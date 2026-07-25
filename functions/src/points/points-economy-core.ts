@@ -486,6 +486,15 @@ export function weeklyDrivingDocId(uid: string, weekKey: string): string {
  *  - `local_day` -> the local day key;
  *  - `event`     -> the eventId (supplied by the caller);
  *  - `forever`   -> the literal `all`.
+ *
+ * THROWS for an `event`-windowed rule called without a window key, instead of
+ * substituting a placeholder. This is not defensive noise: the return value
+ * becomes part of the limit counter's document ID, so a missing eventId would
+ * point every event at ONE shared counter. `event_attend_verified` is 1/event,
+ * so the first meet a member attended would spend that shared counter and
+ * every later meet would be refused `limit_reached` — a silent, permanent loss
+ * of a 50-point award that looks like a cap working correctly. A caller that
+ * forgets the key is a bug, and it must surface as one.
  */
 export function ruleLimitWindowKey(
   rule: EconomyRule,
@@ -496,7 +505,10 @@ export function ruleLimitWindowKey(
     case 'local_day':
       return dayKey;
     case 'event':
-      return explicitWindowKey ?? 'unknown';
+      if (typeof explicitWindowKey !== 'string' || explicitWindowKey.length === 0) {
+        throw new Error(`Rule ${rule.key} is event-windowed and needs an explicit window key.`);
+      }
+      return explicitWindowKey;
     case 'forever':
       return 'all';
   }
@@ -586,9 +598,13 @@ export const MAX_ATTENDANCE_SAMPLES = 60;
  *
  * These samples are the most sensitive thing this feature stores: real
  * coordinates of a real member at a real time. They are few (two taps), they
- * are all next to a published event, and they are owner-readable only — but
- * "few and scoped" is not the same as "not retained", and without an expiry
- * they would sit in Firestore forever. So they get a deadline.
+ * are all next to a published event, and `eventAttendance` is readable ONLY
+ * by the member the record belongs to and by admins — both rules are in
+ * firebase/firestore.rules, and the admin read is stated here rather than
+ * glossed as "private", because it is what makes the audit use below
+ * possible. But "few and scoped" is not the same as "not retained", and
+ * without an expiry they would sit in Firestore forever. So they get a
+ * deadline.
  *
  * 90 days is chosen to outlive any dispute about the award they justify
  * (a member querying a missing 50 KP, an admin auditing a suspected forgery)
@@ -626,7 +642,16 @@ export function attendanceEvidenceExpiry(nowMs: number): Date {
  * accuracy a client may report. That is fine for Kronjakt (a 20-150 m point
  * where a poor fix is separately risk-scored), but here it would be a hole:
  * a client claiming `accuracyMeters: 50000` would inflate a 150 m fence to
- * 25 km and "attend" a meet from the next county. A fix that cannot place you
+ * 25 km and "attend" a meet from the next county. WHAT "REFUSED" MEANS HERE:
+ * the SAMPLE does not qualify — `isSampleInsideFence` returns false and the
+ * call answers `outside_geofence`. It is deliberately NOT a schema bound: the
+ * input schema still accepts a much larger `accuracyMeters`, because a poor
+ * GPS fix is an ordinary field condition (a member standing in the right car
+ * park, indoors or under trees), not a malformed request, and rejecting it
+ * with `invalid-argument` would turn "your phone has not got a fix yet" into
+ * an error the client cannot retry its way out of. The schema bound stays a
+ * sanity bound on the number; this constant is the semantic one. A fix that
+ * cannot place you
  * inside 100 m cannot prove you were inside 150 m, so it is refused outright
  * rather than buffered — which also bounds the effective fence at 150 + 50 =
  * 200 m.

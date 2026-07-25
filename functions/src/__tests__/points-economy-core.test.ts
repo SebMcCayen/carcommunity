@@ -574,6 +574,17 @@ describe('counter document IDs', () => {
     );
   });
 
+  // An event-windowed rule with no eventId must not fall back to a shared
+  // placeholder counter: that would make the first event a member attended
+  // spend the 1/event limit for EVERY later event, silently and permanently.
+  it('refuses to key an event-windowed rule without an event id', () => {
+    for (const rule of ['event_attend_verified', 'event_host_success'] as const) {
+      expect(() => ruleLimitWindowKey(economyRule(rule), '2026-07-15')).toThrow(/window key/);
+      expect(() => ruleLimitWindowKey(economyRule(rule), '2026-07-15', null)).toThrow(/window key/);
+      expect(() => ruleLimitWindowKey(economyRule(rule), '2026-07-15', '')).toThrow(/window key/);
+    }
+  });
+
   it('keys attendance records by (eventId, uid)', () => {
     expect(attendanceDocId('ev1', 'uidA')).toBe('ev1__uidA');
   });

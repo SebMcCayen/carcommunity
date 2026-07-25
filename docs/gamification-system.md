@@ -585,7 +585,7 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 *Icon design:* A ribbon of road narrowing to a horizon line, with a **milestone marker post** standing at the roadside — the classic European kilometre stone, not a race flag. Tier is the marker's metal plus the number of chevrons carved into it (1/2/3/4). **Explicitly forbidden in this icon:** speedometers, tachometers, needles, chequered flags, motion blur, speed lines. The visual language is *distance travelled and places seen*, not *velocity*. Get this wrong in the art and it contradicts C1 more loudly than any formula could.
 
-*On C3:* these are lifetime milestones, not per-kilometre payouts. The KP rate for driving will be set entirely by the capped `drive_5km`/`live_session_1km` awards in §5.1, so once the weekly budget is spent, further kilometres advance the badge counter but pay **zero KP**. (Today the rate is zero by *absence*, not by cap — neither award exists, and `saveDrive.ts` and `live/session.ts` never touch the ledger. The cap only starts doing work once those awards ship, so **the cap and the award must ship together**.) The badge is a record of where you have been, not a meter that keeps ticking. Whether even that is too much encouragement is **Q3**.
+*On C3:* these are lifetime milestones, not per-kilometre payouts. The KP rate for driving will be set entirely by the capped `drive_5km`/`live_session_1km` awards in §5.1, so once the weekly budget is spent, further kilometres advance the badge counter but pay **zero KP**. (The cap and the awards did ship together, as required: `drive_5km` is awarded by the `points-onDriveSaved` trigger on `rides/{rideId}`, `live_session_1km` by `points/liveDistance.ts` called inline from `live.updatePosition`, and both are `driving: true` so both are charged against `WEEKLY_DRIVING_POINTS_CAP`. Note the distance for `live_session_1km` is **server-measured** from the session's own accumulated total — no client-supplied distance, and no speed is read, stored or rewarded.) The badge is a record of where you have been, not a meter that keeps ticking. Whether even that is too much encouragement is **Q3**.
 
 #### Träffräv · *Meet Fox*
 
@@ -664,7 +664,7 @@ Icon identifiers follow the existing `badge_*` convention in `badge-core.ts` (e.
 
 ## 8. Anti-abuse: one pipeline for every geo-earn
 
-Crown claims, event attendance, and any future location-based earn go through **the same guard**. Today's logic lives inside `submitClaim.ts`; the extension generalises it rather than copying it. Divergent copies of a security check are how one of them silently rots.
+Crown claims, event attendance, and any future location-based earn go through **the same guard**. Divergent copies of a security check are how one of them silently rots, so the shared modules are imported, not duplicated: `events/checkIn.ts` and `crownHunt/claimSpawn.ts` both call `isPositionFresh`, `isPlausibleJump` and `isValidCoordinate` from `crownHunt/crown-hunt-geo.ts` and `evaluateClaimRisk` from `crownHunt/crown-hunt-risk.ts` — the same functions, at the same thresholds, that `submitClaim.ts` uses. Anything new that accepts a coordinate must do the same.
 
 ### 8.1 Stages
 
@@ -687,18 +687,18 @@ Crown claims, event attendance, and any future location-based earn go through **
 | 13 | Fence-edge probing | ≥ 3 edge attempts/hour | +20 risk | **PLANNED** ³ |
 | 14 | Device integrity | Play Integrity / App Attest / mock-location flag | +40 risk | **PLANNED** ⁴ |
 | 15 | **Risk threshold** | Score ≥ **60** → `risk_review`, **zero KP** | recorded, not awarded | **built** |
-| 16 | Caps | Enforced **inside** the award transaction | `daily_limit_reached` | **built** ⁵ |
+| 16 | Caps | Enforced **inside** the award transaction | `cap_reached` (clipped to headroom) / `limit_reached` | **built** ⁵ |
 | 17 | Ledger | Append-only, idempotency key = entry ID | replay-safe | **built** |
 
 ¹ Suspended and deleted accounts do resolve to `not_eligible`, but *entitlement* is currently bypassed in `shared/memberGating.ts` — every non-suspended member passes.
 
-² The gate exists and runs, but at **`MAX_CLAIM_SPEED_MPS = 1.4`**, not 2.0 (see **C2** and **Q1** — 2.0 is the proposal, 1.4 is what ships today). "Sustained" is also aspirational: the current check tests a **single reported speed sample**, not a sustained window, and crown dwell is unspecified. Critically, **a claim that omits `speedMetersPerSecond` entirely passes this stage** — see C2 gap 1 and **Q16**.
+² **The two crown paths now differ, and only one of them still has the hole.** Hand-placed claims (`submitClaim.ts`) run at **`MAX_CLAIM_SPEED_MPS = 1.4`** against a **single reported speed sample**, and a claim that omits `speedMetersPerSecond` entirely still passes — see C2 gap 1 and **Q16**. Auto-spawn claims (`claimSpawn.ts`) close both holes: **`MAX_COLLECT_SPEED_MPS = 2.0`** applied to **two** fixes at least `MIN_DWELL_SECONDS` apart, *and* a **server-derived** speed computed from those two positions and the elapsed time — which needs no client cooperation, so omitting the field no longer buys anything. That server-derived check is the pattern Q16 should adopt for `submitClaim` too.
 
 ³ **Scored but never triggered.** `crown-hunt-risk.ts` has the `geofenceEdgeAttempts >= 3 → +20` rule, but `submitClaim.ts` passes `geofenceEdgeAttempts: 0` as a literal (`// legacy TODO: geofence-edge counting`). Nothing counts edge attempts, so this stage contributes zero risk for every claim ever made. Implementing it means adding the counter, not the rule.
 
 ⁴ **Scored, but the input is self-reported and nothing populates it.** The `platformIntegrityPassed === false → +40` rule exists, but the value comes straight from the *client request body* (`crownhunt-core.ts` schema: `platformIntegrityPassed: z.boolean().nullable().optional()`), and no Android code sends it — the field has zero non-test callers in the repo. So today it is always `null`, and even once the client does send it, an attacker simply omits it or sends `true`. **This stage is not a device-integrity check until a real attestation token is verified server-side against Play Integrity / App Attest.** Until then it must not be counted as a defence.
 
-⁵ Built **for the crown daily-claim cap** (10/day, read-and-incremented inside the award transaction). The KP economy caps in §5.3 (300/day global, 400/week driving-derived) are **proposed** and have no counters yet.
+⁵ Built **for the crown daily-claim cap** (10/day, read-and-incremented inside the award transaction) and now also for the KP economy caps in §5.3, which have real counters: `pointsDailyTotals` (300/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits. All three are read and incremented **inside** the award transaction via `creditPointsResolved`, so two concurrent awards serialise on the ledger balance document and cannot race each other past a cap.
 
 Risk **score and reasons are written to a backend-only collection** (`crownHuntClaimRisk`) and never returned to a client. Firestore rules cannot redact fields per-read, so separation is by collection, not by field. Thresholds are never exposed either — a client that can see the threshold can tune against it.
 
@@ -890,10 +890,10 @@ Everything an implementer needs, in one table.
 | Accuracy risk threshold | 50 m |
 | Risk review threshold | 60 |
 | Crown claims/day | 10 (fixed UTC day, from 00:00Z) |
-| Global earn cap | 300 KP (fixed UTC day, from 00:00Z) |
-| Driving-derived cap `D` | 400 KP (fixed ISO week, from Monday 00:00Z) |
+| Global earn cap | 300 KP (Europe/Stockholm civil day, from local midnight) |
+| Driving-derived cap `D` | 400 KP (Europe/Stockholm week, from local Monday midnight) |
 | Streak multiplier | `min(1.7, 1 + min(s,7)/10)` |
 | Event fence | 150 m |
-| Event dwell | ≥ 10 min cumulative, ≥ 2 samples ≥ 10 min apart |
+| Event dwell | ≥ 10 min cumulative, ≥ 2 in-fence samples spanning ≥ 10 min; any single gap credits at most 30 min |
 | Event window | `[start − 30 min, end + 30 min]` |
 | Badge tier bonuses | 25 / 75 / 200 / 500 KP (cap-exempt) |

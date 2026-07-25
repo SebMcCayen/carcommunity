@@ -34,7 +34,9 @@
  *     attendance record carries an `expireAt` and a Firestore TTL policy
  *     deletes it after ATTENDANCE_EVIDENCE_RETENTION_MS (90 days), which is
  *     long enough to settle a dispute about the award and no longer. Scoped
- *     to one event, owner-readable only, and not kept forever;
+ *     to one event, readable by the owning member AND by admins (the audit
+ *     path — see the firestore.rules block for eventAttendance), and not
+ *     kept forever;
  *   - HONESTY: a tap is a deliberate statement ("I am here"), which is what
  *     is being rewarded. Silent background credit for leaving an app open in
  *     a nearby car park is not.
