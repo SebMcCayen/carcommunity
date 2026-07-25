@@ -288,8 +288,15 @@ describe('spawn cell allow-list', () => {
   it('seeds a never-served cell at the FRONT of the round-robin, not the back', async () => {
     await signInAs(adminUser);
 
-    // Serve the existing cell first, so it carries a recent cursor to compete
+    // Self-contained: approve the base cell here rather than relying on the
+    // previous test, then serve it so it carries a recent cursor to compete
     // against.
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Trygg parkeringsficka, god sikt.',
+    });
     await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
     const servedAt = (await adminDb.collection('crownSpawnCells').doc(CELL_KEY).get()).data()!
       .lastSpawnPassAt as Timestamp;
