@@ -28,7 +28,7 @@
  * the badge with the Kronpoäng silently lost.
  *
  * COST: evaluation is O(qualified tiers) — one BATCHED `getAll` of the
- * qualified badge documents (at most 23), plus one `badgeProgress` read ONLY
+ * qualified badge documents (at most 22), plus one `badgeProgress` read ONLY
  * when the caller did not already have that document (both real callers do, so
  * on the hot path it is zero). The `getAll` is a single RPC but is BILLED PER
  * DOCUMENT, so a steady-state no-op costs as many reads as the member holds

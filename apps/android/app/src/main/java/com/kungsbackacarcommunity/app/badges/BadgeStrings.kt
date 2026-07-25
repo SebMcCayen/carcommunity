@@ -10,7 +10,7 @@ import com.kungsbackacarcommunity.app.R
  *
  * Every key in the backend catalog (functions/src/badges/badge-core.ts) must
  * appear here, otherwise an English-locale member sees the Swedish fallback:
- * the five original milestones plus the 23 tiered ladder rungs. The strings
+ * the five original milestones plus the 22 tiered ladder rungs. The strings
  * themselves come from contracts/localization/{sv,en}.json via
  * apps/android/scripts/generate-strings.mjs — never hand-edited.
  */

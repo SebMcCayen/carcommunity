@@ -276,8 +276,9 @@ describe('badges-adminSummary', () => {
       }
     ).summary;
 
-    // Catalog order: the five historic milestones first, then the 23 ladder
-    // rungs bottom-to-top (badge-core.ts::BADGE_CATALOG_ORDER).
+    // Catalog order: the five historic milestones first, then the 22 ladder
+    // rungs bottom-to-top (badge-core.ts::BADGE_CATALOG_ORDER). 22 not 24:
+    // Trogen and Samlare each stop at Guld.
     expect(summary.map((s) => s.key)).toEqual([...BADGE_CATALOG_ORDER]);
     expect(summary.slice(0, 5).map((s) => s.key)).toEqual([
       'first_event',
