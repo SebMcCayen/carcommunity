@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.events
 
+import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.isValidWgs84Coordinate
+
 /**
  * Events domain model + pure logic (Phase 12 slice 9).
  *
@@ -253,15 +256,22 @@ object Events {
 
     /**
      * Whether a captured pin is valid: latitude and longitude are BOTH present or
-     * BOTH absent (mirrors the backend `guardCoordinatePair`), and each sits in
-     * range. A half-set pair or an out-of-range value is rejected before submit so
-     * the callable never has to answer `invalid-argument` for it.
+     * BOTH absent (mirrors the backend `guardCoordinatePair`), and — when present
+     * — the point itself is sendable. A half-set pair or an out-of-range value is
+     * rejected before submit so the callable never has to answer
+     * `invalid-argument` for it.
+     *
+     * The both-or-neither rule is the events-specific part (an event may carry no
+     * pin at all); the point check delegates to the shared
+     * [isValidWgs84Coordinate] so events, convoy destinations and incident
+     * reports validate against ONE definition of a sendable coordinate. That
+     * shared helper also rejects non-finite values, which a bare range comparison
+     * lets through silently (`NaN < -90.0` and `NaN > 90.0` are both false).
      */
     fun isValidCoordinatePair(latitude: Double?, longitude: Double?): Boolean {
         if ((latitude == null) != (longitude == null)) return false
-        if (latitude != null && (latitude < -90.0 || latitude > 90.0)) return false
-        if (longitude != null && (longitude < -180.0 || longitude > 180.0)) return false
-        return true
+        if (latitude == null || longitude == null) return true
+        return isValidWgs84Coordinate(LatLng(longitude = longitude, latitude = latitude))
     }
 
     /**

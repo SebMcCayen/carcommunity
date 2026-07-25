@@ -266,6 +266,7 @@ import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.QueryAnchor
+import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
@@ -1039,11 +1040,20 @@ fun AuthenticatedApp(
             val incidentReportingEnabled =
                 incidentController != null &&
                     MemberGating.allows(profile?.activeMember == true)
-            val reportIncident: (IncidentType) -> Unit = { type ->
+            val reportIncident: (IncidentType, ReportLocation) -> Unit = { type, location ->
                 incidentController?.let { controller ->
                     scope.launch {
+                        // The location choice is resolved here: Current uses the
+                        // controller's own GPS-fix path (unchanged), Chosen reports
+                        // at the point the user placed on the map picker.
+                        val outcome =
+                            when (location) {
+                                ReportLocation.Current -> controller.report(type)
+                                is ReportLocation.Chosen ->
+                                    controller.reportAt(type, location.location)
+                            }
                         val text =
-                            when (controller.report(type)) {
+                            when (outcome) {
                                 is ReportOutcome.Success -> incidentReportSuccessText
                                 ReportOutcome.NoLocation -> incidentLocationUnavailableText
                                 is ReportOutcome.Failed -> incidentReportErrorText
@@ -2807,7 +2817,8 @@ fun AuthenticatedApp(
                                         // every frame would recompose the dialog
                                         // constantly to almost never change the text.
                                         nowMillis = remember(openIncident.id) { System.currentTimeMillis() },
-                                        // "Still there?" on someone else's report.
+                                        // "I confirm it's still here" on someone
+                                        // else's report.
                                         // Confirms via `incidents-confirm`, which
                                         // bumps the shared count and extends the
                                         // incident's life; runIncidentConfirmation

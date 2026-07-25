@@ -82,8 +82,12 @@ import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
+import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.incidents.ReportLocation
+import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
@@ -184,7 +188,7 @@ fun MapHome(
     incidentsLayerEnabled: Boolean = true,
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
-    onReportIncident: (IncidentType) -> Unit = {},
+    onReportIncident: (IncidentType, ReportLocation) -> Unit = { _, _ -> },
     // Whether any of the currently-loaded incidents actually came from
     // Trafikverket (see `hasTrafikverketData`). Gates the "Källa: Trafikverket"
     // credit in the layers popup so it appears exactly where their data is on
@@ -364,9 +368,15 @@ fun MapHome(
         mapSurface.setEventMarkers(eventMarkers)
     }
 
-    // Incident-report type picker open/close is local UI state: tapping the
-    // report control opens it, picking a type reports and closes it.
+    // Incident-report flow is a small local state machine:
+    //  1. [reportOpen] — the type picker (tapping the report control opens it).
+    //  2. [reportPendingType] — a type has been picked and we're asking WHERE to
+    //     place it (the location-choice dialog): current location, or pick on map.
+    //  3. [reportPickOnMap] — the user chose "pick on map"; the full-screen map
+    //     picker is open on top of that pending type.
     var reportOpen by remember { mutableStateOf(false) }
+    var reportPendingType by remember { mutableStateOf<IncidentType?>(null) }
+    var reportPickOnMap by remember { mutableStateOf(false) }
 
     // Profile/account menu open/close is local UI state too: tapping the
     // top-right profile button opens the menu as a transparent Popup *over* the
@@ -643,16 +653,57 @@ fun MapHome(
             )
         }
 
-        // Incident-report type picker. Picking a type reports it (the host
-        // resolves the current location) and closes the dialog.
+        // Incident-report flow, in three steps (see the state block above).
+        //
+        // Step 1 — pick a category. Picking one does NOT report yet: it advances
+        // to the location choice, so every report now goes through the same
+        // "where is it?" step.
         if (reportOpen) {
             IncidentTypePickerDialog(
                 onPick = { type ->
                     reportOpen = false
-                    onReportIncident(type)
+                    reportPendingType = type
                 },
                 onDismiss = { reportOpen = false },
             )
+        }
+
+        // Step 2 — choose WHERE. Current location is the quick default; "pick on
+        // map" opens the full-screen picker (step 3). Cancel/dismiss drops the
+        // pending type and ends the flow.
+        reportPendingType?.let { pendingType ->
+            if (!reportPickOnMap) {
+                IncidentLocationChoiceDialog(
+                    onUseCurrent = {
+                        reportPendingType = null
+                        onReportIncident(pendingType, ReportLocation.Current)
+                    },
+                    onPickOnMap = { reportPickOnMap = true },
+                    onDismiss = { reportPendingType = null },
+                )
+            } else {
+                // Step 3 — place it on the map. Seed the camera where the user is
+                // already looking so they start near the incident rather than
+                // re-navigating from the default camera.
+                // Confirm reports at the chosen point; cancel returns to step 2.
+                //
+                // A one-SHOT read of the StateFlow, deliberately NOT collectAsState():
+                // the picker consumes initialCenter only in its AndroidView factory,
+                // which runs once and has no update block, so collecting would
+                // recompose this subtree on every home-map camera change without ever
+                // moving the picker's camera. remember pins the seed for its lifetime.
+                val camera = remember { mapSurface.cameraSnapshot.value }
+                IncidentLocationPickerDialog(
+                    initialCenter =
+                        camera?.let { LatLng(longitude = it.longitude, latitude = it.latitude) },
+                    onConfirm = { chosen ->
+                        reportPickOnMap = false
+                        reportPendingType = null
+                        onReportIncident(pendingType, ReportLocation.Chosen(chosen))
+                    },
+                    onDismiss = { reportPickOnMap = false },
+                )
+            }
         }
 
         // The profile/account menu popup itself lives inside SearchBarRow,
@@ -884,7 +935,7 @@ const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
 /**
  * The info popup shown when a community EVENT pin is tapped. Rendered as a
  * translucent [Popup] (no dimming scrim) in the SAME floating style as the
- * layers/live popups — `surface.copy(alpha = POPUP_SURFACE_ALPHA)` +
+ * layers/live popups — `surface.copy(alpha = KccAlpha.aeroSurface)` +
  * [KccRadius.lg] — so the live map stays visible behind it. Tapping outside the
  * card or pressing Back dismisses it (focusable popup).
  *
@@ -920,7 +971,7 @@ internal fun EventMarkerInfoPopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_EVENT_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {

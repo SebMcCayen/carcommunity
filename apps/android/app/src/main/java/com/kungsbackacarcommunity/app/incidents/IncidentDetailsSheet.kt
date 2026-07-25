@@ -42,7 +42,8 @@ const val INCIDENT_DETAILS_CONFIRM_COUNT_TAG = "incident_details_confirm_count"
  * Trafikverket import) — then offers the ONE action that makes sense for this
  * viewer, per [IncidentDetails.actionFor]:
  *
- *  - someone else's member report → "Still there?", which is what Seb asked for.
+ *  - someone else's member report → "I confirm it's still here", the
+ *    verification statement Seb asked for.
  *    It is wired to `incidents-confirm` (see [ConfirmAvailability]): tapping it
  *    corroborates the incident, extends its life, and bumps the shared
  *    confirmation count. When others have already confirmed, a "confirmed by N"

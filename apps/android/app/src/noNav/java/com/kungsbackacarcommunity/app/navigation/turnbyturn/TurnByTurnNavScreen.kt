@@ -17,6 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /**
@@ -57,7 +58,7 @@ fun TurnByTurnNavScreen(
     destination: LatLng,
     destinationLabel: String,
     onExit: () -> Unit,
-    @Suppress("UNUSED_PARAMETER") onReportIncident: (IncidentType) -> Unit,
+    @Suppress("UNUSED_PARAMETER") onReportIncident: (IncidentType, ReportLocation) -> Unit,
     modifier: Modifier = Modifier,
     // Present ONLY to keep this stub's signature identical to the real src/nav
     // implementation, so the single host call site compiles in both builds.

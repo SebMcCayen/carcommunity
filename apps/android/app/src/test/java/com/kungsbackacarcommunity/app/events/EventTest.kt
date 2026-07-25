@@ -154,6 +154,19 @@ class EventTest {
     }
 
     @Test
+    fun `coordinate pair rejects non-finite values`() {
+        // Regression guard for the shared-helper convergence: a bare range
+        // comparison lets NaN through silently (`NaN < -90.0` and `NaN > 90.0`
+        // are BOTH false, so an unguarded check answers true). Delegating to
+        // isValidWgs84Coordinate makes finiteness part of the ONE definition
+        // events, convoy destinations and incident reports all share.
+        assertFalse(Events.isValidCoordinatePair(Double.NaN, 12.0))
+        assertFalse(Events.isValidCoordinatePair(57.0, Double.NaN))
+        assertFalse(Events.isValidCoordinatePair(Double.POSITIVE_INFINITY, 12.0))
+        assertFalse(Events.isValidCoordinatePair(57.0, Double.NEGATIVE_INFINITY))
+    }
+
+    @Test
     fun `location picker starts on the existing pin, else the Kungsbacka default`() {
         assertEquals(
             57.5 to 12.1,

@@ -1160,6 +1160,14 @@
     <string name="incidents_reportSuccess">Thanks — your report is on the map.</string>
     <string name="incidents_reportError">Couldn\'t send your report. Try again.</string>
     <string name="incidents_locationUnavailable">Your location isn\'t available. Turn on location to report.</string>
+    <string name="incidents_reportLocationTitle">Where is it?</string>
+    <string name="incidents_reportLocationCurrent">Use my current location</string>
+    <string name="incidents_reportLocationPick">Pick on map</string>
+    <string name="incidents_pickLocationTitle">Place the incident</string>
+    <string name="incidents_pickLocationInstruction">Move the map to place the pin, then confirm.</string>
+    <string name="incidents_pickLocationConfirm">Place here</string>
+    <string name="incidents_pickLocationMap">Map for choosing the incident location</string>
+    <string name="incidents_pickLocationInvalid">Pick a spot on the map first.</string>
     <string name="incidents_markerLabel">Incident</string>
     <string name="incidents_sourceTrafikverket">Source: Trafikverket</string>
     <string name="incidents_close">Close</string>
@@ -1170,7 +1178,7 @@
     <string name="incidents_ageUnknown">Reported time unknown</string>
     <string name="incidents_sourceMember">Reported by a member</string>
     <string name="incidents_sourceImported">Imported from Trafikverket</string>
-    <string name="incidents_verifyAction">Still there?</string>
+    <string name="incidents_verifyAction">I confirm it\'s still here</string>
     <string name="incidents_verifySuccess">Thanks — you confirmed this is still there.</string>
     <string name="incidents_verifyAlready">You\'ve already confirmed this one.</string>
     <string name="incidents_verifyError">Couldn\'t confirm right now. Try again.</string>
