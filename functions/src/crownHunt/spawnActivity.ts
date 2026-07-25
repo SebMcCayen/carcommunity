@@ -124,31 +124,45 @@ export async function recordCrownActivity(params: {
     const userRef = cellRef.collection('recentUsers').doc(crownActivityUserHash(cellKey, params.uid));
     const expireAt = Timestamp.fromMillis(params.now.getTime() + ACTIVITY_WINDOW_MS);
 
-    // Two independent merges, not a transaction: these are last-write-wins
-    // timestamps with no invariant between them, and a transaction on the cell
-    // document would serialise every sharer in the cell against each other on
-    // the position hot path.
-    await Promise.all([
-      cellRef.set(
-        {
-          cellKey,
-          lastActivityAt: FieldValue.serverTimestamp(),
-          // Backstop for the sweeper AND a ready-made Firestore TTL field, so
-          // an abandoned cell disappears even if the sweep is paused.
-          expireAt,
-        },
-        { merge: true },
-      ),
-      userRef.set(
-        {
-          // No uid, no coordinate — the document ID is already the (cell-scoped)
-          // pseudonym, and `lastSeenAt` is the entire payload the score needs.
-          lastSeenAt: FieldValue.serverTimestamp(),
-          expireAt,
-        },
-        { merge: true },
-      ),
-    ]);
+    // ONE BATCH, not two independent writes and not a transaction.
+    //
+    // Not a transaction, because these are last-write-wins timestamps with no
+    // read-modify-write between them, and a transaction on the cell document
+    // would serialise every sharer in the cell against each other on the
+    // position hot path.
+    //
+    // But a batch rather than `Promise.all`, because there IS one invariant
+    // worth keeping: the child must never outlive its parent. If the user write
+    // landed and the cell write did not, `crownCellActivity/{cell}` would hold
+    // a `recentUsers` document under a parent that does not exist — and the
+    // sweeper reaps quiet cells by QUERYING the parents on `lastActivityAt`, so
+    // it would never see that cell and never `recursiveDelete` it. The orphan
+    // would sit there indefinitely: a pseudonymous record that outlives the
+    // cleanup designed to remove it. A batch costs the same two writes and
+    // takes no locks, so there is nothing to trade away here.
+    const batch = db.batch();
+    batch.set(
+      cellRef,
+      {
+        cellKey,
+        lastActivityAt: FieldValue.serverTimestamp(),
+        // Backstop for the sweeper AND a ready-made Firestore TTL field, so
+        // an abandoned cell disappears even if the sweep is paused.
+        expireAt,
+      },
+      { merge: true },
+    );
+    batch.set(
+      userRef,
+      {
+        // No uid, no coordinate — the document ID is already the (cell-scoped)
+        // pseudonym, and `lastSeenAt` is the entire payload the score needs.
+        lastSeenAt: FieldValue.serverTimestamp(),
+        expireAt,
+      },
+      { merge: true },
+    );
+    await batch.commit();
 
     return { crownActivityAt: params.now.toISOString(), crownActivityCell: cellKey };
   } catch (error) {
