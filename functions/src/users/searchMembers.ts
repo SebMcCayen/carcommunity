@@ -29,6 +29,19 @@
  *    optional `limit`;
  *  - a per-uid fixed-window rate limit, checked before the scan.
  *
+ * ACCESS: `requireMemberActor`, declared as 'member' in the registry. Be aware
+ * that member gating is currently DISABLED repo-wide
+ * (shared/memberGating.ts MEMBER_GATING_ENABLED = false), so today the
+ * entitlement half is bypassed and every signed-in, non-suspended,
+ * non-deleted caller passes. Suspension and soft-deletion are never bypassed.
+ *
+ * Do NOT "fix" that with a bespoke entitlement check here. `activeMember`
+ * defaults to false on provisioning (auth/provisioning.ts), so a local check
+ * would deny EVERY caller — shipping a search nobody can use — while the other
+ * 40-odd member callables stay open, and it would silently break the documented
+ * five-switch re-locking procedure in memberGating.ts. Flipping that one flag is
+ * what turns this endpoint (and every sibling) member-only, with no change here.
+ *
  * BLOCKING: rows are filtered in BOTH directions (the caller blocked them, or
  * they blocked the caller), mirroring friend.sendRequest's either-way rule. The
  * filtered row is simply absent — there is no marker, no count, and no reason
