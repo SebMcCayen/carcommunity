@@ -37,6 +37,41 @@ class CrownSpawnQueryTest {
     }
 
     /**
+     * BOTH axes are clamped before flooring, matching the backend's `clampLat` /
+     * `clampLon` in `functions/src/crownHunt/crown-spawn-core.ts`.
+     *
+     * The map wraps the world, so panning east past the anti-meridian hands us a
+     * longitude of 180.1 and up. Flooring that unclamped yields `18010`, a cell
+     * index the spawner can never write — so the layer would go quietly empty
+     * out there rather than fail. Clamping to the same bounds as the writer is
+     * what keeps "no crowns drawn" meaning "no crowns there".
+     */
+    @Test
+    fun `both axes are clamped to the globe, exactly as the backend clamps them`() {
+        // 180.1 and 181 both clamp to 180 → lonIdx 18000, the backend's own
+        // maximum longitude index.
+        assertEquals("5748_18000", CrownSpawnQuery.cellKey(lat, 180.1))
+        assertEquals("5748_18000", CrownSpawnQuery.cellKey(lat, 181.0))
+        assertEquals("5748_-18000", CrownSpawnQuery.cellKey(lat, -180.5))
+        // Latitude was already clamped; pinned here so the pair stays symmetric.
+        assertEquals("9000_1207", CrownSpawnQuery.cellKey(95.0, lon))
+        assertEquals("-9000_1207", CrownSpawnQuery.cellKey(-95.0, lon))
+    }
+
+    /**
+     * The PLAN's centre is clamped the same way, not only the single-cell key —
+     * they have to agree or a crown drawn from the plan could not be looked up.
+     */
+    @Test
+    fun `the query plan clamps its centre on both axes too`() {
+        assertEquals(
+            CrownSpawnQuery.cellKeysFor(lat, 180.0, 1.0),
+            CrownSpawnQuery.cellKeysFor(lat, 181.0, 1.0),
+        )
+        assertTrue(CrownSpawnQuery.cellKeysFor(lat, 181.0, 1.0).contains("5748_18000"))
+    }
+
+    /**
      * The neighbours are ALWAYS included, even at the tightest zoom.
      *
      * A crown 30 m the other side of a cell boundary is exactly as collectable as

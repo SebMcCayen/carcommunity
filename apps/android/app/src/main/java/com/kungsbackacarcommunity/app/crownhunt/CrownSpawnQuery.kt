@@ -76,13 +76,29 @@ object CrownSpawnQuery {
 
     private const val METERS_PER_DEGREE_LAT: Double = 111_320.0
 
-    /** Deterministic grid key for a coordinate — `${latIdx}_${lonIdx}`. */
+    /**
+     * Deterministic grid key for a coordinate — `${latIdx}_${lonIdx}`.
+     *
+     * BOTH axes are clamped before flooring, exactly as the backend's
+     * `crownCellKey` in `functions/src/crownHunt/crown-spawn-core.ts` does. This
+     * has to match key-for-key, not just approximately: the spawner writes the
+     * key the backend computes and this is the key we query on, so a client that
+     * clamped only latitude would ask for `18100_...`-style cells that the
+     * spawner never writes — a silently EMPTY layer rather than a visible error.
+     * Longitude outside [-180, 180] is not hypothetical: the map wraps the world,
+     * so panning across the anti-meridian hands us 180.1 and beyond.
+     */
     fun cellKey(latitude: Double, longitude: Double): String {
-        val clampedLat = latitude.coerceIn(-90.0, 90.0)
-        val latIdx = floor(clampedLat / CELL_DEGREES).toInt()
-        val lonIdx = floor(longitude / CELL_DEGREES).toInt()
+        val latIdx = floor(clampLat(latitude) / CELL_DEGREES).toInt()
+        val lonIdx = floor(clampLon(longitude) / CELL_DEGREES).toInt()
         return "${latIdx}_$lonIdx"
     }
+
+    /** Latitude clamp mirroring the backend's `clampLat`. */
+    private fun clampLat(latitude: Double): Double = latitude.coerceIn(-90.0, 90.0)
+
+    /** Longitude clamp mirroring the backend's `clampLon`. */
+    private fun clampLon(longitude: Double): Double = longitude.coerceIn(-180.0, 180.0)
 
     /**
      * How many rings of cells to ask for, given the map's visible radius.
@@ -123,9 +139,12 @@ object CrownSpawnQuery {
     ): List<String> {
         if (!centerLat.isFinite() || !centerLon.isFinite()) return emptyList()
         val rings = ringsFor(visibleRadiusMeters)
-        val clampedLat = centerLat.coerceIn(-90.0, 90.0)
-        val latIdx = floor(clampedLat / CELL_DEGREES).toInt()
-        val lonIdx = floor(centerLon / CELL_DEGREES).toInt()
+        // Same clamp on both axes as [cellKey] / the backend's `crownCellKey`,
+        // so the centre of the query plan is a cell the spawner can actually
+        // have written. See [cellKey] for why an unclamped longitude reads as an
+        // empty layer instead of an error.
+        val latIdx = floor(clampLat(centerLat) / CELL_DEGREES).toInt()
+        val lonIdx = floor(clampLon(centerLon) / CELL_DEGREES).toInt()
         val keys = ArrayList<String>((2 * rings + 1) * (2 * rings + 1))
         for (dLat in -rings..rings) {
             for (dLon in -rings..rings) {
