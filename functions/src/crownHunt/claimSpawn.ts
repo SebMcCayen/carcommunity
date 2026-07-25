@@ -481,7 +481,18 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
           tx.get(dailyCounterRef),
         ]);
         const crown = crownSnap.data();
-        if (!crownSnap.exists || crown!.status !== 'live') {
+        // A MISSING document and a non-live one are different answers, and the
+        // fast path in step 4 already distinguishes them. Gone means gone: the
+        // sweeper reaped it after expiry, or a cell revocation deleted it out
+        // from under this call because an admin had just declared that area
+        // unsafe. Neither of those is "someone beat you to it", and saying so
+        // would send a member looking for a winner who does not exist.
+        // `already_taken` is reserved for a crown that still EXISTS and whose
+        // status says another member has it.
+        if (!crownSnap.exists) {
+          throw new SpawnClaimRejection('crown_expired');
+        }
+        if (crown!.status !== 'live') {
           throw new SpawnClaimRejection('already_taken');
         }
         const crownExpiry = crown!.expiresAt as Timestamp | undefined;
