@@ -294,6 +294,16 @@ export interface LiveSession {
    */
   discoveryRefreshedAt?: string | null;
   discoveryGeoCell?: string | null;
+  /**
+   * Throttle state for the Kronjakt auto-spawn ACTIVITY AGGREGATE (see
+   * shouldRecordCrownActivity in crownHunt/crown-spawn-core.ts). Same shape and
+   * same reasoning as the discovery pair above — bookkeeping that lets the
+   * position-update path skip a write without an extra read — but on its own
+   * (much slower) interval and its own, much finer spawn grid, so the two
+   * throttles cannot drag each other. Absent until the first activity write.
+   */
+  crownActivityAt?: string | null;
+  crownActivityCell?: string | null;
 }
 
 export function buildSession(

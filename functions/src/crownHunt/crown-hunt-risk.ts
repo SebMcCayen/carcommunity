@@ -49,6 +49,22 @@ const HIGH_VELOCITY_WINDOW_SECONDS = 300; // 5 minutes
  */
 const EXCESSIVE_ATTEMPTS_PER_MINUTE_THRESHOLD = 4;
 
+/**
+ * Penalty for a device that self-reports a MOCK location (Android
+ * `Location.isMock`).
+ *
+ * Set at the review threshold, so a reported mock location is on its own
+ * enough to send a claim to review with no points awarded — a location the
+ * device itself says is synthetic is the single strongest spoofing signal
+ * available without an attestation API, and there is no legitimate reason to
+ * claim a physical-presence reward from one.
+ *
+ * It is a ONE-WAY signal. The flag is client-supplied, so absence proves
+ * nothing (a spoofing app can simply not set it) and `false` is treated
+ * identically to "not reported". Only `true` scores.
+ */
+const MOCK_LOCATION_SCORE = RISK_REVIEW_THRESHOLD;
+
 // ---------------------------------------------------------------------------
 // Input signals
 // ---------------------------------------------------------------------------
@@ -75,6 +91,12 @@ export interface RiskSignals {
    * TODO: Populate once Apple App Attest / Google Play Integrity are integrated.
    */
   platformIntegrityPassed: boolean | null;
+  /**
+   * Whether the device reported the position as a MOCK location (Android
+   * `Location.isMock`). Optional and additive: callers that predate the signal
+   * (the hand-placed-point claim path) omit it and score exactly as before.
+   */
+  mockLocationReported?: boolean | null;
 }
 
 export interface RiskEvaluation {
@@ -143,6 +165,13 @@ export function evaluateClaimRisk(signals: RiskSignals): RiskEvaluation {
   if (signals.geofenceEdgeAttempts >= 3) {
     reasons.push('repeated_geofence_edge');
     score += 20;
+  }
+
+  // A self-reported mock location is the strongest spoofing signal we can get
+  // without an attestation API. Only `true` counts — see MOCK_LOCATION_SCORE.
+  if (signals.mockLocationReported === true) {
+    reasons.push('mock_location');
+    score += MOCK_LOCATION_SCORE;
   }
 
   // Platform integrity failure is a strong signal (when available).

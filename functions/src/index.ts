@@ -47,6 +47,9 @@ import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
 import { adminAdjust, adminReverse } from './points/adminPoints';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
+import { claimSpawn } from './crownHunt/claimSpawn';
+import { setSpawnCellApproval } from './crownHunt/spawnCells';
+import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
@@ -318,13 +321,30 @@ export const points = {
 /**
  * Kronjakt domain (grouped export → deployed as `crownHunt-submitClaim`,
  * `crownHunt-createPoint`, `crownHunt-updatePoint`, `crownHunt-activatePoint`,
- * `crownHunt-pausePoint`).
+ * `crownHunt-pausePoint`, `crownHunt-claimSpawn`,
+ * `crownHunt-setSpawnCellApproval`, and the scheduled `crownHunt-spawnCrowns`
+ * and `crownHunt-sweepSpawns`).
  *
- * Crown Hunt geographic point hunt (contracts/functions/functions.json).
- * submitClaim ports the full legacy anti-fraud validation chain; awards run
- * atomically through the Kronpoäng ledger primitives. Point management is
- * admin-only with a safety-gated activation step. Active points and own
+ * Crown Hunt geographic point hunt (contracts/functions/functions.json). It has
+ * TWO sources of crowns:
+ *
+ * HAND-PLACED points (`crownHuntPoints`) — curated, permanent, with repeat
+ * rules. `submitClaim` ports the full legacy anti-fraud validation chain;
+ * awards run atomically through the Kronpoäng ledger primitives. Point
+ * management is admin-only with a safety-gated activation step in which a named
+ * admin confirms that exact spot is safe to stop at. Active points and own
  * claim history are direct member reads.
+ *
+ * AUTO-SPAWNED crowns (`crownSpawns`) — ephemeral, machine-placed near where
+ * members actually are, first-come-first-served, collected via `claimSpawn`.
+ * `crownHunt-spawnCrowns` tops approved cells up toward an activity-derived
+ * target every 10 min and `crownHunt-sweepSpawns` reaps expired ones every
+ * 15 min. Because no human sees an auto-spawned coordinate, the safety approval
+ * moves up to the AREA: `setSpawnCellApproval` is the admin allow-list of grid
+ * cells the spawner may place in, and the whole automatic half is behind the
+ * `crownHuntSpawn` feature flag, contract default OFF. Collection requires the
+ * member to be STOPPED and dwelling — two server-verified fixes, no reward for
+ * arriving fast, ever.
  */
 export const crownHunt = {
   submitClaim,
@@ -332,6 +352,10 @@ export const crownHunt = {
   updatePoint,
   activatePoint,
   pausePoint,
+  claimSpawn,
+  setSpawnCellApproval,
+  spawnCrowns,
+  sweepSpawns,
 };
 
 /**
