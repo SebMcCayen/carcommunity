@@ -84,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
@@ -3385,8 +3386,9 @@ private fun CreateChooserDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Translucent surface so the map stays visible behind the chooser.
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        // Translucent surface so the map stays visible behind the chooser
+        // (shared Aero token).
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
         title = { Text(stringResource(R.string.shell_createChooserTitle)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
