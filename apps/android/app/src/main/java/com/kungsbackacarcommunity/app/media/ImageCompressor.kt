@@ -9,6 +9,9 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -583,6 +586,39 @@ object ImageCompressor {
     }
 
     /**
+     * The uniform scale factor to fold into the rotation so the ROTATED bounding
+     * box of a [width]x[height] source turned by [angleDeg] stays within
+     * [MAX_DECODE_PIXELS]. Returns 1f when no downscale is needed.
+     *
+     * Why this exists: [sampleSizeForCrop] enforces [MAX_DECODE_PIXELS] against the
+     * UN-ROTATED decode, but rotating grows the axis-aligned bounding box —
+     * `Rw = |cos|·w + |sin|·h`, `Rh = |sin|·w + |cos|·h` — most severely for a very
+     * wide/tall source near 45°. An 8000x4000 source is exactly at a 32 Mpx cap, yet
+     * at 45° its bounding box is ~8485x8485 ≈ 72 Mpx (~288 MB at ARGB_8888): a
+     * near-certain OOM on mid-range devices. Folding this factor into the SAME
+     * [Matrix] as the rotation means the oversized intermediate is never allocated
+     * at all (one resample, not scale-then-rotate).
+     *
+     * Area scales with the square of a uniform factor, so the factor that brings
+     * `Rw·Rh` down to the cap is `sqrt(cap / (Rw·Rh))`.
+     *
+     * Internal (not private) purely so it is JVM-unit-testable without a device.
+     */
+    internal fun rotationDownscaleFactor(width: Int, height: Int, angleDeg: Float): Float {
+        if (width <= 0 || height <= 0 || !angleDeg.isFinite()) return 1f
+        val rad = Math.toRadians(angleDeg.toDouble())
+        val c = abs(cos(rad))
+        val s = abs(sin(rad))
+        val rotatedW = c * width + s * height
+        val rotatedH = s * width + c * height
+        val rotatedPixels = rotatedW * rotatedH
+        if (rotatedPixels <= MAX_DECODE_PIXELS.toDouble()) return 1f
+        val factor = sqrt(MAX_DECODE_PIXELS.toDouble() / rotatedPixels)
+        // Never scale UP, and never collapse the bitmap to nothing.
+        return factor.toFloat().coerceIn(Float.MIN_VALUE, 1f)
+    }
+
+    /**
      * Rotates [bitmap] by an ARBITRARY [angleDeg] about its centre — the free
      * angle the gesture editor produces — returning a new bitmap sized to the
      * rotated content's axis-aligned bounding box (the source is recycled once the
@@ -592,10 +628,21 @@ object ImageCompressor {
      * The bounding box this produces is exactly the space [ImageEditGeometry]
      * resolves the crop rect against: `Rw = |cos|·w + |sin|·h`,
      * `Rh = |sin|·w + |cos|·h`. `filter = true` for a smooth rotate.
+     *
+     * When that bounding box would exceed [MAX_DECODE_PIXELS], a uniform downscale
+     * ([rotationDownscaleFactor]) is folded into the SAME matrix, so the oversized
+     * intermediate is never allocated. The crop is normalized against the bounding
+     * box, so a uniform scale leaves the resolved region unchanged — only its pixel
+     * resolution drops, and [scaleToMax] would have shrunk it anyway.
      */
     private fun rotateArbitrary(bitmap: Bitmap, angleDeg: Float): Bitmap {
         if (!angleDeg.isFinite() || abs(angleDeg) <= ROTATION_EPSILON) return bitmap
-        val matrix = Matrix().apply { postRotate(angleDeg) }
+        val shrink = rotationDownscaleFactor(bitmap.width, bitmap.height, angleDeg)
+        val matrix =
+            Matrix().apply {
+                if (shrink < 1f) postScale(shrink, shrink)
+                postRotate(angleDeg)
+            }
         val rotated =
             Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
         if (rotated !== bitmap) bitmap.recycle()
