@@ -36,7 +36,10 @@
  *  - Trogen      ← `userLifecycle/{uid}.lastLoginAt`, a trusted server write
  *                  (auth.recordLogin uses the Admin SDK; rules deny every
  *                  client write to that document).
- *  - Konvojledare← `convoys/{id}` created by the member and actually started.
+ *  - Konvojledare← `convoys/{id}` created by the member that REACHED `endedAt`
+ *                  with at least one other accepted participant. Crediting on
+ *                  start instead would make the ladder farmable with solo
+ *                  convoys (docs/gamification-system.md §7.2).
  *  - Samlare     ← a server-side `count()` of the member's `vehicles`.
  *
  * SEAM — VERIFIED EVENT ATTENDANCE. A richer `event_attend_verified` record
@@ -143,7 +146,7 @@ export const onRideCreated = onDocumentCreated(
   },
 );
 
-/** Konvojledare — convoys the member created that actually went live. */
+/** Konvojledare — convoys the member led that completed with a real participant. */
 export const onConvoyWritten = onDocumentWritten(
   { ...TRIGGER_OPTS, document: 'convoys/{convoyId}' },
   async (firestoreEvent) => {

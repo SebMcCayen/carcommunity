@@ -37,7 +37,6 @@ fun badgeNameRes(key: String): Int? =
         "trogen_brons" -> R.string.badges_badgeNames_trogen_brons
         "trogen_silver" -> R.string.badges_badgeNames_trogen_silver
         "trogen_guld" -> R.string.badges_badgeNames_trogen_guld
-        "trogen_platina" -> R.string.badges_badgeNames_trogen_platina
         "konvojledare_brons" -> R.string.badges_badgeNames_konvojledare_brons
         "konvojledare_silver" -> R.string.badges_badgeNames_konvojledare_silver
         "konvojledare_guld" -> R.string.badges_badgeNames_konvojledare_guld

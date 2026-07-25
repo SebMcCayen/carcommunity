@@ -328,14 +328,21 @@ describe('rarity weighted pick', () => {
     let max = 0;
     let sum = 0;
     const n = 50_000;
+    // Range violations are COUNTED and asserted once after the loop rather than
+    // asserted per iteration: 100k `expect()` calls cost seconds and pushed this
+    // test past the 5s timeout whenever the full suite ran under load, while
+    // adding no signal a single assertion does not already give.
+    let outOfRange = 0;
     for (let i = 0; i < n; i += 1) {
       const value = rng();
-      expect(value).toBeGreaterThanOrEqual(0);
-      expect(value).toBeLessThan(1);
+      if (!(value >= 0 && value < 1)) {
+        outOfRange += 1;
+      }
       min = Math.min(min, value);
       max = Math.max(max, value);
       sum += value;
     }
+    expect(outOfRange).toBe(0);
     expect(sum / n).toBeCloseTo(0.5, 2);
     expect(min).toBeLessThan(0.001);
     expect(max).toBeGreaterThan(0.999);
