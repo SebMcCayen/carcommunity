@@ -90,6 +90,43 @@ describe('crown spawn grid', () => {
     }
   });
 
+  it('rejects cell keys that are not anywhere on the globe', () => {
+    // The regex alone accepts six digits per axis, and this reaches us from
+    // admin input on setSpawnCellApproval. A key that is not a place has no
+    // correct interpretation, so it is refused rather than clamped.
+    for (const offGlobe of ['9001_0', '-9001_0', '0_18001', '0_-18001', '999999_999999']) {
+      expect(parseCrownCellKey(offGlobe)).toBeNull();
+      expect(crownCellBounds(offGlobe)).toBeNull();
+    }
+    // The extremes themselves are legal: crownCellKey clamps latitude 90 onto
+    // the last row, so that row has to parse.
+    expect(parseCrownCellKey('9000_0')).toEqual({ latIdx: 9000, lonIdx: 0 });
+    expect(parseCrownCellKey('-9000_18000')).toEqual({ latIdx: -9000, lonIdx: 18000 });
+  });
+
+  it('never returns a latitude bound outside [-90, 90]', () => {
+    // sampleCrownPosition draws uniformly inside these bounds, so an unclamped
+    // top edge (90.01) would be written to a crown document as an invalid
+    // WGS-84 coordinate.
+    const polar = crownCellKey(90, 0);
+    const bounds = crownCellBounds(polar)!;
+    expect(bounds.maxLat).toBeLessThanOrEqual(90);
+    expect(bounds.minLat).toBeGreaterThanOrEqual(-90);
+    // There is no strip of Earth above 90, so the polar row is zero-height.
+    expect(bounds.maxLat).toBe(90);
+    expect(bounds.minLat).toBe(90);
+
+    const antipolar = crownCellBounds(crownCellKey(-90, 0))!;
+    expect(antipolar.minLat).toBeGreaterThanOrEqual(-90);
+    expect(antipolar.maxLat).toBeLessThanOrEqual(90);
+
+    // And sampling inside the polar cell still yields a valid coordinate.
+    const sampled = sampleCrownPosition(polar, [], createSeededRng(3));
+    expect(sampled).not.toBeNull();
+    expect(sampled!.latitude).toBeLessThanOrEqual(90);
+    expect(sampled!.latitude).toBeGreaterThanOrEqual(-90);
+  });
+
   it('enumerates a 3x3 neighbourhood containing the cell itself', () => {
     const key = crownCellKey(LAT, LON);
     const neighbours = neighbourCrownCells(key);

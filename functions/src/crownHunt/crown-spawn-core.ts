@@ -106,23 +106,56 @@ export interface CrownCellBounds {
   maxLon: number;
 }
 
-/** Parses a cell key back to its grid indices; null when malformed. */
+/**
+ * Widest grid indices that correspond to somewhere on the globe.
+ *
+ * `crownCellKey` clamps latitude before flooring, so latitude 90 exactly maps
+ * to `MAX_LAT_IDX`; longitude is not clamped, so 180 exactly maps to
+ * `MAX_LON_IDX`. Both ends are therefore inclusive.
+ */
+const MAX_LAT_IDX = Math.round(90 / CROWN_CELL_DEGREES);
+const MAX_LON_IDX = Math.round(180 / CROWN_CELL_DEGREES);
+
+/**
+ * Parses a cell key back to its grid indices; null when malformed OR off the
+ * globe.
+ *
+ * The range check is not cosmetic. `cellKey` reaches this from admin input on
+ * `setSpawnCellApproval`, and the regex alone accepts six digits per axis — so
+ * without it, `"50000_0"` is an approvable cell whose bounds are latitude 500,
+ * and `sampleCrownPosition` would happily write a crown there. Rejecting the
+ * key at the boundary is better than clamping it later, because a key that is
+ * not a place on Earth has no correct interpretation to fall back to.
+ */
 export function parseCrownCellKey(cellKey: string): { latIdx: number; lonIdx: number } | null {
   const match = /^(-?\d{1,6})_(-?\d{1,6})$/.exec(cellKey);
   if (!match) return null;
   const latIdx = Number(match[1]);
   const lonIdx = Number(match[2]);
   if (!Number.isSafeInteger(latIdx) || !Number.isSafeInteger(lonIdx)) return null;
+  if (latIdx < -MAX_LAT_IDX || latIdx > MAX_LAT_IDX) return null;
+  if (lonIdx < -MAX_LON_IDX || lonIdx > MAX_LON_IDX) return null;
   return { latIdx, lonIdx };
 }
 
-/** The half-open [min, max) coordinate box a cell key covers; null when malformed. */
+/**
+ * The half-open [min, max) coordinate box a cell key covers; null when
+ * malformed or off the globe.
+ *
+ * Latitude bounds are clamped to [-90, 90] on the way out. The top row of the
+ * grid is the case that needs it: latitude 90 exactly floors to the last index,
+ * whose unclamped upper edge would be 90.01. `sampleCrownPosition` draws
+ * uniformly inside these bounds, so an unclamped edge is not a cosmetic detail
+ * — it is an invalid WGS-84 latitude written to a crown document and then
+ * handed to a map client. The polar row degenerates to a zero-height box, which
+ * is the right answer: there is no strip of Earth above 90.
+ */
 export function crownCellBounds(cellKey: string): CrownCellBounds | null {
   const parsed = parseCrownCellKey(cellKey);
   if (!parsed) return null;
   return {
-    minLat: parsed.latIdx * CROWN_CELL_DEGREES,
-    maxLat: (parsed.latIdx + 1) * CROWN_CELL_DEGREES,
+    minLat: clampLat(parsed.latIdx * CROWN_CELL_DEGREES),
+    maxLat: clampLat((parsed.latIdx + 1) * CROWN_CELL_DEGREES),
     minLon: parsed.lonIdx * CROWN_CELL_DEGREES,
     maxLon: (parsed.lonIdx + 1) * CROWN_CELL_DEGREES,
   };
