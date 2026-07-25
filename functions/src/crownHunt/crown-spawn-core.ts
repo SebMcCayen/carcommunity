@@ -880,6 +880,26 @@ export function buildCrownSpawnFields(params: {
 export const SPAWN_CELL_NOTE_MIN_LENGTH = 3;
 export const SPAWN_CELL_NOTE_MAX_LENGTH = 2000;
 
+/**
+ * `lastSpawnPassAt` seed for a cell the spawner has never served (epoch, i.e.
+ * 1970-01-01T00:00:00Z).
+ *
+ * The field has to EXIST on approval, because `runCrownSpawnPass` orders the
+ * allow-list by it and Firestore excludes documents missing the orderBy field —
+ * a cell without it would never be served at all. But the value has to be
+ * honest about what it means. `lastSpawnPassAt` records when the spawner last
+ * looked at this cell; a brand-new cell has never been looked at, so seeding it
+ * with "now" would state the opposite of the truth and sort the cell to the
+ * BACK of a least-recently-served queue — the one place a never-served cell
+ * does not belong. The epoch sentinel is both true and correctly ordered: never
+ * served sorts ahead of every cell that has been.
+ *
+ * Re-approval reseeds it deliberately. A revocation deletes that cell's live
+ * crowns, so a re-approved area starts empty and should be repopulated on the
+ * next pass rather than waiting out a full round-robin cycle.
+ */
+export const SPAWN_CELL_NEVER_SERVED_AT_MS = 0;
+
 const cellKeySchema = z
   .string()
   .trim()

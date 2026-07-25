@@ -160,7 +160,10 @@ export async function runCrownSpawnPass(
   // approval" — starting from the approved list makes it structurally
   // impossible for an unapproved cell to be considered at all, however the
   // activity data looks. Least-recently-served first, so a long allow-list is
-  // served round-robin instead of the tail starving.
+  // served round-robin instead of the tail starving. Cells that have never been
+  // served carry the epoch sentinel (SPAWN_CELL_NEVER_SERVED_AT_MS) and so sort
+  // ahead of every served cell — a freshly approved area is picked up on the
+  // next pass rather than after a full cycle.
   const cells = await db
     .collection('crownSpawnCells')
     .where('approved', '==', true)

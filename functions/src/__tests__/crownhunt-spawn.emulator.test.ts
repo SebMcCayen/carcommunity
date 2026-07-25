@@ -39,6 +39,7 @@ import { runCrownSpawnCleanup, runCrownSpawnPass } from '../crownHunt/spawnSched
 import {
   COLLECT_RADIUS_METERS,
   MIN_CROWN_SEPARATION_METERS,
+  SPAWN_CELL_NEVER_SERVED_AT_MS,
   crownActivityUserHash,
   crownCellKey,
   createSeededRng,
@@ -116,6 +117,9 @@ let rival: TestUser;
 const CELL_LAT = 57.4874;
 const CELL_LON = 12.0757;
 const CELL_KEY = crownCellKey(CELL_LAT, CELL_LON);
+
+// A second, non-adjacent cell used only by the round-robin ordering test.
+const FRESH_CELL_KEY = crownCellKey(57.6012, 12.2013);
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -279,6 +283,48 @@ describe('spawn cell allow-list', () => {
       .where('targetId', '==', CELL_KEY)
       .get();
     expect(audit.empty).toBe(false);
+  });
+
+  it('seeds a never-served cell at the FRONT of the round-robin, not the back', async () => {
+    await signInAs(adminUser);
+
+    // Serve the existing cell first, so it carries a recent cursor to compete
+    // against.
+    await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
+    const servedAt = (await adminDb.collection('crownSpawnCells').doc(CELL_KEY).get()).data()!
+      .lastSpawnPassAt as Timestamp;
+    expect(servedAt.toMillis()).toBeGreaterThan(0);
+
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: FRESH_CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Ny godkänd yta, aldrig betjänad.',
+    });
+
+    // A cell the spawner has never looked at must SAY so: epoch, not "now".
+    // Seeding "now" would misstate the field's meaning and sort the new cell
+    // behind every already-served one.
+    const fresh = (await adminDb.collection('crownSpawnCells').doc(FRESH_CELL_KEY).get()).data()!;
+    expect((fresh.lastSpawnPassAt as Timestamp).toMillis()).toBe(SPAWN_CELL_NEVER_SERVED_AT_MS);
+
+    // With room for exactly one cell in the pass, the never-served one wins.
+    await runCrownSpawnPass(new Date(), { maxCells: 1, maxSpawns: 50 });
+    const freshAfter = (
+      await adminDb.collection('crownSpawnCells').doc(FRESH_CELL_KEY).get()
+    ).data()!.lastSpawnPassAt as Timestamp;
+    const oldAfter = (await adminDb.collection('crownSpawnCells').doc(CELL_KEY).get()).data()!
+      .lastSpawnPassAt as Timestamp;
+    expect(freshAfter.toMillis()).toBeGreaterThan(SPAWN_CELL_NEVER_SERVED_AT_MS);
+    expect(oldAfter.toMillis()).toBe(servedAt.toMillis());
+
+    // Leave the allow-list as the rest of the suite expects to find it.
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: false,
+      cellKey: FRESH_CELL_KEY,
+      reason: 'Testupprensning.',
+    });
+    await clearSpawns();
   });
 });
 

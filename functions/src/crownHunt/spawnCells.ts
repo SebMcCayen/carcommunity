@@ -33,11 +33,15 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
-import { parseSetSpawnCellApprovalInput, resolveSpawnCellKey } from './crown-spawn-core';
+import {
+  SPAWN_CELL_NEVER_SERVED_AT_MS,
+  parseSetSpawnCellApprovalInput,
+  resolveSpawnCellKey,
+} from './crown-spawn-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -81,11 +85,15 @@ export const setSpawnCellApproval = onCall(
           approvalNote: input.approvalNote,
           approvedByUserId: actor.uid,
           approvedAt: serverTimestamp(),
-          // Seeded here so the spawner's least-recently-served ordering has a
-          // value for a brand-new cell; without it the orderBy would silently
-          // skip the document (Firestore excludes docs missing the sort field)
-          // and a freshly approved area would never be served.
-          lastSpawnPassAt: serverTimestamp(),
+          // Seeded so the spawner's least-recently-served ordering has a value
+          // for a brand-new cell; without it the orderBy would silently skip
+          // the document (Firestore excludes docs missing the sort field) and a
+          // freshly approved area would never be served. The seed is the EPOCH
+          // sentinel, not `now`: this cell has never been served, so it belongs
+          // at the FRONT of a least-recently-served queue, and "now" would both
+          // misstate the field's meaning and sort it to the back behind every
+          // already-served cell. See SPAWN_CELL_NEVER_SERVED_AT_MS.
+          lastSpawnPassAt: Timestamp.fromMillis(SPAWN_CELL_NEVER_SERVED_AT_MS),
           revokedAt: null,
           revokedByUserId: null,
           updatedAt: serverTimestamp(),
