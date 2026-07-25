@@ -15,7 +15,12 @@
     {
       "key": "crownHunt",
       "default": true,
-      "description": "Kronjakt geographic point hunt."
+      "description": "Kronjakt geographic point hunt (hand-placed, admin-approved reward points)."
+    },
+    {
+      "key": "crownHuntSpawn",
+      "default": false,
+      "description": "Kronjakt AUTOMATIC crown spawning: the scheduled spawner, the aggregate activity signal collected from live-location updates, and crownHunt.claimSpawn. Default OFF — a hand-placed point carries a named admin's safe-location confirmation for that exact spot and an auto-spawned crown cannot, so the automatic engine stays dark until it is deliberately enabled AND admins have approved the areas it may place in (crownSpawnCells, via crownHunt.setSpawnCellApproval). Turning it off stops spawning and stops collecting the activity signal immediately; already-placed crowns still age off the map via the sweep. Independent of crownHunt, so the curated points are unaffected either way."
     },
     {
       "key": "partners",

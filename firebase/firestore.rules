@@ -291,11 +291,20 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     // events – community calendar (Phase 9b)
     // Split-document model: events/{eventId} holds teaser-safe + operational
-    // fields (title, approximateArea, status, rsvpCounts, ...); the exact
-    // location and long description are member-only and live in
+    // fields (title, approximateArea, status, rsvpCounts, ...) PLUS the event's
+    // map location (locationName, latitude, longitude); the long description and
+    // the precise street address are member-only and live in
     // events/{eventId}/details/private. All mutations go through the
     // events.* callables (Admin SDK) — no client writes, including admins, so
     // every admin lifecycle change carries an adminAuditEvents record.
+    //
+    // DELIBERATE PRIVACY CHANGE (2026-07): the coordinate pair + place name are
+    // PUBLIC teaser data now, so every signed-in user sees event pins on the
+    // community map. The teaser read gate below already served the whole teaser
+    // document to any authenticated user while published/completed, so opening
+    // location up needs no rule change here — the fields simply moved onto the
+    // document that gate already covers. Only description + address remain
+    // behind the details/private member gate.
     //
     // events.create is the one callable an active MEMBER may drive (their
     // event is stamped createdByRole: 'member' + createdByUserId and published
@@ -318,20 +327,24 @@ service cloud.firestore {
       // from members the morning after — including for the attendees who
       // RSVP'd — and would break any teaser read that outlives the event (a
       // detail screen opened from a push notification, an archive/past list).
-      // This exposes nothing new: the same teaser document was already
-      // readable by the same users while the event was published, and it is
-      // teaser-safe by construction (the exact location and description live
-      // in details/private, which stays published-gated below — an ended
-      // event closes its detail, roster and chat).
+      // This exposes nothing new about who-can-read: the same teaser document
+      // was already readable by the same users while published. It now also
+      // carries the map location (locationName + coordinates), which is a
+      // DELIBERATE product decision (see the block header) — event pins are
+      // public to every signed-in user. The long description and the precise
+      // street address stay in details/private, which stays published-gated
+      // below (an ended event closes its detail, roster and chat).
       // `draft` and `cancelled` remain admin-only.
       allow read: if (isAuthenticated()
           && resource.data.status in ['published', 'completed'])
         || isAdmin();
       // No client writes: events.create/update/publish/cancel/complete only.
 
-      // Member-gated detail document (exact location, description). The
-      // match is pinned to the single `private` document so nothing else
-      // ever added under details/ inherits member read access.
+      // Member-gated detail document (long description + precise street
+      // address). The map location moved to the public teaser above; this
+      // document no longer holds coordinates. The match is pinned to the
+      // single `private` document so nothing else ever added under details/
+      // inherits member read access.
       match /details/private {
         allow read: if isAdmin()
           || (isActiveMember()
@@ -389,13 +402,21 @@ service cloud.firestore {
     // Each document carries a `userId` field with the owning UID.
     // -------------------------------------------------------------------------
     // All writes go through the garage.* callables (Phase 9e): per-user vehicle
-    // cap, strict no-plate/no-VIN validation, and storage cleanup on delete
+    // cap, strict no-VIN schema validation, registrationPlate normalisation,
+    // and storage cleanup on delete
     // cannot be enforced on direct client writes, so writes stay callable-only
     // even though managing your own garage is no longer member-gated (the ungate
     // lives in the callable's requireActiveActor check, NOT here — opening direct
     // owner writes would bypass the cap and validation). The document stays
-    // authenticated-readable by design — which is exactly why registration
-    // plates must never be stored here (docs/firebase-data-model.md).
+    // authenticated-readable by design. `registrationPlate` is stored here
+    // ON PURPOSE — a DELIBERATELY PUBLIC, user-entered field (Seb product
+    // decision). Note the read below is `isAuthenticated()`, i.e. ANY signed-in
+    // user: it is NOT limited to members and is NOT withdrawn from suspended
+    // accounts, so the plate is wider than "shown to other members". Narrowing
+    // it later means changing this read rule, not just the UI. VIN / insurance /
+    // location remain out (docs/firebase-data-model.md). These rules do not
+    // field-validate the vehicle doc (all writes are callable-only), so adding
+    // the plate needs no rule change here.
     match /vehicles/{vehicleId} {
       allow read: if isAuthenticated();
       // No client writes: garage.addVehicle/updateVehicle/deleteVehicle only.
@@ -811,6 +832,105 @@ service cloud.firestore {
     }
 
     match /crownHuntDailyClaims/{counterId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawns – AUTO-SPAWNED Kronjakt crowns (spawn engine)
+    // Machine-placed, short-lived crowns written ONLY by the scheduled
+    // crownHunt-spawnCrowns, and mutated only by crownHunt.claimSpawn and the
+    // crownHunt-sweepSpawns TTL sweep — all via the Admin SDK.
+    //
+    // Members READ live, unexpired crowns directly (the map layer queries
+    // `cellKey in [...] && status == 'live' && expiresAt > now`, served by the
+    // composite index in firestore.indexes.json). The same two conditions are
+    // required HERE, so a claimed or expired crown disappears from every client
+    // the moment it is written — claiming sets expiresAt to the claim instant
+    // precisely so this rule hides it before the sweep gets to it.
+    //
+    // NO client writes. A crown is a reward-bearing document: a client that
+    // could write one could mint Kronpoäng at a coordinate of its choosing.
+    // -------------------------------------------------------------------------
+    match /crownSpawns/{spawnId} {
+      allow read: if (isActiveMember()
+                      && resource.data.status == 'live'
+                      && resource.data.expiresAt > request.time)
+                  || isAdmin();
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawnCells – ADMIN ALLOW-LIST of areas the spawner may place in
+    // The human half of the auto-spawn safety model. An auto-spawned crown has
+    // no per-point safe-location confirmation (no human ever saw the
+    // coordinate), so an admin approves the ~1.1 km CELL instead and the
+    // spawner reads ONLY approved cells. Writes go exclusively through the
+    // audited, admin-gated crownHunt.setSpawnCellApproval callable.
+    //
+    // Admin-readable (the approval map in the admin portal); NOT
+    // member-readable — the allow-list is an operational safety artefact, not
+    // game content, and exposing "approved but currently empty" would tell a
+    // client exactly where to wait for the next spawn. Members see crowns, not
+    // the grid.
+    // -------------------------------------------------------------------------
+    match /crownSpawnCells/{cellKey} {
+      allow read: if isAdmin();
+      // No client writes — approval is a callable, so it is always audited.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownCellActivity – aggregate ACTIVITY heat used to size spawn density
+    // BACKEND-ONLY, both directions. One document per grid cell plus a
+    // `recentUsers/{hash}` sub-collection holding one `lastSeenAt` per DISTINCT
+    // user, keyed by a CELL-SCOPED SHA-256 pseudonym (no uid, no coordinate, no
+    // trace — the same person is a different identifier in every cell, so the
+    // documents cannot be joined into a route). Written only by the Admin SDK,
+    // from live.updatePosition, and only for members with an active live-
+    // sharing session who are moving slowly.
+    //
+    // Denied to clients even though it is pseudonymous: it still describes
+    // where people gather and when, no client has any use for it (the spawner
+    // is the only consumer), and a member who could read it could predict where
+    // crowns are about to appear.
+    // -------------------------------------------------------------------------
+    match /crownCellActivity/{cellKey} {
+      allow read, write: if false;
+
+      match /recentUsers/{userHash} {
+        allow read, write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawnClaims – every auto-spawn claim ATTEMPT
+    // Document ID = the namespaced SHA-256-scoped idempotency key. Owner-only
+    // read (collection history); all writes go through crownHunt.claimSpawn.
+    // Risk data is NOT here — see crownSpawnClaimRisk below.
+    // -------------------------------------------------------------------------
+    match /crownSpawnClaims/{claimId} {
+      allow read: if (isActiveMember() && resource.data.userId == request.auth.uid) || isAdmin();
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawnClaimRisk – anti-fraud scores and reasons for spawn claims
+    // Fully backend-only, for the same reason as crownHuntClaimRisk: risk
+    // thresholds and reason labels must never reach mobile clients, so they
+    // live apart from the owner-readable claim records.
+    // -------------------------------------------------------------------------
+    match /crownSpawnClaimRisk/{claimId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawnDailyClaims – per-user/per-UTC-day spawn-claim counter
+    // Backend-only. A deterministic document (ID independent of the client
+    // idempotency key) that crownHunt.claimSpawn reads and increments INSIDE
+    // the award transaction, so the daily cap holds under concurrency. Never
+    // client-readable or client-writable — a member must not be able to inspect
+    // or reset their own cap.
+    // -------------------------------------------------------------------------
+    match /crownSpawnDailyClaims/{counterId} {
       allow read, write: if false;
     }
 

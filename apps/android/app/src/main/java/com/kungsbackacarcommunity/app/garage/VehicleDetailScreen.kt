@@ -105,6 +105,9 @@ fun VehicleDetailScreen(
             )
         }
 
+        vehicle.registrationPlate?.takeIf { it.isNotBlank() }?.let { plate ->
+            InfoRow(label = stringResource(R.string.garage_registrationPlate), value = plate)
+        }
         InfoRow(
             label = stringResource(R.string.garage_powertrain),
             value = stringResource(vehicle.powertrain.labelRes()),

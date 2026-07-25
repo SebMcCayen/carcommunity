@@ -48,8 +48,13 @@ interface ConvoyChatRepository {
     /** Live newest-window of a convoy's channel, chronological. */
     fun observeMessages(convoyId: String): Flow<ChannelMessagesState>
 
-    /** `convoyChat-post` — posts [text] to [convoyId]'s channel. */
-    suspend fun post(convoyId: String, text: String): ChannelSendResult
+    /**
+     * `convoyChat-post` — posts [text] to [convoyId]'s channel. [clientId] is the
+     * optimistic idempotency key: the backend uses it as the message doc id, so a
+     * retry is exactly-once and the client reconciles its bubble by matching it.
+     * Null falls back to a server auto-id (legacy, non-idempotent) doc.
+     */
+    suspend fun post(convoyId: String, text: String, clientId: String? = null): ChannelSendResult
 
     /** `convoyChat-list` — an older page of [convoyId] before the [before] ISO cursor. */
     suspend fun loadOlder(convoyId: String, before: String): ChannelOlderResult

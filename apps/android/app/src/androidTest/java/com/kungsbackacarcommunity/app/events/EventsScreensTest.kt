@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.events
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -25,7 +26,11 @@ class EventsScreensTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    private fun event(id: String = "e1", status: EventStatus = EventStatus.PUBLISHED) =
+    private fun event(
+        id: String = "e1",
+        status: EventStatus = EventStatus.PUBLISHED,
+        locationName: String? = null,
+    ) =
         EventSummary(
             id = id,
             title = "Cars & Coffee",
@@ -33,6 +38,7 @@ class EventsScreensTest {
             startsAtMillis = 0L,
             endsAtMillis = null,
             approximateArea = "Kungsbacka",
+            locationName = locationName,
             isOfficial = true,
             status = status,
             counts = RsvpCounts(12, 3, 1),
@@ -173,7 +179,7 @@ class EventsScreensTest {
             KccTheme {
                 EventDetailScreen(
                     event = event(),
-                    detail = EventDetail("Bring your car", "Torg", null, null, null),
+                    detail = EventDetail(description = "Bring your car", address = null),
                     myRsvp = null,
                     passesMemberGate = true,
                     rsvpStatus = RsvpStatusUi.Idle,
@@ -203,6 +209,34 @@ class EventsScreensTest {
         }
         composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.events_rsvpGoing)).assertDoesNotExist()
+    }
+
+    /**
+     * The place name is PUBLIC teaser data since the 2026-07 open-up (it labels
+     * the map pin every signed-in user can see), so a non-member who opens the
+     * detail from a pin must still be told WHERE the event is — only the precise
+     * street address and the long description stay behind the member gate.
+     */
+    @Test
+    fun detail_nonMember_stillSeesThePublicPlaceName() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(locationName = "Kungsbacka torg"),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = false,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_LOCATION_NAME_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Kungsbacka torg").assertIsDisplayed()
+        // The gate itself is still there — this test asserts the place name is
+        // outside it, not that the gate is gone.
+        composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertIsDisplayed()
     }
 
     @Test

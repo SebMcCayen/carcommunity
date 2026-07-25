@@ -31,7 +31,7 @@ import { get as dbGet, ref as dbRef, set as dbSet } from 'firebase/database';
 import { getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { afterAll, beforeAll, describe, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const FIREBASE_DIR = resolve(__dirname, '../../../firebase');
 
@@ -1274,13 +1274,17 @@ describe('Firestore – events (Phase 9b)', () => {
         await setDoc(doc(firestore, 'events', id), {
           title: 'Test event',
           approximateArea: 'Stockholm area',
+          // Map location is PUBLIC teaser data now (2026-07): every signed-in
+          // user sees event pins on the community map.
+          locationName: 'Exact spot',
+          latitude: 59.3,
+          longitude: 18.0,
           status,
           rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
         });
         await setDoc(doc(firestore, 'events', id, 'details', 'private'), {
-          locationName: 'Exact spot',
-          latitude: 59.3,
-          longitude: 18.0,
+          description: 'Member-only long write-up',
+          address: 'Garagevägen 1',
         });
       }
     });
@@ -1289,6 +1293,16 @@ describe('Firestore – events (Phase 9b)', () => {
   it('any authenticated user can read a published event teaser', async () => {
     const ctx = testEnv.authenticatedContext(NON_MEMBER);
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'events', PUBLISHED)));
+  });
+
+  it('a non-member reads the public map location (place name + coordinates) off the teaser', async () => {
+    // Deliberate 2026-07 open-up: location moved onto the teaser so every
+    // signed-in user can render the event as a map pin, with no member gate.
+    const ctx = testEnv.authenticatedContext(NON_MEMBER);
+    const snap = await getDoc(doc(ctx.firestore(), 'events', PUBLISHED));
+    expect(snap.data()?.latitude).toBe(59.3);
+    expect(snap.data()?.longitude).toBe(18.0);
+    expect(snap.data()?.locationName).toBe('Exact spot');
   });
 
   it('any authenticated user can read a completed (ended) event teaser', async () => {
@@ -1307,8 +1321,10 @@ describe('Firestore – events (Phase 9b)', () => {
   });
 
   it('completing an event closes its member-gated detail', async () => {
-    // The teaser opening up does NOT open the exact location/description: an
-    // ended event is closed, and details/private stays gated on `published`.
+    // The teaser (including the now-public map location) stays readable, but the
+    // member-gated detail — the long description + precise street address — does
+    // NOT: an ended event is closed, and details/private stays gated on
+    // `published`.
     await assertFails(
       getDoc(doc(memberCtx().firestore(), 'events', COMPLETED, 'details', 'private')),
     );
@@ -1634,8 +1650,10 @@ describe('Firestore – vehicle ownership', () => {
   });
 
   it('no client writes at all — even the member owner (garage.* callables only)', async () => {
-    // Phase 9e: direct writes would bypass the per-user cap, the strict
-    // no-plate/no-VIN validation, and storage cleanup on delete.
+    // Phase 9e: direct writes would bypass the per-user cap, the strict no-VIN
+    // schema validation, the server-side registrationPlate normalisation, and
+    // storage cleanup on delete. (The registrationPlate write below must still
+    // fail: the field is deliberately PUBLIC to READ, but never client-writable.)
     const ctx = testEnv.authenticatedContext(OWNER, { activeMember: true });
     await assertFails(
       setDoc(doc(ctx.firestore(), 'vehicles', 'v-new'), {

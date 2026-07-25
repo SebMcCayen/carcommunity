@@ -1,18 +1,11 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-
-/** UI-facing status of a channel send. */
-sealed interface ChannelSendStatus {
-    data object Idle : ChannelSendStatus
-
-    data object Sending : ChannelSendStatus
-
-    data class Failed(val error: ChannelSendError) : ChannelSendStatus
-}
+import kotlinx.coroutines.flow.update
 
 /** Older-page pagination status for a channel. */
 sealed interface ChannelPageStatus {
@@ -28,7 +21,7 @@ sealed interface ChannelPageStatus {
 }
 
 /**
- * Orchestrates one open channel (community OR convoy): send status, older-page
+ * Orchestrates one open channel (community OR convoy): OPTIMISTIC send, older-page
  * pagination (accumulated off the live newest-window), and an optional mark-read
  * (community only). Pure Kotlin (no Firebase/Android types) so it is
  * unit-testable with fakes; the live message stream itself is collected in the
@@ -36,16 +29,44 @@ sealed interface ChannelPageStatus {
  * via injected [sender]/[pager]/[marker] lambdas so community and convoy share
  * one coordinator instead of duplicating this state machine.
  *
+ * Send is optimistic: [send] appends a local "sending" bubble to
+ * [pendingMessages] IMMEDIATELY (so the message shows the instant the user taps,
+ * with no wait for the `*-post` round-trip) and fires the callable in the
+ * background. On success the bubble flips to [ChannelDeliveryState.Sent]; on
+ * failure to [ChannelDeliveryState.Failed] with a [retry] affordance (the user's
+ * message is never silently dropped). The route displays
+ * [ChannelThread.mergeWithPending] of the server messages + these bubbles, and the
+ * bubble is reconciled away — rendered exactly once — the moment the real document
+ * arrives from the listener ([onLiveMessages]), matched by its clientId (which the
+ * backend stores as the delivered doc id).
+ *
+ * Idempotency: each optimistic bubble carries a generated clientId sent to the
+ * backend as the message doc id, so a [retry] resends the SAME key and the backend
+ * writes exactly one message however many times it is retried.
+ *
  * [sentCount] increments on every successful send; unused for re-subscription
  * (channel docs already exist), but kept for parity + tests.
  */
 class ChannelChatCoordinator(
-    private val sender: suspend (String, List<String>) -> ChannelSendResult,
+    private val sender: suspend (String, List<String>, String) -> ChannelSendResult,
     private val pager: suspend (String) -> ChannelOlderResult,
+    private val selfUid: String,
     private val marker: (suspend () -> Unit)? = null,
+    private val clock: () -> Long = { System.currentTimeMillis() },
+    private val idGenerator: () -> String = { UUID.randomUUID().toString() },
 ) {
-    private val sendState = MutableStateFlow<ChannelSendStatus>(ChannelSendStatus.Idle)
-    val sendStatus: StateFlow<ChannelSendStatus> = sendState.asStateFlow()
+    private val pending = MutableStateFlow<List<ChannelMessage>>(emptyList())
+
+    /**
+     * The caller's in-flight/failed optimistic bubbles, oldest-first. Each is a
+     * [ChannelMessage] whose id == its clientId and whose
+     * [ChannelMessage.deliveryState] is [ChannelDeliveryState.Sending],
+     * [ChannelDeliveryState.Sent] (acked, awaiting the listener), or
+     * [ChannelDeliveryState.Failed]. Merged into the displayed thread by
+     * [ChannelThread.mergeWithPending] and pruned by [onLiveMessages] once
+     * delivered.
+     */
+    val pendingMessages: StateFlow<List<ChannelMessage>> = pending.asStateFlow()
 
     private val older = MutableStateFlow<List<ChannelMessage>>(emptyList())
     val olderMessages: StateFlow<List<ChannelMessage>> = older.asStateFlow()
@@ -59,41 +80,150 @@ class ChannelChatCoordinator(
     private val dropped = MutableStateFlow(0)
 
     /**
-     * How many of the last send's @mentions the server DROPPED — the composer's
-     * optimistic picks reconciled against the accepted set the `*-post` response
-     * echoed back. Nonzero means a member the user deliberately named was not
-     * notified (they deleted their account, lost their subscription, or blocked
-     * the sender between picking and posting), which is worth one quiet line;
-     * the message itself was still posted. Self-mentions and duplicates cannot
-     * land here — the picker excludes the caller and the draft dedupes — so every
-     * drop counted is a real one. Cleared by [dismissDroppedMentions].
+     * How many @mentions the server DROPPED across the sends the user has not
+     * acknowledged yet — the composer's optimistic picks reconciled against the
+     * accepted set each `*-post` response echoed back. Nonzero means a member the
+     * user deliberately named was not notified (they deleted their account, lost
+     * their subscription, or blocked the sender between picking and posting),
+     * which is worth one quiet line; the message itself was still posted.
+     * Self-mentions and duplicates cannot land here — the picker excludes the
+     * caller and the draft dedupes — so every drop counted is a real one.
+     *
+     * ACCUMULATES rather than tracking only the latest send, and is cleared ONLY
+     * by [dismissDroppedMentions]. Optimistic send frees the composer the instant
+     * a message is queued, so several sends are routinely in flight at once and
+     * their acks can resolve in any order. Resetting this per send — or letting
+     * each ack overwrite it — would let a later send that dropped nothing wipe an
+     * earlier send's note before the user ever saw it, silently swallowing the one
+     * signal that a mention didn't reach anyone. The count only ever falls when
+     * the user dismisses it.
      */
     val droppedMentionCount: StateFlow<Int> = dropped.asStateFlow()
 
+    /**
+     * Optimistically sends [text] (optionally @mentioning [mentionedUids]). Adds
+     * the "sending" bubble synchronously (the first thing this does, so the UI
+     * updates before the suspending callable), then dispatches the `*-post`
+     * callable with a fresh idempotency key.
+     */
     suspend fun send(text: String, mentionedUids: List<String> = emptyList()) {
-        if (sendState.value == ChannelSendStatus.Sending) return
         if (!ChannelThread.isSendable(text)) return
-        sendState.value = ChannelSendStatus.Sending
-        dropped.value = 0
+        val trimmed = text.trim()
+        val clientId = idGenerator()
+        val picked = mentionedUids.distinct()
+        val optimistic =
+            ChannelMessage(
+                id = clientId,
+                senderUid = selfUid,
+                text = trimmed,
+                // Own bubbles render no sender header (isOwn), so no self profile
+                // is needed for display.
+                senderDisplayName = null,
+                senderAvatarPath = null,
+                createdAtMillis = clock(),
+                createdAtIso = null,
+                // Optimistically highlight the picked mentions; the accepted set
+                // reconciles them on the delivered doc via the listener.
+                mentionedUids = picked,
+                clientId = clientId,
+                deliveryState = ChannelDeliveryState.Sending,
+            )
+        pending.update { it + optimistic }
+        dispatch(clientId, trimmed, picked)
+    }
+
+    /**
+     * Re-attempts a previously [ChannelDeliveryState.Failed] bubble, resending the
+     * SAME clientId so the backend stays exactly-once (no double post). A no-op if
+     * the bubble isn't found or isn't in a failed state, so a double-tap can't fire
+     * two resends.
+     */
+    suspend fun retry(clientId: String) {
+        val target =
+            pending.value.firstOrNull {
+                it.clientId == clientId && it.deliveryState == ChannelDeliveryState.Failed
+            } ?: return
+        pending.update { list ->
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = ChannelDeliveryState.Sending, sendError = null)
+                } else {
+                    it
+                }
+            }
+        }
+        dispatch(clientId, target.text, target.mentionedUids)
+    }
+
+    private suspend fun dispatch(clientId: String, text: String, mentionedUids: List<String>) {
         try {
-            when (val result = sender(text.trim(), mentionedUids)) {
+            when (val result = sender(text, mentionedUids, clientId)) {
                 is ChannelSendResult.Sent -> {
-                    sendState.value = ChannelSendStatus.Idle
-                    sent.value += 1
+                    // Flip to Sent so the "sending" affordance clears on the ack;
+                    // the bubble is removed for good once the listener delivers the
+                    // real doc ([onLiveMessages]), matched by clientId == doc id.
+                    markSent(clientId)
+                    // Atomic: concurrent optimistic sends each resolve on their own
+                    // coroutine, so a plain read-modify-write could drop increments.
+                    sent.update { it + 1 }
                     // Reconcile: the accepted set is authoritative, and may be a
                     // strict subset of what we sent.
                     val accepted = result.mentionedUids.toSet()
-                    dropped.value = mentionedUids.distinct().count { it !in accepted }
+                    val droppedHere = mentionedUids.count { it !in accepted }
+                    // Atomic ADD, never an assignment: concurrent sends resolve on
+                    // their own coroutines and in any order, so assigning would let
+                    // whichever ack happens to land last decide the note — including
+                    // a mention-free send zeroing a drop the user hasn't seen.
+                    if (droppedHere > 0) dropped.update { it + droppedHere }
                 }
-                is ChannelSendResult.Failed ->
-                    sendState.value = ChannelSendStatus.Failed(result.error)
+                // Keep the SPECIFIC error so the UI can explain why and offer a
+                // retry only when it could actually help ([ChannelSendError.isRetryable]).
+                is ChannelSendResult.Failed -> markFailed(clientId, result.error)
             }
         } catch (cancellation: CancellationException) {
-            sendState.value = ChannelSendStatus.Idle
+            // Leaving the channel cancels the send; the bubble is dropped with the
+            // coordinator. Don't mark it failed (it may well have been delivered).
             throw cancellation
         } catch (_: Exception) {
-            sendState.value = ChannelSendStatus.Failed(ChannelSendError.Generic)
+            // An unexpected throw is transient/unknown — a retryable Generic.
+            markFailed(clientId, ChannelSendError.Generic)
         }
+    }
+
+    private fun markSent(clientId: String) {
+        pending.update { list ->
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = ChannelDeliveryState.Sent, sendError = null)
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    private fun markFailed(clientId: String, error: ChannelSendError) {
+        pending.update { list ->
+            list.map {
+                if (it.clientId == clientId) {
+                    it.copy(deliveryState = ChannelDeliveryState.Failed, sendError = error)
+                } else {
+                    it
+                }
+            }
+        }
+    }
+
+    /**
+     * Reconciles the optimistic bubbles against the live server messages: a
+     * pending bubble whose id (clientId) now appears as a delivered document id in
+     * [live] is dropped, since the real doc supersedes it. Idempotent; called by
+     * the route on every live update.
+     */
+    fun onLiveMessages(live: List<ChannelMessage>) {
+        if (pending.value.isEmpty()) return
+        val liveIds = live.mapTo(HashSet(live.size)) { it.id }
+        pending.update { list -> list.filter { it.id !in liveIds } }
     }
 
     /** Dismisses the dropped-mention note (e.g. once the user edits a new draft). */
@@ -141,10 +271,5 @@ class ChannelChatCoordinator(
         } catch (_: Exception) {
             page.value = ChannelPageStatus.Error
         }
-    }
-
-    /** Clears a send failure so the input is usable again (e.g. on edit). */
-    fun resetSendError() {
-        if (sendState.value is ChannelSendStatus.Failed) sendState.value = ChannelSendStatus.Idle
     }
 }
