@@ -167,6 +167,25 @@ class UserSearchCoordinatorTest {
     }
 
     @Test
+    fun `visibleResults keeps rows on screen while re-searching, and only then`() {
+        // The screen renders from THIS, so it is what actually decides whether
+        // the carried `previous` list is ever seen. Before it existed the screen
+        // rendered only Results and silently dropped every row on each keystroke,
+        // while the coordinator dutifully maintained a list nothing displayed.
+        val rows = listOf(MemberSearchResult("uid-1", "Gt_86", null))
+        assertEquals(rows, UserSearchState.Results(rows).visibleResults())
+        assertEquals(rows, UserSearchState.Searching(previous = rows).visibleResults())
+
+        // States with nothing to show must show nothing — a stale row must not
+        // outlive an empty or failed search.
+        assertTrue(UserSearchState.Idle.visibleResults().isEmpty())
+        assertTrue(UserSearchState.TooShort.visibleResults().isEmpty())
+        assertTrue(UserSearchState.Empty.visibleResults().isEmpty())
+        assertTrue(UserSearchState.Failed(UserSearchError.Network).visibleResults().isEmpty())
+        assertTrue(UserSearchState.Searching(previous = emptyList()).visibleResults().isEmpty())
+    }
+
+    @Test
     fun `an empty result set is an Empty state, not an error`() = runTest {
         val repo = RecordingRepo { UserSearchOutcome.Loaded(emptyList()) }
         val coordinator = UserSearchCoordinator(repo, TestScope(testScheduler), debounce)

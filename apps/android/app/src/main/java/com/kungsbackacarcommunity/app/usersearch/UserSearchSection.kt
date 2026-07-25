@@ -106,7 +106,13 @@ fun MemberSearchField(
                     )
 
                 is UserSearchState.Searching ->
-                    HintText(stringResource(R.string.userSearch_searching))
+                    // Only when there is nothing else to look at. Once previous
+                    // rows are on screen the trailing spinner already says
+                    // "refreshing", and a redundant line of text under the field
+                    // just pushes those rows further from the keyboard.
+                    if (state.previous.isEmpty()) {
+                        HintText(stringResource(R.string.userSearch_searching))
+                    }
 
                 UserSearchState.Idle, is UserSearchState.Results -> Unit
             }

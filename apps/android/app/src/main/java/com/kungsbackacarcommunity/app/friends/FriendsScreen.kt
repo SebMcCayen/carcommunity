@@ -50,6 +50,7 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import com.kungsbackacarcommunity.app.usersearch.MemberSearchField
 import com.kungsbackacarcommunity.app.usersearch.MemberSearchResultRow
 import com.kungsbackacarcommunity.app.usersearch.UserSearchState
+import com.kungsbackacarcommunity.app.usersearch.visibleResults
 
 /**
  * The Friends surface: add-by-nickname (with an ambiguity picker), incoming and
@@ -117,11 +118,18 @@ fun FriendsScreen(
             // Suggestion rows are LazyColumn items rather than a Column inside
             // the search card, so a full page of matches composes lazily and each
             // row keeps a stable key across keystrokes.
-            if (searchState is UserSearchState.Results) {
+            //
+            // Rendered for Searching TOO, from its carried `previous` list — that
+            // is the whole reason the coordinator carries one. Dropping the rows
+            // the moment the next keystroke lands would blank the list on every
+            // character and yank a row out from under a finger already moving to
+            // tap it; the field's own spinner is what signals the refresh.
+            val suggestions = searchState.visibleResults()
+            if (suggestions.isNotEmpty()) {
                 item(key = "member-search-header") {
                     SectionHeader(stringResource(R.string.userSearch_resultsTitle))
                 }
-                items(searchState.members, key = { "member-search-${it.uid}" }) { member ->
+                items(suggestions, key = { "member-search-${it.uid}" }) { member ->
                     MemberSearchResultRow(
                         member = member,
                         onOpenProfile = { onOpenMemberProfile(member.uid) },

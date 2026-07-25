@@ -39,6 +39,27 @@ sealed interface UserSearchState {
 }
 
 /**
+ * The suggestion rows a screen should currently be showing.
+ *
+ * [UserSearchState.Searching] resolves to its carried [UserSearchState.Searching.previous]
+ * rather than to nothing, which is what keeps the list stable across keystrokes
+ * instead of blanking on every character. Defined once, here, so the screen and
+ * the coordinator's own "what is on screen right now" lookup cannot drift apart
+ * — the two disagreeing is exactly how `previous` ends up carefully maintained
+ * and never rendered.
+ */
+fun UserSearchState.visibleResults(): List<MemberSearchResult> =
+    when (this) {
+        is UserSearchState.Results -> members
+        is UserSearchState.Searching -> previous
+        UserSearchState.Idle,
+        UserSearchState.TooShort,
+        UserSearchState.Empty,
+        is UserSearchState.Failed,
+        -> emptyList()
+    }
+
+/**
  * Drives the member typeahead: debounces keystrokes, cancels superseded
  * searches, and publishes a single [UserSearchState] for the screen to render.
  * Pure Kotlin (no Android, no Firebase) so every timing rule below is
@@ -151,12 +172,7 @@ class UserSearchCoordinator(
     }
 
     /** Rows currently on screen, so a re-search can keep showing them. */
-    private fun currentResults(): List<MemberSearchResult> =
-        when (val current = stateFlow.value) {
-            is UserSearchState.Results -> current.members
-            is UserSearchState.Searching -> current.previous
-            else -> emptyList()
-        }
+    private fun currentResults(): List<MemberSearchResult> = stateFlow.value.visibleResults()
 
     companion object {
         /**
