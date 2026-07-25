@@ -132,6 +132,11 @@ fun MemberSearchResultRow(
     onOpenProfile: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // TalkBack reads this as "<name>, button — double tap to open profile".
+    // Without the label a screen-reader user hears only a name and a generic
+    // "double tap to activate", with no way to know that activating it navigates
+    // to that member rather than, say, sending them a request.
+    val openProfileLabel = stringResource(R.string.userSearch_openProfile)
     Card(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier =
@@ -140,7 +145,11 @@ fun MemberSearchResultRow(
                     // Announced as a button so screen readers expose the
                     // tap-to-open-profile affordance, which is otherwise
                     // invisible on a row of plain text.
-                    .clickable(role = Role.Button, onClick = onOpenProfile)
+                    .clickable(
+                        role = Role.Button,
+                        onClickLabel = openProfileLabel,
+                        onClick = onOpenProfile,
+                    )
                     .padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
