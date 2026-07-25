@@ -512,16 +512,27 @@ private fun ChatHubContent(
             // at touch-down, so a sideways swipe drives only the pager while an
             // up/down drag drives only the list or the panel — they never fight.
             //
-            // beyondViewportPageCount = 1 keeps the immediate neighbour composed so
-            // a swipe slides an already-live section in without tearing down and
-            // re-subscribing its Firestore listener mid-gesture, while still not
-            // holding all four channels open at once. `key` pins each page's
-            // identity to its tab so state is not reshuffled as pages recompose.
+            // beyondViewportPageCount is deliberately left at its default of 0, so
+            // ONLY the section(s) actually on screen are composed. Each section
+            // subscribes as soon as it composes — CommunityChannelRoute collects
+            // observeMessages() (and fires markRead()), NotificationsRoute collects
+            // observeNotifications(), ConversationListRoute collects
+            // observeConversations(), ConvoyListRoute calls listConvoys() — so
+            // prefetching a neighbour would open Firestore listeners and spend a
+            // callable for tabs the member never opens, on their battery and our
+            // bill. Worse, it would mark the community channel READ behind their
+            // back: markRead() keys on composition, not on being looked at.
+            //
+            // The swipe stays smooth without the prefetch because a page composes
+            // as soon as it enters the viewport — i.e. at the very start of the
+            // drag, while the neighbour is only a sliver wide — so it is live well
+            // before it settles. It renders its own loading state in the meantime,
+            // exactly as it does on a tab tap. `key` pins each page's identity to
+            // its tab so state is not reshuffled as pages recompose.
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 userScrollEnabled = !inSubScreen,
-                beyondViewportPageCount = 1,
                 key = { ChatTab.entries[it] },
             ) { page ->
                 when (ChatTab.entries[page]) {

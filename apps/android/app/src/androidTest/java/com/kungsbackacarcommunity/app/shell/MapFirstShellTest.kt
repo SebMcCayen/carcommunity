@@ -852,9 +852,11 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
         // Sanity: the body really is the non-interactive placeholder, not a live
         // channel with its own click handlers. Every section is null-repo here, so
-        // each renders the same placeholder; the hub's swipe pager keeps the
-        // neighbour page composed (beyondViewportPageCount), so more than one copy
-        // exists in the tree — take the front page's, which is the one on screen.
+        // each of the hub's swipe-pager pages renders this same placeholder text.
+        // Match them all and assert the front one — the page on screen — rather
+        // than requiring exactly one node, so this stays a statement about what the
+        // member sees and not an incidental assertion about how many pages the
+        // pager happens to keep composed.
         composeTestRule.onAllNodesWithText(str(R.string.chatHub_unavailable))
             .onFirst()
             .assertIsDisplayed()
