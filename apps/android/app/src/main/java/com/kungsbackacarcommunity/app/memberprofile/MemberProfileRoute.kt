@@ -40,9 +40,17 @@ import kotlinx.coroutines.launch
  * member from the viewer's OWN `friend-list` snapshot (see
  * [MemberFriendCoordinator]) and renders the matching control; without one — a
  * config-less build, or the viewer's own profile — no friend action is offered
- * at all. It is deliberately NOT loaded for a blocked/unavailable profile: the
- * screen only renders it on a loaded one, so a member the viewer blocked can
- * never be befriended from the notice that replaces their profile.
+ * at all.
+ *
+ * RENDERING — not loading — is what the profile state gates. The screen draws
+ * the control only on a LOADED profile, so a member the viewer blocked can
+ * never be befriended from the notice that replaces their profile. The
+ * relationship itself is read in PARALLEL with the profile rather than after
+ * it, so the control is ready when the profile paints instead of a round trip
+ * later. The cost of that choice is one wasted `friend-list` call when the
+ * profile turns out to be withheld or missing; it reads only the viewer's own
+ * graph and never names the target to the backend, so it leaks nothing and the
+ * common path — an ordinary profile visit — is the one that gets faster.
  */
 @Composable
 fun MemberProfileRoute(

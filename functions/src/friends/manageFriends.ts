@@ -647,9 +647,13 @@ export const cancelRequest = onCall(CALLABLE_OPTS, async (request): Promise<Canc
       return { cancelled: false };
     }
     const data = snap.data()!;
-    // fromUid is guaranteed by the id derivation; re-asserted so a doc written
-    // by some future path with a mismatched body can never be deleted here.
-    if (data.fromUid !== actor.uid || data.status !== 'pending') {
+    // BOTH ends of the pair are re-asserted, not just fromUid. The id derivation
+    // already implies them, so this is belt-and-braces against a document whose
+    // BODY disagrees with its own id — written by some future path, or by a
+    // botched migration. Asserting only the sender would still delete a doc that
+    // is addressed to somebody else entirely, which is precisely the case this
+    // guard exists to refuse.
+    if (data.fromUid !== actor.uid || data.toUid !== toUid || data.status !== 'pending') {
       return { cancelled: false };
     }
     tx.delete(requestRef);

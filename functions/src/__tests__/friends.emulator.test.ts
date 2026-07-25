@@ -866,6 +866,42 @@ describe('friend-cancelRequest', () => {
     );
   });
 
+  it('refuses a document whose BODY disagrees with its own id', async () => {
+    // Belt-and-braces: the id derivation already implies BOTH ends of the pair,
+    // so this can only arise from a future write path or a botched migration.
+    // Deleting it would mean acting on a request addressed to somebody else, so
+    // the guard re-asserts toUid as well as fromUid.
+    const xena = await newMember('XenaCX');
+    const yrsa = await newMember('YrsaCX');
+    const zack = await newMember('ZackCX');
+
+    await adminDb
+      .collection('friendRequests')
+      .doc(friendRequestId(xena.uid, yrsa.uid))
+      .set({
+        fromUid: xena.uid,
+        // Disagrees with the id, which encodes (xena -> yrsa).
+        toUid: zack.uid,
+        status: 'pending',
+        fromDisplayName: 'XenaCX',
+        fromAvatarPath: null,
+        toDisplayName: 'ZackCX',
+        toAvatarPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    await signInAs(xena);
+    const attempt = (await call('friend-cancelRequest', { toUid: yrsa.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(attempt.cancelled).toBe(false);
+    // Still there: refused, not silently deleted.
+    expect(await requestStatus(xena.uid, yrsa.uid)).toBe('pending');
+
+    await adminDb.collection('friendRequests').doc(friendRequestId(xena.uid, yrsa.uid)).delete();
+  });
+
   it('rejects unauthenticated and suspended callers', async () => {
     await auth.signOut();
     expect(await callableErrorCode(call('friend-cancelRequest', { toUid: 'anyone' }))).toBe(
