@@ -27,13 +27,13 @@
  * the key would be excluded from `missing` forever and the member would hold
  * the badge with the Kronpoäng silently lost.
  *
- * COST: evaluation is O(qualified tiers) — one `badgeProgress` document read
- * plus one BATCHED `getAll` of the qualified badge documents (at most 23), and
- * writes only for tiers that are actually new. The `getAll` is a single RPC but
- * is BILLED PER DOCUMENT, so a steady-state no-op costs 1 + (tiers currently
- * held) document reads, not two; a member qualifying for nothing returns after
- * the single `badgeProgress` read. It never scans users and never scans a
- * member's full badge subcollection.
+ * COST: evaluation is O(qualified tiers) — one BATCHED `getAll` of the
+ * qualified badge documents (at most 23), plus one `badgeProgress` read ONLY
+ * when the caller did not already have that document (both real callers do, so
+ * on the hot path it is zero). The `getAll` is a single RPC but is BILLED PER
+ * DOCUMENT, so a steady-state no-op costs as many reads as the member holds
+ * tiers; a member qualifying for nothing returns without any `getAll` at all.
+ * It never scans users and never scans a member's full badge subcollection.
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
@@ -153,27 +153,39 @@ export async function raiseBadgeCounter(
  * when the stored value is already at or above the real count — no write, hence
  * no evaluation re-trigger, on the steady-state pass.
  *
- * `knownProgress` is the member's already-loaded `badgeProgress` data, passed
- * by callers that have it in hand so the cap shortcut costs no extra read.
+ * `knownProgress` is the member's already-loaded `badgeProgress` data, passed by
+ * callers that have it in hand so the cap shortcut costs no extra read.
+ *
+ * RETURNS the progress data to evaluate from. When this function raises the
+ * counter it patches the new value into the returned snapshot, because the
+ * caller's copy predates that write — evaluating from the stale copy would
+ * miss the very Samlare tier this reconciliation just made reachable. Returns
+ * `undefined` when the caller supplied nothing, so the evaluator falls back to
+ * reading the document itself.
  */
 export async function reconcileDerivedBadgeCounters(
   uid: string,
   knownProgress?: Record<string, unknown>,
-): Promise<void> {
+): Promise<Record<string, unknown> | undefined> {
+  const field = BADGE_METRIC_FIELD.vehiclesInGarage;
   // The counter is a running maximum and the garage is transactionally capped
   // at MAX_VEHICLES_PER_USER, so once the stored value reaches the cap the
   // `count()` can never return anything higher and is guaranteed wasted. Only
   // callers that ALREADY hold the badgeProgress document can use this
   // shortcut — the sweep does, and that is exactly where the read would
   // otherwise repeat every cycle, forever, for every maxed-out member.
-  if (knownProgress !== undefined) {
-    const stored = toCounter(knownProgress[BADGE_METRIC_FIELD.vehiclesInGarage]);
-    if (stored >= MAX_VEHICLES_PER_USER) {
-      return;
-    }
+  if (knownProgress !== undefined && toCounter(knownProgress[field]) >= MAX_VEHICLES_PER_USER) {
+    return knownProgress;
   }
   const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
-  await raiseBadgeCounter(uid, 'vehiclesInGarage', countSnap.data().count);
+  const count = countSnap.data().count;
+  await raiseBadgeCounter(uid, 'vehiclesInGarage', count);
+  if (knownProgress === undefined) {
+    return undefined;
+  }
+  return toCounter(knownProgress[field]) >= count
+    ? knownProgress
+    : { ...knownProgress, [field]: count };
 }
 
 async function isEligibleForAwards(uid: string): Promise<boolean> {
@@ -191,9 +203,20 @@ async function isEligibleForAwards(uid: string): Promise<boolean> {
  * awarding it would mark the tier processed forever and strand the Kronpoäng,
  * so the loop stops and the next trigger (or the 6h sweep) retries both.
  */
-export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadgeKey[]> {
-  const progressSnap = await badgeProgressRef(uid).get();
-  const counters = readBadgeCounters(progressSnap.data());
+export async function evaluateAndAwardBadgeTiers(
+  uid: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<TierBadgeKey[]> {
+  // Callers that were handed the document already (the onBadgeProgressWritten
+  // trigger gets it as the event payload; the sweep gets it in its page) pass
+  // it in rather than making this re-read it. Evaluating from that snapshot is
+  // safe because qualification is a pure `>=` test and awards are monotonic
+  // create-if-absent writes: a snapshot that is momentarily behind can only
+  // award FEWER tiers, never a wrong one, and the write that superseded it
+  // fires its own evaluation.
+  const progress =
+    knownProgress ?? (await badgeProgressRef(uid).get()).data();
+  const counters = readBadgeCounters(progress);
   const qualified = qualifiedTierBadges(counters);
   if (qualified.length === 0) {
     return [];
@@ -266,9 +289,13 @@ export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadge
  * fail (and therefore never retry-storm) the source write it hangs off. The
  * scheduled sweep re-evaluates anything a swallowed failure missed.
  */
-export async function tryEvaluateBadgeTiers(uid: string, context: string): Promise<void> {
+export async function tryEvaluateBadgeTiers(
+  uid: string,
+  context: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<void> {
   try {
-    await evaluateAndAwardBadgeTiers(uid);
+    await evaluateAndAwardBadgeTiers(uid, knownProgress);
   } catch (error) {
     logger.error('Badge tier evaluation failed', { uid, context, error: String(error) });
   }

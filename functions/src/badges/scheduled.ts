@@ -108,10 +108,13 @@ export async function runBadgeBacklogSweep(
       // this is the ONLY path by which a member whose garage predates the
       // ladders — or who sits at the vehicle cap and can never create another —
       // ever gets a Samlare tier. It writes nothing when already up to date.
-      // The page document is passed in so a member already recorded at the cap
-      // skips the `count()` entirely rather than paying for it every cycle.
-      await reconcileDerivedBadgeCounters(doc.id, doc.data());
-      awarded += (await evaluateAndAwardBadgeTiers(doc.id)).length;
+      //
+      // The page document IS the badgeProgress document, so it is handed to
+      // both steps rather than re-read: reconcile uses it to skip the `count()`
+      // for a member already at the cap, and returns the snapshot to evaluate
+      // from with any counter it just raised patched in.
+      const progress = await reconcileDerivedBadgeCounters(doc.id, doc.data());
+      awarded += (await evaluateAndAwardBadgeTiers(doc.id, progress)).length;
     } catch (error) {
       // One bad member must not abort the page; the cursor still advances so
       // the sweep makes progress, and the next pass retries them.

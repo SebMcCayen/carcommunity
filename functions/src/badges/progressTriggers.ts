@@ -94,7 +94,13 @@ export const onBadgeProgressWritten = onDocumentWritten(
     if (!firestoreEvent.data?.after.exists) {
       return;
     }
-    await tryEvaluateBadgeTiers(firestoreEvent.params.uid, 'badgeProgress.write');
+    // The event payload IS the badgeProgress document — pass it straight to
+    // the evaluator so the hot path (every counter bump) re-reads nothing.
+    await tryEvaluateBadgeTiers(
+      firestoreEvent.params.uid,
+      'badgeProgress.write',
+      firestoreEvent.data.after.data(),
+    );
   },
 );
 
