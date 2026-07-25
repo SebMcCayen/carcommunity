@@ -172,9 +172,27 @@
       "source": "services/api/src/lib/crown-hunt-service.ts (admin point management)"
     },
     {
+      "name": "crownHunt.claimSpawn",
+      "domain": "crownHunt",
+      "description": "Collects an AUTO-SPAWNED Kronjakt crown (crownSpawns/{spawnId}) — the sibling of crownHunt.submitClaim, which collects a hand-placed admin point. Gated by BOTH the crownHunt flag and the crownHuntSpawn flag (contract default OFF), so a member can never collect from a system that is officially off. STATIONARY COLLECTION (safety-critical, and the main difference from submitClaim): the request must carry TWO position fixes, and the server checks that both are inside the crown's 75 m collect radius (accuracy-buffered, distances always server-computed by Haversine — a client-supplied distance is never read), that they are 4..300 s apart, that BOTH reported speeds are <= 2.0 m/s (7.2 km/h), AND that the speed the server DERIVES from the two coordinates and the elapsed time is also <= 2.0 m/s. The derived check is what makes the reported ones meaningful, since an absent speed is otherwise treated as safe. A failing claim returns the plain result code must_be_stationary with a Swedish message telling the member to stop safely and try again — deliberately NOT a risk flag, because the common case is an honest driver rolling through a car park. Nothing in this flow rewards speed: no time bonus, no arrival streak, no fastest-collector ranking. ONCE GLOBALLY, first-come: the first member to collect a crown takes it and it leaves the map for everyone (per-user claiming would make arriving first meaningless and would pay out a leaked coordinate once per member). Enforced INSIDE the ledger award transaction by reading the crown document and flipping it to status 'claimed' with expiresAt set to the claim instant, so concurrent taps serialize on the crown and exactly one wins; the pre-transaction status read is only a fast path. Per-user cap of 20 spawn claims per UTC day via a deterministic backend-only counter read and incremented in the same transaction (counted separately from the hand-placed points' 10/day). ANTI-ABUSE: the full shared chain — position freshness (<=60 s on the current fix), impossible-jump detection against the RTDB trusted position, GPS accuracy, attempts/minute and claim-velocity signals — scored by the SAME evaluateClaimRisk used by submitClaim, with the same 60-point review threshold; >=60 returns risk_review and awards nothing. Adds a mock-location signal (Android Location.isMock) worth exactly the review threshold, so a self-reported mock location alone sends the claim to review; it is one-way (absent and false are treated identically, since a spoofing client would simply not set it). Claims are idempotent — the document ID is a NAMESPACED SHA-256 scoping of (uid, client key), namespaced so a key reused across both claim flows cannot replay the other's result. Risk scores/reasons go to the backend-only crownSpawnClaimRisk collection and never reach a client. Awards go through the existing Kronpoäng ledger (source crown_hunt, deterministic idempotency key), never a direct balance write. Returns { result, pointsAwarded, newBalance, rarity, message }. Deployed via grouped export as crownHunt-claimSpawn (functions/src/crownHunt/claimSpawn.ts). SCHEDULED SIBLING - crownHunt-spawnCrowns (onSchedule, every 10 min, Europe/Stockholm; functions/src/crownHunt/spawnScheduled.ts): tops each ADMIN-APPROVED grid cell up toward an activity-derived target. Candidate set is crownSpawnCells where approved==true, ordered least-recently-served (round-robin, so a long allow-list degrades to a slower refresh rather than a starved tail), capped at 50 cells and 100 spawns per run. For each cell: A(cell) = sum over DISTINCT users seen in the last 7 days of exp(-dt/tau) with tau = 3 days (read from the backend-only crownCellActivity/{cellKey}/recentUsers aggregate, capped at 200 documents); N_target = ceil(1.5 * ln(1+A)) capped at 5, and 0 when A < 1 so a cell nobody frequents never spawns. Positions are rejection-sampled inside the ~1.1 km cell (24 attempts) against every live crown in the 3x3 neighbourhood, so no two live crowns are within 150 m — including across cell boundaries. Rarity is a weighted pick: common .70/10 KP/6 h, uncommon .22/25 KP/12 h, rare .07/100 KP/24 h, legendary .01/500 KP/48 h (TTL rises with value so a legendary is reachable while commons churn; every crown expires, so no coordinate becomes a farmable fixture). Crowns are marked source:'auto' and safeLocationConfirmed:false and carry approvedCellBy. Requires the crownHuntSpawn flag. SCHEDULED SIBLING - crownHunt-sweepSpawns (onSchedule, every 15 min, Europe/Stockholm; same file): deletes crowns whose expiresAt has passed — oldest-first, paged, capped at 1000 per run, mirroring incidents-cleanupExpired — including claimed crowns, whose expiry is set to the claim instant. Deliberately NOT flag-gated, so turning the feature off still lets already-placed crowns age off the map. Also recursiveDeletes crownCellActivity cells that have been quiet for the whole 7-day window, taking their recentUsers sub-collection with them.",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Kronjakt claims → callable functions + Firestore transactions)"
+    },
+    {
+      "name": "crownHunt.setSpawnCellApproval",
+      "domain": "crownHunt",
+      "description": "Admin allow-list control for Kronjakt AUTO-SPAWN: approves or revokes one ~1.1 km grid cell (crownSpawnCells/{cellKey}) for automatic crown placement. This is the HUMAN half of the auto-spawn safety model. A hand-placed point cannot go live until an admin ticks safeLocationConfirmed for that exact coordinate; auto-spawn picks coordinates by itself, so that per-point gate is impossible — and 'spawn where people already are' is NOT an equivalent substitute, because presence is not safety (a motorway is one of the most visited places in the country). The approval therefore moves up to the AREA: crownHunt-spawnCrowns reads ONLY approved cells, so an unapproved cell spawns nothing however much activity it accumulates. Input is { approved: true, safeAreaConfirmed: true (literal, so it cannot be satisfied by a default), approvalNote (>=3 chars) } or { approved: false, reason? }, plus EITHER cellKey OR { latitude, longitude } (exactly one, so a request can never silently target a default cell). Revoking is deliberately cheaper than approving — turning an area off must never be harder than turning it on — and it DELETES the live auto-spawned crowns in that cell immediately rather than waiting out their TTL, since revocation is the lever an admin reaches for after a near-miss and up to 48 h of standing legendary crowns would make it useless. Every call writes an adminAuditEvents record (crownHunt.approveSpawnCell / crownHunt.revokeSpawnCell) with the note, so every area ever opened has a named admin attached to it. crownSpawnCells is admin-read and client-write-denied in firestore.rules; it is not member-readable, because publishing which cells are approved-but-empty would tell a client where to wait for the next spawn. Returns { cellKey, approved, removedCrowns }. Deployed via grouped export as crownHunt-setSpawnCellApproval (functions/src/crownHunt/spawnCells.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Kronjakt admin point management)"
+    },
+    {
       "name": "events.create",
       "domain": "events",
-      "description": "Creates an event. Writes the teaser-safe events/{eventId} document and the member-gated events/{eventId}/details/private document (exact location, description) atomically. Callable by an active member OR an admin/owner (admins never need a subscription; suspended/deleted callers are rejected). An admin's event is created as a draft plus an adminAuditEvents record, published later via events.publish. A member's event is stamped createdByRole 'member' + createdByUserId, has isOfficial forced false, must clear the same publish preconditions as events.publish (future start), is published immediately (post-moderation — admins take it down with events.cancel), is capped at 3 per member per rolling 24h (resource-exhausted beyond that), and writes no adminAuditEvents record: that log stays a record of admin actions only. Deployed via grouped export as events-create (functions/src/events/manageEvent.ts).",
+      "description": "Creates an event. Writes the teaser-safe events/{eventId} document — which now also carries the PUBLIC map location (locationName + latitude/longitude) so every signed-in user sees event pins on the community map, a deliberate 2026-07 change — and the member-gated events/{eventId}/details/private document (long description + precise street address) atomically. Callable by an active member OR an admin/owner (admins never need a subscription; suspended/deleted callers are rejected). An admin's event is created as a draft plus an adminAuditEvents record, published later via events.publish. A member's event is stamped createdByRole 'member' + createdByUserId, has isOfficial forced false, must clear the same publish preconditions as events.publish (future start), is published immediately (post-moderation — admins take it down with events.cancel), is capped at 3 per member per rolling 24h (resource-exhausted beyond that), and writes no adminAuditEvents record: that log stays a record of admin actions only. Deployed via grouped export as events-create (functions/src/events/manageEvent.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -282,8 +300,8 @@
     {
       "name": "garage.addVehicle",
       "domain": "garage",
-      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Strict schema: make/model/modelYear/powertrain/engineDescription/description/color only — registration numbers, VIN, insurance, and location are unrepresentable because vehicles/{vehicleId} is authenticated-readable. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -291,8 +309,8 @@
     {
       "name": "garage.updateVehicle",
       "domain": "garage",
-      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "description": "Partially updates an owned vehicle, including setting/clearing imagePath (validated against the caller's own vehicleImages/{uid}/{vehicleId}/ prefix) and the intentionally-public registrationPlate (normalised server-side; null/empty clears it). Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-updateVehicle (functions/src/garage/manageVehicle.ts).",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -301,7 +319,7 @@
       "name": "garage.setMainVehicle",
       "domain": "garage",
       "description": "Marks (or clears) one owned vehicle as the caller's main car. At most one main car per user is enforced transactionally — setting one clears any other. Ownership failures return not-found to avoid existence probing. Deployed via grouped export as garage-setMainVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -310,7 +328,7 @@
       "name": "garage.deleteVehicle",
       "domain": "garage",
       "description": "Deletes an owned vehicle: removes the vehicleImages/{uid}/{vehicleId}/ storage prefix first, then the document. Deployed via grouped export as garage-deleteVehicle (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -319,7 +337,7 @@
       "name": "garage.addVehiclePhoto",
       "domain": "garage",
       "description": "Appends one already-uploaded photo path to an owned vehicle's photoPaths gallery (max 10; own vehicleImages/{uid}/{vehicleId}/ prefix validated like updateVehicle's imagePath). imagePath mirrors the cover (photoPaths[0]); a first photo becomes the cover. failed-precondition at the cap, already-exists for a duplicate, not-found for a foreign/missing vehicle. Deployed via grouped export as garage-addVehiclePhoto (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -328,7 +346,7 @@
       "name": "garage.removeVehiclePhoto",
       "domain": "garage",
       "description": "Removes one photo path from an owned vehicle's photoPaths and deletes its Storage object; removing the cover promotes the next remaining photo. imagePath is kept in sync with photoPaths[0]. not-found when the path is not on the vehicle. Deployed via grouped export as garage-removeVehiclePhoto (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"
@@ -337,7 +355,7 @@
       "name": "garage.reorderVehiclePhotos",
       "domain": "garage",
       "description": "Sets the full display order of an owned vehicle's photos; orderedPaths must be a permutation of the current set and orderedPaths[0] becomes the cover (mirrored into imagePath). invalid-argument when not a permutation. Deployed via grouped export as garage-reorderVehiclePhotos (functions/src/garage/manageVehicle.ts).",
-      "access": "member",
+      "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/feature-parity-matrix.md (Garage / vehicles rows)"

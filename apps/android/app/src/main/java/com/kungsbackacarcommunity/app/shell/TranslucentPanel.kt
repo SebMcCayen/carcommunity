@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
@@ -64,13 +65,6 @@ import kotlinx.coroutines.launch
  * strip at all.
  */
 private const val PANEL_CARD_HEIGHT_FRACTION = 0.92f
-
-/**
- * Alpha of a panel card's surface colour. Translucent enough that the live map
- * reads through it, opaque enough that body text stays legible over moving
- * roads. Matches the chat hub's card.
- */
-private const val PANEL_CARD_ALPHA = 0.92f
 
 /** Width/height of the drag handle pill at the top of a panel. */
 private val PanelHandleWidth = 32.dp
@@ -365,7 +359,9 @@ fun TranslucentShellPanel(
                             }
                         },
                 shape = RoundedCornerShape(topStart = KccRadius.lg, topEnd = KccRadius.lg),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = PANEL_CARD_ALPHA),
+                // Shared Aero translucency: the panel card reads through to the
+                // live map just like the map-overlay popups (see KccAlpha).
+                color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
                 tonalElevation = 6.dp,
                 shadowElevation = 6.dp,
             ) {

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -21,11 +22,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
@@ -104,6 +109,17 @@ fun IncidentTypePickerDialog(
                 Text(stringResource(R.string.incidents_cancel))
             }
         },
+        // Match the map-overlay popups (MapLayersPopup / LiveSharePopup in
+        // MapHome.kt): the same translucent surface, corner radius and elevation
+        // so the report picker reads as one of the same floating layer rather
+        // than an opaque default M3 dialog. Reuses the shared KccAlpha.aeroSurface
+        // token so this can never drift out of step with those popups. The
+        // dialog keeps M3's default title/text content colours (onSurface /
+        // onSurfaceVariant), which is exactly the contrast the other popups use
+        // over this same surface, so text stays legible over the live map.
+        shape = RoundedCornerShape(KccRadius.lg),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+        tonalElevation = 6.dp,
         title = { Text(stringResource(R.string.incidents_reportTitle)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
@@ -119,6 +135,73 @@ fun IncidentTypePickerDialog(
             }
         },
     )
+}
+
+/**
+ * The location step of the report flow, shown AFTER a type is picked: report at
+ * the user's current location (the quick default) or open the map picker to place
+ * it by hand.
+ *
+ * Keeping this a separate second step (rather than folding a map into the type
+ * picker) is what preserves the fast "three taps at my location" path — the vast
+ * majority of reports — while still offering precise placement for the case the
+ * GPS fix is wrong or the incident is up ahead. [onUseCurrent] takes the current
+ * path; [onPickOnMap] opens [IncidentLocationPickerDialog]; tapping outside or
+ * Cancel dismisses the whole flow.
+ */
+@Composable
+fun IncidentLocationChoiceDialog(
+    onUseCurrent: () -> Unit,
+    onPickOnMap: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.incidents_cancel))
+            }
+        },
+        title = { Text(stringResource(R.string.incidents_reportLocationTitle)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                IncidentChoiceRow(
+                    label = stringResource(R.string.incidents_reportLocationCurrent),
+                    onClick = onUseCurrent,
+                    testTag = INCIDENT_LOCATION_CHOICE_CURRENT_TAG,
+                )
+                IncidentChoiceRow(
+                    label = stringResource(R.string.incidents_reportLocationPick),
+                    onClick = onPickOnMap,
+                    testTag = INCIDENT_LOCATION_CHOICE_PICK_TAG,
+                )
+            }
+        },
+    )
+}
+
+/** Test tag on the "use my current location" choice. */
+const val INCIDENT_LOCATION_CHOICE_CURRENT_TAG = "incident_location_choice_current"
+
+/** Test tag on the "pick on map" choice. */
+const val INCIDENT_LOCATION_CHOICE_PICK_TAG = "incident_location_choice_pick"
+
+@Composable
+private fun IncidentChoiceRow(label: String, onClick: () -> Unit, testTag: String) {
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(MaterialTheme.shapes.medium)
+                .clickable(onClick = onClick)
+                .padding(vertical = KccSpacing.s3)
+                .testTag(testTag)
+                .semantics { contentDescription = label },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(text = label, style = MaterialTheme.typography.bodyLarge)
+    }
 }
 
 @Composable

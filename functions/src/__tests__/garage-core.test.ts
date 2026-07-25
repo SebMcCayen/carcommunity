@@ -16,6 +16,7 @@ import {
   isPhotoPermutation,
   isValidVehicleImagePath,
   maxModelYear,
+  normaliseRegistrationPlate,
   parseAddVehicleInput,
   parseAddVehiclePhotoInput,
   parseDeleteVehicleInput,
@@ -127,14 +128,16 @@ describe('garage-core input parsing', () => {
     expect(parseAddVehicleInput({ ...validAdd, extra: 1 }, NOW).ok).toBe(false);
   });
 
-  it('makes registration plates and VIN unrepresentable (strict schema)', () => {
+  it('accepts registrationPlate (deliberately public field) but keeps VIN unrepresentable', () => {
+    // Plate is a Seb-approved PUBLIC field now — accepted on add and update.
     expect(
       parseAddVehicleInput({ ...validAdd, registrationPlate: 'ABC123' }, NOW).ok,
-    ).toBe(false);
-    expect(parseAddVehicleInput({ ...validAdd, vin: 'YV1abc' }, NOW).ok).toBe(false);
+    ).toBe(true);
     expect(
       parseUpdateVehicleInput({ vehicleId: 'v1', registrationPlate: 'ABC123' }, NOW).ok,
-    ).toBe(false);
+    ).toBe(true);
+    // VIN was never meant to be public and stays unrepresentable (strict schema).
+    expect(parseAddVehicleInput({ ...validAdd, vin: 'YV1abc' }, NOW).ok).toBe(false);
   });
 
   it('bounds modelYear between 1886 and currentYear + 2', () => {
@@ -158,6 +161,62 @@ describe('garage-core input parsing', () => {
     expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: 'yes' }).ok).toBe(false);
     expect(parseSetMainVehicleInput({ vehicleId: 'v1', isMain: true, extra: 1 }).ok).toBe(false);
     expect(parseSetMainVehicleInput({ vehicleId: 'vehicles/other', isMain: true }).ok).toBe(false);
+  });
+});
+
+describe('garage-core registration plate normalisation', () => {
+  it('trims, collapses internal whitespace, and uppercases', () => {
+    expect(normaliseRegistrationPlate('  abc 123  ')).toBe('ABC 123');
+    expect(normaliseRegistrationPlate('abc   123')).toBe('ABC 123');
+    expect(normaliseRegistrationPlate('abc123')).toBe('ABC123');
+  });
+
+  it('treats blank / whitespace-only / null / undefined as a cleared field', () => {
+    expect(normaliseRegistrationPlate('')).toBeNull();
+    expect(normaliseRegistrationPlate('   ')).toBeNull();
+    expect(normaliseRegistrationPlate(null)).toBeNull();
+    expect(normaliseRegistrationPlate(undefined)).toBeNull();
+  });
+
+  it('is format-agnostic — imports / personalised plates pass unchanged (bar normalisation)', () => {
+    expect(normaliseRegistrationPlate('gb-x9')).toBe('GB-X9');
+    expect(normaliseRegistrationPlate('my ride')).toBe('MY RIDE');
+  });
+
+  it('parses a plate on add: normalised into the built document', () => {
+    const parsed = parseAddVehicleInput({ ...validAdd, registrationPlate: '  abc 123 ' }, NOW);
+    if (!parsed.ok) throw new Error('expected ok');
+    expect(parsed.input.registrationPlate).toBe('ABC 123');
+    const doc = buildVehicleDocument(parsed.input, 'u1', serverTimestamp);
+    expect(doc.registrationPlate).toBe('ABC 123');
+  });
+
+  it('omitting the plate leaves it null on the document (not required)', () => {
+    const parsed = parseAddVehicleInput(validAdd, NOW);
+    if (!parsed.ok) throw new Error('expected ok');
+    expect(buildVehicleDocument(parsed.input, 'u1', serverTimestamp).registrationPlate).toBeNull();
+  });
+
+  it('an explicit blank plate on update clears the stored value (null)', () => {
+    const parsed = parseUpdateVehicleInput({ vehicleId: 'v1', registrationPlate: '   ' }, NOW);
+    if (!parsed.ok) throw new Error('expected ok');
+    const { update, changedFields } = buildVehicleUpdate(parsed.input, serverTimestamp);
+    expect(changedFields).toContain('registrationPlate');
+    expect(update.registrationPlate).toBeNull();
+  });
+
+  it('enforces the max length against the NORMALISED value', () => {
+    // 12 chars after normalisation is fine; 13 is rejected.
+    expect(parseAddVehicleInput({ ...validAdd, registrationPlate: 'ABCDEFGHIJKL' }, NOW).ok).toBe(
+      true,
+    );
+    expect(parseAddVehicleInput({ ...validAdd, registrationPlate: 'ABCDEFGHIJKLM' }, NOW).ok).toBe(
+      false,
+    );
+    // Padding/whitespace does NOT count — it collapses away before the length check.
+    expect(
+      parseAddVehicleInput({ ...validAdd, registrationPlate: '   ABC 123   ' }, NOW).ok,
+    ).toBe(true);
   });
 });
 

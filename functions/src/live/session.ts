@@ -33,6 +33,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -56,6 +57,7 @@ import {
 import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from './nearby-core';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 import { trackLiveSessionDistance } from '../points/liveDistance';
+import { recordCrownActivity } from '../crownHunt/spawnActivity';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -226,6 +228,54 @@ export const updatePosition = onCall(
         discoveryGeoCell: discoveryFields.geoCell,
       });
     }
+
+    // Kronjakt AUTO-SPAWN activity signal (crownHunt/spawnActivity.ts).
+    //
+    // This is the ONLY place the app knows "a member is at this place right
+    // now", which is what the spawn engine needs in order to place crowns near
+    // people instead of at random. It writes an AGGREGATE ONLY — a per-cell
+    // count of distinct, cell-scoped pseudonyms and one `lastSeenAt` each. No
+    // uid, no coordinate, no trace. It is separately feature-flagged (default
+    // OFF), separately throttled (its own 10-minute per-cell interval, decided
+    // from state on the RTDB session node we already hold), and skipped
+    // entirely unless this sample is SLOW — so a member driving costs nothing
+    // and contributes nothing.
+    //
+    // BEST EFFORT: recordCrownActivity never throws. Live location sharing is
+    // a safety feature and must not be able to fail because of a game.
+    const crownActivity = await recordCrownActivity({
+      uid: actor.uid,
+      latitude: parsed.input.coordinate.latitude,
+      longitude: parsed.input.coordinate.longitude,
+      speedMetersPerSecond: parsed.input.coordinate.speedMetersPerSecond ?? null,
+      now,
+      throttle: {
+        crownActivityAt: session!.crownActivityAt,
+        crownActivityCell: session!.crownActivityCell,
+      },
+    });
+    if (crownActivity) {
+      // Persisted only on a real write, so a failed or skipped attempt is
+      // retried on the next sample rather than suppressed for the interval.
+      //
+      // Swallowed for the same reason recordCrownActivity swallows its own
+      // errors, and it HAS to be: this write is the GAME's throttle bookkeeping,
+      // living on a session node owned by the SAFETY feature. Letting an RTDB
+      // blip here reject `updatePosition` would stop a member's live location
+      // updating because the crown engine could not remember when it last
+      // counted them — exactly the failure the best-effort contract above
+      // exists to rule out. Losing the throttle state costs nothing: the next
+      // sample simply re-attempts the activity write.
+      try {
+        await sessionRef(actor.uid).update(crownActivity);
+      } catch (error) {
+        logger.warn('Crown activity throttle write failed; live sharing unaffected', {
+          uid: actor.uid,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },
 );

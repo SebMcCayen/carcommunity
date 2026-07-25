@@ -198,9 +198,15 @@ export function guardPositionFreshness(recordedAt: string, now: Date): GuardResu
 /**
  * A safe, PUBLIC-ish projection of the sharer's main car, denormalized onto the
  * live session so viewers of the live share can see which car it is. Only
- * display-safe fields are carried — never registration plates / VIN (which the
- * vehicles schema makes unrepresentable anyway). imagePath points into the
- * owner's public-readable vehicleImages/ prefix.
+ * display-safe fields are carried. VIN stays unrepresentable on the vehicles
+ * schema, but `registrationPlate` is now a real (deliberately public) field on
+ * `vehicles/{id}` — so keeping it OFF the live marker is an ENFORCED projection
+ * choice here, not a schema impossibility. A live marker follows the sharer
+ * around a map in real time; pairing a plate with a live position is a much
+ * stronger disclosure than showing the plate on a static car profile, so
+ * toLiveMainCar deliberately does not carry it (guard test in
+ * functions/src/__tests__/live-core.test.ts). imagePath points into the owner's
+ * public-readable vehicleImages/ prefix.
  */
 export interface LiveMainCar {
   make: string;
@@ -213,7 +219,8 @@ export interface LiveMainCar {
  * Builds a {@link LiveMainCar} from a raw `vehicles/{id}` document's data, or
  * null when the required display fields are missing/malformed. Pure so the
  * callable's main-car selection stays testable. Only make/model/modelYear/
- * imagePath are projected — nothing sensitive.
+ * imagePath are projected — every other field on the source doc, including the
+ * public `registrationPlate`, is dropped on purpose.
  *
  * `modelYear` must be a FINITE INTEGER within the same bounds the garage
  * validation enforces on write (MIN_MODEL_YEAR..maxModelYear). NaN/Infinity or
@@ -287,6 +294,16 @@ export interface LiveSession {
    */
   discoveryRefreshedAt?: string | null;
   discoveryGeoCell?: string | null;
+  /**
+   * Throttle state for the Kronjakt auto-spawn ACTIVITY AGGREGATE (see
+   * shouldRecordCrownActivity in crownHunt/crown-spawn-core.ts). Same shape and
+   * same reasoning as the discovery pair above — bookkeeping that lets the
+   * position-update path skip a write without an extra read — but on its own
+   * (much slower) interval and its own, much finer spawn grid, so the two
+   * throttles cannot drag each other. Absent until the first activity write.
+   */
+  crownActivityAt?: string | null;
+  crownActivityCell?: string | null;
 }
 
 export function buildSession(

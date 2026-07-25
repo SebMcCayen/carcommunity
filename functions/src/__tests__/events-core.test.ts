@@ -254,17 +254,20 @@ describe('events-core document builders', () => {
     expect(eventDoc.status).toBe('draft');
     expect(eventDoc.rsvpCounts).toEqual({ going: 0, maybe: 0, not_going: 0 });
     expect(eventDoc.createdByUserId).toBe('admin-1');
-    // Exact location must never appear on the teaser document.
+    // The map location (place name + coordinates) is PUBLIC teaser data now, so
+    // every signed-in user can see the pin; the long description and the precise
+    // street address stay member-only on the private document.
+    expect(eventDoc.locationName).toBe('Exact spot');
+    expect(eventDoc.latitude).toBe(59.3);
+    expect(eventDoc.longitude).toBe(18.0);
     expect(eventDoc).not.toHaveProperty('description');
-    expect(eventDoc).not.toHaveProperty('locationName');
     expect(eventDoc).not.toHaveProperty('address');
-    expect(eventDoc).not.toHaveProperty('latitude');
-    expect(eventDoc).not.toHaveProperty('longitude');
 
     expect(privateDoc.description).toBe('Long member-only text');
-    expect(privateDoc.locationName).toBe('Exact spot');
-    expect(privateDoc.latitude).toBe(59.3);
-    expect(privateDoc.longitude).toBe(18.0);
+    expect(privateDoc.address).toBe('Street 1');
+    expect(privateDoc).not.toHaveProperty('locationName');
+    expect(privateDoc).not.toHaveProperty('latitude');
+    expect(privateDoc).not.toHaveProperty('longitude');
   });
 
   it('routes partial updates to the correct document and tracks changedFields', () => {
@@ -272,6 +275,10 @@ describe('events-core document builders', () => {
       eventId: 'e1',
       title: 'New title',
       address: 'New street 2',
+      // Map location edits now land on the PUBLIC teaser document.
+      locationName: 'Harbour car park',
+      latitude: 57.5,
+      longitude: 12.1,
     });
     if (!parsed.ok) throw new Error('expected ok');
     const { eventDoc, privateDoc, changedFields } = buildEventUpdates(
@@ -281,9 +288,19 @@ describe('events-core document builders', () => {
 
     expect(eventDoc.title).toBe('New title');
     expect(eventDoc.updatedAt).toBe('SERVER_TS');
+    expect(eventDoc.locationName).toBe('Harbour car park');
+    expect(eventDoc.latitude).toBe(57.5);
+    expect(eventDoc.longitude).toBe(12.1);
     expect(eventDoc).not.toHaveProperty('address');
     expect(privateDoc.address).toBe('New street 2');
-    expect(changedFields.sort()).toEqual(['address', 'title']);
+    expect(privateDoc).not.toHaveProperty('locationName');
+    expect(changedFields.sort()).toEqual([
+      'address',
+      'latitude',
+      'locationName',
+      'longitude',
+      'title',
+    ]);
   });
 
   it('produces no writes for an empty update', () => {

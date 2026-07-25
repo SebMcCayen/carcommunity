@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/events.schema.json",
   "title": "Events and RSVP contract",
-  "description": "Language-neutral event and RSVP shapes shared by iOS, Android, backend, and admin. Values are sourced from packages/shared/src/events.ts. Teasers expose only safe information (no exact location) to all authenticated users; full detail including location is member-only; admin shapes are admin/owner-only.",
+  "description": "Language-neutral event and RSVP shapes shared by iOS, Android, backend, and admin. Values were originally sourced from packages/shared/src/events.ts; that package now serves only the FROZEN legacy stack (services/api + apps/mobile), so this schema — not the TypeScript there — is the source of truth for the Firebase backend and the native clients, and the two deliberately diverge wherever a change lands in Firebase only. Teasers expose safe information PLUS the event's map location (place name + coordinates) to all authenticated users, so every signed-in user can see event pins on the community map (deliberate 2026-07 change from the earlier location-hidden teaser; Firebase + native clients only — the frozen legacy REST teaser keeps the old location-hidden shape, since frozen code takes bug fixes and migration work only). The member-gated detail adds only the long description and the precise street address; admin shapes are admin/owner-only.",
   "$defs": {
     "eventStatus": {
       "type": "string",
@@ -27,7 +27,7 @@
     },
     "eventTeaser": {
       "type": "object",
-      "description": "Public teaser: only safe information, no exact location or personal data. Visible to all authenticated users regardless of subscription.",
+      "description": "Public teaser: safe event information PLUS the map location. Visible to all authenticated users regardless of subscription. The place name and coordinate pair are deliberately public (2026-07) so every signed-in user can see the event as a pin on the community map. Still excludes the precise street address, the long description, and any personal data — those stay member-only on eventDetail.",
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },
@@ -36,17 +36,44 @@
         "approximateArea": {
           "type": "string",
           "minLength": 1,
-          "description": "Coarse area label (e.g. municipality) — never an exact address."
+          "description": "Coarse area label (e.g. municipality) — the human-readable region, distinct from the exact pin below."
+        },
+        "locationName": {
+          "type": ["string", "null"],
+          "description": "Public place name for the map pin (e.g. 'Kungsbacka torg'). Null when the organiser set no name."
+        },
+        "latitude": {
+          "type": ["number", "null"],
+          "minimum": -90,
+          "maximum": 90,
+          "description": "Public map-pin latitude. Null (paired with longitude) when the event has no positioned pin."
+        },
+        "longitude": {
+          "type": ["number", "null"],
+          "minimum": -180,
+          "maximum": 180,
+          "description": "Public map-pin longitude. Null (paired with latitude) when the event has no positioned pin."
         },
         "isOfficial": { "type": "boolean" },
         "status": { "$ref": "#/$defs/eventStatus" }
       },
-      "required": ["id", "title", "startsAt", "endsAt", "approximateArea", "isOfficial", "status"],
+      "required": [
+        "id",
+        "title",
+        "startsAt",
+        "endsAt",
+        "approximateArea",
+        "locationName",
+        "latitude",
+        "longitude",
+        "isOfficial",
+        "status"
+      ],
       "additionalProperties": false
     },
     "eventDetail": {
       "type": "object",
-      "description": "Full event detail — member-only fields included (exact location). Never exposes internal admin fields.",
+      "description": "Full event detail — the public teaser (including the map location) plus the member-only fields the private detail document adds: the long description and the precise street address. The location fields here mirror the now-public teaser (a composite full view); the member gate protects only description and address. Never exposes internal admin fields.",
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "title": { "type": "string", "minLength": 1 },

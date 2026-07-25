@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
@@ -76,23 +77,20 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
+import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
+import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.incidents.ReportLocation
+import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
-
-/**
- * Shared surface opacity for the map-overlay popups (chat, layers, and
- * live-location). Slightly translucent so the live map shows through a little
- * and all the popups read as one consistent floating layer, while staying
- * opaque enough to be readable.
- */
-private const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The map-first home (Waze/Life360 style): a full-bleed [MapSurface] behind a
@@ -181,10 +179,16 @@ fun MapHome(
     // and a pick invokes [onReportIncident]. All default so existing
     // callers/tests are unaffected (layer on, no reporting).
     incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    // Community event pins, drawn on the map for EVERY signed-in user (a
+    // deliberate 2026-07 open-up: event locations are public). Pushed to the
+    // surface's own events layer, separate from incidents; there is no layer
+    // toggle — event pins are always shown. Defaults empty so existing
+    // callers/tests are unaffected.
+    eventMarkers: List<MapEventMarker> = emptyList(),
     incidentsLayerEnabled: Boolean = true,
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
-    onReportIncident: (IncidentType) -> Unit = {},
+    onReportIncident: (IncidentType, ReportLocation) -> Unit = { _, _ -> },
     // Whether any of the currently-loaded incidents actually came from
     // Trafikverket (see `hasTrafikverketData`). Gates the "Källa: Trafikverket"
     // credit in the layers popup so it appears exactly where their data is on
@@ -357,9 +361,22 @@ fun MapHome(
         mapSurface.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
     }
 
-    // Incident-report type picker open/close is local UI state: tapping the
-    // report control opens it, picking a type reports and closes it.
+    // Push the community event pins onto the surface whenever they change (or the
+    // surface instance is swapped), so every signed-in user sees them. No layer
+    // toggle: event pins are always shown (event locations are public).
+    LaunchedEffect(mapSurface, eventMarkers) {
+        mapSurface.setEventMarkers(eventMarkers)
+    }
+
+    // Incident-report flow is a small local state machine:
+    //  1. [reportOpen] — the type picker (tapping the report control opens it).
+    //  2. [reportPendingType] — a type has been picked and we're asking WHERE to
+    //     place it (the location-choice dialog): current location, or pick on map.
+    //  3. [reportPickOnMap] — the user chose "pick on map"; the full-screen map
+    //     picker is open on top of that pending type.
     var reportOpen by remember { mutableStateOf(false) }
+    var reportPendingType by remember { mutableStateOf<IncidentType?>(null) }
+    var reportPickOnMap by remember { mutableStateOf(false) }
 
     // Profile/account menu open/close is local UI state too: tapping the
     // top-right profile button opens the menu as a transparent Popup *over* the
@@ -636,16 +653,57 @@ fun MapHome(
             )
         }
 
-        // Incident-report type picker. Picking a type reports it (the host
-        // resolves the current location) and closes the dialog.
+        // Incident-report flow, in three steps (see the state block above).
+        //
+        // Step 1 — pick a category. Picking one does NOT report yet: it advances
+        // to the location choice, so every report now goes through the same
+        // "where is it?" step.
         if (reportOpen) {
             IncidentTypePickerDialog(
                 onPick = { type ->
                     reportOpen = false
-                    onReportIncident(type)
+                    reportPendingType = type
                 },
                 onDismiss = { reportOpen = false },
             )
+        }
+
+        // Step 2 — choose WHERE. Current location is the quick default; "pick on
+        // map" opens the full-screen picker (step 3). Cancel/dismiss drops the
+        // pending type and ends the flow.
+        reportPendingType?.let { pendingType ->
+            if (!reportPickOnMap) {
+                IncidentLocationChoiceDialog(
+                    onUseCurrent = {
+                        reportPendingType = null
+                        onReportIncident(pendingType, ReportLocation.Current)
+                    },
+                    onPickOnMap = { reportPickOnMap = true },
+                    onDismiss = { reportPendingType = null },
+                )
+            } else {
+                // Step 3 — place it on the map. Seed the camera where the user is
+                // already looking so they start near the incident rather than
+                // re-navigating from the default camera.
+                // Confirm reports at the chosen point; cancel returns to step 2.
+                //
+                // A one-SHOT read of the StateFlow, deliberately NOT collectAsState():
+                // the picker consumes initialCenter only in its AndroidView factory,
+                // which runs once and has no update block, so collecting would
+                // recompose this subtree on every home-map camera change without ever
+                // moving the picker's camera. remember pins the seed for its lifetime.
+                val camera = remember { mapSurface.cameraSnapshot.value }
+                IncidentLocationPickerDialog(
+                    initialCenter =
+                        camera?.let { LatLng(longitude = it.longitude, latitude = it.latitude) },
+                    onConfirm = { chosen ->
+                        reportPickOnMap = false
+                        reportPendingType = null
+                        onReportIncident(pendingType, ReportLocation.Chosen(chosen))
+                    },
+                    onDismiss = { reportPickOnMap = false },
+                )
+            }
         }
 
         // The profile/account menu popup itself lives inside SearchBarRow,
@@ -768,8 +826,8 @@ private fun MapLayersPopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LAYERS_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            // Slightly translucent so the map shows through (matches the chat popup).
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            // Slightly translucent so the map shows through (shared Aero alpha).
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
@@ -871,6 +929,109 @@ private fun LayerToggleRow(
     }
 }
 
+/** Test tag on the event-marker info popup card. */
+const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
+
+/**
+ * The info popup shown when a community EVENT pin is tapped. Rendered as a
+ * translucent [Popup] (no dimming scrim) in the SAME floating style as the
+ * layers/live popups — `surface.copy(alpha = KccAlpha.aeroSurface)` +
+ * [KccRadius.lg] — so the live map stays visible behind it. Tapping outside the
+ * card or pressing Back dismisses it (focusable popup).
+ *
+ * Shows the event's title, when it is, its place name (the public teaser
+ * location) and the going-RSVP count, with a "View details" action that opens
+ * the full event detail (the host routes to the Events screen seeded with this
+ * event's id). Everything is passed pre-resolved so this composable stays free
+ * of the events + Firebase types and is UI-testable in isolation.
+ *
+ * @param whenLabel a formatted date/time, or null when the event carries no
+ *   readable start time (the row is then omitted rather than showing an empty one).
+ * @param locationName the public place name, or null (row omitted).
+ */
+@Composable
+internal fun EventMarkerInfoPopup(
+    title: String,
+    whenLabel: String?,
+    locationName: String?,
+    goingCount: Int,
+    onViewDetails: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 360.dp)
+                    .testTag(MAP_HOME_EVENT_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Event,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.events_mapPopupClose),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (whenLabel != null) {
+                    Text(
+                        text = whenLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (locationName != null) {
+                    Text(
+                        text = locationName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.events_mapPopupGoing, goingCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = onViewDetails,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.events_mapPopupViewDetails))
+                }
+            }
+        }
+    }
+}
+
 /**
  * The transparent live-location popup shown when the broadcast control is tapped.
  * Rendered as a [Popup] (not a [Dialog]) so there is NO dimming scrim and the
@@ -940,7 +1101,7 @@ internal fun LiveSharePopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_LIVE_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
