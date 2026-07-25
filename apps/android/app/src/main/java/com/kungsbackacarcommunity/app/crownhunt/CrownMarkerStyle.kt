@@ -28,15 +28,23 @@ import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
  *
  * ## The honest gap: crowns versus incidents
  *
- * [RARE]'s indigo disc measures ΔE 16.7 from the incidents layer's purple
- * `road_closed` disc, which is below the bar the crown tiers hold against each
- * other. Stated rather than hidden, because the mitigation is real and
- * deliberate: the two are different SHAPES — a crown against a barred circle —
- * and shape is the primary channel on both layers, so the pair a user must tell
- * apart at a glance is distinguished by the strongest cue available. Pushing
- * rare away from purple would collide it with the police blue instead; the
- * palette has four incident hues and four crown tiers to fit around them, and
- * this is the least-bad seat.
+ * TWO cross-layer pairs sit below the ΔE 20 bar the crown tiers hold against
+ * each other, and both are stated rather than hidden because the mitigation is
+ * the same and is real:
+ *
+ *  - [RARE]'s indigo against the incidents layer's purple `road_closed` — ΔE 16.7;
+ *  - [LEGENDARY]'s gold against the amber `hazard` disc — ΔE 19.0.
+ *
+ * In both cases the two markers are different SHAPES — a crown against a barred
+ * circle, a crown against a warning triangle — and shape is the primary channel
+ * on BOTH layers, so the pair a user must tell apart at a glance is distinguished
+ * by the strongest cue available. Legendary additionally carries the only halo in
+ * either palette. Pushing rare away from purple would collide it with the police
+ * blue, and pushing legendary away from amber would stop it reading as gold at
+ * all, which is the one thing the top tier has to do; the palette has four
+ * incident hues and four crown tiers to fit around them, and these are the
+ * least-bad seats. `CrownMarkerStyleTest` measures both numbers, so the gap
+ * cannot silently widen.
  *
  * ## Why one icon set serves BOTH day and night
  *

@@ -159,6 +159,9 @@ class MapboxMapSurface : MapSurface {
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
 
+    private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
+    override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
+
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
@@ -186,6 +189,9 @@ class MapboxMapSurface : MapSurface {
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
     override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
+    private val crownTapFlow = MutableStateFlow<String?>(null)
+    override val crownTap: StateFlow<String?> = crownTapFlow.asStateFlow()
 
     // The map long-click gesture listener ("hold to navigate here"); held so it
     // can be detached in onRelease.
@@ -288,6 +294,25 @@ class MapboxMapSurface : MapSurface {
     // not flicker the layer). Reset to null whenever the manager is (re)created
     // or torn down so a cleared-then-recreated map always redraws.
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+
+    // ---- Kronjakt crown layer -----------------------------------------------
+    // Its OWN annotation manager, image set and lookup, parallel to the incident
+    // ones above and deliberately never shared with them. Two managers means the
+    // crown layer can be emptied (the flag going off) without touching a single
+    // incident annotation, and a tap resolves against exactly one of the two
+    // lookups — so a crown can never open an incident sheet, or vice versa.
+    // Style-image names are namespaced `kcc-crown-` by CrownMarkerBitmaps.imageId
+    // so they cannot collide with `kcc-incident-` or the event layer's images.
+    private var crownMarkerManager: PointAnnotationManager? = null
+
+    // Annotation id → spawn id, rebuilt on every crown redraw and cleared with
+    // the manager. Module-visible for the same reason as the incident lookup:
+    // annotations cannot be created off-device, so a unit test seeds it directly.
+    internal val crownIdsByAnnotation = mutableMapOf<String, String>()
+
+    private var crownClickListener: OnPointAnnotationClickListener? = null
+    private val registeredCrownImages = mutableSetOf<String>()
+    private var lastAppliedCrowns: List<MapCrownMarker>? = null
 
     // Camera-change listener that mirrors the live map bearing into [bearingFlow]
     // (so the compass control rotates); held so it can be detached in onRelease.
@@ -444,6 +469,14 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the incident
         // badges when the set changes, so publishing the value is enough.
         incidentMarkersFlow.value = markers
+    }
+
+    override fun setCrownMarkers(markers: List<MapCrownMarker>) {
+        // Same contract as the incident markers: the Content update lambda
+        // observes this flow and redraws only when the set actually changes, so
+        // publishing the value is the whole of it. An empty list takes the layer
+        // down, which is what the host pushes when the flag reads false.
+        crownMarkersFlow.value = markers
     }
 
     override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
@@ -615,6 +648,14 @@ class MapboxMapSurface : MapSurface {
 
     override fun consumeIncidentTap() {
         incidentTapFlow.value = null
+    }
+
+    override fun emitCrownTap(spawnId: String) {
+        crownTapFlow.value = spawnId
+    }
+
+    override fun consumeCrownTap() {
+        crownTapFlow.value = null
     }
 
     override fun emitLongPress(point: MapPoint) {
@@ -934,6 +975,7 @@ class MapboxMapSurface : MapSurface {
         val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
         val incidents by incidentMarkersFlow.collectAsState()
+        val crowns by crownMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -1355,6 +1397,37 @@ class MapboxMapSurface : MapSurface {
                             registeredIncidentImages.clear()
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
                         }
+                        // Kronjakt crown manager — its OWN PointAnnotationManager,
+                        // so the crown layer and the incidents layer can be drawn,
+                        // emptied and hit-tested independently of each other.
+                        //
+                        // Created unconditionally, even with the crownHuntSpawn
+                        // flag off: an empty manager draws nothing, costs nothing
+                        // and issues no query (the host is what queries, and it is
+                        // gated). Gating the MANAGER on the flag instead would mean
+                        // a flag flipped on mid-session had no manager to draw
+                        // into until the next style load.
+                        runCatching {
+                            val crownManager = annotations.createPointAnnotationManager()
+                            // Same reasoning as the incidents layer: never let
+                            // symbol collision silently drop a crown. Two crowns
+                            // are at least 150 m apart by construction, so overlap
+                            // only happens when zoomed well out — where a hidden
+                            // crown would read as "there is nothing here".
+                            crownManager.iconAllowOverlap = true
+                            crownManager.iconIgnorePlacement = true
+                            val crownClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    onCrownAnnotationClicked(annotation.id)
+                                }
+                            crownClickListener = crownClick
+                            crownManager.addClickListener(crownClick)
+                            crownMarkerManager = crownManager
+                            lastAppliedCrowns = null
+                            // Style images die with the style that owned them.
+                            registeredCrownImages.clear()
+                            applyCrownMarkersIfChanged(crownMarkersFlow.value)
+                        }
                         // Private breadcrumb tail: a GeoJSON line source + a
                         // line-gradient layer (both hidden until there is a tail to
                         // draw), created once the style is ready. Idempotent. If a
@@ -1425,6 +1498,10 @@ class MapboxMapSurface : MapSurface {
                 // (Re)draw the incident markers only when the set actually
                 // changes; a no-op until the manager exists (style loaded).
                 runCatching { applyIncidentMarkersIfChanged(incidents) }
+                // Same for the crown layer — a no-op until its manager exists,
+                // and a no-op whenever the set is unchanged (which, with the flag
+                // off, is "empty" forever).
+                runCatching { applyCrownMarkersIfChanged(crowns) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -1501,20 +1578,30 @@ class MapboxMapSurface : MapSurface {
                     runCatching { incidentMarkerManager?.removeClickListener(l) }
                 }
                 incidentClickListener = null
+                // Same teardown for the crown layer's click listener, so a torn-down
+                // map cannot keep publishing crown taps into a popup that is gone.
+                crownClickListener?.let { l ->
+                    runCatching { crownMarkerManager?.removeClickListener(l) }
+                }
+                crownClickListener = null
                 destMarkerManager = null
                 incidentMarkerManager = null
+                crownMarkerManager = null
                 // The annotations are gone with their manager, so the lookup that
                 // described them must go too — otherwise a stale annotation id
                 // could resolve to an incident on the NEXT map.
                 incidentIdsByAnnotation.clear()
+                crownIdsByAnnotation.clear()
                 // Managers are gone, so a later re-init must redraw the overlay
                 // and the incident markers.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
+                lastAppliedCrowns = null
                 // The style (and every image registered on it) dies with this
                 // MapView, so a later map must re-upload the marker images
                 // rather than believe these are still present.
                 registeredIncidentImages.clear()
+                registeredCrownImages.clear()
                 appContext = null
                 mapViewRef = null
                 lastPoint = null
@@ -1701,6 +1788,116 @@ class MapboxMapSurface : MapSurface {
                 // Record the drawn annotation so a tap on it resolves back to the
                 // incident it represents.
                 incidentIdsByAnnotation[annotation.id] = marker.id
+            }
+        }
+        return complete
+    }
+
+    /**
+     * Handles a tap on one of THIS surface's crown markers, returning whether the
+     * tap was consumed.
+     *
+     * **Always returns true**, for exactly the reasons spelled out on
+     * [onIncidentAnnotationClicked]: the annotation plugin has already hit-tested
+     * the tap against the CROWN manager's own annotations before calling us, so
+     * the tap definitionally landed on a crown, and returning false would hand it
+     * to the basemap-POI interaction — offering to route the user to a nearby
+     * shop because they tapped a crown.
+     *
+     * An unresolvable id means [crownIdsByAnnotation] has drifted from what is
+     * drawn; the same reset-then-redraw repair is used, and nothing is shown to
+     * the user because the condition means nothing to them.
+     */
+    internal fun onCrownAnnotationClicked(annotationId: String): Boolean {
+        val spawnId = crownIdsByAnnotation[annotationId]
+        if (spawnId != null) {
+            emitCrownTap(spawnId)
+            return true
+        }
+        lastAppliedCrowns = null
+        applyCrownMarkersIfChanged(crownMarkersFlow.value)
+        return true
+    }
+
+    /**
+     * Redraws the crown markers only when the set differs from the last one
+     * applied. Same incomplete-draw rule as the incidents layer: a draw that
+     * could not upload one of its images is NOT cached, so the next update
+     * repairs it rather than leaving a permanently blank annotation.
+     */
+    private fun applyCrownMarkersIfChanged(markers: List<MapCrownMarker>) {
+        if (markers == lastAppliedCrowns) return
+        if (applyCrownMarkers(markers)) {
+            lastAppliedCrowns = markers
+        }
+    }
+
+    /**
+     * Clears and redraws the Kronjakt crowns — one rarity marker per crown — and
+     * rebuilds the annotation-id → spawn-id lookup taps resolve through. A no-op
+     * until the manager exists (style loaded), and every native call is wrapped
+     * defensively so a partial draw degrades rather than crashing.
+     *
+     * Deliberately a near-copy of [applyIncidentMarkers] rather than a shared
+     * generic helper. The two differ in the manager, the bitmap builder (crowns
+     * carry an optional halo) and the lookup they populate — so a shared version
+     * would take all three as parameters and be a worse description of either
+     * layer, while coupling a change to one into a change to both.
+     *
+     * ACCESSIBILITY: as with the incident badges, these annotations carry no
+     * content description because there is no semantics node to put one on (they
+     * are style images inside the GL surface). The crown POPUP that a tap opens
+     * is ordinary Compose and is fully readable — rarity, value and distance are
+     * all text.
+     *
+     * On-device verification note: annotation rendering and hit-testing run only
+     * on a token-provisioned device, so they are verified on device.
+     */
+    private fun applyCrownMarkers(markers: List<MapCrownMarker>): Boolean {
+        val manager = crownMarkerManager ?: return false
+        val style = mapViewRef?.mapboxMap?.style
+        val context = appContext
+        var complete = true
+        runCatching { manager.deleteAll() }
+        crownIdsByAnnotation.clear()
+        for (marker in markers) {
+            val imageId =
+                CrownMarkerBitmaps.imageId(
+                    iconRes = marker.iconRes,
+                    discColorArgb = marker.discColorArgb,
+                    glyphColorArgb = marker.glyphColorArgb,
+                    glowColorArgb = marker.glowColorArgb,
+                )
+            if (imageId !in registeredCrownImages) {
+                val bitmap =
+                    if (style != null && context != null) {
+                        CrownMarkerBitmaps.create(
+                            context = context,
+                            iconRes = marker.iconRes,
+                            discColorArgb = marker.discColorArgb,
+                            glyphColorArgb = marker.glyphColorArgb,
+                            glowColorArgb = marker.glowColorArgb,
+                        )
+                    } else {
+                        null
+                    }
+                val added =
+                    bitmap != null &&
+                        style != null &&
+                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
+                if (added) registeredCrownImages.add(imageId) else complete = false
+            }
+            runCatching {
+                val annotation =
+                    manager.create(
+                        PointAnnotationOptions()
+                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                            .withIconImage(imageId)
+                            // Centre-anchored: the disc marks the point, it is not
+                            // a pin whose tip is the location.
+                            .withIconAnchor(IconAnchor.CENTER),
+                    )
+                crownIdsByAnnotation[annotation.id] = marker.id
             }
         }
         return complete

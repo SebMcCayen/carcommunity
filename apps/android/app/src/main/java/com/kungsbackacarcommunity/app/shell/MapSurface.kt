@@ -129,6 +129,42 @@ data class MapIncidentMarker(
 )
 
 /**
+ * One auto-spawned Kronjakt crown to draw on the map.
+ *
+ * The exact sibling of [MapIncidentMarker], and separate from it for the same
+ * reason that one is separate from the incidents package's types: the surface is
+ * handed PRIMITIVES (a colour, a glyph resource, an id) and knows nothing about
+ * rarities, point values or collect radii. The host resolves a
+ * `com.kungsbackacarcommunity.app.crownhunt.CrownSpawn` into this, and resolves
+ * a tapped [id] back again.
+ *
+ * Why not reuse [MapIncidentMarker] with a nullable glow: the two layers are
+ * drawn by different managers, into different style images, and a shared type
+ * would make "which layer does this marker belong to?" a runtime question. It is
+ * currently a compile-time one, and a tap that opened an incident sheet for a
+ * crown would be exactly the bug that costs.
+ *
+ * @property discColorArgb the rarity disc colour, resolved by the host.
+ * @property iconRes drawable for the rarity's crown silhouette. Silhouette is
+ *   the primary rarity channel (it survives any colour-vision deficiency and any
+ *   basemap); the disc colour reinforces it.
+ * @property glyphColorArgb the tint for [iconRes], chosen by the host for
+ *   contrast against [discColorArgb].
+ * @property glowColorArgb a soft halo drawn OUTSIDE the rings, or null for the
+ *   tiers that have none. Only the legendary tier glows — see
+ *   `CrownMarkerStyle.glowColorArgb` for why it is not on all four.
+ */
+data class MapCrownMarker(
+    val id: String,
+    val longitude: Double,
+    val latitude: Double,
+    val discColorArgb: Int,
+    @DrawableRes val iconRes: Int,
+    val glyphColorArgb: Int,
+    val glowColorArgb: Int?,
+)
+
+/**
  * A point in the map view's own pixel space, as the renderer projected it.
  * Origin is the view's top-left, y grows downward.
  */
@@ -263,6 +299,15 @@ interface MapSurface {
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
 
     /**
+     * The Kronjakt crowns to draw (the auto-spawn layer).
+     *
+     * Empty whenever the `crownHuntSpawn` flag is off — the host does not even
+     * query in that case, so "off" costs nothing rather than costing a hidden
+     * layer's worth of reads.
+     */
+    val crownMarkers: StateFlow<List<MapCrownMarker>>
+
+    /**
      * Where the camera currently is, or null before the map has one.
      *
      * Exists for the convoy awareness overlay, which needs the camera CENTRE and
@@ -357,6 +402,19 @@ interface MapSurface {
      */
     val incidentTap: StateFlow<String?>
 
+    /**
+     * The id of the crown marker most recently TAPPED, or null when none is
+     * pending. The host observes this to open the crown popup, then calls
+     * [consumeCrownTap].
+     *
+     * A FOURTH flow rather than a second producer of [incidentTap], for the same
+     * reason [incidentTap] is not a producer of [placeRequest]: the two ids come
+     * from different collections and mean different things, and one shared slot
+     * would let a crown id be looked up among the incidents (finding nothing, so
+     * the tap would silently do nothing) — a failure with no symptom.
+     */
+    val crownTap: StateFlow<String?>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
@@ -385,6 +443,16 @@ interface MapSurface {
 
     /** Clear the pending [incidentTap] once the host has opened the sheet for it. */
     fun consumeIncidentTap()
+
+    /**
+     * Record a tap on the crown marker with [spawnId]. Called by the real
+     * surface's annotation click listener; also drivable by the stub/tests to
+     * simulate the tap without a GL surface.
+     */
+    fun emitCrownTap(spawnId: String)
+
+    /** Clear the pending [crownTap] once the host has opened the popup for it. */
+    fun consumeCrownTap()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. Moves no
@@ -490,6 +558,15 @@ interface MapSurface {
     fun setIncidentMarkers(markers: List<MapIncidentMarker>)
 
     /**
+     * Replace the set of Kronjakt crowns drawn on the map. The host reads these
+     * from `crownSpawns` around the viewport and pushes them here. Pushing an
+     * empty list is how the layer is taken DOWN — which is what the host does
+     * the moment the `crownHuntSpawn` flag reads false. A no-op beyond storing
+     * the value on the stub.
+     */
+    fun setCrownMarkers(markers: List<MapCrownMarker>)
+
+    /**
      * The map view itself, filling [modifier].
      *
      * Composed at exactly ONE place in the whole signed-in shell (see
@@ -543,6 +620,9 @@ class StubMapSurface(
     private val incidentMarkersFlow = MutableStateFlow<List<MapIncidentMarker>>(emptyList())
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
+
+    private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
+    override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
 
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
@@ -609,6 +689,9 @@ class StubMapSurface(
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
     override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
+    private val crownTapFlow = MutableStateFlow<String?>(null)
+    override val crownTap: StateFlow<String?> = crownTapFlow.asStateFlow()
 
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
@@ -680,6 +763,14 @@ class StubMapSurface(
 
     override fun consumeIncidentTap() {
         incidentTapFlow.value = null
+    }
+
+    override fun emitCrownTap(spawnId: String) {
+        crownTapFlow.value = spawnId
+    }
+
+    override fun consumeCrownTap() {
+        crownTapFlow.value = null
     }
 
     /**
@@ -763,6 +854,10 @@ class StubMapSurface(
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
         incidentMarkersFlow.value = markers
+    }
+
+    override fun setCrownMarkers(markers: List<MapCrownMarker>) {
+        crownMarkersFlow.value = markers
     }
 
     /** Test/impl hook to force the load state (e.g. after tiles finish). */

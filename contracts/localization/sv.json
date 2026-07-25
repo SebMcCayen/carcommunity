@@ -889,7 +889,7 @@
     "spawnResultPositionTooOld": "Din position är lite gammal. Vänta en stund och försök igen.",
     "spawnResultCrownExpired": "Den här kronan har försvunnit.",
     "spawnResultDailyLimit": "Du har nått dagens gräns för Kronjakt. Försök igen imorgon.",
-    "spawnResultRiskReview": "Vi kunde inte bekräfta din position, så inga poäng delades ut. Försök igen från en plats med fri sikt mot himlen.",
+    "spawnResultRiskReview": "Vi kunde inte verifiera din position, så inga poäng delades ut. Prova igen från en plats med fri sikt mot himlen.",
     "spawnResultFeatureDisabled": "Kronjakt är inte tillgängligt just nu.",
     "spawnResultNotEligible": "Du behöver ett aktivt Kronjakt-medlemskap för att delta.",
     "spawnErrorClaim": "Något gick fel. Försök igen.",
