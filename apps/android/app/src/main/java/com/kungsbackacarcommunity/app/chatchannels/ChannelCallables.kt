@@ -69,5 +69,8 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         // Backend-written and always present on new messages; absent only on
         // pre-mentions history, which parses as the empty set.
         mentionedUids = ChannelResponseParser.parseMentionedUids(get("mentionedUids")),
+        // Present when the sender posted optimistically (it equals this doc id).
+        // Reconciliation matches on the doc id, so this is carried only for parity.
+        clientId = getString("clientId")?.takeIf { it.isNotBlank() },
     )
 }

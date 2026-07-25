@@ -32,8 +32,16 @@ interface CommunityChatRepository {
      * from parsing names out of [text]: display names are not unique, so a parsed
      * mention would sooner or later notify the wrong member. The returned
      * [ChannelSendResult.Sent] echoes the ACCEPTED subset.
+     *
+     * [clientId] is the optimistic idempotency key: the backend uses it as the
+     * message doc id, so a retry is exactly-once and the client reconciles its
+     * bubble by matching it. Null falls back to a server auto-id (legacy) doc.
      */
-    suspend fun post(text: String, mentionedUids: List<String> = emptyList()): ChannelSendResult
+    suspend fun post(
+        text: String,
+        mentionedUids: List<String> = emptyList(),
+        clientId: String? = null,
+    ): ChannelSendResult
 
     /** `communityChat-list` — an older page before the [before] ISO cursor. */
     suspend fun loadOlder(before: String): ChannelOlderResult

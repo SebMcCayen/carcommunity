@@ -70,8 +70,17 @@ class FirebaseConvoyChatRepository private constructor(
         awaitClose { registration.remove() }
     }
 
-    override suspend fun post(convoyId: String, text: String): ChannelSendResult =
-        functions.callChannel(POST, mapOf("convoyId" to convoyId, "text" to text.trim())).fold(
+    override suspend fun post(convoyId: String, text: String, clientId: String?): ChannelSendResult =
+        functions.callChannel(
+            POST,
+            buildMap {
+                put("convoyId", convoyId)
+                put("text", text.trim())
+                // Only sent when present, so an omitted key is a legacy auto-id doc
+                // rather than a null the strict backend schema would reject.
+                if (clientId != null) put("clientId", clientId)
+            },
+        ).fold(
             onSuccess = { ChannelResponseParser.parsePostSuccess(it) },
             onFailure = {
                 ChannelSendResult.Failed(ChannelErrorMapper.mapSend(it.toChannelErrorCode()))

@@ -780,3 +780,129 @@ describe('communityChat-post writes NO notification without mentions (deliberate
     expect(await inboxFor(poster.uid, 'community_chat')).toHaveLength(0);
   });
 });
+
+describe('keyed optimistic send is EXACTLY-ONCE (clientId idempotency)', () => {
+  // The optimistic composer keeps a bubble pending until the server acks, and
+  // retries the send when that ack never arrives. A retry must therefore land on
+  // the SAME message rather than posting a second one — the clientId is used
+  // verbatim as the doc id, and the write is a `create()` so the arbitration is
+  // Firestore's, not a read-then-write that two racing retries both clear.
+
+  it('community: a sequential retry returns the same message and rewrites nothing', async () => {
+    const poster = await newMember('IdemCommPoster');
+    await signInAs(poster);
+    const clientId = `idem-comm-${Date.now()}`;
+
+    const first = (await call('communityChat-post', { text: 'hej', clientId }))
+      .data as PostedCommunity;
+    expect(first.messageId).toBe(clientId);
+    const stored = await awaitCommunityMessage(clientId);
+
+    const retry = (await call('communityChat-post', { text: 'hej', clientId }))
+      .data as PostedCommunity;
+    expect(retry.messageId).toBe(clientId);
+
+    // Not merely "one doc with the right id" — the ORIGINAL doc, untouched. A
+    // re-write would move createdAt, which is the channel's sort key, so the
+    // message would jump position under a client that already reconciled it.
+    const after = await awaitCommunityMessage(clientId);
+    expect((after.createdAt as { toMillis(): number }).toMillis()).toBe(
+      (stored.createdAt as { toMillis(): number }).toMillis(),
+    );
+  });
+
+  it('community: CONCURRENT retries all succeed and produce exactly one message', async () => {
+    const poster = await newMember('IdemCommRacer');
+    await signInAs(poster);
+    const clientId = `idem-comm-race-${Date.now()}`;
+    const marker = `race-${clientId}`;
+
+    // The race the read-then-write guard could not win: every attempt reads
+    // "missing" before any of them writes. Exactly one `create()` commits; the
+    // losers must replay it as a normal success (a misread ALREADY_EXISTS would
+    // surface here as an internal error rather than a messageId).
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () => call('communityChat-post', { text: marker, clientId })),
+    );
+    for (const result of results) {
+      expect((result.data as PostedCommunity).messageId).toBe(clientId);
+    }
+
+    await awaitCommunityMessage(clientId);
+    const matching = (
+      await adminDb.collection('communityChat').doc('global').collection('messages').get()
+    ).docs.filter((doc) => doc.data().text === marker);
+    expect(matching).toHaveLength(1);
+    expect(matching[0]!.id).toBe(clientId);
+    expect(matching[0]!.data().senderUid).toBe(poster.uid);
+  });
+
+  it('community: a DIFFERENT sender reusing the key is rejected, never swallowed', async () => {
+    const owner = await newMember('IdemCommOwner');
+    const thief = await newMember('IdemCommThief');
+    const clientId = `idem-comm-collide-${Date.now()}`;
+
+    await signInAs(owner);
+    await call('communityChat-post', { text: 'mine', clientId });
+    await awaitCommunityMessage(clientId);
+
+    // Swallowing this as success would silently DROP the second sender's message
+    // while telling them it was delivered.
+    await signInAs(thief);
+    expect(
+      await callableErrorCode(call('communityChat-post', { text: 'theirs', clientId })),
+    ).toBe('functions/already-exists');
+    const stored = await awaitCommunityMessage(clientId);
+    expect(stored.text).toBe('mine');
+  });
+
+  it('convoy: CONCURRENT retries all succeed and produce exactly one message', async () => {
+    const owner = await newMember('IdemConvoyOwner');
+    const accepted = await newMember('IdemConvoyAccepted');
+    const invited = await newMember('IdemConvoyInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited);
+    const clientId = `idem-convoy-race-${Date.now()}`;
+
+    const results = await Promise.all(
+      Array.from({ length: 4 }, () =>
+        call('convoyChat-post', { convoyId, text: 'vi rullar', clientId }),
+      ),
+    );
+    for (const result of results) {
+      expect((result.data as { messageId: string }).messageId).toBe(clientId);
+    }
+
+    const messages = await pollUntil(async () => {
+      const snap = await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .get();
+      return snap.docs.length > 0 ? snap.docs : undefined;
+    });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.id).toBe(clientId);
+    expect(messages[0]!.data().clientId).toBe(clientId);
+  });
+
+  it('convoy: a key-less (legacy) send still posts and stores no clientId', async () => {
+    const owner = await newMember('IdemLegacyOwner');
+    const accepted = await newMember('IdemLegacyAccepted');
+    const invited = await newMember('IdemLegacyInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited);
+
+    const posted = (await call('convoyChat-post', { convoyId, text: 'utan nyckel' })).data as {
+      messageId: string;
+    };
+    const stored = await pollUntil(async () => {
+      const snap = await adminDb
+        .collection('convoyChats')
+        .doc(convoyId)
+        .collection('messages')
+        .doc(posted.messageId)
+        .get();
+      return snap.exists ? snap.data()! : undefined;
+    });
+    expect(stored.clientId).toBeUndefined();
+  });
+});
