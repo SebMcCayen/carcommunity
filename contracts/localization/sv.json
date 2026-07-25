@@ -248,7 +248,13 @@
     "avatarChange": "Byt profilbild",
     "avatarUploading": "Laddar upp…",
     "avatarUploadError": "Kunde inte ladda upp bilden. Försök igen.",
-    "avatarTooLarge": "Bilden är för stor."
+    "avatarTooLarge": "Bilden är för stor.",
+    "pointsTitle": "Kronpoäng",
+    "pointsSubtitle": "Så aktiv har du varit",
+    "pointsRecentTitle": "Senast intjänat",
+    "pointsRecentEmpty": "Kör, samla kronor och delta i träffar – dina poäng dyker upp här.",
+    "pointsAmount": "+%1$d p",
+    "pointsUnit": "p"
   },
   "map": {
     "title": "Karta",
@@ -819,6 +825,59 @@
       "helpful_member": "Hjälpsam medlem",
       "early_member": "Tidig medlem",
       "garage_created": "Garageprofil skapad"
+    }
+  },
+  "badgeShowcase": {
+    "title": "Mina utmärkelser",
+    "subtitle": "%1$d av %2$d upplåsta",
+    "emptyTitle": "Din samling börjar här",
+    "emptyBody": "Sex stegar att klättra – varje nivå ger Kronpoäng. Så här låser du upp den första:",
+    "progressTitle": "Nästa nivå",
+    "nextTier": "Nästa: %1$s",
+    "ladderComplete": "Alla nivåer klara",
+    "progressCount": "%1$s / %2$s",
+    "noTierYet": "Ingen nivå ännu",
+    "currentTier": "Nuvarande: %1$s",
+    "locked": "Låst",
+    "showAll": "Visa alla utmärkelser",
+    "showLess": "Visa färre",
+    "milestonesTitle": "Milstolpar",
+    "awardedOn": "Upplåst %1$s",
+    "howToEarn": "Så låser du upp den",
+    "close": "Stäng",
+    "reward": "Ger %1$d Kronpoäng",
+    "progressUnavailable": "Din ställning räknas på servern – nivån dyker upp här så fort den är klar.",
+    "medallionEarned": "%1$s, upplåst",
+    "medallionLocked": "%1$s, låst",
+    "tierNames": {
+      "brons": "Brons",
+      "silver": "Silver",
+      "guld": "Guld",
+      "platina": "Platina"
+    },
+    "ladderNames": {
+      "kronjagare": "Kronjägare",
+      "vagfarare": "Vägfarare",
+      "traffrav": "Träffräv",
+      "trogen": "Trogen",
+      "konvojledare": "Konvojledare",
+      "samlare": "Samlare"
+    },
+    "ladderRequirements": {
+      "kronjagare": "Samla %1$s kronor i Kronjakten.",
+      "vagfarare": "Kör %1$s totalt.",
+      "traffrav": "Delta i %1$s träffar.",
+      "trogen": "Öppna appen %1$s dagar i rad.",
+      "konvojledare": "Led %1$s konvojer.",
+      "samlare": "Ha %1$s fordon i ditt garage."
+    },
+    "ladderTaglines": {
+      "kronjagare": "Kronor du plockat på kartan.",
+      "vagfarare": "Milen du lagt bakom dig.",
+      "traffrav": "Träffar du varit med på.",
+      "trogen": "Dagar i rad i appen.",
+      "konvojledare": "Konvojer du lett.",
+      "samlare": "Fordon i ditt garage."
     }
   },
   "points": {

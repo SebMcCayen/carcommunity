@@ -33,9 +33,13 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.badges.Badge
+import com.kungsbackacarcommunity.app.badges.BadgeCounters
+import com.kungsbackacarcommunity.app.badges.BadgeShowcase
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
+import com.kungsbackacarcommunity.app.points.PointsEntry
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
@@ -65,6 +69,12 @@ fun ProfileScreen(
     // reads it aggregates are still loading, or in a config-less build — the
     // section simply doesn't render. Shown only in view mode, not while editing.
     statsSummary: ProfileStatsSummary? = null,
+    // Badge wall + climb to the next tier (own profile only — users/{uid}/badges
+    // is an owner-only read). Null while the owner badge listener is loading.
+    badgeShowcase: BadgeShowcase? = null,
+    // Kronpoäng balance and the newest few credits behind it (own profile only).
+    pointsBalance: Long? = null,
+    recentPointsEarnings: List<PointsEntry> = emptyList(),
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -160,6 +170,13 @@ fun ProfileScreen(
                 ) {
                     Text(stringResource(R.string.profile_editButton))
                 }
+
+                ProfilePointsSection(
+                    balance = pointsBalance,
+                    recentEarnings = recentPointsEarnings,
+                )
+
+                ProfileBadgesSection(showcase = badgeShowcase)
 
                 ProfileStatsSection(summary = statsSummary)
             }
