@@ -46,15 +46,14 @@ class ChannelMentionPickerTest {
                     currentUid = "uid-self",
                     loading = false,
                     emptyText = "empty",
-                    sendStatus = ChannelSendStatus.Idle,
                     canLoadOlder = false,
                     isLoadingOlder = false,
                     onSend = { text, mentions ->
                         sentText = text
                         sentMentions = mentions
                     },
+                    onRetry = {},
                     onLoadOlder = {},
-                    onResetError = {},
                     // The picker only exists on the community channel; convoy
                     // passes no candidates (see the no-picker case below).
                     surface = ChatSurface.CommunityChannel,

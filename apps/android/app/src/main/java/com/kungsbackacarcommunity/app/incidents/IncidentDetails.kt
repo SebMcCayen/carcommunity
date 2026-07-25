@@ -80,8 +80,8 @@ enum class ConfirmAvailability {
 /** The action the sheet offers for a given incident and viewer. */
 enum class IncidentAction {
     /**
-     * "Still there?" — offered on someone ELSE'S member report. Wired to
-     * `incidents-confirm` (see [ConfirmAvailability]).
+     * The "I confirm it's still here" verification — offered on someone ELSE'S
+     * member report. Wired to `incidents-confirm` (see [ConfirmAvailability]).
      */
     Confirm,
 

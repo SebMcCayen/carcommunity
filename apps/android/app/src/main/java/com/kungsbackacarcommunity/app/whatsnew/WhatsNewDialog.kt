@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
@@ -34,8 +35,8 @@ fun WhatsNewDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         // Translucent surface so the map home stays visible behind the popup,
-        // matching the shell's other transparent prompts.
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        // matching the shell's other transparent prompts (shared Aero token).
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
         title = {
             Text(
                 stringResource(

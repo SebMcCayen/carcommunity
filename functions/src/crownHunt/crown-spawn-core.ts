@@ -84,6 +84,7 @@ export const CROWN_SPAWN_FLAG_KEY = 'crownHuntSpawn';
 export const CROWN_CELL_DEGREES = 0.01;
 
 const clampLat = (lat: number) => Math.min(90, Math.max(-90, lat));
+const clampLon = (lon: number) => Math.min(180, Math.max(-180, lon));
 
 /**
  * Deterministic spawn-grid key for a coordinate — `${latIdx}_${lonIdx}`.
@@ -95,7 +96,7 @@ const clampLat = (lat: number) => Math.min(90, Math.max(-90, lat));
  */
 export function crownCellKey(latitude: number, longitude: number): string {
   const latIdx = Math.floor(clampLat(latitude) / CROWN_CELL_DEGREES);
-  const lonIdx = Math.floor(longitude / CROWN_CELL_DEGREES);
+  const lonIdx = Math.floor(clampLon(longitude) / CROWN_CELL_DEGREES);
   return `${latIdx}_${lonIdx}`;
 }
 
@@ -106,25 +107,60 @@ export interface CrownCellBounds {
   maxLon: number;
 }
 
-/** Parses a cell key back to its grid indices; null when malformed. */
+/**
+ * Widest grid indices that correspond to somewhere on the globe.
+ *
+ * `crownCellKey` clamps both axes before flooring, so latitude 90 maps to
+ * `MAX_LAT_IDX` and longitude 180 maps to `MAX_LON_IDX`. Both ends are
+ * therefore inclusive, and every key `crownCellKey` produces parses.
+ */
+const MAX_LAT_IDX = Math.round(90 / CROWN_CELL_DEGREES);
+const MAX_LON_IDX = Math.round(180 / CROWN_CELL_DEGREES);
+
+/**
+ * Parses a cell key back to its grid indices; null when malformed OR off the
+ * globe.
+ *
+ * The range check is not cosmetic. `cellKey` reaches this from admin input on
+ * `setSpawnCellApproval`, and the regex alone accepts six digits per axis — so
+ * without it, `"50000_0"` is an approvable cell whose bounds are latitude 500,
+ * and `sampleCrownPosition` would happily write a crown there. Rejecting the
+ * key at the boundary is better than clamping it later, because a key that is
+ * not a place on Earth has no correct interpretation to fall back to.
+ */
 export function parseCrownCellKey(cellKey: string): { latIdx: number; lonIdx: number } | null {
   const match = /^(-?\d{1,6})_(-?\d{1,6})$/.exec(cellKey);
   if (!match) return null;
   const latIdx = Number(match[1]);
   const lonIdx = Number(match[2]);
   if (!Number.isSafeInteger(latIdx) || !Number.isSafeInteger(lonIdx)) return null;
+  if (latIdx < -MAX_LAT_IDX || latIdx > MAX_LAT_IDX) return null;
+  if (lonIdx < -MAX_LON_IDX || lonIdx > MAX_LON_IDX) return null;
   return { latIdx, lonIdx };
 }
 
-/** The half-open [min, max) coordinate box a cell key covers; null when malformed. */
+/**
+ * The half-open [min, max) coordinate box a cell key covers; null when
+ * malformed or off the globe.
+ *
+ * BOTH axes are clamped on the way out — latitude to [-90, 90], longitude to
+ * [-180, 180]. The last row and the last column are the cases that need it:
+ * latitude 90 floors to the final row whose unclamped upper edge is 90.01, and
+ * longitude 180 floors to the final column whose unclamped upper edge is
+ * 180.01. `sampleCrownPosition` draws uniformly inside these bounds, so an
+ * unclamped edge is not a cosmetic detail — it is an invalid WGS-84 coordinate
+ * written to a crown document and then handed to a map client. Both edge cells
+ * degenerate to a zero-width box, which is the right answer: there is no strip
+ * of Earth above 90, and none east of 180.
+ */
 export function crownCellBounds(cellKey: string): CrownCellBounds | null {
   const parsed = parseCrownCellKey(cellKey);
   if (!parsed) return null;
   return {
-    minLat: parsed.latIdx * CROWN_CELL_DEGREES,
-    maxLat: (parsed.latIdx + 1) * CROWN_CELL_DEGREES,
-    minLon: parsed.lonIdx * CROWN_CELL_DEGREES,
-    maxLon: (parsed.lonIdx + 1) * CROWN_CELL_DEGREES,
+    minLat: clampLat(parsed.latIdx * CROWN_CELL_DEGREES),
+    maxLat: clampLat((parsed.latIdx + 1) * CROWN_CELL_DEGREES),
+    minLon: clampLon(parsed.lonIdx * CROWN_CELL_DEGREES),
+    maxLon: clampLon((parsed.lonIdx + 1) * CROWN_CELL_DEGREES),
   };
 }
 
@@ -461,6 +497,42 @@ export function sampleCrownPosition(
 
 /** How close a member must be to collect. Always server-computed. */
 export const COLLECT_RADIUS_METERS = 75;
+
+/**
+ * Hard ceiling on a collect radius read back off a crown document.
+ *
+ * The spawner only ever writes {@link COLLECT_RADIUS_METERS}, and clients cannot
+ * write `crownSpawns` at all (firestore.rules), so a stored radius outside this
+ * bound means the document is wrong — a console edit, a migration, or a future
+ * bug. This exists so that "wrong" can only ever mean a SMALLER gate.
+ */
+export const MAX_STORED_COLLECT_RADIUS_METERS = 250;
+
+/**
+ * Resolves the collect radius to use for a crown, from whatever its document
+ * actually holds.
+ *
+ * Every other way this value can be wrong already fails closed: a non-numeric
+ * latitude makes the Haversine distance NaN and `NaN <= radius` is false, so
+ * the claim is refused. An oversized radius is the one corruption that fails
+ * OPEN — it widens the geofence instead of shutting it — and on a claim path
+ * "fail open" means paying out to someone who was never there. So a stored
+ * radius is used only when it is a finite, positive number inside
+ * {@link MAX_STORED_COLLECT_RADIUS_METERS}; anything else (undefined, null,
+ * NaN, a string, zero, negative, absurd) falls back to the 75 m default rather
+ * than being trusted.
+ */
+export function resolveCollectRadiusMeters(stored: unknown): number {
+  if (
+    typeof stored === 'number' &&
+    Number.isFinite(stored) &&
+    stored > 0 &&
+    stored <= MAX_STORED_COLLECT_RADIUS_METERS
+  ) {
+    return stored;
+  }
+  return COLLECT_RADIUS_METERS;
+}
 
 /**
  * Collection speed ceiling: 2.0 m/s = 7.2 km/h.
@@ -879,6 +951,26 @@ export function buildCrownSpawnFields(params: {
 /** Minimum length of the free-text safety note an approval must carry. */
 export const SPAWN_CELL_NOTE_MIN_LENGTH = 3;
 export const SPAWN_CELL_NOTE_MAX_LENGTH = 2000;
+
+/**
+ * `lastSpawnPassAt` seed for a cell the spawner has never served (epoch, i.e.
+ * 1970-01-01T00:00:00Z).
+ *
+ * The field has to EXIST on approval, because `runCrownSpawnPass` orders the
+ * allow-list by it and Firestore excludes documents missing the orderBy field —
+ * a cell without it would never be served at all. But the value has to be
+ * honest about what it means. `lastSpawnPassAt` records when the spawner last
+ * looked at this cell; a brand-new cell has never been looked at, so seeding it
+ * with "now" would state the opposite of the truth and sort the cell to the
+ * BACK of a least-recently-served queue — the one place a never-served cell
+ * does not belong. The epoch sentinel is both true and correctly ordered: never
+ * served sorts ahead of every cell that has been.
+ *
+ * Re-approval reseeds it deliberately. A revocation deletes that cell's live
+ * crowns, so a re-approved area starts empty and should be repopulated on the
+ * next pass rather than waiting out a full round-robin cycle.
+ */
+export const SPAWN_CELL_NEVER_SERVED_AT_MS = 0;
 
 const cellKeySchema = z
   .string()

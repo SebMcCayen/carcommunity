@@ -74,6 +74,7 @@ import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.CircleControl
@@ -245,7 +246,7 @@ fun TurnByTurnNavScreen(
     destination: LatLng,
     destinationLabel: String,
     onExit: () -> Unit,
-    onReportIncident: (IncidentType) -> Unit,
+    onReportIncident: (IncidentType, ReportLocation) -> Unit,
     modifier: Modifier = Modifier,
     incidentReportingEnabled: Boolean = false,
     // Defaulted so callers/tests that don't wire live sharing still compile; the
@@ -696,11 +697,16 @@ fun TurnByTurnNavScreen(
         // composable, so navigation offers the same categories in the same order
         // with the same wording. Picking a category hands the choice straight to
         // the host, which routes it to the one `incidents-report` callable.
+        //
+        // Behind the wheel we deliberately keep the fast CURRENT-location path
+        // (no "pick on map" step): a driver reporting what they're passing wants
+        // one tap, not a map to fiddle with. The map picker is a map-home
+        // affordance; navigation always reports [ReportLocation.Current].
         if (reportOpen) {
             IncidentTypePickerDialog(
                 onPick = { type ->
                     reportOpen = false
-                    onReportIncident(type)
+                    onReportIncident(type, ReportLocation.Current)
                 },
                 onDismiss = { reportOpen = false },
             )

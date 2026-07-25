@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
@@ -41,15 +42,6 @@ const val CROWN_SPAWN_POPUP_TAG = "crown_spawn_popup"
 
 /** Test tag on the Collect action. */
 const val CROWN_SPAWN_COLLECT_TAG = "crown_spawn_collect"
-
-/**
- * Surface opacity of the crown popup. The same 0.92 the map's other overlay
- * popups use (layers, live-share, chat hub) so the whole floating layer reads as
- * one thing rather than as a stack of separately-designed cards. Translucent
- * enough that the map — including the crown you just tapped — still shows
- * through; opaque enough that the safety copy stays legible over moving roads.
- */
-private const val POPUP_SURFACE_ALPHA = 0.92f
 
 /**
  * The panel opened by TAPPING a Kronjakt crown on the map.
@@ -103,7 +95,7 @@ fun CrownSpawnPopup(
                     .fillMaxWidth()
                     .testTag(CROWN_SPAWN_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {

@@ -70,6 +70,23 @@ describe('live-core toLiveMainCar', () => {
     ).toEqual({ make: 'Volvo', model: '242', modelYear: 1980, imagePath: 'vehicleImages/u1/v1/photo.jpg' });
   });
 
+  it('never carries registrationPlate onto the live marker', () => {
+    // registrationPlate is a deliberately PUBLIC field on vehicles/{id}, so the
+    // schema no longer prevents it reaching here — only this projection does.
+    // A live marker pairs the car with a real-time position, which is a far
+    // stronger disclosure than a static car profile, so the plate must stay off.
+    const projected = toLiveMainCar({
+      make: 'Volvo',
+      model: '242',
+      modelYear: 1980,
+      registrationPlate: 'ABC 123',
+      imagePath: null,
+    });
+    expect(projected).not.toBeNull();
+    expect(Object.keys(projected!).sort()).toEqual(['imagePath', 'make', 'model', 'modelYear']);
+    expect(JSON.stringify(projected)).not.toContain('ABC 123');
+  });
+
   it('defaults a missing image to null and rejects malformed/absent docs', () => {
     expect(toLiveMainCar({ make: 'Saab', model: '900', modelYear: 1993 })).toEqual({
       make: 'Saab',

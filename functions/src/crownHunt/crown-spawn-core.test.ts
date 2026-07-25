@@ -11,6 +11,7 @@ import {
   MAX_ACTIVITY_SPEED_MPS,
   MAX_COLLECT_SPEED_MPS,
   MAX_CROWNS_PER_CELL,
+  MAX_STORED_COLLECT_RADIUS_METERS,
   MIN_CROWN_SEPARATION_METERS,
   MIN_DWELL_SECONDS,
   activityScore,
@@ -31,6 +32,7 @@ import {
   parseCrownCellKey,
   parseSetSpawnCellApprovalInput,
   pickCrownRarity,
+  resolveCollectRadiusMeters,
   resolveSpawnCellKey,
   sampleCrownPosition,
   scopeSpawnClaimKey,
@@ -85,6 +87,72 @@ describe('crown spawn grid', () => {
       expect(parseCrownCellKey(bad)).toBeNull();
       expect(crownCellBounds(bad)).toBeNull();
       expect(neighbourCrownCells(bad)).toEqual([]);
+    }
+  });
+
+  it('rejects cell keys that are not anywhere on the globe', () => {
+    // The regex alone accepts six digits per axis, and this reaches us from
+    // admin input on setSpawnCellApproval. A key that is not a place has no
+    // correct interpretation, so it is refused rather than clamped.
+    for (const offGlobe of ['9001_0', '-9001_0', '0_18001', '0_-18001', '999999_999999']) {
+      expect(parseCrownCellKey(offGlobe)).toBeNull();
+      expect(crownCellBounds(offGlobe)).toBeNull();
+    }
+    // The extremes themselves are legal: crownCellKey clamps latitude 90 onto
+    // the last row, so that row has to parse.
+    expect(parseCrownCellKey('9000_0')).toEqual({ latIdx: 9000, lonIdx: 0 });
+    expect(parseCrownCellKey('-9000_18000')).toEqual({ latIdx: -9000, lonIdx: 18000 });
+  });
+
+  it('never returns a bound outside the globe on EITHER axis', () => {
+    // sampleCrownPosition draws uniformly inside these bounds, so an unclamped
+    // top edge (90.01) would be written to a crown document as an invalid
+    // WGS-84 coordinate.
+    const polar = crownCellKey(90, 0);
+    const bounds = crownCellBounds(polar)!;
+    expect(bounds.maxLat).toBeLessThanOrEqual(90);
+    expect(bounds.minLat).toBeGreaterThanOrEqual(-90);
+    // There is no strip of Earth above 90, so the polar row is zero-height.
+    expect(bounds.maxLat).toBe(90);
+    expect(bounds.minLat).toBe(90);
+
+    const antipolar = crownCellBounds(crownCellKey(-90, 0))!;
+    expect(antipolar.minLat).toBeGreaterThanOrEqual(-90);
+    expect(antipolar.maxLat).toBeLessThanOrEqual(90);
+
+    // Longitude has the same last-column problem at the antimeridian: 180
+    // floors to the final column whose unclamped upper edge would be 180.01.
+    const antimeridian = crownCellKey(0, 180);
+    const lonBounds = crownCellBounds(antimeridian)!;
+    expect(lonBounds.maxLon).toBeLessThanOrEqual(180);
+    expect(lonBounds.minLon).toBeGreaterThanOrEqual(-180);
+    expect(lonBounds.maxLon).toBe(180);
+    expect(lonBounds.minLon).toBe(180);
+
+    // Sampling inside either edge cell still yields a valid coordinate.
+    for (const key of [polar, antimeridian, crownCellKey(90, 180)]) {
+      const sampled = sampleCrownPosition(key, [], createSeededRng(3));
+      expect(sampled).not.toBeNull();
+      expect(sampled!.latitude).toBeLessThanOrEqual(90);
+      expect(sampled!.latitude).toBeGreaterThanOrEqual(-90);
+      expect(sampled!.longitude).toBeLessThanOrEqual(180);
+      expect(sampled!.longitude).toBeGreaterThanOrEqual(-180);
+    }
+  });
+
+  it('only ever produces cell keys that parse', () => {
+    // crownCellKey clamps both axes, so its output is always on the globe and
+    // always round-trips through parseCrownCellKey — including for coordinates
+    // outside the legal range, which is what makes the range check above safe
+    // to apply to keys this function generated.
+    for (const [lat, lon] of [
+      [90, 180],
+      [-90, -180],
+      [91, 181],
+      [-91, -181],
+      [1e6, -1e6],
+    ] as const) {
+      expect(parseCrownCellKey(crownCellKey(lat, lon))).not.toBeNull();
     }
   });
 
@@ -528,6 +596,45 @@ describe('stationary collection rule', () => {
     expect(
       evaluate({ distanceMeters: 5000, accuracyMeters: 0, recordedAtMs: base }, {}),
     ).toEqual({ ok: false, result: 'outside_radius' });
+  });
+});
+
+describe('resolveCollectRadiusMeters', () => {
+  it('uses a sane stored radius as-is', () => {
+    expect(resolveCollectRadiusMeters(COLLECT_RADIUS_METERS)).toBe(COLLECT_RADIUS_METERS);
+    expect(resolveCollectRadiusMeters(120)).toBe(120);
+    expect(resolveCollectRadiusMeters(MAX_STORED_COLLECT_RADIUS_METERS)).toBe(
+      MAX_STORED_COLLECT_RADIUS_METERS,
+    );
+  });
+
+  it('falls back to the default when the field is missing', () => {
+    expect(resolveCollectRadiusMeters(undefined)).toBe(COLLECT_RADIUS_METERS);
+    expect(resolveCollectRadiusMeters(null)).toBe(COLLECT_RADIUS_METERS);
+  });
+
+  it('NEVER widens the gate from a corrupt document', () => {
+    // An oversized radius is the only corruption that fails open — every value
+    // here must come back as the 75 m default, never as the stored one.
+    for (const corrupt of [
+      MAX_STORED_COLLECT_RADIUS_METERS + 1,
+      1e9,
+      Number.MAX_SAFE_INTEGER,
+      Number.POSITIVE_INFINITY,
+      '1e9',
+      '999999',
+      {},
+      [],
+      true,
+    ]) {
+      expect(resolveCollectRadiusMeters(corrupt)).toBe(COLLECT_RADIUS_METERS);
+    }
+  });
+
+  it('rejects zero, negatives and NaN rather than producing a degenerate gate', () => {
+    for (const bad of [0, -1, -1000, Number.NaN, Number.NEGATIVE_INFINITY]) {
+      expect(resolveCollectRadiusMeters(bad)).toBe(COLLECT_RADIUS_METERS);
+    }
   });
 });
 

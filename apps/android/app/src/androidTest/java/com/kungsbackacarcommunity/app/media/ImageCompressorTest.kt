@@ -408,6 +408,113 @@ class ImageCompressorTest {
         assertFalse(ImageCompressor.carriesStrippableMetadata(result.bytes))
     }
 
+    // ---------------------------------------------------------------------
+    // Free rotation (the gesture editor's arbitrary angle). Like the crop, the
+    // rotation is a PARAMETER of the sanitiser, so these are simultaneously the
+    // rotation's correctness proof and the proof that rotating did not open a
+    // route around EXIF/GPS stripping.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun compressForPublicUpload_rotatedCroppedGeotaggedPhoto_isStillStripped() = runBlocking {
+        // A geotagged photo the user rotated AND cropped must come back rotated,
+        // cropped AND free of every strip tag. The strip runs on the final,
+        // rotated+cropped+re-encoded bytes, so the rotation step cannot become a
+        // route around sanitisation.
+        val source = jpegWithExif(gradientBitmap(1600, 1200), geotag)
+        assertTrue(
+            "precondition: the source really is geotagged",
+            ImageCompressor.carriesStrippableMetadata(source),
+        )
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        val crop = NormalizedCropRect(left = 0.2f, top = 0.2f, width = 0.5f, height = 0.5f)
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = crop,
+                rotationDegrees = 30f,
+            )
+
+        assertNotNull("a decodable rotated+cropped photo must sanitise", result)
+        requireNotNull(result)
+        assertEquals("image/jpeg", result.contentType)
+        assertFalse(
+            "a ROTATED, cropped vehicle photo must still carry no GPS/identifying EXIF",
+            ImageCompressor.carriesStrippableMetadata(result.bytes),
+        )
+        assertFalse("the rotated upload must expose no coordinates", hasLatLong(result.bytes))
+    }
+
+    @Test
+    fun compressForPublicUpload_rotationAppliedBeforeCrop_swapsBoundingBox() = runBlocking {
+        // A quarter-turn of a landscape source (via the free-rotation parameter,
+        // NOT an EXIF tag) with a full-frame crop must come out PORTRAIT: proof
+        // the matrix rotation is applied to the pixels before the crop + scale.
+        val source = jpegBytes(gradientBitmap(1600, 1200), 95)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                crop = NormalizedCropRect.FULL,
+                rotationDegrees = 90f,
+            )
+
+        assertNotNull(result)
+        requireNotNull(result)
+        val bounds = decodeBounds(result.bytes)
+        assertTrue(
+            "a 90-degree rotation must swap a landscape source to portrait " +
+                "(${bounds.outWidth}x${bounds.outHeight})",
+            bounds.outHeight > bounds.outWidth,
+        )
+        assertTrue(
+            "longest side must stay capped at the vehicle max",
+            maxOf(bounds.outWidth, bounds.outHeight) <= ImageCompressor.VEHICLE_MAX_DIMENSION,
+        )
+    }
+
+    @Test
+    fun compressForPublicUpload_rotationOnUndecodableImage_failsClosed() = runBlocking {
+        // Like a crop, a requested rotation the fallback cannot honour (it only
+        // ever emits the whole, un-rotated frame) must fail closed rather than
+        // upload the un-rotated original.
+        val garbage = ByteArray(2048) { 0x7F }
+        val picked = PickedImage(bytes = garbage, contentType = "image/jpeg")
+
+        val result =
+            ImageCompressor.compressForPublicUpload(
+                picked,
+                maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                rotationDegrees = 20f,
+            )
+
+        assertNull("an undecodable pick with a rotation must fail closed", result)
+    }
+
+    @Test
+    fun compressForPublicUpload_nonFiniteRotation_failsClosed() = runBlocking {
+        // A non-finite rotation (NaN/±Inf) is a degenerate request rotateArbitrary
+        // would silently NO-OP: without the guard, the un-rotated original would
+        // sail through even though the user asked for a rotation. It must fail
+        // closed instead — even for a perfectly DECODABLE pick — so a corrupt angle
+        // can never route an untransformed image to Storage.
+        val source = jpegBytes(gradientBitmap(1600, 1200), 95)
+        val picked = PickedImage(bytes = source, contentType = "image/jpeg")
+        listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY).forEach { angle ->
+            val result =
+                ImageCompressor.compressForPublicUpload(
+                    picked,
+                    maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
+                    rotationDegrees = angle,
+                )
+            assertNull("a decodable pick with a $angle rotation must fail closed", result)
+        }
+    }
+
     @Test
     fun orientationSwapsAxes_onlyForTheQuarterTurns() {
         listOf(

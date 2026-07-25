@@ -168,15 +168,27 @@ describe('garage-addVehicle', () => {
     expect(docData.powertrain).toBe('petrol');
     expect(docData.engineDescription).toBeNull();
     expect(docData.imagePath).toBeNull();
+    // Plate omitted -> stored as null (deliberately-public field, optional).
+    expect(docData.registrationPlate).toBeNull();
 
-    expect(
-      await callableErrorCode(
-        call('garage-addVehicle', { ...validAdd, registrationPlate: 'ABC123' }),
-      ),
-    ).toBe('functions/invalid-argument');
     expect(
       await callableErrorCode(call('garage-addVehicle', { ...validAdd, modelYear: 1700 })),
     ).toBe('functions/invalid-argument');
+  });
+
+  it('stores the intentionally-public registration plate, normalised', async () => {
+    await signInAs(member);
+    const { vehicleId } = (
+      await call('garage-addVehicle', { ...validAdd, model: 'Plated', registrationPlate: '  abc 123 ' })
+    ).data as { vehicleId: string };
+    let docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    // trim + collapse whitespace + uppercase.
+    expect(docData.registrationPlate).toBe('ABC 123');
+
+    // An explicit blank on update clears it back to null.
+    await call('garage-updateVehicle', { vehicleId, registrationPlate: '   ' });
+    docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(docData.registrationPlate).toBeNull();
   });
 
   it('round-trips each of the four offered powertrains verbatim', async () => {

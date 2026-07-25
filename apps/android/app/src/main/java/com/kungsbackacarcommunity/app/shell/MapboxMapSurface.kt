@@ -162,6 +162,9 @@ class MapboxMapSurface : MapSurface {
     private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
     override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
 
+    private val eventMarkersFlow = MutableStateFlow<List<MapEventMarker>>(emptyList())
+    override val eventMarkers: StateFlow<List<MapEventMarker>> = eventMarkersFlow.asStateFlow()
+
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
@@ -192,6 +195,9 @@ class MapboxMapSurface : MapSurface {
 
     private val crownTapFlow = MutableStateFlow<String?>(null)
     override val crownTap: StateFlow<String?> = crownTapFlow.asStateFlow()
+
+    private val eventTapFlow = MutableStateFlow<String?>(null)
+    override val eventTap: StateFlow<String?> = eventTapFlow.asStateFlow()
 
     // The map long-click gesture listener ("hold to navigate here"); held so it
     // can be detached in onRelease.
@@ -313,6 +319,21 @@ class MapboxMapSurface : MapSurface {
     private var crownClickListener: OnPointAnnotationClickListener? = null
     private val registeredCrownImages = mutableSetOf<String>()
     private var lastAppliedCrowns: List<MapCrownMarker>? = null
+
+    // ---- Community events layer (mirrors the incidents layer above) ----------
+    // A SEPARATE PointAnnotationManager so event pins are their own layer with
+    // their own tap intent ("open this event"), never entangled with incidents.
+    private var eventMarkerManager: PointAnnotationManager? = null
+    // Maps a drawn annotation back to the event id it represents, so a click can
+    // be reported across the seam. Module-visible so unit tests can seed a drawn
+    // pin without a GL surface.
+    internal val eventIdsByAnnotation = mutableMapOf<String, String>()
+    private var eventClickListener: OnPointAnnotationClickListener? = null
+    // The single event-pin image is registered once per style (there is one event
+    // icon, unlike the per-category incident images); tracked so a style reload
+    // re-uploads it.
+    private val registeredEventImages = mutableSetOf<String>()
+    private var lastAppliedEvents: List<MapEventMarker>? = null
 
     // Camera-change listener that mirrors the live map bearing into [bearingFlow]
     // (so the compass control rotates); held so it can be detached in onRelease.
@@ -463,6 +484,12 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the line +
         // destination marker, so publishing the value is enough.
         routeOverlayFlow.value = overlay
+    }
+
+    override fun setEventMarkers(markers: List<MapEventMarker>) {
+        // The Content update lambda observes this flow and (re)draws the event
+        // pins; storing it here is enough (a no-op until the manager exists).
+        eventMarkersFlow.value = markers
     }
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
@@ -656,6 +683,14 @@ class MapboxMapSurface : MapSurface {
 
     override fun consumeCrownTap() {
         crownTapFlow.value = null
+    }
+
+    override fun emitEventTap(eventId: String) {
+        eventTapFlow.value = eventId
+    }
+
+    override fun consumeEventTap() {
+        eventTapFlow.value = null
     }
 
     override fun emitLongPress(point: MapPoint) {
@@ -976,6 +1011,7 @@ class MapboxMapSurface : MapSurface {
         val overlay by routeOverlayFlow.collectAsState()
         val incidents by incidentMarkersFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
+        val events by eventMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -1428,6 +1464,30 @@ class MapboxMapSurface : MapSurface {
                             registeredCrownImages.clear()
                             applyCrownMarkersIfChanged(crownMarkersFlow.value)
                         }
+                        // Community events manager (the shared events layer),
+                        // created once the style is ready — a SEPARATE manager from
+                        // the incidents one so event pins never collide with, or
+                        // get torn down alongside, incident badges. Drawn from the
+                        // current flow value so events fetched while the style was
+                        // still loading are rendered (not lost).
+                        runCatching {
+                            val eventManager = annotations.createPointAnnotationManager()
+                            // Overlapping event pins are shown, never dropped — a
+                            // town centre with several meetups must not silently
+                            // hide one (same rationale as the incidents layer).
+                            eventManager.iconAllowOverlap = true
+                            eventManager.iconIgnorePlacement = true
+                            val eventClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    onEventAnnotationClicked(annotation.id)
+                                }
+                            eventClickListener = eventClick
+                            eventManager.addClickListener(eventClick)
+                            eventMarkerManager = eventManager
+                            lastAppliedEvents = null
+                            registeredEventImages.clear()
+                            applyEventMarkersIfChanged(eventMarkersFlow.value)
+                        }
                         // Private breadcrumb tail: a GeoJSON line source + a
                         // line-gradient layer (both hidden until there is a tail to
                         // draw), created once the style is ready. Idempotent. If a
@@ -1502,6 +1562,9 @@ class MapboxMapSurface : MapSurface {
                 // and a no-op whenever the set is unchanged (which, with the flag
                 // off, is "empty" forever).
                 runCatching { applyCrownMarkersIfChanged(crowns) }
+                // (Re)draw the community event pins only when the set actually
+                // changes; a no-op until the manager exists (style loaded).
+                runCatching { applyEventMarkersIfChanged(events) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -1584,24 +1647,35 @@ class MapboxMapSurface : MapSurface {
                     runCatching { crownMarkerManager?.removeClickListener(l) }
                 }
                 crownClickListener = null
+                // Same teardown for the events layer: detach the click listener
+                // before dropping the manager so a torn-down map cannot keep
+                // publishing event taps.
+                eventClickListener?.let { l ->
+                    runCatching { eventMarkerManager?.removeClickListener(l) }
+                }
+                eventClickListener = null
                 destMarkerManager = null
                 incidentMarkerManager = null
                 crownMarkerManager = null
+                eventMarkerManager = null
                 // The annotations are gone with their manager, so the lookup that
                 // described them must go too — otherwise a stale annotation id
-                // could resolve to an incident on the NEXT map.
+                // could resolve to an incident/event on the NEXT map.
                 incidentIdsByAnnotation.clear()
                 crownIdsByAnnotation.clear()
-                // Managers are gone, so a later re-init must redraw the overlay
-                // and the incident markers.
+                eventIdsByAnnotation.clear()
+                // Managers are gone, so a later re-init must redraw the overlay,
+                // the incident markers, the crowns and the event pins.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
                 lastAppliedCrowns = null
+                lastAppliedEvents = null
                 // The style (and every image registered on it) dies with this
                 // MapView, so a later map must re-upload the marker images
                 // rather than believe these are still present.
                 registeredIncidentImages.clear()
                 registeredCrownImages.clear()
+                registeredEventImages.clear()
                 appContext = null
                 mapViewRef = null
                 lastPoint = null
@@ -1674,6 +1748,99 @@ class MapboxMapSurface : MapSurface {
         lastAppliedIncidents = null
         applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
         return true
+    }
+
+    /**
+     * Resolves a tapped event annotation back to its event id and publishes it so
+     * the host can open the event info popup. Mirrors
+     * [onIncidentAnnotationClicked]: returns true to consume the tap (so it never
+     * falls through to the basemap "navigate here?" interaction), and repairs an
+     * internal lookup desync with a forced redraw rather than eating the gesture.
+     */
+    internal fun onEventAnnotationClicked(annotationId: String): Boolean {
+        val eventId = eventIdsByAnnotation[annotationId]
+        if (eventId != null) {
+            emitEventTap(eventId)
+            return true
+        }
+        lastAppliedEvents = null
+        applyEventMarkersIfChanged(eventMarkersFlow.value)
+        return true
+    }
+
+    /**
+     * Redraws the event pins only when the set differs from the last one applied,
+     * so unrelated recompositions don't clear/redraw the whole events layer. The
+     * cache is reset to null wherever the manager is (re)created or torn down.
+     * Only a complete draw (the single event image uploaded) is cached, so a draw
+     * attempted before the style handle is ready repairs itself on the next update.
+     */
+    private fun applyEventMarkersIfChanged(markers: List<MapEventMarker>) {
+        if (markers == lastAppliedEvents) return
+        if (applyEventMarkers(markers)) {
+            lastAppliedEvents = markers
+        }
+    }
+
+    /**
+     * Clears and redraws the event pins — one event badge per marker — and
+     * rebuilds the annotation-id → event-id lookup the click listener resolves
+     * taps through. A no-op until the manager exists (style loaded). Every native
+     * call is wrapped defensively so a partial/failed draw degrades rather than
+     * crashing. Returns true only when every pin was drawn against an uploaded
+     * image (so the caller can decline to cache an incomplete draw).
+     *
+     * The single event image (a calendar glyph on the event disc) is rasterised
+     * and registered on the style once via the shared [IncidentMarkerBitmaps]
+     * builder (a generic disc+glyph rasteriser), then referenced by name.
+     *
+     * ACCESSIBILITY: like the incident badges these Mapbox annotations carry no
+     * semantics node, so a screen reader cannot reach an individual pin — the
+     * event content becomes accessible once the info popup opens (ordinary text).
+     */
+    private fun applyEventMarkers(markers: List<MapEventMarker>): Boolean {
+        val manager = eventMarkerManager ?: return false
+        val style = mapViewRef?.mapboxMap?.style
+        val context = appContext
+        var complete = true
+        val imageId = EVENT_MARKER_IMAGE_ID
+        // Upload the one event image on first use against the current style.
+        if (imageId !in registeredEventImages) {
+            val bitmap =
+                if (style != null && context != null) {
+                    IncidentMarkerBitmaps.create(
+                        context = context,
+                        iconRes = R.drawable.ic_event_marker,
+                        discColorArgb = EVENT_MARKER_DISC_COLOR,
+                        glyphColorArgb = EVENT_MARKER_GLYPH_COLOR,
+                    )
+                } else {
+                    null
+                }
+            val added =
+                bitmap != null &&
+                    style != null &&
+                    runCatching { style.addImage(imageId, bitmap) }.isSuccess
+            if (added) registeredEventImages.add(imageId) else complete = false
+        }
+        runCatching { manager.deleteAll() }
+        eventIdsByAnnotation.clear()
+        // Nothing more to draw if the image never made it onto the style: the
+        // annotations would reference a name the style does not know.
+        if (imageId !in registeredEventImages) return false
+        for (marker in markers) {
+            runCatching {
+                val annotation =
+                    manager.create(
+                        PointAnnotationOptions()
+                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                            .withIconImage(imageId)
+                            .withIconAnchor(IconAnchor.CENTER),
+                    )
+                eventIdsByAnnotation[annotation.id] = marker.id
+            }
+        }
+        return complete
     }
 
     /**
@@ -2028,6 +2195,17 @@ class MapboxMapSurface : MapSurface {
 
         const val ROUTE_LINE_COLOR = 0xFF1A73E8.toInt()
         const val ROUTE_LINE_WIDTH = 6.0
+
+        // Community event pin styling. One fixed disc colour + glyph tint for the
+        // single event image (there is no per-category variation like incidents).
+        // A distinct teal disc so an event pin is never mistaken for an incident
+        // badge (which are red/orange/amber/blue/purple), with a white calendar
+        // glyph on top. The image name is a fixed `kcc-event-*` id — collision-free
+        // against the traffic/breadcrumb layer ids and the annotation-managed
+        // incident images.
+        const val EVENT_MARKER_IMAGE_ID = "kcc-event-marker"
+        const val EVENT_MARKER_DISC_COLOR = 0xFF00897B.toInt()
+        const val EVENT_MARKER_GLYPH_COLOR = 0xFFFFFFFF.toInt()
         // Destination-pin styling is SHARED with the turn-by-turn navigation
         // map's end-of-route marker (see [MapMarkerStyle]): the same destination
         // must not change appearance the moment the user presses "Start".

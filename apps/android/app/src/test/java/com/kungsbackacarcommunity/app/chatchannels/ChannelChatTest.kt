@@ -53,6 +53,40 @@ class ChannelChatTest {
     }
 
     @Test
+    fun `mergeWithPending appends an optimistic bubble at the end while it is in-flight`() {
+        val live = listOf(msg("a", 1000), msg("b", 2000))
+        val pending =
+            msg("cid-1", 3000, senderUid = "me")
+                .copy(clientId = "cid-1", deliveryState = ChannelDeliveryState.Sending)
+        val display = ChannelThread.mergeWithPending(emptyList(), live, listOf(pending))
+        assertEquals(listOf("a", "b", "cid-1"), display.map { it.id })
+        assertEquals(ChannelDeliveryState.Sending, display.last().deliveryState)
+    }
+
+    @Test
+    fun `mergeWithPending renders the optimistic message and its delivered doc as ONE`() {
+        // The delivered document's id equals the optimistic bubble's clientId, so
+        // the bubble is dropped once the real doc arrives — never a duplicate.
+        val delivered = msg("cid-1", 2000).copy(clientId = "cid-1")
+        val pending =
+            msg("cid-1", 2000, senderUid = "me")
+                .copy(clientId = "cid-1", deliveryState = ChannelDeliveryState.Sent)
+        val display = ChannelThread.mergeWithPending(emptyList(), listOf(delivered), listOf(pending))
+        assertEquals(listOf("cid-1"), display.map { it.id })
+        // The server copy wins (Sent, no optimistic state carried through).
+        assertEquals(ChannelDeliveryState.Sent, display.single().deliveryState)
+    }
+
+    @Test
+    fun `mergeWithPending with no pending is just the server merge`() {
+        val live = listOf(msg("a", 1000), msg("b", 2000))
+        assertEquals(
+            listOf("a", "b"),
+            ChannelThread.mergeWithPending(emptyList(), live, emptyList()).map { it.id },
+        )
+    }
+
+    @Test
     fun `oldestCursor returns the earliest message ISO`() {
         val messages = listOf(msg("a", 3000), msg("b", 1000), msg("c", 2000))
         assertEquals(java.time.Instant.ofEpochMilli(1000).toString(), ChannelThread.oldestCursor(messages))
@@ -163,6 +197,25 @@ class ChannelChatTest {
             emptyList<String>(),
             ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "u1"))
                 ?.mentionedUids,
+        )
+    }
+
+    @Test
+    fun `parseMessage carries the optimistic clientId when present, null otherwise`() {
+        assertEquals(
+            "cid-1",
+            ChannelResponseParser.parseMessage(
+                mapOf("id" to "cid-1", "senderUid" to "u1", "clientId" to "cid-1"),
+            )?.clientId,
+        )
+        // Absent (legacy / received message) or blank → null, never a match key.
+        assertNull(
+            ChannelResponseParser.parseMessage(mapOf("id" to "m1", "senderUid" to "u1"))?.clientId,
+        )
+        assertNull(
+            ChannelResponseParser.parseMessage(
+                mapOf("id" to "m1", "senderUid" to "u1", "clientId" to "  "),
+            )?.clientId,
         )
     }
 

@@ -56,12 +56,15 @@ fun ConvoyChannelRoute(
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
     val coordinator =
-        remember(repository, convoyId) {
+        remember(repository, convoyId, uid) {
             ChannelChatCoordinator(
                 // convoyChat-post takes no mentions; the uid list is always empty
-                // here and is dropped rather than forwarded.
-                sender = { text, _ -> repository.post(convoyId, text) },
+                // here and is dropped rather than forwarded. The clientId makes the
+                // optimistic send idempotent + reconcilable (backend uses it as the
+                // message doc id).
+                sender = { text, _, clientId -> repository.post(convoyId, text, clientId) },
                 pager = { before -> repository.loadOlder(convoyId, before) },
+                selfUid = uid,
                 marker = null,
             )
         }
@@ -72,8 +75,17 @@ fun ConvoyChannelRoute(
     val liveMessages = (messagesState as? ChannelMessagesState.Loaded)?.messages ?: emptyList()
 
     val older by coordinator.olderMessages.collectAsState()
-    val displayed = remember(older, liveMessages) { ChannelThread.merge(older, liveMessages) }
-    val sendStatus by coordinator.sendStatus.collectAsState()
+    val pending by coordinator.pendingMessages.collectAsState()
+    // Server messages merged with the caller's optimistic bubbles; a bubble whose
+    // delivered doc has arrived (matched by clientId == doc id) is dropped, so an
+    // optimistic send and its snapshot render as exactly one message.
+    val displayed =
+        remember(older, liveMessages, pending) {
+            ChannelThread.mergeWithPending(older, liveMessages, pending)
+        }
+    // Reconcile the optimistic bubbles against every live snapshot: once the real
+    // document lands, drop the matching pending bubble.
+    LaunchedEffect(liveMessages) { coordinator.onLiveMessages(liveMessages) }
     val pageStatus by coordinator.pageStatus.collectAsState()
     // The next older-page cursor: the earliest loaded message's ISO createdAt, or
     // null when it lacks createdAt. A null cursor makes older-paging a no-op, so
@@ -85,14 +97,15 @@ fun ConvoyChannelRoute(
         currentUid = uid,
         loading = messagesState is ChannelMessagesState.Loading,
         emptyText = stringResource(R.string.channel_emptyConvoy),
-        sendStatus = sendStatus,
         canLoadOlder = pageStatus != ChannelPageStatus.End &&
             displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
             olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
         onSend = { text, _ -> scope.launch { coordinator.send(text) } },
+        onRetry = { message ->
+            message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
+        },
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
-        onResetError = { coordinator.resetSendError() },
         modifier = modifier,
         onViewProfile = onViewProfile,
         surface = ChatSurface.ConvoyChannel,

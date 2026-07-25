@@ -44,6 +44,75 @@ class ShellNavTest {
         )
     }
 
+    // --- route back-stack (hub → child → Back returns to the hub) --------
+    // The reported bug: from a sub-menu (Settings → Blocked users) system-Back
+    // jumped all the way to the map instead of popping ONE level to the parent
+    // hub. These pin the pure push/pop reducer the shell drives from.
+
+    @Test
+    fun `opening a child from a hub stacks the hub as its parent`() {
+        // Settings is open (no parent); opening Blocked users pushes Settings as
+        // its parent, so a later Back knows where to return.
+        assertEquals(
+            listOf(ShellRoute.Settings),
+            ShellNavigation.pushRoute(parents = emptyList(), current = ShellRoute.Settings),
+        )
+    }
+
+    @Test
+    fun `opening a top-level route adds no parent`() {
+        // A root entry (map-home menu / push tap) opens with nothing already
+        // open, so it stacks no parent and Back from it returns to the map.
+        assertEquals(
+            emptyList<ShellRoute>(),
+            ShellNavigation.pushRoute(parents = emptyList(), current = null),
+        )
+    }
+
+    @Test
+    fun `back from a sub-menu returns to its parent hub, not the map`() {
+        // Settings → Blocked users: the parent stack is [Settings]. Back must pop
+        // to Settings (current), NOT to null/the map — this is the whole fix.
+        val popped = ShellNavigation.popRoute(parents = listOf(ShellRoute.Settings))
+        assertEquals(ShellRoute.Settings, popped.current)
+        assertEquals(emptyList<ShellRoute>(), popped.parents)
+    }
+
+    @Test
+    fun `back pops exactly one level of a deeper stack`() {
+        // Friends → member profile → chat: parents are [Friends, MemberProfile].
+        // Back lands on the member profile, keeping Friends stacked below it.
+        val popped =
+            ShellNavigation.popRoute(
+                parents = listOf(ShellRoute.Friends, ShellRoute.MemberProfile),
+            )
+        assertEquals(ShellRoute.MemberProfile, popped.current)
+        assertEquals(listOf(ShellRoute.Friends), popped.parents)
+    }
+
+    @Test
+    fun `back from a top-level route leaves nothing open`() {
+        // A root route (empty parent stack) pops to null, so the shell falls
+        // through to its tab/exit Back rules (return to Map, or exit).
+        val popped = ShellNavigation.popRoute(parents = emptyList())
+        assertEquals(null, popped.current)
+        assertEquals(emptyList<ShellRoute>(), popped.parents)
+    }
+
+    @Test
+    fun `settings-to-blocked round-trips push then pop back to settings`() {
+        // End-to-end of the reported flow using only the pure reducer, so the two
+        // halves (open, then Back) are asserted to compose correctly.
+        // Open Settings as a root entry, then open Blocked users from it.
+        val afterSettings = ShellNavigation.pushRoute(parents = emptyList(), current = null)
+        val afterBlocked =
+            ShellNavigation.pushRoute(parents = afterSettings, current = ShellRoute.Settings)
+        assertEquals(listOf(ShellRoute.Settings), afterBlocked)
+        // Back from Blocked users pops to Settings, not the map.
+        val popped = ShellNavigation.popRoute(afterBlocked)
+        assertEquals(ShellRoute.Settings, popped.current)
+    }
+
     @Test
     fun `the default tab is Map`() {
         // Assert the real default constant (used by production), not enum order.

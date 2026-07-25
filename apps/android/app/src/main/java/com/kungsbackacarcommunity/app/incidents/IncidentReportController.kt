@@ -93,6 +93,35 @@ class IncidentReportController(
             } catch (_: Throwable) {
                 null
             } ?: return ReportOutcome.NoLocation
+        return submit(type, here, note)
+    }
+
+    /**
+     * Reports an incident of [type] at an EXPLICIT [location] the user placed on
+     * the map picker, rather than the device's current fix. This is the "pick on
+     * map" half of the report flow; [report] remains the quick "at my current
+     * location" default.
+     *
+     * The coordinate is validated here ([isValidReportCoordinate]) before any
+     * write, so a picker that yields a non-finite/out-of-range centre (no
+     * style/camera yet) degrades to [ReportOutcome.NoLocation] — the same "no
+     * usable location" feedback as a missing GPS fix — instead of a wasted
+     * round-trip the callable would reject with `invalid-argument`. On a valid
+     * coordinate the marker/refresh semantics are identical to [report].
+     */
+    suspend fun reportAt(type: IncidentType, location: LatLng, note: String? = null): ReportOutcome {
+        if (!isValidReportCoordinate(location)) return ReportOutcome.NoLocation
+        return submit(type, location, note)
+    }
+
+    /**
+     * The shared write path behind both [report] (current location) and
+     * [reportAt] (a picked location): file the report at [here], sweep nearby,
+     * then apply the promised marker LAST from the write alone (see [report]'s
+     * KDoc for why the ordering matters). Cancellation propagates; any other
+     * failure becomes [ReportOutcome.Failed].
+     */
+    private suspend fun submit(type: IncidentType, here: LatLng, note: String?): ReportOutcome {
         return try {
             val reported = repository.report(type, here, note)
             // Best-effort sweep for everything else nearby. refresh() handles its

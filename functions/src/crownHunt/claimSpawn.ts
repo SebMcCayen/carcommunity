@@ -77,6 +77,7 @@ import {
   evaluateStationaryCollection,
   getSpawnClaimMessage,
   parseClaimSpawnInput,
+  resolveCollectRadiusMeters,
   scopeSpawnClaimKey,
   spawnClaimLedgerIdempotencyKey,
   spawnDailyCounterDocId,
@@ -297,7 +298,13 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // from coordinates; the client never supplies one.
   const crownLat = spawn!.latitude as number;
   const crownLon = spawn!.longitude as number;
-  const collectRadius = (spawn!.collectRadiusMeters as number | undefined) ?? undefined;
+  // The stored radius is validated, not cast. A bad latitude/longitude on the
+  // crown already fails closed (a non-numeric one makes the distance NaN, and
+  // `NaN <= radius` is false, so the claim is refused), but an oversized radius
+  // is the one corruption that would fail OPEN — a wider geofence pays out to
+  // someone who was never there. Anything not a sane positive number falls back
+  // to the 75 m default.
+  const collectRadius = resolveCollectRadiusMeters(spawn!.collectRadiusMeters);
   const distanceMeters = haversineDistanceMeters(input.latitude, input.longitude, crownLat, crownLon);
   const previousDistanceMeters = haversineDistanceMeters(
     input.previousFix.latitude,
@@ -474,7 +481,18 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
           tx.get(dailyCounterRef),
         ]);
         const crown = crownSnap.data();
-        if (!crownSnap.exists || crown!.status !== 'live') {
+        // A MISSING document and a non-live one are different answers, and the
+        // fast path in step 4 already distinguishes them. Gone means gone: the
+        // sweeper reaped it after expiry, or a cell revocation deleted it out
+        // from under this call because an admin had just declared that area
+        // unsafe. Neither of those is "someone beat you to it", and saying so
+        // would send a member looking for a winner who does not exist.
+        // `already_taken` is reserved for a crown that still EXISTS and whose
+        // status says another member has it.
+        if (!crownSnap.exists) {
+          throw new SpawnClaimRejection('crown_expired');
+        }
+        if (crown!.status !== 'live') {
           throw new SpawnClaimRejection('already_taken');
         }
         const crownExpiry = crown!.expiresAt as Timestamp | undefined;

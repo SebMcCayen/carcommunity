@@ -117,7 +117,11 @@ class FirebaseCommunityChatRepository private constructor(
         }
     }
 
-    override suspend fun post(text: String, mentionedUids: List<String>): ChannelSendResult =
+    override suspend fun post(
+        text: String,
+        mentionedUids: List<String>,
+        clientId: String?,
+    ): ChannelSendResult =
         functions.callChannel(
             POST,
             // `mentionedUids` is optional in the contract, so omit it entirely
@@ -128,6 +132,9 @@ class FirebaseCommunityChatRepository private constructor(
                 put("text", text.trim())
                 val uids = mentionedUids.distinct().take(MAX_MESSAGE_MENTIONS)
                 if (uids.isNotEmpty()) put("mentionedUids", uids)
+                // Only sent when present, so an omitted key is a legacy auto-id doc
+                // rather than a null the strict backend schema would reject.
+                if (clientId != null) put("clientId", clientId)
             },
         ).fold(
             onSuccess = { ChannelResponseParser.parsePostSuccess(it) },

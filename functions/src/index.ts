@@ -274,8 +274,9 @@ export const blocking = {
  * Vehicle management + multi-photo gallery (contracts/functions/functions.json:
  * garage.addVehicle/updateVehicle/setMainVehicle/deleteVehicle/addVehiclePhoto/
  * removeVehiclePhoto/reorderVehiclePhotos). Vehicles are authenticated-readable;
- * all writes go through these callables (per-user cap, strict no-plate/no-VIN
- * schemas, per-vehicle photo cap + own-prefix validation, storage cleanup).
+ * all writes go through these callables (per-user cap, strict no-VIN schemas,
+ * server-side normalisation of the deliberately-public `registrationPlate`,
+ * per-vehicle photo cap + own-prefix validation, storage cleanup).
  */
 export const garage = {
   addVehicle,

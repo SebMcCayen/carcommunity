@@ -129,6 +129,23 @@ data class MapIncidentMarker(
 )
 
 /**
+ * A community EVENT pin to draw on the map (visible to every signed-in user).
+ * Shell-owned and self-contained so the [MapSurface] seam stays free of the
+ * events package's types: the host resolves a published, upcoming event into
+ * this, and [id] identifies the pin both for de-duplication and for reporting a
+ * tap back ([MapSurface.emitEventTap]) so the host can open the event.
+ *
+ * Unlike [MapIncidentMarker] there is no per-category colour/glyph — every event
+ * is one distinct event badge — so this carries only the id and position; the
+ * one event icon/colour is a fixed part of the surface's event layer.
+ */
+data class MapEventMarker(
+    val id: String,
+    val longitude: Double,
+    val latitude: Double,
+)
+
+/**
  * One auto-spawned Kronjakt crown to draw on the map.
  *
  * The exact sibling of [MapIncidentMarker], and separate from it for the same
@@ -299,6 +316,14 @@ interface MapSurface {
     val incidentMarkers: StateFlow<List<MapIncidentMarker>>
 
     /**
+     * The community event pins to draw (the shared events layer, visible to every
+     * signed-in user). A separate layer from the incidents one: an event is a
+     * different thing from a road hazard, with its own icon, its own tap intent
+     * ("open this event") and its own [eventTap] flow.
+     */
+    val eventMarkers: StateFlow<List<MapEventMarker>>
+
+    /**
      * The Kronjakt crowns to draw (the auto-spawn layer).
      *
      * Empty whenever the `crownHuntSpawn` flag is off — the host does not even
@@ -403,11 +428,23 @@ interface MapSurface {
     val incidentTap: StateFlow<String?>
 
     /**
+     * The id of the event pin most recently TAPPED, or null when none is pending.
+     * The host observes this to open the event info popup, then calls
+     * [consumeEventTap] to clear it.
+     *
+     * A separate flow from [incidentTap] for the same reason that one is separate
+     * from [placeRequest]: tapping an event pin means "tell me about this event",
+     * a different intent from an incident tap or a "navigate here" gesture. Only
+     * the id crosses the seam; the host resolves it back to the event it holds.
+     */
+    val eventTap: StateFlow<String?>
+
+    /**
      * The id of the crown marker most recently TAPPED, or null when none is
      * pending. The host observes this to open the crown popup, then calls
      * [consumeCrownTap].
      *
-     * A FOURTH flow rather than a second producer of [incidentTap], for the same
+     * A SEPARATE flow rather than a second producer of [incidentTap], for the same
      * reason [incidentTap] is not a producer of [placeRequest]: the two ids come
      * from different collections and mean different things, and one shared slot
      * would let a crown id be looked up among the incidents (finding nothing, so
@@ -443,6 +480,16 @@ interface MapSurface {
 
     /** Clear the pending [incidentTap] once the host has opened the sheet for it. */
     fun consumeIncidentTap()
+
+    /**
+     * Record a tap on the event pin with [eventId]. Called by the real surface's
+     * annotation click listener; also drivable by the stub/tests to simulate the
+     * tap without a GL surface.
+     */
+    fun emitEventTap(eventId: String)
+
+    /** Clear the pending [eventTap] once the host has opened the popup for it. */
+    fun consumeEventTap()
 
     /**
      * Record a tap on the crown marker with [spawnId]. Called by the real
@@ -558,6 +605,14 @@ interface MapSurface {
     fun setIncidentMarkers(markers: List<MapIncidentMarker>)
 
     /**
+     * Replace the set of community event pins drawn on the map. The host derives
+     * these from the published, upcoming events it observes and pushes them here
+     * so every signed-in user sees them. A no-op beyond storing the value on the
+     * stub.
+     */
+    fun setEventMarkers(markers: List<MapEventMarker>)
+
+    /**
      * Replace the set of Kronjakt crowns drawn on the map. The host reads these
      * from `crownSpawns` around the viewport and pushes them here. Pushing an
      * empty list is how the layer is taken DOWN — which is what the host does
@@ -620,6 +675,9 @@ class StubMapSurface(
     private val incidentMarkersFlow = MutableStateFlow<List<MapIncidentMarker>>(emptyList())
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
+
+    private val eventMarkersFlow = MutableStateFlow<List<MapEventMarker>>(emptyList())
+    override val eventMarkers: StateFlow<List<MapEventMarker>> = eventMarkersFlow.asStateFlow()
 
     private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
     override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
@@ -689,6 +747,9 @@ class StubMapSurface(
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
     override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
+
+    private val eventTapFlow = MutableStateFlow<String?>(null)
+    override val eventTap: StateFlow<String?> = eventTapFlow.asStateFlow()
 
     private val crownTapFlow = MutableStateFlow<String?>(null)
     override val crownTap: StateFlow<String?> = crownTapFlow.asStateFlow()
@@ -763,6 +824,14 @@ class StubMapSurface(
 
     override fun consumeIncidentTap() {
         incidentTapFlow.value = null
+    }
+
+    override fun emitEventTap(eventId: String) {
+        eventTapFlow.value = eventId
+    }
+
+    override fun consumeEventTap() {
+        eventTapFlow.value = null
     }
 
     override fun emitCrownTap(spawnId: String) {
@@ -854,6 +923,10 @@ class StubMapSurface(
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
         incidentMarkersFlow.value = markers
+    }
+
+    override fun setEventMarkers(markers: List<MapEventMarker>) {
+        eventMarkersFlow.value = markers
     }
 
     override fun setCrownMarkers(markers: List<MapCrownMarker>) {

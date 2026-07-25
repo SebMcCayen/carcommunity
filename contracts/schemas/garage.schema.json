@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/garage.schema.json",
   "title": "Garage contract",
-  "description": "Language-neutral garage/vehicle shapes shared by iOS, Android, backend, and admin. vehicle mirrors the Firestore `vehicles/{vehicleId}` document (docs/firebase-data-model.md), which is authenticated-readable by design — registration numbers, VIN, insurance data, and vehicle location are therefore unrepresentable in these schemas and must never be added. Garage features are member-only; each user may have at most 5 vehicles. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "description": "Language-neutral garage/vehicle shapes shared by iOS, Android, backend, and admin. vehicle mirrors the Firestore `vehicles/{vehicleId}` document (docs/firebase-data-model.md), which is authenticated-readable by design. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered field (Seb product decision 2026-07): the owner opts in by filling the field, and it is then readable by ANY signed-in user — the `vehicles` read rule is `isAuthenticated()`, so it is gated on neither membership nor a suspension check. Represented here on purpose. It is the one exception — VIN, insurance data, and vehicle location remain unrepresentable and must never be added, as those were never intended to be public. Garage write callables use `requireActiveActor` (signed-in, not suspended, not deleted) — managing your own garage is deliberately NOT member-gated, and member gating is currently DISABLED repo-wide (`MEMBER_GATING_ENABLED = false` in functions/src/shared/memberGating.ts). Each user may have at most 5 vehicles. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
   "$defs": {
     "vehiclePowertrain": {
       "type": "string",
@@ -25,6 +25,11 @@
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
         "description": { "type": ["string", "null"], "maxLength": 500 },
         "color": { "type": ["string", "null"], "maxLength": 80 },
+        "registrationPlate": {
+          "type": ["string", "null"],
+          "maxLength": 12,
+          "description": "Deliberately PUBLIC, user-entered registration plate (Seb product decision) — shown on the car profile and readable by any signed-in user (the `vehicles` read rule is `isAuthenticated()`, NOT member-gated). Server-normalised (trim / collapse internal whitespace / uppercase), format-agnostic so imports and personalised plates are accepted (no country regex). null / omitted when the owner left it blank. OPTIONAL and NOT in `required`: vehicles created before this field omit it. FUTURE: an automatic vehicle-info lookup keyed on this plate would slot in as a garage.lookupVehicleByPlate callable — not built yet."
+        },
         "imagePath": {
           "type": ["string", "null"],
           "maxLength": 500,
@@ -69,7 +74,12 @@
         "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
         "description": { "type": ["string", "null"], "maxLength": 500 },
-        "color": { "type": ["string", "null"], "maxLength": 80 }
+        "color": { "type": ["string", "null"], "maxLength": 80 },
+        "registrationPlate": {
+          "type": ["string", "null"],
+          "maxLength": 64,
+          "description": "Optional user-entered registration plate (raw). Server trims / collapses internal whitespace / uppercases before storing and enforces the 12-char cap against the NORMALISED value, so a raw string with padding/whitespace is accepted; null / empty clears it. Stored as ≤12 chars (see vehicle.registrationPlate). Format-agnostic (no country regex)."
+        }
       },
       "required": ["make", "model", "modelYear", "powertrain"],
       "additionalProperties": false
@@ -91,6 +101,11 @@
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
         "description": { "type": ["string", "null"], "maxLength": 500 },
         "color": { "type": ["string", "null"], "maxLength": 80 },
+        "registrationPlate": {
+          "type": ["string", "null"],
+          "maxLength": 64,
+          "description": "Optional user-entered registration plate (raw). Server trims / collapses internal whitespace / uppercases before storing and enforces the 12-char cap against the NORMALISED value; null / empty clears it. Stored as ≤12 chars (see vehicle.registrationPlate). Format-agnostic (no country regex)."
+        },
         "imagePath": { "type": ["string", "null"], "minLength": 1, "maxLength": 500 }
       },
       "required": ["vehicleId"],
