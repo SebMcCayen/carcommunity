@@ -45,6 +45,13 @@ import kotlinx.coroutines.flow.combine
  *    blocking-onBlockWrite trigger blanks its `lastMessage` preview while the
  *    block stands (functions/src/dm/blockedConversation.ts), so the delivered
  *    copy carries no counterparty content.
+ *
+ *    TWO independent signals drop that row, matching dm.listConversations on the
+ *    server: the caller's `blockVisibility` hidden set, and the `blockedPair`
+ *    marker stored on the conversation itself. The hidden set is
+ *    trigger-maintained (so briefly behind a fresh block) and stops growing at
+ *    MAX_HIDDEN_UIDS; the marker covers both gaps, and costs nothing because it
+ *    rides on a document the listener already receives.
  */
 class FirebaseDmRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -258,7 +265,13 @@ private fun DocumentSnapshot.toConversation(callerUid: String): DmConversation? 
             lastMessageSenderUid = lastMessage?.get("senderUid") as? String,
             lastMessageAtMillis = getTimestamp("lastMessageAt")?.toDate()?.time,
             unread = unread,
+            blockedPair = getBoolean("blockedPair") == true,
         )
+    // Dropped here rather than downstream so the row never reaches the UI: this
+    // is the marker signal that covers the window before the blockVisibility
+    // mirror catches up (and the case where the mirror is at its cap). See
+    // DmMapper.isHiddenByBlock.
+    if (DmMapper.isHiddenByBlock(doc)) return null
     return DmMapper.conversation(id, doc, callerUid)
 }
 
