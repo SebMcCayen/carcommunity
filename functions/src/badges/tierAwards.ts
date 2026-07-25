@@ -18,23 +18,29 @@
  *   3. Qualification is a pure `>=` test over the current counters
  *      (badge-tiers.ts), so it depends on no history and cannot drift.
  *
- * ORDERING: points are credited BEFORE the badge document is written. The
- * badge document's absence is what marks an award as "not yet processed", so
- * if the process dies between the two writes the next evaluation replays the
- * credit (a ledger no-op) and then writes the badge. Writing the badge first
- * would make a failed credit permanently invisible.
+ * ORDERING: points are credited BEFORE the badge document is written, and the
+ * badge is written ONLY if the credit succeeded. The badge document's absence
+ * is what marks an award as "not yet processed", so both a crash between the
+ * two writes and a failed credit leave the tier unprocessed; the next
+ * evaluation replays the credit (a ledger no-op if it did land) and then writes
+ * the badge. Writing the badge after a failed credit would be unrecoverable —
+ * the key would be excluded from `missing` forever and the member would hold
+ * the badge with the Kronpoäng silently lost.
  *
- * COST: evaluation is O(qualified tiers) — one `badgeProgress` read, one
- * batched `getAll` of at most 23 badge documents, and writes only for tiers
- * that are actually new. It never scans users, never scans a member's full
- * badge subcollection, and returns after two reads for the overwhelmingly
- * common case of "nothing new".
+ * COST: evaluation is O(qualified tiers) — one BATCHED `getAll` of the
+ * qualified badge documents (at most 22), plus one `badgeProgress` read ONLY
+ * when the caller did not already have that document (both real callers do, so
+ * on the hot path it is zero). The `getAll` is a single RPC but is BILLED PER
+ * DOCUMENT, so a steady-state no-op costs as many reads as the member holds
+ * tiers; a member qualifying for nothing returns without any `getAll` at all.
+ * It never scans users and never scans a member's full badge subcollection.
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { isRestricted, toUserAccessState } from '../shared/access';
+import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 import { creditPoints } from '../points/ledger';
 import { type BadgeMetric, type TierBadgeKey } from './badge-core';
 import {
@@ -44,6 +50,7 @@ import {
   qualifiedTierBadges,
   readBadgeCounters,
   tierPointsReward,
+  toCounter,
 } from './badge-tiers';
 import { awardBadge } from './awards';
 
@@ -60,6 +67,25 @@ export function badgeProgressRef(uid: string): FirebaseFirestore.DocumentReferen
  *
  * A non-finite or zero delta is dropped rather than written: a corrupt source
  * value must not be able to poison a counter that badges are derived from.
+ *
+ * NOT IDEMPOTENT UNDER REDELIVERY, deliberately. Firestore triggers are
+ * at-least-once, so a redelivered source event increments twice; the guards in
+ * badge-tiers.ts are transition tests on the source document, which reject a
+ * *rewrite* but cannot detect a *replay* of the same write. This is the same
+ * property the pre-existing Phase 9f `completedEventsAttended` counter has, and
+ * the bounded consequence is a counter drifting slightly high — a member
+ * reaching a rung marginally early. It is NOT an economy exploit: the Kronpoäng
+ * for a tier are keyed on `badge_award_{key}` and can only ever be credited
+ * once, and redelivery is a platform event, not something a client can induce.
+ *
+ * The three counters where correctness mattered more than write cost do NOT go
+ * through this function and are idempotent by construction: `vehiclesInGarage`
+ * and (via the sweep) any snapshot counter use `raiseBadgeCounter` over a
+ * re-derived `count()`, and `bestDayStreak` is a transactional day-key
+ * comparison. Making `crownsCollected` / `lifetimeDistanceMeters` /
+ * `convoysLed` exact would mean re-deriving each from its source on every
+ * source event, or a per-event dedupe document — a cost and surface trade-off
+ * that is a deliberate product decision, not an oversight.
  */
 export async function bumpBadgeCounter(
   uid: string,
@@ -108,6 +134,60 @@ export async function raiseBadgeCounter(
   });
 }
 
+/**
+ * Re-derives the counters that are a SNAPSHOT of current state rather than an
+ * accumulated total, and raises the stored running maximum to match.
+ *
+ * Today that is only `vehiclesInGarage`. It cannot be maintained by increments
+ * alone: `onVehicleCreated` fires on a vehicle CREATE, so a member whose garage
+ * was already populated before the ladders shipped — and above all one sitting
+ * at the MAX_VEHICLES_PER_USER cap, who can never create another vehicle and so
+ * can never fire that trigger again — would otherwise never earn a Samlare tier
+ * at all, however full their garage is. Re-deriving it on the sweep is what
+ * makes the Samlare ladder reachable for existing members.
+ *
+ * Costs one `count()` aggregation read per member per sweep, EXCEPT for a
+ * member already recorded at the vehicle cap, where it is skipped entirely (see
+ * below). Raising is a running maximum (raiseBadgeCounter), so a member who has
+ * since deleted cars keeps the tier they already earned, and this never writes
+ * when the stored value is already at or above the real count — no write, hence
+ * no evaluation re-trigger, on the steady-state pass.
+ *
+ * `knownProgress` is the member's already-loaded `badgeProgress` data, passed by
+ * callers that have it in hand so the cap shortcut costs no extra read.
+ *
+ * RETURNS the progress data to evaluate from. When this function raises the
+ * counter it patches the new value into the returned snapshot, because the
+ * caller's copy predates that write — evaluating from the stale copy would
+ * miss the very Samlare tier this reconciliation just made reachable. Returns
+ * `undefined` when the caller supplied nothing, so the evaluator falls back to
+ * reading the document itself.
+ */
+export async function reconcileDerivedBadgeCounters(
+  uid: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<Record<string, unknown> | undefined> {
+  const field = BADGE_METRIC_FIELD.vehiclesInGarage;
+  // The counter is a running maximum and the garage is transactionally capped
+  // at MAX_VEHICLES_PER_USER, so once the stored value reaches the cap the
+  // `count()` can never return anything higher and is guaranteed wasted. Only
+  // callers that ALREADY hold the badgeProgress document can use this
+  // shortcut — the sweep does, and that is exactly where the read would
+  // otherwise repeat every cycle, forever, for every maxed-out member.
+  if (knownProgress !== undefined && toCounter(knownProgress[field]) >= MAX_VEHICLES_PER_USER) {
+    return knownProgress;
+  }
+  const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
+  const count = countSnap.data().count;
+  await raiseBadgeCounter(uid, 'vehiclesInGarage', count);
+  if (knownProgress === undefined) {
+    return undefined;
+  }
+  return toCounter(knownProgress[field]) >= count
+    ? knownProgress
+    : { ...knownProgress, [field]: count };
+}
+
 async function isEligibleForAwards(uid: string): Promise<boolean> {
   const snap = await db.collection('users').doc(uid).get();
   return snap.exists && !isRestricted(toUserAccessState(snap.data()));
@@ -119,12 +199,24 @@ async function isEligibleForAwards(uid: string): Promise<boolean> {
  *
  * Returns the keys awarded by THIS call (empty on a no-op re-run). Never
  * throws for an expected condition — a restricted or missing member is a
- * silent no-op, and a failed points credit is logged and does not block the
- * badge, because the credit will be replayed on the next evaluation.
+ * silent no-op, and a failed points credit is logged and DEFERS the badge:
+ * awarding it would mark the tier processed forever and strand the Kronpoäng,
+ * so the loop stops and the next trigger (or the 6h sweep) retries both.
  */
-export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadgeKey[]> {
-  const progressSnap = await badgeProgressRef(uid).get();
-  const counters = readBadgeCounters(progressSnap.data());
+export async function evaluateAndAwardBadgeTiers(
+  uid: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<TierBadgeKey[]> {
+  // Callers that were handed the document already (the onBadgeProgressWritten
+  // trigger gets it as the event payload; the sweep gets it in its page) pass
+  // it in rather than making this re-read it. Evaluating from that snapshot is
+  // safe because qualification is a pure `>=` test and awards are monotonic
+  // create-if-absent writes: a snapshot that is momentarily behind can only
+  // award FEWER tiers, never a wrong one, and the write that superseded it
+  // fires its own evaluation.
+  const progress =
+    knownProgress ?? (await badgeProgressRef(uid).get()).data();
+  const counters = readBadgeCounters(progress);
   const qualified = qualifiedTierBadges(counters);
   if (qualified.length === 0) {
     return [];
@@ -161,12 +253,19 @@ export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadge
           relatedEntityId: key,
         });
       } catch (error) {
-        // The badge is still worth awarding; the credit replays next time.
-        logger.error('Badge tier points credit failed', {
+        // STOP — do not award the badge. The badge document's absence is the
+        // ONLY marker that this tier is unprocessed, so writing it now would
+        // permanently exclude the key from `missing` on every later evaluation
+        // and the member would keep the badge with the Kronpoäng silently lost.
+        // Breaking (rather than skipping to the next tier) also keeps a
+        // member's holdings a PREFIX of each ladder, never a gap. The next
+        // trigger or the 6h sweep retries the whole tail.
+        logger.error('Badge tier points credit failed — deferring award', {
           uid,
           badgeKey: key,
           error: String(error),
         });
+        break;
       }
     }
     const result = await awardBadge({ targetUid: uid, badgeKey: key, source: 'automatic' });
@@ -190,9 +289,13 @@ export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadge
  * fail (and therefore never retry-storm) the source write it hangs off. The
  * scheduled sweep re-evaluates anything a swallowed failure missed.
  */
-export async function tryEvaluateBadgeTiers(uid: string, context: string): Promise<void> {
+export async function tryEvaluateBadgeTiers(
+  uid: string,
+  context: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<void> {
   try {
-    await evaluateAndAwardBadgeTiers(uid);
+    await evaluateAndAwardBadgeTiers(uid, knownProgress);
   } catch (error) {
     logger.error('Badge tier evaluation failed', { uid, context, error: String(error) });
   }

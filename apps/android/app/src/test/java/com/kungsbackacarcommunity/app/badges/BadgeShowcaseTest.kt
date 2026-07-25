@@ -28,10 +28,12 @@ class BadgeShowcaseTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun `catalog is 5 milestones plus 23 ladder rungs`() {
+    fun `catalog is 5 milestones plus 22 ladder rungs`() {
         assertEquals(5, BADGE_MILESTONE_KEYS.size)
-        assertEquals(23, BADGE_LADDERS.sumOf { it.rungs.size })
-        assertEquals(28, BADGE_TOTAL_COUNT)
+        // 22, not 24: Trogen and Samlare have three rungs each (no Platina) —
+        // see BadgeLadderCatalogParityTest, which pins this to badge-core.ts.
+        assertEquals(22, BADGE_LADDERS.sumOf { it.rungs.size })
+        assertEquals(27, BADGE_TOTAL_COUNT)
     }
 
     @Test
@@ -68,7 +70,7 @@ class BadgeShowcaseTest {
 
         assertFalse(showcase.hasAnyBadge)
         assertEquals(0, showcase.earnedCount)
-        assertEquals(28, showcase.totalCount)
+        assertEquals(27, showcase.totalCount)
         assertTrue(showcase.milestones.isEmpty())
         // All six ladders are still rendered — an empty wall is a menu of goals,
         // never a gap.

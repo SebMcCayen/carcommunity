@@ -29,9 +29,9 @@
  *    maintains from an authoritative source (badges/progressTriggers.ts): only
  *    `awarded` Kronjakt claims (a `risk_review` claim never counts), only
  *    server-computed drive distance, only completed-event attendance credited
- *    by the event lifecycle, only convoys the member created that actually
- *    started, only the real vehicle count. No client-reported number ever
- *    reaches a threshold.
+ *    by the event lifecycle, only convoys the member led that COMPLETED with a
+ *    second accepted participant, only the real vehicle count. No
+ *    client-reported number ever reaches a threshold.
  *  - IDEMPOTENT. Thresholds are pure `>=` tests over the counters, so
  *    re-evaluation is always safe; the award write is create-if-absent.
  *  - Tier milestones also credit Kronpoäng (TIER_POINTS_REWARD) through the
@@ -85,10 +85,12 @@ export const TIER_BADGE_KEYS = [
   'traffrav_silver',
   'traffrav_guld',
   'traffrav_platina',
+  // Trogen intentionally stops at Guld — docs/gamification-system.md Q6 and §9:
+  // a 365-day-streak rung is exactly the "reason to open an app you did not
+  // want to open" the wellbeing rules forbid.
   'trogen_brons',
   'trogen_silver',
   'trogen_guld',
-  'trogen_platina',
   'konvojledare_brons',
   'konvojledare_silver',
   'konvojledare_guld',
@@ -142,6 +144,30 @@ export const TIER_POINTS_REWARD: Readonly<Record<BadgeTier, number>> = {
   platina: 500,
 };
 
+/**
+ * Swedish tier labels — the user-facing ones, and the values mirrored into
+ * `badges.badgeNames.*` in contracts/localization/sv.json.
+ */
+export const TIER_NAME_SV: Readonly<Record<BadgeTier, string>> = {
+  brons: 'Brons',
+  silver: 'Silver',
+  guld: 'Guld',
+  platina: 'Platina',
+};
+
+/**
+ * English tier labels, used for `nameEn` and mirrored into
+ * `badges.badgeNames.*` in contracts/localization/en.json. NOT the Swedish
+ * words: `nameEn` is a genuinely English working name, so a ladder rung reads
+ * "Wayfarer Gold" rather than half-translated.
+ */
+export const TIER_NAME_EN: Readonly<Record<BadgeTier, string>> = {
+  brons: 'Bronze',
+  silver: 'Silver',
+  guld: 'Gold',
+  platina: 'Platinum',
+};
+
 export interface BadgeLadderTierSpec {
   tier: BadgeTier;
   key: TierBadgeKey;
@@ -158,6 +184,13 @@ export interface BadgeLadderDefinition {
   metric: BadgeMetric;
   /** Swedish sentence template; `{n}` is replaced by the formatted threshold. */
   descriptionTemplate: string;
+  /**
+   * Swedish template used when the threshold is exactly 1. Swedish inflects the
+   * noun, so the plural template would render "Deltog i 1 träffar" — wrong, and
+   * on the Brons rung of two ladders. Omitted where the noun does not inflect
+   * (`fordon` is identical in both numbers).
+   */
+  descriptionTemplateOne?: string;
   /** Formats a raw threshold for the description (e.g. metres → "100 km"). */
   formatThreshold: (threshold: number) => string;
   /** The ladder's shared silhouette glyph — see BADGE_ICON_SYSTEM. */
@@ -215,16 +248,19 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
     nameEn: 'Meet Fox',
     metric: 'verifiedEventsAttended',
     descriptionTemplate: 'Deltog i {n} träffar.',
+    descriptionTemplateOne: 'Deltog i {n} träff.',
     formatThreshold: (n) => String(n),
     glyphBrief:
       'A fox head front-on: two tall triangular ears on a broad skull that ' +
       'tapers to a narrow muzzle, with two notched eye cut-outs. A pointed, ' +
       'top-heavy triangle silhouette that no other glyph in the set shares.',
     tiers: [
-      { tier: 'brons', key: 'traffrav_brons', threshold: 3 },
-      { tier: 'silver', key: 'traffrav_silver', threshold: 10 },
+      // Brons/Silver deliberately mirror the existing first_event (1) and
+      // five_events (5) badges — docs/gamification-system.md §7.2.
+      { tier: 'brons', key: 'traffrav_brons', threshold: 1 },
+      { tier: 'silver', key: 'traffrav_silver', threshold: 5 },
       { tier: 'guld', key: 'traffrav_guld', threshold: 25 },
-      { tier: 'platina', key: 'traffrav_platina', threshold: 60 },
+      { tier: 'platina', key: 'traffrav_platina', threshold: 100 },
     ],
   },
   {
@@ -239,10 +275,11 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
       'with one inner notch, sitting on a short plinth. The plinth is what ' +
       'separates it from every other rounded glyph at small sizes.',
     tiers: [
+      // Three rungs only, by product decision (Q6): a 365-day Platina streak is
+      // the loss-aversion hook §9 rules out. Guld at 100 is the top.
       { tier: 'brons', key: 'trogen_brons', threshold: 7 },
       { tier: 'silver', key: 'trogen_silver', threshold: 30 },
       { tier: 'guld', key: 'trogen_guld', threshold: 100 },
-      { tier: 'platina', key: 'trogen_platina', threshold: 365 },
     ],
   },
   {
@@ -251,16 +288,19 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
     nameEn: 'Convoy Leader',
     metric: 'convoysLed',
     descriptionTemplate: 'Ledde {n} konvojer.',
+    descriptionTemplateOne: 'Ledde {n} konvoj.',
     formatThreshold: (n) => String(n),
     glyphBrief:
       'Three chevrons in V-formation seen from above: one large leading chevron ' +
       'with two smaller ones trailing behind and outward. Pure angular ' +
       'repetition — no rounded parts at all, so the silhouette reads as "formation".',
     tiers: [
+      // Silver/Guld/Platina are the spec's 5/25/100 (§7.2); Brons is the
+      // first-convoy rung that gives the ladder its fourth rung per §7.1.
       { tier: 'brons', key: 'konvojledare_brons', threshold: 1 },
       { tier: 'silver', key: 'konvojledare_silver', threshold: 5 },
-      { tier: 'guld', key: 'konvojledare_guld', threshold: 20 },
-      { tier: 'platina', key: 'konvojledare_platina', threshold: 50 },
+      { tier: 'guld', key: 'konvojledare_guld', threshold: 25 },
+      { tier: 'platina', key: 'konvojledare_platina', threshold: 100 },
     ],
   },
   {
@@ -289,7 +329,7 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * The shared visual system every badge icon follows, so 28 badges read as ONE
+ * The shared visual system every badge icon follows, so 27 badges read as ONE
  * family. Descriptive only — this repo ships no image assets; the art is
  * produced against these briefs and shipped as `iconIdentifier` drawables.
  *
@@ -464,8 +504,14 @@ const LEGACY_CATALOG: Readonly<Record<LegacyBadgeKey, BadgeDefinition>> = {
       NON_TIERED_RING_TREATMENT,
     // Historic. Kept live and unchanged (garage.addVehicle still awards it) so
     // the many members already holding it are untouched; `samlare_brons` is the
-    // ladder rung that measures the same moment going forward. See
-    // docs in badges/README-less module header for the full rationale.
+    // ladder rung that measures the same moment going forward. Remapping the
+    // key would either orphan the documents members already hold at this ID or
+    // require a migration write to every holder, for no user benefit — and
+    // because garage_created carries 0 KP, holding both is not a double
+    // payout. An existing garage_created holder picks up the Samlare rungs
+    // their garage already justifies from the badges-evaluateBacklog sweep,
+    // which re-derives the vehicle count (badges/scheduled.ts) — no migration
+    // write to existing badge documents is needed or performed.
     isLegacy: true,
     supersededBy: 'samlare_brons',
   },
@@ -475,20 +521,14 @@ function buildTierDefinition(
   ladder: BadgeLadderDefinition,
   spec: BadgeLadderTierSpec,
 ): BadgeDefinition {
-  const tierNameSv: Record<BadgeTier, string> = {
-    brons: 'Brons',
-    silver: 'Silver',
-    guld: 'Guld',
-    platina: 'Platina',
-  };
   return {
     key: spec.key,
-    name: `${ladder.name} ${tierNameSv[spec.tier]}`,
-    nameEn: `${ladder.nameEn} ${spec.tier}`,
-    description: ladder.descriptionTemplate.replace(
-      '{n}',
-      ladder.formatThreshold(spec.threshold),
-    ),
+    name: `${ladder.name} ${TIER_NAME_SV[spec.tier]}`,
+    nameEn: `${ladder.nameEn} ${TIER_NAME_EN[spec.tier]}`,
+    description: (spec.threshold === 1 && ladder.descriptionTemplateOne
+      ? ladder.descriptionTemplateOne
+      : ladder.descriptionTemplate
+    ).replace('{n}', ladder.formatThreshold(spec.threshold)),
     iconIdentifier: `badge_${spec.key}`,
     isAutomatic: true,
     ladder: ladder.ladder,

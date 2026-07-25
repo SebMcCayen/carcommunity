@@ -8,6 +8,8 @@
  * never counts.
  */
 
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   BADGE_CATALOG,
@@ -15,6 +17,7 @@ import {
   BADGE_ICON_SYSTEM,
   BADGE_KEYS,
   BADGE_LADDERS,
+  BADGE_LADDER_KEYS,
   LEGACY_BADGE_KEYS,
   TIER_BADGE_KEYS,
   TIER_POINTS_REWARD,
@@ -47,6 +50,23 @@ const counters = (overrides: Partial<BadgeCounters> = {}): BadgeCounters => ({
   ...ZERO_BADGE_COUNTERS,
   ...overrides,
 });
+
+/**
+ * Absolute path to a repo file. Walks up from the working directory rather than
+ * using `import.meta.url`: this file is type-checked under tsconfig.test.json,
+ * whose `module` setting does not permit import.meta.
+ */
+const repoRoot = (() => {
+  let dir = process.cwd();
+  for (let up = 0; up < 6; up += 1) {
+    if (existsSync(join(dir, 'contracts', 'localization', 'sv.json'))) {
+      return dir;
+    }
+    dir = dirname(dir);
+  }
+  throw new Error(`Could not locate the repo root from ${process.cwd()}`);
+})();
+const repoFile = (...segments: string[]): string => join(repoRoot, ...segments);
 
 // ---------------------------------------------------------------------------
 // Catalog integrity
@@ -147,9 +167,9 @@ describe('ladder definitions', () => {
     expect(byLadder).toEqual({
       kronjagare: [10, 50, 250, 1_000],
       vagfarare: [100_000, 500_000, 2_000_000, 10_000_000],
-      traffrav: [3, 10, 25, 60],
-      trogen: [7, 30, 100, 365],
-      konvojledare: [1, 5, 20, 50],
+      traffrav: [1, 5, 25, 100],
+      trogen: [7, 30, 100],
+      konvojledare: [1, 5, 25, 100],
       samlare: [1, 3, 5],
     });
   });
@@ -210,10 +230,15 @@ describe('threshold boundaries', () => {
     ]);
   });
 
-  it('Träffräv: 2 events earns nothing, 3 earns Brons', () => {
-    expect(qualifiedTierBadges(counters({ verifiedEventsAttended: 2 }))).toEqual([]);
-    expect(qualifiedTierBadges(counters({ verifiedEventsAttended: 3 }))).toEqual([
+  it('Träffräv: 0 events earns nothing, the first earns Brons (mirrors first_event)', () => {
+    expect(qualifiedTierBadges(counters({ verifiedEventsAttended: 0 }))).toEqual([]);
+    expect(qualifiedTierBadges(counters({ verifiedEventsAttended: 1 }))).toEqual([
       'traffrav_brons',
+    ]);
+    // Silver mirrors the existing five_events badge.
+    expect(qualifiedTierBadges(counters({ verifiedEventsAttended: 5 }))).toEqual([
+      'traffrav_brons',
+      'traffrav_silver',
     ]);
   });
 
@@ -225,6 +250,22 @@ describe('threshold boundaries', () => {
   it('Konvojledare: 0 convoys earns nothing, the first one earns Brons', () => {
     expect(qualifiedTierBadges(counters({ convoysLed: 0 }))).toEqual([]);
     expect(qualifiedTierBadges(counters({ convoysLed: 1 }))).toEqual(['konvojledare_brons']);
+    // 99 is one short of the published Platina threshold.
+    expect(qualifiedTierBadges(counters({ convoysLed: 99 }))).not.toContain(
+      'konvojledare_platina',
+    );
+    expect(qualifiedTierBadges(counters({ convoysLed: 100 }))).toContain('konvojledare_platina');
+  });
+
+  it('Trogen tops out at Guld — there is no 365-day Platina rung (Q6, §9)', () => {
+    const trogen = BADGE_LADDERS.find((ladder) => ladder.ladder === 'trogen')!;
+    expect(trogen.tiers.map((tier) => tier.tier)).toEqual(['brons', 'silver', 'guld']);
+    expect(qualifiedTierBadges(counters({ bestDayStreak: 365 }))).toEqual([
+      'trogen_brons',
+      'trogen_silver',
+      'trogen_guld',
+    ]);
+    expect(TIER_BADGE_KEYS).not.toContain('trogen_platina');
   });
 
   it('Samlare: the first car earns Brons and five cars earn all three tiers', () => {
@@ -275,13 +316,14 @@ describe('multi-tier jumps', () => {
 
   it('awards across several ladders in one evaluation, in catalog order', () => {
     const earned = newlyEarnedTierBadges(
-      counters({ crownsCollected: 50, verifiedEventsAttended: 3, convoysLed: 5 }),
+      counters({ crownsCollected: 50, verifiedEventsAttended: 5, convoysLed: 5 }),
       [],
     );
     expect(earned).toEqual([
       'kronjagare_brons',
       'kronjagare_silver',
       'traffrav_brons',
+      'traffrav_silver',
       'konvojledare_brons',
       'konvojledare_silver',
     ]);
@@ -447,20 +489,63 @@ describe('drive distance credit', () => {
 });
 
 describe('convoy led credit', () => {
-  it('credits the owner when a convoy goes live', () => {
-    expect(convoyLedOwnerUid(undefined, { ownerUid: 'u1', startedAt: 1 })).toBe('u1');
-    expect(convoyLedOwnerUid({ ownerUid: 'u1', startedAt: null }, { ownerUid: 'u1', startedAt: 1 })).toBe(
-      'u1',
-    );
+  const withMembers = (
+    extra: Record<string, unknown>,
+    members: Record<string, string>,
+  ): Record<string, unknown> => ({
+    ownerUid: 'u1',
+    members: {
+      u1: { inviteStatus: 'accepted', role: 'owner' },
+      ...Object.fromEntries(
+        Object.entries(members).map(([uid, status]) => [uid, { inviteStatus: status }]),
+      ),
+    },
+    ...extra,
   });
 
-  it('credits nothing for a convoy that never started, or for later writes', () => {
-    expect(convoyLedOwnerUid(undefined, { ownerUid: 'u1', startedAt: null })).toBeNull();
+  it('credits the owner when a convoy ENDS with another accepted participant', () => {
+    const before = withMembers({ startedAt: 1, endedAt: null }, { u2: 'accepted' });
+    const after = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'accepted' });
+    expect(convoyLedOwnerUid(before, after)).toBe('u1');
+  });
+
+  it('credits nothing for a SOLO convoy — the whole anti-farming rule', () => {
+    // Convoys are born active, so crediting on start would let a member mint a
+    // rung per tap by creating and abandoning convoys nobody joined.
+    const solo = withMembers({ startedAt: 1, endedAt: 2 }, {});
+    expect(convoyLedOwnerUid(withMembers({ startedAt: 1, endedAt: null }, {}), solo)).toBeNull();
+    // An invite that was never answered, or was declined, is not a participant.
+    const invitedOnly = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'invited' });
+    expect(convoyLedOwnerUid(undefined, invitedOnly)).toBeNull();
+    const declined = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'declined' });
+    expect(convoyLedOwnerUid(undefined, declined)).toBeNull();
+  });
+
+  it('credits nothing while the convoy is merely running, only when it ends', () => {
+    const running = withMembers({ startedAt: 1, endedAt: null }, { u2: 'accepted' });
+    expect(convoyLedOwnerUid(undefined, running)).toBeNull();
+  });
+
+  it('credits nothing for a re-write of an already-ended convoy', () => {
+    const ended = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'accepted' });
+    expect(convoyLedOwnerUid(ended, { ...ended, title: 'renamed' })).toBeNull();
+  });
+
+  it('credits nothing for a delete, or a document with no usable owner', () => {
+    const ended = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'accepted' });
+    expect(convoyLedOwnerUid(ended, undefined)).toBeNull();
+    const ownerless = { endedAt: 2, members: { u2: { inviteStatus: 'accepted' } } };
+    expect(convoyLedOwnerUid(undefined, ownerless)).toBeNull();
+  });
+
+  it('ignores a malformed members map rather than crediting', () => {
+    expect(convoyLedOwnerUid(undefined, { ownerUid: 'u1', endedAt: 2 })).toBeNull();
     expect(
-      convoyLedOwnerUid({ ownerUid: 'u1', startedAt: 1 }, { ownerUid: 'u1', startedAt: 1, endedAt: 2 }),
+      convoyLedOwnerUid(undefined, { ownerUid: 'u1', endedAt: 2, members: 'nope' }),
     ).toBeNull();
-    expect(convoyLedOwnerUid({ ownerUid: 'u1', startedAt: 1 }, undefined)).toBeNull();
-    expect(convoyLedOwnerUid(undefined, { startedAt: 1 })).toBeNull();
+    expect(
+      convoyLedOwnerUid(undefined, { ownerUid: 'u1', endedAt: 2, members: { u2: null } }),
+    ).toBeNull();
   });
 });
 
@@ -593,5 +678,150 @@ describe('presentation', () => {
       () => 'TS',
     );
     expect(document).toMatchObject({ ladder: null, tier: null, awardedByUserId: 'admin1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Localization parity
+//
+// The Android badge screen looks a badge name up by key and falls back to the
+// denormalized (always Swedish) name from the document when the key is unknown
+// (apps/android/.../badges/BadgeStrings.kt). A badge added to the catalog
+// without localization entries therefore ships Swedish text to English-locale
+// members SILENTLY. These tests make that impossible rather than asserting it
+// in prose.
+// ---------------------------------------------------------------------------
+
+describe('localization parity', () => {
+  const badgeNames = (locale: 'sv' | 'en'): Record<string, string> =>
+    JSON.parse(readFileSync(repoFile('contracts', 'localization', `${locale}.json`), 'utf8')).badges
+      .badgeNames;
+
+  it('localizes every catalog key in both Swedish and English', () => {
+    const sv = badgeNames('sv');
+    const en = badgeNames('en');
+    expect(Object.keys(sv)).toEqual([...BADGE_CATALOG_ORDER]);
+    // Identical key SETS in both locales, so neither can drift ahead.
+    expect(Object.keys(en)).toEqual(Object.keys(sv));
+    for (const key of BADGE_CATALOG_ORDER) {
+      expect(sv[key]?.length ?? 0).toBeGreaterThan(0);
+      expect(en[key]?.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it('matches the Swedish catalog names exactly for the tier ladders', () => {
+    const sv = badgeNames('sv');
+    for (const key of TIER_BADGE_KEYS) {
+      expect(sv[key]).toBe(BADGE_CATALOG[key].name);
+    }
+  });
+
+  it('uses genuinely English tier words in the English locale', () => {
+    const en = badgeNames('en');
+    for (const key of TIER_BADGE_KEYS) {
+      expect(en[key]).toBe(BADGE_CATALOG[key].nameEn);
+      // "Crown Hunter brons" would be half-translated; catch it.
+      expect(en[key]).not.toMatch(/\b(brons|guld|platina)\b/i);
+    }
+  });
+
+  it('maps every catalog key in the Android lookup', () => {
+    // Cross-lane guard: the `when` in BadgeStrings.kt is the only thing that
+    // turns a localized string into a rendered badge name.
+    const kotlin = readFileSync(
+      repoFile(
+        'apps/android/app/src/main/java/com/kungsbackacarcommunity/app/badges/BadgeStrings.kt',
+      ),
+      'utf8',
+    );
+    for (const key of BADGE_CATALOG_ORDER) {
+      expect(kotlin).toContain(`"${key}" -> R.string.badges_badgeNames_${key}`);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spec agreement
+//
+// docs/gamification-system.md §7.2 is the canonical maths for the ladders. The
+// recurring failure mode in this repo is a document asserting something the
+// code does not do, so rather than trusting the two to be kept in step by hand,
+// this parses the spec's own tables and compares them to the catalog. If either
+// side moves without the other, this fails and names the ladder.
+// ---------------------------------------------------------------------------
+
+describe('agrees with docs/gamification-system.md §7.2', () => {
+  /** Swedish ladder heading -> ladder key, as used in the spec's §7.2 tables. */
+  const LADDER_BY_HEADING: Record<string, string> = {
+    Kronjägare: 'kronjagare',
+    Vägfarare: 'vagfarare',
+    Träffräv: 'traffrav',
+    Trogen: 'trogen',
+    Konvojledare: 'konvojledare',
+    Samlare: 'samlare',
+  };
+  const TIER_BY_HEADING: Record<string, string> = {
+    Brons: 'brons',
+    Silver: 'silver',
+    Guld: 'guld',
+    Platina: 'platina',
+  };
+
+  function parseSpecLadders(): Record<string, Array<{ tier: string; threshold: number }>> {
+    const doc = readFileSync(repoFile('docs/gamification-system.md'), 'utf8');
+    const section = doc.slice(doc.indexOf('### 7.2 The ladders'), doc.indexOf('### 7.3'));
+    expect(section.length).toBeGreaterThan(0);
+    const parsed: Record<string, Array<{ tier: string; threshold: number }>> = {};
+    for (const block of section.split('#### ').slice(1)) {
+      const heading = block.split('\n')[0]!.split(' · ')[0]!.trim();
+      const ladder = LADDER_BY_HEADING[heading];
+      expect(ladder, `unknown ladder heading "${heading}"`).toBeDefined();
+      const rows = block
+        .split('\n')
+        .filter((line) => line.startsWith('| ') && !line.includes('---') && !line.startsWith('| Tier'));
+      parsed[ladder!] = rows.map((row) => {
+        const [, tierCell, requirement] = row.split('|').map((cell) => cell.trim());
+        const tier = TIER_BY_HEADING[tierCell!];
+        expect(tier, `unknown tier "${tierCell}"`).toBeDefined();
+        // "1 000 km" -> 1000; digits may be space-grouped in the prose.
+        const digits = /^([\d\s]+)/.exec(requirement!)?.[1]?.replace(/\s/g, '');
+        expect(digits, `no leading number in "${requirement}"`).toBeTruthy();
+        const value = Number(digits);
+        // Vägfarare is published in kilometres; the catalog stores metres.
+        return { tier: tier!, threshold: ladder === 'vagfarare' ? value * 1_000 : value };
+      });
+    }
+    return parsed;
+  }
+
+  it('matches every published threshold, tier and rung count', () => {
+    const spec = parseSpecLadders();
+    expect(Object.keys(spec).sort()).toEqual([...BADGE_LADDER_KEYS].sort());
+    for (const ladder of BADGE_LADDERS) {
+      expect(spec[ladder.ladder], `${ladder.ladder} missing from the spec`).toBeDefined();
+      expect(
+        ladder.tiers.map((tier) => ({ tier: tier.tier, threshold: tier.threshold })),
+        `${ladder.ladder} disagrees with docs/gamification-system.md §7.2`,
+      ).toEqual(spec[ladder.ladder]);
+    }
+  });
+
+  it('matches the published 25/75/200/500 milestone bonuses', () => {
+    const doc = readFileSync(repoFile('docs/gamification-system.md'), 'utf8');
+    expect(doc).toContain('**25 / 75 / 200 / 500**');
+    expect(TIER_POINTS_REWARD).toEqual({ brons: 25, silver: 75, guld: 200, platina: 500 });
+  });
+
+  it('documents both ladders that deliberately stop short of Platina', () => {
+    const shortLadders = BADGE_LADDERS.filter((ladder) => ladder.tiers.length < 4).map(
+      (ladder) => ladder.ladder,
+    );
+    expect(shortLadders.sort()).toEqual(['samlare', 'trogen']);
+    const doc = readFileSync(repoFile('docs/gamification-system.md'), 'utf8');
+    const structure = doc.slice(doc.indexOf('### 7.1 Structure'), doc.indexOf('### 7.2'));
+    // §7.1 must name each exception, so the rung counts are never a surprise.
+    expect(structure).toContain('**Trogen**');
+    expect(structure).toContain('**Samlare**');
+    expect(structure).toContain('MAX_VEHICLES_PER_USER');
   });
 });

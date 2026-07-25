@@ -227,23 +227,55 @@ export function rideDistanceDelta(data: DocData): number {
 }
 
 /**
- * The owner to credit with one led convoy, or null when this write is not a
- * convoy going live.
+ * The owner to credit with one led convoy, or null when this write does not
+ * complete a qualifying convoy.
  *
- * "Led" means CREATED BY the member AND actually started — convoys are born
- * active with a `startedAt` (convoy-core.ts::buildConvoyDocument), and this
- * guard also covers a `forming → active` transition should the lifecycle ever
- * regain a separate start step. A convoy that never starts never counts, and
- * ending or re-writing an already-started convoy credits nothing more.
+ * "Led" is the definition in docs/gamification-system.md §7.2: the member was
+ * the INITIATING member of a convoy that COMPLETED with AT LEAST ONE OTHER
+ * PARTICIPANT. All three parts matter, and the last two are what make the
+ * ladder unfarmable — a convoy is born active with a `startedAt`
+ * (convoy-core.ts::buildConvoyDocument), so crediting on start would let a
+ * member mint Konvojledare rungs by creating and abandoning solo convoys, one
+ * tap each. Requiring a real second participant means another account has to
+ * actively accept the invite.
+ *
+ * Credit fires on the transition INTO ended (`endedAt` going from unset to
+ * set), which convoy.end makes exactly once, so re-writing an ended convoy
+ * credits nothing more.
  */
 export function convoyLedOwnerUid(before: DocData, after: DocData): string | null {
-  const hadStarted = before != null && before.startedAt != null;
-  const hasStarted = after != null && after.startedAt != null;
-  if (hadStarted || !hasStarted) {
+  const hadEnded = before != null && before.endedAt != null;
+  const hasEnded = after != null && after.endedAt != null;
+  if (hadEnded || !hasEnded) {
     return null;
   }
   const ownerUid = after?.ownerUid;
-  return typeof ownerUid === 'string' && ownerUid.length > 0 ? ownerUid : null;
+  if (typeof ownerUid !== 'string' || ownerUid.length === 0) {
+    return null;
+  }
+  return acceptedConvoyParticipants(after, ownerUid) >= 1 ? ownerUid : null;
+}
+
+/**
+ * Members other than the owner who actually ACCEPTED the invite. An invited
+ * member who never responded, or who declined, is not a participant — only
+ * `inviteStatus: 'accepted'` counts (convoy-core.ts::buildMemberEntry).
+ */
+function acceptedConvoyParticipants(data: DocData, ownerUid: string): number {
+  const members = data?.members;
+  if (typeof members !== 'object' || members === null) {
+    return 0;
+  }
+  let accepted = 0;
+  for (const [uid, entry] of Object.entries(members as Record<string, unknown>)) {
+    if (uid === ownerUid || typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    if ((entry as Record<string, unknown>).inviteStatus === 'accepted') {
+      accepted += 1;
+    }
+  }
+  return accepted;
 }
 
 // ---------------------------------------------------------------------------

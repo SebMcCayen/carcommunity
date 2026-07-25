@@ -105,7 +105,7 @@ class PublicBadgeWallTest {
 
         assertTrue(wall.hasAnyBadge)
         assertEquals(3, wall.earnedCount)
-        assertEquals(28, wall.totalCount)
+        assertEquals(27, wall.totalCount)
         assertEquals(
             listOf(BadgeLadderId.KRONJAGARE, BadgeLadderId.SAMLARE),
             wall.ladders.map { it.ladder.id },

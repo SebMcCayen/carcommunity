@@ -7,7 +7,7 @@
     "badgeTier": {
       "type": "string",
       "enum": ["brons", "silver", "guld", "platina"],
-      "description": "Ladder rung. Samlare has no platina tier — the garage caps at five vehicles."
+      "description": "Ladder rung. Two ladders stop at guld: Samlare, because the garage caps at five vehicles so a higher rung would be unreachable; and Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9)."
     },
     "badgeLadder": {
       "type": "string",
@@ -44,7 +44,6 @@
         "trogen_brons",
         "trogen_silver",
         "trogen_guld",
-        "trogen_platina",
         "konvojledare_brons",
         "konvojledare_silver",
         "konvojledare_guld",

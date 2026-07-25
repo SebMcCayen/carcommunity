@@ -74,7 +74,7 @@ enum class BadgeLadderId(val key: String) {
 data class BadgeLadder(
     val id: BadgeLadderId,
     val unit: BadgeLadderUnit,
-    /** Bottom-to-top. Samlare has three rungs; every other ladder has four. */
+    /** Bottom-to-top. Trogen and Samlare have three rungs; the rest have four. */
     val rungs: List<BadgeRung>,
 ) {
     val badgeKeys: List<String> get() = rungs.map { it.badgeKey }
@@ -114,12 +114,17 @@ val BADGE_LADDERS: List<BadgeLadder> =
             unit = BadgeLadderUnit.COUNT,
             rungs =
                 listOf(
-                    BadgeRung(BadgeTier.BRONS, "traffrav_brons", 3),
-                    BadgeRung(BadgeTier.SILVER, "traffrav_silver", 10),
+                    // Brons/Silver deliberately mirror the existing first_event (1)
+                    // and five_events (5) badges — docs/gamification-system.md §7.2.
+                    BadgeRung(BadgeTier.BRONS, "traffrav_brons", 1),
+                    BadgeRung(BadgeTier.SILVER, "traffrav_silver", 5),
                     BadgeRung(BadgeTier.GULD, "traffrav_guld", 25),
-                    BadgeRung(BadgeTier.PLATINA, "traffrav_platina", 60),
+                    BadgeRung(BadgeTier.PLATINA, "traffrav_platina", 100),
                 ),
         ),
+        // Three rungs only, by product decision (Q6): a 365-day Platina streak is
+        // the loss-aversion hook the design doc rules out, so `trogen_platina` is
+        // not a badge key at all. Guld at 100 is the top (matches the backend).
         BadgeLadder(
             id = BadgeLadderId.TROGEN,
             unit = BadgeLadderUnit.COUNT,
@@ -128,7 +133,6 @@ val BADGE_LADDERS: List<BadgeLadder> =
                     BadgeRung(BadgeTier.BRONS, "trogen_brons", 7),
                     BadgeRung(BadgeTier.SILVER, "trogen_silver", 30),
                     BadgeRung(BadgeTier.GULD, "trogen_guld", 100),
-                    BadgeRung(BadgeTier.PLATINA, "trogen_platina", 365),
                 ),
         ),
         BadgeLadder(
@@ -138,8 +142,8 @@ val BADGE_LADDERS: List<BadgeLadder> =
                 listOf(
                     BadgeRung(BadgeTier.BRONS, "konvojledare_brons", 1),
                     BadgeRung(BadgeTier.SILVER, "konvojledare_silver", 5),
-                    BadgeRung(BadgeTier.GULD, "konvojledare_guld", 20),
-                    BadgeRung(BadgeTier.PLATINA, "konvojledare_platina", 50),
+                    BadgeRung(BadgeTier.GULD, "konvojledare_guld", 25),
+                    BadgeRung(BadgeTier.PLATINA, "konvojledare_platina", 100),
                 ),
         ),
         // Three rungs only: the garage caps at five vehicles, so a Platina rung

@@ -36,7 +36,10 @@
  *  - Trogen      ← `userLifecycle/{uid}.lastLoginAt`, a trusted server write
  *                  (auth.recordLogin uses the Admin SDK; rules deny every
  *                  client write to that document).
- *  - Konvojledare← `convoys/{id}` created by the member and actually started.
+ *  - Konvojledare← `convoys/{id}` created by the member that REACHED `endedAt`
+ *                  with at least one other accepted participant. Crediting on
+ *                  start instead would make the ladder farmable with solo
+ *                  convoys (docs/gamification-system.md §7.2).
  *  - Samlare     ← a server-side `count()` of the member's `vehicles`.
  *
  * SEAM — VERIFIED EVENT ATTENDANCE. A richer `event_attend_verified` record
@@ -63,7 +66,12 @@ import {
   rideDistanceDelta,
   streakDayKey,
 } from './badge-tiers';
-import { badgeProgressRef, bumpBadgeCounter, raiseBadgeCounter, tryEvaluateBadgeTiers } from './tierAwards';
+import {
+  badgeProgressRef,
+  bumpBadgeCounter,
+  reconcileDerivedBadgeCounters,
+  tryEvaluateBadgeTiers,
+} from './tierAwards';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
@@ -89,7 +97,13 @@ export const onBadgeProgressWritten = onDocumentWritten(
     if (!firestoreEvent.data?.after.exists) {
       return;
     }
-    await tryEvaluateBadgeTiers(firestoreEvent.params.uid, 'badgeProgress.write');
+    // The event payload IS the badgeProgress document — pass it straight to
+    // the evaluator so the hot path (every counter bump) re-reads nothing.
+    await tryEvaluateBadgeTiers(
+      firestoreEvent.params.uid,
+      'badgeProgress.write',
+      firestoreEvent.data.after.data(),
+    );
   },
 );
 
@@ -132,7 +146,7 @@ export const onRideCreated = onDocumentCreated(
   },
 );
 
-/** Konvojledare — convoys the member created that actually went live. */
+/** Konvojledare — convoys the member led that completed with a real participant. */
 export const onConvoyWritten = onDocumentWritten(
   { ...TRIGGER_OPTS, document: 'convoys/{convoyId}' },
   async (firestoreEvent) => {
@@ -161,8 +175,7 @@ export const onVehicleCreated = onDocumentCreated(
     if (typeof uid !== 'string' || uid.length === 0) {
       return;
     }
-    const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
-    await raiseBadgeCounter(uid, 'vehiclesInGarage', countSnap.data().count);
+    await reconcileDerivedBadgeCounters(uid);
   },
 );
 
@@ -178,12 +191,24 @@ export const onVehicleCreated = onDocumentCreated(
  *
  * The transaction writes nothing when the member has already been counted for
  * today, which is the case for every app open after the first each day.
+ *
+ * `userLifecycle/{uid}` is NOT written only by recordLogin: the inactivity
+ * sweep merges `inactivityWarnedAt` / `inactivityDeleteAfter` into the same
+ * document (account/inactivityCleanup.ts::warnAccount, ::clearWarning), leaving
+ * `lastLoginAt` untouched. Those writes fire this trigger too, so it returns
+ * early unless `lastLoginAt` ITSELF changed — otherwise every warn/clear would
+ * pay for a `badgeProgress` transaction read to compute a day key that is
+ * necessarily the one already stored.
  */
 export const onUserLifecycleWritten = onDocumentWritten(
   { ...TRIGGER_OPTS, document: 'userLifecycle/{uid}' },
   async (firestoreEvent) => {
     const lastLoginAt = firestoreEvent.data?.after.data()?.lastLoginAt;
     if (!(lastLoginAt instanceof Timestamp)) {
+      return;
+    }
+    const previousLoginAt = firestoreEvent.data?.before.data()?.lastLoginAt;
+    if (previousLoginAt instanceof Timestamp && previousLoginAt.isEqual(lastLoginAt)) {
       return;
     }
     const dayKey = streakDayKey(lastLoginAt.toDate());

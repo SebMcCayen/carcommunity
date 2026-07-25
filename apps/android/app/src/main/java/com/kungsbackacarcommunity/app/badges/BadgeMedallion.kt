@@ -20,17 +20,17 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 /**
- * ONE parameterised badge medallion, drawn on a [Canvas], for all 28 badges.
+ * ONE parameterised badge medallion, drawn on a [Canvas], for all 27 badges.
  *
- * WHY A COMPOSABLE AND NOT 28 DRAWABLES. The icon system (BADGE_ICON_SYSTEM in
+ * WHY A COMPOSABLE AND NOT 27 DRAWABLES. The icon system (BADGE_ICON_SYSTEM in
  * functions/src/badges/badge-core.ts) is explicitly compositional: an outer ring
  * whose colour and pip COUNT encode the tier, a constant dark field, and one
  * per-ladder glyph. That is 11 silhouettes × 5 ring treatments, and shipping it
- * as 28 hand-written vector XMLs would duplicate identical ring/pip geometry 28
+ * as 27 hand-written vector XMLs would duplicate identical ring/pip geometry 27
  * times — one drifted copy and Guld starts showing two pips. Here ring, pips and
  * glyph are separate functions of (ladder, tier), so the system cannot drift,
  * a new rung is one catalog entry with no new asset, and the locked/greyed state
- * is a colour argument rather than a second set of 28 files.
+ * is a colour argument rather than a second set of 27 files.
  *
  * ACCESSIBILITY. Tier is carried by ring colour AND by a countable number of
  * pips notched into the ring (1/2/3/4), and Platina additionally by a second
