@@ -181,9 +181,10 @@ async function enforceSearchRateLimit(uid: string): Promise<void> {
 export const searchMembers = onCall(CALLABLE_OPTS, async (request): Promise<SearchMembersResult> => {
   const actor = await requireMemberActor(request);
 
-  // Validate BEFORE the rate limit so a malformed call is rejected without
-  // touching Firestore at all — it neither pays for the counter get + write nor
-  // burns the caller's window on a bad payload.
+  // Validate BEFORE the rate limit. The actor gate above has already read
+  // users/{uid}, so this is NOT a "no Firestore work" path — what it buys is
+  // that a malformed call pays neither the counter get + write nor the range
+  // scan, and never burns the caller's rate-limit window on a bad payload.
   const parsed = parseSearchMembersInput(request.data);
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
