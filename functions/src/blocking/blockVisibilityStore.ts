@@ -39,12 +39,17 @@ export async function loadHiddenUids(uid: string): Promise<Set<string>> {
 /**
  * Adds or removes ONE side of the symmetric mirror.
  *
- * Uses arrayUnion/arrayRemove so concurrent block writes for different pairs
- * never clobber each other (no read-modify-write race). The MAX_HIDDEN_UIDS cap
- * is therefore enforced on the ADD path with a preceding read: if the viewer is
- * already at the cap the entry is skipped rather than growing the document the
- * client holds a listener on. Removal is always applied — shrinking is safe and
- * must never be blocked by the cap.
+ * REMOVAL is an unconditional `arrayRemove`: it is idempotent, needs no prior
+ * read, and shrinking must never be gated on anything — an unblock has to be
+ * able to land even from a document at the cap.
+ *
+ * ADDITION runs in a TRANSACTION so the MAX_HIDDEN_UIDS check is atomic. The
+ * cheaper read-then-`arrayUnion` shape would let two blocks landing at the same
+ * instant both observe `size == cap - 1` and both append, so the document could
+ * exceed the cap the surrounding docs promise. Contention here is per-VIEWER and
+ * per-block — a rate no user generates — so the retry cost is theoretical while
+ * the guarantee is not. `arrayUnion` is still used for the write itself, so the
+ * transaction only arbitrates the size check, never rewrites the whole array.
  *
  * Idempotent in both directions (arrayUnion of a present value and arrayRemove
  * of an absent one are both no-ops), so a trigger retry costs a write and
@@ -64,12 +69,14 @@ export async function setHiddenUid(
     return true;
   }
 
-  const existing = toHiddenUidSet((await ref.get()).data());
-  if (existing.has(otherUid)) return true;
-  if (existing.size >= MAX_HIDDEN_UIDS) return false;
+  return db.runTransaction(async (tx) => {
+    const existing = toHiddenUidSet((await tx.get(ref)).data());
+    if (existing.has(otherUid)) return true;
+    if (existing.size >= MAX_HIDDEN_UIDS) return false;
 
-  await ref.set({ [HIDDEN_UIDS_FIELD]: FieldValue.arrayUnion(otherUid) }, { merge: true });
-  return true;
+    tx.set(ref, { [HIDDEN_UIDS_FIELD]: FieldValue.arrayUnion(otherUid) }, { merge: true });
+    return true;
+  });
 }
 
 /** Mirrors a pair's mutual-hidden state on BOTH sides. */

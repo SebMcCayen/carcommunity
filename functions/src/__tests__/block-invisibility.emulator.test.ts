@@ -671,6 +671,51 @@ describe('DM threads are hidden and inert for a blocked pair', () => {
     expect((await getDocs(collection(firestore, ...messagesPath))).size).toBe(1);
   });
 
+  it('FAILS CLOSED on a malformed conversation rather than guessing the counterparty', async () => {
+    // The rules gate derives "the other party" from `members` to run the block
+    // check. With a members list that isn't exactly two strings, "whichever one
+    // isn't me" is ambiguous — it could resolve to someone the caller has NOT
+    // blocked and silently reopen a blocked thread. So the shape is validated
+    // first and anything else is denied.
+    //
+    // Only dm.sendMessage writes these documents and it always writes two uids,
+    // so this is written with the Admin SDK to exercise a shape the callables
+    // cannot currently produce — the point is that the RULE, not the writer, is
+    // what holds the line.
+    const one = await newMember('ShapeOne');
+    const two = await newMember('ShapeTwo');
+    const third = await newMember('ShapeThird');
+
+    const pairId = `malformed-${SFX}-${Date.now()}`;
+    const convRef = adminDb.collection('conversations').doc(pairId);
+    await convRef.set({ members: [one.uid, two.uid, third.uid] });
+    await convRef.collection('messages').add({
+      senderUid: two.uid,
+      text: `malformed-${SFX}`,
+      createdAt: new Date(),
+    });
+
+    await signInAs(one);
+    await expect(
+      getDocs(collection(firestore, 'conversations', pairId, 'messages')),
+    ).rejects.toThrow();
+
+    // A well-formed two-member conversation with the same participants IS
+    // readable — so the denial above is the shape check, not a blanket deny.
+    const goodPairId = `wellformed-${SFX}-${Date.now()}`;
+    const goodRef = adminDb.collection('conversations').doc(goodPairId);
+    await goodRef.set({ members: [one.uid, two.uid] });
+    await goodRef.collection('messages').add({
+      senderUid: two.uid,
+      text: `wellformed-${SFX}`,
+      createdAt: new Date(),
+    });
+    await signInAs(one);
+    expect((await getDocs(collection(firestore, 'conversations', goodPairId, 'messages'))).size).toBe(
+      1,
+    );
+  });
+
   it('still refuses to SEND between a blocked pair (unchanged pre-existing gate)', async () => {
     await makeFriends(userA, userB);
     await blockAndAwaitMirror(userA, userB);

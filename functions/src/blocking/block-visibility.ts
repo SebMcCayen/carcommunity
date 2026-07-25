@@ -40,12 +40,27 @@
  * ## Bound
  *
  * The array is capped at MAX_HIDDEN_UIDS entries per viewer (see the writer in
- * blockVisibilityStore.ts). At the cap a further block still takes effect on
- * the SERVER-side read paths that resolve the pair directly (dm.* and the
- * firestore.rules DM gate), but stops being mirrored, so the client-side live
- * window filter no longer covers it. The cap exists so `blockVisibility/{uid}`
- * — which the client holds a live listener on — can never grow into a large
- * document that is re-downloaded on every change.
+ * blockVisibilityStore.ts), so `blockVisibility/{uid}` — which the client holds
+ * a live listener on — can never grow into a large document re-downloaded on
+ * every change.
+ *
+ * WHAT THE CAP COSTS, precisely: past it a further block is no longer mirrored,
+ * so EVERY surface reading this mirror stops hiding that pair — not only the
+ * client-side live-window filters but the SERVER-side ones too
+ * (communityChat.list, convoyChat.list, the convoyChat.post notification
+ * fan-out, and dm.listConversations).
+ *
+ * What still enforces a block past the cap is every surface that resolves a
+ * KNOWN pair directly against the authoritative `userBlocks` edges — which is
+ * also where confidentiality actually matters:
+ *   - the live map (live.listNearby's block matrix, plus the RTDB
+ *     liveLocationBlocks rule on the marker stream),
+ *   - dm.getMessages / dm.markRead / dm.sendMessage,
+ *   - the firestore.rules gate on conversations/{pairId}/messages.
+ *
+ * So the cap degrades the CHANNEL surfaces — shared rooms every active member
+ * can read anyway — and leaves the private ones fully enforced. At 1000 blocked
+ * users it is not a bound a real account reaches.
  *
  * Firebase-free so it is unit-testable without the emulator.
  */

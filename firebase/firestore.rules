@@ -140,23 +140,49 @@ service cloud.firestore {
         && validUserPrivateFields(keys);
     }
 
-    // ---- DM block gate ------------------------------------------------------
-    // A 1:1 conversation has exactly two members; the caller is one of them (the
-    // messages rule checks that separately), so the counterparty is whichever of
-    // the two is not the caller. `get()` results are cached within a request, so
-    // this shares its read with the membership check rather than adding one.
-    function dmCounterparty(pairId) {
-      let members = get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
-      return members[0] == request.auth.uid ? members[1] : members[0];
+    // ---- DM message read gate (membership + mutual block) --------------------
+    // This is a CONFIDENTIALITY boundary, so it FAILS CLOSED: the shape of the
+    // conversation document is validated before the counterparty is derived from
+    // it, rather than assumed. A malformed `members` (not a list, not exactly two
+    // entries, or non-string entries) denies the read outright instead of
+    // producing a counterparty that might be the wrong uid — with three members,
+    // for example, "whichever isn't me" is ambiguous and could resolve to someone
+    // the caller has NOT blocked, silently reopening a blocked thread.
+    //
+    // Only conversations/{pairId} documents written by dm.sendMessage exist (no
+    // client writes), and it always writes exactly two uids, so this is a guard
+    // against a future shape change rather than a live hole. Denying is the safe
+    // side: a genuinely broken conversation is unreadable, not leaky.
+    //
+    // `get()` results are cached within a request, so the membership check and
+    // the counterparty derivation share ONE read: 1 get + 2 exists = 3 of the
+    // 10-document-access budget a query gets.
+    function dmMembers(pairId) {
+      return get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
     }
 
-    // True when NEITHER party of the conversation has blocked the other. Both
-    // directions are checked because blocking is mutual invisibility: the
-    // blocker stops seeing the blocked party's messages AND vice versa.
-    function dmPairNotBlocked(pairId) {
-      let other = dmCounterparty(pairId);
+    function dmWellFormed(members) {
+      return members is list
+        && members.size() == 2
+        && members[0] is string
+        && members[1] is string;
+    }
+
+    // True when NEITHER party has blocked the other. Both directions are checked
+    // because blocking is mutual invisibility: the blocker stops seeing the
+    // blocked party's messages AND vice versa.
+    function dmNotBlockedWith(other) {
       return !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blocked/$(other))
         && !exists(/databases/$(database)/documents/userBlocks/$(other)/blocked/$(request.auth.uid));
+    }
+
+    // The whole gate for conversations/{pairId}/messages: a well-formed two-party
+    // conversation, the caller is one of the two, and the pair is not blocked.
+    function dmMessagesReadable(pairId) {
+      let members = dmMembers(pairId);
+      return dmWellFormed(members)
+        && request.auth.uid in members
+        && dmNotBlockedWith(members[0] == request.auth.uid ? members[1] : members[0]);
     }
 
     // -------------------------------------------------------------------------
@@ -528,13 +554,10 @@ service cloud.firestore {
         // already renders PERMISSION_DENIED as an empty thread.
         //
         // Both directions: the caller having blocked the counterparty, or the
-        // counterparty having blocked the caller, each hides the thread. Cost is
-        // 1 get (shared with the member check below via the rules read cache) +
-        // 2 exists, well inside the 10-access-call budget for a query.
-        allow read: if isAuthenticated()
-          && request.auth.uid in
-            get(/databases/$(database)/documents/conversations/$(pairId)).data.members
-          && dmPairNotBlocked(pairId);
+        // counterparty having blocked the caller, each hides the thread.
+        // dmMessagesReadable also carries the membership check and fails closed
+        // on a malformed conversation — see its definition above.
+        allow read: if isAuthenticated() && dmMessagesReadable(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }
