@@ -634,6 +634,17 @@ describe('DM threads are hidden and inert for a blocked pair', () => {
       return data.blockedPair === false ? data : undefined;
     });
     expect((restored.lastMessage as { text?: string } | null)?.text).toBe(text);
+
+    // lastMessageAt is documented as a mirror of lastMessage.createdAt and is the
+    // inbox's ordering key, so the restore must move them together — otherwise
+    // the pair silently drifts whenever the message the preview is re-derived
+    // from isn't the one that set lastMessageAt.
+    const previewAt = (restored.lastMessage as { createdAt?: { toMillis(): number } } | null)
+      ?.createdAt;
+    expect(previewAt).toBeTruthy();
+    expect((restored.lastMessageAt as { toMillis(): number }).toMillis()).toBe(
+      previewAt!.toMillis(),
+    );
   });
 
   it('denies the messages subcollection at the RULES layer, in both directions', async () => {

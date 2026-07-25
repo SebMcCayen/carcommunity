@@ -117,15 +117,32 @@ export async function setConversationBlocked(
     const doc = newest.docs[0];
     const data = doc?.data();
     const senderUid = typeof data?.senderUid === 'string' ? data.senderUid : null;
+    const createdAt = data?.createdAt instanceof Timestamp ? data.createdAt : null;
     const lastMessage =
       senderUid !== null
         ? {
             text: messagePreview(typeof data?.text === 'string' ? data.text : ''),
             senderUid,
-            createdAt: data?.createdAt instanceof Timestamp ? data.createdAt : null,
+            createdAt,
           }
         : null;
 
-    tx.set(convRef, { [BLOCKED_PAIR_FIELD]: false, lastMessage }, { merge: true });
+    // `lastMessageAt` is documented as a MIRROR of lastMessage.createdAt, and is
+    // the inbox's ordering key (see the data model in dm-core.ts). Restoring the
+    // preview without it would let the two drift whenever the message we
+    // re-derive from is not the one that set lastMessageAt originally — e.g. the
+    // newest message was erased by an account deletion while the block stood.
+    //
+    // Written ONLY when a real Timestamp came back. Leaving it untouched
+    // otherwise is deliberate and load-bearing: the inbox query orders by
+    // `lastMessageAt`, and a document MISSING that field drops out of the query
+    // altogether — so clearing it would HIDE a restored conversation rather than
+    // merely misorder it.
+    const restored: Record<string, unknown> = { [BLOCKED_PAIR_FIELD]: false, lastMessage };
+    if (createdAt !== null) {
+      restored.lastMessageAt = createdAt;
+    }
+
+    tx.set(convRef, restored, { merge: true });
   });
 }
