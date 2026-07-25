@@ -884,7 +884,7 @@ const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
 /**
  * The info popup shown when a community EVENT pin is tapped. Rendered as a
  * translucent [Popup] (no dimming scrim) in the SAME floating style as the
- * layers/live popups — `surface.copy(alpha = POPUP_SURFACE_ALPHA)` +
+ * layers/live popups — `surface.copy(alpha = KccAlpha.aeroSurface)` +
  * [KccRadius.lg] — so the live map stays visible behind it. Tapping outside the
  * card or pressing Back dismisses it (focusable popup).
  *
@@ -920,7 +920,7 @@ internal fun EventMarkerInfoPopup(
                     .widthIn(max = 360.dp)
                     .testTag(MAP_HOME_EVENT_POPUP_TAG),
             shape = RoundedCornerShape(KccRadius.lg),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
