@@ -49,6 +49,7 @@ import {
   parseCheckInInput,
   parseRecordDailyOpenInput,
   previousDayKey,
+  readCount,
   ruleCounterDocId,
   ruleLimitWindowKey,
   stockholmDayKey,
@@ -599,6 +600,47 @@ describe('counter document IDs', () => {
     );
     expect(isUnderEconomyRateLimit(9)).toBe(true);
     expect(isUnderEconomyRateLimit(10)).toBe(false);
+  });
+
+  // Every economy counter is backend-only and increment-only, so a corrupt
+  // value should be impossible — but the read side must not depend on that.
+  // The failure directions are asymmetric and all silent, which is why this is
+  // pinned rather than left to a `typeof === 'number'` check:
+  //  - NaN/Infinity compare false against every ceiling, so a naive read LOCKS
+  //    THE MEMBER OUT with a `resource-exhausted` indistinguishable from real
+  //    abuse;
+  //  - a fractional value survives `Number.isFinite` and is then handed to the
+  //    anti-fraud risk pipeline as an attempt rate;
+  //  - a negative value silently GRANTS extra headroom under every cap.
+  it('degrades a corrupt counter to 0 rather than trusting it', () => {
+    for (const good of [0, 1, 9, 300]) {
+      expect(readCount(good)).toBe(good);
+    }
+    for (const bad of [
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.NEGATIVE_INFINITY,
+      1.5,
+      -1,
+      -300,
+      Number.MAX_SAFE_INTEGER + 1,
+      '5',
+      null,
+      undefined,
+      {},
+    ]) {
+      expect(readCount(bad)).toBe(0);
+    }
+  });
+
+  // The lockout and fractional-attempt bugs, stated as the behaviour the
+  // callables actually get once the read goes through readCount.
+  it('never lets a corrupt counter reject a caller or score a fractional attempt', () => {
+    for (const corrupt of [Number.NaN, Number.POSITIVE_INFINITY, 1.5, -5]) {
+      const stored = readCount(corrupt);
+      expect(isUnderEconomyRateLimit(stored)).toBe(true);
+      expect(Number.isSafeInteger(stored + 1)).toBe(true);
+    }
   });
 });
 
