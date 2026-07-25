@@ -600,9 +600,8 @@
     "mainCar": "Huvudbil",
     "badgesTitle": "Utmärkelser",
     "badgesEmpty": "Inga utmärkelser ännu.",
-    "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
+    "badgesUnavailable": "De här utmärkelserna går inte att visa just nu.",
     "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
-    "awardedOn": "Tilldelad %1$s",
     "blocked": "Du har blockerat den här medlemmen. Avblockera för att se profilen igen."
   },
   "groupDrive": {
@@ -837,8 +836,6 @@
     "ladderComplete": "Alla nivåer klara",
     "progressCount": "%1$s / %2$s",
     "noTierYet": "Ingen nivå ännu",
-    "currentTier": "Nuvarande: %1$s",
-    "locked": "Låst",
     "showAll": "Visa alla utmärkelser",
     "showLess": "Visa färre",
     "milestonesTitle": "Milstolpar",

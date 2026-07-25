@@ -36,9 +36,13 @@ import kotlin.math.sin
  * pips notched into the ring (1/2/3/4), and Platina additionally by a second
  * concentric hairline ring — so the top tier differs in SILHOUETTE, not only in
  * hue. Ladders are told apart by glyph shape alone: rendered as a pure
- * black-on-white stencil the set still reads. Nothing in the artwork depicts or
- * implies speed — Vägfarare is a road receding to a horizon with a milestone
- * stone, never a speedometer, needle, motion line or vehicle.
+ * black-on-white stencil the set still reads.
+ *
+ * NOTHING IN THE ARTWORK MAY DEPICT OR IMPLY SPEED — a standing product stance,
+ * enforced by BadgeLadderCatalogParityTest. Anywhere in the set:
+ * no speedometer, no needle, no motion line, no chequered flag, no vehicle.
+ * The distance ladder is drawn as a road receding to a horizon with a milestone
+ * stone — a journey covered, not a pace held.
  */
 
 /** Ring colours, verbatim from the backend icon system. */
@@ -325,9 +329,9 @@ private fun DrawScope.drawCrownGlyph(box: Rect, ink: Color) {
 /**
  * Vägfarare — a road ribbon receding to a horizon, with a milestone stone.
  *
- * NO SPEED IMAGERY, by standing product rule: no speedometer, no needle, no
- * motion lines, no chequered flag, no vehicle. The glyph is about DISTANCE
- * COVERED — horizon, road, milestone.
+ * By standing product rule this glyph depicts DISTANCE COVERED and never speed:
+ * no speedometer, no needle, no motion lines, no chequered flag, no vehicle.
+ * Horizon, road, milestone — nothing else.
  */
 private fun DrawScope.drawRoadGlyph(box: Rect, ink: Color, field: Color) {
     // Horizon bar across the upper third.

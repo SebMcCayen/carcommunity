@@ -6,9 +6,10 @@
  * Returns aggregate badge award counts per catalog key (total + last-30-day
  * "recent"). Ports the legacy SQL groupBy (services/api badge-service
  * getAdminBadgeSummary), which has no Firestore equivalent because badge
- * awards live at users/{uid}/badges/{badgeKey} — a per-user, owner-only
- * subcollection that is NOT admin-readable via client rules (Phase 9f: badges
- * are strictly owner-only, "not even admin clients"). So the aggregate is
+ * awards live at users/{uid}/badges/{badgeKey} — a per-user subcollection with
+ * no cross-user aggregate. Client rules let any authenticated user READ a given
+ * member's wall (badges are public — firebase/firestore.rules), but no client
+ * can run the collectionGroup scan this summary needs. So the aggregate is
  * computed server-side with the Admin SDK (which bypasses rules) over a
  * collectionGroup scan; no individual user data ever leaves this function —
  * only per-key counts.
@@ -34,9 +35,10 @@ export const adminSummary = onCall(
   async (request): Promise<AdminBadgeSummaryResult> => {
     await requireAdminActor(request);
 
-    // Admin SDK collectionGroup scan bypasses security rules — badges stay
-    // owner-only for clients. Only aggregate counts are returned; project to
-    // just the two fields the aggregation needs (not the full badge doc).
+    // Admin SDK collectionGroup scan bypasses security rules — clients can
+    // read one member's wall at a time, never scan them all. Only aggregate
+    // counts are returned; project to just the two fields the aggregation
+    // needs (not the full badge doc).
     const snapshot = await db.collectionGroup('badges').select('badgeKey', 'awardedAt').get();
     const awards = snapshot.docs.map((doc) => {
       const data = doc.data();

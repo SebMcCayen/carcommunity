@@ -600,9 +600,8 @@
     "mainCar": "Main car",
     "badgesTitle": "Awards",
     "badgesEmpty": "No awards yet.",
-    "badgesUnavailable": "Awards aren't shown on other members' profiles.",
+    "badgesUnavailable": "These awards aren't visible to you right now.",
     "badgesLoadError": "Awards couldn't be loaded.",
-    "awardedOn": "Awarded %1$s",
     "blocked": "You've blocked this member. Unblock them to see their profile again."
   },
   "groupDrive": {
@@ -837,8 +836,6 @@
     "ladderComplete": "All tiers complete",
     "progressCount": "%1$s / %2$s",
     "noTierYet": "No tier yet",
-    "currentTier": "Current: %1$s",
-    "locked": "Locked",
     "showAll": "Show all awards",
     "showLess": "Show fewer",
     "milestonesTitle": "Milestones",

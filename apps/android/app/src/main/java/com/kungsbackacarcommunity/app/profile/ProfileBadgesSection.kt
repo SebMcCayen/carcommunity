@@ -1,11 +1,8 @@
 package com.kungsbackacarcommunity.app.profile
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -23,15 +20,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BADGE_LADDERS
 import com.kungsbackacarcommunity.app.badges.BADGE_TIER_POINTS
 import com.kungsbackacarcommunity.app.badges.BadgeGlyph
+import com.kungsbackacarcommunity.app.badges.BadgeGridRows
 import com.kungsbackacarcommunity.app.badges.BadgeLadder
 import com.kungsbackacarcommunity.app.badges.BadgeMedallion
+import com.kungsbackacarcommunity.app.badges.BadgeMedallionSize
+import com.kungsbackacarcommunity.app.badges.BadgeMedallionTile
 import com.kungsbackacarcommunity.app.badges.BadgeRung
 import com.kungsbackacarcommunity.app.badges.BadgeShowcase
 import com.kungsbackacarcommunity.app.badges.BadgeTier
@@ -51,11 +49,12 @@ import java.util.Date
  * The member's own badge wall on their profile — "a way to show off what you
  * have achieved", plus the climb to the next rung.
  *
- * OWN PROFILE ONLY. `users/{uid}/badges` is an owner-only read; showing another
- * member's badges would leak their streaks, distance driven and meets attended
- * and needs a deliberate rules change that has not been made. This composable is
- * therefore only ever handed the signed-in member's own [BadgeShowcase], and the
- * read-only member-profile screen carries a commented seam rather than a call.
+ * OWN PROFILE ONLY — not because badges are secret (they are public now, and
+ * another member's wall renders on the member-profile screen from
+ * [com.kungsbackacarcommunity.app.badges.PublicBadgeWall]) but because
+ * everything BEYOND the trophies here is yours alone: the progress bars, the
+ * observable counters and the locked ladders you have not started. This
+ * composable is only ever handed the signed-in member's own [BadgeShowcase].
  *
  * Three bands, top to bottom:
  *  1. HIGHEST TIER PER LADDER — six medallions, so the ladders read as ladders
@@ -179,51 +178,34 @@ private fun LadderMedallionGrid(
     ladders: List<LadderProgress>,
     onSelect: (BadgeDetail) -> Unit,
 ) {
-    GridRows(items = ladders, perRow = 3) { progress ->
+    BadgeGridRows(items = ladders, perRow = 3) { progress ->
         val rung = progress.displayRung
         // Resolved during composition — a click lambda is not a composable scope
         // and cannot call stringResource.
         val detail = rememberRungDetail(progress.ladder, rung, !progress.isLocked)
-        Column(
-            modifier =
-                Modifier
-                    .clickable(role = Role.Button) { onSelect(detail) }
-                    .padding(vertical = KccSpacing.s1),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            BadgeMedallion(
-                glyph = BadgeGlyph.Ladder(progress.ladder.id),
-                tier = rung.tier,
-                earned = !progress.isLocked,
-                contentDescription =
-                    stringResource(
-                        if (progress.isLocked) {
-                            R.string.badgeShowcase_medallionLocked
-                        } else {
-                            R.string.badgeShowcase_medallionEarned
-                        },
-                        rungDisplayName(progress.ladder, rung),
-                    ),
-            )
-            Text(
-                text = stringResource(ladderNameRes(progress.ladder.id)),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-            )
-            Text(
-                text =
+        BadgeMedallionTile(
+            glyph = BadgeGlyph.Ladder(progress.ladder.id),
+            tier = rung.tier,
+            earned = !progress.isLocked,
+            label = stringResource(ladderNameRes(progress.ladder.id)),
+            contentDescription =
+                stringResource(
                     if (progress.isLocked) {
-                        stringResource(R.string.badgeShowcase_noTierYet)
+                        R.string.badgeShowcase_medallionLocked
                     } else {
-                        stringResource(tierNameRes(rung.tier))
+                        R.string.badgeShowcase_medallionEarned
                     },
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-        }
+                    rungDisplayName(progress.ladder, rung),
+                ),
+            caption =
+                if (progress.isLocked) {
+                    stringResource(R.string.badgeShowcase_noTierYet)
+                } else {
+                    stringResource(tierNameRes(rung.tier))
+                },
+            medallionSize = BadgeMedallionSize,
+            onClick = { onSelect(detail) },
+        )
     }
 }
 
@@ -298,15 +280,25 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            GridRows(items = ladder.rungs, perRow = 4) { rung ->
+            BadgeGridRows(items = ladder.rungs, perRow = 4) { rung ->
                 val earned = rung.badgeKey in earnedKeys
                 val detail =
                     rememberRungDetail(ladder, rung, earned, showcase.awardedAtByKey[rung.badgeKey])
-                MedallionTile(
+                val label = stringResource(tierNameRes(rung.tier))
+                BadgeMedallionTile(
                     glyph = BadgeGlyph.Ladder(ladder.id),
                     tier = rung.tier,
                     earned = earned,
-                    label = stringResource(tierNameRes(rung.tier)),
+                    label = label,
+                    contentDescription =
+                        stringResource(
+                            if (earned) {
+                                R.string.badgeShowcase_medallionEarned
+                            } else {
+                                R.string.badgeShowcase_medallionLocked
+                            },
+                            label,
+                        ),
                     onClick = { onSelect(detail) },
                 )
             }
@@ -318,7 +310,7 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            GridRows(items = showcase.milestones, perRow = 4) { milestone ->
+            BadgeGridRows(items = showcase.milestones, perRow = 4) { milestone ->
                 val name = milestoneName(milestone)
                 val detail =
                     BadgeDetail(
@@ -330,86 +322,15 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                         earned = true,
                         awardedAtMillis = milestone.awardedAtMillis,
                     )
-                MedallionTile(
+                BadgeMedallionTile(
                     glyph = BadgeGlyph.Milestone(milestone.key),
                     tier = null,
                     earned = true,
                     label = name,
+                    contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
                     onClick = { onSelect(detail) },
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun MedallionTile(
-    glyph: BadgeGlyph,
-    tier: BadgeTier?,
-    earned: Boolean,
-    label: String,
-    onClick: () -> Unit,
-) {
-    Column(
-        modifier = Modifier.clickable(role = Role.Button, onClick = onClick).padding(vertical = KccSpacing.s1),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-    ) {
-        BadgeMedallion(
-            glyph = glyph,
-            tier = tier,
-            earned = earned,
-            contentDescription =
-                stringResource(
-                    if (earned) {
-                        R.string.badgeShowcase_medallionEarned
-                    } else {
-                        R.string.badgeShowcase_medallionLocked
-                    },
-                    label,
-                ),
-            size = 40.dp,
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color =
-                if (earned) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-            textAlign = TextAlign.Center,
-        )
-    }
-}
-
-/**
- * A fixed-column grid built from Rows.
- *
- * Deliberately not a LazyVerticalGrid: this section renders inside the profile's
- * vertically scrolling column, where a nested lazy grid has unbounded height.
- * The item counts here are small and fixed (3–6 per grid), so plain Rows are
- * both correct and cheaper. The trailing row is padded with empty weights so
- * items stay column-aligned instead of centring.
- */
-@Composable
-private fun <T> GridRows(
-    items: List<T>,
-    perRow: Int,
-    item: @Composable (T) -> Unit,
-) {
-    items.chunked(perRow).forEach { row ->
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            row.forEach { value ->
-                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
-                    item(value)
-                }
-            }
-            repeat(perRow - row.size) { Spacer(modifier = Modifier.weight(1f)) }
         }
     }
 }

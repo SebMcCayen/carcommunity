@@ -1,0 +1,294 @@
+package com.kungsbackacarcommunity.app.badges
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The OWN-profile badge wall: which rung a member stands on, what the next one
+ * costs, and how far along they are toward it.
+ *
+ * Every case here is pure — no Android, no Firebase. The wall is assembled from
+ * the award documents plus the client-observable counters; the authoritative
+ * counters are backend-only, so "how far along" is deliberately absent wherever
+ * the client cannot observe it honestly (see [BadgeCounters]).
+ */
+class BadgeShowcaseTest {
+
+    private fun badge(key: String, awardedAtMillis: Long? = 1_700_000_000_000L) =
+        Badge(key = key, fallbackName = null, awardedAtMillis = awardedAtMillis)
+
+    private fun ladderOf(showcase: BadgeShowcase, id: BadgeLadderId): LadderProgress =
+        showcase.ladders.first { it.ladder.id == id }
+
+    // -----------------------------------------------------------------------
+    // Catalog shape
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `catalog is 5 milestones plus 23 ladder rungs`() {
+        assertEquals(5, BADGE_MILESTONE_KEYS.size)
+        assertEquals(23, BADGE_LADDERS.sumOf { it.rungs.size })
+        assertEquals(28, BADGE_TOTAL_COUNT)
+    }
+
+    @Test
+    fun `every ladder rung is reachable from its badge key`() {
+        for (ladder in BADGE_LADDERS) {
+            for (rung in ladder.rungs) {
+                val found = rungForBadgeKey(rung.badgeKey)
+                assertEquals(ladder.id, found?.first?.id)
+                assertEquals(rung.tier, found?.second?.tier)
+            }
+        }
+        // A standalone milestone belongs to no ladder.
+        assertNull(rungForBadgeKey("garage_created"))
+        assertNull(rungForBadgeKey("not_a_badge"))
+    }
+
+    @Test
+    fun `rungs ascend within every ladder`() {
+        for (ladder in BADGE_LADDERS) {
+            val thresholds = ladder.rungs.map { it.threshold }
+            assertEquals(thresholds.sorted(), thresholds)
+            val tiers = ladder.rungs.map { it.tier.ordinal }
+            assertEquals(tiers.sorted(), tiers)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Zero badges — the motivating empty state
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `a member with no badges gets every ladder locked on its first rung`() {
+        val showcase = BadgeShowcase.from(badges = emptyList())
+
+        assertFalse(showcase.hasAnyBadge)
+        assertEquals(0, showcase.earnedCount)
+        assertEquals(28, showcase.totalCount)
+        assertTrue(showcase.milestones.isEmpty())
+        // All six ladders are still rendered — an empty wall is a menu of goals,
+        // never a gap.
+        assertEquals(BADGE_LADDERS.size, showcase.ladders.size)
+
+        for (progress in showcase.ladders) {
+            assertTrue(progress.isLocked)
+            assertNull(progress.highestRung)
+            // The medallion depicts the FIRST rung, greyed, with its requirement.
+            assertEquals(progress.ladder.rungs.first(), progress.displayRung)
+            assertEquals(BadgeTier.BRONS, progress.displayRung.tier)
+            assertEquals(progress.ladder.rungs.first(), progress.nextRung)
+            assertFalse(progress.isComplete)
+        }
+    }
+
+    @Test
+    fun `an unobservable ladder offers a goal but never a bar`() {
+        // Crowns, meets, streak and convoys have no honest client-side counter.
+        val showcase = BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters.NONE)
+        for (id in listOf(
+            BadgeLadderId.KRONJAGARE,
+            BadgeLadderId.TRAFFRAV,
+            BadgeLadderId.TROGEN,
+            BadgeLadderId.KONVOJLEDARE,
+        )) {
+            val progress = ladderOf(showcase, id)
+            assertNull(progress.observedValue)
+            assertNull(progress.fractionToNext)
+            // …but the goal itself is always known.
+            assertEquals(progress.ladder.rungs.first(), progress.nextRung)
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Highest tier per ladder
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `the medallion shows the highest rung held, not the newest`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_guld", awardedAtMillis = 1L),
+                        badge("kronjagare_brons", awardedAtMillis = 9_999L),
+                        badge("kronjagare_silver", awardedAtMillis = 500L),
+                    ),
+            )
+        val kronjagare = ladderOf(showcase, BadgeLadderId.KRONJAGARE)
+
+        assertEquals(BadgeTier.GULD, kronjagare.highestRung?.tier)
+        assertEquals(BadgeTier.GULD, kronjagare.displayRung.tier)
+        assertFalse(kronjagare.isLocked)
+        assertEquals(3, kronjagare.earnedRungs.size)
+        assertEquals(BadgeTier.PLATINA, kronjagare.nextRung?.tier)
+    }
+
+    @Test
+    fun `a gap left by a partial write is offered again rather than skipped`() {
+        // The monotonic backend never produces this, but a partial write might.
+        val showcase = BadgeShowcase.from(badges = listOf(badge("traffrav_guld")))
+        val traffrav = ladderOf(showcase, BadgeLadderId.TRAFFRAV)
+
+        assertEquals(BadgeTier.GULD, traffrav.highestRung?.tier)
+        assertEquals(BadgeTier.BRONS, traffrav.nextRung?.tier)
+        assertFalse(traffrav.isLocked)
+    }
+
+    @Test
+    fun `unknown and duplicate keys never inflate the unlocked count`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons"),
+                        badge("kronjagare_brons"),
+                        badge("a_badge_from_the_future"),
+                        badge("garage_created"),
+                    ),
+            )
+        assertEquals(2, showcase.earnedCount)
+        assertEquals(listOf("garage_created"), showcase.milestones.map { it.key })
+    }
+
+    // -----------------------------------------------------------------------
+    // Fully completed ladders
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `a Platina ladder is complete and draws no bar`() {
+        val kronjagare = ladderById(BadgeLadderId.KRONJAGARE)
+        val showcase =
+            BadgeShowcase.from(
+                badges = kronjagare.badgeKeys.map { badge(it) },
+                // Even with a counter present, a finished ladder has no next rung
+                // and therefore no fraction to fill.
+                counters = BadgeCounters(savedDriveDistanceMeters = 1_000_000.0, vehiclesInGarage = 5),
+            )
+        val progress = ladderOf(showcase, BadgeLadderId.KRONJAGARE)
+
+        assertTrue(progress.isComplete)
+        assertNull(progress.nextRung)
+        assertNull(progress.fractionToNext)
+        assertEquals(BadgeTier.PLATINA, progress.highestRung?.tier)
+        // A complete ladder drops out of the "next tier" band entirely.
+        assertFalse(showcase.laddersInProgress.any { it.ladder.id == BadgeLadderId.KRONJAGARE })
+    }
+
+    @Test
+    fun `Samlare tops out at Guld — its Platina rung would be unreachable`() {
+        val samlare = ladderById(BadgeLadderId.SAMLARE)
+        assertEquals(3, samlare.rungs.size)
+        assertEquals(BadgeTier.GULD, samlare.rungs.last().tier)
+
+        val showcase =
+            BadgeShowcase.from(badges = samlare.badgeKeys.map { badge(it) }, counters = BadgeCounters(vehiclesInGarage = 5))
+        val progress = ladderOf(showcase, BadgeLadderId.SAMLARE)
+        assertTrue(progress.isComplete)
+        assertNull(progress.fractionToNext)
+    }
+
+    // -----------------------------------------------------------------------
+    // The climb: counter → current tier, next threshold, fraction
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `distance progress is measured from zero to the next threshold`() {
+        // 234 km driven: Brons (100 km) is held, Silver (500 km) is next.
+        val showcase =
+            BadgeShowcase.from(
+                badges = listOf(badge("vagfarare_brons")),
+                counters = BadgeCounters(savedDriveDistanceMeters = 234_000.0),
+            )
+        val vagfarare = ladderOf(showcase, BadgeLadderId.VAGFARARE)
+
+        assertEquals(BadgeTier.BRONS, vagfarare.highestRung?.tier)
+        assertEquals(BadgeTier.SILVER, vagfarare.nextRung?.tier)
+        assertEquals(500_000L, vagfarare.nextRung?.threshold)
+        assertEquals(234_000L, vagfarare.observedValue)
+        assertEquals(234_000f / 500_000f, vagfarare.fractionToNext!!, 0.0001f)
+        // Both sides of the "234 km / 500 km" line render in the same unit.
+        assertEquals("234 km", formatLadderValue(vagfarare.ladder.unit, vagfarare.observedValue!!))
+        assertEquals("500 km", formatLadderValue(vagfarare.ladder.unit, vagfarare.nextRung!!.threshold))
+    }
+
+    @Test
+    fun `a count ladder reads its own unit without a suffix`() {
+        val showcase =
+            BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters(vehiclesInGarage = 2))
+        val samlare = ladderOf(showcase, BadgeLadderId.SAMLARE)
+
+        assertEquals(2L, samlare.observedValue)
+        assertEquals(BadgeTier.BRONS, samlare.nextRung?.tier)
+        assertEquals("2", formatLadderValue(samlare.ladder.unit, 2L))
+        // Brons needs 1 vehicle and 2 are held — the server simply has not
+        // evaluated yet, so the bar saturates rather than overflowing.
+        assertEquals(1f, samlare.fractionToNext!!, 0.0001f)
+    }
+
+    @Test
+    fun `a nonsense counter is ignored rather than drawn`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges = emptyList(),
+                counters =
+                    BadgeCounters(
+                        savedDriveDistanceMeters = Double.NaN,
+                        vehiclesInGarage = -3,
+                    ),
+            )
+        assertNull(ladderOf(showcase, BadgeLadderId.VAGFARARE).observedValue)
+        assertNull(ladderOf(showcase, BadgeLadderId.VAGFARARE).fractionToNext)
+        assertNull(ladderOf(showcase, BadgeLadderId.SAMLARE).observedValue)
+
+        val infinite =
+            BadgeShowcase.from(
+                badges = emptyList(),
+                counters = BadgeCounters(savedDriveDistanceMeters = Double.POSITIVE_INFINITY),
+            )
+        assertNull(ladderOf(infinite, BadgeLadderId.VAGFARARE).observedValue)
+    }
+
+    @Test
+    fun `the climb list leads with the ladders that have a real bar`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges = emptyList(),
+                counters = BadgeCounters(savedDriveDistanceMeters = 90_000.0, vehiclesInGarage = 0),
+            )
+        val order = showcase.laddersInProgress.map { it.ladder.id }
+
+        // Vägfarare is 90 % of the way to Brons, Samlare 0 % — both observable,
+        // so both lead the four unobservable ladders, most-complete first.
+        assertEquals(BadgeLadderId.VAGFARARE, order.first())
+        assertEquals(BadgeLadderId.SAMLARE, order[1])
+        // The remainder keeps catalog order so the list never reshuffles.
+        assertEquals(
+            listOf(
+                BadgeLadderId.KRONJAGARE,
+                BadgeLadderId.TRAFFRAV,
+                BadgeLadderId.TROGEN,
+                BadgeLadderId.KONVOJLEDARE,
+            ),
+            order.drop(2),
+        )
+    }
+
+    @Test
+    fun `award dates are carried through for the detail sheet`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = 42L),
+                        badge("first_event", awardedAtMillis = null),
+                    ),
+            )
+        assertEquals(42L, showcase.awardedAtByKey["kronjagare_brons"])
+        // An undated award simply has no entry — never a fabricated date.
+        assertNull(showcase.awardedAtByKey["first_event"])
+    }
+}

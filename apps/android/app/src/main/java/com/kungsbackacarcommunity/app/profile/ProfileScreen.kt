@@ -69,8 +69,11 @@ fun ProfileScreen(
     // reads it aggregates are still loading, or in a config-less build — the
     // section simply doesn't render. Shown only in view mode, not while editing.
     statsSummary: ProfileStatsSummary? = null,
-    // Badge wall + climb to the next tier (own profile only — users/{uid}/badges
-    // is an owner-only read). Null while the owner badge listener is loading.
+    // Badge wall + the climb to the next tier. OWN PROFILE ONLY: the badges
+    // themselves are public and also render on the read-only member-profile
+    // screen, but the progress bars, the observable counters and the locked
+    // ladders behind this model are the owner's alone. Null while the owner
+    // badge listener is still loading.
     badgeShowcase: BadgeShowcase? = null,
     // Kronpoäng balance and the newest few credits behind it (own profile only).
     pointsBalance: Long? = null,
@@ -283,6 +286,24 @@ private fun ProfileScreenPreview() {
                     badgeCount = 3,
                     pointsBalance = 150,
                     memberSinceMillis = 1_700_000_000_000L,
+                ),
+            badgeShowcase =
+                BadgeShowcase.from(
+                    badges =
+                        listOf(
+                            Badge("kronjagare_brons", "Kronjägare Brons", 1_700_000_000_000L),
+                            Badge("vagfarare_brons", "Vägfarare Brons", 1_700_500_000_000L),
+                            Badge("garage_created", "Garageprofil skapad", 1_699_000_000_000L),
+                        ),
+                    // Two observable counters → two honest bars; the other four
+                    // ladders show their goal line without one.
+                    counters = BadgeCounters(savedDriveDistanceMeters = 234_000.0, vehiclesInGarage = 2),
+                ),
+            pointsBalance = 150,
+            recentPointsEarnings =
+                listOf(
+                    PointsEntry("a", 25L, 150L, "Märke upplåst: Vägfarare Brons", 1_700_500_000_000L),
+                    PointsEntry("b", 15L, 125L, "Sparad körning", 1_700_400_000_000L),
                 ),
         )
     }

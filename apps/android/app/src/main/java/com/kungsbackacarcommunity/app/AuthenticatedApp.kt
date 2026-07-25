@@ -87,6 +87,8 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
+import com.kungsbackacarcommunity.app.badges.BadgeCounters
+import com.kungsbackacarcommunity.app.badges.BadgeShowcase
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.badges.BadgesState
@@ -169,6 +171,8 @@ import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationRoute
 import com.kungsbackacarcommunity.app.partners.PartnersRepository
 import com.kungsbackacarcommunity.app.partners.PartnersRoute
+import com.kungsbackacarcommunity.app.points.Points
+import com.kungsbackacarcommunity.app.points.PointsEntriesState
 import com.kungsbackacarcommunity.app.points.PointsRepository
 import com.kungsbackacarcommunity.app.points.PointsRoute
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
@@ -2410,6 +2414,7 @@ fun AuthenticatedApp(
                         onOpenChat = openChat,
                         pointsRepository = pointsRepository,
                         drivesRepository = drivesRepository,
+                        garageRepository = garageRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
                         accountDeletionCoordinator = accountDeletionCoordinator,
@@ -3518,6 +3523,10 @@ private fun RouteHost(
     // Owner drives list, folded into the profile's "my stats" summary (same
     // owner query the History tab uses). Null in a config-less build.
     drivesRepository: DrivesRepository?,
+    // Owner garage list. Used ONLY by the Profile route, to put an honest
+    // "3 / 5 vehicles" bar under the Samlare ladder — the same owner query the
+    // Garage tab runs, listened to only while the Profile route is composed.
+    garageRepository: GarageRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
     accountDeletionCoordinator: AccountDeletionCoordinator?,
@@ -3613,8 +3622,12 @@ private fun RouteHost(
             // tear down on leaving it. No new query or index is added.
             //   • drives  → the same owner list the History tab folds, run through
             //     the shared DriveStatsCalculator (from the drive-stats page);
-            //   • badges  → the owner users/{uid}/badges list (count only here);
-            //   • points  → the single pointsLedger/{uid}.balance doc;
+            //   • badges  → the owner users/{uid}/badges list (the badge wall);
+            //   • points  → the single pointsLedger/{uid}.balance doc, plus the
+            //     same bounded newest-first entries listener the Kronpoäng screen
+            //     uses (credits only are shown — see Points.recentEarnings);
+            //   • garage  → the owner vehicles list, only so the Samlare ladder
+            //     gets an honest bar; the Garage tab runs the identical query.
             //   • member since → users/{uid}.createdAt, already on `profile`.
             val drivesState by
                 remember(drivesRepository, uid) {
@@ -3631,6 +3644,16 @@ private fun RouteHost(
                     pointsRepository?.observeBalance(uid) ?: flowOf<Long?>(null)
                 }
                     .collectAsState(initial = null)
+            val pointsEntriesState by
+                remember(pointsRepository, uid) {
+                    pointsRepository?.observeEntries(uid) ?: flowOf(PointsEntriesState.Loading)
+                }
+                    .collectAsState(initial = PointsEntriesState.Loading)
+            val profileGarageState by
+                remember(garageRepository, uid) {
+                    garageRepository?.observeGarage(uid) ?: flowOf(GarageState.Loading)
+                }
+                    .collectAsState(initial = GarageState.Loading)
             // Start of the current calendar month (device time zone) — required by
             // the shared fold; the profile summary reads only its all-time fields,
             // but the value is kept correct rather than faked. Computed on each
@@ -3667,6 +3690,38 @@ private fun RouteHost(
                     }
                 }
 
+            // The badge wall. Null until the owner badge list resolves, so the
+            // section stays absent rather than flashing an empty wall at a member
+            // who actually holds badges. Counters are the two the client can
+            // observe HONESTLY from reads it already makes here (see
+            // BadgeCounters); every other ladder renders its goal without a bar.
+            val badgeShowcase =
+                remember(badgesState, drivesState, profileGarageState, statsMonthStart) {
+                    (badgesState as? BadgesState.Loaded)?.badges?.let { badges ->
+                        val drives = (drivesState as? DrivesState.Loaded)?.drives
+                        BadgeShowcase.from(
+                            badges = badges,
+                            counters =
+                                BadgeCounters(
+                                    savedDriveDistanceMeters =
+                                        drives?.let {
+                                            DriveStatsCalculator.compute(it, statsMonthStart)?.totalDistanceMeters
+                                        },
+                                    vehiclesInGarage =
+                                        (profileGarageState as? GarageState.Loaded)?.vehicles?.size,
+                                ),
+                        )
+                    }
+                }
+            // Credits only, newest first — a redeemed reward answers a different
+            // question and belongs on the full Kronpoäng screen.
+            val recentPointsEarnings =
+                remember(pointsEntriesState) {
+                    (pointsEntriesState as? PointsEntriesState.Loaded)
+                        ?.let { Points.recentEarnings(it.entries) }
+                        ?: emptyList()
+                }
+
             ProfileScreen(
                 profile = profile,
                 saveStatus = saveStatus,
@@ -3687,6 +3742,9 @@ private fun RouteHost(
                         null
                     },
                 statsSummary = statsSummary,
+                badgeShowcase = badgeShowcase,
+                pointsBalance = pointsBalance,
+                recentPointsEarnings = recentPointsEarnings,
             )
         }
 

@@ -1,19 +1,25 @@
 package com.kungsbackacarcommunity.app.badges
 
 /**
- * The member's OWN badge wall, folded from the owner-readable award documents.
+ * Badge walls, folded from award documents. Two models, and the split between
+ * them IS the privacy boundary:
  *
- * OWNER-ONLY BY CONSTRUCTION. `users/{uid}/badges` is an owner-only read
- * (firebase/firestore.rules) because badges leak activity — streaks, distance
- * driven, meets attended. Everything in this file is therefore built from the
- * SIGNED-IN member's own award list; there is no code path here that takes
- * another member's uid, and none may be added without a deliberate rules change.
+ *  - [BadgeShowcase] — the SIGNED-IN member's own wall: trophies, the climb to
+ *    the next rung, and the locked ladders they have not started.
+ *  - [PublicBadgeWall] — ANOTHER member's wall: trophies only.
  *
- * WHERE THE PROGRESS NUMBERS COME FROM. The authoritative counters live on
- * `badgeProgress/{uid}`, which is denied to every client (read included) — it is
- * the anti-abuse core of the ladders. So the client cannot show "34 of 50
- * crowns" for a ladder whose counter it cannot see. Two things are always known
- * and exact:
+ * PUBLISH THE TROPHIES, NOT THE TELEMETRY. `users/{uid}/badges` is readable by
+ * any authenticated user (firebase/firestore.rules) so achievements can be shown
+ * off — an award says a threshold was crossed, and when. The counters it was
+ * crossed against (`badgeProgress/{uid}`: streak length, lifetime distance,
+ * meets attended, crowns collected) are denied to EVERY client, owner included.
+ * [PublicBadgeWall] therefore has no counter field, no next rung and no
+ * fraction: it cannot carry progress even by accident, because there is nowhere
+ * to put it — see `PublicBadgeWallTest`.
+ *
+ * WHERE THE OWN-PROFILE PROGRESS NUMBERS COME FROM. Since not even the owner can
+ * read `badgeProgress`, the client cannot show "34 of 50 crowns" for a ladder
+ * whose counter it cannot see. Two things are always known and exact:
  *
  *  - which rungs are held, from the award documents; and
  *  - what the next rung needs, from [BADGE_LADDERS].
@@ -46,6 +52,11 @@ package com.kungsbackacarcommunity.app.badges
  * cheap owner-scoped source on the client — each would need a new query (and
  * index), and the streak is not client-readable at all — so they stay null and
  * their ladders render as a goal line without a bar.
+ *
+ * OWN PROFILE ONLY. Both fields describe the signed-in member's ACTIVITY, not
+ * their trophies, and are assembled from their own owner-scoped reads. They must
+ * never be built for another uid — which is why [PublicBadgeWall] accepts no
+ * counters at all.
  */
 data class BadgeCounters(
     val savedDriveDistanceMeters: Double? = null,
@@ -183,6 +194,85 @@ data class BadgeShowcase(
                 milestones = milestones,
                 earnedCount = heldKeys.count { it in catalogKeys },
                 awardedAtByKey = awardedAt,
+            )
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Another member's wall — trophies only
+// ---------------------------------------------------------------------------
+
+/** The top rung another member has reached on one ladder. */
+data class PublicLadderStanding(
+    val ladder: BadgeLadder,
+    /** Highest rung held on this ladder. Never null: unstarted ladders are omitted. */
+    val highestRung: BadgeRung,
+    /** When that rung was awarded, when the document carries a date. */
+    val awardedAtMillis: Long?,
+)
+
+/**
+ * ANOTHER member's badge wall, as the read-only member-profile screen shows it.
+ *
+ * DELIBERATELY POORER THAN [BadgeShowcase], in two ways:
+ *
+ *  1. NO PROGRESS, EVER. There is no counter, no next rung and no fraction on
+ *     this type or on [PublicLadderStanding], and [from] takes nothing but the
+ *     award list — so a progress number cannot leak onto another member's
+ *     profile even by a wiring mistake. The climb is yours alone; the trophies
+ *     are the part meant to be shown off. (`badgeProgress/{uid}` is denied to
+ *     every client anyway, but the boundary is enforced here in the type as
+ *     well, not only in the rules.)
+ *  2. ONLY WHAT THEY HOLD. Ladders they have not started are omitted rather
+ *     than rendered as greyed goals: an unstarted ladder is a to-do list, which
+ *     belongs on your own profile as motivation and on nobody else's as a
+ *     scoreboard of what they have not done.
+ *
+ * Unknown/retired badge keys are ignored, exactly as on the own-profile wall, so
+ * a future catalog key cannot break an older client's rendering.
+ */
+data class PublicBadgeWall(
+    /** Started ladders only, in catalog order. Empty when nothing is held. */
+    val ladders: List<PublicLadderStanding>,
+    /** Standalone milestones held, in catalog order. */
+    val milestones: List<MilestoneBadge>,
+    /** Distinct catalog badges held (unknown keys excluded). */
+    val earnedCount: Int,
+    /** Every badge in the catalog — the denominator of "x of y unlocked". */
+    val totalCount: Int = BADGE_TOTAL_COUNT,
+) {
+    /** False → the profile shows a neutral "no awards yet" line, not an empty grid. */
+    val hasAnyBadge: Boolean get() = earnedCount > 0
+
+    companion object {
+        fun from(badges: List<Badge>): PublicBadgeWall {
+            val heldKeys = badges.map { it.key }.toSet()
+            val awardedAt =
+                badges.mapNotNull { badge -> badge.awardedAtMillis?.let { badge.key to it } }.toMap()
+
+            val ladders =
+                BADGE_LADDERS.mapNotNull { ladder ->
+                    val highest = ladder.rungs.lastOrNull { it.badgeKey in heldKeys } ?: return@mapNotNull null
+                    PublicLadderStanding(
+                        ladder = ladder,
+                        highestRung = highest,
+                        awardedAtMillis = awardedAt[highest.badgeKey],
+                    )
+                }
+
+            val milestones =
+                BADGE_MILESTONE_KEYS.mapNotNull { key ->
+                    badges.firstOrNull { it.key == key }?.let {
+                        MilestoneBadge(key = key, fallbackName = it.fallbackName, awardedAtMillis = it.awardedAtMillis)
+                    }
+                }
+
+            val catalogKeys = BADGE_MILESTONE_KEYS.toSet() + BADGE_LADDERS.flatMap { it.badgeKeys }
+            return PublicBadgeWall(
+                ladders = ladders,
+                milestones = milestones,
+                earnedCount = heldKeys.count { it in catalogKeys },
             )
         }
     }

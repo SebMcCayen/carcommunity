@@ -17,7 +17,16 @@ import {
   initializeTestEnvironment,
   type RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, serverTimestamp, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import { get as dbGet, ref as dbRef, set as dbSet } from 'firebase/database';
 import { getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { readFileSync } from 'node:fs';
@@ -168,27 +177,48 @@ describe('Firestore – badges (Phase 9f)', () => {
         name: 'Garageprofil skapad',
         source: 'automatic',
       });
+      await setDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver'), {
+        badgeKey: 'kronjagare_silver',
+        name: 'Kronjägare Silver',
+        ladder: 'kronjagare',
+        tier: 'silver',
+        source: 'automatic',
+      });
       await setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), {
         completedEventsAttended: 3,
       });
     });
   });
 
-  it('owner can read their own badges; others cannot — not even admin clients', async () => {
+  // PUBLIC BADGES (2026-07). Earned badges are a showcase: any authenticated
+  // user may read another member's wall, exactly like the users/{uid} profile
+  // document and the /vehicles garage it is rendered beside.
+  it('any authenticated member can read another member’s earned badges', async () => {
     const ownerCtx = testEnv.authenticatedContext(OWNER);
     await assertSucceeds(
-      getDoc(doc(ownerCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+      getDoc(doc(ownerCtx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver')),
     );
+
     const otherCtx = testEnv.authenticatedContext(OTHER);
-    await assertFails(
-      getDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    // Single award AND the whole wall — the member-profile screen lists the
+    // subcollection, so the list read is the one that actually has to pass.
+    await assertSucceeds(
+      getDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver')),
     );
-    // Strictly owner-only: admin workflows go through the Admin SDK, and a
-    // compromised admin client must not browse users' badges.
-    const adminCtx = testEnv.authenticatedContext('badge-admin', { admin: true });
+    await assertSucceeds(getDocs(collection(otherCtx.firestore(), 'users', OWNER, 'badges')));
+
+    // Not member-gated: the profile and garage beside it are not either, so a
+    // non-subscriber sees a whole profile rather than a half-rendered one.
+    const noClaimsCtx = testEnv.authenticatedContext('badge-viewer-no-claims');
+    await assertSucceeds(getDocs(collection(noClaimsCtx.firestore(), 'users', OWNER, 'badges')));
+  });
+
+  it('signed-out visitors still cannot read badges', async () => {
+    const anonCtx = testEnv.unauthenticatedContext();
     await assertFails(
-      getDoc(doc(adminCtx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+      getDoc(doc(anonCtx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver')),
     );
+    await assertFails(getDocs(collection(anonCtx.firestore(), 'users', OWNER, 'badges')));
   });
 
   it('no client can write badges — not even the owner', async () => {
@@ -200,7 +230,31 @@ describe('Firestore – badges (Phase 9f)', () => {
       }),
     );
     await assertFails(
+      setDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'kronjagare_platina'), {
+        badgeKey: 'kronjagare_platina',
+        ladder: 'kronjagare',
+        tier: 'platina',
+        source: 'automatic',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver'), {
+        tier: 'platina',
+      }),
+    );
+    await assertFails(
       deleteDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
+    );
+    // A viewer who can now READ someone else's wall still cannot touch it.
+    const otherCtx = testEnv.authenticatedContext(OTHER, { activeMember: true });
+    await assertFails(
+      setDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'traffrav_guld'), {
+        badgeKey: 'traffrav_guld',
+        source: 'automatic',
+      }),
+    );
+    await assertFails(
+      deleteDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver')),
     );
   });
 
@@ -210,6 +264,21 @@ describe('Firestore – badges (Phase 9f)', () => {
     await assertFails(
       setDoc(doc(ctx.firestore(), 'badgeProgress', OWNER), { completedEventsAttended: 999 }),
     );
+  });
+
+  // The trophies/telemetry split, asserted as one fact: making the wall public
+  // must NOT have dragged the counters behind it into public view.
+  it('publishes the trophies but not the telemetry behind them', async () => {
+    const viewerCtx = testEnv.authenticatedContext('badge-telemetry-viewer', {
+      activeMember: true,
+    });
+    // The wall: readable.
+    await assertSucceeds(getDocs(collection(viewerCtx.firestore(), 'users', OWNER, 'badges')));
+    // The counters it was earned against: denied to that same viewer…
+    await assertFails(getDoc(doc(viewerCtx.firestore(), 'badgeProgress', OWNER)));
+    // …and to the owner of the counters themselves.
+    const ownerCtx = testEnv.authenticatedContext(OWNER);
+    await assertFails(getDoc(doc(ownerCtx.firestore(), 'badgeProgress', OWNER)));
   });
 
   it('no client can forge a tiered-ladder counter or the sweep cursor', async () => {
