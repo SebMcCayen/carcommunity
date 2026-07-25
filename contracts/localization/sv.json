@@ -605,6 +605,7 @@
     "carsTitle": "Bilar",
     "carsEmpty": "Inga bilar i garaget ännu.",
     "mainCar": "Huvudbil",
+    "registrationPlate": "Reg.nr %1$s",
     "badgesTitle": "Utmärkelser",
     "badgesEmpty": "Inga utmärkelser ännu.",
     "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",

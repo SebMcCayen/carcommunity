@@ -560,6 +560,7 @@
     <string name="memberProfile_carsTitle">Cars</string>
     <string name="memberProfile_carsEmpty">No cars in the garage yet.</string>
     <string name="memberProfile_mainCar">Main car</string>
+    <string name="memberProfile_registrationPlate">Reg. no. %1$s</string>
     <string name="memberProfile_badgesTitle">Awards</string>
     <string name="memberProfile_badgesEmpty">No awards yet.</string>
     <string name="memberProfile_badgesUnavailable">Awards aren\'t shown on other members\' profiles.</string>

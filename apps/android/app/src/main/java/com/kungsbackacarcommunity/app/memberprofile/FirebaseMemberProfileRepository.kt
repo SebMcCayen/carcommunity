@@ -127,6 +127,10 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),
         modifications = getString("description"),
+        // Deliberately public (see Vehicle.registrationPlate): vehicles/{id} is
+        // readable by any signed-in user, so this viewer could read the plate
+        // regardless — dropping it here only hid it from the UI.
+        registrationPlate = getString("registrationPlate"),
         imagePath = getString("imagePath"),
         photoPaths = (get("photoPaths") as? List<*>)?.filterIsInstance<String>() ?: emptyList(),
         isMainCar = getBoolean("isMainCar") ?: false,
