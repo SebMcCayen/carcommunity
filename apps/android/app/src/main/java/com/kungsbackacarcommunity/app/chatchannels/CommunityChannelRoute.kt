@@ -47,11 +47,14 @@ import kotlinx.coroutines.launch
  * sender → their read-only member profile); null leaves them inert.
  *
  * [blockingRepository] wires the long-press action sheet's block action; null
- * (config-less build) leaves the sheet's block row off. Blocking from here
- * deliberately does NOT filter the message list: the community channel is the
- * global town square, whose messages are not block-filtered server-side either
- * (functions/src/index.ts). The block still takes effect everywhere it is
- * enforced — DMs, live location, interaction.
+ * (config-less build) leaves the sheet's block row off. Blocking from here DOES
+ * now remove the blocked member's messages from this list, and mutually — they
+ * stop seeing the blocker's messages too. Nothing is filtered at THIS layer:
+ * older pages are filtered by `communityChat-list` server-side and the live
+ * window inside the repository, against the backend's `blockVisibility` mirror
+ * (see [com.kungsbackacarcommunity.app.blocking.BlockVisibility]). The list
+ * therefore updates a moment AFTER the block callable returns, when the mirror
+ * catches up — not synchronously with the tap.
  */
 @Composable
 fun CommunityChannelRoute(

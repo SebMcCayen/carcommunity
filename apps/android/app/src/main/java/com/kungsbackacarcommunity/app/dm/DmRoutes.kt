@@ -79,10 +79,14 @@ private const val FEATURE_CONVERSATION_LIST = "messages.conversationList"
  *
  * [blockingRepository] wires the long-press action sheet's block action on the
  * other member's messages; null (config-less build) leaves the sheet's block row
- * off. The thread is deliberately NOT filtered or closed on a block: the backend
- * already refuses to deliver new DMs either way (`dm-sendMessage` returns a
- * neutral failed-precondition), and silently erasing the history the user just
- * acted on would hide the very messages they may need to reference.
+ * off. Blocking now takes the WHOLE thread out of view for both parties: the
+ * conversation leaves both inboxes and firebase/firestore.rules denies the
+ * messages subcollection outright, which this screen's existing
+ * PERMISSION_DENIED branch already renders as an empty thread. Nothing is
+ * filtered at this layer — a half-thread stripped of one side would read as a
+ * monologue, and sending was already refused for a blocked pair
+ * (`dm-sendMessage` returns a neutral failed-precondition), so the thread would
+ * be a dead end anyway. Unblocking restores it whole.
  */
 @Composable
 fun ChatRoute(

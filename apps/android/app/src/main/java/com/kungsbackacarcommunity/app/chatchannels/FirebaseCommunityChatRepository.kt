@@ -6,6 +6,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
+import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -19,12 +22,20 @@ import kotlinx.coroutines.flow.combine
  *
  * The newest-window listener is bounded (createdAt descending, capped at
  * [CHANNEL_MESSAGES_PAGE_SIZE]) so it never syncs the whole channel; older pages
- * come from `communityChat-list`. Unread combines a 1-message newest listener
- * with the owner-readable `userPrivate/{uid}.communityChatLastReadAt` marker.
+ * come from `communityChat-list`. Unread combines a newest-message listener with
+ * the owner-readable `userPrivate/{uid}.communityChatLastReadAt` marker.
+ *
+ * BLOCKING: both the live window and the unread dot are filtered against the
+ * caller's mutual-hidden set ([BlockVisibilityRepository]) so a blocked pair
+ * never sees each other's messages, whichever side blocked. Older pages are
+ * filtered SERVER-side by `communityChat-list`; the live window cannot be,
+ * because a Firestore rule cannot filter a list query per document — see
+ * [BlockVisibility] for the full enforcement map.
  */
 class FirebaseCommunityChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
+    private val blockVisibility: BlockVisibilityRepository,
 ) : CommunityChatRepository {
 
     private fun messagesQuery(limit: Long): Query =
@@ -35,7 +46,20 @@ class FirebaseCommunityChatRepository private constructor(
             .orderBy(CREATED_AT, Query.Direction.DESCENDING)
             .limit(limit)
 
-    override fun observeMessages(): Flow<ChannelMessagesState> = callbackFlow {
+    override fun observeMessages(): Flow<ChannelMessagesState> =
+        combine(observeRawMessages(), blockVisibility.observeHiddenUids()) { state, hidden ->
+            // The hidden set is loaded ONCE per session (one document listener),
+            // never per message, so the filter costs no reads at all.
+            when (state) {
+                is ChannelMessagesState.Loaded ->
+                    ChannelMessagesState.Loaded(
+                        BlockVisibility.filterHiddenAuthors(state.messages, hidden) { it.senderUid },
+                    )
+                ChannelMessagesState.Loading -> state
+            }
+        }
+
+    private fun observeRawMessages(): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
             messagesQuery(CHANNEL_MESSAGES_PAGE_SIZE.toLong())
                 .addSnapshotListener { snapshot, error ->
@@ -74,9 +98,16 @@ class FirebaseCommunityChatRepository private constructor(
     }
 
     override fun observeUnread(uid: String): Flow<Boolean> {
-        val newest: Flow<ChannelMessage?> = callbackFlow {
+        // The window is [UNREAD_SCAN_LIMIT], not 1, because the newest message may
+        // be from a blocked party: lighting the dot for a message the user will
+        // never be shown sends them into an apparently unchanged channel. Scanning
+        // a few and taking the newest VISIBLE one fixes that for any realistic
+        // case; the documented bound is that if ALL of the newest
+        // [UNREAD_SCAN_LIMIT] messages are hidden, an older unread message does
+        // not light the dot. The channel itself still shows it.
+        val newestWindow: Flow<List<ChannelMessage>?> = callbackFlow {
             val registration =
-                messagesQuery(1L).addSnapshotListener { snapshot, error ->
+                messagesQuery(UNREAD_SCAN_LIMIT).addSnapshotListener { snapshot, error ->
                     if (error != null) {
                         if ((error as? FirebaseFirestoreException)?.code ==
                             FirebaseFirestoreException.Code.PERMISSION_DENIED
@@ -92,10 +123,16 @@ class FirebaseCommunityChatRepository private constructor(
                         // no-unread. With cached data, fall through and use it.
                         if (snapshot == null) return@addSnapshotListener
                     }
-                    trySend(snapshot?.documents?.firstOrNull()?.toChannelMessage())
+                    // Newest-first (the query is createdAt DESC), so the first
+                    // visible entry downstream is the newest visible message.
+                    trySend(snapshot?.documents?.mapNotNull { it.toChannelMessage() }.orEmpty())
                 }
             awaitClose { registration.remove() }
         }
+        val newest: Flow<ChannelMessage?> =
+            combine(newestWindow, blockVisibility.observeHiddenUids()) { window, hidden ->
+                window?.let { BlockVisibility.newestVisible(it, hidden) { m -> m.senderUid } }
+            }
         val lastReadAt: Flow<Long?> = callbackFlow {
             val registration =
                 firestore
@@ -158,11 +195,15 @@ class FirebaseCommunityChatRepository private constructor(
         private const val LIST = "communityChat-list"
         private const val MARK_READ = "communityChat-markRead"
 
+        /** Newest-message window scanned for the unread dot (see observeUnread). */
+        private const val UNREAD_SCAN_LIMIT = 10L
+
         fun createIfAvailable(context: Context): CommunityChatRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
             return FirebaseCommunityChatRepository(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
+                FirebaseBlockVisibilityRepository.createOrEmpty(context),
             )
         }
     }

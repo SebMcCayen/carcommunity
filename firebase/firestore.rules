@@ -140,6 +140,25 @@ service cloud.firestore {
         && validUserPrivateFields(keys);
     }
 
+    // ---- DM block gate ------------------------------------------------------
+    // A 1:1 conversation has exactly two members; the caller is one of them (the
+    // messages rule checks that separately), so the counterparty is whichever of
+    // the two is not the caller. `get()` results are cached within a request, so
+    // this shares its read with the membership check rather than adding one.
+    function dmCounterparty(pairId) {
+      let members = get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+      return members[0] == request.auth.uid ? members[1] : members[0];
+    }
+
+    // True when NEITHER party of the conversation has blocked the other. Both
+    // directions are checked because blocking is mutual invisibility: the
+    // blocker stops seeing the blocked party's messages AND vice versa.
+    function dmPairNotBlocked(pairId) {
+      let other = dmCounterparty(pairId);
+      return !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blocked/$(other))
+        && !exists(/databases/$(database)/documents/userBlocks/$(other)/blocked/$(request.auth.uid));
+    }
+
     // -------------------------------------------------------------------------
     // Deny-all catch-all (rules below override for specific paths)
     // -------------------------------------------------------------------------
@@ -421,6 +440,30 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // blockVisibility – the SYMMETRIC mirror of the block graph
+    // (functions/src/blocking/block-visibility.ts), maintained solely by the
+    // blocking-onBlockWrite trigger.
+    //
+    // blockVisibility/{uid}.hiddenUids is the UNION of "uids this user blocked"
+    // and "uids that blocked this user". It exists because the chat surfaces
+    // need the second half and userBlocks cannot give it to them: that half
+    // lives in the OTHER party's owner-read-only subcollection, so the client
+    // cannot read it at all and the server can only reach it with one point read
+    // per candidate. One document read (or one snapshot listener) replaces that.
+    //
+    // Owner-only read, no client writes. The document carries uids and nothing
+    // else — no displayName, no direction, no timestamp — so it never says who
+    // blocked whom, only that the pair is mutually hidden. That is still a
+    // deliberate, documented weakening of "a block never reveals itself to its
+    // target": the product requires the blocked party to stop seeing the
+    // blocker, which is observable from the missing messages regardless.
+    // -------------------------------------------------------------------------
+    match /blockVisibility/{userId} {
+      allow read: if isOwner(userId);
+      // No client writes: the blocking-onBlockWrite trigger only.
+    }
+
+    // -------------------------------------------------------------------------
     // Friends – friend graph (friend.sendRequest / respondRequest / remove /
     // list). Messaging/DMs are a SEPARATE follow-up, not modelled here.
     //
@@ -464,13 +507,34 @@ service cloud.firestore {
     // a parent lookup.
     // -------------------------------------------------------------------------
     match /conversations/{pairId} {
+      // NOTE: no block check here, deliberately. The inbox is a LIST query
+      // (members array-contains uid), and Firestore rules are not filters — a
+      // condition that varies per document fails the ENTIRE query rather than
+      // dropping the offending row, so a block gate here would break the inbox
+      // of anyone who has one blocked thread. The blocked row is instead
+      // dropped by dm.listConversations (server) and by the client's inbox
+      // listener, and the trigger blanks the document's `lastMessage` preview
+      // (functions/src/dm/blockedConversation.ts) so the copy that is still
+      // delivered carries no counterparty content.
       allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
       // No client writes: dm.* callables only.
 
       match /messages/{messageId} {
+        // Blocking IS rules-enforced here, and this is the one chat surface
+        // where it can be: every message in a conversation belongs to the SAME
+        // pair, so the block condition is CONSTANT across the query and the
+        // rules-are-not-filters problem above does not arise — the whole listen
+        // is denied, which is exactly the intent. The Android thread listener
+        // already renders PERMISSION_DENIED as an empty thread.
+        //
+        // Both directions: the caller having blocked the counterparty, or the
+        // counterparty having blocked the caller, each hides the thread. Cost is
+        // 1 get (shared with the member check below via the rules read cache) +
+        // 2 exists, well inside the 10-access-call budget for a query.
         allow read: if isAuthenticated()
           && request.auth.uid in
-            get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+            get(/databases/$(database)/documents/conversations/$(pairId)).data.members
+          && dmPairNotBlocked(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }

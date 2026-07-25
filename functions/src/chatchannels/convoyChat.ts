@@ -19,6 +19,12 @@
  *    existence can't be probed — parity with convoy.respond.
  *  - Every message denormalizes the sender's safe profile so the channel renders
  *    with no per-message profile lookup. FCM push deferred (end-of-MVP, as DM).
+ *  - Blocking is filtered in BOTH directions on `list` and on the post-time
+ *    notification fan-out, off the `blockVisibility/{uid}.hiddenUids` mirror
+ *    (one document read per call, never one per message). The channel's LIVE
+ *    window is a direct Firestore listener on the client, which no security rule
+ *    can filter per-document, so that window is filtered client-side against the
+ *    same mirror — see blocking/block-visibility.ts.
  *  - On post, a best-effort IN-APP notification fans out to the other ACCEPTED
  *    members under the 'convoy_chat' category, so a member can silence convoy
  *    chatter without silencing DMs or invites. writeInAppNotification checks the
@@ -47,6 +53,8 @@ import { requireMemberActor } from '../shared/memberActor';
 import { requireAcceptedConvoyMember } from './convoyMembership';
 import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
+import { filterHiddenAuthors } from '../blocking/block-visibility';
+import { loadHiddenUids } from '../blocking/blockVisibilityStore';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   CONVOY_CHAT_RETENTION_DAYS,
@@ -155,11 +163,18 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   // here, and the shared per-window notification id collapses a busy chat into
   // at most one notice per member per CONVOY_CHAT_NOTIFY_WINDOW_MS.
   //
-  // Blocking is deliberately NOT filtered: a convoy's membership is already
-  // block-gated at invite time (convoy/manageConvoy.ts), and the convoy chat
-  // read surface itself applies no block filter — so filtering only the
-  // notification would silently diverge from what the channel actually shows.
-  const recipients = acceptedConvoyMemberUids(convoy, actor.uid);
+  // Blocking IS filtered here, and must be: the convoy chat's READ surface now
+  // hides a blocked pair from each other in both directions (see list below and
+  // the client-side live-window filter), so notifying a member about a message
+  // they will never be shown would be a notice that leads nowhere — and it would
+  // announce the blocked party's presence to the very person hidden from them.
+  // Membership is block-gated at invite time (convoy/manageConvoy.ts), but a
+  // block can also happen AFTER both parties joined, which is this case.
+  // One document read for the whole fan-out.
+  const hidden = await loadHiddenUids(actor.uid);
+  const recipients = acceptedConvoyMemberUids(convoy, actor.uid).filter(
+    (uid) => !hidden.has(uid),
+  );
   const senderName = senderProfile.displayName ?? 'En medlem';
   const convoyTitle = typeof convoy.title === 'string' && convoy.title ? convoy.title : null;
   const notificationId = convoyChatNotificationId(convoyId, new Date());
@@ -212,18 +227,27 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoyRes
     query = query.where('createdAt', '<', Timestamp.fromDate(new Date(before)));
   }
 
-  const messagesSnap = await query.get();
+  // ONE block-visibility document read for the whole page, never one per
+  // message (blocking/block-visibility.ts).
+  const [messagesSnap, hidden] = await Promise.all([query.get(), loadHiddenUids(actor.uid)]);
   const docs = messagesSnap.docs;
   const hasMore = docs.length > CHAT_MESSAGES_PAGE_SIZE;
   const page = hasMore ? docs.slice(0, CHAT_MESSAGES_PAGE_SIZE) : docs;
 
-  const messages = page.map((doc) => {
+  const pageMessages = page.map((doc) => {
     const createdAtIso = toIso(doc.data().createdAt) ?? new Date(0).toISOString();
     return toChatMessageSummary(doc.id, doc.data(), createdAtIso);
   });
 
+  // Cursor off the RAW page, before the block filter — same reasoning as
+  // communityChat.list: a cursor taken from the filtered list would stall
+  // pagination whenever a page's tail is entirely hidden.
   const nextBefore =
-    hasMore && messages.length > 0 ? messages[messages.length - 1]!.createdAt : null;
+    hasMore && pageMessages.length > 0 ? pageMessages[pageMessages.length - 1]!.createdAt : null;
+
+  // Bidirectional: neither party of a blocked pair sees the other's messages,
+  // even while both remain accepted members of the convoy.
+  const messages = filterHiddenAuthors(pageMessages, (message) => message.senderUid, hidden);
 
   return { convoyId, messages, nextBefore, hasMore };
 });
