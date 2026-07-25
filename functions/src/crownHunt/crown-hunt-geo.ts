@@ -20,7 +20,13 @@
  * Safety rules encoded here:
  *  - Coordinates must be valid WGS-84 values.
  *  - Positions must be fresh (not older than MAX_POSITION_AGE_SECONDS).
- *  - Speed must be at or below MAX_CLAIM_SPEED_MPS (~5 km/h) to allow a claim.
+ *  - A *reported* speed must be at or below MAX_CLAIM_SPEED_MPS (~5 km/h) to
+ *    allow a claim. Known gap, stated here so the rule is not read as stronger
+ *    than it is: `speedMetersPerSecond` is optional on the callable and an
+ *    absent/null speed is treated as safe, so a client that simply omits the
+ *    field is never speed-checked and gains no risk score for it. That is
+ *    legacy behaviour, deliberately left alone by the accuracy-bound change;
+ *    closing it is a separate, client-affecting decision.
  *  - Geofence check accounts for reported GPS accuracy conservatively AND
  *    boundedly: client-supplied accuracy can never inflate the fence beyond
  *    MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the configured radius.
@@ -132,8 +138,14 @@ export function isPositionFresh(
 /**
  * Returns true when the reported speed is safe enough to allow a claim.
  *
- * A null or undefined speed is treated as safe (speed not reported by device).
- * The backend still validates other signals in that case.
+ * KNOWN GAP (legacy behaviour, unchanged here): a null or undefined speed is
+ * treated as SAFE, on the assumption that the device did not report one. The
+ * callable's `speedMetersPerSecond` is optional and `evaluateClaimRisk` adds
+ * no signal for a missing speed, so a client that omits the field skips this
+ * gate entirely and is not penalised for it. The other gates (freshness,
+ * server-computed distance, bounded geofence, impossible-jump) still run.
+ * Closing this would reject honest fixes that carry no speed, so it is a
+ * separate client-affecting decision, not part of the geofence-accuracy fix.
  *
  * @param speedMps     - Reported speed in meters per second (may be null).
  * @param maxSpeedMps  - Maximum allowed speed. Defaults to MAX_CLAIM_SPEED_MPS.
@@ -170,9 +182,19 @@ export function isSpeedSafe(
  *  2. the result is capped at MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the
  *     configured radius.
  *
- * So the effective radius is always within
- * `[geofenceRadius, min(geofenceRadius + 50, geofenceRadius * 2)]` — this is
- * now enforced, not merely intended.
+ * For any finite, positive `geofenceRadiusMeters` r, the result is
+ * therefore always within
+ * `[r, min(r + MAX_GEOFENCE_ACCURACY_METERS * GEOFENCE_ACCURACY_BUFFER,
+ * r * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER)]` (with today's constants: `[r,
+ * min(r + 50, 2r)]`) — enforced, not merely intended, and asserted over a grid
+ * of radii × accuracies in crownhunt-core.test.ts.
+ *
+ * A radius that is not a finite positive number — a point document whose
+ * `geofenceRadiusMeters` is missing, null, or non-numeric, which reaches
+ * submitClaim behind a bare `as number` cast — returns NaN, and `distance <=
+ * NaN` is false. Such a point therefore rejects every claim (fail CLOSED)
+ * instead of collapsing to a zero-radius fence that an exact-coordinate
+ * spoof would satisfy.
  *
  * @param geofenceRadiusMeters - Configured point geofence radius.
  * @param accuracyMeters       - Reported horizontal GPS accuracy (may be null).
@@ -181,6 +203,15 @@ export function effectiveGeofenceRadiusMeters(
   geofenceRadiusMeters: number,
   accuracyMeters: number | null | undefined,
 ): number {
+  // A point without a usable radius must reject every claim, not degenerate
+  // into a zero-radius fence (which an exact-coordinate spoof would satisfy).
+  if (
+    typeof geofenceRadiusMeters !== 'number' ||
+    !Number.isFinite(geofenceRadiusMeters) ||
+    geofenceRadiusMeters <= 0
+  ) {
+    return Number.NaN;
+  }
   const accuracy =
     typeof accuracyMeters === 'number' && Number.isFinite(accuracyMeters) && accuracyMeters > 0
       ? Math.min(accuracyMeters, MAX_GEOFENCE_ACCURACY_METERS)

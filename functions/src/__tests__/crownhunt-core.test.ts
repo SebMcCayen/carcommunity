@@ -115,6 +115,29 @@ describe('crown-hunt-geo (legacy port + deliberate safety deviations)', () => {
     }
   });
 
+  it('rejects the claim when the point has no usable geofence radius', () => {
+    // submitClaim reads `point.geofenceRadiusMeters` off a Firestore document
+    // behind a bare `as number` cast, so a legacy or corrupt point can hand
+    // this a non-numeric radius. The KDoc promises that path fails CLOSED —
+    // NaN must propagate to a reject, never to a pass.
+    for (const radius of [
+      Number.NaN,
+      undefined as unknown as number,
+      null as unknown as number,
+      '75' as unknown as number,
+      0,
+      -50,
+      Number.POSITIVE_INFINITY,
+    ]) {
+      // Distance 0 is the dangerous case: a spoofer knows the point's exact
+      // coordinates, so a fence that collapses to 0 is still satisfiable.
+      expect(isWithinGeofence(0, radius, null)).toBe(false);
+      expect(isWithinGeofence(0, radius, 40)).toBe(false);
+      expect(isWithinGeofence(1e9, radius, 50_000)).toBe(false);
+      expect(Number.isNaN(effectiveGeofenceRadiusMeters(radius, 40))).toBe(true);
+    }
+  });
+
   it('still gives an honest poor-but-plausible fix its full buffer', () => {
     // 40 m accuracy at a 75 m point → 75 + 20 = 95 m, unchanged by the caps.
     expect(effectiveGeofenceRadiusMeters(75, 40)).toBe(95);
