@@ -123,6 +123,12 @@ export interface CrownSpawnResult {
    * mid-pass revocation guard doing its job, and is worth seeing in the logs.
    */
   cellsRevokedMidPass: number;
+  /**
+   * Approved cells skipped because their document ID is not a parseable cell
+   * key. Zero in normal operation; a non-zero value means a malformed document
+   * is sitting in `crownSpawnCells` and wants cleaning up.
+   */
+  cellsSkippedInvalidKey: number;
   /** True when the run stopped on {@link MAX_SPAWNS_PER_RUN}. */
   capped: boolean;
   /** True when the feature flag was off and nothing ran. */
@@ -151,6 +157,7 @@ export async function runCrownSpawnPass(
     spawned: 0,
     separationRejections: 0,
     cellsRevokedMidPass: 0,
+    cellsSkippedInvalidKey: 0,
     capped: false,
     skipped: false,
   };
@@ -193,6 +200,21 @@ export async function runCrownSpawnPass(
     // would sit at the head of the queue forever and consume a slot every run.
     await cellDoc.ref.update({ lastSpawnPassAt: Timestamp.fromDate(now) });
 
+    // A cell key is a DOCUMENT ID, so it is whatever was written there. The
+    // collection is backend-only and `setSpawnCellApproval` validates the key,
+    // but a console edit or a hand-written migration can still leave one that
+    // does not parse — and `neighbourCrownCells` returns [] for those. Firestore
+    // REJECTS an `in` filter with an empty array, so without this guard a single
+    // malformed document would throw and take the WHOLE pass down with it,
+    // every other approved cell included. Skip it loudly instead; the cursor is
+    // already advanced, so a bad cell cannot block the round-robin either.
+    const neighbours = neighbourCrownCells(cellKey);
+    if (neighbours.length === 0) {
+      result.cellsSkippedInvalidKey += 1;
+      logger.warn('Crown spawn skipped: cell key does not parse', { cellKey });
+      continue;
+    }
+
     // A(cell): one decayed weight per DISTINCT user, distinctness guaranteed by
     // the document ID (a cell-scoped hash), never by counting rows.
     const recentUsers = await db
@@ -221,7 +243,7 @@ export async function runCrownSpawnPass(
     // separation check (a crown 20 m over the boundary is still a clump).
     const neighbourhood = await db
       .collection('crownSpawns')
-      .where('cellKey', 'in', neighbourCrownCells(cellKey))
+      .where('cellKey', 'in', neighbours)
       .where('status', '==', 'live')
       .where('expiresAt', '>', nowTs)
       .limit(MAX_NEIGHBOURHOOD_CROWNS)

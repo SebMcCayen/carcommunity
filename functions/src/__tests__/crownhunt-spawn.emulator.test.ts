@@ -402,6 +402,53 @@ describe('scheduled spawner', () => {
     await clearActivity(unapproved);
   });
 
+  it('survives a malformed approved-cell document instead of aborting the pass', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Godkänd, ska fortfarande spawna.',
+    });
+    await seedActivity(CELL_KEY, 12, new Date());
+
+    // Written directly, because the callable would (correctly) refuse this key.
+    // A cell key is a document ID, so a console edit or a migration can leave
+    // one that does not parse. neighbourCrownCells returns [] for it and
+    // Firestore rejects an `in` filter with an empty array — so the whole pass
+    // used to throw, taking every other approved cell down with one bad row.
+    const badKeys = ['not-a-cell-key', '99999_0'];
+    for (const bad of badKeys) {
+      await adminDb.collection('crownSpawnCells').doc(bad).set({
+        cellKey: bad,
+        approved: true,
+        approvedByUserId: adminUser.uid,
+        lastSpawnPassAt: Timestamp.fromMillis(0),
+      });
+    }
+
+    try {
+      const result = await runCrownSpawnPass(
+        new Date(),
+        { maxCells: 50, maxSpawns: 50 },
+        createSeededRng(11),
+      );
+      expect(result.cellsSkippedInvalidKey).toBe(badKeys.length);
+      // And the healthy cell was still served in the same pass.
+      expect(result.spawned).toBeGreaterThan(0);
+      const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
+      expect(spawns.empty).toBe(false);
+    } finally {
+      for (const bad of badKeys) {
+        await adminDb.collection('crownSpawnCells').doc(bad).delete();
+      }
+      await clearSpawns();
+      await clearActivity(CELL_KEY);
+    }
+  });
+
   it('spawns nothing in an approved cell with no recent activity (A < 1)', async () => {
     await clearSpawns();
     await clearActivity(CELL_KEY);
