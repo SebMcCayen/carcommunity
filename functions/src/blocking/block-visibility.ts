@@ -44,23 +44,34 @@
  * a live listener on — can never grow into a large document re-downloaded on
  * every change.
  *
- * WHAT THE CAP COSTS, precisely: past it a further block is no longer mirrored,
- * so EVERY surface reading this mirror stops hiding that pair — not only the
- * client-side live-window filters but the SERVER-side ones too
- * (communityChat.list, convoyChat.list, the convoyChat.post notification
- * fan-out, and dm.listConversations).
+ * WHAT THE CAP COSTS, precisely. The cap is PER VIEWER DOCUMENT, and
+ * `applyPairVisibility` writes the two sides independently, so the degradation
+ * is scoped to whichever side is full — and is therefore ASYMMETRIC in the
+ * normal case. If A is at the cap and B is not, B's mirror still gains A, so B
+ * stops seeing A everywhere; A's mirror does not gain B, so A keeps seeing B on
+ * the mirror-driven surfaces. Only a pair where BOTH sides are full loses the
+ * mirror in both directions.
  *
- * What still enforces a block past the cap is every surface that resolves a
- * KNOWN pair directly against the authoritative `userBlocks` edges — which is
- * also where confidentiality actually matters:
+ * For a viewer whose own mirror is full, a further block is not reflected on ANY
+ * surface that reads it — not only that viewer's client-side live-window filters
+ * but the SERVER-side reads made on their behalf too (communityChat.list,
+ * convoyChat.list, the convoyChat.post notification fan-out, and
+ * dm.listConversations).
+ *
+ * What still enforces a block regardless of the cap, for both sides, is every
+ * surface that resolves a KNOWN pair directly against the authoritative
+ * `userBlocks` edges — which is also where confidentiality actually matters:
  *   - the live map (live.listNearby's block matrix, plus the RTDB
  *     liveLocationBlocks rule on the marker stream),
  *   - dm.getMessages / dm.markRead / dm.sendMessage,
- *   - the firestore.rules gate on conversations/{pairId}/messages.
+ *   - the firestore.rules gate on conversations/{pairId}/messages,
+ *   - the DM inbox row, which also keys off the stored `blockedPair` marker
+ *     rather than the mirror alone (dm/blockedConversation.ts).
  *
  * So the cap degrades the CHANNEL surfaces — shared rooms every active member
- * can read anyway — and leaves the private ones fully enforced. At 1000 blocked
- * users it is not a bound a real account reaches.
+ * can read anyway — for the capped viewer only, and leaves the private ones
+ * fully enforced for both. At 1000 blocked users it is not a bound a real
+ * account reaches.
  *
  * Firebase-free so it is unit-testable without the emulator.
  */

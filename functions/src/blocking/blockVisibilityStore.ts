@@ -79,7 +79,15 @@ export async function setHiddenUid(
   });
 }
 
-/** Mirrors a pair's mutual-hidden state on BOTH sides. */
+/**
+ * Mirrors a pair's mutual-hidden state on BOTH sides.
+ *
+ * The two writes are INDEPENDENT — each targets its own viewer document and each
+ * checks that document's own MAX_HIDDEN_UIDS budget. So one side can be skipped
+ * at the cap while the other still applies, leaving the mirror asymmetric for
+ * that pair (see the bound section in ./block-visibility.ts for exactly what
+ * that costs, and what still enforces the block regardless).
+ */
 export async function applyPairVisibility(
   uidA: string,
   uidB: string,
