@@ -41,10 +41,11 @@
  * the beginning when the collection is exhausted. Ordering by
  * `FieldPath.documentId()` needs no composite index and — unlike ordering by a
  * timestamp field — cannot silently skip documents that lack the field. A
- * member with nothing new costs one `count()` aggregation, one `badgeProgress`
- * read and one batched `getAll` of the tiers they already hold — and a `getAll`
- * is BILLED PER DOCUMENT, so that is 1 + tiersHeld document reads, not two —
- * with NO writes. Cheap per member, but not constant per member.
+ * member with nothing new costs one `badgeProgress` read and one batched
+ * `getAll` of the tiers they already hold — and a `getAll` is BILLED PER
+ * DOCUMENT, so that is 1 + tiersHeld document reads, not two — plus one
+ * `count()` aggregation, which is skipped once the member is recorded at the
+ * vehicle cap. No writes. Cheap per member, but not constant per member.
  *
  * IDEMPOTENT: it calls exactly the same evaluateAndAwardBadgeTiers the
  * triggers do, so re-running it (or overlapping a trigger) awards nothing
@@ -107,7 +108,9 @@ export async function runBadgeBacklogSweep(
       // this is the ONLY path by which a member whose garage predates the
       // ladders — or who sits at the vehicle cap and can never create another —
       // ever gets a Samlare tier. It writes nothing when already up to date.
-      await reconcileDerivedBadgeCounters(doc.id);
+      // The page document is passed in so a member already recorded at the cap
+      // skips the `count()` entirely rather than paying for it every cycle.
+      await reconcileDerivedBadgeCounters(doc.id, doc.data());
       awarded += (await evaluateAndAwardBadgeTiers(doc.id)).length;
     } catch (error) {
       // One bad member must not abort the page; the cursor still advances so

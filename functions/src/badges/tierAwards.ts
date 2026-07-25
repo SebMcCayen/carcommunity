@@ -40,6 +40,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { isRestricted, toUserAccessState } from '../shared/access';
+import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 import { creditPoints } from '../points/ledger';
 import { type BadgeMetric, type TierBadgeKey } from './badge-core';
 import {
@@ -49,6 +50,7 @@ import {
   qualifiedTierBadges,
   readBadgeCounters,
   tierPointsReward,
+  toCounter,
 } from './badge-tiers';
 import { awardBadge } from './awards';
 
@@ -144,13 +146,32 @@ export async function raiseBadgeCounter(
  * at all, however full their garage is. Re-deriving it on the sweep is what
  * makes the Samlare ladder reachable for existing members.
  *
- * Costs one `count()` aggregation read per member per sweep. Raising is a
- * running maximum (raiseBadgeCounter), so a member who has since deleted cars
- * keeps the tier they already earned, and this never writes when the stored
- * value is already at or above the real count — no write, hence no evaluation
- * re-trigger, on the steady-state pass.
+ * Costs one `count()` aggregation read per member per sweep, EXCEPT for a
+ * member already recorded at the vehicle cap, where it is skipped entirely (see
+ * below). Raising is a running maximum (raiseBadgeCounter), so a member who has
+ * since deleted cars keeps the tier they already earned, and this never writes
+ * when the stored value is already at or above the real count — no write, hence
+ * no evaluation re-trigger, on the steady-state pass.
+ *
+ * `knownProgress` is the member's already-loaded `badgeProgress` data, passed
+ * by callers that have it in hand so the cap shortcut costs no extra read.
  */
-export async function reconcileDerivedBadgeCounters(uid: string): Promise<void> {
+export async function reconcileDerivedBadgeCounters(
+  uid: string,
+  knownProgress?: Record<string, unknown>,
+): Promise<void> {
+  // The counter is a running maximum and the garage is transactionally capped
+  // at MAX_VEHICLES_PER_USER, so once the stored value reaches the cap the
+  // `count()` can never return anything higher and is guaranteed wasted. Only
+  // callers that ALREADY hold the badgeProgress document can use this
+  // shortcut — the sweep does, and that is exactly where the read would
+  // otherwise repeat every cycle, forever, for every maxed-out member.
+  if (knownProgress !== undefined) {
+    const stored = toCounter(knownProgress[BADGE_METRIC_FIELD.vehiclesInGarage]);
+    if (stored >= MAX_VEHICLES_PER_USER) {
+      return;
+    }
+  }
   const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
   await raiseBadgeCounter(uid, 'vehiclesInGarage', countSnap.data().count);
 }
