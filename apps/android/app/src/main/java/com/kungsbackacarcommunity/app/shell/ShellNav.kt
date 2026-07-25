@@ -147,10 +147,27 @@ enum class MapCover {
 val TRANSLUCENT_PANEL_TABS: Set<ShellTab> =
     setOf(ShellTab.History, ShellTab.Social, ShellTab.Garage)
 
+/**
+ * The shell's full-screen sub-routes form a back-stack: the [current] route on
+ * top, with its ancestors in [parents] (nearest parent last). Modelled as pure
+ * data — no Compose — so the "Back pops ONE level to the parent, not to the
+ * map" rule is assertable in a JVM unit test.
+ *
+ * @property parents the routes stacked below [current] (its ancestors). Empty
+ *   whenever [current] is null.
+ * @property current the route now on top, or null when nothing is open (the
+ *   shell then falls through to its tab/exit Back rules).
+ */
+data class ShellRouteStack(
+    val parents: List<ShellRoute>,
+    val current: ShellRoute?,
+)
+
 object ShellNavigation {
     /**
      * Resolves a system-Back press given the current [tab] and open [route].
-     * An open route always closes first; otherwise a non-Map tab returns to
+     * An open route always closes first — which, with a route back-stack, means
+     * popping ONE level (see [popRoute]); otherwise a non-Map tab returns to
      * Map; and Map with nothing open exits.
      */
     fun onBack(tab: ShellTab, route: ShellRoute?): ShellBackResult =
@@ -158,6 +175,33 @@ object ShellNavigation {
             route != null -> ShellBackResult.CloseRoute
             tab != ShellTab.Map -> ShellBackResult.GoToMapTab
             else -> ShellBackResult.Exit
+        }
+
+    /**
+     * The parent stack after opening a new route one level deeper. The
+     * currently-open [current] route (if any) becomes the new route's parent, so
+     * a later Back pops back to it — this is what makes hub → child
+     * (Settings → Blocked users) and list → detail (a conversation, a member
+     * profile) hierarchical. Opening a route with nothing already open (a
+     * top-level entry from the map home or a push tap) adds no parent, so Back
+     * from it returns to the map.
+     */
+    fun pushRoute(parents: List<ShellRoute>, current: ShellRoute?): List<ShellRoute> =
+        if (current == null) parents else parents + current
+
+    /**
+     * Pops one level off the route back-stack on a Back press. This is the fix
+     * for "Back from a sub-menu jumps to the map": backing out of a child route
+     * (Settings → Blocked users) must return to its PARENT hub (Settings), which
+     * is the top of [parents] — NOT null. Only an empty parent stack yields a
+     * null [ShellRouteStack.current] (nothing left open), letting the shell then
+     * apply its tab/exit Back rules.
+     */
+    fun popRoute(parents: List<ShellRoute>): ShellRouteStack =
+        if (parents.isEmpty()) {
+            ShellRouteStack(parents = emptyList(), current = null)
+        } else {
+            ShellRouteStack(parents = parents.dropLast(1), current = parents.last())
         }
 
     /**

@@ -67,6 +67,73 @@ class VehicleValidationTest {
         assertNull(input!!.engineDescription)
     }
 
+    // --- registration plate (deliberately-public field) --------------------
+
+    @Test
+    fun `plate is trimmed, whitespace-collapsed and uppercased`() {
+        assertEquals("ABC 123", VehicleValidation.normaliseRegistrationPlate("  abc   123  "))
+        assertEquals("ABC123", VehicleValidation.normaliseRegistrationPlate("abc123"))
+    }
+
+    @Test
+    fun `blank plate normalises to null so the field clears`() {
+        assertNull(VehicleValidation.normaliseRegistrationPlate(""))
+        assertNull(VehicleValidation.normaliseRegistrationPlate("   "))
+        val input = VehicleValidation.toInput(valid().copy(registrationPlate = "  "), year)
+        assertNull(input!!.registrationPlate)
+    }
+
+    @Test
+    fun `a valid plate round-trips into the input, normalised`() {
+        val input = VehicleValidation.toInput(valid().copy(registrationPlate = " abc 12 "), year)
+        assertEquals("ABC 12", input!!.registrationPlate)
+    }
+
+    @Test
+    fun `an over-length plate is rejected, checked against the normalised value`() {
+        val tooLong = "a".repeat(VehicleValidation.REGISTRATION_PLATE_MAX_LENGTH + 1)
+        assertEquals(
+            VehicleFieldError.REGISTRATION_PLATE_TOO_LONG,
+            VehicleValidation.validate(valid().copy(registrationPlate = tooLong), year),
+        )
+        // Exactly at the cap is fine, and padding/whitespace does not count.
+        assertNull(
+            VehicleValidation.validate(
+                valid().copy(registrationPlate = "a".repeat(VehicleValidation.REGISTRATION_PLATE_MAX_LENGTH)),
+                year,
+            ),
+        )
+        assertNull(VehicleValidation.validate(valid().copy(registrationPlate = "   ABC 123   "), year))
+    }
+
+    @Test
+    fun `plate uppercasing is locale-independent under the Turkish locale`() {
+        // Turkish upper-cases 'i' to dotted 'İ' under a LOCALE-SENSITIVE
+        // uppercase. We pin Locale.ROOT (matching the backend's locale-
+        // independent JS String.toUpperCase()) so 'i' -> 'I' and the canonical
+        // plate is stable across device locales.
+        //
+        // NOTE for future reviewers: Kotlin's NO-ARG String.uppercase() is
+        // already locale-invariant — the stdlib defines it as
+        // toUpperCase(Locale.ROOT), unlike the deprecated toUpperCase(). The
+        // assertions below pin BOTH so nobody "fixes" this back and forth: the
+        // explicit Locale.ROOT is for readability/intent, not a behaviour change.
+        // (Contrast the genuinely locale-sensitive default-locale bug in #516.)
+        val previous = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+            assertEquals("ABI123", VehicleValidation.normaliseRegistrationPlate("abi123"))
+            val input = VehicleValidation.toInput(valid().copy(registrationPlate = "abi 123"), year)
+            assertEquals("ABI 123", input!!.registrationPlate)
+            // The no-arg form under tr-TR: proves it is Locale.ROOT-based, while
+            // the explicitly locale-sensitive form is what would break.
+            assertEquals("ABI123", "abi123".uppercase())
+            assertEquals("ABİ123", "abi123".uppercase(java.util.Locale.getDefault()))
+        } finally {
+            java.util.Locale.setDefault(previous)
+        }
+    }
+
     @Test
     fun `powertrain parses wire values`() {
         assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))

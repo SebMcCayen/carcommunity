@@ -1,12 +1,15 @@
 package com.kungsbackacarcommunity.app.garage
 
+import java.util.Locale
+
 /**
  * Garage / vehicles domain + validation (Phase 12 slice 13).
  *
  * Mirrors the backend garage-core contract: the powertrain vocabulary, the
- * field bounds (make/model 1..N, modelYear 1886..currentYear+2), and the
- * privacy stance — no registration numbers/VIN are ever represented. Pure
- * Kotlin — JVM-testable.
+ * field bounds (make/model 1..N, modelYear 1886..currentYear+2), and the plate
+ * normalisation. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered
+ * field (Seb product decision) shown on the car profile; VIN and other private
+ * data are still never represented. Pure Kotlin — JVM-testable.
  */
 
 /**
@@ -64,6 +67,19 @@ data class Vehicle(
      */
     val modifications: String? = null,
     /**
+     * Registration plate (vehicles/{id}.registrationPlate). A DELIBERATELY
+     * PUBLIC, user-entered field (Seb product decision); normalised
+     * (trim/collapse/uppercase, ≤12 chars) by the backend. null when the owner
+     * left it blank.
+     *
+     * Audience: the `vehicles` read rule is `allow read: if isAuthenticated()`,
+     * so ANY signed-in user can read this — it is NOT member-gated and is NOT
+     * withdrawn from suspended accounts. Do not describe it as "shown to other
+     * members"; that understates it. Narrowing the audience means changing that
+     * Firestore rule, not just which screens render the field.
+     */
+    val registrationPlate: String? = null,
+    /**
      * Cloud Storage path of the COVER photo
      * (vehicleImages/{uid}/{vehicleId}/{imageId}), or null when unset. Kept as a
      * denormalised mirror of the cover (`photoPaths[0]`) for the profile card
@@ -96,6 +112,7 @@ data class VehicleForm(
     val powertrain: VehiclePowertrain? = null,
     val engineDescription: String = "",
     val modifications: String = "",
+    val registrationPlate: String = "",
 )
 
 /** The validated add/update payload. */
@@ -106,6 +123,8 @@ data class VehicleInput(
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
     val modifications: String?,
+    /** Normalised plate (trim/collapse/uppercase), or null when blank. */
+    val registrationPlate: String? = null,
 )
 
 /** First validation problem, or null when valid. */
@@ -119,6 +138,7 @@ enum class VehicleFieldError {
     POWERTRAIN_REQUIRED,
     ENGINE_DESCRIPTION_TOO_LONG,
     MODIFICATIONS_TOO_LONG,
+    REGISTRATION_PLATE_TOO_LONG,
 }
 
 object VehicleValidation {
@@ -135,6 +155,25 @@ object VehicleValidation {
 
     /** Backend bound (garage-core VEHICLE_DESCRIPTION_MAX_LENGTH) for modifications. */
     const val MODIFICATIONS_MAX_LENGTH = 500
+
+    /** Backend bound (garage-core REGISTRATION_PLATE_MAX_LENGTH), checked against the NORMALISED plate. */
+    const val REGISTRATION_PLATE_MAX_LENGTH = 12
+
+    /**
+     * Normalises a plate the same way the backend does (garage-core
+     * normaliseRegistrationPlate): trim, collapse internal whitespace to a
+     * single space, uppercase. Blank -> null (so an empty field clears the
+     * plate). Format-agnostic — no country regex, imports/personalised plates
+     * pass through.
+     *
+     * Uppercasing pins [Locale.ROOT] so the canonical plate is stable across
+     * device locales (e.g. Turkish 'i' -> 'I', never 'İ'), matching the
+     * backend's locale-independent JS String.toUpperCase().
+     */
+    fun normaliseRegistrationPlate(raw: String): String? {
+        val collapsed = raw.trim().replace(Regex("\\s+"), " ").uppercase(Locale.ROOT)
+        return collapsed.ifEmpty { null }
+    }
 
     /** Returns the first validation error, or null when the form is valid. */
     fun validate(form: VehicleForm, currentYear: Int): VehicleFieldError? {
@@ -157,6 +196,12 @@ object VehicleValidation {
         if (form.modifications.trim().length > MODIFICATIONS_MAX_LENGTH) {
             return VehicleFieldError.MODIFICATIONS_TOO_LONG
         }
+        // Length is checked against the NORMALISED plate, so trailing/duplicate
+        // spaces never push a valid plate over the cap.
+        val plate = normaliseRegistrationPlate(form.registrationPlate)
+        if (plate != null && plate.length > REGISTRATION_PLATE_MAX_LENGTH) {
+            return VehicleFieldError.REGISTRATION_PLATE_TOO_LONG
+        }
         return null
     }
 
@@ -170,6 +215,7 @@ object VehicleValidation {
             powertrain = form.powertrain!!,
             engineDescription = form.engineDescription.trim().takeIf { it.isNotEmpty() },
             modifications = form.modifications.trim().takeIf { it.isNotEmpty() },
+            registrationPlate = normaliseRegistrationPlate(form.registrationPlate),
         )
     }
 }

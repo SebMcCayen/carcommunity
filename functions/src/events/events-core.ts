@@ -3,15 +3,22 @@
  * builders (Phase 9b).
  *
  * Mirrors the legacy semantics in services/api/src/lib/event-service.ts and
- * the contracts in contracts/schemas/events.schema.json. The exact location
- * (locationName, address, latitude, longitude) and long description are
- * member-only in the legacy API, so the Firestore model splits every event
+ * the contracts in contracts/schemas/events.schema.json. Every event is split
  * into two documents:
  *
- * - `events/{eventId}` — teaser-safe + operational fields; readable by any
+ * - `events/{eventId}` — teaser-safe + operational fields, PLUS the event's
+ *   map location (locationName, latitude, longitude); readable by any
  *   authenticated user while published, by admins always.
- * - `events/{eventId}/details/private` — member-gated fields; readable by
- *   active members while the event is published, by admins always.
+ * - `events/{eventId}/details/private` — member-gated fields (the long
+ *   description and the precise street address); readable by active members
+ *   while the event is published, by admins always.
+ *
+ * DELIBERATE PRIVACY CHANGE (2026-07): the coordinate pair and the place name
+ * now live on the PUBLIC teaser, not the member-gated detail. Product decision
+ * — every signed-in user sees event locations as pins on the community map, so
+ * the map read must reach them without the member gate. Only the precise street
+ * `address` and the long `description` remain member-only. Historically the
+ * whole "exact location" was member-only; that is no longer the model.
  *
  * No Firebase Admin SDK imports — the server-timestamp sentinel is injected
  * so this module stays unit-testable without emulators.
@@ -481,14 +488,15 @@ export function initialEventStatus(creatorRole: EventCreatorRole): EventStatus {
 // Document builders — the teaser/private split
 // ---------------------------------------------------------------------------
 
-/** Field names stored on the member-gated events/{eventId}/details/private doc. */
-export const PRIVATE_DETAIL_FIELDS = [
-  'description',
-  'locationName',
-  'address',
-  'latitude',
-  'longitude',
-] as const;
+/**
+ * Field names stored on the member-gated events/{eventId}/details/private doc.
+ *
+ * The map location (locationName, latitude, longitude) is deliberately NOT here
+ * — it moved to the public teaser so every signed-in user can see event pins on
+ * the map (see the file header). Only the long description and the precise
+ * street address stay member-only.
+ */
+export const PRIVATE_DETAIL_FIELDS = ['description', 'address'] as const;
 
 export interface EventDocuments {
   /** events/{eventId} — teaser-safe + operational fields. */
@@ -525,6 +533,11 @@ export function buildEventDocuments(
       // Europe/Stockholm start day (23:59:59.999 local).
       endsAt: new Date(effectiveEndsAt(input.startsAt, input.endsAt)),
       approximateArea: input.approximateArea,
+      // Public map location (see the file header): the place name and the
+      // coordinate pair live on the teaser so every signed-in user sees the pin.
+      locationName: input.locationName ?? null,
+      latitude: input.latitude ?? null,
+      longitude: input.longitude ?? null,
       isOfficial: creatorRole === 'admin' ? (input.isOfficial ?? false) : false,
       status: initialEventStatus(creatorRole),
       cancelledAt: null,
@@ -535,11 +548,9 @@ export function buildEventDocuments(
       updatedAt: serverTimestamp(),
     },
     privateDoc: {
+      // Member-only: the long write-up and the precise street address.
       description: input.description ?? null,
-      locationName: input.locationName ?? null,
       address: input.address ?? null,
-      latitude: input.latitude ?? null,
-      longitude: input.longitude ?? null,
       updatedAt: serverTimestamp(),
     },
   };
@@ -569,13 +580,15 @@ export function buildEventUpdates(
     assign(eventDoc, 'endsAt', input.endsAt ? new Date(input.endsAt) : null);
   if (input.approximateArea !== undefined)
     assign(eventDoc, 'approximateArea', input.approximateArea);
+  // Public map location — teaser fields now (see the file header).
+  if (input.locationName !== undefined) assign(eventDoc, 'locationName', input.locationName);
+  if (input.latitude !== undefined) assign(eventDoc, 'latitude', input.latitude);
+  if (input.longitude !== undefined) assign(eventDoc, 'longitude', input.longitude);
   if (input.isOfficial !== undefined) assign(eventDoc, 'isOfficial', input.isOfficial);
 
+  // Member-only fields stay on the private detail document.
   if (input.description !== undefined) assign(privateDoc, 'description', input.description);
-  if (input.locationName !== undefined) assign(privateDoc, 'locationName', input.locationName);
   if (input.address !== undefined) assign(privateDoc, 'address', input.address);
-  if (input.latitude !== undefined) assign(privateDoc, 'latitude', input.latitude);
-  if (input.longitude !== undefined) assign(privateDoc, 'longitude', input.longitude);
 
   if (Object.keys(eventDoc).length > 0) {
     eventDoc.updatedAt = serverTimestamp();

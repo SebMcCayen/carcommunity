@@ -13,6 +13,7 @@ import {
   communityMentionNotificationId,
   convoyChatNotificationId,
   isAcceptedConvoyMember,
+  isAlreadyExistsError,
   messagePreview,
   normalizeMentionCandidates,
   parseListCommunityInput,
@@ -62,6 +63,24 @@ describe('chat-core parsing', () => {
     expect(parsePostCommunityInput({ text: 'hi', mentionedUids: [''] }).ok).toBe(false);
     expect(parsePostCommunityInput({ text: 'hi', mentionedUids: [42] }).ok).toBe(false);
     expect(parsePostCommunityInput({ text: 'hi', mentionedUids: 'u1' }).ok).toBe(false);
+  });
+
+  it('parses an optional clientId idempotency key, rejecting junk', () => {
+    // A valid key round-trips verbatim (no trimming — the alphabet forbids space).
+    expect(parsePostCommunityInput({ text: 'hi', clientId: 'Abc-1_2' })).toEqual({
+      ok: true,
+      input: { text: 'hi', clientId: 'Abc-1_2' },
+    });
+    expect(parsePostConvoyInput({ convoyId: 'c-1', text: 'hi', clientId: 'Abc-1_2' })).toEqual({
+      ok: true,
+      input: { convoyId: 'c-1', text: 'hi', clientId: 'Abc-1_2' },
+    });
+    // Path separators, whitespace, empty, and over-length are all rejected.
+    expect(parsePostCommunityInput({ text: 'hi', clientId: 'a/b' }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', clientId: ' abc' }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', clientId: '' }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', clientId: 'x'.repeat(65) }).ok).toBe(false);
+    expect(parsePostConvoyInput({ convoyId: 'c-1', text: 'hi', clientId: 'a b' }).ok).toBe(false);
   });
 
   it('parses communityChat.list with an optional ISO cursor', () => {
@@ -145,6 +164,27 @@ describe('chat-core projections + builders', () => {
     expect(doc.mentionedUids).toEqual(['u1', 'u2']);
   });
 
+  it('stores the clientId on the message doc only when supplied', () => {
+    const withKey = buildChatMessageDocument(
+      {
+        senderUid: 'a',
+        text: 'hi',
+        senderProfile: { displayName: 'Al', avatarPath: null },
+        expireAt: 'EXP',
+        clientId: 'c-1',
+      },
+      () => 'TS',
+    );
+    expect(withKey.clientId).toBe('c-1');
+    // Legacy (key-less) send: no clientId field at all.
+    expect(
+      buildChatMessageDocument(
+        { senderUid: 'a', text: 'hi', senderProfile: { displayName: null, avatarPath: null }, expireAt: 'EXP' },
+        () => 'TS',
+      ),
+    ).not.toHaveProperty('clientId');
+  });
+
   it('computes the retention TTL instant as now + retentionDays', () => {
     const now = new Date('2026-07-12T00:00:00.000Z');
     // Community: 120 days out.
@@ -200,6 +240,16 @@ describe('chat-core projections + builders', () => {
     expect(
       toChatMessageSummary('m3', { mentionedUids: ['u1', 42, null] }, 'T3').mentionedUids,
     ).toEqual(['u1']);
+  });
+
+  it('echoes the clientId on a summary only when the doc carries one', () => {
+    expect(
+      toChatMessageSummary('c-1', { senderUid: 'a', text: 'hi', clientId: 'c-1' }, 'T1').clientId,
+    ).toBe('c-1');
+    // A doc without the field (legacy / received message) omits it entirely.
+    expect(toChatMessageSummary('m1', { senderUid: 'a', text: 'hi' }, 'T1')).not.toHaveProperty(
+      'clientId',
+    );
   });
 });
 
@@ -344,5 +394,34 @@ describe('chat-core message preview', () => {
   it('trims and truncates to the preview length', () => {
     expect(messagePreview('  hej  ')).toBe('hej');
     expect(messagePreview('x'.repeat(500))).toHaveLength(CHAT_MESSAGE_PREVIEW_LENGTH);
+  });
+});
+
+describe('chat-core isAlreadyExistsError (atomic keyed-send guard)', () => {
+  // The keyed-send idempotency guarantee rests on `create()` losing the race
+  // rather than a read-then-write, so misclassifying its rejection would either
+  // resurface as a 500 to a perfectly ordinary concurrent retry, or (worse)
+  // swallow a genuinely different failure as a duplicate.
+  it('matches every shape the admin SDK surfaces ALREADY_EXISTS as', () => {
+    expect(isAlreadyExistsError({ code: 6 })).toBe(true);
+    expect(isAlreadyExistsError({ code: 'already-exists' })).toBe(true);
+    expect(
+      isAlreadyExistsError(new Error('6 ALREADY_EXISTS: entity already exists: app=dev')),
+    ).toBe(true);
+  });
+
+  it('does not classify other failures as a duplicate', () => {
+    // Notably code 10 (ABORTED, a contention retry) and 7 (PERMISSION_DENIED):
+    // treating either as "already committed" would return a success for a
+    // message that was never written.
+    expect(isAlreadyExistsError({ code: 10, message: 'ABORTED' })).toBe(false);
+    expect(isAlreadyExistsError({ code: 7, message: 'PERMISSION_DENIED' })).toBe(false);
+    expect(isAlreadyExistsError(new Error('deadline exceeded'))).toBe(false);
+  });
+
+  it('tolerates non-error throwables instead of crashing the handler', () => {
+    expect(isAlreadyExistsError(undefined)).toBe(false);
+    expect(isAlreadyExistsError(null)).toBe(false);
+    expect(isAlreadyExistsError('boom')).toBe(false);
   });
 });

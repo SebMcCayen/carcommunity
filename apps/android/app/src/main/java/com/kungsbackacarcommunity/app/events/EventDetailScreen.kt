@@ -126,6 +126,19 @@ fun EventDetailScreen(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onBackground,
             )
+            // PUBLIC place name (teaser data since the 2026-07 open-up — it is
+            // what the map pin is labelled with), so it sits OUTSIDE the member
+            // gate below: a non-member who taps a pin must still see where the
+            // event is. Only the precise street address and the long description
+            // stay member-only, in the gated card.
+            event.locationName?.takeIf { it.isNotBlank() }?.let { placeName ->
+                Text(
+                    text = placeName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(EVENT_DETAIL_LOCATION_NAME_TAG),
+                )
+            }
             event.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                 Text(
                     text = summary,
@@ -134,13 +147,13 @@ fun EventDetailScreen(
                 )
             }
 
-            // Member-gated detail: exact location + full description, or a gate.
-            // Detail (exact location/description) only when the rules would
-            // actually serve it: passes the member gate AND published. A
-            // caller who fails the gate sees the membership upsell INSTEAD of
-            // the detail (that copy is the block, not a hint beside it, so it
-            // disappears while gating is disabled); someone who passes but is
-            // on a non-published event sees
+            // Member-gated detail: the precise street address + full description,
+            // or a gate. (The place name is public and already rendered above.)
+            // Shown only when the rules would actually serve it: passes the member
+            // gate AND published. A caller who fails the gate sees the membership
+            // upsell INSTEAD of the detail (that copy is the block, not a hint
+            // beside it, so it disappears while gating is disabled); someone who
+            // passes but is on a non-published event sees
             // neither (the cancelled notice above already explains the state).
             if (Events.canSeeDetails(passesMemberGate, event.status)) {
                 DetailCard(detail)
@@ -362,6 +375,12 @@ private fun AttendeeAvatar(avatarPath: String?) {
 /** Test tag for the attendees section container. */
 internal const val ATTENDEES_SECTION_TAG = "events_attendees_section"
 
+/**
+ * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered
+ * outside the member gate (a non-member must still see where the event is).
+ */
+internal const val EVENT_DETAIL_LOCATION_NAME_TAG = "events_detail_location_name"
+
 /** Stable per-attendee test tag so a UI test can tap a specific member. */
 internal fun attendeeRowTag(uid: String): String = "events_attendee_$uid"
 
@@ -383,10 +402,13 @@ private fun DetailCard(detail: EventDetail?) {
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            val location = detail?.locationName ?: detail?.address
-            if (location != null) {
+            // Member-only precise street address. The public place name is NOT
+            // repeated here — it is rendered above the gate so non-members see it
+            // too.
+            val address = detail?.address
+            if (address != null) {
                 Text(
-                    text = location,
+                    text = address,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -462,11 +484,14 @@ private fun EventDetailPreview() {
                     startsAtMillis = 0L,
                     endsAtMillis = null,
                     approximateArea = "Kungsbacka",
+                    locationName = "Torg",
+                    latitude = 57.4874,
+                    longitude = 12.0757,
                     isOfficial = true,
                     status = EventStatus.PUBLISHED,
                     counts = RsvpCounts(12, 3, 1),
                 ),
-            detail = EventDetail("Bring your car.", "Torg", "Storgatan 1", 57.0, 12.0),
+            detail = EventDetail("Bring your car.", "Storgatan 1"),
             myRsvp = RsvpStatus.GOING,
             passesMemberGate = true,
             rsvpStatus = RsvpStatusUi.Idle,

@@ -118,6 +118,90 @@ class ImageCompressorTest {
         )
     }
 
+    // ------------------------------------------------------------------
+    // rotationDownscaleFactor — the free rotation must not blow the decode
+    // budget. sampleSizeForCrop caps the UN-ROTATED decode, but rotating grows
+    // the axis-aligned bounding box (worst near 45deg for a wide/tall source),
+    // so the factor folded into the rotation Matrix is what keeps peak memory
+    // bounded and the intermediate allocation from OOMing.
+    // ------------------------------------------------------------------
+
+    /** The rotated bounding-box pixel count for a w x h source at [deg]. */
+    private fun rotatedPixels(w: Int, h: Int, deg: Double): Double {
+        val rad = Math.toRadians(deg)
+        val c = kotlin.math.abs(kotlin.math.cos(rad))
+        val s = kotlin.math.abs(kotlin.math.sin(rad))
+        return (c * w + s * h) * (s * w + c * h)
+    }
+
+    @Test
+    fun `rotationDownscaleFactor is 1 when the rotated box already fits`() {
+        // A modest source stays well under the 32 Mpx budget at any angle, so no
+        // downscale is folded in and the rotate is a pure rotate.
+        listOf(0f, 15f, 45f, 90f, 137f, -45f).forEach { angle ->
+            assertEquals(
+                "angle=$angle",
+                1f,
+                ImageCompressor.rotationDownscaleFactor(2000, 1500, angle),
+                0f,
+            )
+        }
+    }
+
+    @Test
+    fun `rotationDownscaleFactor shrinks a wide source rotated near 45 degrees`() {
+        // The OOM case: 8000x4000 is exactly at the 32 Mpx cap un-rotated, but at
+        // 45deg its bounding box is ~8485x8485 ~= 72 Mpx (~288 MB at ARGB_8888).
+        val w = 8000
+        val h = 4000
+        val angle = 45f
+        assertTrue(
+            "precondition: the rotated box must genuinely exceed the budget",
+            rotatedPixels(w, h, angle.toDouble()) > 32_000_000.0,
+        )
+
+        val factor = ImageCompressor.rotationDownscaleFactor(w, h, angle)
+
+        assertTrue("a downscale must be requested (got $factor)", factor < 1f)
+        assertTrue("the factor must stay positive (got $factor)", factor > 0f)
+        // The whole point: after folding the factor in, the allocation fits.
+        val scaledPixels = rotatedPixels(w, h, angle.toDouble()) * factor * factor
+        assertTrue(
+            "the scaled rotated box must fit the budget (got ${scaledPixels / 1_000_000} Mpx)",
+            scaledPixels <= 32_000_000.0 * 1.001,
+        )
+    }
+
+    @Test
+    fun `rotationDownscaleFactor keeps every angle of a huge source within budget`() {
+        // Sweep: whatever the angle, the allocation the Matrix produces is bounded.
+        val w = 12000
+        val h = 9000
+        (0..180 step 5).forEach { deg ->
+            val factor = ImageCompressor.rotationDownscaleFactor(w, h, deg.toFloat())
+            assertTrue("deg=$deg factor must be in (0,1] (got $factor)", factor > 0f && factor <= 1f)
+            val scaledPixels = rotatedPixels(w, h, deg.toDouble()) * factor * factor
+            assertTrue(
+                "deg=$deg must fit the budget (got ${scaledPixels / 1_000_000} Mpx)",
+                scaledPixels <= 32_000_000.0 * 1.001,
+            )
+        }
+    }
+
+    @Test
+    fun `rotationDownscaleFactor is defensive about degenerate input`() {
+        // Degenerate dimensions and a non-finite angle must not produce NaN or 0 —
+        // they mean "no scaling", leaving the existing non-finite guard in charge.
+        assertEquals(1f, ImageCompressor.rotationDownscaleFactor(0, 100, 45f), 0f)
+        assertEquals(1f, ImageCompressor.rotationDownscaleFactor(100, 0, 45f), 0f)
+        assertEquals(1f, ImageCompressor.rotationDownscaleFactor(9000, 9000, Float.NaN), 0f)
+        assertEquals(
+            1f,
+            ImageCompressor.rotationDownscaleFactor(9000, 9000, Float.POSITIVE_INFINITY),
+            0f,
+        )
+    }
+
     @Test
     fun `vehicle max dimension is larger than avatar for detail`() {
         assertTrue(ImageCompressor.VEHICLE_MAX_DIMENSION > ImageCompressor.AVATAR_MAX_DIMENSION)

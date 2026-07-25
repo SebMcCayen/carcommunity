@@ -15,6 +15,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.media.ImageCompressor
+import com.kungsbackacarcommunity.app.media.ImageEditFrameShape
+import com.kungsbackacarcommunity.app.media.ImageEditScreen
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
@@ -196,6 +198,7 @@ fun GarageRoute(
                     powertrain = it.powertrain,
                     engineDescription = it.engineDescription ?: "",
                     modifications = it.modifications ?: "",
+                    registrationPlate = it.registrationPlate ?: "",
                 )
             } ?: VehicleForm()
 
@@ -220,14 +223,15 @@ fun GarageRoute(
         // asked for; else it returns null and we fail closed / skip the upload
         // rather than risk leaking source metadata. Vehicle photos keep a larger
         // longest-side cap than avatars so detail shots stay crisp.
-        val sanitizeAndUpload: suspend (PickedImage, NormalizedCropRect) -> Unit =
-            { picked, crop ->
+        val sanitizeAndUpload: suspend (PickedImage, Float, NormalizedCropRect) -> Unit =
+            { picked, rotationDegrees, crop ->
                 if (photoCoordinator != null) {
                     val sanitized =
                         ImageCompressor.compressForPublicUpload(
                             picked,
                             maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
                             crop = crop,
+                            rotationDegrees = rotationDegrees,
                         )
                     if (sanitized != null) {
                         if (editingId != null) {
@@ -307,14 +311,18 @@ fun GarageRoute(
             // (they are rememberSaveable, and the `key(editingId)` below is
             // unchanged), so returning from the crop lands the user back on the
             // vehicle they were filling in.
-            VehiclePhotoCropScreen(
+            ImageEditScreen(
                 bitmap = cropping,
-                onConfirm = { crop ->
+                // Vehicle/other photos get the free-form frame (draggable edges),
+                // started at the source's own aspect.
+                frameShape = ImageEditFrameShape.FREEFORM,
+                initialAspect = cropping.width.toFloat() / cropping.height.toFloat(),
+                onConfirm = { rotationDegrees, crop ->
                     cancelCrop()
                     // Route scope, not the crop screen's: the screen leaves
                     // composition on the line above, and a screen-scoped
                     // coroutine would be cancelled mid-sanitise.
-                    scope.launch { sanitizeAndUpload(candidate, crop) }
+                    scope.launch { sanitizeAndUpload(candidate, rotationDegrees, crop) }
                 },
                 onCancel = cancelCrop,
             )
@@ -379,14 +387,15 @@ fun GarageRoute(
         // pick -> crop -> compressForPublicUpload (crop + downscale + EXIF/GPS
         // strip, from #407/#479) -> putBytes -> garage-addVehiclePhoto records
         // the path. Never a raw upload — same guarantee as the single-photo edit.
-        val detailSanitizeAndUpload: suspend (PickedImage, NormalizedCropRect) -> Unit =
-            { picked, crop ->
+        val detailSanitizeAndUpload: suspend (PickedImage, Float, NormalizedCropRect) -> Unit =
+            { picked, rotationDegrees, crop ->
                 if (detailPhotoCoordinator != null) {
                     val sanitized =
                         ImageCompressor.compressForPublicUpload(
                             picked,
                             maxDimension = ImageCompressor.VEHICLE_MAX_DIMENSION,
                             crop = crop,
+                            rotationDegrees = rotationDegrees,
                         )
                     if (sanitized != null) {
                         val imageId = MediaUpload.newImageId(sanitized.contentType)
@@ -430,11 +439,15 @@ fun GarageRoute(
             }
             // The crop step REPLACES the detail page while open; Back cancels it
             // (handled in the BackHandler) and returns here.
-            VehiclePhotoCropScreen(
+            ImageEditScreen(
                 bitmap = detailCropping,
-                onConfirm = { crop ->
+                frameShape = ImageEditFrameShape.FREEFORM,
+                initialAspect = detailCropping.width.toFloat() / detailCropping.height.toFloat(),
+                onConfirm = { rotationDegrees, crop ->
                     cancelDetailCrop()
-                    scope.launch { detailSanitizeAndUpload(detailCandidate, crop) }
+                    scope.launch {
+                        detailSanitizeAndUpload(detailCandidate, rotationDegrees, crop)
+                    }
                 },
                 onCancel = cancelDetailCrop,
             )
