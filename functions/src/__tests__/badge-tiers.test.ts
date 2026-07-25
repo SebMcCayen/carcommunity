@@ -8,7 +8,8 @@
  * never counts.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   BADGE_CATALOG,
@@ -609,9 +610,23 @@ describe('presentation', () => {
 // ---------------------------------------------------------------------------
 
 describe('localization parity', () => {
-  const contractsDir = new URL('../../../contracts/localization/', import.meta.url);
+  // Walk up from the working directory to the repo root rather than using
+  // `import.meta.url`: this file is type-checked under tsconfig.test.json,
+  // whose `module` setting does not permit import.meta.
+  const repoRoot = (() => {
+    let dir = process.cwd();
+    for (let up = 0; up < 6; up += 1) {
+      if (existsSync(join(dir, 'contracts', 'localization', 'sv.json'))) {
+        return dir;
+      }
+      dir = dirname(dir);
+    }
+    throw new Error(`Could not locate the repo root from ${process.cwd()}`);
+  })();
+  const repoFile = (...segments: string[]): string => join(repoRoot, ...segments);
   const badgeNames = (locale: 'sv' | 'en'): Record<string, string> =>
-    JSON.parse(readFileSync(new URL(`${locale}.json`, contractsDir), 'utf8')).badges.badgeNames;
+    JSON.parse(readFileSync(repoFile('contracts', 'localization', `${locale}.json`), 'utf8')).badges
+      .badgeNames;
 
   it('localizes every catalog key in both Swedish and English', () => {
     const sv = badgeNames('sv');
@@ -645,9 +660,8 @@ describe('localization parity', () => {
     // Cross-lane guard: the `when` in BadgeStrings.kt is the only thing that
     // turns a localized string into a rendered badge name.
     const kotlin = readFileSync(
-      new URL(
-        '../../../apps/android/app/src/main/java/com/kungsbackacarcommunity/app/badges/BadgeStrings.kt',
-        import.meta.url,
+      repoFile(
+        'apps/android/app/src/main/java/com/kungsbackacarcommunity/app/badges/BadgeStrings.kt',
       ),
       'utf8',
     );
