@@ -304,6 +304,11 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
         startsAtMillis = getTimestamp("startsAt")?.toDate()?.time,
         endsAtMillis = getTimestamp("endsAt")?.toDate()?.time,
         approximateArea = getString("approximateArea") ?: "",
+        // Public map location (2026-07): read off the teaser so the map can pin
+        // every published event without the member gate.
+        locationName = getString("locationName"),
+        latitude = getDouble("latitude"),
+        longitude = getDouble("longitude"),
         isOfficial = getBoolean("isOfficial") ?: false,
         status = status,
         counts = counts,
@@ -312,11 +317,9 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
 
 private fun DocumentSnapshot.toEventDetail(): EventDetail? {
     if (!exists()) return null
+    // Member-gated fields only; the map location lives on the teaser now.
     return EventDetail(
         description = getString("description"),
-        locationName = getString("locationName"),
         address = getString("address"),
-        latitude = getDouble("latitude"),
-        longitude = getDouble("longitude"),
     )
 }

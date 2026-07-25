@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app
 
 import android.Manifest
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -83,6 +84,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.kungsbackacarcommunity.app.config.FeatureFlag
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
@@ -138,6 +140,9 @@ import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.events.EventSummary
+import com.kungsbackacarcommunity.app.events.Events
+import com.kungsbackacarcommunity.app.events.EventsListState
 import com.kungsbackacarcommunity.app.events.EventsRepository
 import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
@@ -202,10 +207,13 @@ import com.kungsbackacarcommunity.app.map.MapRoute
 import com.kungsbackacarcommunity.app.map.toConvoyMemberPosition
 import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
 import com.kungsbackacarcommunity.app.media.ImageCompressor
+import com.kungsbackacarcommunity.app.media.ImageEditFrameShape
+import com.kungsbackacarcommunity.app.media.ImageEditScreen
 import com.kungsbackacarcommunity.app.media.ImageUploadCoordinator
 import com.kungsbackacarcommunity.app.media.ImageUploadStatus
 import com.kungsbackacarcommunity.app.media.MediaUpload
 import com.kungsbackacarcommunity.app.media.MediaUploader
+import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
@@ -262,7 +270,9 @@ import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
 import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
+import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -504,6 +514,47 @@ fun AuthenticatedApp(
             // pendingWelcomeRoute instead of inheriting the previous user's saved one.
             var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
 
+            // The ancestors of the currently-open [route], nearest parent last —
+            // together they form the shell's route back-stack. Held separately
+            // from [route] (rather than folding both into one list) so every
+            // existing `route` read/`when(route)` stays untouched; this is the
+            // ONLY addition. INVARIANT: non-empty only while [route] != null —
+            // the openers/closer below keep the two in lock-step.
+            //
+            // Why it exists: opening a child from a hub (Settings → Blocked
+            // users) used to overwrite the single `route`, losing the parent, so
+            // Back dropped straight to the map. Pushing the parent here lets Back
+            // pop ONE level back to it. Keyed on uid like [route] itself.
+            var routeParents by
+                rememberSaveable(uid) { mutableStateOf<ArrayList<ShellRoute>>(arrayListOf()) }
+
+            // A fresh top-level entry — the map-home profile menu / social hub, a
+            // push-notification tap, a map dialog. Starts a NEW stack, so Back
+            // from it returns to the map/tab, never a stale parent.
+            val openRootRoute = { target: ShellRoute ->
+                routeParents = arrayListOf()
+                route = target
+            }
+            // Navigate one level DEEPER. The current route (if any) becomes the
+            // new route's parent — via the unit-tested [ShellNavigation.pushRoute]
+            // so production and its test can't drift — so Back pops back to it.
+            // Used for hub → child (Settings → Blocked users) and list → detail
+            // (a conversation, a member profile). With nothing open it degrades
+            // to a root entry (no parent), which is the honest result for a
+            // list→detail reached directly from a push tap.
+            val pushRoute = { target: ShellRoute ->
+                routeParents = ArrayList(ShellNavigation.pushRoute(routeParents, route))
+                route = target
+            }
+            // Leave the route stack entirely, back to a bare tab (Garage tab, the
+            // map after a convoy is created, the address picker). Clears parents
+            // alongside `route` so the back-stack can't outlive the route it
+            // described.
+            val clearRoutes = {
+                routeParents = arrayListOf()
+                route = null
+            }
+
             // The map's manual day/night override (null = follow the app theme).
             //
             // Owned HERE, not inside MapHome, precisely because [route] above can
@@ -575,7 +626,10 @@ fun AuthenticatedApp(
             val openChat = { otherUid: String, otherName: String? ->
                 dmChatOtherUid = otherUid
                 dmChatOtherName = otherName
-                route = ShellRoute.Chat
+                // From inside the conversation list (or a member profile) this
+                // pushes, so Back returns there; from a push tap on the map it
+                // starts a fresh stack (no parent) — pushRoute handles both.
+                pushRoute(ShellRoute.Chat)
             }
 
             // Notification taps. MainActivity decodes the Intent extras and parks
@@ -589,14 +643,15 @@ fun AuthenticatedApp(
             // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
             //
             // INVARIANT — pendingChatHubLink is never read stale, and the reason
-            // is structural rather than a clear-on-exit: the assignment below is
-            // the ONLY `route = ShellRoute.ChatHub` in the shell, and it always
+            // is structural rather than a clear-on-exit: the opener below is the
+            // ONLY route into ShellRoute.ChatHub in the shell, and it always
             // writes a fresh link in the same frame. ChatHubRoute therefore
             // cannot be entered carrying a previous tap's destination. The map
             // bubble is not a counter-example — it opens ChatHubPopup, which
             // takes no pushDeepLink parameter at all. Back-out is likewise safe:
-            // closeRoute() sets route = null and there is no back stack to
-            // return to ChatHub through.
+            // ChatHub is opened via openRootRoute (a fresh, parent-less stack),
+            // so a Back pop from it lands on the map, never back INTO ChatHub —
+            // the only entry stays this fresh-link opener.
             //
             // If you ever add a second way to reach ShellRoute.ChatHub, that
             // invariant dies and this must become a consume-and-clear.
@@ -613,28 +668,37 @@ fun AuthenticatedApp(
                     PushTarget.DM ->
                         // With the counterpart resolved, open the thread directly;
                         // without it, the conversation list is the honest landing.
+                        // A push tap is a fresh top-level entry, so open as a ROOT
+                        // (parent-less) stack — Back returns to the map, not to
+                        // whatever route happened to be open when the tap arrived.
+                        // openChat() is the in-app list → detail path (it pushes),
+                        // which is why the payload is set + opened as a root here
+                        // rather than routed through it, matching every other push
+                        // target below.
                         if (link.entityId != null) {
-                            openChat(link.entityId, null)
+                            dmChatOtherUid = link.entityId
+                            dmChatOtherName = null
+                            openRootRoute(ShellRoute.Chat)
                         } else {
-                            route = ShellRoute.Conversations
+                            openRootRoute(ShellRoute.Conversations)
                         }
                     PushTarget.COMMUNITY_CHAT,
                     PushTarget.CONVOY_CHAT,
                     -> {
                         pendingChatHubLink = link
-                        route = ShellRoute.ChatHub
+                        openRootRoute(ShellRoute.ChatHub)
                     }
-                    PushTarget.CONVOYS -> route = ShellRoute.Convoys
-                    PushTarget.FRIENDS -> route = ShellRoute.Friends
+                    PushTarget.CONVOYS -> openRootRoute(ShellRoute.Convoys)
+                    PushTarget.FRIENDS -> openRootRoute(ShellRoute.Friends)
                     PushTarget.EVENT -> {
                         // The backend sends the reminder's event id as entityId;
                         // open that event directly. Null (unknown event) falls
                         // through to the events list, EventsRoute's own default.
                         pendingEventDeepLinkId = link.entityId
-                        route = ShellRoute.Events
+                        openRootRoute(ShellRoute.Events)
                     }
-                    PushTarget.SUBSCRIPTION -> route = ShellRoute.Subscription
-                    PushTarget.NOTIFICATIONS -> route = ShellRoute.Notifications
+                    PushTarget.SUBSCRIPTION -> openRootRoute(ShellRoute.Subscription)
+                    PushTarget.NOTIFICATIONS -> openRootRoute(ShellRoute.Notifications)
                 }
             }
 
@@ -644,7 +708,9 @@ fun AuthenticatedApp(
             val openMemberProfile = { targetUid: String ->
                 if (targetUid.isNotBlank()) {
                     memberProfileTargetUid = targetUid
-                    route = ShellRoute.MemberProfile
+                    // Reached from a friend/chat row: push so Back returns to that
+                    // list rather than dropping to the map.
+                    pushRoute(ShellRoute.MemberProfile)
                 }
             }
 
@@ -724,6 +790,59 @@ fun AuthenticatedApp(
             val tappedIncident =
                 remember(tappedIncidentId, nearbyIncidents) {
                     tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
+                }
+
+            // Community event pins on the map, visible to EVERY signed-in user
+            // (deliberate 2026-07 open-up: event locations are public). Reuses the
+            // same published-events teaser listener the events list uses; the pure
+            // [Events.mapPinEvents] filter keeps only published, upcoming,
+            // positioned events (a cancelled or draft event never gets a pin).
+            // Guarded off when no events repository is configured (CI/no-Firebase),
+            // where the flow stays empty and the layer simply draws nothing.
+            val publishedEventsState by
+                remember(eventsRepository) {
+                    eventsRepository?.observePublishedEvents()
+                        ?: MutableStateFlow(EventsListState.Loading)
+                }
+                    .collectAsState(initial = EventsListState.Loading)
+            val publishedEventsForMap: List<EventSummary> =
+                (publishedEventsState as? EventsListState.Loaded)?.events ?: emptyList()
+            // The "not past" cutoff is evaluated against a clock, so filtering once
+            // per list change would leave an ended event pinned until an unrelated
+            // Firestore snapshot arrived. Instead: filter now, then sleep exactly
+            // until the soonest pinned event ends and filter again — one scheduled
+            // wake-up rather than per-frame work or a poll (the same
+            // delay-to-expiry shape the live-sharing expiry uses above). Falls out
+            // of the loop when nothing left on the map is time-limited.
+            val mapEventMarkers by
+                produceState(initialValue = emptyList<MapEventMarker>(), publishedEventsForMap) {
+                    while (true) {
+                        val now = nowMillis()
+                        value =
+                            Events.mapPinEvents(publishedEventsForMap, now).mapNotNull { event ->
+                                val lat = event.latitude
+                                val lng = event.longitude
+                                if (lat != null && lng != null) {
+                                    MapEventMarker(id = event.id, longitude = lng, latitude = lat)
+                                } else {
+                                    null
+                                }
+                            }
+                        val nextExpiry =
+                            Events.nextPinExpiryMillis(publishedEventsForMap, now) ?: break
+                        // Wake just AFTER the end instant so the re-filter sees the
+                        // event as past (the filter keeps `end >= now`).
+                        delay((nextExpiry - now + 1L).coerceAtLeast(1L))
+                    }
+                }
+            // The event pin the user TAPPED, resolved back from the id the surface
+            // published to the event we already hold. Derived (not snapshotted) so
+            // an event that drops out of the list (cancelled, ended) closes its
+            // popup rather than leaving it describing a pin no longer on the map.
+            val tappedEventId by mapSurface.eventTap.collectAsState()
+            val tappedEvent =
+                remember(tappedEventId, publishedEventsForMap) {
+                    tappedEventId?.let { id -> publishedEventsForMap.firstOrNull { it.id == id } }
                 }
             // True while a removal is in flight, so the sheet can disable its
             // remove button. Keyed to the open incident: the sheet now survives
@@ -1368,7 +1487,7 @@ fun AuthenticatedApp(
             // silently no-op when the LiveLocationCoordinator isn't wired.
             fun openLiveShareFallback() {
                 if (liveLocationRepository != null) {
-                    route = ShellRoute.LiveLocation
+                    openRootRoute(ShellRoute.LiveLocation)
                 } else {
                     scope.launch {
                         snackbarHostState.showSnackbar(unavailableText)
@@ -1478,12 +1597,20 @@ fun AuthenticatedApp(
                 // session's own expiry, or sign-out — all of which the service
                 // observes for itself.
                 val closeRoute = {
+                    // Per-route teardown applies to the route being CLOSED (the
+                    // current top), before it is popped.
                     when (route) {
                         ShellRoute.LiveLocation -> liveLocationCoordinator?.reset()
                         ShellRoute.Map -> mapParticipantUids = ArrayList()
                         else -> Unit
                     }
-                    route = null
+                    // Pop ONE level: land on the parent hub if there is one
+                    // (Settings ← Blocked users), otherwise clear the stack and
+                    // return to the tab/map. Delegated to the unit-tested
+                    // ShellNavigation.popRoute so production and its test agree.
+                    val popped = ShellNavigation.popRoute(routeParents)
+                    routeParents = ArrayList(popped.parents)
+                    route = popped.current
                 }
 
                 // What, if anything, is drawn over the map. Delegated to the
@@ -2315,7 +2442,10 @@ fun AuthenticatedApp(
                         profileActiveMember = profile?.activeMember == true,
                         scope = scope,
                         onClose = closeRoute,
-                        onOpenRoute = { route = it },
+                        // Navigation from WITHIN an open route (a hub → its child,
+                        // e.g. Settings → Blocked users) pushes onto the back-stack
+                        // so Back pops back to the parent hub, not to the map.
+                        onOpenRoute = { pushRoute(it) },
                         onSignOut = onSignOut,
                         // repositories / coordinators
                         profile = profile,
@@ -2356,7 +2486,9 @@ fun AuthenticatedApp(
                                     // own location + see their own puck.
                                     if (canViewLiveOthers) {
                                         mapParticipantUids = ArrayList(uids)
-                                        route = ShellRoute.Map
+                                        // Opened from a roster (Events/Convoys);
+                                        // push so Back returns to that roster.
+                                        pushRoute(ShellRoute.Map)
                                     } else {
                                         // Distinguish WHY viewing is blocked: a
                                         // disabled LIVE_LOCATION flag → "not available"
@@ -2388,7 +2520,7 @@ fun AuthenticatedApp(
                         notificationSettingsRepository = notificationSettingsRepository,
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
                         onOpenGarageTab = {
-                            route = null
+                            clearRoutes()
                             selectedTab = ShellTab.Garage
                         },
                         badgesRepository = badgesRepository,
@@ -2406,7 +2538,7 @@ fun AuthenticatedApp(
                         // re-entry from the Social hub opens list-first as normal.
                         onConvoyCreated = {
                             convoyOpenCreate = false
-                            route = null
+                            clearRoutes()
                             selectedTab = ShellTab.Map
                         },
                         chatHubPushLink = pendingChatHubLink,
@@ -2442,9 +2574,9 @@ fun AuthenticatedApp(
                         savedPlacesStore = savedPlacesStore,
                         // "Add a place" / "Change address" on the management screen
                         // reuse the existing address picker: close this route and
-                        // open the navigation search (search-first). route=null so
-                        // the picker returns to the map home, not to a stale
-                        // saved-places snapshot.
+                        // open the navigation search (search-first). clearRoutes()
+                        // (route + parent stack both cleared) so the picker returns
+                        // to the map home, not to a stale saved-places snapshot.
                         onOpenAddressSearch = {
                             // "Add a place": a fresh save, so no change-address
                             // context — clear it in case one lingered.
@@ -2456,7 +2588,7 @@ fun AuthenticatedApp(
                             navSearchTarget = null
                             navSearchTargetName = null
                             navSearchConvoyPick = false
-                            route = null
+                            clearRoutes()
                             navSearchOpen = true
                         },
                         // "Change address" for a specific saved place: carry its
@@ -2471,7 +2603,7 @@ fun AuthenticatedApp(
                             navSearchTarget = null
                             navSearchTargetName = null
                             navSearchConvoyPick = false
-                            route = null
+                            clearRoutes()
                             navSearchOpen = true
                         },
                     )
@@ -2591,7 +2723,10 @@ fun AuthenticatedApp(
                                             badgesRepository = badgesRepository,
                                             partnerApplicationCoordinator =
                                                 partnerApplicationCoordinator,
-                                            onOpenRoute = { route = it },
+                                            // Top-level entries from the map-home
+                                            // profile popup: each starts a fresh
+                                            // stack, so Back returns to the map.
+                                            onOpenRoute = { openRootRoute(it) },
                                             onSignOut = onSignOut,
                                         ),
                                     // Community-chat unread ("missed") dot:
@@ -2622,6 +2757,11 @@ fun AuthenticatedApp(
                                     // gate, non-members would see an action that
                                     // fails on submit.
                                     incidentMarkers = incidentMarkers,
+                                    // Community event pins for everyone (published,
+                                    // upcoming, positioned). No layer toggle — event
+                                    // locations are public. Tapping one opens the
+                                    // event info popup composed below.
+                                    eventMarkers = mapEventMarkers,
                                     // Credit Trafikverket only while their data is
                                     // actually on the map (so: not abroad, where the
                                     // Sweden-only importer contributes nothing).
@@ -2756,6 +2896,45 @@ fun AuthenticatedApp(
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }
+
+                                // Tapping a community event pin opens its info
+                                // popup (title, when, place name, going count) with
+                                // a way into the full event detail. Composed in the
+                                // same map-chrome subtree as the incident sheet, so
+                                // a tab switch takes it out of the semantics tree.
+                                // Rendered only while the tapped id still resolves to
+                                // a published event: an event that is cancelled or
+                                // ends out from under an open popup closes it rather
+                                // than describing a pin that is gone.
+                                val openEvent = tappedEvent
+                                if (openEvent != null) {
+                                    val whenLabel =
+                                        openEvent.startsAtMillis?.let { millis ->
+                                            java.text.DateFormat
+                                                .getDateTimeInstance(
+                                                    java.text.DateFormat.MEDIUM,
+                                                    java.text.DateFormat.SHORT,
+                                                )
+                                                .format(java.util.Date(millis))
+                                        }
+                                    EventMarkerInfoPopup(
+                                        title = openEvent.title,
+                                        whenLabel = whenLabel,
+                                        locationName = openEvent.locationName,
+                                        goingCount = openEvent.counts.going,
+                                        onViewDetails = {
+                                            // Reuse the event-reminder deep-link
+                                            // plumbing: seed the id and switch to the
+                                            // Events route, which opens that event's
+                                            // detail on entry (EventsRoute.initialEventId).
+                                            val id = openEvent.id
+                                            mapSurface.consumeEventTap()
+                                            pendingEventDeepLinkId = id
+                                            route = ShellRoute.Events
+                                        },
+                                        onDismiss = { mapSurface.consumeEventTap() },
+                                    )
+                                }
                                 // Location explanation, over the map rather than
                                 // inside MapHome so the map chrome stays one
                                 // concern. Anchored to the bottom so it does not
@@ -2863,7 +3042,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_friendsTitle),
                                                                 Icons.Filled.Groups,
                                                                 if (friendsRepository != null) {
-                                                                    { route = ShellRoute.Friends }
+                                                                    { openRootRoute(ShellRoute.Friends) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2878,7 +3057,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_socialEvents),
                                                                 Icons.Filled.Event,
                                                                 if (eventsRepository != null) {
-                                                                    { route = ShellRoute.Events }
+                                                                    { openRootRoute(ShellRoute.Events) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2887,7 +3066,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_socialNotifications),
                                                                 Icons.Filled.Notifications,
                                                                 if (notificationsRepository != null) {
-                                                                    { route = ShellRoute.Notifications }
+                                                                    { openRootRoute(ShellRoute.Notifications) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2903,7 +3082,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.CrownHunt }
+                                                                    { openRootRoute(ShellRoute.CrownHunt) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2919,7 +3098,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.Partners }
+                                                                    { openRootRoute(ShellRoute.Partners) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2935,7 +3114,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.Billboards }
+                                                                    { openRootRoute(ShellRoute.Billboards) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -3065,7 +3244,7 @@ fun AuthenticatedApp(
                         announcement = announcement,
                         onShowAll = {
                             acknowledge()
-                            route = ShellRoute.WhatsNew
+                            openRootRoute(ShellRoute.WhatsNew)
                         },
                         onDismiss = acknowledge,
                     )
@@ -3093,7 +3272,7 @@ fun AuthenticatedApp(
                             // Deep-link straight into #417's create-convoy flow;
                             // the owner can start the convoy from its detail.
                             convoyOpenCreate = true
-                            route = ShellRoute.Convoys
+                            openRootRoute(ShellRoute.Convoys)
                         },
                         onDismiss = { showCreateChooser = false },
                     )
@@ -3392,8 +3571,9 @@ private fun CreateChooserDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        // Translucent surface so the map stays visible behind the chooser.
-        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+        // Translucent surface so the map stays visible behind the chooser
+        // (shared Aero token).
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
         title = { Text(stringResource(R.string.shell_createChooserTitle)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
@@ -3566,6 +3746,19 @@ private fun RouteHost(
                 (avatarCoordinator?.status ?: flowOf(ImageUploadStatus.Idle))
                     .collectAsState(initial = ImageUploadStatus.Idle)
             val avatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
+
+            // The avatar pick currently being EDITED, and its display-only preview
+            // decode. Both raw, unsanitised and inert: `avatarCropCandidate` is the
+            // ORIGINAL pick (it only reaches Storage via compressForPublicUpload on
+            // confirm) and `avatarCropPreview` is a Bitmap, which has no encoded
+            // form to upload. Plain remember (bytes/bitmaps are too large for the
+            // saved-instance Bundle — a process death just drops the pending edit).
+            var avatarCropCandidate by remember(mediaUploader) { mutableStateOf<PickedImage?>(null) }
+            var avatarCropPreview by remember(mediaUploader) { mutableStateOf<Bitmap?>(null) }
+            val cancelAvatarCrop = {
+                avatarCropCandidate = null
+                avatarCropPreview = null
+            }
             val avatarPicker =
                 rememberImagePickLauncher(
                     // Read with a higher cap than the 5 MB upload cap so the raw
@@ -3581,29 +3774,24 @@ private fun RouteHost(
                     // cancel routes to onPicked(null) below and stays silent.
                     onPickFailed = { avatarCoordinator?.markFailed() },
                 ) { picked ->
-                    val repo = profileRepository
-                    if (picked != null && avatarCoordinator != null && repo != null) {
-                        // Strip GPS + identifying metadata BEFORE upload: avatars are
-                        // PUBLICLY readable by any authenticated member (storage.rules),
-                        // so a selfie taken at the owner's home must never leak their
-                        // coordinates or device fingerprint. compressForPublicUpload
-                        // GUARANTEES the returned bytes are free of every STRIP_TAG (all
-                        // GPS + identifying EXIF): the happy path re-encodes to JPEG
-                        // (dropping all metadata), and if a pick can't be re-encoded it
-                        // physically strips those tags or returns the original only when
-                        // proven free of them — else it returns null and we fail closed /
-                        // skip the upload rather than risk leaking source metadata.
-                        val sanitized = ImageCompressor.compressForPublicUpload(picked)
-                        if (sanitized != null) {
-                            val imageId = MediaUpload.newImageId(sanitized.contentType)
-                            val path = MediaUpload.profileImagePath(uid, imageId)
-                            avatarCoordinator.upload(sanitized, path) { storedPath ->
-                                repo.updateAvatarPath(uid, storedPath)
-                            }
+                    if (picked != null && avatarCoordinator != null && profileRepository != null) {
+                        // Straight to the shared gesture editor — NOTHING is
+                        // uploaded on picking. decodeForCrop hands back a display-
+                        // only Bitmap; the pick's bytes are held untouched until the
+                        // user confirms a crop/rotation, and only then does
+                        // compressForPublicUpload (crop + free rotate + downscale +
+                        // EXIF/GPS strip) consume them.
+                        val preview =
+                            ImageCompressor.decodeForCrop(
+                                picked,
+                                maxDimension = ImageCompressor.AVATAR_MAX_DIMENSION,
+                            )
+                        if (preview != null) {
+                            avatarCropCandidate = picked
+                            avatarCropPreview = preview
                         } else {
-                            // Sanitisation failed (decode/re-encode returned null), so
-                            // nothing was uploaded. Surface the failure instead of a
-                            // silent no-op so the user knows to retry.
+                            // Undecodable pick: could not be shown and could not have
+                            // been sanitised either. Fail visibly.
                             avatarCoordinator.markFailed()
                         }
                     }
@@ -3678,27 +3866,87 @@ private fun RouteHost(
                     }
                 }
 
-            ProfileScreen(
-                profile = profile,
-                saveStatus = saveStatus,
-                onSave = { name, bio ->
-                    profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
-                },
-                onBack = onClose,
-                onSignOut = onSignOut,
-                avatarUrl = avatarUrl,
-                avatarUploadStatus = avatarStatus,
-                onChangeAvatar =
-                    if (avatarCoordinator != null && profileRepository != null) {
-                        {
-                            avatarCoordinator.reset()
-                            avatarPicker.pickImage()
+            val avatarCropping = avatarCropPreview
+            val avatarCandidate = avatarCropCandidate
+            // While editing an avatar, system/gesture Back cancels the EDIT and
+            // returns to the profile rather than closing the whole route.
+            BackHandler(enabled = avatarCropping != null) { cancelAvatarCrop() }
+            if (avatarCropping != null && avatarCandidate != null && avatarCoordinator != null) {
+                // Release the preview's pixels once it can no longer be drawn (same
+                // onDispose rationale as the garage crop: recycling in the
+                // cancel/confirm handler would race the outgoing frame).
+                DisposableEffect(avatarCropping) {
+                    onDispose { avatarCropping.recycle() }
+                }
+                // Avatars get the SQUARE frame shown as a CIRCLE mask (the profile
+                // renders them round). The gesture editor replaces the profile
+                // screen while open; confirming resolves an (angle, crop) pair that
+                // compressForPublicUpload turns into stripped, cropped, rotated
+                // bytes — the ONLY route from this pick to Storage.
+                ImageEditScreen(
+                    bitmap = avatarCropping,
+                    frameShape = ImageEditFrameShape.CIRCLE,
+                    initialAspect = 1f,
+                    onConfirm = { rotationDegrees, crop ->
+                        cancelAvatarCrop()
+                        // Route scope, not the editor's: the editor leaves
+                        // composition on cancelAvatarCrop above, and a screen-scoped
+                        // coroutine would be cancelled mid-sanitise.
+                        scope.launch {
+                            val repo = profileRepository
+                            if (repo != null) {
+                                // Strip GPS + identifying metadata BEFORE upload:
+                                // avatars are PUBLICLY readable by any member, so a
+                                // selfie taken at home must never leak coordinates or
+                                // a device fingerprint. compressForPublicUpload
+                                // GUARANTEES the bytes are free of every STRIP_TAG,
+                                // and fails closed (null) rather than upload raw
+                                // bytes — with a crop/rotation requested there is no
+                                // whole-frame fallback.
+                                val sanitized =
+                                    ImageCompressor.compressForPublicUpload(
+                                        avatarCandidate,
+                                        maxDimension = ImageCompressor.AVATAR_MAX_DIMENSION,
+                                        crop = crop,
+                                        rotationDegrees = rotationDegrees,
+                                    )
+                                if (sanitized != null) {
+                                    val imageId = MediaUpload.newImageId(sanitized.contentType)
+                                    val path = MediaUpload.profileImagePath(uid, imageId)
+                                    avatarCoordinator.upload(sanitized, path) { storedPath ->
+                                        repo.updateAvatarPath(uid, storedPath)
+                                    }
+                                } else {
+                                    avatarCoordinator.markFailed()
+                                }
+                            }
                         }
-                    } else {
-                        null
                     },
-                statsSummary = statsSummary,
-            )
+                    onCancel = cancelAvatarCrop,
+                )
+            } else {
+                ProfileScreen(
+                    profile = profile,
+                    saveStatus = saveStatus,
+                    onSave = { name, bio ->
+                        profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
+                    },
+                    onBack = onClose,
+                    onSignOut = onSignOut,
+                    avatarUrl = avatarUrl,
+                    avatarUploadStatus = avatarStatus,
+                    onChangeAvatar =
+                        if (avatarCoordinator != null && profileRepository != null) {
+                            {
+                                avatarCoordinator.reset()
+                                avatarPicker.pickImage()
+                            }
+                        } else {
+                            null
+                        },
+                    statsSummary = statsSummary,
+                )
+            }
         }
 
         ShellRoute.LiveLocation -> {

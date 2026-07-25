@@ -348,10 +348,16 @@ describe('events-create / events-update', () => {
     expect(event.approximateArea).toBe(validCreate.approximateArea);
     expect(event.rsvpCounts).toEqual({ going: 0, maybe: 0, not_going: 0 });
     expect(event.createdByUserId).toBe(adminUser.uid);
-    // Exact location must not leak onto the teaser document.
-    expect(event.locationName).toBeUndefined();
-    expect(event.latitude).toBeUndefined();
+    // The map location (place name + coordinates) is PUBLIC teaser data now, so
+    // event pins reach every signed-in user; the long description and precise
+    // street address stay member-only on the private document.
+    expect(event.locationName).toBe(validCreate.locationName);
+    // BOTH halves of the coordinate pair, so a partial write (one field landing
+    // on the wrong document) cannot slip through this test.
+    expect(event.latitude).toBe(validCreate.latitude);
+    expect(event.longitude).toBe(validCreate.longitude);
     expect(event.description).toBeUndefined();
+    expect(event.address).toBeUndefined();
 
     const privateSnap = await adminDb
       .collection('events')
@@ -360,9 +366,11 @@ describe('events-create / events-update', () => {
       .doc('private')
       .get();
     const detail = privateSnap.data()!;
-    expect(detail.locationName).toBe(validCreate.locationName);
-    expect(detail.latitude).toBe(validCreate.latitude);
     expect(detail.description).toBe(validCreate.description);
+    expect(detail.address).toBe(validCreate.address);
+    expect(detail.locationName).toBeUndefined();
+    expect(detail.latitude).toBeUndefined();
+    expect(detail.longitude).toBeUndefined();
 
     const audit = await adminDb
       .collection('adminAuditEvents')

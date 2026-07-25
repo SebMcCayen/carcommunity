@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -26,7 +27,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
+import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
@@ -105,6 +109,17 @@ fun IncidentTypePickerDialog(
                 Text(stringResource(R.string.incidents_cancel))
             }
         },
+        // Match the map-overlay popups (MapLayersPopup / LiveSharePopup in
+        // MapHome.kt): the same translucent surface, corner radius and elevation
+        // so the report picker reads as one of the same floating layer rather
+        // than an opaque default M3 dialog. Reuses the shared KccAlpha.aeroSurface
+        // token so this can never drift out of step with those popups. The
+        // dialog keeps M3's default title/text content colours (onSurface /
+        // onSurfaceVariant), which is exactly the contrast the other popups use
+        // over this same surface, so text stays legible over the live map.
+        shape = RoundedCornerShape(KccRadius.lg),
+        containerColor = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+        tonalElevation = 6.dp,
         title = { Text(stringResource(R.string.incidents_reportTitle)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {

@@ -28,4 +28,5 @@ fun VehicleFieldError.messageRes(): Int =
         VehicleFieldError.POWERTRAIN_REQUIRED -> R.string.garage_validationPowertrainRequired
         VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG -> R.string.garage_validationEngineDescriptionTooLong
         VehicleFieldError.MODIFICATIONS_TOO_LONG -> R.string.garage_validationModificationsTooLong
+        VehicleFieldError.REGISTRATION_PLATE_TOO_LONG -> R.string.garage_validationRegistrationPlateTooLong
     }

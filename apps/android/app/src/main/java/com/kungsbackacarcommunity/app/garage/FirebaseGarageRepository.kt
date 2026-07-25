@@ -124,6 +124,9 @@ private fun VehicleInput.toData(): Map<String, Any?> =
         // "modifications" is stored in the existing free-text `description`
         // field (garage-core); always sent (possibly null) so an edit can clear.
         "description" to modifications,
+        // Registration plate — DELIBERATELY PUBLIC field. Already normalised by
+        // VehicleValidation; always sent (possibly null) so an edit can clear it.
+        "registrationPlate" to registrationPlate,
     )
 
 private fun DocumentSnapshot.toVehicle(): Vehicle? {
@@ -140,6 +143,7 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),
         modifications = getString("description"),
+        registrationPlate = getString("registrationPlate"),
         imagePath = getString("imagePath"),
         // Ordered gallery; keep only string entries. Empty for legacy docs that
         // predate the field — VehicleGallery falls back to imagePath for those.
