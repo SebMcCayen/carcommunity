@@ -30,7 +30,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BADGE_CATALOG_ORDER } from '../badges/badge-core';
 
@@ -399,5 +399,68 @@ describe('tiered badge ladders', () => {
     expect(
       (await adminDb.collection('badgeProgress').doc(hunter.uid).get()).data()!.crownsCollected,
     ).toBe(10);
+  }, 120_000);
+
+  /**
+   * The backlog sweep is the ONLY path by which a garage that predates the
+   * ladders ever earns a Samlare tier: `vehiclesInGarage` is a snapshot counter
+   * re-derived on a vehicle CREATE, so a member already sitting at the
+   * five-vehicle cap can never fire that trigger again. Without the
+   * reconciliation step in badges/scheduled.ts they would hold a full garage
+   * and no Samlare badge, forever.
+   */
+  it('back-fills Samlare for a garage that predates the ladders', async () => {
+    // Imported lazily: the module pulls in the Admin SDK bootstrap, which must
+    // not be evaluated before this file's emulator-host env fallbacks are set.
+    const { runBadgeBacklogSweep } = await import('../badges/scheduled');
+
+    const collector = await createProvisionedUser('badges-tier-samlare');
+    await adminDb
+      .collection('users')
+      .doc(collector.uid)
+      .set({ activeMember: true }, { merge: true });
+
+    for (let index = 0; index < 3; index += 1) {
+      await adminDb
+        .collection('vehicles')
+        .doc(`${collector.uid}__v${index}`)
+        .set({ userId: collector.uid, make: 'Volvo', model: `240-${index}` });
+    }
+    // Let onVehicleCreated settle, then rewind to the pre-ladders state: the
+    // counter never existed and no Samlare badge was ever awarded.
+    await pollUntil(async () => {
+      const snap = await badgeDoc(collector.uid, 'samlare_silver').get();
+      return snap.exists ? true : undefined;
+    });
+    await adminDb
+      .collection('badgeProgress')
+      .doc(collector.uid)
+      .set({ vehiclesInGarage: FieldValue.delete() }, { merge: true });
+    await badgeDoc(collector.uid, 'samlare_brons').delete();
+    await badgeDoc(collector.uid, 'samlare_silver').delete();
+    expect((await badgeDoc(collector.uid, 'samlare_brons').get()).exists).toBe(false);
+
+    // The sweep pages through `badgeProgress` from a shared cursor, so reset it
+    // and run until it has wrapped at least once — that guarantees this member
+    // was visited regardless of where a previous test left the cursor.
+    await adminDb.collection('badgeSweepState').doc('backlog').delete();
+    for (let pass = 0; pass < 10; pass += 1) {
+      const { wrapped } = await runBadgeBacklogSweep();
+      if (wrapped) {
+        break;
+      }
+    }
+
+    // Re-derived to 3 → Brons (1) and Silver (3), but not Guld (5).
+    await pollUntil(async () => {
+      const snap = await badgeDoc(collector.uid, 'samlare_silver').get();
+      return snap.exists ? true : undefined;
+    });
+    expect((await badgeDoc(collector.uid, 'samlare_brons').get()).exists).toBe(true);
+    expect((await badgeDoc(collector.uid, 'samlare_guld').get()).exists).toBe(false);
+    expect(
+      (await adminDb.collection('badgeProgress').doc(collector.uid).get()).data()!
+        .vehiclesInGarage,
+    ).toBe(3);
   }, 120_000);
 });

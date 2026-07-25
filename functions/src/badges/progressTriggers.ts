@@ -63,7 +63,12 @@ import {
   rideDistanceDelta,
   streakDayKey,
 } from './badge-tiers';
-import { badgeProgressRef, bumpBadgeCounter, raiseBadgeCounter, tryEvaluateBadgeTiers } from './tierAwards';
+import {
+  badgeProgressRef,
+  bumpBadgeCounter,
+  reconcileDerivedBadgeCounters,
+  tryEvaluateBadgeTiers,
+} from './tierAwards';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
@@ -161,8 +166,7 @@ export const onVehicleCreated = onDocumentCreated(
     if (typeof uid !== 'string' || uid.length === 0) {
       return;
     }
-    const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
-    await raiseBadgeCounter(uid, 'vehiclesInGarage', countSnap.data().count);
+    await reconcileDerivedBadgeCounters(uid);
   },
 );
 

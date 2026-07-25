@@ -8,6 +8,7 @@
  * never counts.
  */
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   BADGE_CATALOG,
@@ -593,5 +594,65 @@ describe('presentation', () => {
       () => 'TS',
     );
     expect(document).toMatchObject({ ladder: null, tier: null, awardedByUserId: 'admin1' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Localization parity
+//
+// The Android badge screen looks a badge name up by key and falls back to the
+// denormalized (always Swedish) name from the document when the key is unknown
+// (apps/android/.../badges/BadgeStrings.kt). A badge added to the catalog
+// without localization entries therefore ships Swedish text to English-locale
+// members SILENTLY. These tests make that impossible rather than asserting it
+// in prose.
+// ---------------------------------------------------------------------------
+
+describe('localization parity', () => {
+  const contractsDir = new URL('../../../contracts/localization/', import.meta.url);
+  const badgeNames = (locale: 'sv' | 'en'): Record<string, string> =>
+    JSON.parse(readFileSync(new URL(`${locale}.json`, contractsDir), 'utf8')).badges.badgeNames;
+
+  it('localizes every catalog key in both Swedish and English', () => {
+    const sv = badgeNames('sv');
+    const en = badgeNames('en');
+    expect(Object.keys(sv)).toEqual([...BADGE_CATALOG_ORDER]);
+    // Identical key SETS in both locales, so neither can drift ahead.
+    expect(Object.keys(en)).toEqual(Object.keys(sv));
+    for (const key of BADGE_CATALOG_ORDER) {
+      expect(sv[key]?.length ?? 0).toBeGreaterThan(0);
+      expect(en[key]?.length ?? 0).toBeGreaterThan(0);
+    }
+  });
+
+  it('matches the Swedish catalog names exactly for the tier ladders', () => {
+    const sv = badgeNames('sv');
+    for (const key of TIER_BADGE_KEYS) {
+      expect(sv[key]).toBe(BADGE_CATALOG[key].name);
+    }
+  });
+
+  it('uses genuinely English tier words in the English locale', () => {
+    const en = badgeNames('en');
+    for (const key of TIER_BADGE_KEYS) {
+      expect(en[key]).toBe(BADGE_CATALOG[key].nameEn);
+      // "Crown Hunter brons" would be half-translated; catch it.
+      expect(en[key]).not.toMatch(/\b(brons|guld|platina)\b/i);
+    }
+  });
+
+  it('maps every catalog key in the Android lookup', () => {
+    // Cross-lane guard: the `when` in BadgeStrings.kt is the only thing that
+    // turns a localized string into a rendered badge name.
+    const kotlin = readFileSync(
+      new URL(
+        '../../../apps/android/app/src/main/java/com/kungsbackacarcommunity/app/badges/BadgeStrings.kt',
+        import.meta.url,
+      ),
+      'utf8',
+    );
+    for (const key of BADGE_CATALOG_ORDER) {
+      expect(kotlin).toContain(`"${key}" -> R.string.badges_badgeNames_${key}`);
+    }
   });
 });

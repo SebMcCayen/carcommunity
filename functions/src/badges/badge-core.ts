@@ -142,6 +142,30 @@ export const TIER_POINTS_REWARD: Readonly<Record<BadgeTier, number>> = {
   platina: 500,
 };
 
+/**
+ * Swedish tier labels — the user-facing ones, and the values mirrored into
+ * `badges.badgeNames.*` in contracts/localization/sv.json.
+ */
+export const TIER_NAME_SV: Readonly<Record<BadgeTier, string>> = {
+  brons: 'Brons',
+  silver: 'Silver',
+  guld: 'Guld',
+  platina: 'Platina',
+};
+
+/**
+ * English tier labels, used for `nameEn` and mirrored into
+ * `badges.badgeNames.*` in contracts/localization/en.json. NOT the Swedish
+ * words: `nameEn` is a genuinely English working name, so a ladder rung reads
+ * "Wayfarer Gold" rather than half-translated.
+ */
+export const TIER_NAME_EN: Readonly<Record<BadgeTier, string>> = {
+  brons: 'Bronze',
+  silver: 'Silver',
+  guld: 'Gold',
+  platina: 'Platinum',
+};
+
 export interface BadgeLadderTierSpec {
   tier: BadgeTier;
   key: TierBadgeKey;
@@ -464,8 +488,14 @@ const LEGACY_CATALOG: Readonly<Record<LegacyBadgeKey, BadgeDefinition>> = {
       NON_TIERED_RING_TREATMENT,
     // Historic. Kept live and unchanged (garage.addVehicle still awards it) so
     // the many members already holding it are untouched; `samlare_brons` is the
-    // ladder rung that measures the same moment going forward. See
-    // docs in badges/README-less module header for the full rationale.
+    // ladder rung that measures the same moment going forward. Remapping the
+    // key would either orphan the documents members already hold at this ID or
+    // require a migration write to every holder, for no user benefit — and
+    // because garage_created carries 0 KP, holding both is not a double
+    // payout. An existing garage_created holder picks up the Samlare rungs
+    // their garage already justifies from the badges-evaluateBacklog sweep,
+    // which re-derives the vehicle count (badges/scheduled.ts) — no migration
+    // write to existing badge documents is needed or performed.
     isLegacy: true,
     supersededBy: 'samlare_brons',
   },
@@ -475,16 +505,10 @@ function buildTierDefinition(
   ladder: BadgeLadderDefinition,
   spec: BadgeLadderTierSpec,
 ): BadgeDefinition {
-  const tierNameSv: Record<BadgeTier, string> = {
-    brons: 'Brons',
-    silver: 'Silver',
-    guld: 'Guld',
-    platina: 'Platina',
-  };
   return {
     key: spec.key,
-    name: `${ladder.name} ${tierNameSv[spec.tier]}`,
-    nameEn: `${ladder.nameEn} ${spec.tier}`,
+    name: `${ladder.name} ${TIER_NAME_SV[spec.tier]}`,
+    nameEn: `${ladder.nameEn} ${TIER_NAME_EN[spec.tier]}`,
     description: ladder.descriptionTemplate.replace(
       '{n}',
       ladder.formatThreshold(spec.threshold),

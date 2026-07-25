@@ -108,6 +108,29 @@ export async function raiseBadgeCounter(
   });
 }
 
+/**
+ * Re-derives the counters that are a SNAPSHOT of current state rather than an
+ * accumulated total, and raises the stored running maximum to match.
+ *
+ * Today that is only `vehiclesInGarage`. It cannot be maintained by increments
+ * alone: `onVehicleCreated` fires on a vehicle CREATE, so a member whose garage
+ * was already populated before the ladders shipped — and above all one sitting
+ * at the MAX_VEHICLES_PER_USER cap, who can never create another vehicle and so
+ * can never fire that trigger again — would otherwise never earn a Samlare tier
+ * at all, however full their garage is. Re-deriving it on the sweep is what
+ * makes the Samlare ladder reachable for existing members.
+ *
+ * Costs one `count()` aggregation read per member per sweep. Raising is a
+ * running maximum (raiseBadgeCounter), so a member who has since deleted cars
+ * keeps the tier they already earned, and this never writes when the stored
+ * value is already at or above the real count — no write, hence no evaluation
+ * re-trigger, on the steady-state pass.
+ */
+export async function reconcileDerivedBadgeCounters(uid: string): Promise<void> {
+  const countSnap = await db.collection('vehicles').where('userId', '==', uid).count().get();
+  await raiseBadgeCounter(uid, 'vehiclesInGarage', countSnap.data().count);
+}
+
 async function isEligibleForAwards(uid: string): Promise<boolean> {
   const snap = await db.collection('users').doc(uid).get();
   return snap.exists && !isRestricted(toUserAccessState(snap.data()));
