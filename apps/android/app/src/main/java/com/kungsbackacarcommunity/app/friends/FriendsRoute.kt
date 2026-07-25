@@ -33,8 +33,9 @@ import kotlinx.coroutines.launch
  * context — the same guarded pattern as [errorReporter], rather than threaded
  * down through the app's already very long repository parameter lists — and is
  * INDEPENDENTLY nullable: a config-less build still gets the full friends
- * surface, just with the search field permanently idle. The search is therefore
- * strictly additive, never a new way for this screen to fail to render.
+ * surface, with the search field simply OMITTED (not rendered inert). The search
+ * is therefore strictly additive, never a new way for this screen to fail to
+ * render.
  */
 @Composable
 fun FriendsRoute(
@@ -62,9 +63,12 @@ fun FriendsRoute(
             searchRepository?.let { UserSearchCoordinator(it, scope) }
         }
     var searchQuery by remember { mutableStateOf("") }
-    val searchState by
+    // NULL when there is no search backend, which is how the screen knows to omit
+    // the field entirely rather than render one that accepts typing and can never
+    // answer (that would read as "nobody matches" for every query).
+    val searchState: UserSearchState? by
         searchCoordinator?.state?.collectAsState()
-            ?: remember { mutableStateOf<UserSearchState>(UserSearchState.Idle) }
+            ?: remember { mutableStateOf(null) }
 
     LaunchedEffect(coordinator) { coordinator.load() }
 

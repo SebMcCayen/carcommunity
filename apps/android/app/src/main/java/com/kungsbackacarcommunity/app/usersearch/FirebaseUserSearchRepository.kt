@@ -11,7 +11,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 /**
  * [UserSearchRepository] backed by the member-gated `userSearch-members`
  * callable (europe-west1). Guarded ([createIfAvailable]) so a config-less build
- * gets a null repository and the search field is simply not offered.
+ * gets a null repository, which FriendsRoute turns into a null search state and
+ * the screen renders by OMITTING the search field entirely.
  *
  * HttpsError codes (never messages) are translated to the pure
  * [UserSearchCallableError] and mapped by [UserSearchErrorMapper]; the raw
@@ -39,16 +40,16 @@ class FirebaseUserSearchRepository private constructor(
      * Invokes the callable and returns its payload map.
      *
      * A [FirebaseFunctionsException] is rethrown so [search] can map its code +
-     * details; anything else (an App Check token failure, or the empty-payload
-     * guard below) is an unmapped fault and surfaces as [UserSearchError.Generic].
-     * CancellationException propagates untouched, which is what makes cancelling
-     * the job a real cancellation of the in-flight search rather than a silently
-     * swallowed one.
+     * details; anything else — an App Check token failure, or the empty-payload
+     * guard below — is an unmapped fault that propagates to the coordinator and
+     * surfaces as [UserSearchError.Generic]. CancellationException propagates
+     * untouched, which is what makes cancelling the job a real cancellation of
+     * the in-flight search rather than a silently swallowed one.
      */
     private suspend fun callForData(
         name: String,
         payload: Map<String, Any?>,
-    ): Map<String, Any?>? =
+    ): Map<String, Any?> =
         suspendCancellableCoroutine { continuation ->
             functions
                 .getHttpsCallable(name)
@@ -57,7 +58,24 @@ class FirebaseUserSearchRepository private constructor(
                     if (!continuation.isActive) return@addOnCompleteListener
                     if (task.isSuccessful) {
                         @Suppress("UNCHECKED_CAST")
-                        continuation.resume(task.result?.getData() as? Map<String, Any?>)
+                        val data = task.result?.getData() as? Map<String, Any?>
+                        if (data == null) {
+                            // A 2xx carrying no Map payload is a protocol fault,
+                            // not an answer. Degrading it to an empty list would
+                            // render as the ordinary "No members match that." —
+                            // making a broken client/backend contract look
+                            // exactly like a search that legitimately found
+                            // nobody, which is precisely the class of failure
+                            // that then goes unnoticed. Mirrors the same guard in
+                            // friends/FirebaseFriendsRepository.
+                            continuation.resumeWithException(
+                                IllegalStateException(
+                                    "$name returned an unexpected or empty payload",
+                                ),
+                            )
+                        } else {
+                            continuation.resume(data)
+                        }
                     } else {
                         // resumeWithException, NOT continuation.cancel(cause):
                         // cancel() would surface a CancellationException that

@@ -86,6 +86,15 @@ function blockRef(blockerUid: string, blockedUid: string): DocumentReference {
  * requested limit — so it is charged for at most `limit` candidates, not for the
  * whole raw scan.
  *
+ * RESULTS ARE MATCHED BY DOCUMENT PATH, NEVER BY POSITION. Pairing candidate `i`
+ * to `snapshots[i * 2]` would silently produce the wrong answer for every
+ * candidate after any reordering or de-duplication of the batch-get, and the
+ * dangerous direction of that failure is INCLUDING someone who blocked the
+ * caller — a privacy leak rather than a visible bug. Keying off `snap.ref.path`
+ * makes the check independent of the order the backend answered in, and matches
+ * how the codebase's other batched identity join resolves its results
+ * (events/listAttendees.ts loadProfiles keys by `snap.id`).
+ *
  * A blocked row is removed WITHOUT backfilling another candidate from further
  * down the range: backfilling would make the result count depend on the block
  * graph in an observable way (search 'a', get 20; block someone, still get 20
@@ -99,17 +108,26 @@ async function withoutBlockedEitherWay(
   if (candidates.length === 0) {
     return candidates;
   }
-  const refs: DocumentReference[] = [];
-  for (const candidate of candidates) {
-    refs.push(blockRef(callerUid, candidate.uid));
-    refs.push(blockRef(candidate.uid, callerUid));
-  }
-  const snapshots = await db.getAll(...refs);
-  return candidates.filter((_, index) => {
-    const callerBlockedThem: DocumentSnapshot | undefined = snapshots[index * 2];
-    const theyBlockedCaller: DocumentSnapshot | undefined = snapshots[index * 2 + 1];
-    return !callerBlockedThem?.exists && !theyBlockedCaller?.exists;
-  });
+  const pairs = candidates.map((candidate) => ({
+    candidate,
+    callerBlockedThem: blockRef(callerUid, candidate.uid),
+    theyBlockedCaller: blockRef(candidate.uid, callerUid),
+  }));
+  const refs: DocumentReference[] = pairs.flatMap((pair) => [
+    pair.callerBlockedThem,
+    pair.theyBlockedCaller,
+  ]);
+
+  const snapshots: DocumentSnapshot[] = await db.getAll(...refs);
+  const blockedPaths = new Set(snapshots.filter((snap) => snap.exists).map((snap) => snap.ref.path));
+
+  return pairs
+    .filter(
+      (pair) =>
+        !blockedPaths.has(pair.callerBlockedThem.path) &&
+        !blockedPaths.has(pair.theyBlockedCaller.path),
+    )
+    .map((pair) => pair.candidate);
 }
 
 /**

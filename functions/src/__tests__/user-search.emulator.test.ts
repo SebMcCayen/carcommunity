@@ -315,6 +315,44 @@ describe('userSearch-members exclusions', () => {
     expect(uids).not.toContain(blocked.uid);
   });
 
+  it('excludes the RIGHT members out of a larger page, in both directions', async () => {
+    // Guards the block check's result matching. It pairs batch-get snapshots by
+    // document PATH; pairing them by POSITION would still pass a two-candidate
+    // test but mis-attribute blocks once several candidates are in play — and
+    // the dangerous direction of that failure is surfacing someone who blocked
+    // the caller. Blocks are placed on candidates in the MIDDLE of the page, in
+    // both directions, so an off-by-one or reordering cannot go unnoticed.
+    const caller = await newMember('callerpairing');
+    const visibleA = await newMember('pair_a');
+    const iBlocked = await newMember('pair_b');
+    const visibleC = await newMember('pair_c');
+    const blockedMe = await newMember('pair_d');
+    const visibleE = await newMember('pair_e');
+
+    await adminDb
+      .collection('userBlocks')
+      .doc(caller.uid)
+      .collection('blocked')
+      .doc(iBlocked.uid)
+      .set({ blockedUid: iBlocked.uid, createdAt: new Date() });
+    await adminDb
+      .collection('userBlocks')
+      .doc(blockedMe.uid)
+      .collection('blocked')
+      .doc(caller.uid)
+      .set({ blockedUid: caller.uid, createdAt: new Date() });
+    await signInAs(caller);
+
+    const uids = uidsOf(await search(`${RUN_PREFIX}pair_`));
+    expect(uids).toEqual(
+      expect.arrayContaining([visibleA.uid, visibleC.uid, visibleE.uid]),
+    );
+    expect(uids).not.toContain(iBlocked.uid);
+    expect(uids).not.toContain(blockedMe.uid);
+    // Exactly the three unblocked members — no more, no fewer.
+    expect(uids.length).toBe(3);
+  });
+
   it('excludes a member who has blocked the caller, with no trace in the response', async () => {
     const caller = await newMember('callerblockee');
     const blocker = await newMember('revblocker');

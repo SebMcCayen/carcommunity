@@ -77,7 +77,7 @@ fun FriendsScreen(
     actionError: FriendActionError?,
     busyRows: Set<String>,
     searchQuery: String,
-    searchState: UserSearchState,
+    searchState: UserSearchState?,
     onSearchQueryChange: (String) -> Unit,
     onOpenMemberProfile: (String) -> Unit,
     onSend: (String) -> Unit,
@@ -107,12 +107,18 @@ fun FriendsScreen(
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
             }
 
-            item(key = "member-search") {
-                MemberSearchField(
-                    query = searchQuery,
-                    onQueryChange = onSearchQueryChange,
-                    state = searchState,
-                )
+            // A null state means no search backend is wired (a config-less
+            // build): the field is omitted entirely rather than rendered inert.
+            // A search box that accepts typing and can never answer is worse than
+            // no search box — it reads as "nobody matches" for every query.
+            if (searchState != null) {
+                item(key = "member-search") {
+                    MemberSearchField(
+                        query = searchQuery,
+                        onQueryChange = onSearchQueryChange,
+                        state = searchState,
+                    )
+                }
             }
 
             // Suggestion rows are LazyColumn items rather than a Column inside
@@ -124,7 +130,7 @@ fun FriendsScreen(
             // the moment the next keystroke lands would blank the list on every
             // character and yank a row out from under a finger already moving to
             // tap it; the field's own spinner is what signals the refresh.
-            val suggestions = searchState.visibleResults()
+            val suggestions = searchState?.visibleResults().orEmpty()
             if (suggestions.isNotEmpty()) {
                 item(key = "member-search-header") {
                     SectionHeader(stringResource(R.string.userSearch_resultsTitle))
