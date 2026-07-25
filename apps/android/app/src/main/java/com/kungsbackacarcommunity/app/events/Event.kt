@@ -50,7 +50,15 @@ data class RsvpCounts(val going: Int, val maybe: Int, val notGoing: Int) {
     }
 }
 
-/** Teaser-safe event summary (events/{id}) — visible to any authenticated user. */
+/**
+ * Teaser-safe event summary (events/{id}) — visible to any authenticated user.
+ *
+ * Carries the PUBLIC map location (locationName + latitude/longitude) as of the
+ * deliberate 2026-07 change: every signed-in user sees event pins on the
+ * community map, so the coordinates must be on the teaser the map reads without
+ * the member gate. The long description and the precise street address stay
+ * member-only ([EventDetail]).
+ */
 data class EventSummary(
     val id: String,
     val title: String,
@@ -58,18 +66,25 @@ data class EventSummary(
     val startsAtMillis: Long?,
     val endsAtMillis: Long?,
     val approximateArea: String,
+    // Public map location; null when the organiser positioned no pin. Defaulted so
+    // fixtures without a location stay terse — the repository sets them from the
+    // teaser, and the map layer only pins events where both coordinates are set.
+    val locationName: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
     val isOfficial: Boolean,
     val status: EventStatus,
     val counts: RsvpCounts,
 )
 
-/** Member-gated detail (events/{id}/details/private). */
+/**
+ * Member-gated detail (events/{id}/details/private) — the long description and
+ * the precise street address only. The map location moved to the public teaser
+ * ([EventSummary]); it is no longer here.
+ */
 data class EventDetail(
     val description: String?,
-    val locationName: String?,
     val address: String?,
-    val latitude: Double?,
-    val longitude: Double?,
 )
 
 /**
@@ -97,6 +112,11 @@ data class CreateEventInput(
     val endsAtMillis: Long? = null,
     val locationName: String? = null,
     val address: String? = null,
+    // Map-pin coordinates captured by the location picker. Both set (a positioned
+    // pin) or both null (no pin) — the backend rejects a half-set pair
+    // (guardCoordinatePair). Public teaser data once created.
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )
 
 /**
@@ -227,6 +247,20 @@ object Events {
         if ((input.locationName?.length ?: 0) > LOCATION_NAME_MAX) return false
         if ((input.address?.length ?: 0) > ADDRESS_MAX) return false
         input.endsAtMillis?.let { if (it < input.startsAtMillis) return false }
+        if (!isValidCoordinatePair(input.latitude, input.longitude)) return false
+        return true
+    }
+
+    /**
+     * Whether a captured pin is valid: latitude and longitude are BOTH present or
+     * BOTH absent (mirrors the backend `guardCoordinatePair`), and each sits in
+     * range. A half-set pair or an out-of-range value is rejected before submit so
+     * the callable never has to answer `invalid-argument` for it.
+     */
+    fun isValidCoordinatePair(latitude: Double?, longitude: Double?): Boolean {
+        if ((latitude == null) != (longitude == null)) return false
+        if (latitude != null && (latitude < -90.0 || latitude > 90.0)) return false
+        if (longitude != null && (longitude < -180.0 || longitude > 180.0)) return false
         return true
     }
 
@@ -256,6 +290,73 @@ object Events {
         input.description?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["description"] = it }
         input.locationName?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["locationName"] = it }
         input.address?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["address"] = it }
+        // Only send a COMPLETE pin: both coordinates or neither (the callable's
+        // strict schema rejects a half-set pair). isValidForCreate has already
+        // gated this, so a lone value here would be a caller bug — dropped rather
+        // than sent to fail server-side.
+        val lat = input.latitude
+        val lng = input.longitude
+        if (lat != null && lng != null) {
+            payload["latitude"] = lat
+            payload["longitude"] = lng
+        }
         return payload
     }
+
+    /**
+     * The published, upcoming, positioned events that should appear as pins on the
+     * community map, from a teaser list — the pure filter behind the map's event
+     * layer. Kept here (not in the map surface) so it is JVM-unit-testable without
+     * a device.
+     *
+     * An event qualifies only when it is:
+     * - PUBLISHED — a draft is invisible to everyone and a cancelled/completed
+     *   event is not a live meetup, so neither gets a pin (the map must never
+     *   show a cancelled event; see the callers);
+     * - POSITIONED — it has a latitude AND a longitude (a half-set pair, which the
+     *   backend forbids, is treated as no pin);
+     * - NOT PAST — its effective end (the explicit end, else its start) is at or
+     *   after [nowMillis], so a finished event drops off the map even before the
+     *   auto-close sweep flips it to `completed`. An event with no readable time
+     *   at all is kept (it is published with a location; there is no basis to call
+     *   it past).
+     *
+     * Blocking is deliberately NOT applied: a published event's location is public
+     * community information, so a blocked author's published event still shows as a
+     * pin (its chat and detail remain block-filtered elsewhere).
+     */
+    fun mapPinEvents(events: List<EventSummary>, nowMillis: Long): List<EventSummary> =
+        events.filter { event ->
+            event.status == EventStatus.PUBLISHED &&
+                event.latitude != null &&
+                event.longitude != null &&
+                run {
+                    val effectiveEnd = effectivePinEndMillis(event)
+                    effectiveEnd == null || effectiveEnd >= nowMillis
+                }
+        }
+
+    /**
+     * When the SOONEST currently-pinned event stops qualifying for a pin, i.e. the
+     * earliest effective end at or after [nowMillis] among the events
+     * [mapPinEvents] would keep. Null when nothing on the map is time-limited (no
+     * pins, or only pins with no readable time), meaning the pin set cannot change
+     * on its own and no re-filter needs scheduling.
+     *
+     * Exists because the "not past" cutoff is evaluated against a clock: without a
+     * scheduled re-filter the pins would only be recomputed when the Firestore
+     * list itself changed, so an event that ended while the map sat open would
+     * keep its pin. The shell turns this into a single delay-to-expiry (the same
+     * pattern the live-sharing expiry uses) rather than polling every frame.
+     */
+    fun nextPinExpiryMillis(events: List<EventSummary>, nowMillis: Long): Long? =
+        mapPinEvents(events, nowMillis).mapNotNull { effectivePinEndMillis(it) }.minOrNull()
+
+    /**
+     * The moment an event stops being "not past" for pin purposes: its explicit
+     * end, else its start (a start-only event is past once it has started). Null
+     * when neither time is readable — such an event is never treated as past.
+     */
+    private fun effectivePinEndMillis(event: EventSummary): Long? =
+        event.endsAtMillis ?: event.startsAtMillis
 }

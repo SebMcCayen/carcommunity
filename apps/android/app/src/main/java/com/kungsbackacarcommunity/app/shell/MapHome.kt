@@ -22,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
@@ -174,6 +175,12 @@ fun MapHome(
     // and a pick invokes [onReportIncident]. All default so existing
     // callers/tests are unaffected (layer on, no reporting).
     incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    // Community event pins, drawn on the map for EVERY signed-in user (a
+    // deliberate 2026-07 open-up: event locations are public). Pushed to the
+    // surface's own events layer, separate from incidents; there is no layer
+    // toggle — event pins are always shown. Defaults empty so existing
+    // callers/tests are unaffected.
+    eventMarkers: List<MapEventMarker> = emptyList(),
     incidentsLayerEnabled: Boolean = true,
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
@@ -348,6 +355,13 @@ fun MapHome(
     // giving the toggle a real on/off effect on the map.
     LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled) {
         mapSurface.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
+    }
+
+    // Push the community event pins onto the surface whenever they change (or the
+    // surface instance is swapped), so every signed-in user sees them. No layer
+    // toggle: event pins are always shown (event locations are public).
+    LaunchedEffect(mapSurface, eventMarkers) {
+        mapSurface.setEventMarkers(eventMarkers)
     }
 
     // Incident-report type picker open/close is local UI state: tapping the
@@ -861,6 +875,109 @@ private fun LayerToggleRow(
             onCheckedChange = onCheckedChange,
             modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
+    }
+}
+
+/** Test tag on the event-marker info popup card. */
+const val MAP_HOME_EVENT_POPUP_TAG = "map_home_event_popup"
+
+/**
+ * The info popup shown when a community EVENT pin is tapped. Rendered as a
+ * translucent [Popup] (no dimming scrim) in the SAME floating style as the
+ * layers/live popups — `surface.copy(alpha = POPUP_SURFACE_ALPHA)` +
+ * [KccRadius.lg] — so the live map stays visible behind it. Tapping outside the
+ * card or pressing Back dismisses it (focusable popup).
+ *
+ * Shows the event's title, when it is, its place name (the public teaser
+ * location) and the going-RSVP count, with a "View details" action that opens
+ * the full event detail (the host routes to the Events screen seeded with this
+ * event's id). Everything is passed pre-resolved so this composable stays free
+ * of the events + Firebase types and is UI-testable in isolation.
+ *
+ * @param whenLabel a formatted date/time, or null when the event carries no
+ *   readable start time (the row is then omitted rather than showing an empty one).
+ * @param locationName the public place name, or null (row omitted).
+ */
+@Composable
+internal fun EventMarkerInfoPopup(
+    title: String,
+    whenLabel: String?,
+    locationName: String?,
+    goingCount: Int,
+    onViewDetails: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Popup(
+        alignment = Alignment.BottomCenter,
+        onDismissRequest = onDismiss,
+        properties = PopupProperties(focusable = true),
+    ) {
+        Surface(
+            modifier =
+                Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .widthIn(max = 360.dp)
+                    .testTag(MAP_HOME_EVENT_POPUP_TAG),
+            shape = RoundedCornerShape(KccRadius.lg),
+            color = MaterialTheme.colorScheme.surface.copy(alpha = POPUP_SURFACE_ALPHA),
+            tonalElevation = 6.dp,
+            shadowElevation = 6.dp,
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Event,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.events_mapPopupClose),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                if (whenLabel != null) {
+                    Text(
+                        text = whenLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+                if (locationName != null) {
+                    Text(
+                        text = locationName,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.events_mapPopupGoing, goingCount),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = onViewDetails,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.events_mapPopupViewDetails))
+                }
+            }
+        }
     }
 }
 

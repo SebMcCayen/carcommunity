@@ -272,11 +272,20 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     // events – community calendar (Phase 9b)
     // Split-document model: events/{eventId} holds teaser-safe + operational
-    // fields (title, approximateArea, status, rsvpCounts, ...); the exact
-    // location and long description are member-only and live in
+    // fields (title, approximateArea, status, rsvpCounts, ...) PLUS the event's
+    // map location (locationName, latitude, longitude); the long description and
+    // the precise street address are member-only and live in
     // events/{eventId}/details/private. All mutations go through the
     // events.* callables (Admin SDK) — no client writes, including admins, so
     // every admin lifecycle change carries an adminAuditEvents record.
+    //
+    // DELIBERATE PRIVACY CHANGE (2026-07): the coordinate pair + place name are
+    // PUBLIC teaser data now, so every signed-in user sees event pins on the
+    // community map. The teaser read gate below already served the whole teaser
+    // document to any authenticated user while published/completed, so opening
+    // location up needs no rule change here — the fields simply moved onto the
+    // document that gate already covers. Only description + address remain
+    // behind the details/private member gate.
     //
     // events.create is the one callable an active MEMBER may drive (their
     // event is stamped createdByRole: 'member' + createdByUserId and published
@@ -299,20 +308,24 @@ service cloud.firestore {
       // from members the morning after — including for the attendees who
       // RSVP'd — and would break any teaser read that outlives the event (a
       // detail screen opened from a push notification, an archive/past list).
-      // This exposes nothing new: the same teaser document was already
-      // readable by the same users while the event was published, and it is
-      // teaser-safe by construction (the exact location and description live
-      // in details/private, which stays published-gated below — an ended
-      // event closes its detail, roster and chat).
+      // This exposes nothing new about who-can-read: the same teaser document
+      // was already readable by the same users while published. It now also
+      // carries the map location (locationName + coordinates), which is a
+      // DELIBERATE product decision (see the block header) — event pins are
+      // public to every signed-in user. The long description and the precise
+      // street address stay in details/private, which stays published-gated
+      // below (an ended event closes its detail, roster and chat).
       // `draft` and `cancelled` remain admin-only.
       allow read: if (isAuthenticated()
           && resource.data.status in ['published', 'completed'])
         || isAdmin();
       // No client writes: events.create/update/publish/cancel/complete only.
 
-      // Member-gated detail document (exact location, description). The
-      // match is pinned to the single `private` document so nothing else
-      // ever added under details/ inherits member read access.
+      // Member-gated detail document (long description + precise street
+      // address). The map location moved to the public teaser above; this
+      // document no longer holds coordinates. The match is pinned to the
+      // single `private` document so nothing else ever added under details/
+      // inherits member read access.
       match /details/private {
         allow read: if isAdmin()
           || (isActiveMember()

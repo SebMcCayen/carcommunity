@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.events
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -66,6 +67,10 @@ fun CreateEventScreen(
     var locationName by rememberSaveable { mutableStateOf("") }
     var address by rememberSaveable { mutableStateOf("") }
     var startsAtMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Map-pin coordinates captured by the location picker (both set or both null).
+    var latitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var longitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var showLocationPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
     // Date chosen in the date step, held until the time step completes it.
@@ -74,6 +79,28 @@ fun CreateEventScreen(
 
     val saving = status == CreateEventStatusUi.Saving
     val startsAt = startsAtMillis
+    val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+
+    // System/gesture Back while the picker is open closes it rather than leaving
+    // the create flow (the route's own Back handles the form-level exit).
+    BackHandler(enabled = showLocationPicker) { showLocationPicker = false }
+
+    // The location picker takes over the whole screen while open; confirming
+    // captures the pin's coordinate, cancelling leaves the coordinate unchanged.
+    if (showLocationPicker) {
+        EventLocationPickerScreen(
+            initialLatitude = latitude,
+            initialLongitude = longitude,
+            hasToken = hasMapToken,
+            onConfirm = { lat, lng ->
+                latitude = lat
+                longitude = lng
+                showLocationPicker = false
+            },
+            onCancel = { showLocationPicker = false },
+        )
+        return
+    }
 
     AeroPage(title = stringResource(R.string.events_createTitle), modifier = modifier) {
         Text(
@@ -148,6 +175,49 @@ fun CreateEventScreen(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // Map location picker: opens the full-screen map with a centre pin. The
+        // status line reflects whether a pin has been placed, and a placed pin can
+        // be cleared. The event's pin is PUBLIC (shown on everyone's map).
+        val lat = latitude
+        val lng = longitude
+        Text(
+            text =
+                if (lat != null && lng != null) {
+                    val coords = String.format(java.util.Locale.US, "%.5f, %.5f", lat, lng)
+                    stringResource(R.string.events_createLocationSet, coords)
+                } else {
+                    stringResource(R.string.events_createLocationNone)
+                },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        OutlinedButton(
+            onClick = { showLocationPicker = true },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text =
+                    stringResource(
+                        if (latitude != null && longitude != null) {
+                            R.string.events_createLocationEdit
+                        } else {
+                            R.string.events_createLocationPick
+                        },
+                    ),
+            )
+        }
+        if (latitude != null && longitude != null) {
+            TextButton(
+                onClick = {
+                    latitude = null
+                    longitude = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.events_createLocationClear))
+            }
+        }
+
         if (showValidation) {
             Text(
                 text = stringResource(R.string.events_createValidation),
@@ -185,6 +255,8 @@ fun CreateEventScreen(
                             description = description.ifBlank { null },
                             locationName = locationName.ifBlank { null },
                             address = address.ifBlank { null },
+                            latitude = latitude,
+                            longitude = longitude,
                         )
                     }
                 if (input == null || !Events.isValidForCreate(input)) {
