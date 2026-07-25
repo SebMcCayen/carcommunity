@@ -104,7 +104,7 @@ describe('crown spawn grid', () => {
     expect(parseCrownCellKey('-9000_18000')).toEqual({ latIdx: -9000, lonIdx: 18000 });
   });
 
-  it('never returns a latitude bound outside [-90, 90]', () => {
+  it('never returns a bound outside the globe on EITHER axis', () => {
     // sampleCrownPosition draws uniformly inside these bounds, so an unclamped
     // top edge (90.01) would be written to a crown document as an invalid
     // WGS-84 coordinate.
@@ -120,11 +120,40 @@ describe('crown spawn grid', () => {
     expect(antipolar.minLat).toBeGreaterThanOrEqual(-90);
     expect(antipolar.maxLat).toBeLessThanOrEqual(90);
 
-    // And sampling inside the polar cell still yields a valid coordinate.
-    const sampled = sampleCrownPosition(polar, [], createSeededRng(3));
-    expect(sampled).not.toBeNull();
-    expect(sampled!.latitude).toBeLessThanOrEqual(90);
-    expect(sampled!.latitude).toBeGreaterThanOrEqual(-90);
+    // Longitude has the same last-column problem at the antimeridian: 180
+    // floors to the final column whose unclamped upper edge would be 180.01.
+    const antimeridian = crownCellKey(0, 180);
+    const lonBounds = crownCellBounds(antimeridian)!;
+    expect(lonBounds.maxLon).toBeLessThanOrEqual(180);
+    expect(lonBounds.minLon).toBeGreaterThanOrEqual(-180);
+    expect(lonBounds.maxLon).toBe(180);
+    expect(lonBounds.minLon).toBe(180);
+
+    // Sampling inside either edge cell still yields a valid coordinate.
+    for (const key of [polar, antimeridian, crownCellKey(90, 180)]) {
+      const sampled = sampleCrownPosition(key, [], createSeededRng(3));
+      expect(sampled).not.toBeNull();
+      expect(sampled!.latitude).toBeLessThanOrEqual(90);
+      expect(sampled!.latitude).toBeGreaterThanOrEqual(-90);
+      expect(sampled!.longitude).toBeLessThanOrEqual(180);
+      expect(sampled!.longitude).toBeGreaterThanOrEqual(-180);
+    }
+  });
+
+  it('only ever produces cell keys that parse', () => {
+    // crownCellKey clamps both axes, so its output is always on the globe and
+    // always round-trips through parseCrownCellKey — including for coordinates
+    // outside the legal range, which is what makes the range check above safe
+    // to apply to keys this function generated.
+    for (const [lat, lon] of [
+      [90, 180],
+      [-90, -180],
+      [91, 181],
+      [-91, -181],
+      [1e6, -1e6],
+    ] as const) {
+      expect(parseCrownCellKey(crownCellKey(lat, lon))).not.toBeNull();
+    }
   });
 
   it('enumerates a 3x3 neighbourhood containing the cell itself', () => {
