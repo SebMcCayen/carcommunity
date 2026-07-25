@@ -60,6 +60,7 @@ import {
   buildAwardDescription,
   dailyTotalDocId,
   economyRule,
+  readCount,
   ruleCounterDocId,
   ruleLimitWindowKey,
   stockholmDayKey,
@@ -124,9 +125,6 @@ class EconomyRejection extends Error {
     this.name = 'EconomyRejection';
   }
 }
-
-const readCount = (value: unknown): number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
 
 /**
  * The most a `daily_open` may ever pay: base x the capped multiplier. Any

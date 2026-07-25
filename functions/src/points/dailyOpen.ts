@@ -40,6 +40,7 @@ import {
   economyRateLimitExpiry,
   isUnderEconomyRateLimit,
   parseRecordDailyOpenInput,
+  readCount,
   toStoredStreak,
   type DailyOpenDecision,
 } from './points-economy-core';
@@ -81,8 +82,11 @@ async function enforceRateLimit(uid: string, nowMs: number): Promise<void> {
     .collection(ECONOMY_RATE_LIMIT_COLLECTION)
     .doc(economyRateLimitDocId(uid, RATE_LIMIT_ACTION, nowMs));
   const snap = await ref.get();
-  const count = snap.get('count');
-  if (!isUnderEconomyRateLimit(typeof count === 'number' ? count : 0)) {
+  // Degrades a corrupt counter to 0. A bare `typeof === 'number'` would let a
+  // stored NaN or Infinity through, and both compare false against the
+  // ceiling — locking the member out of their own daily open with a
+  // `resource-exhausted` indistinguishable from genuine abuse.
+  if (!isUnderEconomyRateLimit(readCount(snap.get('count')))) {
     throw new HttpsError('resource-exhausted', 'Too many requests — try again shortly.');
   }
   await ref.set(

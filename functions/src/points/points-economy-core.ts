@@ -988,3 +988,37 @@ export function economyRateLimitExpiry(nowMs: number): Date {
 export function isUnderEconomyRateLimit(currentCount: number): boolean {
   return currentCount < ECONOMY_CALLABLE_RATE_LIMIT_PER_MINUTE;
 }
+
+/**
+ * Reads a stored counter value — a rate-limit window, a rule limit, a daily or
+ * weekly total — degrading anything that is not a non-negative safe integer
+ * to 0.
+ *
+ * Every one of these counters is backend-only and only ever written with
+ * `FieldValue.increment(1)` or `increment(points)`, so in practice the value
+ * is always a non-negative integer. This is the read side refusing to TRUST
+ * that, because the failure modes are asymmetric and silent:
+ *
+ *  - a corrupted `NaN` or `Infinity` compares false against every ceiling, so
+ *    a naive read would REJECT every call for that window — a member locked
+ *    out of their own daily open by a bad byte, with a `resource-exhausted`
+ *    that looks exactly like genuine abuse;
+ *  - a fractional value (1.5) passes a `Number.isFinite` check and then flows
+ *    onward as an attempt count — `events.checkIn` feeds this number straight
+ *    into the anti-fraud risk pipeline, where a fractional attempt rate is
+ *    meaningless;
+ *  - a negative value silently GRANTS extra headroom under every cap.
+ *
+ * Treating a nonsense counter as 0 is the honest reading — "no attempts
+ * recorded in this window" — and it fails in the direction that costs the
+ * member nothing, since the ledger's idempotency key still caps the AWARD at
+ * one regardless of what the rate limiter decides.
+ *
+ * This is the single implementation for the whole economy: `economy-award.ts`
+ * (rule limit, daily total, weekly driving total), `events/checkIn.ts` and
+ * `points/dailyOpen.ts` (rate-limit windows) all read through it, so the
+ * three call sites cannot drift apart on what a corrupt counter means.
+ */
+export function readCount(value: unknown): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}

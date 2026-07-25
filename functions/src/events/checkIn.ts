@@ -80,6 +80,7 @@ import {
   isSampleInsideFence,
   isUnderEconomyRateLimit,
   parseCheckInInput,
+  readCount,
   type AttendanceSample,
 } from '../points/points-economy-core';
 
@@ -129,8 +130,11 @@ async function enforceRateLimit(uid: string, nowMs: number): Promise<number> {
     .collection(ECONOMY_RATE_LIMIT_COLLECTION)
     .doc(economyRateLimitDocId(uid, RATE_LIMIT_ACTION, nowMs));
   const snap = await ref.get();
-  const count = snap.get('count');
-  const stored = typeof count === 'number' && Number.isFinite(count) && count > 0 ? count : 0;
+  // Degrades a corrupt counter to 0. That matters more here than at any other
+  // counter read: `stored + 1` is returned as the `attemptsInLastMinute` fed
+  // to the risk pipeline below, and a fractional or non-finite attempt rate
+  // would score as silently as a real one.
+  const stored = readCount(snap.get('count'));
   if (!isUnderEconomyRateLimit(stored)) {
     throw new HttpsError('resource-exhausted', 'Too many check-in attempts — try again shortly.');
   }
