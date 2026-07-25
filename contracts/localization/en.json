@@ -734,6 +734,14 @@
     "filterNoMatches": "No drives match your filters.",
     "filterNoMatchesAction": "Clear filters"
   },
+  "imageEditor": {
+    "title": "Edit photo",
+    "hint": "Drag to move, pinch to zoom, and twist with two fingers to rotate. The area inside the frame is what others will see.",
+    "frameDescription": "Drag the corners to reshape the crop area.",
+    "confirm": "Done",
+    "reset": "Reset",
+    "cancel": "Cancel"
+  },
   "garage": {
     "screenTitle": "My Garage",
     "detailTitle": "Vehicle info",
@@ -784,13 +792,6 @@
     "photoUploading": "Uploading…",
     "photoUploadError": "Couldn’t upload the image. Please try again.",
     "photoTooLarge": "The image is too large.",
-    "photoCropTitle": "Crop photo",
-    "photoCropHint": "Drag to position and pinch to zoom. The area inside the frame is what others will see.",
-    "photoCropRatioOriginal": "Original",
-    "photoCropRatioSquare": "Square",
-    "photoCropRatio43": "4:3",
-    "photoCropRatio169": "16:9",
-    "photoCropConfirm": "Use photo",
     "photoNone": "No photos yet",
     "photoCounter": "%1$d / %2$d",
     "photoThumbnail": "Show photo %1$d",

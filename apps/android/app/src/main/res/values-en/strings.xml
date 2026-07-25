@@ -684,6 +684,12 @@
     <string name="savedDrives_filterClear">Clear filters</string>
     <string name="savedDrives_filterNoMatches">No drives match your filters.</string>
     <string name="savedDrives_filterNoMatchesAction">Clear filters</string>
+    <string name="imageEditor_title">Edit photo</string>
+    <string name="imageEditor_hint">Drag to move, pinch to zoom, and twist with two fingers to rotate. The area inside the frame is what others will see.</string>
+    <string name="imageEditor_frameDescription">Drag the corners to reshape the crop area.</string>
+    <string name="imageEditor_confirm">Done</string>
+    <string name="imageEditor_reset">Reset</string>
+    <string name="imageEditor_cancel">Cancel</string>
     <string name="garage_screenTitle">My Garage</string>
     <string name="garage_detailTitle">Vehicle info</string>
     <string name="garage_formTitleCreate">Add vehicle</string>
@@ -733,13 +739,6 @@
     <string name="garage_photoUploading">Uploading…</string>
     <string name="garage_photoUploadError">Couldn’t upload the image. Please try again.</string>
     <string name="garage_photoTooLarge">The image is too large.</string>
-    <string name="garage_photoCropTitle">Crop photo</string>
-    <string name="garage_photoCropHint">Drag to position and pinch to zoom. The area inside the frame is what others will see.</string>
-    <string name="garage_photoCropRatioOriginal">Original</string>
-    <string name="garage_photoCropRatioSquare">Square</string>
-    <string name="garage_photoCropRatio43">4:3</string>
-    <string name="garage_photoCropRatio169">16:9</string>
-    <string name="garage_photoCropConfirm">Use photo</string>
     <string name="garage_photoNone">No photos yet</string>
     <string name="garage_photoCounter">%1$d / %2$d</string>
     <string name="garage_photoThumbnail">Show photo %1$d</string>

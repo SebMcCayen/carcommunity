@@ -734,6 +734,14 @@
     "filterNoMatches": "Inga körningar matchar dina filter.",
     "filterNoMatchesAction": "Rensa filter"
   },
+  "imageEditor": {
+    "title": "Redigera bild",
+    "hint": "Dra för att flytta, nyp för att zooma och vrid med två fingrar för att rotera. Det som syns i rutan är det andra ser.",
+    "frameDescription": "Dra i hörnen för att ändra beskärningens form.",
+    "confirm": "Klar",
+    "reset": "Återställ",
+    "cancel": "Avbryt"
+  },
   "garage": {
     "screenTitle": "Mitt garage",
     "detailTitle": "Fordonsinformation",
@@ -784,13 +792,6 @@
     "photoUploading": "Laddar upp…",
     "photoUploadError": "Kunde inte ladda upp bilden. Försök igen.",
     "photoTooLarge": "Bilden är för stor.",
-    "photoCropTitle": "Beskär bild",
-    "photoCropHint": "Dra för att placera och nyp för att zooma. Det som syns i rutan är det andra ser.",
-    "photoCropRatioOriginal": "Original",
-    "photoCropRatioSquare": "Kvadrat",
-    "photoCropRatio43": "4:3",
-    "photoCropRatio169": "16:9",
-    "photoCropConfirm": "Använd bilden",
     "photoNone": "Inga bilder ännu",
     "photoCounter": "%1$d / %2$d",
     "photoThumbnail": "Visa bild %1$d",
