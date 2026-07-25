@@ -123,7 +123,10 @@ private fun defaultClientErrorReporter(): ClientErrorReporter? {
 
 /**
  * Builds the callable-backed member-search repository from the local context, or
- * null in a config-less build (the search field then stays idle).
+ * null in a config-less build — which makes the search state null and the screen
+ * OMIT the field entirely (FriendsScreen). Not "idle": an inert-but-editable
+ * field renders as "nobody matches" for every query, which is what this
+ * arrangement exists to avoid.
  */
 @Composable
 private fun defaultUserSearchRepository(): UserSearchRepository? {
