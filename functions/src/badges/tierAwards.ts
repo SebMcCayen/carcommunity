@@ -65,6 +65,25 @@ export function badgeProgressRef(uid: string): FirebaseFirestore.DocumentReferen
  *
  * A non-finite or zero delta is dropped rather than written: a corrupt source
  * value must not be able to poison a counter that badges are derived from.
+ *
+ * NOT IDEMPOTENT UNDER REDELIVERY, deliberately. Firestore triggers are
+ * at-least-once, so a redelivered source event increments twice; the guards in
+ * badge-tiers.ts are transition tests on the source document, which reject a
+ * *rewrite* but cannot detect a *replay* of the same write. This is the same
+ * property the pre-existing Phase 9f `completedEventsAttended` counter has, and
+ * the bounded consequence is a counter drifting slightly high — a member
+ * reaching a rung marginally early. It is NOT an economy exploit: the Kronpoäng
+ * for a tier are keyed on `badge_award_{key}` and can only ever be credited
+ * once, and redelivery is a platform event, not something a client can induce.
+ *
+ * The three counters where correctness mattered more than write cost do NOT go
+ * through this function and are idempotent by construction: `vehiclesInGarage`
+ * and (via the sweep) any snapshot counter use `raiseBadgeCounter` over a
+ * re-derived `count()`, and `bestDayStreak` is a transactional day-key
+ * comparison. Making `crownsCollected` / `lifetimeDistanceMeters` /
+ * `convoysLed` exact would mean re-deriving each from its source on every
+ * source event, or a per-event dedupe document — a cost and surface trade-off
+ * that is a deliberate product decision, not an oversight.
  */
 export async function bumpBadgeCounter(
   uid: string,
