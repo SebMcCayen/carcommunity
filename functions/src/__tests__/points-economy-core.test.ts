@@ -11,6 +11,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  ATTENDANCE_EVIDENCE_RETENTION_MS,
   ATTENDANCE_WINDOW_AFTER_MS,
   ATTENDANCE_WINDOW_BEFORE_MS,
   DAILY_OPEN_BASE_POINTS,
@@ -31,6 +32,7 @@ import {
   WEEKLY_DRIVING_POINTS_CAP,
   applyEconomyCaps,
   attendanceDocId,
+  attendanceEvidenceExpiry,
   attendanceWindow,
   buildAwardDescription,
   dailyOpenPoints,
@@ -962,5 +964,30 @@ describe('liveDistanceIncrementMeters', () => {
       previous = next;
     }
     expect(total).toBeGreaterThanOrEqual(LIVE_SESSION_AWARD_MIN_DISTANCE_METERS);
+  });
+});
+
+describe('attendance evidence retention', () => {
+  it('expires 90 days after the sample that set it', () => {
+    const now = Date.UTC(2026, 6, 25, 12, 0, 0);
+    expect(attendanceEvidenceExpiry(now).getTime() - now).toBe(ATTENDANCE_EVIDENCE_RETENTION_MS);
+    expect(ATTENDANCE_EVIDENCE_RETENTION_MS).toBe(90 * 24 * 60 * 60_000);
+  });
+
+  it('outlives the event it documents by a wide margin', () => {
+    // The record must survive long enough to settle a dispute about the award,
+    // so the retention has to dwarf the attendance window itself.
+    const window = attendanceWindow({ startsAtMs: 0, endsAtMs: null });
+    expect(ATTENDANCE_EVIDENCE_RETENTION_MS).toBeGreaterThan((window.toMs - window.fromMs) * 100);
+  });
+
+  it('pushes the deadline out as later samples arrive', () => {
+    // expireAt is rewritten on every write, so a member who checks in twice
+    // does not have the record reaped 90 days after the FIRST tap.
+    const first = Date.UTC(2026, 6, 25, 12, 0, 0);
+    const second = first + 11 * 60_000;
+    expect(attendanceEvidenceExpiry(second).getTime()).toBeGreaterThan(
+      attendanceEvidenceExpiry(first).getTime(),
+    );
   });
 });

@@ -880,6 +880,12 @@ service cloud.firestore {
     // progress ("8 of 10 minutes"), and — critically — NEVER client-writable:
     // the samples in this document are the proof that decides a 50 KP award,
     // so a client write would be a self-service attendance certificate.
+    // The samples are raw member coordinates, so the document also carries an
+    // `expireAt` and is reaped by a Firestore TTL policy after 90 days
+    // (ATTENDANCE_EVIDENCE_RETENTION_MS) — long enough to settle a dispute
+    // about the award, not a permanent location record. Deleting it cannot
+    // re-open the award: the ledger idempotency key, the per-event rule
+    // counter and the host tally guard all outlive it, none with a TTL.
     match /eventAttendance/{attendanceId} {
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       allow read: if isAdmin();

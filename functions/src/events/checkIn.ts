@@ -29,8 +29,12 @@
  *     are not asked for the scariest permission Android has in order to
  *     collect 50 points;
  *   - PRIVACY: two coordinates, both next to a published event, versus a
- *     continuous trail of where someone was. Nothing here creates a location
- *     history — samples live on the attendance record, scoped to one event;
+ *     continuous trail of where someone was. The samples are nonetheless real
+ *     positions of a real member, so they are also BOUNDED IN TIME: the
+ *     attendance record carries an `expireAt` and a Firestore TTL policy
+ *     deletes it after ATTENDANCE_EVIDENCE_RETENTION_MS (90 days), which is
+ *     long enough to settle a dispute about the award and no longer. Scoped
+ *     to one event, owner-readable only, and not kept forever;
  *   - HONESTY: a tap is a deliberate statement ("I am here"), which is what
  *     is being rewarded. Silent background credit for leaving an app open in
  *     a nearby car park is not.
@@ -66,6 +70,7 @@ import {
   MAX_ATTENDANCE_SAMPLES,
   REQUIRED_DWELL_MS,
   attendanceDocId,
+  attendanceEvidenceExpiry,
   attendanceWindow,
   economyRateLimitDocId,
   economyRateLimitExpiry,
@@ -144,7 +149,6 @@ interface EventLocation {
   longitude: number;
   startsAtMs: number;
   endsAtMs: number | null;
-  title: string;
 }
 
 const toMillis = (value: unknown): number | null =>
@@ -194,7 +198,6 @@ async function loadEventLocation(eventId: string): Promise<EventLocation | null>
     longitude,
     startsAtMs,
     endsAtMs: toMillis(event.endsAt),
-    title: typeof event.title === 'string' ? event.title : '',
   };
 }
 
@@ -334,6 +337,7 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
           userId: actor.uid,
           rejectedSampleCount: FieldValue.increment(1),
           updatedAt: FieldValue.serverTimestamp(),
+          expireAt: Timestamp.fromDate(attendanceEvidenceExpiry(now.getTime())),
         },
         { merge: true },
       ),
@@ -402,6 +406,11 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
           ? { verifiedAt: FieldValue.serverTimestamp() }
           : {}),
         updatedAt: FieldValue.serverTimestamp(),
+        // Retention deadline on the raw coordinates — pushed out by each new
+        // sample so the record survives the event it documents, then reaped
+        // by the TTL policy. See ATTENDANCE_EVIDENCE_RETENTION_MS for why
+        // deleting this record cannot re-open the award.
+        expireAt: Timestamp.fromDate(attendanceEvidenceExpiry(now.getTime())),
         ...(snap.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
       },
       { merge: true },

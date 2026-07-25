@@ -573,6 +573,44 @@ export const DEFAULT_EVENT_DURATION_MS = 4 * 60 * 60_000;
 export const MAX_ATTENDANCE_SAMPLES = 60;
 
 /**
+ * How long an attendance record — INCLUDING its raw position samples — is
+ * kept before Firestore's TTL reaper deletes it.
+ *
+ * These samples are the most sensitive thing this feature stores: real
+ * coordinates of a real member at a real time. They are few (two taps), they
+ * are all next to a published event, and they are owner-readable only — but
+ * "few and scoped" is not the same as "not retained", and without an expiry
+ * they would sit in Firestore forever. So they get a deadline.
+ *
+ * 90 days is chosen to outlive any dispute about the award they justify
+ * (a member querying a missing 50 KP, an admin auditing a suspected forgery)
+ * and nothing beyond that.
+ *
+ * DELETING THE RECORD CANNOT RE-OPEN THE AWARD. Three independent guards
+ * outlive it, none of which carries a TTL:
+ *  - the ledger entry itself, whose document ID IS the idempotency key
+ *    `pe__event_attend_verified__{eventId}__{uid}`, so a replayed award is a
+ *    transactional no-op;
+ *  - `pointsRuleCounters/{uid}__event_attend_verified__{eventId}`, the
+ *    1-per-event limit counter;
+ *  - `eventAttendanceCounts/{eventId}/counted/{uid}`, so the host tally
+ *    cannot count one attendee twice either.
+ * A member who checks in again after expiry at a still-open event therefore
+ * re-verifies and is paid nothing.
+ *
+ * ONE-TIME DEPLOY STEP (same pattern as the rate-limit counters below):
+ *
+ *   gcloud firestore fields ttls update expireAt \
+ *     --collection-group=eventAttendance --enable-ttl
+ */
+export const ATTENDANCE_EVIDENCE_RETENTION_MS = 90 * 24 * 60 * 60_000;
+
+/** When an attendance record touched at `nowMs` becomes reapable. */
+export function attendanceEvidenceExpiry(nowMs: number): Date {
+  return new Date(nowMs + ATTENDANCE_EVIDENCE_RETENTION_MS);
+}
+
+/**
  * A sample whose reported accuracy is worse than this cannot qualify at all.
  *
  * This is a DELIBERATE tightening on top of the shared isWithinGeofence,
