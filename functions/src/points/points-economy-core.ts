@@ -449,8 +449,16 @@ const IDEMPOTENCY_PREFIX = 'pe';
  * calls describing the same happening produce the same key and therefore the
  * same single ledger row.
  *
- * Returns null when any part is not a Firestore-safe ID fragment, so a
- * malformed id fails loudly at the call site instead of building a path.
+ * Returns null when any part is not a Firestore-safe ID fragment, rather than
+ * building a document path out of it.
+ *
+ * CALL-SITE CONTRACT: null must never be swallowed silently. A missing award
+ * is close to undiagnosable after the fact — there is no failed row to find,
+ * only a member reporting points that never arrived — so every caller either
+ * throws (points.recordDailyOpen, which has a caller to tell) or logs a
+ * warning naming the offending ids and skips the award (every trigger, and
+ * the live-distance tracker, which have no caller and must not fail the user
+ * action that already succeeded). Do not add a call site that just returns.
  */
 export function economyIdempotencyKey(
   rule: EconomyRuleKey,

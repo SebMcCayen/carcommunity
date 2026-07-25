@@ -144,6 +144,10 @@ export const onIncidentConfirmed = onDocumentCreated(
       confirmerUid,
     );
     if (!idempotencyKey) {
+      logger.warn('incident_report_confirmed: unusable ids for an award key', {
+        incidentId,
+        confirmerUid,
+      });
       return;
     }
     await tryAwardEconomyPoints({
@@ -173,6 +177,7 @@ export const onVehicleCreated = onDocumentCreated(
     // `forever` limit counter is the second, independent guard.
     const idempotencyKey = economyIdempotencyKey('garage_first_car', uid);
     if (!idempotencyKey) {
+      logger.warn('garage_first_car: unusable uid for an award key', { uid });
       return;
     }
     await tryAwardEconomyPoints({
@@ -216,7 +221,9 @@ export const onAttendanceVerified = onDocumentWritten(
     const now = event.data?.after.updateTime?.toDate() ?? new Date();
 
     const attendKey = economyIdempotencyKey('event_attend_verified', eventId, uid);
-    if (attendKey) {
+    if (!attendKey) {
+      logger.warn('event_attend_verified: unusable ids for an award key', { eventId, uid });
+    } else {
       await tryAwardEconomyPoints({
         uid,
         rule: 'event_attend_verified',
@@ -301,6 +308,7 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
   }
   const hostKey = economyIdempotencyKey('event_host_success', eventId);
   if (!hostKey) {
+    logger.warn('event_host_success: unusable eventId for an award key', { eventId });
     return;
   }
   await tryAwardEconomyPoints({

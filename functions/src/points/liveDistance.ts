@@ -134,6 +134,7 @@ export async function trackLiveSessionDistance(
 
     const idempotencyKey = economyIdempotencyKey('live_session_1km', uid, sessionId);
     if (!idempotencyKey) {
+      logger.warn('live_session_1km: unusable ids for an award key', { uid, sessionId });
       return;
     }
     const outcome = await tryAwardEconomyPoints({
