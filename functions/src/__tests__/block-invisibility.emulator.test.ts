@@ -77,18 +77,22 @@ const adminApp =
 const adminDb = getAdminFirestore(adminApp);
 const adminAuth = getAdminAuth(adminApp);
 
-// RTDB needs its OWN named app rather than `getAdminApps()[0]`: the emulator
-// suite shares one process across files, so the first-registered admin app may
-// be one created WITHOUT a databaseURL (Firestore does not need one). Reusing it
-// leaves getDatabase() pointing nowhere and the mirror read silently times out.
+// RTDB gets its OWN named app so the namespace is unambiguous rather than
+// inherited from whichever admin app another test file registered first.
+//
+// The namespace is `?ns=<projectId>`, NOT `<projectId>-default-rtdb`. That was
+// established by measurement, not assumption: writing a userBlocks edge and then
+// dumping `liveLocationBlocks` from both namespaces showed the functions
+// runtime's write (functions/src/firebase.ts `getDatabase()`, whose URL comes
+// from the emulator's FIREBASE_CONFIG) landing in `demo-test` while
+// `demo-test-default-rtdb` stayed empty. Reading the wrong namespace does not
+// error — it silently returns null — so a mismatch shows up only as a poll that
+// times out, which is exactly how this first presented.
 const RTDB_APP_NAME = `block-invisibility-rtdb-${SFX}`;
 const rtdbApp =
   getAdminApps().find((candidate) => candidate.name === RTDB_APP_NAME) ??
   initializeAdminApp(
-    {
-      projectId: PROJECT_ID,
-      databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb`,
-    },
+    { projectId: PROJECT_ID, databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}` },
     RTDB_APP_NAME,
   );
 const adminRtdb = getAdminDatabase(rtdbApp);
