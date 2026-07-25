@@ -1,14 +1,21 @@
 package com.kungsbackacarcommunity.app.friends
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
+import com.kungsbackacarcommunity.app.usersearch.FirebaseUserSearchRepository
+import com.kungsbackacarcommunity.app.usersearch.UserSearchCoordinator
+import com.kungsbackacarcommunity.app.usersearch.UserSearchRepository
+import com.kungsbackacarcommunity.app.usersearch.UserSearchState
 import kotlinx.coroutines.launch
 
 /**
@@ -21,12 +28,21 @@ import kotlinx.coroutines.launch
  * via the shared `errors-reportClientError` pipeline instead of vanishing.
  * Defaulted here (rather than threaded from the caller) so tests can inject a
  * fake; a config-less build gets null and simply skips reporting.
+ *
+ * [searchRepository] backs the member typeahead. It is built here from the local
+ * context — the same guarded pattern as [errorReporter], rather than threaded
+ * down through the app's already very long repository parameter lists — and is
+ * INDEPENDENTLY nullable: a config-less build still gets the full friends
+ * surface, just with the search field permanently idle. The search is therefore
+ * strictly additive, never a new way for this screen to fail to render.
  */
 @Composable
 fun FriendsRoute(
     repository: FriendsRepository,
     onMessageFriend: (FriendSummary) -> Unit,
     onViewProfile: (FriendSummary) -> Unit,
+    onOpenMemberProfile: (String) -> Unit = {},
+    searchRepository: UserSearchRepository? = defaultUserSearchRepository(),
     errorReporter: ClientErrorReporter? = defaultClientErrorReporter(),
 ) {
     val coordinator = remember(repository, errorReporter) {
@@ -38,13 +54,38 @@ fun FriendsRoute(
     val busyRows by coordinator.busyRows.collectAsState()
     val scope = rememberCoroutineScope()
 
+    // The search coordinator launches its debounced work into the composition's
+    // scope, so leaving the screen cancels any pending or in-flight search along
+    // with it — no result can arrive for a screen that is gone.
+    val searchCoordinator =
+        remember(searchRepository, scope) {
+            searchRepository?.let { UserSearchCoordinator(it, scope) }
+        }
+    var searchQuery by remember { mutableStateOf("") }
+    val searchState by
+        searchCoordinator?.state?.collectAsState()
+            ?: remember { mutableStateOf<UserSearchState>(UserSearchState.Idle) }
+
     LaunchedEffect(coordinator) { coordinator.load() }
+
+    // Drop any results still on screen when the route leaves, so returning to
+    // Friends never opens on a stale suggestion list from a previous visit.
+    DisposableEffect(searchCoordinator) {
+        onDispose { searchCoordinator?.clear() }
+    }
 
     FriendsScreen(
         status = status,
         addState = addState,
         actionError = actionError,
         busyRows = busyRows,
+        searchQuery = searchQuery,
+        searchState = searchState,
+        onSearchQueryChange = { typed ->
+            searchQuery = typed
+            searchCoordinator?.onQueryChanged(typed)
+        },
+        onOpenMemberProfile = onOpenMemberProfile,
         onSend = { nickname -> scope.launch { coordinator.sendRequestByNickname(nickname) } },
         onChooseCandidate = { uid -> scope.launch { coordinator.chooseCandidate(uid) } },
         onDismissAdd = { coordinator.resetAdd() },
@@ -65,4 +106,14 @@ fun FriendsRoute(
 private fun defaultClientErrorReporter(): ClientErrorReporter? {
     val context = LocalContext.current
     return remember(context) { FirebaseClientErrorReporter.createIfAvailable(context) }
+}
+
+/**
+ * Builds the callable-backed member-search repository from the local context, or
+ * null in a config-less build (the search field then stays idle).
+ */
+@Composable
+private fun defaultUserSearchRepository(): UserSearchRepository? {
+    val context = LocalContext.current
+    return remember(context) { FirebaseUserSearchRepository.createIfAvailable(context) }
 }

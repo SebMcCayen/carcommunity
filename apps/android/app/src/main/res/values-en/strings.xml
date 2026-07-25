@@ -436,6 +436,17 @@
     <string name="friends_errorRequestGone">That request is no longer available.</string>
     <string name="friends_errorTemporarilyUnavailable">Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.</string>
     <string name="friends_errorGeneric">Something went wrong. Please try again.</string>
+    <string name="userSearch_hint">Search for a person</string>
+    <string name="userSearch_keepTyping">Keep typing to search…</string>
+    <string name="userSearch_searching">Searching…</string>
+    <string name="userSearch_noMatches">No members match that.</string>
+    <string name="userSearch_matchesFromStart">Search matches the start of a nickname.</string>
+    <string name="userSearch_resultsTitle">Matching members</string>
+    <string name="userSearch_error">Couldn\'t search right now. Please try again.</string>
+    <string name="userSearch_errorRateLimited">That\'s a lot of searching! Wait a moment and try again.</string>
+    <string name="userSearch_errorSignedOut">Please sign in to search for members.</string>
+    <string name="userSearch_unknownMember">Member</string>
+    <string name="userSearch_openProfile">Open profile</string>
     <string name="nearby_liveSharerOnMap">%1$s is sharing live nearby</string>
     <string name="nearby_unknownSharer">Someone nearby</string>
     <string name="convoy_title">Convoys</string>

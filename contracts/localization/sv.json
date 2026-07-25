@@ -476,6 +476,19 @@
     "errorTemporarilyUnavailable": "Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.",
     "errorGeneric": "Något gick fel. Försök igen."
   },
+  "userSearch": {
+    "hint": "Sök efter en person",
+    "keepTyping": "Fortsätt skriva för att söka…",
+    "searching": "Söker…",
+    "noMatches": "Ingen medlem matchar det.",
+    "matchesFromStart": "Sökningen matchar början av ett smeknamn.",
+    "resultsTitle": "Matchande medlemmar",
+    "error": "Kunde inte söka just nu. Försök igen.",
+    "errorRateLimited": "Det var mycket sökande! Vänta en stund och försök igen.",
+    "errorSignedOut": "Logga in för att söka efter medlemmar.",
+    "unknownMember": "Medlem",
+    "openProfile": "Öppna profil"
+  },
   "nearby": {
     "liveSharerOnMap": "%1$s delar live i närheten",
     "unknownSharer": "Någon i närheten"

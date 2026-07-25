@@ -476,6 +476,19 @@
     "errorTemporarilyUnavailable": "Friends are temporarily unavailable on our side. Nothing is wrong with your account — please try again in a few minutes.",
     "errorGeneric": "Something went wrong. Please try again."
   },
+  "userSearch": {
+    "hint": "Search for a person",
+    "keepTyping": "Keep typing to search…",
+    "searching": "Searching…",
+    "noMatches": "No members match that.",
+    "matchesFromStart": "Search matches the start of a nickname.",
+    "resultsTitle": "Matching members",
+    "error": "Couldn't search right now. Please try again.",
+    "errorRateLimited": "That's a lot of searching! Wait a moment and try again.",
+    "errorSignedOut": "Please sign in to search for members.",
+    "unknownMember": "Member",
+    "openProfile": "Open profile"
+  },
   "nearby": {
     "liveSharerOnMap": "%1$s is sharing live nearby",
     "unknownSharer": "Someone nearby"
