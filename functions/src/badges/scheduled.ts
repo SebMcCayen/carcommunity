@@ -35,9 +35,10 @@
  * deploy is therefore in scope within one sweep cycle.
  *
  * COST IS BOUNDED AND INDEX-FREE. Each run walks `badgeProgress` in document-ID
- * order from a stored cursor, reading at most SWEEP_PAGE_SIZE documents and
- * evaluating each once, then saves the new cursor; the next run resumes there
- * and wraps to the beginning when the collection is exhausted. Ordering by
+ * order from a stored cursor, reading at most SWEEP_PAGE_SIZE documents (plus a
+ * one-document lookahead that detects the end of the collection) and evaluating
+ * each once, then saves the new cursor; the next run resumes there and wraps to
+ * the beginning when the collection is exhausted. Ordering by
  * `FieldPath.documentId()` needs no composite index and — unlike ordering by a
  * timestamp field — cannot silently skip documents that lack the field. A
  * member with nothing new costs one `count()` aggregation, one `badgeProgress`
@@ -67,7 +68,11 @@ const SWEEP_STATE_PATH = ['badgeSweepState', 'backlog'] as const;
 export interface BadgeBacklogSweepResult {
   scanned: number;
   awarded: number;
-  /** True when this run reached the end of the collection and wrapped. */
+  /**
+   * True when this run reached the end of the collection and wrapped — set on
+   * the run that reads the FINAL document, including when the collection size
+   * is an exact multiple of `limit` (see the lookahead below).
+   */
   wrapped: boolean;
 }
 
@@ -79,17 +84,23 @@ export async function runBadgeBacklogSweep(
   const storedCursor = stateSnap.data()?.lastUid;
   const cursor = typeof storedCursor === 'string' && storedCursor.length > 0 ? storedCursor : null;
 
+  // Over-fetch by ONE as an end-of-collection lookahead. Without it, a
+  // collection whose size is an exact multiple of `limit` reports
+  // `wrapped: false` on the very run that read its final document, and then
+  // burns an entire scheduled slot on an empty page just to discover the end —
+  // so one run in every full cycle would do no work at all.
   let query = db
     .collection('badgeProgress')
     .orderBy(FieldPath.documentId())
-    .limit(limit);
+    .limit(limit + 1);
   if (cursor) {
     query = query.startAfter(cursor);
   }
   const page = await query.get();
+  const docs = page.docs.slice(0, limit);
 
   let awarded = 0;
-  for (const doc of page.docs) {
+  for (const doc of docs) {
     try {
       // Snapshot-style counters first: `vehiclesInGarage` is re-derived rather
       // than accumulated, and its trigger only fires on a vehicle CREATE, so
@@ -105,17 +116,18 @@ export async function runBadgeBacklogSweep(
     }
   }
 
-  // Fewer results than requested means the collection is exhausted — wrap so
-  // the next run starts over rather than stalling at the end forever.
-  const wrapped = page.size < limit;
-  const nextCursor = wrapped ? null : (page.docs[page.docs.length - 1]?.id ?? null);
+  // The lookahead document did not come back, so nothing follows this page:
+  // the collection is exhausted. Wrap, so the next run starts over rather than
+  // stalling at the end forever.
+  const wrapped = page.size <= limit;
+  const nextCursor = wrapped ? null : (docs[docs.length - 1]?.id ?? null);
   await stateRef.set(
     { lastUid: nextCursor, updatedAt: FieldValue.serverTimestamp() },
     { merge: true },
   );
 
-  logger.info('Badge backlog sweep complete', { scanned: page.size, awarded, wrapped });
-  return { scanned: page.size, awarded, wrapped };
+  logger.info('Badge backlog sweep complete', { scanned: docs.length, awarded, wrapped });
+  return { scanned: docs.length, awarded, wrapped };
 }
 
 export const evaluateBacklog = onSchedule(
