@@ -179,6 +179,11 @@ export async function awardEconomyPoints(
       },
       // READ PHASE: limit counter + both cap counters, transactionally.
       async (tx) => {
+        // Firestore may run this resolver more than once (transaction retry
+        // on contention), so the captured value is reset every attempt rather
+        // than carrying a stale ceiling over from an aborted one.
+        clippedBy = 'none';
+
         const [counterSnap, dailySnap, weeklySnap] = await Promise.all([
           tx.get(counterRef),
           tx.get(dailyRef),
@@ -193,10 +198,13 @@ export async function awardEconomyPoints(
           dailyAwarded: readCount(dailySnap.data()?.total),
           weeklyDrivingAwarded: readCount(weeklySnap?.data()?.total),
         });
+        // Captured BEFORE the rejection throw: when the headroom is 0 the
+        // outcome must still name WHICH ceiling bound the award, and for a
+        // driving rule that is often `weekly_driving`, not `daily`.
+        clippedBy = decision.clippedBy;
         if (decision.awarded <= 0) {
           throw new EconomyRejection('cap_reached');
         }
-        clippedBy = decision.clippedBy;
         return {
           amount: decision.awarded,
           description: buildAwardDescription(rule, decision, request.detail),
@@ -257,7 +265,9 @@ export async function awardEconomyPoints(
         points: 0,
         balanceAfter: null,
         entryId: null,
-        clippedBy: error.status === 'cap_reached' ? 'daily' : 'none',
+        // `cap_reached` reports the ceiling the read phase actually measured;
+        // `limit_reached` never consulted a cap, so it reports none.
+        clippedBy: error.status === 'cap_reached' ? clippedBy : 'none',
       };
     }
     // The ledger refuses suspended/deleted accounts and unknown users with

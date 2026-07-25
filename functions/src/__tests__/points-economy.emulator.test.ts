@@ -137,6 +137,16 @@ async function entryCount(uid: string): Promise<number> {
   return snap.data().count;
 }
 
+/**
+ * A valid `garage.addVehicle` payload — the callable's schema is strict, so
+ * the powertrain is required and the year field is `modelYear`
+ * (contracts/schemas/garage.schema.json).
+ */
+const VEHICLE = (overrides: { make: string; model: string; modelYear: number }) => ({
+  powertrain: 'petrol',
+  ...overrides,
+});
+
 /** Coordinates for the fixture event / drives. */
 const LAT = 57.4879;
 const LON = 12.0763;
@@ -294,13 +304,13 @@ describe('garage_first_car via the vehicles trigger', () => {
     const user = await createProvisionedUser('pe-garage');
     await signInAs(user);
 
-    await call('garage-addVehicle', { make: 'Volvo', model: '240', year: 1989 });
+    await call('garage-addVehicle', VEHICLE({ make: 'Volvo', model: '240', modelYear: 1989 }));
     const key = economyIdempotencyKey('garage_first_car', user.uid)!;
     const entry = await awaitLedgerEntry(user.uid, key);
     expect(entry.amount).toBe(25);
     expect(entry.source).toBe('garage');
 
-    await call('garage-addVehicle', { make: 'Saab', model: '900', year: 1993 });
+    await call('garage-addVehicle', VEHICLE({ make: 'Saab', model: '900', modelYear: 1993 }));
     await new Promise((resolve) => setTimeout(resolve, 3_000));
     expect(await entryCount(user.uid)).toBe(1);
   });
@@ -309,20 +319,23 @@ describe('garage_first_car via the vehicles trigger', () => {
 describe('incident_report_confirmed via the confirmations trigger', () => {
   it('pays the REPORTER when another member confirms', async () => {
     await signInAs(reporter);
+    // incidents.report answers with the incident RECORD — the id field is
+    // `id`, not `incidentId` (functions/src/incidents/report.ts).
     const reported = (
       await call('incidents-report', {
         type: 'hazard',
         latitude: LAT,
         longitude: LON,
       })
-    ).data as { incidentId: string };
+    ).data as { id: string };
+    expect(typeof reported.id).toBe('string');
 
     await signInAs(confirmer);
-    await call('incidents-confirm', { incidentId: reported.incidentId });
+    await call('incidents-confirm', { incidentId: reported.id });
 
     const key = economyIdempotencyKey(
       'incident_report_confirmed',
-      reported.incidentId,
+      reported.id,
       confirmer.uid,
     )!;
     const entry = await awaitLedgerEntry(reporter.uid, key);
@@ -332,26 +345,42 @@ describe('incident_report_confirmed via the confirmations trigger', () => {
 
     // A repeat confirmation writes nothing new (incidents.confirm is
     // idempotent, so the trigger never fires a second time).
-    await call('incidents-confirm', { incidentId: reported.incidentId });
+    await call('incidents-confirm', { incidentId: reported.id });
     await new Promise((resolve) => setTimeout(resolve, 2_000));
     expect(await entryCount(reporter.uid)).toBe(1);
   });
 });
 
 describe('events.checkIn — geofence + dwell', () => {
+  /**
+   * Publishes an event whose window is [startsAt, endsAt].
+   *
+   * events.publish refuses a draft whose start time has already passed
+   * (guardPublishable in events-core.ts), so an already-running meet cannot be
+   * created directly. The draft is therefore created and published with a
+   * FUTURE start, and the real window is written afterwards with the Admin SDK
+   * — the emulator equivalent of publishing on Friday and checking in on
+   * Sunday. startsAt/endsAt live on the teaser document (buildEventDocuments),
+   * which is exactly where events.checkIn reads them from.
+   */
   async function publishEvent(startsAt: Date, endsAt: Date): Promise<string> {
     await signInAs(organiser);
+    const publishSafeStart = new Date(Date.now() + 60 * 60_000);
     const created = (
       await call('events-create', {
         title: 'Söndagsträff',
         approximateArea: 'Kungsbacka',
-        startsAt: startsAt.toISOString(),
-        endsAt: endsAt.toISOString(),
+        startsAt: publishSafeStart.toISOString(),
+        endsAt: new Date(publishSafeStart.getTime() + 60 * 60_000).toISOString(),
         latitude: LAT,
         longitude: LON,
       })
     ).data as { eventId: string };
     await call('events-publish', { eventId: created.eventId });
+    await adminDb.collection('events').doc(created.eventId).update({
+      startsAt: Timestamp.fromDate(startsAt),
+      endsAt: Timestamp.fromDate(endsAt),
+    });
     return created.eventId;
   }
 
@@ -479,7 +508,7 @@ describe('the global daily cap', () => {
       .set({ userId: user.uid, day, total: DAILY_POINTS_CAP - 10 });
 
     await signInAs(user);
-    await call('garage-addVehicle', { make: 'Volvo', model: 'V70', year: 2004 });
+    await call('garage-addVehicle', VEHICLE({ make: 'Volvo', model: 'V70', modelYear: 2004 }));
 
     const key = economyIdempotencyKey('garage_first_car', user.uid)!;
     const entry = await awaitLedgerEntry(user.uid, key);

@@ -45,7 +45,7 @@ import {
 /**
  * The points-economy fields kept on `liveLocation/{uid}/session`:
  * `pointsDistanceMeters`, `pointsLastLatitude`, `pointsLastLongitude`,
- * `pointsAwarded`. Backend-only writes (RTDB rules deny every client write
+ * `pointsAwarded`, `pointsAwardAttempts`. Backend-only writes (RTDB rules deny every client write
  * under liveLocation/); the owner can READ their own session node, which
  * exposes only their own distance.
  *
@@ -66,6 +66,17 @@ const toMeters = (value: unknown): number =>
 
 const toCoord = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const toAttempts = (value: unknown): number =>
+  typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : 0;
+
+/**
+ * How many times one session may re-attempt its award after an INFRASTRUCTURE
+ * failure (see the un-latch below). Bounded on purpose: `updatePosition` runs
+ * once per position sample, so an unbounded retry would turn a Firestore
+ * outage into one award transaction per sample for the rest of the session.
+ */
+export const MAX_LIVE_AWARD_ATTEMPTS = 3;
 
 /**
  * Accumulates one live-position sample into the session's server-measured
@@ -104,15 +115,17 @@ export async function trackLiveSessionDistance(
     });
     const total = toMeters(session?.pointsDistanceMeters) + increment;
     const reached = total >= LIVE_SESSION_AWARD_MIN_DISTANCE_METERS;
+    const attempt = toAttempts(session?.pointsAwardAttempts) + 1;
 
-    await adminRtdb.ref(`liveLocation/${uid}/session`).update({
+    const sessionRef = adminRtdb.ref(`liveLocation/${uid}/session`);
+    await sessionRef.update({
       pointsDistanceMeters: total,
       pointsLastLatitude: sample.latitude,
       pointsLastLongitude: sample.longitude,
       // Latched BEFORE the award so a burst of concurrent samples cannot each
       // start their own award attempt; the ledger idempotency key below is
       // the authoritative guard either way.
-      ...(reached ? { pointsAwarded: true } : {}),
+      ...(reached ? { pointsAwarded: true, pointsAwardAttempts: attempt } : {}),
     });
 
     if (!reached) {
@@ -123,7 +136,7 @@ export async function trackLiveSessionDistance(
     if (!idempotencyKey) {
       return;
     }
-    await tryAwardEconomyPoints({
+    const outcome = await tryAwardEconomyPoints({
       uid,
       rule: 'live_session_1km',
       now: new Date(),
@@ -131,6 +144,19 @@ export async function trackLiveSessionDistance(
       relatedEntityType: 'live_session',
       relatedEntityId: sessionId,
     });
+
+    // `null` means the award threw — an INFRASTRUCTURE failure, not a verdict.
+    // Every real verdict (awarded, already_awarded, limit_reached,
+    // cap_reached, blocked) comes back as an outcome and keeps the latch: a
+    // member who has already spent today's two live awards gains nothing from
+    // retrying. Only a genuine failure un-latches, so a later sample in the
+    // same session can try again — the deterministic idempotency key makes a
+    // retry that follows a silently-succeeded award a no-op replay, so this
+    // cannot double-award. Bounded by MAX_LIVE_AWARD_ATTEMPTS so a sustained
+    // outage does not cost one transaction per position sample.
+    if (outcome === null && attempt < MAX_LIVE_AWARD_ATTEMPTS) {
+      await sessionRef.update({ pointsAwarded: false });
+    }
   } catch (error) {
     logger.warn('Live-session distance tracking failed', { uid, error: String(error) });
   }
