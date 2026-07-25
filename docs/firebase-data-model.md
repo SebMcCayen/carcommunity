@@ -635,8 +635,17 @@ admin-only write and full read. The canonical entry point is the
 disabled, refresh tokens revoked, `users/{uid}.deleted: true`). The daily
 scheduled `account-purgeDeleted` hard-deletes data for pending requests
 older than 30 days (Firestore trees incl. subcollections, owned
-vehicles/rides, storage prefixes, the Auth user) and flips the request to
-`processed` — the record is retained as the proof of deletion.
+vehicles/rides, social-graph mirrors, chat, storage prefixes, the Auth
+user) and flips the request to `processed` — the record is retained as
+the proof of deletion. SOCIAL-GRAPH MIRRORS are the rows other users'
+documents carry about the deleted user, unreachable from their own tree:
+the mirror friendship rows `users/{otherUid}/friends/{uid}`, the
+`friendRequests` documents in both directions, and convoy membership
+(`memberUids` + `members`/`memberProfiles`; a convoy the deleted user
+OWNED is ended so the survivors aren't stranded with an un-endable drive,
+and one they were alone in is deleted). All of it runs through the single
+`purgeUserData` routine, which the inactive-account sweep
+(`account-cleanupInactive`) reuses — both erasure paths delete the same set.
 Deliberately retained: moderation/audit history, hashed partner-insight
 events (7-day TTL, no raw UIDs), Kronjakt claim audit keys, and
 community-context chat/RSVPs (scrubbing is the blocking domain's listed
