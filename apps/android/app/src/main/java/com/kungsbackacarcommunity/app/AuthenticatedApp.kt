@@ -513,6 +513,47 @@ fun AuthenticatedApp(
             // pendingWelcomeRoute instead of inheriting the previous user's saved one.
             var route by rememberSaveable(uid) { mutableStateOf(pendingWelcomeRoute) }
 
+            // The ancestors of the currently-open [route], nearest parent last —
+            // together they form the shell's route back-stack. Held separately
+            // from [route] (rather than folding both into one list) so every
+            // existing `route` read/`when(route)` stays untouched; this is the
+            // ONLY addition. INVARIANT: non-empty only while [route] != null —
+            // the openers/closer below keep the two in lock-step.
+            //
+            // Why it exists: opening a child from a hub (Settings → Blocked
+            // users) used to overwrite the single `route`, losing the parent, so
+            // Back dropped straight to the map. Pushing the parent here lets Back
+            // pop ONE level back to it. Keyed on uid like [route] itself.
+            var routeParents by
+                rememberSaveable(uid) { mutableStateOf<ArrayList<ShellRoute>>(arrayListOf()) }
+
+            // A fresh top-level entry — the map-home profile menu / social hub, a
+            // push-notification tap, a map dialog. Starts a NEW stack, so Back
+            // from it returns to the map/tab, never a stale parent.
+            val openRootRoute = { target: ShellRoute ->
+                routeParents = arrayListOf()
+                route = target
+            }
+            // Navigate one level DEEPER. The current route (if any) becomes the
+            // new route's parent — via the unit-tested [ShellNavigation.pushRoute]
+            // so production and its test can't drift — so Back pops back to it.
+            // Used for hub → child (Settings → Blocked users) and list → detail
+            // (a conversation, a member profile). With nothing open it degrades
+            // to a root entry (no parent), which is the honest result for a
+            // list→detail reached directly from a push tap.
+            val pushRoute = { target: ShellRoute ->
+                routeParents = ArrayList(ShellNavigation.pushRoute(routeParents, route))
+                route = target
+            }
+            // Leave the route stack entirely, back to a bare tab (Garage tab, the
+            // map after a convoy is created, the address picker). Clears parents
+            // alongside `route` so the back-stack can't outlive the route it
+            // described.
+            val clearRoutes = {
+                routeParents = arrayListOf()
+                route = null
+            }
+
             // The map's manual day/night override (null = follow the app theme).
             //
             // Owned HERE, not inside MapHome, precisely because [route] above can
@@ -584,7 +625,10 @@ fun AuthenticatedApp(
             val openChat = { otherUid: String, otherName: String? ->
                 dmChatOtherUid = otherUid
                 dmChatOtherName = otherName
-                route = ShellRoute.Chat
+                // From inside the conversation list (or a member profile) this
+                // pushes, so Back returns there; from a push tap on the map it
+                // starts a fresh stack (no parent) — pushRoute handles both.
+                pushRoute(ShellRoute.Chat)
             }
 
             // Notification taps. MainActivity decodes the Intent extras and parks
@@ -598,14 +642,15 @@ fun AuthenticatedApp(
             // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
             //
             // INVARIANT — pendingChatHubLink is never read stale, and the reason
-            // is structural rather than a clear-on-exit: the assignment below is
-            // the ONLY `route = ShellRoute.ChatHub` in the shell, and it always
+            // is structural rather than a clear-on-exit: the opener below is the
+            // ONLY route into ShellRoute.ChatHub in the shell, and it always
             // writes a fresh link in the same frame. ChatHubRoute therefore
             // cannot be entered carrying a previous tap's destination. The map
             // bubble is not a counter-example — it opens ChatHubPopup, which
             // takes no pushDeepLink parameter at all. Back-out is likewise safe:
-            // closeRoute() sets route = null and there is no back stack to
-            // return to ChatHub through.
+            // ChatHub is opened via openRootRoute (a fresh, parent-less stack),
+            // so a Back pop from it lands on the map, never back INTO ChatHub —
+            // the only entry stays this fresh-link opener.
             //
             // If you ever add a second way to reach ShellRoute.ChatHub, that
             // invariant dies and this must become a consume-and-clear.
@@ -622,28 +667,37 @@ fun AuthenticatedApp(
                     PushTarget.DM ->
                         // With the counterpart resolved, open the thread directly;
                         // without it, the conversation list is the honest landing.
+                        // A push tap is a fresh top-level entry, so open as a ROOT
+                        // (parent-less) stack — Back returns to the map, not to
+                        // whatever route happened to be open when the tap arrived.
+                        // openChat() is the in-app list → detail path (it pushes),
+                        // which is why the payload is set + opened as a root here
+                        // rather than routed through it, matching every other push
+                        // target below.
                         if (link.entityId != null) {
-                            openChat(link.entityId, null)
+                            dmChatOtherUid = link.entityId
+                            dmChatOtherName = null
+                            openRootRoute(ShellRoute.Chat)
                         } else {
-                            route = ShellRoute.Conversations
+                            openRootRoute(ShellRoute.Conversations)
                         }
                     PushTarget.COMMUNITY_CHAT,
                     PushTarget.CONVOY_CHAT,
                     -> {
                         pendingChatHubLink = link
-                        route = ShellRoute.ChatHub
+                        openRootRoute(ShellRoute.ChatHub)
                     }
-                    PushTarget.CONVOYS -> route = ShellRoute.Convoys
-                    PushTarget.FRIENDS -> route = ShellRoute.Friends
+                    PushTarget.CONVOYS -> openRootRoute(ShellRoute.Convoys)
+                    PushTarget.FRIENDS -> openRootRoute(ShellRoute.Friends)
                     PushTarget.EVENT -> {
                         // The backend sends the reminder's event id as entityId;
                         // open that event directly. Null (unknown event) falls
                         // through to the events list, EventsRoute's own default.
                         pendingEventDeepLinkId = link.entityId
-                        route = ShellRoute.Events
+                        openRootRoute(ShellRoute.Events)
                     }
-                    PushTarget.SUBSCRIPTION -> route = ShellRoute.Subscription
-                    PushTarget.NOTIFICATIONS -> route = ShellRoute.Notifications
+                    PushTarget.SUBSCRIPTION -> openRootRoute(ShellRoute.Subscription)
+                    PushTarget.NOTIFICATIONS -> openRootRoute(ShellRoute.Notifications)
                 }
             }
 
@@ -653,7 +707,9 @@ fun AuthenticatedApp(
             val openMemberProfile = { targetUid: String ->
                 if (targetUid.isNotBlank()) {
                     memberProfileTargetUid = targetUid
-                    route = ShellRoute.MemberProfile
+                    // Reached from a friend/chat row: push so Back returns to that
+                    // list rather than dropping to the map.
+                    pushRoute(ShellRoute.MemberProfile)
                 }
             }
 
@@ -1421,7 +1477,7 @@ fun AuthenticatedApp(
             // silently no-op when the LiveLocationCoordinator isn't wired.
             fun openLiveShareFallback() {
                 if (liveLocationRepository != null) {
-                    route = ShellRoute.LiveLocation
+                    openRootRoute(ShellRoute.LiveLocation)
                 } else {
                     scope.launch {
                         snackbarHostState.showSnackbar(unavailableText)
@@ -1531,12 +1587,20 @@ fun AuthenticatedApp(
                 // session's own expiry, or sign-out — all of which the service
                 // observes for itself.
                 val closeRoute = {
+                    // Per-route teardown applies to the route being CLOSED (the
+                    // current top), before it is popped.
                     when (route) {
                         ShellRoute.LiveLocation -> liveLocationCoordinator?.reset()
                         ShellRoute.Map -> mapParticipantUids = ArrayList()
                         else -> Unit
                     }
-                    route = null
+                    // Pop ONE level: land on the parent hub if there is one
+                    // (Settings ← Blocked users), otherwise clear the stack and
+                    // return to the tab/map. Delegated to the unit-tested
+                    // ShellNavigation.popRoute so production and its test agree.
+                    val popped = ShellNavigation.popRoute(routeParents)
+                    routeParents = ArrayList(popped.parents)
+                    route = popped.current
                 }
 
                 // What, if anything, is drawn over the map. Delegated to the
@@ -2368,7 +2432,10 @@ fun AuthenticatedApp(
                         profileActiveMember = profile?.activeMember == true,
                         scope = scope,
                         onClose = closeRoute,
-                        onOpenRoute = { route = it },
+                        // Navigation from WITHIN an open route (a hub → its child,
+                        // e.g. Settings → Blocked users) pushes onto the back-stack
+                        // so Back pops back to the parent hub, not to the map.
+                        onOpenRoute = { pushRoute(it) },
                         onSignOut = onSignOut,
                         // repositories / coordinators
                         profile = profile,
@@ -2409,7 +2476,9 @@ fun AuthenticatedApp(
                                     // own location + see their own puck.
                                     if (canViewLiveOthers) {
                                         mapParticipantUids = ArrayList(uids)
-                                        route = ShellRoute.Map
+                                        // Opened from a roster (Events/Convoys);
+                                        // push so Back returns to that roster.
+                                        pushRoute(ShellRoute.Map)
                                     } else {
                                         // Distinguish WHY viewing is blocked: a
                                         // disabled LIVE_LOCATION flag → "not available"
@@ -2441,7 +2510,7 @@ fun AuthenticatedApp(
                         notificationSettingsRepository = notificationSettingsRepository,
                         notificationSettingsCoordinator = notificationSettingsCoordinator,
                         onOpenGarageTab = {
-                            route = null
+                            clearRoutes()
                             selectedTab = ShellTab.Garage
                         },
                         badgesRepository = badgesRepository,
@@ -2459,7 +2528,7 @@ fun AuthenticatedApp(
                         // re-entry from the Social hub opens list-first as normal.
                         onConvoyCreated = {
                             convoyOpenCreate = false
-                            route = null
+                            clearRoutes()
                             selectedTab = ShellTab.Map
                         },
                         chatHubPushLink = pendingChatHubLink,
@@ -2495,9 +2564,9 @@ fun AuthenticatedApp(
                         savedPlacesStore = savedPlacesStore,
                         // "Add a place" / "Change address" on the management screen
                         // reuse the existing address picker: close this route and
-                        // open the navigation search (search-first). route=null so
-                        // the picker returns to the map home, not to a stale
-                        // saved-places snapshot.
+                        // open the navigation search (search-first). clearRoutes()
+                        // (route + parent stack both cleared) so the picker returns
+                        // to the map home, not to a stale saved-places snapshot.
                         onOpenAddressSearch = {
                             // "Add a place": a fresh save, so no change-address
                             // context — clear it in case one lingered.
@@ -2509,7 +2578,7 @@ fun AuthenticatedApp(
                             navSearchTarget = null
                             navSearchTargetName = null
                             navSearchConvoyPick = false
-                            route = null
+                            clearRoutes()
                             navSearchOpen = true
                         },
                         // "Change address" for a specific saved place: carry its
@@ -2524,7 +2593,7 @@ fun AuthenticatedApp(
                             navSearchTarget = null
                             navSearchTargetName = null
                             navSearchConvoyPick = false
-                            route = null
+                            clearRoutes()
                             navSearchOpen = true
                         },
                     )
@@ -2644,7 +2713,10 @@ fun AuthenticatedApp(
                                             badgesRepository = badgesRepository,
                                             partnerApplicationCoordinator =
                                                 partnerApplicationCoordinator,
-                                            onOpenRoute = { route = it },
+                                            // Top-level entries from the map-home
+                                            // profile popup: each starts a fresh
+                                            // stack, so Back returns to the map.
+                                            onOpenRoute = { openRootRoute(it) },
                                             onSignOut = onSignOut,
                                         ),
                                     // Community-chat unread ("missed") dot:
@@ -2959,7 +3031,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_friendsTitle),
                                                                 Icons.Filled.Groups,
                                                                 if (friendsRepository != null) {
-                                                                    { route = ShellRoute.Friends }
+                                                                    { openRootRoute(ShellRoute.Friends) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2974,7 +3046,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_socialEvents),
                                                                 Icons.Filled.Event,
                                                                 if (eventsRepository != null) {
-                                                                    { route = ShellRoute.Events }
+                                                                    { openRootRoute(ShellRoute.Events) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2983,7 +3055,7 @@ fun AuthenticatedApp(
                                                                 stringResource(R.string.shell_socialNotifications),
                                                                 Icons.Filled.Notifications,
                                                                 if (notificationsRepository != null) {
-                                                                    { route = ShellRoute.Notifications }
+                                                                    { openRootRoute(ShellRoute.Notifications) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -2999,7 +3071,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.CrownHunt }
+                                                                    { openRootRoute(ShellRoute.CrownHunt) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -3015,7 +3087,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.Partners }
+                                                                    { openRootRoute(ShellRoute.Partners) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -3031,7 +3103,7 @@ fun AuthenticatedApp(
                                                                         isActiveMember = profile?.activeMember == true,
                                                                     )
                                                                 ) {
-                                                                    { route = ShellRoute.Billboards }
+                                                                    { openRootRoute(ShellRoute.Billboards) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -3161,7 +3233,7 @@ fun AuthenticatedApp(
                         announcement = announcement,
                         onShowAll = {
                             acknowledge()
-                            route = ShellRoute.WhatsNew
+                            openRootRoute(ShellRoute.WhatsNew)
                         },
                         onDismiss = acknowledge,
                     )
@@ -3189,7 +3261,7 @@ fun AuthenticatedApp(
                             // Deep-link straight into #417's create-convoy flow;
                             // the owner can start the convoy from its detail.
                             convoyOpenCreate = true
-                            route = ShellRoute.Convoys
+                            openRootRoute(ShellRoute.Convoys)
                         },
                         onDismiss = { showCreateChooser = false },
                     )
