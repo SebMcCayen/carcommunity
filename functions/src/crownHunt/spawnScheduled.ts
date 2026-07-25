@@ -42,7 +42,7 @@
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
@@ -117,6 +117,12 @@ export interface CrownSpawnResult {
    * a run with no deficit.
    */
   separationRejections: number;
+  /**
+   * Cells whose crowns were NOT written because the cell was revoked after this
+   * pass read the allow-list. Zero in normal operation; a non-zero value is the
+   * mid-pass revocation guard doing its job, and is worth seeing in the logs.
+   */
+  cellsRevokedMidPass: number;
   /** True when the run stopped on {@link MAX_SPAWNS_PER_RUN}. */
   capped: boolean;
   /** True when the feature flag was off and nothing ran. */
@@ -144,6 +150,7 @@ export async function runCrownSpawnPass(
     cellsBelowActivityFloor: 0,
     spawned: 0,
     separationRejections: 0,
+    cellsRevokedMidPass: 0,
     capped: false,
     skipped: false,
   };
@@ -233,8 +240,10 @@ export async function runCrownSpawnPass(
     const deficit = Math.min(target - liveInCell, limits.maxSpawns - result.spawned);
     if (deficit <= 0) continue;
 
-    const batch = db.batch();
-    let created = 0;
+    // Sampled OUTSIDE the transaction below, and against pre-generated document
+    // refs, so that a transaction retry re-commits exactly these crowns instead
+    // of resampling new positions and new IDs on each attempt.
+    const pending: { ref: FirebaseFirestore.DocumentReference; data: DocumentData }[] = [];
     for (let i = 0; i < deficit; i += 1) {
       const position = sampleCrownPosition(cellKey, occupied, rng);
       if (!position) {
@@ -248,18 +257,47 @@ export async function runCrownSpawnPass(
       occupied.push(position);
 
       const rarity = pickCrownRarity(rng());
-      batch.set(db.collection('crownSpawns').doc(), {
-        ...buildCrownSpawnFields({ cellKey, position, rarity, approvedCellBy }),
-        createdAt: FieldValue.serverTimestamp(),
-        expiresAt: Timestamp.fromDate(crownExpiresAt(rarity, now)),
-        claimedAt: null,
+      pending.push({
+        ref: db.collection('crownSpawns').doc(),
+        data: {
+          ...buildCrownSpawnFields({ cellKey, position, rarity, approvedCellBy }),
+          createdAt: FieldValue.serverTimestamp(),
+          expiresAt: Timestamp.fromDate(crownExpiresAt(rarity, now)),
+          claimedAt: null,
+        },
       });
-      created += 1;
     }
 
-    if (created > 0) {
-      await batch.commit();
-      result.spawned += created;
+    if (pending.length > 0) {
+      // THE APPROVAL IS RE-CHECKED AT WRITE TIME, TRANSACTIONALLY.
+      //
+      // The approved-cell list was read once at the top of this pass, and a
+      // pass may run for minutes. `setSpawnCellApproval` revokes by flipping
+      // `approved` and then deleting the cell's live crowns — so a revocation
+      // landing mid-pass would drain a cell this loop is still working on, and
+      // the plain batch that used to be here would then commit fresh crowns
+      // into an area an admin had just declared unsafe. Nothing downstream
+      // removes those: the sweeper only takes expired crowns, so they would
+      // stand for their full TTL, up to 48 h for a legendary.
+      //
+      // Reading the cell document inside the transaction closes the window
+      // rather than narrowing it. Firestore aborts and retries a transaction
+      // whose reads were written by someone else before it committed, so the
+      // two possible orderings are both safe: commit-before-revocation means
+      // the revocation's drain deletes these crowns, and revocation-first means
+      // the retry re-reads `approved: false` and writes nothing at all.
+      const committed = await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(cellDoc.ref);
+        if (fresh.get('approved') !== true) return 0;
+        for (const crown of pending) tx.set(crown.ref, crown.data);
+        return pending.length;
+      });
+
+      if (committed === 0) {
+        result.cellsRevokedMidPass += 1;
+        logger.warn('Crown spawn skipped: cell revoked mid-pass', { cellKey });
+      }
+      result.spawned += committed;
     }
   }
 

@@ -754,6 +754,41 @@ describe('revoking an area', () => {
     const after = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
     expect(after.empty).toBe(true);
   });
+
+  it('leaves no crown behind when the revocation lands MID-PASS', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Godkänd inför kapplöpningstest.',
+    });
+    await seedActivity(CELL_KEY, 12, new Date());
+
+    // A pass reads the allow-list once and then runs for a while. Start one and
+    // revoke the cell underneath it. The assertion deliberately does NOT depend
+    // on which side wins: if the spawn transaction commits first the
+    // revocation's drain deletes those crowns, and if the revocation commits
+    // first the transaction re-reads `approved: false` and writes nothing. The
+    // one thing that must never be true either way is a live crown left
+    // standing in a revoked area — nothing downstream would remove it, since
+    // the sweeper only takes expired crowns.
+    const pass = runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 }, createSeededRng(7));
+    const revoke = call('crownHunt-setSpawnCellApproval', {
+      approved: false,
+      cellKey: CELL_KEY,
+      reason: 'Nödstopp mitt under en pågående runda.',
+    });
+    await Promise.all([pass, revoke]);
+
+    const remaining = await adminDb
+      .collection('crownSpawns')
+      .where('cellKey', '==', CELL_KEY)
+      .get();
+    expect(remaining.empty).toBe(true);
+  }, 30_000);
 });
 
 describe('scheduled sweeper', () => {
