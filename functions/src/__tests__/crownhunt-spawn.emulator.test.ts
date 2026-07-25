@@ -595,6 +595,69 @@ describe('crownHunt.claimSpawn', () => {
 });
 
 describe('revoking an area', () => {
+  it('drains the whole cell, not just the first page', async () => {
+    await clearSpawns();
+    await signInAs(adminUser);
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Godkänd inför tömningstest.',
+    });
+
+    // More than one revocation page (200), including crowns that have expired
+    // but not yet been swept — those still carry status 'live' and must go too.
+    const total = 250;
+    const now = new Date();
+    for (let start = 0; start < total; start += 400) {
+      const batch = adminDb.batch();
+      for (let i = start; i < Math.min(start + 400, total); i += 1) {
+        const expired = i % 5 === 0;
+        batch.set(adminDb.collection('crownSpawns').doc(), {
+          cellKey: CELL_KEY,
+          latitude: CELL_LAT,
+          longitude: CELL_LON,
+          rarity: 'common',
+          rewardPoints: 10,
+          collectRadiusMeters: COLLECT_RADIUS_METERS,
+          status: 'live',
+          source: 'auto',
+          safeLocationConfirmed: false,
+          approvedCellBy: 'admin-seed',
+          claimedByUid: null,
+          claimedAt: null,
+          createdAt: Timestamp.fromDate(now),
+          expiresAt: Timestamp.fromMillis(
+            now.getTime() + (expired ? -60_000 : 6 * 60 * 60 * 1000),
+          ),
+        });
+      }
+      await batch.commit();
+    }
+
+    const response = (
+      await call('crownHunt-setSpawnCellApproval', {
+        approved: false,
+        cellKey: CELL_KEY,
+        reason: 'Området stängt, allt måste bort nu.',
+      })
+    ).data as { removedCrowns: number };
+    expect(response.removedCrowns).toBe(total);
+    const remaining = await adminDb
+      .collection('crownSpawns')
+      .where('cellKey', '==', CELL_KEY)
+      .get();
+    expect(remaining.empty).toBe(true);
+
+    // Put the allow-list back for the test that follows.
+    await call('crownHunt-setSpawnCellApproval', {
+      approved: true,
+      cellKey: CELL_KEY,
+      safeAreaConfirmed: true,
+      approvalNote: 'Återställd efter tömningstest.',
+    });
+  }, 60_000);
+
   it('removes live crowns immediately instead of waiting out their TTL', async () => {
     await clearSpawns();
     await placeCrown();

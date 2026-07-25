@@ -368,6 +368,42 @@ export async function runCrownSpawnCleanup(
 // ---------------------------------------------------------------------------
 
 /**
+ * Serialization for both schedulers.
+ *
+ * `runCrownSpawnPass` reads a cell's live neighbourhood, then writes into it.
+ * Two passes running at the same time would both read the pre-write state, so
+ * each would place crowns the other could not see — and the >= 150 m separation
+ * rule, which is a stated property of the feature rather than a nice-to-have,
+ * would be violated without either run doing anything wrong. Read-then-write
+ * against a shared collection is only safe here because exactly one pass runs
+ * at a time.
+ *
+ * `timeoutSeconds` (300) is already shorter than either interval, so a slow run
+ * cannot bleed into the next tick. These two settings make that ENFORCED rather
+ * than merely true today:
+ *
+ *  - `maxInstances: 1` — at most one container, so a retry or an early tick
+ *    cannot be answered by a second instance running in parallel.
+ *  - `concurrency: 1` — pinned explicitly, not inherited. It happens to be the
+ *    default at 256MiB (Cloud Run defaults concurrency to 1 below 1 CPU and to
+ *    80 at or above it), which means a later memory bump would otherwise let 80
+ *    passes share one instance and silently undo the guarantee above.
+ *
+ * The sweeper carries the same pair. Duplicate deletes are harmless in
+ * themselves, but overlapping sweeps double the Firestore load and make the
+ * `capped` bound meaningless, and an unexplained asymmetry between two
+ * schedulers in one file is worse than a redundant constant.
+ */
+const SPAWN_SCHEDULE_OPTS = {
+  region: 'europe-west1',
+  timeZone: 'Europe/Stockholm',
+  memory: '256MiB' as const,
+  timeoutSeconds: 300,
+  maxInstances: 1,
+  concurrency: 1,
+};
+
+/**
  * Replenish pass, every 10 minutes.
  *
  * Faster than the 15-minute sweep so a cell that loses its crowns (collected or
@@ -375,13 +411,7 @@ export async function runCrownSpawnCleanup(
  * hundred reads an hour at the active footprint we expect.
  */
 export const spawnCrowns = onSchedule(
-  {
-    region: 'europe-west1',
-    timeZone: 'Europe/Stockholm',
-    memory: '256MiB' as const,
-    timeoutSeconds: 300,
-    schedule: '*/10 * * * *',
-  },
+  { ...SPAWN_SCHEDULE_OPTS, schedule: '*/10 * * * *' },
   async () => {
     await runCrownSpawnPass(new Date());
   },
@@ -389,13 +419,7 @@ export const spawnCrowns = onSchedule(
 
 /** TTL sweep, every 15 minutes (mirrors `incidents-cleanupExpired`). */
 export const sweepSpawns = onSchedule(
-  {
-    region: 'europe-west1',
-    timeZone: 'Europe/Stockholm',
-    memory: '256MiB' as const,
-    timeoutSeconds: 300,
-    schedule: '*/15 * * * *',
-  },
+  { ...SPAWN_SCHEDULE_OPTS, schedule: '*/15 * * * *' },
   async () => {
     await runCrownSpawnCleanup(new Date());
   },

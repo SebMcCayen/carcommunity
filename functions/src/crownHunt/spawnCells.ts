@@ -50,6 +50,20 @@ const CALLABLE_OPTS = {
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
 
+/**
+ * Documents deleted per batch when a revocation drains a cell. Firestore caps a
+ * write batch at 500 operations; 200 keeps each commit small enough that a slow
+ * one still leaves room inside the 30 s callable timeout for the next page.
+ */
+const REVOCATION_PAGE_SIZE = 200;
+
+/**
+ * Defensive ceiling on one revocation. A cell should hold single digits of live
+ * crowns, so reaching this means something upstream is wrong; stop and let the
+ * sweeper finish rather than time the admin's callable out mid-drain.
+ */
+const MAX_REVOKED_CROWNS = 2000;
+
 export interface SetSpawnCellApprovalResponse {
   cellKey: string;
   approved: boolean;
@@ -140,20 +154,39 @@ export const setSpawnCellApproval = onCall(
     // Revocation is the lever an admin reaches for after a near-miss or a
     // complaint; leaving up to 48 hours of legendary crowns standing in an area
     // just declared unsafe would make it useless for the one job it has.
-    // Bounded: a single cell holds at most MAX_CROWNS_PER_CELL live crowns.
+    //
+    // So this DRAINS the cell rather than deleting one fixed page of it. The
+    // spawner tops a cell up to at most MAX_CROWNS_PER_CELL crowns that are
+    // live AND unexpired, but this query is deliberately `status == 'live'`
+    // with no expiry filter, and expired-but-not-yet-swept crowns stay in that
+    // set until the 15-minute sweeper reaches them — so "at most 5 documents"
+    // was never an invariant a single page could be sized against. Neither a
+    // sweeper backlog nor a future change to the target curve may leave a crown
+    // standing in an area an admin has just declared unsafe.
+    //
+    // Still bounded: pages of REVOCATION_PAGE_SIZE up to MAX_REVOKED_CROWNS in
+    // total, so a pathological cell degrades to "nearly all of it removed now,
+    // sweeper gets the rest" rather than running the callable out of time.
     let removedCrowns = 0;
     if (!input.approved) {
-      const live = await db
-        .collection('crownSpawns')
-        .where('cellKey', '==', cellKey)
-        .where('status', '==', 'live')
-        .limit(50)
-        .get();
-      if (!live.empty) {
+      while (removedCrowns < MAX_REVOKED_CROWNS) {
+        const pageSize = Math.min(REVOCATION_PAGE_SIZE, MAX_REVOKED_CROWNS - removedCrowns);
+        const live = await db
+          .collection('crownSpawns')
+          .where('cellKey', '==', cellKey)
+          .where('status', '==', 'live')
+          .limit(pageSize)
+          .get();
+        if (live.empty) break;
+
         const removal = db.batch();
         for (const doc of live.docs) removal.delete(doc.ref);
         await removal.commit();
-        removedCrowns = live.size;
+        removedCrowns += live.size;
+
+        // A short page means the cell is drained. The next query would come
+        // back empty anyway; this saves a round trip on every revocation.
+        if (live.size < pageSize) break;
       }
     }
 
