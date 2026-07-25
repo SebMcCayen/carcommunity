@@ -417,7 +417,7 @@ The `min(s,7)` and the 1.7 ceiling reach the cap at exactly the same point — t
 | **Driving-derived** cap `D` | **400 KP** | fixed ISO week (Mon–Sun), UTC | Monday `00:00:00Z` | proposed |
 | Crown claims | 10 | fixed UTC calendar day | `00:00:00Z` daily | **built** |
 
-**These are fixed calendar windows, not sliding ones.** A cap resets at the boundary; it is not a trailing 24 h / 7 d lookback. This is deliberate — a sliding window needs a per-earn timestamp scan, whereas a fixed window needs one counter document whose ID *is* the window, which is what makes the cap check cheap enough to run **inside** the award transaction (§5.3, stage 16).
+**These are fixed calendar windows, not sliding ones.** A cap resets at the boundary; it is not a trailing 24 h / 7 d lookback. This is deliberate — a sliding window needs a per-earn timestamp scan, whereas a fixed window needs one counter document whose ID *is* the window, which is what makes the cap check cheap enough to run **inside** the award transaction (§5.5, and stage 16 of the §8.1 pipeline).
 
 Implementers must not invent new boundary maths: the helpers already exist in `functions/src/crownHunt/crownhunt-core.ts` and are the definition of record —
 
