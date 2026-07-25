@@ -1,11 +1,11 @@
 /**
  * Points-economy emulator integration tests (Phase 20).
  *
- * CI-ONLY: these need the full Emulator Suite (auth + functions + firestore +
- * database) and are excluded from the default `vitest run`. Run them with
+ * These need the full Emulator Suite (auth + functions + firestore + database)
+ * and therefore a JDK, so they are excluded from the default `vitest run` and
+ * live behind vitest.emulator.config.ts. Run them with
  *   pnpm --filter @carcommunity/functions emulators:test
- * which is what CI does; there is no local JVM on the dev machine this branch
- * was written on, so they were NOT executed locally.
+ * which is exactly what the test-firebase-rules workflow does.
  *
  * What they prove end-to-end (the pure maths is covered exhaustively by
  * points-economy-core.test.ts):

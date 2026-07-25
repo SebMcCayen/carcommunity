@@ -101,8 +101,24 @@ export const onIncidentConfirmed = onDocumentCreated(
     const incidentId = event.params.incidentId;
     const confirmerUid = event.params.confirmerUid;
 
-    const incidentSnap = await db.collection('incidents').doc(incidentId).get();
-    const incident = incidentSnap.data();
+    // Best-effort by contract (see the module header): the confirmation is
+    // already committed, so an unreadable incident must end this invocation
+    // quietly rather than escape as a function failure. Retries are off for
+    // these triggers (firebase-functions v2 defaults `retry` to false and no
+    // trigger in this repo opts in), so an escaping throw would not be
+    // re-delivered — it would only be noise in the error budget. The award is
+    // re-earnable by replaying the source event, and the idempotency key makes
+    // that safe.
+    let incident: FirebaseFirestore.DocumentData | undefined;
+    try {
+      incident = (await db.collection('incidents').doc(incidentId).get()).data();
+    } catch (error) {
+      logger.warn('incident_report_confirmed: incident unreadable', {
+        incidentId,
+        error: String(error),
+      });
+      return;
+    }
     if (!incident) {
       return;
     }
@@ -238,7 +254,14 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
       if (countedSnap.exists) {
         return stored;
       }
-      tx.set(countedRef, { userId: uid, createdAt: FieldValue.serverTimestamp() });
+      // `create`, not `set`: the claim is a one-shot guard, so an unexpected
+      // second writer must fail loudly rather than silently overwrite it and
+      // let the tally double-count an attendee. Same shape as the crown fold
+      // marker in onLedgerEntryCreated. (Correctness does not rest on this —
+      // countedRef is READ in this transaction, so a concurrent claim aborts
+      // and retries it — but the doc above promised `create`, so it is
+      // `create`.)
+      tx.create(countedRef, { userId: uid, createdAt: FieldValue.serverTimestamp() });
       tx.set(
         countsRef,
         {
@@ -259,8 +282,20 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
     return;
   }
 
-  const eventSnap = await db.collection('events').doc(eventId).get();
-  const hostUid = eventSnap.data()?.createdByUserId;
+  // Same best-effort contract as the transaction above: the attendee has
+  // already been counted, so an unreadable event ends this quietly. The tally
+  // is durable and this runs again for every subsequent verified attendee, so
+  // the host award self-heals as long as one more member checks in; if the
+  // event ends on exactly HOST_SUCCESS_MIN_VERIFIED_ATTENDEES it is lost, and
+  // an admin adjustment is the remedy. Losing 75 points is strictly better
+  // than a trigger that fails loudly on a gamification side effect.
+  let hostUid: unknown;
+  try {
+    hostUid = (await db.collection('events').doc(eventId).get()).data()?.createdByUserId;
+  } catch (error) {
+    logger.warn('event_host_success: event unreadable', { eventId, error: String(error) });
+    return;
+  }
   if (typeof hostUid !== 'string' || hostUid.length === 0) {
     return;
   }

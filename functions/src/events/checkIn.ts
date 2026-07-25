@@ -107,14 +107,24 @@ export interface CheckInResponse {
   sampleCount: number;
 }
 
-/** Per-minute ceiling — same limiter shape as points.recordDailyOpen. */
-async function enforceRateLimit(uid: string, nowMs: number): Promise<void> {
+/**
+ * Per-minute ceiling — same limiter shape as points.recordDailyOpen.
+ *
+ * Returns the attempt number THIS call represents (the stored count plus its
+ * own increment), which is exactly what the risk pipeline's
+ * `attemptsInLastMinute` signal needs. Returning it instead of re-reading the
+ * same document a few lines later saves one Firestore read on every check-in,
+ * and is if anything more truthful: a second read could observe a concurrent
+ * caller's increment and attribute it to this attempt.
+ */
+async function enforceRateLimit(uid: string, nowMs: number): Promise<number> {
   const ref = db
     .collection(ECONOMY_RATE_LIMIT_COLLECTION)
     .doc(economyRateLimitDocId(uid, RATE_LIMIT_ACTION, nowMs));
   const snap = await ref.get();
   const count = snap.get('count');
-  if (!isUnderEconomyRateLimit(typeof count === 'number' ? count : 0)) {
+  const stored = typeof count === 'number' && Number.isFinite(count) && count > 0 ? count : 0;
+  if (!isUnderEconomyRateLimit(stored)) {
     throw new HttpsError('resource-exhausted', 'Too many check-in attempts — try again shortly.');
   }
   await ref.set(
@@ -126,6 +136,7 @@ async function enforceRateLimit(uid: string, nowMs: number): Promise<void> {
     },
     { merge: true },
   );
+  return stored + 1;
 }
 
 interface EventLocation {
@@ -244,7 +255,7 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
   }
   const input = parsed.input;
   const now = new Date();
-  await enforceRateLimit(actor.uid, now.getTime());
+  const attemptsInLastMinute = await enforceRateLimit(actor.uid, now.getTime());
 
   const location = await loadEventLocation(input.eventId);
   if (!location) {
@@ -280,14 +291,10 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
     return respond('outside_geofence', false, 0, 0);
   }
 
-  // Risk pipeline — identical thresholds to a Kronjakt claim.
-  const attemptsRef = db
-    .collection(ECONOMY_RATE_LIMIT_COLLECTION)
-    .doc(economyRateLimitDocId(actor.uid, RATE_LIMIT_ACTION, now.getTime()));
-  const [latestPosition, attemptsSnap] = await Promise.all([
-    readLatestTrustedPosition(actor.uid),
-    attemptsRef.get(),
-  ]);
+  // Risk pipeline — identical thresholds to a Kronjakt claim. The attempts
+  // signal is the value enforceRateLimit already established above; it is not
+  // re-read (one fewer Firestore read per check-in).
+  const latestPosition = await readLatestTrustedPosition(actor.uid);
   const impossibleJump = latestPosition
     ? !isPlausibleJump(
         latestPosition.latitude,
@@ -303,7 +310,7 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
     poorAccuracy: (input.accuracyMeters ?? 0) > 50,
     impossibleJump,
     duplicateIdempotencyKey: false,
-    attemptsInLastMinute: typeof attemptsSnap.get('count') === 'number' ? attemptsSnap.get('count') : 0,
+    attemptsInLastMinute,
     successfulClaimsInVelocityWindow: 0,
     geofenceEdgeAttempts: 0,
     accuracyMeters: input.accuracyMeters ?? null,
