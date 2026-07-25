@@ -23,12 +23,14 @@
  * other past a limit or a cap.
  *
  * WHAT IS *NOT* BEHIND THIS DOOR — stated so "single door" is not read as
- * "every point in the system". Three paths write the ledger in their own
+ * "every point in the system". Four paths write the ledger in their own
  * transactions and therefore see none of the limits or caps above:
  *
- *   - `crownHunt.submitClaim` (owned by another domain). Its award is not
- *     clipped, but it IS charged to the daily budget after the fact by the
- *     `points-onLedgerEntryCreated` fold — see economyTriggers.ts;
+ *   - `crownHunt.submitClaim` (hand-placed crowns) and `crownHunt.claimSpawn`
+ *     (auto-spawned crowns), both owned by another domain. Neither award is
+ *     clipped, but both ARE charged to the daily budget after the fact by the
+ *     `points-onLedgerEntryCreated` fold, which keys on `source: 'crown_hunt'`
+ *     and so covers any future crown path too — see economyTriggers.ts;
  *   - `points.adminAdjust` — an admin credit is not member "earning";
  *   - `points.adminReverse` — likewise, and note the deliberate asymmetry:
  *     reversing an award does NOT release the daily/weekly headroom it

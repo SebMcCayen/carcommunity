@@ -295,7 +295,7 @@
       "access": "member",
       "appCheck": true,
       "status": "implemented",
-      "source": "docs/gamification (points economy - event attendance verification)"
+      "source": "docs/gamification-system.md (points economy - event attendance verification)"
     },
     {
       "name": "garage.addVehicle",
@@ -403,7 +403,7 @@
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",
-      "source": "docs/gamification (points economy - daily open + streak)"
+      "source": "docs/gamification-system.md (points economy - daily open + streak)"
     },
     {
       "name": "partners.submitApplication",

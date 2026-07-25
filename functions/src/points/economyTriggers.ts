@@ -338,16 +338,21 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
  *    them would make the ceiling trivially bypassable and turn the whole
  *    economy into a crown race, which is exactly what a ceiling is for.
  *  - Driving cap NO: that cap exists specifically to remove any incentive to
- *    drive further or more often. Crowns are fixed, admin-placed objectives
- *    at safe stopping points with their own repeat rules and their own daily
- *    claim limit — collecting one is a destination, not a distance. Charging
- *    them to the driving lane would penalise a member for visiting a crown
- *    and would eat the headroom for the drive rules without capping anything
- *    that scales with kilometres.
+ *    drive further or more often. A crown is a destination, not a distance,
+ *    in BOTH of its forms: hand-placed points are fixed coordinates an admin
+ *    has reviewed as safe to stop at, with their own repeat rules; auto-spawned
+ *    crowns are machine-placed inside admin-APPROVED cells, expire on their own
+ *    TTL, and are collectable only while STOPPED and dwelling (crownHunt/
+ *    crown-spawn-core.ts), so neither form pays for kilometres and both carry
+ *    their own daily claim limit. Charging them to the driving lane would
+ *    penalise a member for visiting a crown and would eat the headroom for the
+ *    drive rules without capping anything that scales with kilometres.
  *
- * MECHANISM: crownHunt.submitClaim credits the ledger directly (that domain
- * is owned elsewhere and its award path is deliberately left untouched), so
- * the fold happens here, after the fact. Two consequences, stated plainly:
+ * MECHANISM: both crown award paths — crownHunt.submitClaim (hand-placed
+ * points) and crownHunt.claimSpawn (auto-spawned crowns) — credit the ledger
+ * directly with `source: 'crown_hunt'` (that domain is owned elsewhere and its
+ * award paths are deliberately left untouched), so the fold happens here,
+ * after the fact, for both. Two consequences, stated plainly:
  *  - a crown is never CLIPPED by the cap — a 500-point crown pays 500 even on
  *    a day that already had 280 — but it does consume the day's budget, so
  *    economy awards for the rest of that local day return `cap_reached`;
@@ -356,8 +361,8 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
  *    the crown is folded in. The overshoot is bounded by one rule's value
  *    (at most 75 points) and self-corrects for the rest of the day.
  * Routing crowns through `awardEconomyPoints` would make them clipped and
- * exact; that is a one-line change on the crownHunt side whenever that team
- * wants it.
+ * exact; that is a small change at the two crownHunt award sites whenever that
+ * team wants it.
  *
  * Non-crown sources are deliberately NOT folded: economy awards already
  * increment the counter inside their own transaction, and admin adjustments,
