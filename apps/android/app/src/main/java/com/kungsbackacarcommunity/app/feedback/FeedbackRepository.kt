@@ -154,8 +154,12 @@ class FirebaseFeedbackRepository private constructor(
                                 // without this the single most likely cause of a
                                 // "reporting an issue errors" report — App Check
                                 // rejecting the token — leaves no trace at all.
-                                Log.w(TAG, "$CALLABLE rejected as unauthenticated; if this is a " +
-                                    "debug build, check the App Check debug token (docs/app-check.md)")
+                                Log.w(
+                                    TAG,
+                                    "$CALLABLE rejected as unauthenticated; if this is a debug " +
+                                        "build, check the App Check debug token (docs/app-check.md)",
+                                    cause,
+                                )
                                 continuation.resumeWithException(
                                     FeedbackUnauthenticatedException(cause),
                                 )

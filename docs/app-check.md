@@ -56,9 +56,18 @@ Treat the token like a credential: anyone holding it can pass App Check as this
 app. Rotate by registering a new UUID and deleting the old one in the console.
 
 **Not this bug:** if a *release* build also fails a callable, that is a separate
-IAM problem — the Cloud Run service backing the function is missing the
-`allUsers → roles/run.invoker` binding. That is a gcloud/console action, not a
-client change.
+IAM problem — the Cloud Run service backing that **v2 callable** (`onCall`) is
+missing the `allUsers → roles/run.invoker` binding. That is a gcloud/console
+action, not a client change.
+
+Granting `allUsers` invoker sounds alarming but is the intended setup for v2
+callables specifically: it only lets a request *reach* the service, where the
+function's own Firebase Auth check and `enforceAppCheck` are what actually
+authorize it — an unauthenticated or unattested caller is rejected before the
+function does any work. Apply it **only** to a service you have confirmed is an
+`onCall` callable with both of those in place. Adding it to a plain `onRequest`
+HTTP function that relies on IAM for its gating would expose that endpoint to
+the public internet.
 
 ## Production rollout (at cutover, per the migration plan)
 
