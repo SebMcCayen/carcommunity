@@ -1,6 +1,6 @@
 /**
- * Unit tests for the Kronjakt pure logic (crownhunt-core.ts + the verbatim
- * geo/risk ports). No emulators required.
+ * Unit tests for the Kronjakt pure logic (crownhunt-core.ts + the geo/risk
+ * modules ported from the legacy service). No emulators required.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -33,7 +33,7 @@ import {
 
 const NOW = new Date('2026-07-04T12:00:00Z');
 
-describe('crown-hunt-geo (verbatim legacy port)', () => {
+describe('crown-hunt-geo (legacy port + deliberate safety deviations)', () => {
   it('validates WGS-84 coordinates', () => {
     expect(isValidCoordinate(59.33, 18.07)).toBe(true);
     expect(isValidCoordinate(91, 0)).toBe(false);

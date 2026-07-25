@@ -1,8 +1,19 @@
 /**
- * Crown Hunt geographic and position-validation helpers (Phase 9h) — ported
- * verbatim from services/api/src/lib/crown-hunt-geo.ts per
+ * Crown Hunt geographic and position-validation helpers (Phase 9h) — based on
+ * services/api/src/lib/crown-hunt-geo.ts per
  * docs/migration/backend-domain-mapping.md ("Must preserve all validation
  * logic").
+ *
+ * NOT a verbatim port. Migration parity is preserved except where the legacy
+ * behaviour was itself a hole; each deviation below is deliberate, so a
+ * parity audit should expect it rather than "fix" it back:
+ *
+ *  1. `isSpeedSafe` returns FALSE for a non-finite or negative speed. Legacy
+ *     treated those as safe, which let a claim bypass the stopped-vehicle
+ *     check by reporting a negative speed.
+ *  2. The geofence buffer derived from the client-supplied accuracy is
+ *     bounded (see {@link effectiveGeofenceRadiusMeters}). Legacy applied it
+ *     unbounded, which let a claim inflate a 150 m fence to kilometres.
  *
  * Small, testable pure functions — no database or service dependencies.
  *
