@@ -166,8 +166,9 @@ async function isEligibleForAwards(uid: string): Promise<boolean> {
  *
  * Returns the keys awarded by THIS call (empty on a no-op re-run). Never
  * throws for an expected condition — a restricted or missing member is a
- * silent no-op, and a failed points credit is logged and does not block the
- * badge, because the credit will be replayed on the next evaluation.
+ * silent no-op, and a failed points credit is logged and DEFERS the badge:
+ * awarding it would mark the tier processed forever and strand the Kronpoäng,
+ * so the loop stops and the next trigger (or the 6h sweep) retries both.
  */
 export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadgeKey[]> {
   const progressSnap = await badgeProgressRef(uid).get();
