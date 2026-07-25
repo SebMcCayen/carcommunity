@@ -16,6 +16,8 @@ import com.kungsbackacarcommunity.app.usersearch.FirebaseUserSearchRepository
 import com.kungsbackacarcommunity.app.usersearch.UserSearchCoordinator
 import com.kungsbackacarcommunity.app.usersearch.UserSearchRepository
 import com.kungsbackacarcommunity.app.usersearch.UserSearchState
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 /**
@@ -63,12 +65,19 @@ fun FriendsRoute(
             searchRepository?.let { UserSearchCoordinator(it, scope) }
         }
     var searchQuery by remember { mutableStateOf("") }
-    // NULL when there is no search backend, which is how the screen knows to omit
-    // the field entirely rather than render one that accepts typing and can never
-    // answer (that would read as "nobody matches" for every query).
-    val searchState: UserSearchState? by
-        searchCoordinator?.state?.collectAsState()
-            ?: remember { mutableStateOf(null) }
+    // A constant null flow stands in when there is no search backend, so
+    // collectAsState() is called UNCONDITIONALLY. Collecting inside an elvis
+    // branch would make the composable call order depend on whether the
+    // repository is null, which is exactly what Compose's positional memoization
+    // forbids. `StateFlow` is covariant, so the coordinator's
+    // StateFlow<UserSearchState> is already a StateFlow<UserSearchState?>.
+    //
+    // A null state is how the screen knows to OMIT the field entirely rather than
+    // render one that accepts typing and can never answer — which would read as
+    // "nobody matches" for every query.
+    val searchStateFlow: StateFlow<UserSearchState?> =
+        remember(searchCoordinator) { searchCoordinator?.state ?: MutableStateFlow(null) }
+    val searchState by searchStateFlow.collectAsState()
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
