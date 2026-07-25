@@ -112,11 +112,15 @@ export function isHiddenUid(uid: string | null | undefined, hidden: ReadonlySet<
  * since none of these collections accept client writes).
  */
 export function filterHiddenAuthors<T>(
-  items: readonly T[],
+  items: T[],
   authorUidOf: (item: T) => string | null | undefined,
   hidden: ReadonlySet<string>,
 ): T[] {
-  if (hidden.size === 0) return [...items];
+  // Most viewers have blocked nobody, so the empty set is the hot path: return
+  // the SAME array rather than copying it. Nothing here or downstream mutates
+  // the result, so sharing the instance is safe and saves an O(n) allocation on
+  // every list call.
+  if (hidden.size === 0) return items;
   return items.filter((item) => !isHiddenUid(authorUidOf(item), hidden));
 }
 

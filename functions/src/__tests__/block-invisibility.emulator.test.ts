@@ -720,6 +720,76 @@ describe('DM threads are hidden and inert for a blocked pair', () => {
     );
   });
 
+  it('dm-getMessages and dm-markRead FAIL CLOSED on a malformed conversation', async () => {
+    // These callables read and WRITE with the Admin SDK, which bypasses the
+    // firestore.rules gate entirely — so the shape check has to exist on the
+    // server side too, or a conversation whose counterparty cannot be derived
+    // would be served (and its unread aggregate mutated) with no block check
+    // having run at all.
+    const one = await newMember('FailClosedOne');
+    const two = await newMember('FailClosedTwo');
+    const third = await newMember('FailClosedThird');
+
+    const pairId = `callable-malformed-${SFX}-${Date.now()}`;
+    const convRef = adminDb.collection('conversations').doc(pairId);
+    await convRef.set({
+      members: [one.uid, two.uid, third.uid],
+      unread: { [one.uid]: 3 },
+      lastMessageAt: new Date(),
+    });
+    await convRef.collection('messages').add({
+      senderUid: two.uid,
+      text: `callable-malformed-${SFX}`,
+      createdAt: new Date(),
+    });
+
+    await signInAs(one);
+    // The caller IS listed in members, so this is the shape check refusing —
+    // not the membership check.
+    expect(await callableErrorCode(call('dm-getMessages', { conversationId: pairId }))).toBe(
+      'functions/not-found',
+    );
+    expect(await callableErrorCode(call('dm-markRead', { conversationId: pairId }))).toBe(
+      'functions/not-found',
+    );
+
+    // Refusing means refusing to WRITE too: the unread counter is untouched, so
+    // no aggregate was decremented against a document we cannot interpret.
+    expect(((await convRef.get()).data()?.unread as Record<string, number>)[one.uid]).toBe(3);
+  });
+
+  it('omits a redacted thread from the inbox even when the mirror has not caught up', async () => {
+    // The inbox filters on TWO signals: the eventually-consistent blockVisibility
+    // mirror and the `blockedPair` marker the same trigger writes on the
+    // conversation. This pins the second one on its own — a conversation marked
+    // blocked but absent from the mirror must still not appear, which is the
+    // window between a block landing and its fan-out completing.
+    const one = await newMember('MarkerOne');
+    const two = await newMember('MarkerTwo');
+    await makeFriends(one, two);
+
+    await signInAs(one);
+    const sent = (await call('dm-sendMessage', { toUid: two.uid, text: `marker-${SFX}` }))
+      .data as { conversationId: string };
+
+    await signInAs(one);
+    expect(await conversationIds()).toContain(sent.conversationId);
+
+    // Simulate the mid-fan-out state directly: the marker is set, the mirror is
+    // not. (Writing the marker with the Admin SDK rather than blocking, so the
+    // mirror genuinely stays empty.)
+    await adminDb
+      .collection('conversations')
+      .doc(sent.conversationId)
+      .set({ blockedPair: true }, { merge: true });
+    expect(await hiddenUids(one.uid)).not.toContain(two.uid);
+
+    await signInAs(one);
+    expect(await conversationIds()).not.toContain(sent.conversationId);
+    await signInAs(two);
+    expect(await conversationIds()).not.toContain(sent.conversationId);
+  });
+
   it('still refuses to SEND between a blocked pair (unchanged pre-existing gate)', async () => {
     await makeFriends(userA, userB);
     await blockAndAwaitMirror(userA, userB);

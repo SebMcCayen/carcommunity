@@ -71,9 +71,12 @@ describe('filterHiddenAuthors', () => {
     expect(kept.map((m) => m.id)).toEqual(['1', '3']);
   });
 
-  it('is a no-op when nothing is hidden', () => {
+  it('returns the SAME array instance when nothing is hidden', () => {
+    // The empty set is the hot path (most viewers have blocked nobody), so this
+    // must not allocate a copy of every page. Identity, not equality, is the
+    // assertion — `toEqual` would pass against a copy too.
     const messages: Msg[] = [{ id: '1', senderUid: 'alice' }];
-    expect(filterHiddenAuthors(messages, uidOf, new Set())).toEqual(messages);
+    expect(filterHiddenAuthors(messages, uidOf, new Set())).toBe(messages);
   });
 
   it('keeps an item with no resolvable author', () => {

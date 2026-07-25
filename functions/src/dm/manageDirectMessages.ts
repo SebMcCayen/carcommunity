@@ -51,6 +51,7 @@ import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
 import { loadHiddenUids } from '../blocking/blockVisibilityStore';
+import { BLOCKED_PAIR_FIELD } from './blockedConversation';
 import {
   CONVERSATION_NOT_FOUND_MESSAGE,
   DM_CONVERSATIONS_LIMIT,
@@ -348,8 +349,18 @@ export const listConversations = onCall(
     // thread is hidden and inert rather than half-shown (dm/blockedConversation.ts
     // explains why, and redacts the stored preview so the raw document a client
     // listener still receives carries no counterparty content).
+    //
+    // TWO independent signals, deliberately. The mirror is trigger-maintained and
+    // therefore eventually consistent, so on its own it would let a just-blocked
+    // thread appear for the moment before the fan-out lands — and by then the
+    // SAME trigger has already blanked the row's preview, so what slips through
+    // is a contentless ghost row sitting in the inbox ordering. The stored
+    // `blockedPair` marker is written in that same fan-out and read off the
+    // document this query already fetched, so checking it costs nothing and
+    // closes the window from the other side.
+    const visibleDocs = snap.docs.filter((doc) => doc.data()[BLOCKED_PAIR_FIELD] !== true);
     const conversations = filterHiddenAuthors(
-      snap.docs.map((doc) => toConversationSummary(doc.id, doc.data(), actor.uid, toIso)),
+      visibleDocs.map((doc) => toConversationSummary(doc.id, doc.data(), actor.uid, toIso)),
       (conversation) => conversation.otherUser.uid,
       hidden,
     );
@@ -394,8 +405,15 @@ export const getMessages = onCall(CALLABLE_OPTS, async (request): Promise<GetMes
   // userBlocks edges (two point reads on a known pair), not the eventually
   // consistent blockVisibility mirror, so a page read cannot slip through in
   // the moment between the block landing and its trigger running.
+  //
+  // FAILS CLOSED on a malformed conversation. A null counterparty means the
+  // document does not name exactly one other member, so there is no pair to
+  // block-check — and this callable reads the messages with the Admin SDK,
+  // which BYPASSES the firestore.rules gate that would otherwise catch it. So a
+  // shape we cannot verify is refused rather than served unchecked (same rule as
+  // the rules-side gate: dmWellFormed in firebase/firestore.rules).
   const otherUid = conversationCounterparty(convSnap.data(), actor.uid);
-  if (otherUid !== null && (await isBlockedEitherWay(actor.uid, otherUid))) {
+  if (otherUid === null || (await isBlockedEitherWay(actor.uid, otherUid))) {
     throw new HttpsError('not-found', CONVERSATION_NOT_FOUND_MESSAGE);
   }
 
@@ -455,15 +473,22 @@ export const markRead = onCall(CALLABLE_OPTS, async (request): Promise<MarkReadR
     // hidden thread cannot be marked read (its unread was already cleared and
     // unwound from the aggregate when the block landed; letting markRead run
     // here would decrement the aggregate a second time).
+    //
+    // FAILS CLOSED on a malformed conversation, as getMessages does: a null
+    // counterparty is a shape whose block state cannot be established, and this
+    // transaction MUTATES state (per-member unread and the owner-only
+    // dmUnreadTotal aggregate) through the Admin SDK. Refusing is strictly safer
+    // than writing against a document we cannot interpret.
     const otherUid = conversationCounterparty(convSnap.data(), actor.uid);
-    if (otherUid !== null) {
-      const [callerBlocked, blockedCaller] = await Promise.all([
-        tx.get(blockRef(actor.uid, otherUid)),
-        tx.get(blockRef(otherUid, actor.uid)),
-      ]);
-      if (callerBlocked.exists || blockedCaller.exists) {
-        throw new HttpsError('not-found', CONVERSATION_NOT_FOUND_MESSAGE);
-      }
+    if (otherUid === null) {
+      throw new HttpsError('not-found', CONVERSATION_NOT_FOUND_MESSAGE);
+    }
+    const [callerBlocked, blockedCaller] = await Promise.all([
+      tx.get(blockRef(actor.uid, otherUid)),
+      tx.get(blockRef(otherUid, actor.uid)),
+    ]);
+    if (callerBlocked.exists || blockedCaller.exists) {
+      throw new HttpsError('not-found', CONVERSATION_NOT_FOUND_MESSAGE);
     }
 
     const unreadMap = (convSnap.data()?.unread ?? {}) as Record<string, unknown>;
