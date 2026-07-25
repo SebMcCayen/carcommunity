@@ -463,6 +463,42 @@ export function sampleCrownPosition(
 export const COLLECT_RADIUS_METERS = 75;
 
 /**
+ * Hard ceiling on a collect radius read back off a crown document.
+ *
+ * The spawner only ever writes {@link COLLECT_RADIUS_METERS}, and clients cannot
+ * write `crownSpawns` at all (firestore.rules), so a stored radius outside this
+ * bound means the document is wrong — a console edit, a migration, or a future
+ * bug. This exists so that "wrong" can only ever mean a SMALLER gate.
+ */
+export const MAX_STORED_COLLECT_RADIUS_METERS = 250;
+
+/**
+ * Resolves the collect radius to use for a crown, from whatever its document
+ * actually holds.
+ *
+ * Every other way this value can be wrong already fails closed: a non-numeric
+ * latitude makes the Haversine distance NaN and `NaN <= radius` is false, so
+ * the claim is refused. An oversized radius is the one corruption that fails
+ * OPEN — it widens the geofence instead of shutting it — and on a claim path
+ * "fail open" means paying out to someone who was never there. So a stored
+ * radius is used only when it is a finite, positive number inside
+ * {@link MAX_STORED_COLLECT_RADIUS_METERS}; anything else (undefined, null,
+ * NaN, a string, zero, negative, absurd) falls back to the 75 m default rather
+ * than being trusted.
+ */
+export function resolveCollectRadiusMeters(stored: unknown): number {
+  if (
+    typeof stored === 'number' &&
+    Number.isFinite(stored) &&
+    stored > 0 &&
+    stored <= MAX_STORED_COLLECT_RADIUS_METERS
+  ) {
+    return stored;
+  }
+  return COLLECT_RADIUS_METERS;
+}
+
+/**
  * Collection speed ceiling: 2.0 m/s = 7.2 km/h.
  *
  * Slightly more permissive than the hand-placed points' 1.4 m/s so a member

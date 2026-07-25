@@ -11,6 +11,7 @@ import {
   MAX_ACTIVITY_SPEED_MPS,
   MAX_COLLECT_SPEED_MPS,
   MAX_CROWNS_PER_CELL,
+  MAX_STORED_COLLECT_RADIUS_METERS,
   MIN_CROWN_SEPARATION_METERS,
   MIN_DWELL_SECONDS,
   activityScore,
@@ -31,6 +32,7 @@ import {
   parseCrownCellKey,
   parseSetSpawnCellApprovalInput,
   pickCrownRarity,
+  resolveCollectRadiusMeters,
   resolveSpawnCellKey,
   sampleCrownPosition,
   scopeSpawnClaimKey,
@@ -528,6 +530,45 @@ describe('stationary collection rule', () => {
     expect(
       evaluate({ distanceMeters: 5000, accuracyMeters: 0, recordedAtMs: base }, {}),
     ).toEqual({ ok: false, result: 'outside_radius' });
+  });
+});
+
+describe('resolveCollectRadiusMeters', () => {
+  it('uses a sane stored radius as-is', () => {
+    expect(resolveCollectRadiusMeters(COLLECT_RADIUS_METERS)).toBe(COLLECT_RADIUS_METERS);
+    expect(resolveCollectRadiusMeters(120)).toBe(120);
+    expect(resolveCollectRadiusMeters(MAX_STORED_COLLECT_RADIUS_METERS)).toBe(
+      MAX_STORED_COLLECT_RADIUS_METERS,
+    );
+  });
+
+  it('falls back to the default when the field is missing', () => {
+    expect(resolveCollectRadiusMeters(undefined)).toBe(COLLECT_RADIUS_METERS);
+    expect(resolveCollectRadiusMeters(null)).toBe(COLLECT_RADIUS_METERS);
+  });
+
+  it('NEVER widens the gate from a corrupt document', () => {
+    // An oversized radius is the only corruption that fails open — every value
+    // here must come back as the 75 m default, never as the stored one.
+    for (const corrupt of [
+      MAX_STORED_COLLECT_RADIUS_METERS + 1,
+      1e9,
+      Number.MAX_SAFE_INTEGER,
+      Number.POSITIVE_INFINITY,
+      '1e9',
+      '999999',
+      {},
+      [],
+      true,
+    ]) {
+      expect(resolveCollectRadiusMeters(corrupt)).toBe(COLLECT_RADIUS_METERS);
+    }
+  });
+
+  it('rejects zero, negatives and NaN rather than producing a degenerate gate', () => {
+    for (const bad of [0, -1, -1000, Number.NaN, Number.NEGATIVE_INFINITY]) {
+      expect(resolveCollectRadiusMeters(bad)).toBe(COLLECT_RADIUS_METERS);
+    }
   });
 });
 

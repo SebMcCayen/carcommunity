@@ -547,6 +547,34 @@ describe('crownHunt.claimSpawn', () => {
     expect(response.result).toBe('outside_radius');
   });
 
+  it('ignores an absurd collectRadiusMeters on the crown document', async () => {
+    // Clients cannot write crownSpawns, so this models a console edit, a bad
+    // migration, or a future spawner bug. It must narrow the gate to the 75 m
+    // default, never widen it — a wider geofence pays out to someone who was
+    // never there.
+    const spawnId = await placeCrown({ collectRadiusMeters: 1e9 });
+    await signInAs(hunter);
+    const farLat = CELL_LAT + 0.05; // ~5.5 km away, well inside a 1e9 m radius
+    const response = (
+      await call(
+        'crownHunt-claimSpawn',
+        claimInput({
+          spawnId,
+          latitude: farLat,
+          accuracyMeters: 5,
+          previousFix: {
+            latitude: farLat,
+            longitude: CELL_LON,
+            accuracyMeters: 5,
+            speedMetersPerSecond: 0,
+            recordedAt: new Date(Date.now() - 6000).toISOString(),
+          },
+        }),
+      )
+    ).data as ClaimResponse;
+    expect(response.result).toBe('outside_radius');
+  });
+
   it('sends a self-reported MOCK location to review and awards nothing', async () => {
     const spawnId = await placeCrown();
     await signInAs(hunter);
