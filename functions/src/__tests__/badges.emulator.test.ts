@@ -33,6 +33,7 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BADGE_CATALOG_ORDER } from '../badges/badge-core';
+import { runBadgeBacklogSweep } from '../badges/scheduled';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -410,10 +411,6 @@ describe('tiered badge ladders', () => {
    * and no Samlare badge, forever.
    */
   it('back-fills Samlare for a garage that predates the ladders', async () => {
-    // Imported lazily: the module pulls in the Admin SDK bootstrap, which must
-    // not be evaluated before this file's emulator-host env fallbacks are set.
-    const { runBadgeBacklogSweep } = await import('../badges/scheduled');
-
     const collector = await createProvisionedUser('badges-tier-samlare');
     await adminDb
       .collection('users')
