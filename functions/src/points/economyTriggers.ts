@@ -320,6 +320,14 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
  * increment the counter inside their own transaction, and admin adjustments,
  * reversals and badge milestones are not member "earning" that a daily
  * grinding ceiling should apply to.
+ *
+ * The filter is on `transactionType === 'earn'`, so this trigger never UNDOES
+ * a fold either: `points.adminReverse` writes a `reversal` entry, and the day
+ * that a reversed crown consumed stays consumed. That is the same asymmetry
+ * documented on DAILY_POINTS_CAP — the counter is a record of what was paid
+ * out during the day, not a live mirror of the balance — and it is the
+ * conservative direction: the worst case is a member paid slightly less on
+ * the one day an admin corrected something.
  */
 export const onLedgerEntryCreated = onDocumentCreated(
   { ...TRIGGER_OPTS, document: 'pointsLedger/{uid}/entries/{entryId}' },

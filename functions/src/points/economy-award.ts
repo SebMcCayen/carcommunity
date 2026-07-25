@@ -22,6 +22,21 @@
  * the same uid serialise on the ledger balance document and cannot race each
  * other past a limit or a cap.
  *
+ * WHAT IS *NOT* BEHIND THIS DOOR — stated so "single door" is not read as
+ * "every point in the system". Three paths write the ledger in their own
+ * transactions and therefore see none of the limits or caps above:
+ *
+ *   - `crownHunt.submitClaim` (owned by another domain). Its award is not
+ *     clipped, but it IS charged to the daily budget after the fact by the
+ *     `points-onLedgerEntryCreated` fold — see economyTriggers.ts;
+ *   - `points.adminAdjust` — an admin credit is not member "earning";
+ *   - `points.adminReverse` — likewise, and note the deliberate asymmetry:
+ *     reversing an award does NOT release the daily/weekly headroom it
+ *     consumed, nor decrement the rule's limit counter. A reversal corrects a
+ *     BALANCE; it does not rewind the member's day. It also cannot reopen an
+ *     award, because the original entry (whose ID is the idempotency key)
+ *     survives the reversal.
+ *
  * FORGERY: nothing here accepts a point value, a distance or a duration from
  * a caller — `points` may only be supplied for `daily_open` and is itself
  * derived from the server clock plus the stored streak, and it is clamped to

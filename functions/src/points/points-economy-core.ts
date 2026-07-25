@@ -172,7 +172,10 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  *
  * Deliberately NOT applied to admin adjustments or reversals — a correction
  * by an admin is not a member "earning", and letting it eat the member's
- * daily headroom would punish them for a support ticket.
+ * daily headroom would punish them for a support ticket. The asymmetry runs
+ * both ways and is intended: a reversal does not RELEASE the headroom the
+ * reversed award consumed either. This counter records what was paid out
+ * during the day; it is not a live mirror of the balance.
  */
 export const DAILY_POINTS_CAP = 300;
 

@@ -530,6 +530,23 @@ describe('the global daily cap', () => {
     const streakDoc = await adminDb.collection('pointsStreaks').doc(user.uid).get();
     expect(streakDoc.data()?.streak).toBe(1);
     expect(streakDoc.data()?.lastOpenDay).toBe(day);
+
+    // COUNTERS MOVE WITH THE ENTRY OR NOT AT ALL — the award engine's central
+    // atomicity claim, asserted against the real Firestore rather than the
+    // cap arithmetic alone. The capped-out open wrote no ledger entry, so it
+    // must also have left the daily_open rule counter untouched (otherwise the
+    // member would have burned today's single open on an award they were never
+    // paid) and must not have moved the daily total past the ceiling.
+    expect(
+      await ledgerEntry(user.uid, economyIdempotencyKey('daily_open', user.uid, day)!),
+    ).toBeUndefined();
+    const openCounter = await adminDb
+      .collection('pointsRuleCounters')
+      .doc(`${user.uid}__daily_open__${day}`)
+      .get();
+    expect(openCounter.exists).toBe(false);
+    const totals = await adminDb.collection('pointsDailyTotals').doc(`${user.uid}__${day}`).get();
+    expect(totals.data()?.total).toBe(DAILY_POINTS_CAP);
   });
 });
 
