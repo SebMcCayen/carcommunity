@@ -324,10 +324,16 @@ private fun ChatHubContent(
     val scope = rememberCoroutineScope()
 
     // The pager is the single source of truth for which section is showing:
-    // [selectedTab] is a REFLECTION of the settled page, driving the tab-row
-    // indicator (and the active-chat registry) from whatever page the pager rests
-    // on — whether the user swiped there or tapped a tab. currentPage flips at the
-    // half-way point of a settle, so the indicator tracks a swipe as it crosses.
+    // [selectedTab] is a REFLECTION of the pager's CURRENT page, driving the tab-row
+    // indicator (and the active-chat registry) from whatever page the pager is on —
+    // whether the user swiped there or tapped a tab.
+    //
+    // `currentPage`, deliberately, NOT `settledPage`: currentPage flips as the swipe
+    // crosses the half-way point, so the tab indicator moves with the member's
+    // finger and the section they are pulling into view is the one marked active.
+    // settledPage would hold the old tab highlighted for the whole gesture and snap
+    // only after the animation finished, which reads as lag. Abandoning a swipe
+    // simply flips it back, since the pager returns to the page it came from.
     //
     // Deliberately one-directional (pager → tab): a tab TAP scrolls the pager
     // directly (see ChatTabItem's onSelect) and lets this reflect the result. The
