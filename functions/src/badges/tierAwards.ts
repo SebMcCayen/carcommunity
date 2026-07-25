@@ -18,17 +18,22 @@
  *   3. Qualification is a pure `>=` test over the current counters
  *      (badge-tiers.ts), so it depends on no history and cannot drift.
  *
- * ORDERING: points are credited BEFORE the badge document is written. The
- * badge document's absence is what marks an award as "not yet processed", so
- * if the process dies between the two writes the next evaluation replays the
- * credit (a ledger no-op) and then writes the badge. Writing the badge first
- * would make a failed credit permanently invisible.
+ * ORDERING: points are credited BEFORE the badge document is written, and the
+ * badge is written ONLY if the credit succeeded. The badge document's absence
+ * is what marks an award as "not yet processed", so both a crash between the
+ * two writes and a failed credit leave the tier unprocessed; the next
+ * evaluation replays the credit (a ledger no-op if it did land) and then writes
+ * the badge. Writing the badge after a failed credit would be unrecoverable —
+ * the key would be excluded from `missing` forever and the member would hold
+ * the badge with the Kronpoäng silently lost.
  *
- * COST: evaluation is O(qualified tiers) — one `badgeProgress` read, one
- * batched `getAll` of at most 23 badge documents, and writes only for tiers
- * that are actually new. It never scans users, never scans a member's full
- * badge subcollection, and returns after two reads for the overwhelmingly
- * common case of "nothing new".
+ * COST: evaluation is O(qualified tiers) — one `badgeProgress` document read
+ * plus one BATCHED `getAll` of the qualified badge documents (at most 23), and
+ * writes only for tiers that are actually new. The `getAll` is a single RPC but
+ * is BILLED PER DOCUMENT, so a steady-state no-op costs 1 + (tiers currently
+ * held) document reads, not two; a member qualifying for nothing returns after
+ * the single `badgeProgress` read. It never scans users and never scans a
+ * member's full badge subcollection.
  */
 
 import { FieldValue } from 'firebase-admin/firestore';
@@ -184,12 +189,19 @@ export async function evaluateAndAwardBadgeTiers(uid: string): Promise<TierBadge
           relatedEntityId: key,
         });
       } catch (error) {
-        // The badge is still worth awarding; the credit replays next time.
-        logger.error('Badge tier points credit failed', {
+        // STOP — do not award the badge. The badge document's absence is the
+        // ONLY marker that this tier is unprocessed, so writing it now would
+        // permanently exclude the key from `missing` on every later evaluation
+        // and the member would keep the badge with the Kronpoäng silently lost.
+        // Breaking (rather than skipping to the next tier) also keeps a
+        // member's holdings a PREFIX of each ladder, never a gap. The next
+        // trigger or the 6h sweep retries the whole tail.
+        logger.error('Badge tier points credit failed — deferring award', {
           uid,
           badgeKey: key,
           error: String(error),
         });
+        break;
       }
     }
     const result = await awardBadge({ targetUid: uid, badgeKey: key, source: 'automatic' });

@@ -40,8 +40,10 @@
  * and wraps to the beginning when the collection is exhausted. Ordering by
  * `FieldPath.documentId()` needs no composite index and — unlike ordering by a
  * timestamp field — cannot silently skip documents that lack the field. A
- * member with nothing new costs one `count()` aggregation plus two document
- * reads and NO writes, so a full pass over an unchanged member base is cheap.
+ * member with nothing new costs one `count()` aggregation, one `badgeProgress`
+ * read and one batched `getAll` of the tiers they already hold — and a `getAll`
+ * is BILLED PER DOCUMENT, so that is 1 + tiersHeld document reads, not two —
+ * with NO writes. Cheap per member, but not constant per member.
  *
  * IDEMPOTENT: it calls exactly the same evaluateAndAwardBadgeTiers the
  * triggers do, so re-running it (or overlapping a trigger) awards nothing

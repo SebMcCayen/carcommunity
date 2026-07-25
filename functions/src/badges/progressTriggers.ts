@@ -182,12 +182,24 @@ export const onVehicleCreated = onDocumentCreated(
  *
  * The transaction writes nothing when the member has already been counted for
  * today, which is the case for every app open after the first each day.
+ *
+ * `userLifecycle/{uid}` is NOT written only by recordLogin: the inactivity
+ * sweep merges `inactivityWarnedAt` / `inactivityDeleteAfter` into the same
+ * document (account/inactivityCleanup.ts::warnAccount, ::clearWarning), leaving
+ * `lastLoginAt` untouched. Those writes fire this trigger too, so it returns
+ * early unless `lastLoginAt` ITSELF changed — otherwise every warn/clear would
+ * pay for a `badgeProgress` transaction read to compute a day key that is
+ * necessarily the one already stored.
  */
 export const onUserLifecycleWritten = onDocumentWritten(
   { ...TRIGGER_OPTS, document: 'userLifecycle/{uid}' },
   async (firestoreEvent) => {
     const lastLoginAt = firestoreEvent.data?.after.data()?.lastLoginAt;
     if (!(lastLoginAt instanceof Timestamp)) {
+      return;
+    }
+    const previousLoginAt = firestoreEvent.data?.before.data()?.lastLoginAt;
+    if (previousLoginAt instanceof Timestamp && previousLoginAt.isEqual(lastLoginAt)) {
       return;
     }
     const dayKey = streakDayKey(lastLoginAt.toDate());
