@@ -99,6 +99,8 @@ class ConvoyRouteCreateHandoffTest {
 
         override suspend fun respond(requestId: String, accept: Boolean) = error("unused")
 
+        override suspend fun cancelRequest(toUid: String) = error("unused")
+
         override suspend fun remove(friendUid: String) = error("unused")
     }
 

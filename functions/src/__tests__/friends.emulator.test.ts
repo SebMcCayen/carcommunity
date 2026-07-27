@@ -728,6 +728,195 @@ describe('friend request lifecycle', () => {
   });
 });
 
+/**
+ * friend-cancelRequest: the SENDER's withdrawal of a still-pending request.
+ *
+ * The callable takes the RECIPIENT ({ toUid }) and derives the document id
+ * server-side, so these tests pin the two properties that shape buys us: only
+ * the sender can ever delete a request, and every non-cancellable case is the
+ * same silent { cancelled: false } no-op (never an error, never an oracle).
+ *
+ * Display names carry a `CX` suffix: the emulator suite shares ONE Firestore
+ * across test files and nickname resolution is by displayName, so a name reused
+ * from another file would make these members ambiguous.
+ */
+describe('friend-cancelRequest', () => {
+  it('lets the sender withdraw a pending request, and is idempotent', async () => {
+    const olle = await newMember('OlleCX');
+    const petra = await newMember('PetraCX');
+
+    await signInAs(olle);
+    await call('friend-sendRequest', { toUid: petra.uid });
+    expect(await requestStatus(olle.uid, petra.uid)).toBe('pending');
+
+    // Petra sees it as incoming before the withdrawal.
+    await signInAs(petra);
+    const before = (await call('friend-list', {})).data as {
+      incoming: Array<{ otherUser: { uid: string } }>;
+    };
+    expect(before.incoming.map((r) => r.otherUser.uid)).toContain(olle.uid);
+
+    await signInAs(olle);
+    const cancelled = (await call('friend-cancelRequest', { toUid: petra.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(cancelled.cancelled).toBe(true);
+    // Deleted, not moved to a terminal status: a withdrawn request reads as
+    // never sent, which is what lets the pair start over below.
+    expect(await requestStatus(olle.uid, petra.uid)).toBeUndefined();
+
+    const olleList = (await call('friend-list', {})).data as { outgoing: unknown[] };
+    expect(olleList.outgoing).toHaveLength(0);
+
+    // The recipient's pending row is gone too.
+    await signInAs(petra);
+    const after = (await call('friend-list', {})).data as {
+      incoming: Array<{ otherUser: { uid: string } }>;
+    };
+    expect(after.incoming.map((r) => r.otherUser.uid)).not.toContain(olle.uid);
+
+    // Idempotent: a double-tap (or a retry after a dropped response) is a
+    // successful no-op, never a user-visible failure.
+    await signInAs(olle);
+    const again = (await call('friend-cancelRequest', { toUid: petra.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(again.cancelled).toBe(false);
+
+    // And the pair can start over.
+    const resent = (await call('friend-sendRequest', { toUid: petra.uid })).data as {
+      status: string;
+    };
+    expect(resent.status).toBe('requested');
+    expect(await requestStatus(olle.uid, petra.uid)).toBe('pending');
+  });
+
+  it('does not let the RECIPIENT cancel the request sent to them', async () => {
+    const rune = await newMember('RuneCX');
+    const sara = await newMember('SaraCX');
+
+    await signInAs(rune);
+    await call('friend-sendRequest', { toUid: sara.uid });
+
+    // Sara points the callable at Rune: that resolves to the (sara → rune)
+    // document, which does not exist. Her own INBOUND request is untouched —
+    // only friend-respondRequest can act on it.
+    await signInAs(sara);
+    const attempt = (await call('friend-cancelRequest', { toUid: rune.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(attempt.cancelled).toBe(false);
+    expect(await requestStatus(rune.uid, sara.uid)).toBe('pending');
+
+    const saraList = (await call('friend-list', {})).data as {
+      incoming: Array<{ otherUser: { uid: string } }>;
+    };
+    expect(saraList.incoming.map((r) => r.otherUser.uid)).toContain(rune.uid);
+  });
+
+  it('is a no-op once the request has been accepted — the friendship stands', async () => {
+    const tova = await newMember('TovaCX');
+    const uno = await newMember('UnoCX');
+
+    await signInAs(tova);
+    await call('friend-sendRequest', { toUid: uno.uid });
+
+    await signInAs(uno);
+    await call('friend-respondRequest', {
+      requestId: friendRequestId(tova.uid, uno.uid),
+      action: 'accept',
+    });
+
+    // Tova cancels too late: the request is 'accepted', so nothing is deleted
+    // and — crucially — the established friendship is untouched.
+    await signInAs(tova);
+    const late = (await call('friend-cancelRequest', { toUid: uno.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(late.cancelled).toBe(false);
+    expect(await requestStatus(tova.uid, uno.uid)).toBe('accepted');
+    expect(await friendshipExists(tova.uid, uno.uid)).toBe(true);
+    expect(await friendshipExists(uno.uid, tova.uid)).toBe(true);
+  });
+
+  it('no-ops for an unrelated member and for self, and rejects a malformed payload', async () => {
+    const vera = await newMember('VeraCX');
+    const stranger = await newMember('WilmaCX');
+
+    // A member the caller never wrote a request to, and the caller themselves:
+    // both answer exactly like "already handled", so neither can be used to
+    // probe another account.
+    await signInAs(vera);
+    expect(
+      ((await call('friend-cancelRequest', { toUid: stranger.uid })).data as { cancelled: boolean })
+        .cancelled,
+    ).toBe(false);
+    expect(
+      ((await call('friend-cancelRequest', { toUid: vera.uid })).data as { cancelled: boolean })
+        .cancelled,
+    ).toBe(false);
+
+    expect(await callableErrorCode(call('friend-cancelRequest', {}))).toBe(
+      'functions/invalid-argument',
+    );
+    // The schema is .strict(): a requestId-shaped payload (the OTHER friend
+    // callables' input) is rejected rather than silently ignored.
+    expect(await callableErrorCode(call('friend-cancelRequest', { requestId: 'whatever' }))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it('refuses a document whose BODY disagrees with its own id', async () => {
+    // Belt-and-braces: the id derivation already implies BOTH ends of the pair,
+    // so this can only arise from a future write path or a botched migration.
+    // Deleting it would mean acting on a request addressed to somebody else, so
+    // the guard re-asserts toUid as well as fromUid.
+    const xena = await newMember('XenaCX');
+    const yrsa = await newMember('YrsaCX');
+    const zack = await newMember('ZackCX');
+
+    await adminDb
+      .collection('friendRequests')
+      .doc(friendRequestId(xena.uid, yrsa.uid))
+      .set({
+        fromUid: xena.uid,
+        // Disagrees with the id, which encodes (xena -> yrsa).
+        toUid: zack.uid,
+        status: 'pending',
+        fromDisplayName: 'XenaCX',
+        fromAvatarPath: null,
+        toDisplayName: 'ZackCX',
+        toAvatarPath: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+    await signInAs(xena);
+    const attempt = (await call('friend-cancelRequest', { toUid: yrsa.uid })).data as {
+      cancelled: boolean;
+    };
+    expect(attempt.cancelled).toBe(false);
+    // Still there: refused, not silently deleted.
+    expect(await requestStatus(xena.uid, yrsa.uid)).toBe('pending');
+
+    await adminDb.collection('friendRequests').doc(friendRequestId(xena.uid, yrsa.uid)).delete();
+  });
+
+  it('rejects unauthenticated and suspended callers', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('friend-cancelRequest', { toUid: 'anyone' }))).toBe(
+      'functions/unauthenticated',
+    );
+
+    const suspended = await newFreeUser();
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
+    expect(await callableErrorCode(call('friend-cancelRequest', { toUid: 'anyone' }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+});
+
 describe('friends Firestore rules', () => {
   it('owner reads own friends + requests; others cannot; no client writes', async () => {
     const mona = await newMember('MonaR');

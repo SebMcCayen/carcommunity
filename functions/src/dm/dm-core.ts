@@ -362,3 +362,22 @@ export function isConversationMember(
   const members = Array.isArray(data?.members) ? (data!.members as unknown[]) : [];
   return members.includes(callerUid);
 }
+
+/**
+ * The OTHER member of a 1:1 conversation, or null when the stored document does
+ * not name exactly one counterparty (a malformed or single-member doc).
+ *
+ * Callers resolve the pair from this to run a block check, so returning null
+ * rather than guessing matters: a wrong uid would either hide a thread that is
+ * fine or serve one that is blocked.
+ */
+export function conversationCounterparty(
+  data: Record<string, unknown> | undefined,
+  callerUid: string,
+): string | null {
+  const members = Array.isArray(data?.members) ? (data!.members as unknown[]) : [];
+  const others = members.filter(
+    (uid): uid is string => typeof uid === 'string' && uid !== callerUid,
+  );
+  return others.length === 1 ? others[0]! : null;
+}

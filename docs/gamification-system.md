@@ -6,7 +6,14 @@
 
 This document describes **both** what exists in the codebase today **and** the proposed extension. Nothing here is implemented purely from this document — it is the shared reference the implementation slices are written against.
 
-**How to read it.** The default is **proposed**. §1 is the honest inventory of what exists; §8.1's Status column and the `STATUS:` banners on §6 and §7 mark the built/unbuilt boundary where it is easy to get wrong. Everything else — the whole of §4, §5, §6, §7 and the numbers in §10 — is design, even where it is written in the present indicative for readability.
+**How to read it.** The default is **proposed**. §1 is the honest inventory of what exists; §8.1's Status column and the `STATUS:` banners on §6 and §7 mark the built/unbuilt boundary where it is easy to get wrong. Everything else — §4, the numbers in §10, and the still-unbuilt parts of §7 — is design, even where it is written in the present indicative for readability.
+
+> **SINCE THIS DRAFT: §5 and §6 have SHIPPED, and so has the auto-spawn half of §3.**
+>
+> - **§5 (the earning rules, caps and streak) is BUILT.** `functions/src/points/points-economy-core.ts` is the canonical rule table, cap arithmetic and streak maths; `points/economy-award.ts` is the single award door; `points/economyTriggers.ts` holds the five triggers. All eight `Action` identifiers exist, both caps have real counter collections, and partial clipping is real (`creditPointsResolved` in `ledger.ts`). Where the numbers below differ from `points-economy-core.ts`, **the code is canonical.**
+> - **§6 (event-attendance verification) is BUILT** as the `events.checkIn` callable + the `eventAttendance` collection. Its per-banner caveats are corrected in place below.
+> - **§3's auto-spawn engine is BUILT** (`functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts`, `claimSpawn.ts`) — see the §3 table.
+> - **Still unbuilt:** the §7 badge ladders (no tier field, nothing writes `source: 'badge'`), cap exemption, and a `readGuard` on `debitPoints`.
 
 **If you are implementing from this document, assume nothing described here exists until you have grepped for it.** The repo has a recurring failure mode where a doc asserts an invariant that no code enforces, and several of the callouts below exist specifically because an earlier draft of this document did exactly that.
 
@@ -81,10 +88,11 @@ Reading the current code, the system is roughly half-built. This is the honest i
 | Haversine, geofence w/ accuracy buffer, freshness, speed, jump | **Built** | `functions/src/crownHunt/crown-hunt-geo.ts` |
 | Risk scoring, threshold 60 → `risk_review` | **Built** | `functions/src/crownHunt/crown-hunt-risk.ts` |
 | Idempotency + concurrent-award guards | **Built** | `crownhunt-core.ts`, `submitClaim.ts` |
-| **Spawn algorithm** | **DOES NOT EXIST** | — |
-| **Rarity tiers / TTL** | **DOES NOT EXIST** | — |
+| **Spawn algorithm** | **Built** | `functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts` |
+| **Rarity tiers / TTL** | **Built** (`CROWN_RARITY_TABLE`: 10/25/100/500 KP, 6/12/24/48 h) | `crown-spawn-core.ts` |
+| **Auto-spawn claim** (`crownHunt.claimSpawn`) | **Built** — stopped + dwelling required | `functions/src/crownHunt/claimSpawn.ts` |
 
-**Crowns today are hand-placed by an admin.** There is no spawn logic anywhere in the repo. Every live crown is a `crownHuntPoints/{pointId}` document a human created, filled in coordinates for, and explicitly activated with a safety confirmation. That does not scale past a demo, and it is the single biggest gap this document closes (§4).
+**Crowns now come from two sources.** Hand-placed `crownHuntPoints/{pointId}` documents an admin created and explicitly activated with a safety confirmation, *and* ephemeral `crownSpawns` placed automatically near recent member activity. Because no human reviews an auto-spawned coordinate, the safety approval moves up to the **area**: `crownHunt.setSpawnCellApproval` is an admin allow-list of grid cells the spawner may place in, and the whole automatic half sits behind the `crownHuntSpawn` feature flag, **contract default OFF**. Both crown paths credit the ledger with `source: 'crown_hunt'` and are folded into the daily cap after the fact (§5.3).
 
 Current constants (`crownhunt-core.ts`):
 
@@ -105,19 +113,19 @@ The proposed 75 m collect radius and 10/25/100/500 KP rewards all sit comfortabl
 `functions/src/points/points-core.ts` + `ledger.ts` already give us exactly what a gamification economy needs:
 
 - Transaction types: `earn`, `spend`, `adjustment_credit`, `adjustment_debit`, `reversal`.
-- Sources: `badge`, `event`, `garage`, `admin_adjustment`, `system`, `crown_hunt` (plus a deprecated `future_crown_hunt` kept only for legacy rows). **The enum is complete; most writers are not** — `crown_hunt` (`submitClaim.ts`), `admin_adjustment` (`adminPoints.ts`) and now `badge` (`badges/tierAwards.ts`, the tier milestones) have call sites. `event`, `garage` and `system` are declared but nothing writes them, which is why §5.1 needs no enum change and a lot of new callers.
+- Sources: `badge`, `event`, `garage`, `admin_adjustment`, `system`, `crown_hunt` (plus a deprecated `future_crown_hunt` kept only for legacy rows). **The enum was always complete; the writers were the gap — and that gap is now closed.** §5 shipped the economy callers, so `event`, `garage` and `system` are written by the economy rule table (`points-economy-core.ts`), alongside the pre-existing `crown_hunt` (both crown paths) and `admin_adjustment`. §7's ladders supply the last one: `badge` is written by `badges/tierAwards.ts` for the tier milestones. Every source now has a writer, and no enum change was ever needed — exactly as predicted.
 - Idempotency key **is** the entry document ID *when one is supplied*, so a replayed award is a transactional no-op that returns the original entry. The key is **optional** and falls back to an auto-ID, so this is a property of well-behaved callers, not an invariant of the ledger — see §5.5.
 - An `AtomicReadGuard` hook that lets a caller run reads *inside* the award transaction and abort it — this is how the Kronjakt daily cap is enforced without a race, and it is the same mechanism every cap in §5 will use.
 
-**The economy in §5 needs no new ledger *concepts*** — the transaction shape, the source enum and the atomic-guard mechanism all carry over unchanged, which is a good sign about the design of the existing code. But it is **not** true that it needs no new primitives; three concrete extensions to `ledger.ts` are required, and they should be built before the first new earn path ships:
+**The economy in §5 needed no new ledger *concepts*** — the transaction shape, the source enum and the atomic-guard mechanism all carried over unchanged, which is a good sign about the design of the existing code. It did need new primitives. Three were identified; one shipped with §5 and two remain open because nothing needs them yet:
 
-| Gap | Why the current primitive cannot do it |
+| Gap | Status |
 |---|---|
-| **Partial clipping** | §5.3 and the §10 worked example require awarding *part* of an earn when it would breach a cap (e.g. 130 of 180 KP). `AtomicReadGuard` returns `Promise<void>` — it can only **throw to abort the whole mutation**. The amount is fixed before the transaction opens and nothing inside can reduce it. Today the only options are "award all" or "award none". |
-| **Cap exemption** | §5.3 exempts badge milestones from the 300/day global cap. `PointsMutationParams` has no such flag, so the cap logic has nothing to branch on. |
-| **`debitPoints` has no `readGuard`** | `creditPoints` takes one; `debitPoints` takes only `extraWrites`. Any capped or guarded *spend* path needs the parameter added. |
+| **Partial clipping** | **CLOSED.** §5.3 and the §10 worked example require awarding *part* of an earn when it would breach a cap (e.g. 130 of 180 KP), and `AtomicReadGuard` returns `Promise<void>` — it can only throw to abort the whole mutation. `creditPointsResolved` in `ledger.ts` adds an `AmountResolver` that runs inside the transaction and returns the final amount, which the ledger validates is a positive integer **no larger than the requested one** — a resolver can only clip down, never inflate an award. |
+| **Cap exemption** | **OPEN.** §5.3 exempts badge milestones from the 300/day global cap. `PointsMutationParams` has no such flag, so the cap logic has nothing to branch on. Not yet needed: the §7 ladders are unbuilt, so nothing writes `source: 'badge'`. |
+| **`debitPoints` has no `readGuard`** | **OPEN.** `creditPoints` takes one; `debitPoints` takes only `extraWrites`. Any capped or guarded *spend* path needs the parameter added. Not yet needed: there is no spend path. |
 
-Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): if capped-out KP is forfeited, partial clipping is what makes "you earned 180, we credited 130" honest rather than a silent all-or-nothing rejection.
+Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): capped-out KP is forfeited, and partial clipping is what makes "you earned 180, we credited 130" honest rather than a silent all-or-nothing rejection. The shipped award engine names the binding ceiling (`clippedBy`: `daily` or `weekly_driving`) in the ledger entry's description, so a member can always see *which* cap bit.
 
 ### 1.3 Badges — built, but flat and thin
 
@@ -177,7 +185,7 @@ At the time this document was first written there was no progression, no tiering
     └────────────────────────────────────────────────┘
 ```
 
-**This diagram is the target state, not the current one.** Of the four boxes, only the ledger's *append-only, idempotent-on-a-derived-key* property is built. The two caps annotated on it (300/day, 400/week) do not exist — there are no counter collections and no cap constants anywhere in the repo. The only cap that exists at all is `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` on crown claims. Presence aggregation, spawning and badge tiers are all unbuilt (§1).
+**Three of the four boxes are now built; the badge box is not.** The ledger's *append-only, idempotent-on-a-derived-key* property, the earning rules, and both caps annotated on the diagram (300/day, 400/week) are real: `pointsDailyTotals` and `pointsWeeklyDriving` are the counter collections and `DAILY_POINTS_CAP` / `WEEKLY_DRIVING_POINTS_CAP` the constants, both in `points-economy-core.ts`, read and incremented inside the award transaction. Presence aggregation and spawning shipped with the auto-spawn engine (§3). **Badge tiers remain unbuilt**, so the bottom box and its `source=badge` arrow are still design. The older `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` cap on hand-placed crown claims still exists and is unchanged.
 
 Three feedback loops, deliberately different in tempo:
 
@@ -373,7 +381,11 @@ The `A ≥ 1` gate does much of this work implicitly: we only place where people
 
 ### 5.1 Earn table
 
-**Every `Action` identifier in this table is net-new** — none of `daily_open`, `live_session_1km`, `drive_5km`, `crown_collect`, `event_attend_verified`, `event_host_success`, `garage_first_car` or `incident_report_confirmed` appears anywhere in the repo today. The **`Ledger source` column is the opposite**: every value in it is an existing member of `POINTS_TRANSACTION_SOURCES` in `functions/src/points/points-core.ts` (and of the narrower `ACTIVE_POINTS_TRANSACTION_SOURCES`, which excludes the deprecated `future_crown_hunt`), so no source enum needs widening. That split is the point of §1.2 — new callers, existing primitives.
+**BUILT.** This table is implemented as `ECONOMY_RULES` in `functions/src/points/points-economy-core.ts`, and the KP / Limit / source columns below match it exactly. **That file is canonical** — if the two ever diverge, the code is right and this table is stale.
+
+`crown_collect` is the one row that is *not* a rule key. Crowns are awarded by the Kronjakt domain in its own transaction and are folded into the daily cap afterwards by `points-onLedgerEntryCreated`, so a crown is never *clipped* by a cap but does consume the day's budget (§5.3). Every other row goes through the single award door, `awardEconomyPoints`. The **Badge tier milestone** row is still **proposed** — nothing writes `source: 'badge'`.
+
+The **`Ledger source` column** needed no enum change, as predicted: every value in it was already a member of `POINTS_TRANSACTION_SOURCES` in `functions/src/points/points-core.ts` (and of the narrower `ACTIVE_POINTS_TRANSACTION_SOURCES`, which excludes the deprecated `future_crown_hunt`). That split was the point of §1.2 — new callers, existing primitives.
 
 | Action | KP | Limit | Ledger source |
 |---|---|---|---|
@@ -413,18 +425,21 @@ The `min(s,7)` and the 1.7 ceiling reach the cap at exactly the same point — t
 
 | Cap | Value | Window | Window start | Status |
 |---|---|---|---|---|
-| Global earn cap | **300 KP** | fixed UTC calendar day | `00:00:00Z` daily | proposed |
-| **Driving-derived** cap `D` | **400 KP** | fixed ISO week (Mon–Sun), UTC | Monday `00:00:00Z` | proposed |
-| Crown claims | 10 | fixed UTC calendar day | `00:00:00Z` daily | **built** |
+| Global earn cap | **300 KP** | Europe/Stockholm civil day | local midnight | **built** (`DAILY_POINTS_CAP`) |
+| **Driving-derived** cap `D` | **400 KP** | Europe/Stockholm week (Mon–Sun) | local Monday midnight | **built** (`WEEKLY_DRIVING_POINTS_CAP`) |
+| Crown claims | 10 | fixed UTC calendar day | `00:00:00Z` daily | **built** (pre-existing) |
+
+> **CORRECTION — the economy windows are Europe/Stockholm, not UTC.** An earlier draft of this table specified UTC days and ISO-UTC weeks. The shipped engine deliberately does not do that, and the reasoning is in `stockholmDayKey`'s KDoc: Sweden is UTC+1/+2, so a UTC day never lines up with a Swedish one and the mismatch breaks **both** directions. Two opens at 01:30 and 02:30 local on the same Swedish summer day straddle UTC midnight, so UTC would pay two daily-opens and inflate the streak; two opens at 23:30 and 00:30 local are two consecutive Swedish days inside one UTC day, so UTC would pay once and silently break a streak the member actually kept. DST is resolved through the IANA zone database via `Intl.DateTimeFormat.formatToParts`, never by hard-coded offset arithmetic, so the 23- and 25-hour days come out right. The crown daily-claim cap predates the economy and still uses UTC days; that is a known, deliberate inconsistency, not a target.
 
 **These are fixed calendar windows, not sliding ones.** A cap resets at the boundary; it is not a trailing 24 h / 7 d lookback. This is deliberate — a sliding window needs a per-earn timestamp scan, whereas a fixed window needs one counter document whose ID *is* the window, which is what makes the cap check cheap enough to run **inside** the award transaction (§5.5, and stage 16 of the §8.1 pipeline).
 
-Implementers must not invent new boundary maths: the helpers already exist in `functions/src/crownHunt/crownhunt-core.ts` and are the definition of record —
+Implementers must not invent new boundary maths. For the **economy**, the helpers of record are in `functions/src/points/points-economy-core.ts` —
 
-- `startOfUtcDay(date)` — midnight UTC.
-- `startOfUtcWeek(date)` — Monday 00:00 UTC (ISO week; Sunday maps back to the preceding Monday).
-- `utcDayKey(date)` → `YYYY-MM-DD`, already used for the crown daily-claim counter ID.
-- `awardGuardWindowKey(rule, now)` → the **window-start date** as `YYYY-MM-DD` for both daily and weekly rules. Keying the week by its start date is what lets the weekly cap avoid ISO week-number arithmetic entirely.
+- `stockholmDayKey(instant)` → `YYYY-MM-DD`, the Europe/Stockholm civil day. Counter ID via `dailyTotalDocId`.
+- `stockholmWeekKey(instant)` → the Monday-anchored local week, keyed by its **start date**, which is what lets the weekly cap avoid ISO week-number arithmetic entirely. Counter ID via `weeklyDrivingDocId`.
+- `ruleLimitWindowKey(rule, dayKey, override)` → the per-rule limit-counter window (`local_day`, `event` or `forever`), used for `pointsRuleCounters`.
+
+The older UTC helpers in `functions/src/crownHunt/crownhunt-core.ts` (`startOfUtcDay`, `startOfUtcWeek`, `utcDayKey`, `awardGuardWindowKey`) remain the definition of record **for Kronjakt's own crown-claim cap only**, and must not be used for economy windows.
 
 So the weekly `D` counter should be keyed on `startOfUtcWeek`'s date, exactly as `awardGuardWindowKey('weekly', now)` already returns.
 
@@ -483,7 +498,11 @@ Where a cap must hold under concurrency, it is enforced **inside the award trans
 
 ## 6. Event attendance verification
 
-> **STATUS: ENTIRELY PROPOSED. None of §6 exists.** There is no `eventAttendance` collection, no dwell logic, no geofence check in `functions/src/events/`, and zero occurrences of `event_attend_verified` or `event_host_success` in the repo. `isWithinGeofence` exists but its only caller is `submitClaim.ts`. The **only** attendance mechanism that exists today is the RSVP proxy described in §1.3. Read every present-tense sentence below as "will", including the privacy properties in §6.3 — those are design commitments to be built and tested, not statements about a running system.
+> **STATUS: BUILT.** §6 shipped as the `events.checkIn` callable (`functions/src/events/checkIn.ts`) writing the `eventAttendance` collection, with dwell + geofence evaluation and the risk pipeline in `points-economy-core.ts`. Both `event_attend_verified` and `event_host_success` are live rule keys, awarded by the `points-onAttendanceVerified` trigger. The RSVP proxy of §1.3 still exists alongside it.
+>
+> **Two design points below shipped differently from this draft — the code is canonical:**
+> - **The award is not made by the callable.** `events.checkIn` only records evidence and flips `verified` false → true; `points-onAttendanceVerified` credits the points on that edge. This keeps the callable's failure modes away from the ledger.
+> - **The raw samples are retention-bound.** §6.3 described them as scoped and owner-readable, which they are, but "few and scoped" is not "not retained". Each `eventAttendance` record carries an `expireAt` and a **90-day Firestore TTL** (`ATTENDANCE_EVIDENCE_RETENTION_MS`) — long enough to settle a dispute about the award, and no longer. Deleting the record **cannot re-open the award**: the ledger entry (whose document ID *is* the idempotency key), the per-event rule counter, and the `eventAttendanceCounts/{eventId}/counted/{uid}` host-tally guard all outlive it and none carries a TTL.
 
 > *"How do you know someone is actually at the meeting — GPS?"* — Yes, with a dwell requirement, and with a deliberate bias toward being generous.
 
@@ -522,7 +541,7 @@ Position samples used for attendance are evaluated **in flight**. Only the deriv
 
 Precise location of that proxy, since it is split across three files and `badge-core.ts` is *not* where the counting happens: `badge-core.ts` holds only the thresholds (`FIRST_EVENT_THRESHOLD` / `FIVE_EVENTS_THRESHOLD`) and `qualifiedEventBadges()`; the actual counting is `recordEventAttendance()` in **`functions/src/badges/awards.ts`**, which increments `badgeProgress/{uid}.completedEventsAttended`, driven from `functions/src/events/eventLifecycle.ts`.
 
-Note also that "falls back" describes the *target* state. Today there is no branch to fall back *from* — the proxy is the only attendance path that exists.
+**As shipped, the fall-back is implicit rather than a branch.** `events.checkIn` loads the event's coordinates (teaser first, then `details/private`) and returns `event_not_checkinable` when there are none — as it also does for a draft or cancelled event. Nothing is awarded and nothing is recorded, so the RSVP proxy remains the only attendance signal for an unlocated event, exactly as intended. There is no code path that *reads* "this event is unlocated, therefore use the proxy"; the two mechanisms simply do not overlap.
 
 The proxy path awards **badge progress but not `event_attend_verified` KP.** Otherwise an unlocated event becomes a free 50 KP for anyone who taps "going" — a much cheaper attack than any GPS spoof described in §8. Hosts should be nudged to pin a location, with the payoff made explicit: *pin the location and your attendees earn points.*
 
@@ -575,7 +594,7 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 *Icon design:* A ribbon of road narrowing to a horizon line, with a **milestone marker post** standing at the roadside — the classic European kilometre stone, not a race flag. Tier is the marker's metal plus the number of chevrons carved into it (1/2/3/4). **Explicitly forbidden in this icon:** speedometers, tachometers, needles, chequered flags, motion blur, speed lines. The visual language is *distance travelled and places seen*, not *velocity*. Get this wrong in the art and it contradicts C1 more loudly than any formula could.
 
-*On C3:* these are lifetime milestones, not per-kilometre payouts. The KP rate for driving will be set entirely by the capped `drive_5km`/`live_session_1km` awards in §5.1, so once the weekly budget is spent, further kilometres advance the badge counter but pay **zero KP**. (Today the rate is zero by *absence*, not by cap — neither award exists, and `saveDrive.ts` and `live/session.ts` never touch the ledger. The cap only starts doing work once those awards ship, so **the cap and the award must ship together**.) The badge is a record of where you have been, not a meter that keeps ticking. Whether even that is too much encouragement is **Q3**.
+*On C3:* these are lifetime milestones, not per-kilometre payouts. The KP rate for driving will be set entirely by the capped `drive_5km`/`live_session_1km` awards in §5.1, so once the weekly budget is spent, further kilometres advance the badge counter but pay **zero KP**. (The cap and the awards did ship together, as required: `drive_5km` is awarded by the `points-onDriveSaved` trigger on `rides/{rideId}`, `live_session_1km` by `points/liveDistance.ts` called inline from `live.updatePosition`, and both are `driving: true` so both are charged against `WEEKLY_DRIVING_POINTS_CAP`. Note the distance for `live_session_1km` is **server-measured** from the session's own accumulated total — no client-supplied distance, and no speed is read, stored or rewarded.) The badge is a record of where you have been, not a meter that keeps ticking. Whether even that is too much encouragement is **Q3**.
 
 #### Träffräv · *Meet Fox*
 
@@ -660,7 +679,7 @@ Icon identifiers follow the existing `badge_*` convention in `badge-core.ts` (e.
 
 ## 8. Anti-abuse: one pipeline for every geo-earn
 
-Crown claims, event attendance, and any future location-based earn go through **the same guard**. Today's logic lives inside `submitClaim.ts`; the extension generalises it rather than copying it. Divergent copies of a security check are how one of them silently rots.
+Crown claims, event attendance, and any future location-based earn go through **the same guard**. Divergent copies of a security check are how one of them silently rots, so the shared modules are imported, not duplicated: `events/checkIn.ts` and `crownHunt/claimSpawn.ts` both call `isPositionFresh`, `isPlausibleJump` and `isValidCoordinate` from `crownHunt/crown-hunt-geo.ts` and `evaluateClaimRisk` from `crownHunt/crown-hunt-risk.ts` — the same functions, at the same thresholds, that `submitClaim.ts` uses. Anything new that accepts a coordinate must do the same.
 
 ### 8.1 Stages
 
@@ -683,18 +702,18 @@ Crown claims, event attendance, and any future location-based earn go through **
 | 13 | Fence-edge probing | ≥ 3 edge attempts/hour | +20 risk | **PLANNED** ³ |
 | 14 | Device integrity | Play Integrity / App Attest / mock-location flag | +40 risk | **PLANNED** ⁴ |
 | 15 | **Risk threshold** | Score ≥ **60** → `risk_review`, **zero KP** | recorded, not awarded | **built** |
-| 16 | Caps | Enforced **inside** the award transaction | `daily_limit_reached` | **built** ⁵ |
+| 16 | Caps | Enforced **inside** the award transaction | `cap_reached` (clipped to headroom) / `limit_reached` | **built** ⁵ |
 | 17 | Ledger | Append-only, idempotency key = entry ID | replay-safe | **built** |
 
 ¹ Suspended and deleted accounts do resolve to `not_eligible`, but *entitlement* is currently bypassed in `shared/memberGating.ts` — every non-suspended member passes.
 
-² The gate exists and runs, but at **`MAX_CLAIM_SPEED_MPS = 1.4`**, not 2.0 (see **C2** and **Q1** — 2.0 is the proposal, 1.4 is what ships today). "Sustained" is also aspirational: the current check tests a **single reported speed sample**, not a sustained window, and crown dwell is unspecified. Critically, **a claim that omits `speedMetersPerSecond` entirely passes this stage** — see C2 gap 1 and **Q16**.
+² **The two crown paths now differ, and only one of them still has the hole.** Hand-placed claims (`submitClaim.ts`) run at **`MAX_CLAIM_SPEED_MPS = 1.4`** against a **single reported speed sample**, and a claim that omits `speedMetersPerSecond` entirely still passes — see C2 gap 1 and **Q16**. Auto-spawn claims (`claimSpawn.ts`) close both holes: **`MAX_COLLECT_SPEED_MPS = 2.0`** applied to **two** fixes at least `MIN_DWELL_SECONDS` apart, *and* a **server-derived** speed computed from those two positions and the elapsed time — which needs no client cooperation, so omitting the field no longer buys anything. That server-derived check is the pattern Q16 should adopt for `submitClaim` too.
 
 ³ **Scored but never triggered.** `crown-hunt-risk.ts` has the `geofenceEdgeAttempts >= 3 → +20` rule, but `submitClaim.ts` passes `geofenceEdgeAttempts: 0` as a literal (`// legacy TODO: geofence-edge counting`). Nothing counts edge attempts, so this stage contributes zero risk for every claim ever made. Implementing it means adding the counter, not the rule.
 
 ⁴ **Scored, but the input is self-reported and nothing populates it.** The `platformIntegrityPassed === false → +40` rule exists, but the value comes straight from the *client request body* (`crownhunt-core.ts` schema: `platformIntegrityPassed: z.boolean().nullable().optional()`), and no Android code sends it — the field has zero non-test callers in the repo. So today it is always `null`, and even once the client does send it, an attacker simply omits it or sends `true`. **This stage is not a device-integrity check until a real attestation token is verified server-side against Play Integrity / App Attest.** Until then it must not be counted as a defence.
 
-⁵ Built **for the crown daily-claim cap** (10/day, read-and-incremented inside the award transaction). The KP economy caps in §5.3 (300/day global, 400/week driving-derived) are **proposed** and have no counters yet.
+⁵ Built **for the crown daily-claim cap** (10/day, read-and-incremented inside the award transaction) and now also for the KP economy caps in §5.3, which have real counters: `pointsDailyTotals` (300/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits. All three are read and incremented **inside** the award transaction via `creditPointsResolved`, so two concurrent awards serialise on the ledger balance document and cannot race each other past a cap.
 
 Risk **score and reasons are written to a backend-only collection** (`crownHuntClaimRisk`) and never returned to a client. Firestore rules cannot redact fields per-read, so separation is by collection, not by field. Thresholds are never exposed either — a client that can see the threshold can tune against it.
 
@@ -887,10 +906,10 @@ Everything an implementer needs, in one table.
 | Accuracy risk threshold | 50 m |
 | Risk review threshold | 60 |
 | Crown claims/day | 10 (fixed UTC day, from 00:00Z) |
-| Global earn cap | 300 KP (fixed UTC day, from 00:00Z) |
-| Driving-derived cap `D` | 400 KP (fixed ISO week, from Monday 00:00Z) |
+| Global earn cap | 300 KP (Europe/Stockholm civil day, from local midnight) |
+| Driving-derived cap `D` | 400 KP (Europe/Stockholm week, from local Monday midnight) |
 | Streak multiplier | `min(1.7, 1 + min(s,7)/10)` |
 | Event fence | 150 m |
-| Event dwell | ≥ 10 min cumulative, ≥ 2 samples ≥ 10 min apart |
+| Event dwell | ≥ 10 min cumulative, ≥ 2 in-fence samples spanning ≥ 10 min; any single gap credits at most 30 min |
 | Event window | `[start − 30 min, end + 30 min]` |
 | Badge tier bonuses | 25 / 75 / 200 / 500 KP (cap-exempt) |

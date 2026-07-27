@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.feedback
 
 import android.content.Context
+import android.util.Log
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
@@ -21,6 +22,20 @@ data class FeedbackSubmitResult(
 
 /** Thrown when the per-user rate limit is hit (resource-exhausted). */
 class FeedbackRateLimitedException : Exception()
+
+/**
+ * Thrown when the callable rejected the request as `unauthenticated`.
+ *
+ * Two distinct causes share this code, and neither used to be distinguishable
+ * from a generic failure: a missing/expired sign-in, or a rejected App Check
+ * token. On debug builds the latter is the usual one — see docs/app-check.md
+ * for the stable-debug-token setup that prevents it.
+ */
+class FeedbackUnauthenticatedException(cause: Throwable?) : Exception(
+    "feedback-reportIssue rejected the request as unauthenticated " +
+        "(sign-in expired, or App Check rejected the token)",
+    cause,
+)
 
 /** Files a "Report a problem" report via the callable (feedback.reportIssue). */
 interface FeedbackRepository {
@@ -79,8 +94,11 @@ class FeedbackCoordinator(
  * [FeedbackRepository] backed by the feedback-reportIssue callable
  * (europe-west1). Guarded ([createIfAvailable]): returns null when
  * google-services.json is absent (CI / local validation builds), mirroring the
- * rest of the Firebase wiring. Translates the resource-exhausted error code
- * into [FeedbackRateLimitedException]; every other failure propagates as-is.
+ * rest of the Firebase wiring. Translates two callable error codes into typed
+ * exceptions — resource-exhausted into [FeedbackRateLimitedException] and
+ * unauthenticated into [FeedbackUnauthenticatedException] (also logged, since
+ * the coordinator renders it as a generic failure) — and propagates every other
+ * failure as-is.
  */
 class FirebaseFeedbackRepository private constructor(
     private val functions: FirebaseFunctions,
@@ -125,14 +143,33 @@ class FirebaseFeedbackRepository private constructor(
                         )
                     } else {
                         val cause = task.exception
-                        if (cause is FirebaseFunctionsException &&
-                            cause.code == FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED
-                        ) {
-                            continuation.resumeWithException(FeedbackRateLimitedException())
-                        } else {
-                            continuation.resumeWithException(
-                                cause ?: IllegalStateException("$CALLABLE failed without a cause"),
-                            )
+                        val code = (cause as? FirebaseFunctionsException)?.code
+                        when (code) {
+                            FirebaseFunctionsException.Code.RESOURCE_EXHAUSTED ->
+                                continuation.resumeWithException(FeedbackRateLimitedException())
+
+                            FirebaseFunctionsException.Code.UNAUTHENTICATED -> {
+                                // The coordinator collapses every non-rate-limit
+                                // failure into the same generic UI state, so
+                                // without this the single most likely cause of a
+                                // "reporting an issue errors" report — App Check
+                                // rejecting the token — leaves no trace at all.
+                                Log.w(
+                                    TAG,
+                                    "$CALLABLE rejected as unauthenticated; if this is a debug " +
+                                        "build, check the App Check debug token (docs/app-check.md)",
+                                    cause,
+                                )
+                                continuation.resumeWithException(
+                                    FeedbackUnauthenticatedException(cause),
+                                )
+                            }
+
+                            else ->
+                                continuation.resumeWithException(
+                                    cause
+                                        ?: IllegalStateException("$CALLABLE failed without a cause"),
+                                )
                         }
                     }
                 }
@@ -140,6 +177,7 @@ class FirebaseFeedbackRepository private constructor(
     }
 
     companion object {
+        private const val TAG = "FeedbackRepository"
         private const val REGION = "europe-west1"
         private const val CALLABLE = "feedback-reportIssue"
 

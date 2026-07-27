@@ -140,6 +140,51 @@ service cloud.firestore {
         && validUserPrivateFields(keys);
     }
 
+    // ---- DM message read gate (membership + mutual block) --------------------
+    // This is a CONFIDENTIALITY boundary, so it FAILS CLOSED: the shape of the
+    // conversation document is validated before the counterparty is derived from
+    // it, rather than assumed. A malformed `members` (not a list, not exactly two
+    // entries, or non-string entries) denies the read outright instead of
+    // producing a counterparty that might be the wrong uid — with three members,
+    // for example, "whichever isn't me" is ambiguous and could resolve to someone
+    // the caller has NOT blocked, silently reopening a blocked thread.
+    //
+    // Only conversations/{pairId} documents written by dm.sendMessage exist (no
+    // client writes), and it always writes exactly two uids, so this is a guard
+    // against a future shape change rather than a live hole. Denying is the safe
+    // side: a genuinely broken conversation is unreadable, not leaky.
+    //
+    // `get()` results are cached within a request, so the membership check and
+    // the counterparty derivation share ONE read: 1 get + 2 exists = 3 of the
+    // 10-document-access budget a query gets.
+    function dmMembers(pairId) {
+      return get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+    }
+
+    function dmWellFormed(members) {
+      return members is list
+        && members.size() == 2
+        && members[0] is string
+        && members[1] is string;
+    }
+
+    // True when NEITHER party has blocked the other. Both directions are checked
+    // because blocking is mutual invisibility: the blocker stops seeing the
+    // blocked party's messages AND vice versa.
+    function dmNotBlockedWith(other) {
+      return !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blocked/$(other))
+        && !exists(/databases/$(database)/documents/userBlocks/$(other)/blocked/$(request.auth.uid));
+    }
+
+    // The whole gate for conversations/{pairId}/messages: a well-formed two-party
+    // conversation, the caller is one of the two, and the pair is not blocked.
+    function dmMessagesReadable(pairId) {
+      let members = dmMembers(pairId);
+      return dmWellFormed(members)
+        && request.auth.uid in members
+        && dmNotBlockedWith(members[0] == request.auth.uid ? members[1] : members[0]);
+    }
+
     // -------------------------------------------------------------------------
     // Deny-all catch-all (rules below override for specific paths)
     // -------------------------------------------------------------------------
@@ -475,6 +520,30 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // blockVisibility – the SYMMETRIC mirror of the block graph
+    // (functions/src/blocking/block-visibility.ts), maintained solely by the
+    // blocking-onBlockWrite trigger.
+    //
+    // blockVisibility/{uid}.hiddenUids is the UNION of "uids this user blocked"
+    // and "uids that blocked this user". It exists because the chat surfaces
+    // need the second half and userBlocks cannot give it to them: that half
+    // lives in the OTHER party's owner-read-only subcollection, so the client
+    // cannot read it at all and the server can only reach it with one point read
+    // per candidate. One document read (or one snapshot listener) replaces that.
+    //
+    // Owner-only read, no client writes. The document carries uids and nothing
+    // else — no displayName, no direction, no timestamp — so it never says who
+    // blocked whom, only that the pair is mutually hidden. That is still a
+    // deliberate, documented weakening of "a block never reveals itself to its
+    // target": the product requires the blocked party to stop seeing the
+    // blocker, which is observable from the missing messages regardless.
+    // -------------------------------------------------------------------------
+    match /blockVisibility/{userId} {
+      allow read: if isOwner(userId);
+      // No client writes: the blocking-onBlockWrite trigger only.
+    }
+
+    // -------------------------------------------------------------------------
     // Friends – friend graph (friend.sendRequest / respondRequest / remove /
     // list). Messaging/DMs are a SEPARATE follow-up, not modelled here.
     //
@@ -518,13 +587,31 @@ service cloud.firestore {
     // a parent lookup.
     // -------------------------------------------------------------------------
     match /conversations/{pairId} {
+      // NOTE: no block check here, deliberately. The inbox is a LIST query
+      // (members array-contains uid), and Firestore rules are not filters — a
+      // condition that varies per document fails the ENTIRE query rather than
+      // dropping the offending row, so a block gate here would break the inbox
+      // of anyone who has one blocked thread. The blocked row is instead
+      // dropped by dm.listConversations (server) and by the client's inbox
+      // listener, and the trigger blanks the document's `lastMessage` preview
+      // (functions/src/dm/blockedConversation.ts) so the copy that is still
+      // delivered carries no counterparty content.
       allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
       // No client writes: dm.* callables only.
 
       match /messages/{messageId} {
-        allow read: if isAuthenticated()
-          && request.auth.uid in
-            get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+        // Blocking IS rules-enforced here, and this is the one chat surface
+        // where it can be: every message in a conversation belongs to the SAME
+        // pair, so the block condition is CONSTANT across the query and the
+        // rules-are-not-filters problem above does not arise — the whole listen
+        // is denied, which is exactly the intent. The Android thread listener
+        // already renders PERMISSION_DENIED as an empty thread.
+        //
+        // Both directions: the caller having blocked the counterparty, or the
+        // counterparty having blocked the caller, each hides the thread.
+        // dmMessagesReadable also carries the membership check and fails closed
+        // on a malformed conversation — see its definition above.
+        allow read: if isAuthenticated() && dmMessagesReadable(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }
@@ -774,6 +861,20 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // memberSearchRateLimits – per-user fixed-window counter for
+    // userSearch.members (the member typeahead). Same shape and same reasoning
+    // as incidentListRateLimits above: deterministic doc id
+    // `{uid}_{epochMinute}`, read by id and bumped with FieldValue.increment via
+    // the Admin SDK before the displayNameLower range scan, `expireAt` carrying
+    // a Firestore TTL policy so spent windows self-delete. Fully backend-only —
+    // a member must not be able to inspect or reset their own throttle, which is
+    // the entire point of putting the search behind a callable.
+    // -------------------------------------------------------------------------
+    match /memberSearchRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // liveSessions – nearby live-sharer DISCOVERY index (live location)
     // A lightweight, geo-cell-indexed Firestore doc per ACTIVE standalone
     // sharer (liveSessions/{uid}), written ONLY by the live.* callables via the
@@ -962,6 +1063,108 @@ service cloud.firestore {
       match /entries/{entryId} {
         allow read: if isOwner(userId);
         // No client writes: append-only via backend transactions.
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // POINTS ECONOMY (Phase 20) — the earning rules on top of the 9g ledger.
+    //
+    // The single invariant across every collection below: points are
+    // SERVER-AUTHORITATIVE. A member may READ the state that explains their own
+    // balance (their streak, their attendance evidence) and may write NONE of
+    // it. Everything is written by the economy award engine
+    // (functions/src/points/economy-award.ts) and its triggers/callables
+    // through the Admin SDK, which bypasses these rules.
+    //
+    // If any of these ever became client-writable the whole economy would be
+    // forgeable in one line of client code — a member could zero their own
+    // daily-cap counter, set a 400-day streak, or mark themselves present at an
+    // event they never attended. Hence: no `allow write` anywhere in this
+    // block, for anyone, including admins (the admin app reads points through
+    // the points.admin* callables).
+    // -------------------------------------------------------------------------
+
+    // pointsStreaks – the member's daily-open streak (lastOpenDay, streak,
+    // longestStreak). Owner-readable so the app can show "dag 5 i rad" without
+    // a callable round-trip; backend-only writes, so the streak that drives the
+    // 1.0x–1.7x multiplier cannot be set by the client that benefits from it.
+    match /pointsStreaks/{userId} {
+      allow read: if isOwner(userId);
+      // No client writes: points.recordDailyOpen only.
+    }
+
+    // pointsDailyTotals / pointsWeeklyDriving – the cap counters
+    // ({uid}__{YYYY-MM-DD} and {uid}__{w-YYYY-MM-DD}). Fully backend-only:
+    // these ARE the DAILY_POINTS_CAP and WEEKLY_DRIVING_POINTS_CAP ceilings,
+    // read and incremented inside the award transaction. Not even
+    // owner-readable — a member has no use for the raw counter, and exposing
+    // it would leak exactly how close the ceiling is to anyone building a
+    // grinding script.
+    match /pointsDailyTotals/{counterId} {
+      allow read, write: if false;
+    }
+
+    match /pointsWeeklyDriving/{counterId} {
+      allow read, write: if false;
+    }
+
+    // pointsRuleCounters – per-rule limit counters
+    // ({uid}__{ruleKey}__{day|eventId|all}) enforcing 1/day, 2/day, 3/day,
+    // 1/event and once-ever. Backend-only for the same reason.
+    match /pointsRuleCounters/{counterId} {
+      allow read, write: if false;
+    }
+
+    // pointsLedgerFolds – exactly-once markers for folding Kronjakt crown
+    // awards into the daily cap (points/economyTriggers.ts onLedgerEntryCreated).
+    // Pure bookkeeping; backend-only.
+    match /pointsLedgerFolds/{foldId} {
+      allow read, write: if false;
+    }
+
+    // pointsEconomyRateLimit – per-minute call counters for the two
+    // client-facing economy callables ({uid}__{action}__{epochMinute}).
+    // Backend-only; a Firestore TTL policy on `expireAt` reaps spent windows.
+    match /pointsEconomyRateLimit/{windowId} {
+      allow read, write: if false;
+    }
+
+    // eventAttendance – geofence + dwell attendance evidence, one document per
+    // (eventId, uid). OWNER-READABLE so a member can see their own check-in
+    // progress ("8 of 10 minutes"), and — critically — NEVER client-writable:
+    // the samples in this document are the proof that decides a 50 KP award,
+    // so a client write would be a self-service attendance certificate.
+    // The samples are raw member coordinates, so the document also carries an
+    // `expireAt` and is reaped by a Firestore TTL policy after 90 days
+    // (ATTENDANCE_EVIDENCE_RETENTION_MS) — long enough to settle a dispute
+    // about the award, not a permanent location record. Deleting it cannot
+    // re-open the award: the ledger idempotency key, the per-event rule
+    // counter and the host tally guard all outlive it, none with a TTL.
+    match /eventAttendance/{attendanceId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow read: if isAdmin();
+      // No client writes: events.checkIn only.
+    }
+
+    // eventAttendanceRisk – anti-fraud scores and reasons for rejected
+    // check-in samples. A SEPARATE collection from eventAttendance for exactly
+    // the reason crownHuntClaimRisk is separate from crownHuntClaims: the
+    // attendance record is owner-readable, and risk thresholds/reasons must
+    // never reach a mobile client — telling someone which signal tripped is
+    // telling them what to change. Fully backend-only.
+    match /eventAttendanceRisk/{attendanceId} {
+      allow read, write: if false;
+    }
+
+    // eventAttendanceCounts – verified-attendee tally per event plus its
+    // `counted/{uid}` exactly-once guards; feeds the 3-attendee
+    // event_host_success award. Backend-only: it is a count of who was
+    // physically present, which is nobody's business but the backend's.
+    match /eventAttendanceCounts/{eventId} {
+      allow read, write: if false;
+
+      match /counted/{userId} {
+        allow read, write: if false;
       }
     }
 

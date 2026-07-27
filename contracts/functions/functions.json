@@ -289,6 +289,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Events -> Firestore; attendee visibility)"
     },
     {
+      "name": "events.checkIn",
+      "domain": "events",
+      "description": "Records ONE position sample as proof of attendance at a published (or just-completed) event and, once the evidence is complete, marks eventAttendance/{eventId}__{uid} verified. Verification is GEOFENCE + DWELL, all measured server-side: each sample must be within 150 m of the event's own coordinates (haversine + a conservative GPS-accuracy buffer, reusing crownHunt/crown-hunt-geo.ts) and inside [startsAt - 30 min, endsAt + 30 min]; attendance needs at least two qualifying samples at least 10 minutes apart and at least 10 minutes of cumulative dwell (each gap credited at most 30 minutes). The client sends only { eventId, latitude, longitude, capturedAt, accuracyMeters?, platformIntegrityPassed? } - never a distance, a dwell or a point value - and capturedAt is freshness-checked against the server clock. Every sample runs through the same anti-fraud pipeline as a Kronjakt claim (crown-hunt-risk.ts evaluateClaimRisk: stale position, implausible jump vs the last trusted RTDB position, poor accuracy, attempts per minute); a score >= 60 records the sample as rejected and it contributes no dwell. Risk scores/reasons are backend-only and never returned. Rate-limited to 10 calls/minute per uid. No points are credited here - the points-onAttendanceVerified trigger awards event_attend_verified (50 KP, once per event) on the false->true edge, and event_host_success (75 KP) to the host once the event reaches 3 verified attendees. Intended client flow is two explicit taps ~10 min apart (one-shot GPS fixes, no background-location permission, no location trail), but the evaluation is written against a list of samples so periodic foreground posting works unchanged. Deployed via grouped export as events-checkIn (functions/src/events/checkIn.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/gamification-system.md (points economy - event attendance verification)"
+    },
+    {
       "name": "garage.addVehicle",
       "domain": "garage",
       "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
@@ -386,6 +395,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (Points ledger -> Firestore transactions)"
+    },
+    {
+      "name": "points.recordDailyOpen",
+      "domain": "points",
+      "description": "Records the caller's first app open of the current Europe/Stockholm day and credits daily_open: 5 KP x the streak multiplier (1 + min(streak, 7) / 10, so 1.0x at streak 0 up to 1.7x at streak >= 7, where the streak is the run of consecutive local days ENDING YESTERDAY). Takes NO arguments (strict empty schema): the day, the streak and the award are all derived from the server clock and the stored pointsStreaks/{uid} document, so a client cannot supply a day, a streak or a point value. This is the ONLY client-triggered award in the economy - every other rule hangs off a document the backend already writes - so it is additionally rate-limited to 10 calls/minute per uid and is idempotent on the ledger key pe__daily_open__{uid}__{YYYY-MM-DD}: repeat calls on the same local day return alreadyCountedToday with pointsAwarded 0. Local days are computed via the IANA Europe/Stockholm zone (DST-correct), never UTC. The streak is advanced in its own transaction BEFORE the credit, so a member who has already hit the 300 KP daily cap keeps their streak even though the open pays nothing (dailyCapReached true). Deployed via grouped export as points-recordDailyOpen (functions/src/points/dailyOpen.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/gamification-system.md (points economy - daily open + streak)"
     },
     {
       "name": "partners.submitApplication",
@@ -712,6 +730,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "friend.cancelRequest",
+      "domain": "friend",
+      "description": "Withdraws the caller's own still-PENDING outgoing friend request ({ toUid }) — the counterpart of friend.sendRequest. Addressed by RECIPIENT, never by requestId: the doc id is derived server-side as friendRequestId(caller, toUid), so a caller can structurally only address a request they SENT and cannot name (or probe the existence of) anyone else's. Deletes friendRequests/{requestId} so a withdrawn request reads as never sent (the recipient's pending list simply loses the row) and the pair can send again later; established friendship is the source of truth for 'already friends', so a delete can never disturb one. Returns { cancelled } — true only when a pending request was actually deleted. Every other outcome (no request, already accepted/declined, self) is the SAME silent { cancelled: false } no-op rather than an error, so a double-tap or a retry after a dropped response is idempotent and the response is never an oracle for activity on another member's account. Does NOT unwrite the best-effort in-app 'friend_request' notification from the original send (that would need a new composite index over another user's notifications; the actionable pending-request row is gone, and acting on the stale notice not-founds). Deployed via grouped export as friend-cancelRequest (functions/src/friends/manageFriends.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "friend.remove",
       "domain": "friend",
       "description": "Removes an established friend ({ friendUid }). Idempotent: deletes users/{caller}/friends/{friendUid} and the mirror users/{friendUid}/friends/{caller}; returns { removed } reflecting whether the caller's own side existed (self is always { removed: false }). Established friendship — not request status — is the source of truth, so a later friend.sendRequest can re-friend. Deployed via grouped export as friend-remove (functions/src/friends/manageFriends.ts).",
@@ -730,6 +757,15 @@
       "source": "docs/api-guidelines.md"
     },
     {
+      "name": "userSearch.members",
+      "domain": "userSearch",
+      "description": "Live member typeahead backing the 'find a person' field ({ query, limit? } → { members:[{uid,displayName,avatarPath}] }). MATCHING: case-insensitive PREFIX over the denormalized users/{uid}.displayNameLower key (toSearchKey in functions/src/friends/friends-core.ts), queried as the half-open range [key, prefixUpperBound(key)) — typing 'gt' finds 'gt_86' and 'GT86_swe'; a MID-WORD or trailing substring such as '86' does NOT match. Firestore has no substring/contains/full-text operator and a precomputed n-gram token array is deliberately not built, so prefix is the whole capability. Single-field range + orderBy on the same field, so NO composite index is required. BOUNDS, all fixed server-side: the normalized query must be at least 2 CODE POINTS (shorter → invalid-argument with reason QUERY_TOO_SHORT, distinct from a malformed payload so a typeahead can render 'keep typing' silently); the raw scan is capped at 30 documents; at most 20 rows are returned and the optional limit is CLAMPED to that, never honoured beyond it; there is no cursor, so the endpoint cannot be paged into a member-directory export. A per-uid fixed-window rate limit (90/min, counter doc memberSearchRateLimits/{uid}_{epochMinute} read by id and bumped with FieldValue.increment; expireAt carries a Firestore TTL policy) is enforced after validation and before the scan, and returns resource-exhausted. The caller's own row and restricted (suspended/soft-deleted) accounts are excluded, as is any user with a block edge to the caller in EITHER direction — a blocked row is simply ABSENT, with no marker, count or reason code, so a search can never reveal that a block exists or who set it. The response projection is an allowlist of exactly uid/displayName/avatarPath, built field by field, so email, role, activeMember, suspended, deleted and any future field on users/{uid} are invisible by default. Declared access 'member' (requireMemberActor). NOTE the declared access is what is enforced WHEN THE GATE IS ON: functions/src/shared/memberGating.ts currently sets MEMBER_GATING_ENABLED = false repo-wide, so the entitlement half of every 'member' declaration in this registry is presently bypassed and any signed-in, non-suspended, non-deleted caller passes. Suspension and soft-deletion are NEVER bypassed. Re-locking is the documented five-switch procedure in memberGating.ts; this callable needs no change when it happens, and must NOT grow a bespoke entitlement check — activeMember defaults to false on provisioning, so a local check would deny every caller and make the search dead on arrival while the rest of the app stays open. Exists as a callable even though users/{uid} is authenticated-readable because security rules can bound none of the above. Deployed via grouped export as userSearch-members (functions/src/users/searchMembers.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "dm.sendMessage",
       "domain": "dm",
       "description": "Sends a 1:1 direct message to an ESTABLISHED friend ({ toUid, text, clientId? }, text 1..2000). Requires an established friendship (users/{uid}/friends/{friendUid}) — else failed-precondition NOT_FRIENDS; rejects self (invalid-argument) and either-way blocks (failed-precondition, neutral). Creates or updates the canonical conversations/{pairId} (pairId = the two UIDs sorted + joined by `__`), appends conversations/{pairId}/messages/{id} {senderUid,text,createdAt,clientId?}, bumps the recipient's per-member unread AND the userPrivate/{recipient}.dmUnreadTotal aggregate in one transaction. Returns { conversationId, messageId }. The optional clientId is a client idempotency key ([A-Za-z0-9_-]{1,64}, e.g. a UUID) used verbatim as the message doc id so an optimistic-send retry is exactly-once (a resend of the same clientId returns the existing messageId without re-bumping unread or re-notifying) and the live listener can reconcile the delivered doc against the optimistic bubble; messageId equals clientId when supplied. FCM push deferred to end-of-MVP. Deployed via grouped export as dm-sendMessage (functions/src/dm/manageDirectMessages.ts).",
@@ -741,7 +777,7 @@
     {
       "name": "dm.listConversations",
       "domain": "dm",
-      "description": "Lists the caller's DM conversations newest-first ({} input). Returns { conversations:[{ conversationId, otherUser:{uid,displayName,avatarPath}, lastMessage:{text,senderUid,createdAt}|null, unreadCount, lastReadAt }], totalUnread }. otherUser + lastMessage are denormalized on conversations/{pairId}; unreadCount/lastReadAt are the caller's own per-member values. totalUnread mirrors userPrivate/{uid}.dmUnreadTotal (the badge source). Deployed via grouped export as dm-listConversations (functions/src/dm/manageDirectMessages.ts).",
+      "description": "Lists the caller's DM conversations newest-first ({} input). Returns { conversations:[{ conversationId, otherUser:{uid,displayName,avatarPath}, lastMessage:{text,senderUid,createdAt}|null, unreadCount, lastReadAt }], totalUnread }. otherUser + lastMessage are denormalized on conversations/{pairId}; unreadCount/lastReadAt are the caller's own per-member values. totalUnread mirrors userPrivate/{uid}.dmUnreadTotal (the badge source). A conversation whose counterparty is in the caller's blockVisibility/{uid}.hiddenUids mirror is OMITTED entirely, in both directions - a blocked DM thread is hidden and inert for both parties (blocking-onBlockWrite additionally blanks the stored lastMessage preview and clears unread). ONE document read for the whole inbox. Deployed via grouped export as dm-listConversations (functions/src/dm/manageDirectMessages.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -750,7 +786,7 @@
     {
       "name": "dm.getMessages",
       "domain": "dm",
-      "description": "Paginated newest-first messages for a conversation ({ conversationId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only a member of the pair may read; a non-member or missing conversation is not-found (never permission-denied, so conversations can't be probed). Returns { conversationId, messages:[{id,senderUid,text,createdAt}], nextBefore, hasMore } (page size 30). Deployed via grouped export as dm-getMessages (functions/src/dm/manageDirectMessages.ts).",
+      "description": "Paginated newest-first messages for a conversation ({ conversationId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only a member of the pair may read; a non-member or missing conversation is not-found (never permission-denied, so conversations can't be probed). Returns { conversationId, messages:[{id,senderUid,text,createdAt}], nextBefore, hasMore } (page size 30). A blocked pair (either direction) is ALSO not-found, resolved against the authoritative userBlocks edges rather than the eventually consistent mirror, so being blocked is indistinguishable from the thread not existing. The messages subcollection is independently denied by firebase/firestore.rules (possible there because every message in one conversation shares the same pair, so the condition is constant across the query). Deployed via grouped export as dm-getMessages (functions/src/dm/manageDirectMessages.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -759,7 +795,7 @@
     {
       "name": "dm.markRead",
       "domain": "dm",
-      "description": "Clears the caller's unread for a conversation ({ conversationId }). Sets conversations/{pairId}.unread[caller]=0 + lastReadAt[caller]=now and decrements userPrivate/{caller}.dmUnreadTotal by exactly the cleared amount (never underflows) in one transaction. Non-member/missing → not-found. Returns { conversationId, cleared }. Deployed via grouped export as dm-markRead (functions/src/dm/manageDirectMessages.ts).",
+      "description": "Clears the caller's unread for a conversation ({ conversationId }). Sets conversations/{pairId}.unread[caller]=0 + lastReadAt[caller]=now and decrements userPrivate/{caller}.dmUnreadTotal by exactly the cleared amount (never underflows) in one transaction. Non-member/missing → not-found. A blocked pair (either direction) is not-found too: the thread is inert, and its unread was already cleared and unwound from the aggregate when the block landed, so a second decrement must not happen here. Returns { conversationId, cleared }. Deployed via grouped export as dm-markRead (functions/src/dm/manageDirectMessages.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -867,7 +903,7 @@
     {
       "name": "communityChat.list",
       "domain": "communityChat",
-      "description": "Paginated newest-first community messages ({ before? } where before is an ISO-8601 createdAt cursor, exclusive). Any active member reads. Returns { messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore, lastReadAt } (page size 30). mentionedUids is the server-validated @mention set for the message ([] when none, and for messages posted before mentions existed) — the client highlights those uids without resolving anything. lastReadAt is the caller's own userPrivate/{uid}.communityChatLastReadAt marker (the client derives the unread dot by comparing the newest message's createdAt to it — no fan-out unread aggregate). Blocking is NOT filtered server-side (global town square). Deployed via grouped export as communityChat-list (functions/src/chatchannels/communityChat.ts).",
+      "description": "Paginated newest-first community messages ({ before? } where before is an ISO-8601 createdAt cursor, exclusive). Any active member reads. Returns { messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore, lastReadAt } (page size 30). mentionedUids is the server-validated @mention set for the message ([] when none, and for messages posted before mentions existed) — the client highlights those uids without resolving anything. lastReadAt is the caller's own userPrivate/{uid}.communityChatLastReadAt marker (the client derives the unread dot by comparing the newest message's createdAt to it — no fan-out unread aggregate). Blocking is filtered in BOTH directions off the caller's blockVisibility/{uid}.hiddenUids mirror (the union of 'the caller blocked them' and 'they blocked the caller', maintained by blocking-onBlockWrite): a message from a hidden uid is dropped. ONE document read per call, never one per message. The pagination cursor is taken from the RAW page before filtering, so a wholly-hidden page tail cannot stall paging. The channel's LIVE window is a direct Firestore listener and is filtered client-side against the same mirror - a Firestore rule cannot filter a list query per-document. Deployed via grouped export as communityChat-list (functions/src/chatchannels/communityChat.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -885,7 +921,7 @@
     {
       "name": "convoyChat.post",
       "domain": "convoyChat",
-      "description": "Posts a message to a per-CONVOY chat ({ convoyId, text }, text 1..2000). Member-gated AND accepted-convoy-member-gated: the caller must be in convoys/{convoyId}.memberUids with members[caller].inviteStatus=='accepted' (owner seeded accepted). A missing convoy or a total outsider is not-found (never permission-denied, so a convoy can't be probed); a still-invited/declined member is failed-precondition. Appends convoyChats/{convoyId}/messages/{id} {senderUid, text, createdAt, senderDisplayName, senderAvatarPath, mentionedUids} (denormalized sender profile; mentionedUids is always [] — this callable accepts no @mentions, the field exists so both chat channels share one message shape). Backend is the sole writer (firebase/firestore.rules grants reads only to accepted convoy members via a get() of the convoy doc, denies client writes). Returns { messageId }. Deployed via grouped export as convoyChat-post (functions/src/chatchannels/convoyChat.ts).",
+      "description": "Posts a message to a per-CONVOY chat ({ convoyId, text }, text 1..2000). Member-gated AND accepted-convoy-member-gated: the caller must be in convoys/{convoyId}.memberUids with members[caller].inviteStatus=='accepted' (owner seeded accepted). A missing convoy or a total outsider is not-found (never permission-denied, so a convoy can't be probed); a still-invited/declined member is failed-precondition. Appends convoyChats/{convoyId}/messages/{id} {senderUid, text, createdAt, senderDisplayName, senderAvatarPath, mentionedUids} (denormalized sender profile; mentionedUids is always [] — this callable accepts no @mentions, the field exists so both chat channels share one message shape). Backend is the sole writer (firebase/firestore.rules grants reads only to accepted convoy members via a get() of the convoy doc, denies client writes). The in-app notification fan-out skips members in the poster's blockVisibility/{uid}.hiddenUids mirror, matching what the channel now shows them. Returns { messageId }. Deployed via grouped export as convoyChat-post (functions/src/chatchannels/convoyChat.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",
@@ -894,7 +930,7 @@
     {
       "name": "convoyChat.list",
       "domain": "convoyChat",
-      "description": "Paginated newest-first convoy chat messages ({ convoyId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only an accepted member of the convoy may read (same gate as convoyChat.post; missing convoy/outsider not-found, still-invited/declined failed-precondition). Returns { convoyId, messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore } (page size 30). mentionedUids is always [] here — convoyChat.post accepts no @mentions (the chat already notifies every accepted member, so a mention notice would duplicate one they get anyway); the field is present only so both channels share one message shape. Deployed via grouped export as convoyChat-list (functions/src/chatchannels/convoyChat.ts).",
+      "description": "Paginated newest-first convoy chat messages ({ convoyId, before? } where before is an ISO-8601 createdAt cursor, exclusive). Only an accepted member of the convoy may read (same gate as convoyChat.post; missing convoy/outsider not-found, still-invited/declined failed-precondition). Returns { convoyId, messages:[{id,senderUid,text,senderDisplayName,senderAvatarPath,mentionedUids,createdAt}], nextBefore, hasMore } (page size 30). mentionedUids is always [] here — convoyChat.post accepts no @mentions (the chat already notifies every accepted member, so a mention notice would duplicate one they get anyway); the field is present only so both channels share one message shape. Blocking is filtered in BOTH directions off the caller's blockVisibility/{uid}.hiddenUids mirror (the union of 'the caller blocked them' and 'they blocked the caller', maintained by blocking-onBlockWrite): a message from a hidden uid is dropped. ONE document read per call, never one per message. The pagination cursor is taken from the RAW page before filtering, so a wholly-hidden page tail cannot stall paging. The channel's LIVE window is a direct Firestore listener and is filtered client-side against the same mirror - a Firestore rule cannot filter a list query per-document. Deployed via grouped export as convoyChat-list (functions/src/chatchannels/convoyChat.ts).",
       "access": "member",
       "appCheck": true,
       "status": "implemented",

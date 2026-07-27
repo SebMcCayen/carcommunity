@@ -20,9 +20,14 @@
  * BLOCKING does not gate reporting, deliberately and in either direction. You
  * block someone because they are behaving badly; making you unblock them to
  * report them would be exactly backwards, and letting a harasser pre-emptively
- * block their target to disarm the report button would be worse. (The community
- * channel applies no server-side block filter to reads either — chat-core.ts —
- * so a blocked user's message is still on screen and must still be reportable.)
+ * block their target to disarm the report button would be worse.
+ *
+ * This matters MORE now that the channels hide a blocked pair from each other
+ * (chat-core.ts). A report can be in flight, or a report sheet already open, at
+ * the moment a block lands — and the moderation queue is where the offending
+ * message is preserved. So reporting deliberately stays open on any message id
+ * the caller is otherwise entitled to report, blocked pair or not; only the
+ * caller's own VIEW of the channel changes.
  *
  * The reported message is SNAPSHOTTED into the report: channel messages carry a
  * retention TTL (120 / 30 days) and are hard-deleted when it fires, so a report

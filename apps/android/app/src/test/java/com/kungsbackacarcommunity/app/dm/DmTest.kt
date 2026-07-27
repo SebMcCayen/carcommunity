@@ -97,6 +97,44 @@ class DmTest {
     }
 
     @Test
+    fun `isHiddenByBlock drops a conversation the backend marked as a blocked pair`() {
+        // The inbox is a LIST query, so a Firestore rule cannot filter this row
+        // out — the document IS delivered and the client has to drop it. This is
+        // the signal covering the window before the blockVisibility mirror
+        // catches up, and the case where that mirror sits at its cap. Note the
+        // blanked preview but still-set lastMessageAt: without this check the row
+        // renders as a contentless entry holding its place in the ordering.
+        val doc =
+            DmConversationDoc(
+                members = listOf("me", "friend"),
+                memberProfiles = mapOf("friend" to DmUser("friend", "Robin", null)),
+                lastMessageText = null,
+                lastMessageSenderUid = null,
+                lastMessageAtMillis = 1000L,
+                unread = emptyMap(),
+                blockedPair = true,
+            )
+        assertTrue(DmMapper.isHiddenByBlock(doc))
+    }
+
+    @Test
+    fun `isHiddenByBlock keeps a normal conversation and defaults to visible`() {
+        // Default-false is load-bearing: conversation documents written before
+        // the marker existed carry no such field, and must read as visible rather
+        // than vanishing from every inbox.
+        val doc =
+            DmConversationDoc(
+                members = listOf("me", "friend"),
+                memberProfiles = mapOf("friend" to DmUser("friend", "Robin", null)),
+                lastMessageText = "Hej!",
+                lastMessageSenderUid = "friend",
+                lastMessageAtMillis = 1000L,
+                unread = emptyMap(),
+            )
+        assertFalse(DmMapper.isHiddenByBlock(doc))
+    }
+
+    @Test
     fun `sortConversations orders newest first`() {
         val a = conversation("a", 100L)
         val b = conversation("b", 300L)

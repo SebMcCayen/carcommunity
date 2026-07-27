@@ -6,10 +6,14 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
+import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 
 /**
  * [EventChatRepository] backed by a Firestore snapshot listener on the messages
@@ -17,13 +21,36 @@ import kotlinx.coroutines.flow.callbackFlow
  * slice 10. Removed messages keep their (blanked) body but carry
  * moderationState=removed, which the UI renders as a neutral placeholder.
  * Construction is guarded ([createIfAvailable] returns null without Firebase).
+ *
+ * BLOCKING: filtered against the caller's mutual-hidden set
+ * ([BlockVisibilityRepository]) so a blocked pair does not see each other in an
+ * event's chat, in either direction. This surface has NO list callable — it is a
+ * snapshot listener only — so unlike the community/convoy channels the filter
+ * here is client-side ONLY. See [BlockVisibility] for why a Firestore rule
+ * cannot do it and what that does and does not guarantee.
  */
 class FirebaseEventChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
+    private val blockVisibility: BlockVisibilityRepository,
 ) : EventChatRepository {
 
-    override fun observeMessages(eventId: String): Flow<ChatMessagesState> = callbackFlow {
+    override fun observeMessages(eventId: String): Flow<ChatMessagesState> =
+        combine(observeRawMessages(eventId), blockVisibility.observeHiddenUids()) { state, hidden ->
+            // One document listener supplies the hidden set for the session; the
+            // filter itself costs no reads.
+            when (state) {
+                is ChatMessagesState.Loaded ->
+                    ChatMessagesState.Loaded(
+                        BlockVisibility.filterHiddenAuthors(state.messages, hidden) {
+                            it.authorUserId
+                        },
+                    )
+                else -> state
+            }
+        }
+
+    private fun observeRawMessages(eventId: String): Flow<ChatMessagesState> = callbackFlow {
         // Bound the read to the most recent messages (backend-domain-mapping
         // note): newest-first with a limit, then reverse to chronological for
         // display, so the listener cost stays flat as a chat grows.
@@ -86,6 +113,7 @@ class FirebaseEventChatRepository private constructor(
             return FirebaseEventChatRepository(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(REGION),
+                FirebaseBlockVisibilityRepository.createOrEmpty(context),
             )
         }
     }

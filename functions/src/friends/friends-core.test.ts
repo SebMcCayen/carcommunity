@@ -4,6 +4,7 @@ import {
   buildFriendshipDocument,
   friendRequestId,
   isMissingIndexError,
+  parseCancelRequestInput,
   parseListInput,
   parseRemoveFriendInput,
   parseRespondRequestInput,
@@ -114,6 +115,21 @@ describe('friends-core parsing', () => {
     expect(parseListInput({}).ok).toBe(true);
     expect(parseListInput(undefined).ok).toBe(true);
     expect(parseListInput({ foo: 1 }).ok).toBe(false);
+  });
+
+  it('parses the cancel input strictly, by RECIPIENT and nothing else', () => {
+    expect(parseCancelRequestInput({ toUid: '  u-3  ' })).toEqual({
+      ok: true,
+      input: { toUid: 'u-3' },
+    });
+    expect(parseCancelRequestInput({ toUid: '' }).ok).toBe(false);
+    expect(parseCancelRequestInput({}).ok).toBe(false);
+    expect(parseCancelRequestInput(undefined).ok).toBe(false);
+    // .strict(): a requestId-shaped payload (the shape the OTHER friend
+    // callables take) must be REJECTED, not silently ignored — accepting it
+    // would let a caller believe they had cancelled a request they named.
+    expect(parseCancelRequestInput({ requestId: 'abc' }).ok).toBe(false);
+    expect(parseCancelRequestInput({ toUid: 'u-3', requestId: 'abc' }).ok).toBe(false);
   });
 });
 

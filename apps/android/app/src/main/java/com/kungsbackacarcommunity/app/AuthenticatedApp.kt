@@ -132,9 +132,22 @@ import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
 import com.kungsbackacarcommunity.app.convoy.invitableSelection
 import com.kungsbackacarcommunity.app.convoy.messageRes
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
+import com.kungsbackacarcommunity.app.crownhunt.CrownClaimStatus
+import com.kungsbackacarcommunity.app.crownhunt.CrownCollectGate
+import com.kungsbackacarcommunity.app.crownhunt.CrownFix
+import com.kungsbackacarcommunity.app.crownhunt.CrownFixTracker
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
+import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
+import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
+import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnController
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
+import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
+import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
@@ -276,6 +289,7 @@ import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -344,6 +358,22 @@ private const val MAX_NEARBY_LIVE_MARKERS = 50
  * whether the settle is even worth a callable.
  */
 private const val INCIDENT_CAMERA_IDLE_DEBOUNCE_MS = 500L
+
+/**
+ * How often a fresh position fix is taken WHILE a Kronjakt crown popup is open.
+ *
+ * `crownHunt.claimSpawn` needs two fixes at least
+ * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS]
+ * (4 s) apart and derives its own speed from the pair, so a single sample can
+ * never satisfy it. 2 s means a usable pair exists a couple of seconds after the
+ * server's own minimum — as fast as the rule permits, and no faster.
+ *
+ * Deliberately scoped to the OPEN POPUP and nothing else: this is a
+ * high-accuracy GPS read, and running it for the whole session (or in the
+ * background) to keep a Collect button warm would be a real battery cost for a
+ * feature the user is not currently looking at.
+ */
+private const val CROWN_FIX_INTERVAL_MS = 2_000L
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -1120,14 +1150,99 @@ fun AuthenticatedApp(
                     requeryTicks = incidentRequeryTicks,
                 )
             }
+
+            // ── Kronjakt crown layer (the AUTO-SPAWN half) ──────────────────
+            //
+            // Deliberately built out of the incident layer's parts rather than a
+            // second, differently-tuned machine: the same camera-idle pump below,
+            // the same conflated tick channel, the same two-phase poll shape (see
+            // CrownSpawnController.pollNearby), and ViewportRadius via the same
+            // mapSurface.visibleRadiusMeters() seam. The only thing that differs is
+            // the cadence — 60 s keep-alive rather than 15 s, because the spawner
+            // runs every 10 minutes and the shortest crown lives 6 hours, so a
+            // faster poll has nothing to find and would only cost battery.
+            val crownSpawnController =
+                remember(context) { CrownSpawnController.createIfAvailable(context) }
+            // BOTH flags. `crownHunt` is the feature as a whole; `crownHuntSpawn`
+            // (contract default OFF) is the automatic half specifically, because an
+            // auto-placed crown carries no admin's confirmation that its spot is
+            // safe to stop at. With either off this is false, and false here means
+            // the poll effect below returns immediately: no `crownSpawns` query is
+            // ever issued, not a hidden layer that still costs reads.
+            val crownSpawnEnabled =
+                flags.isEnabled(FeatureFlag.CROWN_HUNT) &&
+                    flags.isEnabled(FeatureFlag.CROWN_HUNT_SPAWN)
+            val crownSpawnsFlow =
+                remember(crownSpawnController) {
+                    crownSpawnController?.nearbySpawns
+                        ?: MutableStateFlow(emptyList<CrownSpawn>())
+                }
+            val crownSpawns by crownSpawnsFlow.collectAsState()
+            val crownRequeryTicks =
+                remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
+            LaunchedEffect(selectedTab, crownSpawnController, crownSpawnEnabled, mapSurface) {
+                val controller = crownSpawnController ?: return@LaunchedEffect
+                if (selectedTab != ShellTab.Map || !crownSpawnEnabled) {
+                    // Leaving the map (or the flag going off) takes the layer down
+                    // rather than freezing it: crowns are claimed once globally, so
+                    // a frozen layer is a set of markers that may already be gone.
+                    controller.clear()
+                    return@LaunchedEffect
+                }
+                val appContext = context.applicationContext
+                controller.pollNearby(
+                    // Two gates, not one. The effect KEY above is what reacts to
+                    // the flag actually changing (a flip cancels this loop and the
+                    // early return above takes the layer down). This provider is
+                    // the controller's own gate — checked before every single
+                    // refresh — and it is what a unit test can drive, so "off means
+                    // zero queries" is a proven property of the controller rather
+                    // than a property of one call site's effect keys.
+                    enabledProvider = { crownSpawnEnabled },
+                    centerProvider = {
+                        mapSurface.cameraSnapshot.value?.let { snapshot ->
+                            CrownQueryCenter(
+                                latitude = snapshot.latitude,
+                                longitude = snapshot.longitude,
+                            )
+                        }
+                            ?: CurrentLocation.lastKnown(appContext)?.let { fix ->
+                                CrownQueryCenter(
+                                    latitude = fix.latitude,
+                                    longitude = fix.longitude,
+                                )
+                            }
+                    },
+                    radiusProvider = { mapSurface.visibleRadiusMeters() },
+                    requeryTicks = crownRequeryTicks,
+                )
+            }
             // Turn camera-idle into meaningful-move re-query pulses. collectLatest
             // debounces: a new camera snapshot cancels the pending settle timer, so
             // the radius/centre are read only once the camera has been still for
             // INCIDENT_CAMERA_IDLE_DEBOUNCE_MS. The pure CameraRequeryDecision then
             // gates it, so jitter and settles at the same spot/zoom send nothing.
-            LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
-                if (incidentController == null) return@LaunchedEffect
-                if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
+            //
+            // ONE pump for BOTH layers, fanned out to their two channels. A second
+            // copy for the crowns would mean two debounce timers and two anchors
+            // racing on the same camera — twice the work to answer the same
+            // question ("has the camera meaningfully moved?"), and two chances to
+            // drift apart. The extra tick a layer receives when only the other one
+            // moved is free: each controller re-checks its own re-query rule
+            // (CameraRequeryDecision for incidents, cell-set equality for crowns)
+            // and skips a pass that would return the same rows.
+            LaunchedEffect(
+                selectedTab,
+                incidentController,
+                incidentsLayerEnabled,
+                crownSpawnController,
+                crownSpawnEnabled,
+                mapSurface,
+            ) {
+                if (selectedTab != ShellTab.Map) return@LaunchedEffect
+                val pumpIncidents = incidentController != null && incidentsLayerEnabled
+                val pumpCrowns = crownSpawnController != null && crownSpawnEnabled
+                if (!pumpIncidents && !pumpCrowns) return@LaunchedEffect
                 var lastAnchor: QueryAnchor? = null
                 mapSurface.cameraSnapshot.collectLatest { snapshot ->
                     snapshot ?: return@collectLatest
@@ -1141,10 +1256,143 @@ fun AuthenticatedApp(
                         )
                     if (CameraRequeryDecision.shouldRequery(lastAnchor, next)) {
                         lastAnchor = next
-                        incidentRequeryTicks.trySend(Unit)
+                        if (pumpIncidents) incidentRequeryTicks.trySend(Unit)
+                        if (pumpCrowns) crownRequeryTicks.trySend(Unit)
                     }
                 }
             }
+            // Crowns → drawing primitives for the map seam, exactly as incidents
+            // are above: the surface is handed a colour, a silhouette and a tint
+            // and knows nothing about rarities. Empty whenever the feature is off,
+            // so a flag flipped mid-session takes the markers off the map without
+            // waiting for a poll pass.
+            val crownMarkers =
+                remember(crownSpawns, crownSpawnEnabled) {
+                    if (!crownSpawnEnabled) {
+                        emptyList()
+                    } else {
+                        crownSpawns.map { spawn ->
+                            MapCrownMarker(
+                                id = spawn.id,
+                                longitude = spawn.longitude,
+                                latitude = spawn.latitude,
+                                discColorArgb = CrownMarkerStyle.discColorArgb(spawn.rarity),
+                                iconRes = crownGlyphRes(spawn.rarity),
+                                glyphColorArgb = CrownMarkerStyle.glyphColorArgb(spawn.rarity),
+                                // Only the legendary tier has one; the other three
+                                // pass null and are drawn without a halo.
+                                glowColorArgb = CrownMarkerStyle.glowColorArgb(spawn.rarity),
+                            )
+                        }
+                    }
+                }
+            LaunchedEffect(mapSurface, crownMarkers) {
+                mapSurface.setCrownMarkers(crownMarkers)
+            }
+            // The crown the user tapped. LATCHED, in deliberate contrast to
+            // [tappedIncident] just below, which is derived from the live list so a
+            // vanished incident closes its sheet.
+            //
+            // A crown vanishes from the layer the instant it is COLLECTED — that is
+            // the feature working, and it happens on success — so deriving the open
+            // crown would take the "+100 KP, the crown is yours" confirmation off
+            // the screen in the same frame it appeared. The latch is reset by
+            // `remember(tappedCrownId)`, so a new tap always re-resolves.
+            val tappedCrownId by mapSurface.crownTap.collectAsState()
+            val openCrownSlot = remember(tappedCrownId) { mutableStateOf<CrownSpawn?>(null) }
+            LaunchedEffect(tappedCrownId, crownSpawns) {
+                val id = tappedCrownId ?: return@LaunchedEffect
+                // Fill on the first emission that carries it; a later refresh that
+                // drops the crown must NOT clear it (see above).
+                if (openCrownSlot.value == null) {
+                    openCrownSlot.value = crownSpawns.firstOrNull { it.id == id }
+                }
+            }
+            val openCrown = if (tappedCrownId != null) openCrownSlot.value else null
+            val crownClaimFlow =
+                remember(crownSpawnController) {
+                    crownSpawnController?.claimStatus
+                        ?: MutableStateFlow<CrownClaimStatus>(CrownClaimStatus.Idle)
+                }
+            val crownClaimStatus by crownClaimFlow.collectAsState()
+            // The rolling pair of fixes a claim needs (`crownHunt.claimSpawn` will
+            // not accept one — a self-reported speed of zero is just a number the
+            // client sent). Keyed to the open crown, so leaving the popup forgets
+            // the pair rather than letting a stale one prove a later dwell.
+            val crownFixTracker = remember(tappedCrownId) { CrownFixTracker() }
+            var crownCurrentFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
+            var crownPreviousFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
+            // The claim has been ANSWERED — awarded or honestly refused. Terminal
+            // for this popup: [CrownSpawnPopup] swaps the whole body for the
+            // outcome, so there is no Collect button and no distance line left for
+            // a fresh fix to feed. `Failed` is deliberately NOT terminal — that one
+            // still offers a retry, which needs a live proof pair.
+            val crownClaimDone = crownClaimStatus is CrownClaimStatus.Done
+            // High-accuracy fixes, but ONLY while a crown popup is open AND the
+            // claim is still open — so the cost is bounded by the user's own
+            // attention rather than running for the whole session, and a member who
+            // leaves the "+100 KP" confirmation on screen is not quietly holding
+            // GPS at 2 s for as long as they admire it. A 2 s cadence gets a usable
+            // proof pair a couple of seconds after the 4 s minimum dwell, which is
+            // as fast as the server's own rule allows.
+            LaunchedEffect(tappedCrownId, crownSpawnEnabled, crownClaimDone) {
+                if (tappedCrownId == null || !crownSpawnEnabled) {
+                    // With no crown open, drop any finished result. The status
+                    // lives on the controller and outlives the popup, so a
+                    // "someone got there first" left behind would greet the next
+                    // crown the member opened — whichever route closed this one.
+                    crownSpawnController?.resetClaim()
+                    return@LaunchedEffect
+                }
+                // Answered: stop polling, but leave the popup and the last fixes
+                // exactly as they are. Resetting here would replace the outcome the
+                // member is reading; that belongs to the close path above.
+                if (crownClaimDone) return@LaunchedEffect
+                val appContext = context.applicationContext
+                while (true) {
+                    val fix = CrownLocation.currentFix(appContext)
+                    if (fix != null) {
+                        crownFixTracker.record(fix)
+                        crownCurrentFix = crownFixTracker.latest
+                        crownPreviousFix = crownFixTracker.proofPartner()
+                    }
+                    delay(CROWN_FIX_INTERVAL_MS)
+                }
+            }
+            // Distance from the member to the open crown, or null with no fix. The
+            // same haversine the rest of the app uses (via ViewportRadius), so a
+            // distance shown here agrees with one computed anywhere else.
+            val crownDistanceMeters =
+                remember(openCrown, crownCurrentFix) {
+                    val crown = openCrown
+                    val fix = crownCurrentFix
+                    if (crown == null || fix == null) {
+                        null
+                    } else {
+                        CrownSpawnQuery.distanceMeters(
+                            fix.latitude,
+                            fix.longitude,
+                            crown.latitude,
+                            crown.longitude,
+                        )
+                    }
+                }
+            val crownCollectState =
+                remember(crownSpawnEnabled, crownDistanceMeters, crownCurrentFix, openCrown) {
+                    CrownCollectGate.evaluate(
+                        featureEnabled = crownSpawnEnabled,
+                        distanceMeters = crownDistanceMeters,
+                        speedMetersPerSecond = crownCurrentFix?.speedMetersPerSecond,
+                        collectRadiusMeters =
+                            openCrown?.collectRadiusMeters
+                                ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
+                    )
+                }
+            // One key per opened crown, so a retry after a transport failure is the
+            // SAME claim to the backend (which de-duplicates on it) rather than a
+            // second attempt against the daily cap.
+            val crownIdempotencyKey =
+                remember(tappedCrownId) { java.util.UUID.randomUUID().toString() }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
@@ -2901,6 +3149,47 @@ fun AuthenticatedApp(
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }
+                                // Tapping a Kronjakt crown opens its popup: rarity,
+                                // value, distance, and a Collect button that is live
+                                // only within 75 m AND stopped. Composed in the same
+                                // map-chrome subtree as the incident sheet, for the
+                                // same reason — a tap that landed just before a tab
+                                // switch cannot leave it hanging over another page.
+                                val crownForPopup = openCrown
+                                if (crownForPopup != null && crownSpawnEnabled) {
+                                    CrownSpawnPopup(
+                                        spawn = crownForPopup,
+                                        state = crownCollectState,
+                                        status = crownClaimStatus,
+                                        distanceMeters = crownDistanceMeters,
+                                        onCollect = {
+                                            crownSpawnController?.let { controller ->
+                                                scope.launch {
+                                                    controller.collect(
+                                                        spawn = crownForPopup,
+                                                        current = crownCurrentFix,
+                                                        previous = crownPreviousFix,
+                                                        // Same key for every retry on
+                                                        // this crown: the backend
+                                                        // de-duplicates on it, so a
+                                                        // failed-then-retried claim
+                                                        // costs one attempt, not two.
+                                                        idempotencyKey = crownIdempotencyKey,
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onDismiss = {
+                                            // Clear the RESULT as well as the tap:
+                                            // the status flow lives on the
+                                            // controller, so a "someone got there
+                                            // first" left behind would greet the next
+                                            // crown the user opened.
+                                            crownSpawnController?.resetClaim()
+                                            mapSurface.consumeCrownTap()
+                                        },
+                                    )
+                                }
 
                                 // Tapping a community event pin opens its info
                                 // popup (title, when, place name, going count) with
@@ -4164,6 +4453,12 @@ private fun RouteHost(
                         // Guarded: only navigate when the profile repo is wired.
                         if (memberProfileRepository != null) onOpenMemberProfile(friend.uid)
                     },
+                    onOpenMemberProfile = { uid ->
+                        // A member-search suggestion opens that member's profile,
+                        // which is where every action on a person lives. Guarded
+                        // identically to the friend-row path above.
+                        if (memberProfileRepository != null) onOpenMemberProfile(uid)
+                    },
                 )
             } else {
                 LoadingScreen()
@@ -4176,6 +4471,9 @@ private fun RouteHost(
                     targetUid = memberProfileTargetUid,
                     viewerUid = uid,
                     blockingRepository = blockingRepository,
+                    // Optional, like the blocking repo: without it the profile
+                    // simply carries no friend action (config-less build).
+                    friendsRepository = friendsRepository,
                 )
             } else {
                 LoadingScreen()

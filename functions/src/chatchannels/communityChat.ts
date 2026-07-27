@@ -20,8 +20,15 @@
  *    (owner-only readable, alongside dmUnreadTotal). markRead stamps it; list
  *    returns it; the client's newest-message live listener derives the unread
  *    dot (createdAt > lastReadAt). See chat-core.ts.
- *  - Blocking is NOT filtered server-side (global town square) — documented in
- *    chat-core.ts. FCM push is intentionally not wired (end-of-MVP, as DM).
+ *  - Blocking IS filtered on `list`: a message authored by a uid in the caller's
+ *    `blockVisibility/{uid}.hiddenUids` mirror is dropped, in BOTH directions
+ *    (the caller blocked them, or they blocked the caller). One document read
+ *    per call, never one per message. The channel's LIVE window is a direct
+ *    Firestore listener on the client, which no security rule can filter
+ *    per-document (a per-doc condition fails the whole list query), so that
+ *    window is filtered client-side against the same mirror — see
+ *    blocking/block-visibility.ts for the full enforcement map.
+ *    FCM push is intentionally not wired (end-of-MVP, as DM).
  *  - The ONLY 'community_chat' notification producer is @MENTIONS: a message
  *    notifies the (at most MAX_MESSAGE_MENTIONS) members it explicitly names,
  *    and nobody else. A message with no mentions still writes no notification at
@@ -78,6 +85,8 @@ import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
+import { filterHiddenAuthors } from '../blocking/block-visibility';
+import { loadHiddenUids } from '../blocking/blockVisibilityStore';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   COMMUNITY_CHANNEL_ID,
@@ -384,22 +393,36 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListCommunity
     query = query.where('createdAt', '<', Timestamp.fromDate(new Date(before)));
   }
 
-  const [messagesSnap, privateSnap] = await Promise.all([
+  // ONE block-visibility document read for the whole page
+  // (blocking/block-visibility.ts) — never a per-message block lookup, so the
+  // cost of the filter is flat in the page size.
+  const [messagesSnap, privateSnap, hidden] = await Promise.all([
     query.get(),
     userPrivateRef(actor.uid).get(),
+    loadHiddenUids(actor.uid),
   ]);
 
   const docs = messagesSnap.docs;
   const hasMore = docs.length > CHAT_MESSAGES_PAGE_SIZE;
   const page = hasMore ? docs.slice(0, CHAT_MESSAGES_PAGE_SIZE) : docs;
 
-  const messages = page.map((doc) => {
+  const pageMessages = page.map((doc) => {
     const createdAtIso = toIso(doc.data().createdAt) ?? new Date(0).toISOString();
     return toChatMessageSummary(doc.id, doc.data(), createdAtIso);
   });
 
+  // The cursor comes off the RAW page, BEFORE the block filter: it records how
+  // far this read got through the channel, which is not the same as the oldest
+  // message the caller may see. Deriving it from the filtered list would re-serve
+  // the dropped messages' neighbours and, with a wholly-hidden tail, stall
+  // pagination on the same cursor forever.
   const nextBefore =
-    hasMore && messages.length > 0 ? messages[messages.length - 1]!.createdAt : null;
+    hasMore && pageMessages.length > 0 ? pageMessages[pageMessages.length - 1]!.createdAt : null;
+
+  // Bidirectional by construction: `hidden` is the union of "the caller blocked
+  // them" and "they blocked the caller", so neither party sees the other here.
+  const messages = filterHiddenAuthors(pageMessages, (message) => message.senderUid, hidden);
+
   const lastReadAt = toIso(privateSnap.data()?.communityChatLastReadAt);
 
   return { messages, nextBefore, hasMore, lastReadAt };

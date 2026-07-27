@@ -47,6 +47,7 @@ import com.kungsbackacarcommunity.app.badges.ladderNameRes
 import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.labelRes
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
@@ -62,9 +63,14 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  * their awards. The profile DATA stays read-only: this screen never mutates and
  * never reveals owner-only data.
  *
- * It does carry the two safety actions a member needs on another member, both
- * about the VIEWER's own relationship to them rather than about their profile:
+ * It does carry the actions a member needs ON another member, all of them about
+ * the VIEWER's own relationship to them rather than about their profile:
  *
+ *  - **Friend action** (when [friendState] is non-null): one control that
+ *    reflects the current relationship — Add friend / Cancel request / Accept +
+ *    Decline / a "Friends" status. It sits directly under the header because it
+ *    is the point of visiting someone's profile; the safety actions stay at the
+ *    bottom. See [MemberFriendControl].
  *  - **Block / Unblock** (when [onBlock]/[onUnblock] are wired): blocking a
  *    loaded profile confirms first, and on success the route settles the screen
  *    on [MemberProfileState.Blocked] — the profile withheld, offering the
@@ -84,6 +90,11 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  *   viewer's own profile) omits the block action.
  * @param onUnblock unblocks them from the [MemberProfileState.Blocked] state;
  *   null omits the unblock action, leaving that state a bare notice.
+ * @param friendState the viewer's friend relationship to this member; null (a
+ *   config-less build, or the viewer's own profile) omits the friend action
+ *   entirely. It is only ever rendered on a LOADED profile — a withheld
+ *   ([MemberProfileState.Blocked]) or missing one offers no friend action, so a
+ *   blocked member can never be befriended from here.
  */
 @Composable
 fun MemberProfileScreen(
@@ -93,6 +104,11 @@ fun MemberProfileScreen(
     onBlock: (() -> Unit)? = null,
     onUnblock: (() -> Unit)? = null,
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
+    friendState: MemberFriendState? = null,
+    onAddFriend: () -> Unit = {},
+    onCancelRequest: () -> Unit = {},
+    onAcceptRequest: () -> Unit = {},
+    onDeclineRequest: () -> Unit = {},
 ) {
     val title =
         (state as? MemberProfileState.Loaded)?.profile?.displayName
@@ -154,6 +170,15 @@ fun MemberProfileScreen(
 
             is MemberProfileState.Loaded -> {
                 ProfileHeader(state.profile)
+                if (friendState != null) {
+                    FriendAction(
+                        friendState = friendState,
+                        onAddFriend = onAddFriend,
+                        onCancelRequest = onCancelRequest,
+                        onAcceptRequest = onAcceptRequest,
+                        onDeclineRequest = onDeclineRequest,
+                    )
+                }
                 CarsSection(state.vehicles)
                 BadgesSection(state.badges)
                 MemberActions(
@@ -182,6 +207,103 @@ fun MemberProfileScreen(
             },
             onDismiss = { confirmingUnblock = false },
         )
+    }
+}
+
+/**
+ * The one friend control for this profile, chosen by the viewer's relationship
+ * to its owner ([MemberFriendState.control]).
+ *
+ * Every control disables itself while a callable is in flight — that, plus the
+ * coordinator's own in-flight guard, is what stops a double-tap from sending
+ * two requests. An unknown relationship (still loading, or the graph failed to
+ * load) renders NOTHING rather than a speculative "Add friend".
+ *
+ * A failure is shown inline, under the control, using the same `friends_*`
+ * strings the Friends screen maps ([messageRes]) — never a raw callable
+ * message. The state itself is untouched by a failure, so the control the user
+ * tapped is still the one they are looking at when they read the error.
+ */
+@Composable
+private fun FriendAction(
+    friendState: MemberFriendState,
+    onAddFriend: () -> Unit,
+    onCancelRequest: () -> Unit,
+    onAcceptRequest: () -> Unit,
+    onDeclineRequest: () -> Unit,
+) {
+    val control = friendState.control
+    if (control == MemberFriendControl.None && friendState.error == null) return
+    val enabled = friendState.enabled
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+    ) {
+        when (control) {
+            MemberFriendControl.None -> Unit
+
+            MemberFriendControl.Add ->
+                Button(
+                    onClick = onAddFriend,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.memberProfile_addFriend))
+                }
+
+            MemberFriendControl.CancelRequest -> {
+                Text(
+                    text = stringResource(R.string.memberProfile_requestPending),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                OutlinedButton(
+                    onClick = onCancelRequest,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.memberProfile_cancelRequest))
+                }
+            }
+
+            MemberFriendControl.Respond -> {
+                Text(
+                    text = stringResource(R.string.memberProfile_wantsToBeFriends),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = onAcceptRequest,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.friends_accept))
+                }
+                TextButton(
+                    onClick = onDeclineRequest,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(stringResource(R.string.friends_decline))
+                }
+            }
+
+            MemberFriendControl.Friends ->
+                Text(
+                    text = stringResource(R.string.memberProfile_friendsAlready),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+        }
+
+        friendState.error?.let { error ->
+            Text(
+                text = stringResource(error.messageRes()),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
     }
 }
 

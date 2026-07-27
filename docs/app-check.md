@@ -5,7 +5,7 @@
 | Surface  | Provider                | Status                                                            |
 | -------- | ----------------------- | ----------------------------------------------------------------- |
 | Functions | built-in v2 enforcement | Every callable sets `enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true'` (guard test: `functions/src/__tests__/appcheck-guard.test.ts`) |
-| Android  | Play Integrity (release) / debug provider (debug builds) | Registered in `KccApplication`; no-op until `google-services.json` is provisioned |
+| Android  | Play Integrity (release) / debug provider (debug builds) | Registered in `KccApplication`; no-op until `google-services.json` is provisioned. Debug builds can pin a stable debug secret — see below |
 | Admin web | reCAPTCHA Enterprise   | Registered in `apps/admin/src/lib/firebase.ts`; no-op until `VITE_APPCHECK_SITE_KEY` is configured |
 | iOS      | App Attest              | Descoped with the iOS app (2026-07-02 decision)                   |
 
@@ -13,6 +13,61 @@ Emulator/CI: the Functions emulator runs with enforcement DISABLED (the
 `FUNCTIONS_EMULATOR` guard); clients use debug providers
 (`VITE_APPCHECK_DEBUG_TOKEN` on web, `DebugAppCheckProviderFactory` on
 Android debug builds).
+
+## Android debug builds — stable debug token (one-time setup)
+
+**Symptom this solves:** after every debug rebuild/reinstall, App-Check-gated
+callables (`feedback-reportIssue` — "report an issue" — and every other
+`onCall`) start failing with `UNAUTHENTICATED` until a new debug token is
+registered by hand.
+
+**Cause:** `DebugAppCheckProviderFactory` generates its secret with
+`UUID.randomUUID()` on first run and stores it in SharedPreferences inside the
+app's data dir. An uninstall/reinstall wipes it, so the next launch mints a new,
+*unregistered* secret. (The Android SDK has no `FIREBASE_APP_CHECK_DEBUG_TOKEN`
+environment variable — that mechanism is web/JS only.)
+
+**Fix:** pick one UUID, pin it locally, register it once.
+
+1. Generate a UUID: `uuidgen` (or any v4 UUID).
+2. Add it to `apps/android/local.properties` — gitignored, so the value is
+   never committed (this repo is public):
+
+   ```properties
+   appcheck.debugToken=<your-uuid>
+   ```
+
+3. Register the same UUID once in the Firebase console → **App Check** →
+   the Android app → **⋮ → Manage debug tokens** → **Add debug token**.
+4. Rebuild. `app/build.gradle.kts` exposes the value as
+   `BuildConfig.APP_CHECK_DEBUG_TOKEN` (debug build type only), and
+   `AppCheckDebugSecret.seedIfConfigured` writes it into the SDK's debug store
+   (`com.google.firebase.appcheck.debug.store.<persistenceKey>` /
+   `com.google.firebase.appcheck.debug.DEBUG_SECRET`, verified against
+   `firebase-appcheck-debug` 19.3.0) **before** the provider factory is
+   installed. From then on every rebuild reuses the registered token.
+
+Leaving `appcheck.debugToken` unset is fully supported and is the default: CI
+and fresh clones build green and keep the old SDK-generated-token behaviour.
+Release builds are untouched — they attest with Play Integrity, and the
+`BuildConfig` field is hard-coded empty outside the debug build type.
+
+Treat the token like a credential: anyone holding it can pass App Check as this
+app. Rotate by registering a new UUID and deleting the old one in the console.
+
+**Not this bug:** if a *release* build also fails a callable, that is a separate
+IAM problem — the Cloud Run service backing that **v2 callable** (`onCall`) is
+missing the `allUsers → roles/run.invoker` binding. That is a gcloud/console
+action, not a client change.
+
+Granting `allUsers` invoker sounds alarming but is the intended setup for v2
+callables specifically: it only lets a request *reach* the service, where the
+function's own Firebase Auth check and `enforceAppCheck` are what actually
+authorize it — an unauthenticated or unattested caller is rejected before the
+function does any work. Apply it **only** to a service you have confirmed is an
+`onCall` callable with both of those in place. Adding it to a plain `onRequest`
+HTTP function that relies on IAM for its gating would expose that endpoint to
+the public internet.
 
 ## Production rollout (at cutover, per the migration plan)
 

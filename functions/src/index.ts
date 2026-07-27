@@ -30,6 +30,7 @@ import { reportChatMessage } from './events/reportChatMessage';
 import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
+import { checkIn } from './events/checkIn';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
@@ -50,10 +51,18 @@ import {
   onCrownClaimWritten,
   onRideCreated,
   onUserLifecycleWritten,
-  onVehicleCreated,
+  onVehicleCreated as onVehicleCreatedForBadges,
 } from './badges/progressTriggers';
 import { evaluateBacklog as badgesEvaluateBacklog } from './badges/scheduled';
 import { adminAdjust, adminReverse } from './points/adminPoints';
+import { recordDailyOpen } from './points/dailyOpen';
+import {
+  onAttendanceVerified,
+  onDriveSaved,
+  onIncidentConfirmed,
+  onLedgerEntryCreated,
+  onVehicleCreated,
+} from './points/economyTriggers';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
@@ -109,11 +118,14 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
+  cancelRequest as cancelFriendRequest,
   list as listFriends,
   remove as removeFriend,
   respondRequest as respondFriendRequest,
   sendRequest as sendFriendRequest,
 } from './friends/manageFriends';
+import { searchMembers } from './users/searchMembers';
+import { onUserProfileWrite } from './users/onUserProfileWrite';
 import {
   getMessages as dmGetMessages,
   listConversations as dmListConversations,
@@ -241,6 +253,10 @@ export const events = {
   // Attendee roster: member-readable list of who RSVP'd (going/maybe/not_going),
   // identity joined + blocking applied server-side (events/listAttendees.ts).
   listAttendees,
+  // Attendance proof (Phase 20 points economy): a geofence + dwell position
+  // sample. Two taps ten minutes apart inside a 150 m fence verify attendance
+  // and earn `event_attend_verified` (events/checkIn.ts).
+  checkIn,
 };
 
 /**
@@ -324,7 +340,7 @@ export const badges = {
   onCrownClaimWritten,
   onRideCreated,
   onConvoyWritten: onConvoyWrittenForBadges,
-  onVehicleCreated,
+  onVehicleCreated: onVehicleCreatedForBadges,
   onUserLifecycleWritten,
   evaluateBacklog: badgesEvaluateBacklog,
 };
@@ -338,10 +354,32 @@ export const badges = {
  * primitives (functions/src/points/ledger.ts) — never exposed as generic
  * endpoints. Wallet/ledger reads are direct owner reads of
  * pointsLedger/{uid} and its entries subcollection.
+ *
+ * Phase 20 adds the EARNING RULES on top of that ledger
+ * (points/points-economy-core.ts is the canonical rule table, cap arithmetic
+ * and streak maths; points/economy-award.ts is the single award door). All of
+ * it is server-authoritative: only `recordDailyOpen` is client-triggered —
+ * because "opened the app" leaves no other server footprint — and it takes no
+ * arguments, is rate-limited and is idempotent per Europe/Stockholm day.
+ * Everything else hangs off documents the backend already writes:
+ *   - points-onDriveSaved         rides/{rideId}                    -> drive_5km
+ *   - points-onIncidentConfirmed  incidents/{id}/confirmations/{uid} -> incident_report_confirmed
+ *   - points-onVehicleCreated     vehicles/{vehicleId}               -> garage_first_car
+ *   - points-onAttendanceVerified eventAttendance/{id}               -> event_attend_verified + event_host_success
+ *   - points-onLedgerEntryCreated pointsLedger/{uid}/entries/{id}    -> folds Kronjakt crowns into the daily cap
+ * `live_session_1km` has no such document (live positions are RTDB-only with
+ * no history by design), so points/liveDistance.ts is called inline by
+ * live.updatePosition from the session node it has already read.
  */
 export const points = {
   adminAdjust,
   adminReverse,
+  recordDailyOpen,
+  onDriveSaved,
+  onIncidentConfirmed,
+  onVehicleCreated,
+  onAttendanceVerified,
+  onLedgerEntryCreated,
 };
 
 /**
@@ -673,10 +711,11 @@ export const groupDrive = {
 
 /**
  * Friends domain (grouped export → deployed as `friend-sendRequest`,
- * `friend-respondRequest`, `friend-remove`, `friend-list`).
+ * `friend-respondRequest`, `friend-cancelRequest`, `friend-remove`,
+ * `friend-list`).
  *
  * The friend-GRAPH foundation (contracts/functions/functions.json:
- * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
+ * friend.sendRequest/respondRequest/cancelRequest/remove/list) — messaging/DMs are a
  * separate follow-up and are NOT part of this domain. Model:
  * friendRequests/{requestId} — one directional request per ordered pair, keyed
  * by a deterministic hash of the (fromUid, toUid) pair (friendRequestId in
@@ -689,13 +728,45 @@ export const groupDrive = {
  * client disambiguation via { toUid }. Blocking is honoured both ways
  * (neutral NOT_ADDABLE); an incoming pending request is auto-accepted when
  * the caller sends the reverse. Established friendship — not request status —
- * is the source of truth for "already friends".
+ * is the source of truth for "already friends". A pending request is
+ * withdrawable by its SENDER via cancelRequest, which addresses it by RECIPIENT
+ * and derives the doc id server-side (so no other member's request can be named
+ * or probed) and deletes it, leaving the pair free to send again later.
  */
 export const friend = {
   sendRequest: sendFriendRequest,
   respondRequest: respondFriendRequest,
+  cancelRequest: cancelFriendRequest,
   remove: removeFriend,
   list: listFriends,
+};
+
+/**
+ * User-search domain (grouped export → deployed as `userSearch-members` and the
+ * `userSearch-onUserProfileWrite` Firestore trigger).
+ *
+ * Powers the "find a person" typeahead on the Friends surface
+ * (contracts/functions/functions.json: userSearch.members). Case-insensitive
+ * PREFIX matching over the denormalized `users/{uid}.displayNameLower` key —
+ * typing 'gt' finds 'gt_86'; a mid-word substring like '86' does NOT match,
+ * because Firestore offers no substring operator and an n-gram token index is
+ * deliberately not built (functions/src/users/user-search-core.ts).
+ *
+ * Server-side rather than a client query even though `users/{uid}` is
+ * authenticated-readable: only a callable can enforce a minimum query length, a
+ * hard result cap with no cursor, a per-user rate limit, an allowlisted
+ * three-field projection (uid/displayName/avatarPath — never email or any
+ * backend-managed flag), and either-way block exclusion. A client-side range
+ * query would be a paginated member-directory dump.
+ *
+ * onUserProfileWrite re-derives `displayNameLower` from `displayName` on every
+ * users/{uid} write, whoever wrote it — the OWNER may update `displayName`
+ * directly under firestore.rules but cannot write the key, so without this a
+ * renamed member stays findable only under their OLD nickname.
+ */
+export const userSearch = {
+  members: searchMembers,
+  onUserProfileWrite,
 };
 
 /**
@@ -792,8 +863,11 @@ export const convoy = {
  * aggregate — a lightweight per-user last-read marker lives at
  * userPrivate/{uid}.communityChatLastReadAt (owner-only readable) so the client
  * derives the unread dot from its newest-message live listener (O(1) per user).
- * Blocking is NOT filtered server-side (global town square — a client display
- * concern). See functions/src/chatchannels/chat-core.ts.
+ * Blocking IS filtered, in BOTH directions, off the symmetric
+ * blockVisibility/{uid}.hiddenUids mirror — one document read per page in
+ * communityChat.list, and the same mirror drives the client's live-window filter
+ * (a Firestore rule cannot filter a list query per document). See
+ * functions/src/chatchannels/chat-core.ts and blocking/block-visibility.ts.
  *
  * There is deliberately NO per-message notification producer (that would be an
  * O(members × messages) fan-out on the town square). Instead the channel notifies
