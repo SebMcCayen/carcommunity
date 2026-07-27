@@ -11,6 +11,7 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockedUsersState
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -33,6 +34,23 @@ import kotlinx.coroutines.launch
  * can still be serving the pre-change snapshot, which would silently undo the
  * action the user just took. See [MemberProfileCoordinator.markBlocked]. On
  * failure the state is untouched and the screen surfaces the error.
+ *
+ * The FRIEND action is wired the same way and is equally optional: with a
+ * [friendsRepository] the route resolves the viewer's relationship to this
+ * member from the viewer's OWN `friend-list` snapshot (see
+ * [MemberFriendCoordinator]) and renders the matching control; without one — a
+ * config-less build, or the viewer's own profile — no friend action is offered
+ * at all.
+ *
+ * RENDERING — not loading — is what the profile state gates. The screen draws
+ * the control only on a LOADED profile, so a member the viewer blocked can
+ * never be befriended from the notice that replaces their profile. The
+ * relationship itself is read in PARALLEL with the profile rather than after
+ * it, so the control is ready when the profile paints instead of a round trip
+ * later. The cost of that choice is one wasted `friend-list` call when the
+ * profile turns out to be withheld or missing; it reads only the viewer's own
+ * graph and never names the target to the backend, so it leaks nothing and the
+ * common path — an ordinary profile visit — is the one that gets faster.
  */
 @Composable
 fun MemberProfileRoute(
@@ -41,6 +59,7 @@ fun MemberProfileRoute(
     viewerUid: String,
     blockingRepository: BlockingRepository?,
     modifier: Modifier = Modifier,
+    friendsRepository: FriendsRepository? = null,
 ) {
     val coordinator =
         remember(repository, targetUid, blockingRepository, viewerUid) {
@@ -63,6 +82,20 @@ fun MemberProfileRoute(
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
+    // Never offer a friend action on the viewer's OWN profile (the route is
+    // reachable with their own uid, e.g. a stale deep link) — the backend
+    // rejects a self-request, so the affordance is simply absent rather than
+    // present-and-failing, exactly like the block action below.
+    val friendCoordinator =
+        remember(friendsRepository, targetUid, viewerUid) {
+            friendsRepository
+                ?.takeIf { targetUid.isNotBlank() && targetUid != viewerUid }
+                ?.let { MemberFriendCoordinator(repository = it, targetUid = targetUid) }
+        }
+    val friendState by
+        (friendCoordinator?.state ?: flowOf(null)).collectAsState(initial = null)
+    LaunchedEffect(friendCoordinator) { friendCoordinator?.load() }
+
     // Never offer to block/unblock YOURSELF: the backend rejects a self-block,
     // and the profile route is reachable with the viewer's own uid (e.g. a stale
     // deep link). Guarded here rather than in the screen so the affordance is
@@ -71,7 +104,14 @@ fun MemberProfileRoute(
 
     MemberProfileScreen(
         state = state,
-        onRetry = { scope.launch { coordinator.load() } },
+        // Retry re-reads the friend graph too: its own load failure is silent by
+        // design (see MemberFriendCoordinator.load), so without this a profile
+        // that recovered on retry could keep an unresolved — and therefore
+        // hidden — friend control from the failed first pass.
+        onRetry = {
+            scope.launch { coordinator.load() }
+            scope.launch { friendCoordinator?.load() }
+        },
         modifier = modifier,
         // Both actions reflect the profile only once the callable REPORTED
         // SUCCESS, and only from that outcome — never by re-reading the block
@@ -108,6 +148,14 @@ fun MemberProfileRoute(
                 null
             },
         blockStatus = blockStatus,
+        friendState = friendState,
+        // Each action is fire-and-forget from the UI's side: the coordinator
+        // owns the in-flight guard (a second tap while one is running returns
+        // immediately), the optimistic post-state, and the error.
+        onAddFriend = { scope.launch { friendCoordinator?.sendRequest() } },
+        onCancelRequest = { scope.launch { friendCoordinator?.cancelRequest() } },
+        onAcceptRequest = { scope.launch { friendCoordinator?.acceptRequest() } },
+        onDeclineRequest = { scope.launch { friendCoordinator?.declineRequest() } },
     )
 }
 

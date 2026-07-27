@@ -1,16 +1,21 @@
 /**
- * friend.sendRequest / friend.respondRequest / friend.remove / friend.list —
- * member-gated callables (contracts/functions/functions.json).
+ * friend.sendRequest / friend.respondRequest / friend.cancelRequest /
+ * friend.remove / friend.list — member-gated callables
+ * (contracts/functions/functions.json).
  *
  * Deployed via the `friend` export group (functions/src/index.ts) as
- * `friend-sendRequest`, `friend-respondRequest`, `friend-remove`,
- * `friend-list`. This is the
+ * `friend-sendRequest`, `friend-respondRequest`, `friend-cancelRequest`,
+ * `friend-remove`, `friend-list`. This is the
  * friend-GRAPH foundation only — direct messaging/DMs are a separate
  * follow-up and are intentionally NOT built here.
  *
  * Invariants:
  *  - Backend is the sole writer of friendRequests and users/{uid}/friends
  *    (firebase/firestore.rules grants owner reads, denies all client writes).
+ *  - A pending request is withdrawable by its SENDER only, via cancelRequest,
+ *    which addresses it by RECIPIENT and derives the doc id server-side — so a
+ *    caller structurally cannot name (or probe) anyone else's request. Every
+ *    non-cancellable outcome is the same silent no-op.
  *  - Established friendship (users/{uid}/friends/{friendUid}) — not request
  *    status — is the source of truth for "already friends", so re-friending
  *    after a decline or a removal always works.
@@ -73,6 +78,7 @@ import {
   buildFriendRequestDocument,
   buildFriendshipDocument,
   friendRequestId,
+  parseCancelRequestInput,
   parseListInput,
   parseRemoveFriendInput,
   parseRespondRequestInput,
@@ -569,6 +575,90 @@ export const respondRequest = onCall(CALLABLE_OPTS, async (request): Promise<Res
   }
 
   return result;
+});
+
+// ---------------------------------------------------------------------------
+// friend.cancelRequest
+// ---------------------------------------------------------------------------
+
+export interface CancelRequestResult {
+  /** True only when a PENDING request of the caller's was actually deleted. */
+  cancelled: boolean;
+}
+
+/**
+ * Withdraws the caller's own still-PENDING outgoing friend request to
+ * { toUid } — the counterpart of sendRequest, so a request sent by mistake (or
+ * to someone who simply never replies) is not permanent.
+ *
+ * AUTHORIZATION IS STRUCTURAL, not a check on client input: the doc id is
+ * derived server-side as friendRequestId(caller, toUid), so the callable can
+ * only ever address a request the CALLER sent. There is no id parameter to
+ * point at somebody else's request, and consequently no way to use this
+ * callable to probe whether a request between two other members exists.
+ *
+ * EVERY non-cancellable outcome is the SAME silent { cancelled: false } no-op —
+ * no request, an already accepted/declined one, or self. It is deliberately not
+ * an error:
+ *  - Idempotency: a double-tap (or a retry after a dropped response) must not
+ *    turn the second call into a user-visible failure when the post-state asked
+ *    for is the post-state that exists.
+ *  - No oracle: a request that was accepted a second ago is indistinguishable
+ *    from one that never existed, so the response can never confirm activity on
+ *    another member's account beyond what the caller already knows.
+ * `cancelled` is bookkeeping for the client's optimistic UI; the authoritative
+ * relationship state is whatever the following friend.list returns.
+ *
+ * The request document is DELETED rather than moved to a terminal status: a
+ * withdrawn request should read as "never sent" (the recipient's pending list
+ * simply loses the row), and sendRequest upserts the same deterministic id, so
+ * the caller can send again later. Established friendship — not request status
+ * — is the source of truth for "already friends", so deleting a pending request
+ * can never disturb an existing friendship.
+ *
+ * NOT undone here: the best-effort in-app 'friend_request' notification
+ * sendRequest wrote for the recipient. Deleting it would need a
+ * category+relatedEntityId query over another user's notifications (a new
+ * composite index) to unwrite a historical "someone wanted to be your friend"
+ * notice; the actionable surface — the recipient's pending-request list — is
+ * cleared by this delete, and acting on the stale notice cannot resurrect the
+ * request (respondRequest not-founds it).
+ */
+export const cancelRequest = onCall(CALLABLE_OPTS, async (request): Promise<CancelRequestResult> => {
+  const actor = await requireMemberActor(request);
+
+  const parsed = parseCancelRequestInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { toUid } = parsed.input;
+
+  // A self-request can never exist (sendRequest rejects it), so there is
+  // nothing to cancel — answered as the same no-op rather than an error.
+  if (toUid === actor.uid) {
+    return { cancelled: false };
+  }
+
+  const requestRef = friendRequestRef(actor.uid, toUid);
+
+  return db.runTransaction<CancelRequestResult>(async (tx) => {
+    const snap = await tx.get(requestRef);
+    if (!snap.exists) {
+      return { cancelled: false };
+    }
+    const data = snap.data()!;
+    // BOTH ends of the pair are re-asserted, not just fromUid. The id derivation
+    // already implies them, so this is belt-and-braces against a document whose
+    // BODY disagrees with its own id — written by some future path, or by a
+    // botched migration. Asserting only the sender would still delete a doc that
+    // is addressed to somebody else entirely, which is precisely the case this
+    // guard exists to refuse.
+    if (data.fromUid !== actor.uid || data.toUid !== toUid || data.status !== 'pending') {
+      return { cancelled: false };
+    }
+    tx.delete(requestRef);
+    return { cancelled: true };
+  });
 });
 
 // ---------------------------------------------------------------------------

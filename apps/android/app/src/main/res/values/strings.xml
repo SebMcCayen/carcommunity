@@ -566,6 +566,11 @@
     <string name="memberProfile_badgesLoadError">Det gick inte att läsa in utmärkelser.</string>
     <string name="memberProfile_awardedOn">Tilldelad %1$s</string>
     <string name="memberProfile_blocked">Du har blockerat den här medlemmen. Avblockera för att se profilen igen.</string>
+    <string name="memberProfile_addFriend">Lägg till som vän</string>
+    <string name="memberProfile_requestPending">Vänförfrågan skickad – väntar på svar.</string>
+    <string name="memberProfile_cancelRequest">Ångra vänförfrågan</string>
+    <string name="memberProfile_wantsToBeFriends">Den här medlemmen vill bli din vän.</string>
+    <string name="memberProfile_friendsAlready">Ni är vänner</string>
     <string name="groupDrive_screenTitle">Gruppkörning</string>
     <string name="groupDrive_joinButton">Gå med i gruppkörningen</string>
     <string name="groupDrive_leaveButton">Lämna gruppkörningen</string>

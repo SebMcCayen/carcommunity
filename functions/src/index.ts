@@ -118,6 +118,7 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
+  cancelRequest as cancelFriendRequest,
   list as listFriends,
   remove as removeFriend,
   respondRequest as respondFriendRequest,
@@ -708,10 +709,11 @@ export const groupDrive = {
 
 /**
  * Friends domain (grouped export → deployed as `friend-sendRequest`,
- * `friend-respondRequest`, `friend-remove`, `friend-list`).
+ * `friend-respondRequest`, `friend-cancelRequest`, `friend-remove`,
+ * `friend-list`).
  *
  * The friend-GRAPH foundation (contracts/functions/functions.json:
- * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
+ * friend.sendRequest/respondRequest/cancelRequest/remove/list) — messaging/DMs are a
  * separate follow-up and are NOT part of this domain. Model:
  * friendRequests/{requestId} — one directional request per ordered pair, keyed
  * by a deterministic hash of the (fromUid, toUid) pair (friendRequestId in
@@ -724,11 +726,15 @@ export const groupDrive = {
  * client disambiguation via { toUid }. Blocking is honoured both ways
  * (neutral NOT_ADDABLE); an incoming pending request is auto-accepted when
  * the caller sends the reverse. Established friendship — not request status —
- * is the source of truth for "already friends".
+ * is the source of truth for "already friends". A pending request is
+ * withdrawable by its SENDER via cancelRequest, which addresses it by RECIPIENT
+ * and derives the doc id server-side (so no other member's request can be named
+ * or probed) and deletes it, leaving the pair free to send again later.
  */
 export const friend = {
   sendRequest: sendFriendRequest,
   respondRequest: respondFriendRequest,
+  cancelRequest: cancelFriendRequest,
   remove: removeFriend,
   list: listFriends,
 };

@@ -610,7 +610,12 @@
     "badgesUnavailable": "Utmärkelser visas inte på andra medlemmars profiler.",
     "badgesLoadError": "Det gick inte att läsa in utmärkelser.",
     "awardedOn": "Tilldelad %1$s",
-    "blocked": "Du har blockerat den här medlemmen. Avblockera för att se profilen igen."
+    "blocked": "Du har blockerat den här medlemmen. Avblockera för att se profilen igen.",
+    "addFriend": "Lägg till som vän",
+    "requestPending": "Vänförfrågan skickad – väntar på svar.",
+    "cancelRequest": "Ångra vänförfrågan",
+    "wantsToBeFriends": "Den här medlemmen vill bli din vän.",
+    "friendsAlready": "Ni är vänner"
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",
