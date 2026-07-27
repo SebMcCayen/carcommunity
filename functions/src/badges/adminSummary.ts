@@ -21,7 +21,7 @@
  *
  * That is asserted, not just asserted-in-prose — emulator test "no client can
  * scan badges across members — collectionGroup is denied"
- * (src/__tests__/security-rules.emulator.test.ts) runs the actual
+ * (functions/src/__tests__/security-rules.emulator.test.ts) runs the actual
  * collectionGroup('badges') query as a viewer, an activeMember and an admin and
  * requires permission-denied from all three, having first run the same query
  * with rules disabled to prove the query is valid and the data is there. Adding
