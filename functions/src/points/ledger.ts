@@ -14,6 +14,12 @@
  * Idempotency: when an idempotencyKey is provided it becomes the entry
  * document ID, so a replayed automated award is a transactional no-op that
  * returns the original entry.
+ *
+ * The Phase 20 points ECONOMY adds one strictly ADDITIVE capability —
+ * creditPointsResolved — for awards whose final amount can only be known
+ * INSIDE the transaction (a daily/weekly cap may clip them). creditPoints and
+ * debitPoints keep their exact previous signatures and semantics; existing
+ * callers (Kronjakt claims, badges, the admin callables) are untouched.
  */
 
 import { HttpsError } from 'firebase-functions/v2/https';
@@ -79,6 +85,31 @@ export type AtomicExtraWrites = (
  */
 export type AtomicReadGuard = (tx: FirebaseFirestore.Transaction) => Promise<void>;
 
+/**
+ * The final amount (and, optionally, a replacement description) for an award
+ * whose value is only knowable inside the transaction.
+ */
+export interface ResolvedAward {
+  /** Positive integer. Anything <= 0 aborts the mutation. */
+  amount: number;
+  /** Overrides params.description — lets the reason name the cap that bit. */
+  description?: string;
+}
+
+/**
+ * A read-phase hook that COMPUTES the amount transactionally.
+ *
+ * The points economy needs this: a member's remaining daily / weekly headroom
+ * lives in counter documents, and reading them outside the transaction would
+ * race two concurrent awards past the cap. The resolver runs in the read
+ * phase (after {@link AtomicReadGuard}, before any write) and may itself
+ * throw to abort. `params.amount` is the MAXIMUM the caller would pay; the
+ * resolver may only return that or less, and returning 0 or less aborts the
+ * mutation with `failed-precondition` (a zero-point ledger row is never
+ * written).
+ */
+export type AmountResolver = (tx: FirebaseFirestore.Transaction) => Promise<ResolvedAward>;
+
 async function assertTargetCanTransact(targetUid: string): Promise<void> {
   const snap = await db.collection('users').doc(targetUid).get();
   if (!snap.exists) {
@@ -96,9 +127,10 @@ async function assertTargetCanTransact(targetUid: string): Promise<void> {
 
 async function mutatePoints(
   params: PointsMutationParams,
-  signedAmount: number,
+  sign: 1 | -1,
   extraWrites?: AtomicExtraWrites,
   readGuard?: AtomicReadGuard,
+  resolveAmount?: AmountResolver,
 ): Promise<PointsMutationResult> {
   if (!Number.isInteger(params.amount) || params.amount <= 0) {
     throw new HttpsError('invalid-argument', 'Amount must be a positive integer.');
@@ -131,15 +163,32 @@ async function mutatePoints(
 
     const ledgerSnap = await tx.get(ledgerRef);
     const currentBalance = toStoredBalance(ledgerSnap.data()?.balance);
-    const check = applyDelta(currentBalance, signedAmount);
-    if (!check.ok) {
-      throw new HttpsError('failed-precondition', check.message);
-    }
 
     // Read-phase guard: any additional reads (and abort-throws) must happen
     // before the first write below, per Firestore's read-before-write rule.
     if (readGuard) {
       await readGuard(tx);
+    }
+
+    // Amount resolution is also a READ-phase step (it reads cap counters), so
+    // it runs here, before applyDelta and before any write. Ordering note: the
+    // negative-balance check below used to precede the read guard. Moving it
+    // after changes nothing observable — only credits pass a readGuard today
+    // (debitPoints takes none) and a credit can never fail applyDelta — but it
+    // is what lets the final amount be transactional.
+    const resolved = resolveAmount ? await resolveAmount(tx) : null;
+    const amount = resolved ? resolved.amount : params.amount;
+    if (!Number.isInteger(amount) || amount <= 0 || amount > params.amount) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Resolved award must be a positive integer no larger than the requested amount.',
+      );
+    }
+    const description = resolved?.description ?? params.description;
+    const signedAmount = sign * amount;
+    const check = applyDelta(currentBalance, signedAmount);
+    if (!check.ok) {
+      throw new HttpsError('failed-precondition', check.message);
     }
 
     const serverTimestamp = () => FieldValue.serverTimestamp();
@@ -151,7 +200,7 @@ async function mutatePoints(
           source: params.source,
           amount: signedAmount,
           balanceAfter: check.balanceAfter,
-          description: params.description,
+          description,
           idempotencyKey: params.idempotencyKey ?? null,
           relatedEntityType: params.relatedEntityType ?? null,
           relatedEntityId: params.relatedEntityId ?? null,
@@ -183,7 +232,25 @@ export function creditPoints(
   extraWrites?: AtomicExtraWrites,
   readGuard?: AtomicReadGuard,
 ): Promise<PointsMutationResult> {
-  return mutatePoints(params, params.amount, extraWrites, readGuard);
+  return mutatePoints(params, 1, extraWrites, readGuard);
+}
+
+/**
+ * Awards points whose FINAL amount is decided inside the transaction by
+ * `resolveAmount` — the points-economy cap path. `params.amount` is the
+ * uncapped ceiling; the resolver returns the capped amount (and the
+ * cap-explaining description) after reading the counter documents
+ * transactionally. Everything else — idempotency, the balance transaction,
+ * the append-only entry, the atomic extra writes — is identical to
+ * {@link creditPoints}.
+ */
+export function creditPointsResolved(
+  params: PointsMutationParams,
+  resolveAmount: AmountResolver,
+  extraWrites?: AtomicExtraWrites,
+  readGuard?: AtomicReadGuard,
+): Promise<PointsMutationResult> {
+  return mutatePoints(params, 1, extraWrites, readGuard, resolveAmount);
 }
 
 /** Spends points (negative entry); never allows overdraft. Internal. */
@@ -191,5 +258,5 @@ export function debitPoints(
   params: PointsMutationParams,
   extraWrites?: AtomicExtraWrites,
 ): Promise<PointsMutationResult> {
-  return mutatePoints(params, -params.amount, extraWrites);
+  return mutatePoints(params, -1, extraWrites);
 }
