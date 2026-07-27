@@ -13,7 +13,8 @@
  *    the deleted user, which no owned-doc purge can reach: the mirror
  *    friendship rows users/{otherUid}/friends/{uid}, the friendRequests
  *    documents in both directions, and convoy membership
- *    (memberUids/members/memberProfiles).
+ *    (memberUids/members/memberProfiles, plus the stored summary's
+ *    participantUids and the shared destination's setByDisplayName).
  * 4. Chat erasure: the user's 1:1 DM conversations (conversation doc +
  *    messages subcollection) wholesale, and the community + convoy
  *    channel messages the user authored (by senderUid).
@@ -113,6 +114,35 @@ function toDate(value: unknown): Date | null {
 }
 
 /**
+ * The stored end-of-convoy summary with `uid` removed from its participants, or
+ * null when there is nothing to scrub.
+ *
+ * A convoy that was ALREADY `ended` before the purge carries a summary written
+ * by convoy.end from the membership as it stood then — so it names the deleted
+ * user in `participantUids` even after the membership maps are stripped.
+ * `participantCount` is recomputed from the filtered list rather than left
+ * alone, keeping the count == uids.length invariant every reader assumes (the
+ * Android parser falls back to `participantUids.size` when the count is absent)
+ * and matching what the owner branch's freshly computed summary yields.
+ *
+ * The membership sweep's `memberUids array-contains` query is sufficient to
+ * find these: `participantUids` is a subset of the ACCEPTED members, and once
+ * convoy.end has written the summary every membership mutation (leave, respond,
+ * invite) rejects the convoy as `ended` — so a uid in a stored summary is still
+ * in that convoy's memberUids.
+ */
+function scrubSummaryParticipants(summary: unknown, uid: string): Record<string, unknown> | null {
+  if (!summary || typeof summary !== 'object') return null;
+  const stored = summary as Record<string, unknown>;
+  if (!Array.isArray(stored.participantUids)) return null;
+  const participantUids = (stored.participantUids as unknown[]).filter(
+    (participant) => participant !== uid,
+  );
+  if (participantUids.length === stored.participantUids.length) return null;
+  return { participantUids, participantCount: participantUids.length };
+}
+
+/**
  * Removes the deleted user from every convoy they are a member of. Membership
  * lives on the CONVOY document (memberUids + members/memberProfiles, the last
  * holding displayName/avatarPath), so it survives the owned-doc purge exactly
@@ -129,6 +159,27 @@ function toDate(value: unknown): Date | null {
  *   "active" convoy nobody can ever end. The summary is computed from the
  *   POST-removal membership so the deleted user is not listed as a participant.
  * - Otherwise: membership entries are stripped and the convoy is left alone.
+ *
+ * Two further references to the deleted user live OUTSIDE the membership maps
+ * and are scrubbed in the same atomic update:
+ * - `summary.participantUids` on a convoy that was already `ended` — see
+ *   scrubSummaryParticipants. (The owner branch above never needs this: it
+ *   writes a fresh post-removal summary, and the two are mutually exclusive so
+ *   the update never carries both `summary` and `summary.*` field paths.)
+ * - `destination.setByDisplayName` when the deleted user set the shared
+ *   destination — a denormalized display name exactly like memberProfiles'.
+ *   Only the ATTRIBUTION is cleared: the coordinate + label are the group's
+ *   record of where they were headed, and `setByUid` stays because
+ *   toConvoyDestination/the Android parser DROP a destination with a blank
+ *   setByUid, which would take the surviving members' destination with it.
+ *
+ * `ownerUid` is DELIBERATELY LEFT as the deleted uid (documented in
+ * deletion-core.ts): the convoy is always `ended` by the time this returns, so
+ * the field grants nothing (every owner-gated callable rejects an ended
+ * convoy), it no longer resolves to anything (the user doc, profile and Auth
+ * account are all gone, and the roster no longer lists them), and blanking it
+ * would make the Android client discard the whole convoy row — deleting the
+ * surviving members' record of their own drive.
  *
  * The strip uses arrayRemove/FieldValue.delete rather than rewriting the three
  * collections wholesale, so a concurrent invite adding OTHER members cannot be
@@ -177,6 +228,22 @@ async function removeConvoyMemberships(uid: string): Promise<void> {
             endedAt.toDate(),
             toDate,
           );
+        } else {
+          // Already ended (by this owner earlier, or by someone else's convoy):
+          // the stored summary still names the deleted user as a participant.
+          const scrubbed = scrubSummaryParticipants(data.summary, uid);
+          if (scrubbed) {
+            update['summary.participantUids'] = scrubbed.participantUids;
+            update['summary.participantCount'] = scrubbed.participantCount;
+          }
+        }
+        const destination = data.destination;
+        if (
+          destination &&
+          typeof destination === 'object' &&
+          (destination as Record<string, unknown>).setByUid === uid
+        ) {
+          update['destination.setByDisplayName'] = null;
         }
         tx.update(fresh.ref, update);
         mutated += 1;

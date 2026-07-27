@@ -641,15 +641,21 @@ the proof of deletion. SOCIAL-GRAPH MIRRORS are the rows other users'
 documents carry about the deleted user, unreachable from their own tree:
 the mirror friendship rows `users/{otherUid}/friends/{uid}`, the
 `friendRequests` documents in both directions, and convoy membership
-(`memberUids` + `members`/`memberProfiles`; a convoy the deleted user
-OWNED is ended so the survivors aren't stranded with an un-endable drive,
-and one they were alone in is deleted). All of it runs through the single
+(`memberUids` + `members`/`memberProfiles`, the stored
+`summary.participantUids`/`participantCount`, and the shared
+`destination.setByDisplayName`; a convoy the deleted user OWNED is ended
+so the survivors aren't stranded with an un-endable drive, and one they
+were alone in is deleted). All of it runs through the single
 `purgeUserData` routine, which the inactive-account sweep
 (`account-cleanupInactive`) reuses — both erasure paths delete the same set.
 Deliberately retained: moderation/audit history, hashed partner-insight
-events (7-day TTL, no raw UIDs), Kronjakt claim audit keys, and
+events (7-day TTL, no raw UIDs), Kronjakt claim audit keys,
 community-context chat/RSVPs (scrubbing is the blocking domain's listed
-follow-up). Composite index: `status ASC, createdAt ASC` (purge query).
+follow-up), and the bare `convoys/{id}.ownerUid` /
+`destination.setByUid` of a convoy the deleted user owned or set the
+destination on — structural keys the clients drop the whole convoy /
+destination row over, kept once every name and roster entry around them
+is gone. Composite index: `status ASC, createdAt ASC` (purge query).
 
 ---
 

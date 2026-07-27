@@ -36,6 +36,12 @@
  *   stored, 7-day TTL; nothing to purge.
  * - crownHuntClaims — claim keys are SHA-256-scoped; awarded-claim
  *   records back the points audit trail. The ledger itself is purged.
+ * - convoys/{id}.ownerUid on a convoy the deleted user OWNED — see
+ *   PURGE_CONVOY_MEMBERSHIP. Every other trace of them is stripped from that
+ *   document and the convoy is ended; the bare uid stays because it is the
+ *   convoy's structural key (an ended convoy grants it nothing) and blanking it
+ *   makes the Android parser discard the row, taking the surviving members'
+ *   record of their own drive with it.
  * - EVENT chat messages and RSVPs — community-context records with
  *   denormalized author names; scrubbing them is the blocking domain's
  *   listed follow-up and is out of the 30-day purge's scope for MVP.
@@ -140,6 +146,13 @@ export const PURGE_FRIEND_REQUEST_USER_FIELDS = ['fromUid', 'toUid'] as const;
  * `memberUids array-contains` with no orderBy is covered by the automatic
  * single-field index (the composite entries exist for convoy.list's
  * membership+createdAt / membership+status reads).
+ *
+ * The same sweep scrubs the two references that sit OUTSIDE those maps:
+ * `summary.participantUids` (written by convoy.end from the membership as it
+ * stood then, so stripping the maps alone leaves the uid there) and
+ * `destination.setByDisplayName` (a denormalized display name, exactly like
+ * memberProfiles'). `destination.setByUid` and `ownerUid` are retained — see
+ * the retained list at the top of this file and removeConvoyMemberships.
  */
 export const PURGE_CONVOY_MEMBERSHIP = {
   collection: 'convoys',

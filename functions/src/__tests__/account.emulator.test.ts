@@ -251,6 +251,42 @@ describe('account purge (hard delete after retention)', () => {
       startedAt: Timestamp.now(),
       endedAt: null,
     });
+    // (g) An ALREADY-ENDED convoy: the stored summary names the deleted user in
+    //     participantUids (convoy.end wrote it from the membership as it stood
+    //     then, so stripping the maps alone would leave it), and they set the
+    //     shared destination, whose setByDisplayName is a denormalized name just
+    //     like memberProfiles'.
+    const endedConvoyRef = adminDb.collection('convoys').doc(`convoy-ended-${uid}`);
+    await endedConvoyRef.set({
+      ownerUid: 'convoy-owner-uid',
+      status: 'ended',
+      memberUids: ['convoy-owner-uid', uid],
+      members: {
+        'convoy-owner-uid': { uid: 'convoy-owner-uid', role: 'owner', inviteStatus: 'accepted' },
+        [uid]: { uid, role: 'member', inviteStatus: 'accepted' },
+      },
+      memberProfiles: {
+        'convoy-owner-uid': { displayName: 'Ägare', avatarPath: null },
+        [uid]: { displayName: 'Raderad', avatarPath: null },
+      },
+      destination: {
+        latitude: 57.49,
+        longitude: 12.07,
+        label: 'Kungsbacka',
+        setByUid: uid,
+        setByDisplayName: 'Raderad',
+        setAt: Timestamp.now(),
+      },
+      summary: {
+        durationSeconds: 600,
+        participantUids: ['convoy-owner-uid', uid],
+        participantCount: 2,
+        distanceMeters: null,
+      },
+      createdAt: Timestamp.now(),
+      startedAt: Timestamp.now(),
+      endedAt: Timestamp.now(),
+    });
 
     // Controls that must SURVIVE the purge:
     // - another user's community message,
@@ -344,6 +380,27 @@ describe('account purge (hard delete after retention)', () => {
     ]);
     // ...and the convoy they were alone in is deleted outright.
     expect((await soloConvoyRef.get()).exists).toBe(false);
+    // An already-ENDED convoy keeps its status and its stored summary, but the
+    // deleted user is scrubbed OUT of the summary's participants (count kept in
+    // step with the list) and out of the destination's attribution — while the
+    // destination the group was driving to survives intact.
+    const endedConvoy = (await endedConvoyRef.get()).data()!;
+    expect(endedConvoy.status).toBe('ended');
+    expect(endedConvoy.memberUids).toEqual(['convoy-owner-uid']);
+    expect(endedConvoy.members).not.toHaveProperty(uid);
+    expect(endedConvoy.memberProfiles).not.toHaveProperty(uid);
+    const endedSummary = endedConvoy.summary as {
+      participantUids: string[];
+      participantCount: number;
+      durationSeconds: number;
+    };
+    expect(endedSummary.participantUids).toEqual(['convoy-owner-uid']);
+    expect(endedSummary.participantCount).toBe(1);
+    expect(endedSummary.durationSeconds).toBe(600);
+    const endedDestination = endedConvoy.destination as Record<string, unknown>;
+    expect(endedDestination.setByDisplayName).toBeNull();
+    expect(endedDestination.latitude).toBe(57.49);
+    expect(endedDestination.label).toBe('Kungsbacka');
 
     // Controls survive: another user's community message, a DM the user isn't in,
     // the user's EVENT chat message (authorUserId-keyed, deliberately retained),
