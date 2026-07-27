@@ -679,8 +679,19 @@ export interface AttendanceSample {
  * whole (truncated) list back. Coercing a bad entry to `NaN` and keeping it
  * would persist that `NaN` forever, one write at a time, and each junk entry
  * would also consume one of the MAX_ATTENDANCE_SAMPLES slots that a real
- * sample needs. Nothing is lost by dropping: an entry that fails these
- * checks could never qualify under `isSampleInsideFence` anyway.
+ * sample needs.
+ *
+ * NOTHING IS LOST BY DROPPING — an entry failing any of these checks could
+ * never have qualified. `evaluateAttendance` is the predicate that settles
+ * it, and it excludes them on two different grounds:
+ *  - the COORDINATE and ACCURACY checks here are the geo subset of
+ *    `isSampleInsideFence`, which `evaluateAttendance` requires;
+ *  - the CAPTURE INSTANT is not something `isSampleInsideFence` looks at at
+ *    all. `evaluateAttendance` is what requires `Number.isFinite`
+ *    (and membership of the attendance window) on it.
+ * So a timestamp-only corruption is excluded by `evaluateAttendance`, not by
+ * the fence — worth stating precisely, because "the fence rejects it" would
+ * be false for exactly that case.
  *
  * `accuracyMeters` is the one field where coercion would be UNSAFE rather
  * than merely untidy — a stored `"500"` coerced to `null` reads as "no
