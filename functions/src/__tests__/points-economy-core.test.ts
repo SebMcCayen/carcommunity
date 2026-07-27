@@ -1109,6 +1109,39 @@ describe('parseStoredAttendanceSamples — corrupt evidence is dropped, not carr
     }
   });
 
+  // The SEMANTIC bound, not just "is it a number": these are exactly the
+  // accuracies isSampleInsideFence refuses, so such an entry can never
+  // qualify and must not keep occupying one of the 60 slots.
+  it('drops an accuracy that is out of bounds, not merely non-numeric', () => {
+    for (const bad of [
+      { ...good, accuracyMeters: -1 },
+      { ...good, accuracyMeters: -0.5 },
+      { ...good, accuracyMeters: MAX_ATTENDANCE_ACCURACY_METERS + 1 },
+      { ...good, accuracyMeters: 50_000 },
+    ]) {
+      expect(parseStoredAttendanceSamples([bad])).toEqual([]);
+      // The parser and the fence agree on what is unusable.
+      expect(
+        isSampleInsideFence(bad as unknown as AttendanceSample, EVENT_LAT, EVENT_LON),
+      ).toBe(false);
+    }
+  });
+
+  it('keeps the worst accuracy that can still qualify', () => {
+    const atBound = { ...good, accuracyMeters: MAX_ATTENDANCE_ACCURACY_METERS };
+    expect(parseStoredAttendanceSamples([atBound])).toEqual([
+      {
+        latitude: EVENT_LAT,
+        longitude: EVENT_LON,
+        accuracyMeters: MAX_ATTENDANCE_ACCURACY_METERS,
+        capturedAtMs: START,
+      },
+    ]);
+    expect(parseStoredAttendanceSamples([{ ...good, accuracyMeters: 0 }])).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: 0, capturedAtMs: START },
+    ]);
+  });
+
   it('accepts a legitimately absent accuracy as null', () => {
     const withoutAccuracy = {
       latitude: EVENT_LAT,

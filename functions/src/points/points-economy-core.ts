@@ -689,6 +689,21 @@ export interface AttendanceSample {
  * accuracy is legitimate (it is what the client sends when the platform
  * reports none); anything else present but not a finite number drops the
  * whole entry.
+ *
+ * Accuracy is also held to the SEMANTIC bound, not just "is it a number":
+ * negative, or worse than MAX_ATTENDANCE_ACCURACY_METERS, drops the entry
+ * too. That is the same predicate `isSampleInsideFence` applies, so such an
+ * entry could never qualify — and `events.checkIn` runs the fence check
+ * BEFORE the transaction, so it can never have been written by the normal
+ * path either. Keeping it would be keeping dead weight in a bounded array.
+ *
+ * ONE CONSEQUENCE WORTH KNOWING: this couples the stored evidence to a
+ * POLICY constant. If MAX_ATTENDANCE_ACCURACY_METERS is ever TIGHTENED,
+ * samples that were legitimate when captured stop being re-written on the
+ * next check-in. No award moves — `verified` latches once true, and those
+ * samples stop counting toward dwell the moment the constant changes
+ * regardless — but the audit trail for them thins. Tighten the constant with
+ * that in mind rather than discovering it later.
  */
 export function parseStoredAttendanceSamples(raw: unknown): AttendanceSample[] {
   if (!Array.isArray(raw)) {
@@ -714,7 +729,10 @@ export function parseStoredAttendanceSamples(raw: unknown): AttendanceSample[] {
     if (
       accuracyMeters !== undefined &&
       accuracyMeters !== null &&
-      (typeof accuracyMeters !== 'number' || !Number.isFinite(accuracyMeters))
+      (typeof accuracyMeters !== 'number' ||
+        !Number.isFinite(accuracyMeters) ||
+        accuracyMeters < 0 ||
+        accuracyMeters > MAX_ATTENDANCE_ACCURACY_METERS)
     ) {
       continue;
     }
