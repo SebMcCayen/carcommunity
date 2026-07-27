@@ -108,6 +108,47 @@ val mapboxDownloadsToken: String = (
     ).trim()
 val navSdkEnabled: Boolean = mapboxDownloadsToken.isNotEmpty()
 
+// App Check DEBUG token (debug builds only). The Firebase debug provider
+// otherwise generates a random secret that is wiped on uninstall/reinstall, so
+// every debug rebuild yields an unregistered token and every App-Check-gated
+// callable starts failing until it's re-registered by hand. Supplying a fixed
+// UUID here (seeded into the SDK's debug store by AppCheckDebugSecret) makes a
+// single Firebase-console registration survive rebuilds.
+//
+// Read from the gitignored apps/android/local.properties (`appcheck.debugToken`)
+// so a token value is NEVER committed to this public repo. Empty is the default
+// and is valid: CI and fresh clones build fine and simply keep today's
+// SDK-generated behaviour. Release builds ignore this entirely.
+//
+// rootProject.file, NOT file(): the latter resolves against apps/android/app/,
+// and it is apps/android/local.properties (the Gradle root, alongside sdk.dir)
+// that .gitignore covers.
+val localPropsFile = rootProject.file("local.properties")
+val localProps = Properties().apply {
+    if (localPropsFile.isFile && localPropsFile.canRead()) {
+        try {
+            localPropsFile.inputStream().use { load(it) }
+        } catch (e: Exception) {
+            logger.warn(
+                "Could not read local.properties (${e.message}); the App Check debug " +
+                    "token will be empty and debug builds will use an SDK-generated one.",
+            )
+        }
+    }
+}
+val appCheckDebugToken: String = (localProps.getProperty("appcheck.debugToken") ?: "").trim()
+
+// buildConfigField splices its value into generated Java verbatim, so a stray
+// quote/backslash/newline would emit code that doesn't compile. Escape rather
+// than reject: the runtime seeder treats anything unusable as "not configured".
+fun javaStringLiteral(value: String): String =
+    value
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+        .let { "\"$it\"" }
+
 // Firebase configuration: google-services.json is intentionally NOT committed
 // (see .gitignore and apps/android/README.md). The plugin is applied only when
 // the file is present so that CI validation builds work without secrets.
@@ -152,6 +193,12 @@ android {
             "MAPBOX_MAPS_SDK_VERSION",
             "\"${libs.versions.mapbox.get()}\"",
         )
+
+        // Empty by default and deliberately NOT overridden in the release block:
+        // only the debug build type (below) gets the real value, so a release
+        // APK/AAB can never carry a debug token even on a machine that has one
+        // configured. KccApplication reads it behind BuildConfig.DEBUG.
+        buildConfigField("String", "APP_CHECK_DEBUG_TOKEN", "\"\"")
     }
 
     signingConfigs {
@@ -172,6 +219,15 @@ android {
             // Resolved above: empty unless MAPBOX_ACCESS_TOKEN / mapbox.properties
             // provides a token. Empty keeps config-less/CI builds green.
             resValue("string", "mapbox_access_token", mapboxAccessToken)
+
+            // Resolved above: empty unless local.properties sets
+            // appcheck.debugToken. Empty keeps config-less/CI builds green and
+            // preserves the SDK-generated-token behaviour.
+            buildConfigField(
+                "String",
+                "APP_CHECK_DEBUG_TOKEN",
+                javaStringLiteral(appCheckDebugToken),
+            )
         }
         release {
             if (hasReleaseSigning) {
