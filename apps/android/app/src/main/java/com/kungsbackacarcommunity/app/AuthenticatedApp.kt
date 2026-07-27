@@ -4159,8 +4159,20 @@ private fun RouteHost(
                     set(Calendar.SECOND, 0)
                     set(Calendar.MILLISECOND, 0)
                 }.timeInMillis
+            // ONE fold over the drives list. The stats summary and the badge wall
+            // both want the same lifetime figure, and the list is unbounded, so
+            // computing it twice repeats an O(n) pass on every drives update.
+            // Hoisted rather than read off statsSummary: that flattens a null
+            // (drives not loaded / no stats) to 0.0, and the Vägfarare counter
+            // distinguishes "unknown" from "zero".
+            val driveStats =
+                remember(drivesState, statsMonthStart) {
+                    (drivesState as? DrivesState.Loaded)?.drives?.let {
+                        DriveStatsCalculator.compute(it, statsMonthStart)
+                    }
+                }
             val statsSummary =
-                remember(drivesState, badgesState, pointsBalance, profile?.createdAtMillis, statsMonthStart) {
+                remember(driveStats, badgesState, pointsBalance, profile?.createdAtMillis) {
                     val loadedDrives = (drivesState as? DrivesState.Loaded)?.drives
                     val loadedBadges = (badgesState as? BadgesState.Loaded)?.badges
                     // Hold the section back until the two activity signals have
@@ -4170,7 +4182,7 @@ private fun RouteHost(
                         null
                     } else {
                         ProfileStatsSummary.from(
-                            driveStats = DriveStatsCalculator.compute(loadedDrives, statsMonthStart),
+                            driveStats = driveStats,
                             badgeCount = loadedBadges.size,
                             pointsBalance = pointsBalance,
                             memberSinceMillis = profile?.createdAtMillis,
@@ -4184,17 +4196,13 @@ private fun RouteHost(
             // observe HONESTLY from reads it already makes here (see
             // BadgeCounters); every other ladder renders its goal without a bar.
             val badgeShowcase =
-                remember(badgesState, drivesState, profileGarageState, statsMonthStart) {
+                remember(badgesState, driveStats, profileGarageState) {
                     (badgesState as? BadgesState.Loaded)?.badges?.let { badges ->
-                        val drives = (drivesState as? DrivesState.Loaded)?.drives
                         BadgeShowcase.from(
                             badges = badges,
                             counters =
                                 BadgeCounters(
-                                    savedDriveDistanceMeters =
-                                        drives?.let {
-                                            DriveStatsCalculator.compute(it, statsMonthStart)?.totalDistanceMeters
-                                        },
+                                    savedDriveDistanceMeters = driveStats?.totalDistanceMeters,
                                     vehiclesInGarage =
                                         (profileGarageState as? GarageState.Loaded)?.vehicles?.size,
                                 ),

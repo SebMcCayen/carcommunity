@@ -123,6 +123,7 @@ fun ProfileBadgesSection(
 
             LadderMedallionGrid(
                 ladders = showcase.ladders,
+                awardedAtByKey = showcase.awardedAtByKey,
                 onSelect = { selected = it },
             )
 
@@ -176,13 +177,20 @@ fun ProfileBadgesSection(
 @Composable
 private fun LadderMedallionGrid(
     ladders: List<LadderProgress>,
+    awardedAtByKey: Map<String, Long>,
     onSelect: (BadgeDetail) -> Unit,
 ) {
     BadgeGridRows(items = ladders, perRow = 3) { progress ->
         val rung = progress.displayRung
         // Resolved during composition — a click lambda is not a composable scope
         // and cannot call stringResource.
-        val detail = rememberRungDetail(progress.ladder, rung, !progress.isLocked)
+        val detail =
+            rememberRungDetail(
+                progress.ladder,
+                rung,
+                !progress.isLocked,
+                awardedAtByKey[rung.badgeKey],
+            )
         BadgeMedallionTile(
             glyph = BadgeGlyph.Ladder(progress.ladder.id),
             tier = rung.tier,
