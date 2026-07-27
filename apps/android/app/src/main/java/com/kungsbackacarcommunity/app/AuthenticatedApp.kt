@@ -1318,12 +1318,20 @@ fun AuthenticatedApp(
             val crownFixTracker = remember(tappedCrownId) { CrownFixTracker() }
             var crownCurrentFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
             var crownPreviousFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
-            // High-accuracy fixes, but ONLY while a crown popup is open — so the
-            // cost is bounded by the user's own attention rather than running for
-            // the whole session. A 2 s cadence gets a usable proof pair a couple of
-            // seconds after the 4 s minimum dwell, which is as fast as the server's
-            // own rule allows.
-            LaunchedEffect(tappedCrownId, crownSpawnEnabled) {
+            // The claim has been ANSWERED — awarded or honestly refused. Terminal
+            // for this popup: [CrownSpawnPopup] swaps the whole body for the
+            // outcome, so there is no Collect button and no distance line left for
+            // a fresh fix to feed. `Failed` is deliberately NOT terminal — that one
+            // still offers a retry, which needs a live proof pair.
+            val crownClaimDone = crownClaimStatus is CrownClaimStatus.Done
+            // High-accuracy fixes, but ONLY while a crown popup is open AND the
+            // claim is still open — so the cost is bounded by the user's own
+            // attention rather than running for the whole session, and a member who
+            // leaves the "+100 KP" confirmation on screen is not quietly holding
+            // GPS at 2 s for as long as they admire it. A 2 s cadence gets a usable
+            // proof pair a couple of seconds after the 4 s minimum dwell, which is
+            // as fast as the server's own rule allows.
+            LaunchedEffect(tappedCrownId, crownSpawnEnabled, crownClaimDone) {
                 if (tappedCrownId == null || !crownSpawnEnabled) {
                     // With no crown open, drop any finished result. The status
                     // lives on the controller and outlives the popup, so a
@@ -1332,6 +1340,10 @@ fun AuthenticatedApp(
                     crownSpawnController?.resetClaim()
                     return@LaunchedEffect
                 }
+                // Answered: stop polling, but leave the popup and the last fixes
+                // exactly as they are. Resetting here would replace the outcome the
+                // member is reading; that belongs to the close path above.
+                if (crownClaimDone) return@LaunchedEffect
                 val appContext = context.applicationContext
                 while (true) {
                     val fix = CrownLocation.currentFix(appContext)

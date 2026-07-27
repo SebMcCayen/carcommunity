@@ -223,7 +223,7 @@ class CrownCollectGateTest {
     /** A malformed radius on the document falls back to the mirrored constant. */
     @Test
     fun aMalformedRadiusFallsBackToTheMirroredConstant() {
-        for (broken in listOf(0.0, -10.0, Double.NaN)) {
+        for (broken in listOf(0.0, -10.0, Double.NaN, Double.POSITIVE_INFINITY)) {
             val inside =
                 CrownCollectGate.evaluate(
                     featureEnabled = true,
@@ -240,6 +240,85 @@ class CrownCollectGateTest {
                     collectRadiusMeters = broken,
                 )
             assertTrue("radius=$broken", outside is CrownCollectState.TooFar)
+        }
+    }
+
+    /**
+     * An ABSURD radius narrows back to 75 m rather than widening the geofence.
+     *
+     * The one corruption that fails open: a document claiming a 1000 km radius
+     * would otherwise enable Collect from another county, and the popup would
+     * print that number as if it meant something. The bound is the backend's,
+     * mirrored, so client and server refuse the same crowns.
+     */
+    @Test
+    fun anAbsurdRadiusNarrowsBackToTheMirroredConstant() {
+        val justInsideTheBound =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS - 1.0,
+                speedMetersPerSecond = 0.0,
+                collectRadiusMeters = CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS,
+            )
+        assertEquals(CrownCollectState.Ready, justInsideTheBound)
+
+        val absurdRadii =
+            listOf(CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS + 0.5, 1_000_000.0)
+        for (absurd in absurdRadii) {
+            val farButInsideTheAbsurdRadius =
+                CrownCollectGate.evaluate(
+                    featureEnabled = true,
+                    distanceMeters = radius + 1.0,
+                    speedMetersPerSecond = 0.0,
+                    collectRadiusMeters = absurd,
+                )
+            assertTrue(
+                "radius=$absurd should not widen the gate, got $farButInsideTheAbsurdRadius",
+                farButInsideTheAbsurdRadius is CrownCollectState.TooFar,
+            )
+        }
+    }
+
+    // ---- The resolver the parse boundary uses ----------------------------
+
+    /**
+     * [CrownSpawnLimits.resolveCollectRadiusMeters] mirrors the backend's
+     * `resolveCollectRadiusMeters` exactly, so the number the popup PRINTS and
+     * the number the gate USES are the same one.
+     *
+     * The bug this pins: a document with `collectRadiusMeters: 0` used to reach
+     * the popup raw ("get within 0 m") while the gate silently substituted 75 m,
+     * so the app stated one rule and enforced another.
+     */
+    @Test
+    fun theResolverKeepsOnlyRealStoredRadii() {
+        // Kept as-is.
+        assertEquals(25.0, CrownSpawnLimits.resolveCollectRadiusMeters(25.0), 0.0)
+        assertEquals(
+            CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS,
+            CrownSpawnLimits.resolveCollectRadiusMeters(
+                CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS,
+            ),
+            0.0,
+        )
+        // Everything a wrong document can hold falls back.
+        val rejected =
+            listOf(
+                null,
+                0.0,
+                -1.0,
+                Double.NaN,
+                Double.POSITIVE_INFINITY,
+                Double.NEGATIVE_INFINITY,
+                CrownSpawnLimits.MAX_STORED_COLLECT_RADIUS_METERS + 0.5,
+            )
+        for (stored in rejected) {
+            assertEquals(
+                "stored=$stored",
+                CrownSpawnLimits.COLLECT_RADIUS_METERS,
+                CrownSpawnLimits.resolveCollectRadiusMeters(stored),
+                0.0,
+            )
         }
     }
 

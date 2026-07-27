@@ -92,7 +92,9 @@ object CrownCollectGate {
      * @param speedMetersPerSecond the device's reported speed, or null when the
      *   platform did not supply one.
      * @param collectRadiusMeters the crown's own radius, defaulting to the
-     *   mirrored server constant.
+     *   mirrored server constant. Put through
+     *   [CrownSpawnLimits.resolveCollectRadiusMeters], so a broken or absurd
+     *   value narrows the gate back to 75 m instead of widening it.
      *
      * ## Why an unknown speed does not block
      *
@@ -119,12 +121,11 @@ object CrownCollectGate {
         if (distanceMeters == null || !distanceMeters.isFinite()) {
             return CrownCollectState.NoPosition
         }
-        val radius =
-            if (collectRadiusMeters.isFinite() && collectRadiusMeters > 0.0) {
-                collectRadiusMeters
-            } else {
-                CrownSpawnLimits.COLLECT_RADIUS_METERS
-            }
+        // Belt and braces: [CrownSpawn.collectRadiusMeters] is already sanitized
+        // at the parse boundary, but this is a public entry point with a default
+        // and the SAME resolver runs here, so a caller that hands over a raw
+        // field gets the backend's answer rather than a second opinion.
+        val radius = CrownSpawnLimits.resolveCollectRadiusMeters(collectRadiusMeters)
         if (distanceMeters > radius) return CrownCollectState.TooFar(distanceMeters)
         // Distance first, THEN stillness: a crown 5 km away is "too far"
         // whatever the car is doing, and reporting it as "stop the car" would be

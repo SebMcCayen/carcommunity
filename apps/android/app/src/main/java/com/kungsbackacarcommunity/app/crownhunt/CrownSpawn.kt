@@ -79,8 +79,10 @@ enum class CrownSpawnClaimResult(val wire: String) {
  * @property collectRadiusMeters the crown's own radius, as the server stamped
  *   it. Read from the document rather than assumed to be
  *   [CrownSpawnLimits.COLLECT_RADIUS_METERS] so a server-side retune takes
- *   effect without an app release; the constant is only the fallback for a
- *   document that omits it.
+ *   effect without an app release. Always a SANITIZED value: every parser puts
+ *   the raw field through [CrownSpawnLimits.resolveCollectRadiusMeters], so a
+ *   document that omits it — or carries a broken one — yields the mirrored
+ *   constant rather than a number the popup would print and the gate ignore.
  */
 data class CrownSpawn(
     val id: String,
@@ -153,6 +155,50 @@ object CrownSpawnLimits {
 
     /** `MAX_DWELL_SECONDS` — beyond this the earlier fix says nothing about now. */
     const val MAX_DWELL_SECONDS: Long = 300
+
+    /**
+     * `MAX_STORED_COLLECT_RADIUS_METERS` — the widest gate a crown DOCUMENT is
+     * allowed to ask for.
+     *
+     * Mirrored from the backend, and worth mirroring: every other way a crown
+     * document can be wrong fails CLOSED (a non-numeric coordinate makes the
+     * distance NaN, and `NaN > radius` is false in neither direction — the claim
+     * is refused server-side), while an oversized radius is the one corruption
+     * that fails OPEN, by widening the geofence. The spawner only ever writes
+     * [COLLECT_RADIUS_METERS] and clients cannot write `crownSpawns` at all, so
+     * a stored radius beyond this bound means the document is wrong — a console
+     * edit, a migration, or a future bug.
+     */
+    const val MAX_STORED_COLLECT_RADIUS_METERS: Double = 250.0
+
+    /**
+     * The radius to actually use for a crown, from whatever its document holds.
+     *
+     * Mirrors `resolveCollectRadiusMeters` in
+     * `functions/src/crownHunt/crown-spawn-core.ts`, upper bound included, so
+     * the client agrees with the server about which stored radii are real.
+     *
+     * Applied at the PARSE boundary, once, rather than at each use — so
+     * [CrownSpawn.collectRadiusMeters] is sanitized by construction. The
+     * alternative, each consumer deciding for itself, is exactly how a popup
+     * ends up printing "get within 0 m" off the raw field while
+     * [CrownCollectGate] quietly enables the button at 75 m: two honest-looking
+     * numbers that contradict each other, from one bad document.
+     *
+     * Null, non-finite, zero, negative and absurd all yield
+     * [COLLECT_RADIUS_METERS], so a wrong document can only ever produce the
+     * DEFAULT gate — never a wider one.
+     */
+    fun resolveCollectRadiusMeters(stored: Double?): Double =
+        if (stored != null &&
+            stored.isFinite() &&
+            stored > 0.0 &&
+            stored <= MAX_STORED_COLLECT_RADIUS_METERS
+        ) {
+            stored
+        } else {
+            COLLECT_RADIUS_METERS
+        }
 
     /** Feature-flag key gating the whole automatic half. Contract default OFF. */
     const val SPAWN_FLAG_KEY: String = "crownHuntSpawn"

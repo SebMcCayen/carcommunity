@@ -134,8 +134,13 @@ private fun DocumentSnapshot.toSpawn(): CrownSpawn? {
         // table is only the fallback for a document that omits the field, so a
         // retuned reward shows up without an app release.
         rewardPoints = (get("rewardPoints") as? Number)?.toInt() ?: rarity.rewardPoints,
+        // Sanitized here, at the ONE place a document becomes a CrownSpawn, so
+        // the popup's "get within X m" and the Collect gate can never disagree
+        // about a crown. A missing, zero, negative, non-finite or absurd radius
+        // all become the mirrored 75 m — the same answer the backend's
+        // `resolveCollectRadiusMeters` would give when it re-checks the claim.
         collectRadiusMeters =
-            getDouble("collectRadiusMeters") ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
+            CrownSpawnLimits.resolveCollectRadiusMeters(getDouble("collectRadiusMeters")),
         expiresAtMillis = getTimestamp("expiresAt")?.toDate()?.time,
     )
 }
