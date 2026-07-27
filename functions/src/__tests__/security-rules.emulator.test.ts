@@ -19,6 +19,7 @@ import {
 } from '@firebase/rules-unit-testing';
 import {
   collection,
+  collectionGroup,
   deleteDoc,
   doc,
   getDoc,
@@ -256,6 +257,42 @@ describe('Firestore – badges (Phase 9f)', () => {
     await assertFails(
       deleteDoc(doc(otherCtx.firestore(), 'users', OWNER, 'badges', 'kronjagare_silver')),
     );
+  });
+
+  // THE PUBLIC READ IS PER-MEMBER, NOT A GLOBAL INDEX. Widening
+  // users/{uid}/badges to isAuthenticated() lets a viewer open ONE member's
+  // wall; it does not let anyone enumerate every member's awards, and several
+  // doc claims (adminSummary.ts, contracts/functions/functions.json,
+  // firestore.rules) depend on that. Asserted here rather than asserted in
+  // prose: a collection group query is authorised ONLY by a rule written
+  // against a recursive-wildcard path (match /{path=**}/badges/{badgeKey}); a
+  // rule nested under /users/{userId} never applies to one. The single
+  // recursive-wildcard rule in firestore.rules is the deny-all catch-all, so
+  // adding a /{path=**}/badges/… grant later would break this test.
+  it('no client can scan badges across members — collectionGroup is denied', async () => {
+    // Negative control FIRST, so the denials below cannot pass for the wrong
+    // reason: with rules off the very same query returns the seeded awards,
+    // proving the collection group exists and the query is well-formed. What
+    // follows is therefore a rules denial, not a broken query. (assertFails
+    // itself only accepts permission-denied, so both halves are pinned.)
+    await testEnv.withSecurityRulesDisabled(async (bypass) => {
+      const all = await getDocs(collectionGroup(bypass.firestore(), 'badges'));
+      expect(all.size).toBeGreaterThan(0);
+    });
+
+    const viewerCtx = testEnv.authenticatedContext(OTHER);
+    await assertFails(getDocs(collectionGroup(viewerCtx.firestore(), 'badges')));
+
+    // Not an entitlement loophole and not an admin loophole either: the Admin
+    // SDK in badges.adminSummary bypasses rules, no client credential does.
+    const memberCtx = testEnv.authenticatedContext('badge-scanner', { activeMember: true });
+    await assertFails(getDocs(collectionGroup(memberCtx.firestore(), 'badges')));
+    const adminCtx = testEnv.authenticatedContext('badge-scanner-admin', { admin: true });
+    await assertFails(getDocs(collectionGroup(adminCtx.firestore(), 'badges')));
+
+    // The per-member read the product actually needs still works, so this is a
+    // real restriction on scanning and not a blanket denial.
+    await assertSucceeds(getDocs(collection(viewerCtx.firestore(), 'users', OWNER, 'badges')));
   });
 
   it('badgeProgress counters are fully backend-only', async () => {

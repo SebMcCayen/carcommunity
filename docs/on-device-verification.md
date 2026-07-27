@@ -61,6 +61,9 @@ EXIF. Only a device can prove that.
     badges and tiers must render (badges are public), and there must be **no**
     progress bars or counter numbers on that screen — the telemetry behind a badge
     (streak, distance, meets) stays private to its owner.
+    Requires the `firebase deploy --only firestore:rules` that ships with this
+    change; run against an un-deployed project the other member's wall correctly
+    degrades to a neutral "not visible" note, which is not a bug.
 
 ## Known gaps — do NOT report these as bugs
 

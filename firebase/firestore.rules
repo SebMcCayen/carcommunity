@@ -183,6 +183,20 @@ service cloud.firestore {
       // live on badgeProgress/{uid}, which stays denied to EVERY client,
       // including the owner (see that block below). Widening this rule
       // therefore exposes rungs reached, never the activity totals behind them.
+      //
+      // AND IT IS PER-MEMBER, NOT A GLOBAL INDEX. This grant does NOT make
+      // badges enumerable across users via collectionGroup('badges'). Firestore
+      // authorises a collection group query only from a rule written against a
+      // recursive-wildcard path (match /{path=**}/badges/{badgeKey}); a rule
+      // nested under a concrete ancestor like /users/{userId} is never
+      // consulted for one. The only recursive-wildcard rule in this file is the
+      // deny-all catch-all above, so every client collection group query over
+      // `badges` is denied — viewer, activeMember and admin alike. Do not add a
+      // /{path=**}/badges/… grant: badges.adminSummary
+      // (functions/src/badges/adminSummary.ts) and the functions.json contract
+      // both state that no client can scan across members, and the emulator
+      // test "no client can scan badges across members — collectionGroup is
+      // denied" will fail if that stops being true.
       match /badges/{badgeKey} {
         allow read: if isAuthenticated();
         // No client writes — for the tiered ladders too. A tier is derived
