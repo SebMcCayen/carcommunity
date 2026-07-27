@@ -1,16 +1,35 @@
 /**
- * Crown Hunt geographic and position-validation helpers (Phase 9h) — ported
- * verbatim from services/api/src/lib/crown-hunt-geo.ts per
+ * Crown Hunt geographic and position-validation helpers (Phase 9h) — based on
+ * services/api/src/lib/crown-hunt-geo.ts per
  * docs/migration/backend-domain-mapping.md ("Must preserve all validation
  * logic").
+ *
+ * NOT a verbatim port. Migration parity is preserved except where the legacy
+ * behaviour was itself a hole; each deviation below is deliberate, so a
+ * parity audit should expect it rather than "fix" it back:
+ *
+ *  1. `isSpeedSafe` returns FALSE for a non-finite or negative speed. Legacy
+ *     treated those as safe, which let a claim bypass the stopped-vehicle
+ *     check by reporting a negative speed.
+ *  2. The geofence buffer derived from the client-supplied accuracy is
+ *     bounded (see {@link effectiveGeofenceRadiusMeters}). Legacy applied it
+ *     unbounded, which let a claim inflate a 150 m fence to kilometres.
  *
  * Small, testable pure functions — no database or service dependencies.
  *
  * Safety rules encoded here:
  *  - Coordinates must be valid WGS-84 values.
  *  - Positions must be fresh (not older than MAX_POSITION_AGE_SECONDS).
- *  - Speed must be at or below MAX_CLAIM_SPEED_MPS (~5 km/h) to allow a claim.
- *  - Geofence check accounts for reported GPS accuracy (conservative).
+ *  - A *reported* speed must be at or below MAX_CLAIM_SPEED_MPS (~5 km/h) to
+ *    allow a claim. Known gap, stated here so the rule is not read as stronger
+ *    than it is: `speedMetersPerSecond` is optional on the callable and an
+ *    absent/null speed is treated as safe, so a client that simply omits the
+ *    field is never speed-checked and gains no risk score for it. That is
+ *    legacy behaviour, deliberately left alone by the accuracy-bound change;
+ *    closing it is a separate, client-affecting decision.
+ *  - Geofence check accounts for reported GPS accuracy conservatively AND
+ *    boundedly: client-supplied accuracy can never inflate the fence beyond
+ *    MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the configured radius.
  *  - Distance is computed server-side; client-supplied distance is never trusted.
  *  - No route history is created here.
  *  - No coordinates are logged.
@@ -23,6 +42,24 @@ import { MAX_CLAIM_SPEED_MPS, MAX_POSITION_AGE_SECONDS } from './crownhunt-core'
 // ---------------------------------------------------------------------------
 
 const EARTH_RADIUS_METERS = 6_371_000;
+
+/** Multiplier applied to the (clamped) reported accuracy when buffering. */
+const GEOFENCE_ACCURACY_BUFFER = 0.5;
+
+/**
+ * Largest reported GPS accuracy (meters) that may contribute to the geofence
+ * buffer. A legitimate phone fix used to claim at a 20–150 m point is well
+ * under this; anything larger is either unusable for the claim or a hostile
+ * value, so it is clamped rather than trusted.
+ */
+export const MAX_GEOFENCE_ACCURACY_METERS = 100;
+
+/**
+ * Hard ceiling on the accuracy-buffered geofence, as a multiple of the point's
+ * configured radius. However the client reports accuracy, the effective fence
+ * can never be more than twice the radius an admin approved.
+ */
+export const MAX_EFFECTIVE_GEOFENCE_MULTIPLIER = 2;
 
 // ---------------------------------------------------------------------------
 // Coordinate validation
@@ -101,8 +138,14 @@ export function isPositionFresh(
 /**
  * Returns true when the reported speed is safe enough to allow a claim.
  *
- * A null or undefined speed is treated as safe (speed not reported by device).
- * The backend still validates other signals in that case.
+ * KNOWN GAP (legacy behaviour, unchanged here): a null or undefined speed is
+ * treated as SAFE, on the assumption that the device did not report one. The
+ * callable's `speedMetersPerSecond` is optional and `evaluateClaimRisk` adds
+ * no signal for a missing speed, so a client that omits the field skips this
+ * gate entirely and is not penalised for it. The other gates (freshness,
+ * server-computed distance, bounded geofence, impossible-jump) still run.
+ * Closing this would reject honest fixes that carry no speed, so it is a
+ * separate client-affecting decision, not part of the geofence-accuracy fix.
  *
  * @param speedMps     - Reported speed in meters per second (may be null).
  * @param maxSpeedMps  - Maximum allowed speed. Defaults to MAX_CLAIM_SPEED_MPS.
@@ -126,13 +169,65 @@ export function isSpeedSafe(
 // ---------------------------------------------------------------------------
 
 /**
- * Returns true when the user is within the geofence of a Kronjakt point,
- * accounting conservatively for the reported GPS accuracy.
+ * Computes the accuracy-buffered geofence radius actually used for a claim.
  *
- * The effective threshold is: geofenceRadius + (accuracyMeters * accuracyBuffer).
- * This ensures a user with poor GPS accuracy is not unfairly rejected at the boundary.
- * The buffer is intentionally kept small (0.5) so that accuracy cannot be used to
- * claim from far outside the intended stopping area.
+ * The buffer exists so a member with a mediocre-but-honest GPS fix is not
+ * unfairly rejected right at the boundary. `accuracyMeters` is CLIENT-SUPPLIED,
+ * so the buffer is bounded twice — an unbounded buffer let a claim declare a
+ * huge accuracy and inflate a 75 m fence into kilometres:
+ *
+ *  1. the accuracy that feeds the buffer is clamped to
+ *     MAX_GEOFENCE_ACCURACY_METERS (a non-finite or non-positive value
+ *     contributes nothing at all), and
+ *  2. the result is capped at MAX_EFFECTIVE_GEOFENCE_MULTIPLIER × the
+ *     configured radius.
+ *
+ * For any finite, positive `geofenceRadiusMeters` r, the result is
+ * therefore always within
+ * `[r, min(r + MAX_GEOFENCE_ACCURACY_METERS * GEOFENCE_ACCURACY_BUFFER,
+ * r * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER)]` (with today's constants: `[r,
+ * min(r + 50, 2r)]`) — enforced, not merely intended, and asserted over a grid
+ * of radii × accuracies in crownhunt-core.test.ts.
+ *
+ * A radius that is not a finite positive number — a point document whose
+ * `geofenceRadiusMeters` is missing, null, or non-numeric, which reaches
+ * submitClaim behind a bare `as number` cast — returns NaN, and `distance <=
+ * NaN` is false. Such a point therefore rejects every claim (fail CLOSED)
+ * instead of collapsing to a zero-radius fence that an exact-coordinate
+ * spoof would satisfy.
+ *
+ * @param geofenceRadiusMeters - Configured point geofence radius.
+ * @param accuracyMeters       - Reported horizontal GPS accuracy (may be null).
+ */
+export function effectiveGeofenceRadiusMeters(
+  geofenceRadiusMeters: number,
+  accuracyMeters: number | null | undefined,
+): number {
+  // A point without a usable radius must reject every claim, not degenerate
+  // into a zero-radius fence (which an exact-coordinate spoof would satisfy).
+  if (
+    typeof geofenceRadiusMeters !== 'number' ||
+    !Number.isFinite(geofenceRadiusMeters) ||
+    geofenceRadiusMeters <= 0
+  ) {
+    return Number.NaN;
+  }
+  const accuracy =
+    typeof accuracyMeters === 'number' && Number.isFinite(accuracyMeters) && accuracyMeters > 0
+      ? Math.min(accuracyMeters, MAX_GEOFENCE_ACCURACY_METERS)
+      : 0;
+  return Math.min(
+    geofenceRadiusMeters + accuracy * GEOFENCE_ACCURACY_BUFFER,
+    geofenceRadiusMeters * MAX_EFFECTIVE_GEOFENCE_MULTIPLIER,
+  );
+}
+
+/**
+ * Returns true when the user is within the geofence of a Kronjakt point,
+ * accounting conservatively — and boundedly — for the reported GPS accuracy.
+ *
+ * See {@link effectiveGeofenceRadiusMeters} for the bounds enforced on the
+ * client-supplied accuracy.
  *
  * @param distanceMeters     - Distance from user to point (server-computed via Haversine).
  * @param geofenceRadiusMeters - Configured point geofence radius.
@@ -143,12 +238,7 @@ export function isWithinGeofence(
   geofenceRadiusMeters: number,
   accuracyMeters: number | null | undefined,
 ): boolean {
-  const accuracyBuffer = 0.5; // conservative multiplier
-  const accuracy = accuracyMeters !== null && accuracyMeters !== undefined && accuracyMeters > 0
-    ? accuracyMeters
-    : 0;
-  const effectiveRadius = geofenceRadiusMeters + accuracy * accuracyBuffer;
-  return distanceMeters <= effectiveRadius;
+  return distanceMeters <= effectiveGeofenceRadiusMeters(geofenceRadiusMeters, accuracyMeters);
 }
 
 // ---------------------------------------------------------------------------
