@@ -36,17 +36,31 @@
  * newest message's createdAt is newer than the caller's lastReadAt — O(1) per
  * user, no fan-out. Convoy channels carry no unread state (small, session-scoped).
  *
- * BLOCKING (community): the community channel is a global town square and does
- * NOT filter messages by blocks server-side — that would cost an unbounded block
- * lookup per page and break the createdAt pagination cursor. Blocking still
- * governs DMs/friend/convoy interactions; hiding a blocked user's community
- * messages is left to the client as a display concern (documented choice).
- * @MENTIONS are the deliberate exception: a mention is not a message sitting in
- * a room you chose to open, it is a directed push into a personal inbox — the
- * same reach a DM has. So the mention producer DOES apply the both-ways block
- * check (bounded: at most MAX_MESSAGE_MENTIONS pairs per post), exactly as the
- * DM domain does, and a blocked pair simply resolves to no mention. The message
- * itself still posts and stays readable by everyone, unchanged.
+ * BLOCKING (community + convoy): messages authored by a uid the caller is in a
+ * block relationship with — in EITHER direction — are filtered out of the
+ * `*-list` read paths. This used to be left to the client as a display concern
+ * because resolving "did they block me" cost an unbounded per-page block lookup;
+ * that objection is gone now that `blocking-onBlockWrite` maintains a symmetric
+ * `blockVisibility/{uid}.hiddenUids` mirror, so the whole page costs ONE document
+ * read (functions/src/blocking/block-visibility.ts). The pagination cursor is
+ * taken from the RAW page BEFORE filtering, so the createdAt cursor still walks
+ * the channel exactly once and a wholly-hidden page tail cannot stall it.
+ *
+ * The channels' LIVE windows are direct Firestore snapshot listeners on the
+ * client, and a Firestore rule cannot filter a list query per document (a
+ * per-document condition fails the WHOLE query), so those windows are filtered
+ * CLIENT-side against the same mirror. That is a behaviour guarantee, not a
+ * confidentiality one — the message document is still delivered to the device.
+ * These channels are readable by every active member by design, so that is the
+ * honest boundary; the DM domain, where confidentiality does matter, is gated by
+ * firestore.rules instead.
+ *
+ * @MENTIONS applied the both-ways block check even before the read filter
+ * existed, and still do: a mention is not a message sitting in a room you chose
+ * to open, it is a directed push into a personal inbox — the same reach a DM
+ * has. Bounded at MAX_MESSAGE_MENTIONS pairs per post; a blocked pair resolves
+ * to no mention. The message itself still posts, and stays readable by everyone
+ * who is not in a block relationship with its author.
  *
  * MENTIONS (community): resolution is CLIENT-SIDE. `displayName` is NOT unique
  * (the friends nickname lookup already had to grow an AMBIGUOUS_NICKNAME path

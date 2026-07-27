@@ -863,8 +863,11 @@ export const convoy = {
  * aggregate — a lightweight per-user last-read marker lives at
  * userPrivate/{uid}.communityChatLastReadAt (owner-only readable) so the client
  * derives the unread dot from its newest-message live listener (O(1) per user).
- * Blocking is NOT filtered server-side (global town square — a client display
- * concern). See functions/src/chatchannels/chat-core.ts.
+ * Blocking IS filtered, in BOTH directions, off the symmetric
+ * blockVisibility/{uid}.hiddenUids mirror — one document read per page in
+ * communityChat.list, and the same mirror drives the client's live-window filter
+ * (a Firestore rule cannot filter a list query per document). See
+ * functions/src/chatchannels/chat-core.ts and blocking/block-visibility.ts.
  *
  * There is deliberately NO per-message notification producer (that would be an
  * O(members × messages) fan-out on the town square). Instead the channel notifies

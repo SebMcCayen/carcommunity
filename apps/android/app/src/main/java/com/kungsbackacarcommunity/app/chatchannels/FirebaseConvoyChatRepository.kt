@@ -6,9 +6,13 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
+import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
+import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 
 /**
  * [ConvoyChatRepository] backed by the `convoy-list` callable (for the caller's
@@ -16,10 +20,18 @@ import kotlinx.coroutines.flow.callbackFlow
  * `convoyChats/{convoyId}/messages` listener, and the `convoyChat-*` callables
  * (europe-west1). Guarded ([createIfAvailable]) so a config-less build gets a
  * null repository and the tab renders a placeholder.
+ *
+ * BLOCKING: the live window is filtered against the caller's mutual-hidden set
+ * ([BlockVisibilityRepository]), so two members of the same convoy who have
+ * blocked each other stop seeing each other's messages in both directions.
+ * Older pages are filtered SERVER-side by `convoyChat-list`; the live window
+ * cannot be, because a Firestore rule cannot filter a list query per document —
+ * see [BlockVisibility].
  */
 class FirebaseConvoyChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
+    private val blockVisibility: BlockVisibilityRepository,
 ) : ConvoyChatRepository {
 
     override suspend fun listConvoys(): ConvoyListState =
@@ -28,7 +40,20 @@ class FirebaseConvoyChatRepository private constructor(
             onFailure = { ConvoyListState.Error },
         )
 
-    override fun observeMessages(convoyId: String): Flow<ChannelMessagesState> = callbackFlow {
+    override fun observeMessages(convoyId: String): Flow<ChannelMessagesState> =
+        combine(observeRawMessages(convoyId), blockVisibility.observeHiddenUids()) { state, hidden ->
+            // One document listener supplies the hidden set for the whole
+            // session; the filter itself costs no reads.
+            when (state) {
+                is ChannelMessagesState.Loaded ->
+                    ChannelMessagesState.Loaded(
+                        BlockVisibility.filterHiddenAuthors(state.messages, hidden) { it.senderUid },
+                    )
+                ChannelMessagesState.Loading -> state
+            }
+        }
+
+    private fun observeRawMessages(convoyId: String): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
             firestore
                 .collection(CONVOY_CHATS)
@@ -106,6 +131,7 @@ class FirebaseConvoyChatRepository private constructor(
             return FirebaseConvoyChatRepository(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
+                FirebaseBlockVisibilityRepository.createOrEmpty(context),
             )
         }
     }
