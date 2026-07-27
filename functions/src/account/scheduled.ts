@@ -8,7 +8,9 @@
  *    userPrivate/{uid} incl. pushTokens, userLifecycle/{uid}
  *    (last-login + inactivity state), notifications/{uid} incl.
  *    items, pointsLedger/{uid} incl. entries, badgeProgress/{uid},
- *    userBlocks/{uid} incl. blocked) via recursiveDelete.
+ *    userBlocks/{uid} incl. blocked, liveSessions/{uid} (the nearby-
+ *    discovery doc: last coordinate + denormalized displayName)) via
+ *    recursiveDelete.
  * 2. Owned documents by query (vehicles, rides where userId == uid).
  * 3. Social-graph MIRRORS — the rows other users' documents carry about
  *    the deleted user, which no owned-doc purge can reach: the mirror
@@ -19,13 +21,17 @@
  *    and convoy membership (memberUids/members/memberProfiles, plus the
  *    stored summary's participantUids and the shared destination's
  *    setByDisplayName).
- * 4. Chat erasure: the user's 1:1 DM conversations (conversation doc +
+ * 4. Live-location state in Realtime Database: the liveLocation/{uid}
+ *    subtree (whose `session` node — denormalized displayName, main-car
+ *    snapshot, last recorded coordinate — is never deleted by stop /
+ *    hide-me-now / the TTL sweep) and presence/{uid}.
+ * 5. Chat erasure: the user's 1:1 DM conversations (conversation doc +
  *    messages subcollection) wholesale, and the community + convoy
  *    channel messages the user authored (by senderUid).
- * 5. Cloud Storage prefixes (profileImages/, vehicleImages/,
+ * 6. Cloud Storage prefixes (profileImages/, vehicleImages/,
  *    rideRoutes/ under the uid).
- * 6. The Firebase Auth user is deleted.
- * 7. The request record flips to `processed` (processedAt stamped) and
+ * 7. The Firebase Auth user is deleted.
+ * 8. The request record flips to `processed` (processedAt stamped) and
  *    is RETAINED as the proof-of-deletion record.
  *
  * This is the SINGLE purge routine for BOTH erasure paths: the
@@ -51,6 +57,7 @@ import {
 } from '../convoy/convoy-core';
 import {
   LIVE_LOCATION_BLOCKS_RTDB_ROOT,
+  LIVE_LOCATION_RTDB_ROOTS,
   PURGE_BLOCK_MIRROR,
   PURGE_CONVOY_MEMBERSHIP,
   PURGE_DOC_TREES,
@@ -168,6 +175,27 @@ async function purgeBlockGraph(uid: string): Promise<void> {
     }
     await batch.commit();
     if (snap.size < QUERY_BATCH_SIZE) break;
+  }
+}
+
+/**
+ * Removes the user's own LIVE-LOCATION state from Realtime Database — the
+ * `liveLocation/{uid}` session/marker subtree and the `presence/{uid}` node (see
+ * LIVE_LOCATION_RTDB_ROOTS in deletion-core.ts for what each carries and why the
+ * session node would otherwise survive erasure forever).
+ *
+ * The Firestore half of this domain — the `liveSessions/{uid}` nearby-discovery
+ * doc, which carries the last coordinate and the denormalized displayName — is
+ * purged with the doc trees in purgeUserData, since it is a plain uid-keyed
+ * document.
+ *
+ * Each root is removed at `{root}/{uid}` — a path built from the uid alone, so
+ * there is nothing to read first and nothing a partial purge can orphan. Writing
+ * `null` to a path that is already empty is a no-op, so this is idempotent.
+ */
+async function purgeLiveLocationState(uid: string): Promise<void> {
+  for (const root of LIVE_LOCATION_RTDB_ROOTS) {
+    await adminRtdb.ref(`${root}/${uid}`).set(null);
   }
 }
 
@@ -387,6 +415,10 @@ export async function purgeUserData(uid: string): Promise<void> {
   // user, which the doc-tree/owned-doc purges above cannot reach.
   await deleteFriendGraphMirror(uid);
   await purgeBlockGraph(uid);
+  // Live-location state the doc-tree purge cannot reach: the RTDB session/marker
+  // subtree (its `session` node is never deleted by stop/hide/sweep) and the
+  // presence node. The Firestore discovery doc went with the doc trees above.
+  await purgeLiveLocationState(uid);
   await removeConvoyMemberships(uid);
   // Chat erasure: DM conversations wholesale, then authored community + convoy
   // messages. DMs go first so no DM message survives into the channel sweep.
