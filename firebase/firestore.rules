@@ -749,6 +749,20 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // memberSearchRateLimits – per-user fixed-window counter for
+    // userSearch.members (the member typeahead). Same shape and same reasoning
+    // as incidentListRateLimits above: deterministic doc id
+    // `{uid}_{epochMinute}`, read by id and bumped with FieldValue.increment via
+    // the Admin SDK before the displayNameLower range scan, `expireAt` carrying
+    // a Firestore TTL policy so spent windows self-delete. Fully backend-only —
+    // a member must not be able to inspect or reset their own throttle, which is
+    // the entire point of putting the search behind a callable.
+    // -------------------------------------------------------------------------
+    match /memberSearchRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // liveSessions – nearby live-sharer DISCOVERY index (live location)
     // A lightweight, geo-cell-indexed Firestore doc per ACTIVE standalone
     // sharer (liveSessions/{uid}), written ONLY by the live.* callables via the

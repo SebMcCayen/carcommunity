@@ -124,6 +124,8 @@ import {
   respondRequest as respondFriendRequest,
   sendRequest as sendFriendRequest,
 } from './friends/manageFriends';
+import { searchMembers } from './users/searchMembers';
+import { onUserProfileWrite } from './users/onUserProfileWrite';
 import {
   getMessages as dmGetMessages,
   listConversations as dmListConversations,
@@ -737,6 +739,34 @@ export const friend = {
   cancelRequest: cancelFriendRequest,
   remove: removeFriend,
   list: listFriends,
+};
+
+/**
+ * User-search domain (grouped export → deployed as `userSearch-members` and the
+ * `userSearch-onUserProfileWrite` Firestore trigger).
+ *
+ * Powers the "find a person" typeahead on the Friends surface
+ * (contracts/functions/functions.json: userSearch.members). Case-insensitive
+ * PREFIX matching over the denormalized `users/{uid}.displayNameLower` key —
+ * typing 'gt' finds 'gt_86'; a mid-word substring like '86' does NOT match,
+ * because Firestore offers no substring operator and an n-gram token index is
+ * deliberately not built (functions/src/users/user-search-core.ts).
+ *
+ * Server-side rather than a client query even though `users/{uid}` is
+ * authenticated-readable: only a callable can enforce a minimum query length, a
+ * hard result cap with no cursor, a per-user rate limit, an allowlisted
+ * three-field projection (uid/displayName/avatarPath — never email or any
+ * backend-managed flag), and either-way block exclusion. A client-side range
+ * query would be a paginated member-directory dump.
+ *
+ * onUserProfileWrite re-derives `displayNameLower` from `displayName` on every
+ * users/{uid} write, whoever wrote it — the OWNER may update `displayName`
+ * directly under firestore.rules but cannot write the key, so without this a
+ * renamed member stays findable only under their OLD nickname.
+ */
+export const userSearch = {
+  members: searchMembers,
+  onUserProfileWrite,
 };
 
 /**

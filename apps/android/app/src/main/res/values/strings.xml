@@ -449,6 +449,17 @@
     <string name="friends_errorRequestGone">Förfrågan är inte längre tillgänglig.</string>
     <string name="friends_errorTemporarilyUnavailable">Vänner är tillfälligt otillgängliga hos oss. Det är inget fel på ditt konto — försök igen om några minuter.</string>
     <string name="friends_errorGeneric">Något gick fel. Försök igen.</string>
+    <string name="userSearch_hint">Sök efter en person</string>
+    <string name="userSearch_keepTyping">Fortsätt skriva för att söka…</string>
+    <string name="userSearch_searching">Söker…</string>
+    <string name="userSearch_noMatches">Ingen medlem matchar det.</string>
+    <string name="userSearch_matchesFromStart">Sökningen matchar början av ett smeknamn.</string>
+    <string name="userSearch_resultsTitle">Matchande medlemmar</string>
+    <string name="userSearch_error">Kunde inte söka just nu. Försök igen.</string>
+    <string name="userSearch_errorRateLimited">Det var mycket sökande! Vänta en stund och försök igen.</string>
+    <string name="userSearch_errorSignedOut">Logga in för att söka efter medlemmar.</string>
+    <string name="userSearch_unknownMember">Medlem</string>
+    <string name="userSearch_openProfile">Öppna profil</string>
     <string name="nearby_liveSharerOnMap">%1$s delar live i närheten</string>
     <string name="nearby_unknownSharer">Någon i närheten</string>
     <string name="convoy_title">Konvojer</string>
