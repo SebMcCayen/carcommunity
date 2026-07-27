@@ -30,6 +30,7 @@ import { reportChatMessage } from './events/reportChatMessage';
 import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
+import { checkIn } from './events/checkIn';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
@@ -45,6 +46,14 @@ import {
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
 import { adminAdjust, adminReverse } from './points/adminPoints';
+import { recordDailyOpen } from './points/dailyOpen';
+import {
+  onAttendanceVerified,
+  onDriveSaved,
+  onIncidentConfirmed,
+  onLedgerEntryCreated,
+  onVehicleCreated,
+} from './points/economyTriggers';
 import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
@@ -232,6 +241,10 @@ export const events = {
   // Attendee roster: member-readable list of who RSVP'd (going/maybe/not_going),
   // identity joined + blocking applied server-side (events/listAttendees.ts).
   listAttendees,
+  // Attendance proof (Phase 20 points economy): a geofence + dwell position
+  // sample. Two taps ten minutes apart inside a 150 m fence verify attendance
+  // and earn `event_attend_verified` (events/checkIn.ts).
+  checkIn,
 };
 
 /**
@@ -312,10 +325,32 @@ export const badges = {
  * primitives (functions/src/points/ledger.ts) — never exposed as generic
  * endpoints. Wallet/ledger reads are direct owner reads of
  * pointsLedger/{uid} and its entries subcollection.
+ *
+ * Phase 20 adds the EARNING RULES on top of that ledger
+ * (points/points-economy-core.ts is the canonical rule table, cap arithmetic
+ * and streak maths; points/economy-award.ts is the single award door). All of
+ * it is server-authoritative: only `recordDailyOpen` is client-triggered —
+ * because "opened the app" leaves no other server footprint — and it takes no
+ * arguments, is rate-limited and is idempotent per Europe/Stockholm day.
+ * Everything else hangs off documents the backend already writes:
+ *   - points-onDriveSaved         rides/{rideId}                    -> drive_5km
+ *   - points-onIncidentConfirmed  incidents/{id}/confirmations/{uid} -> incident_report_confirmed
+ *   - points-onVehicleCreated     vehicles/{vehicleId}               -> garage_first_car
+ *   - points-onAttendanceVerified eventAttendance/{id}               -> event_attend_verified + event_host_success
+ *   - points-onLedgerEntryCreated pointsLedger/{uid}/entries/{id}    -> folds Kronjakt crowns into the daily cap
+ * `live_session_1km` has no such document (live positions are RTDB-only with
+ * no history by design), so points/liveDistance.ts is called inline by
+ * live.updatePosition from the session node it has already read.
  */
 export const points = {
   adminAdjust,
   adminReverse,
+  recordDailyOpen,
+  onDriveSaved,
+  onIncidentConfirmed,
+  onVehicleCreated,
+  onAttendanceVerified,
+  onLedgerEntryCreated,
 };
 
 /**

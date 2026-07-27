@@ -289,6 +289,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Events -> Firestore; attendee visibility)"
     },
     {
+      "name": "events.checkIn",
+      "domain": "events",
+      "description": "Records ONE position sample as proof of attendance at a published (or just-completed) event and, once the evidence is complete, marks eventAttendance/{eventId}__{uid} verified. Verification is GEOFENCE + DWELL, all measured server-side: each sample must be within 150 m of the event's own coordinates (haversine + a conservative GPS-accuracy buffer, reusing crownHunt/crown-hunt-geo.ts) and inside [startsAt - 30 min, endsAt + 30 min]; attendance needs at least two qualifying samples at least 10 minutes apart and at least 10 minutes of cumulative dwell (each gap credited at most 30 minutes). The client sends only { eventId, latitude, longitude, capturedAt, accuracyMeters?, platformIntegrityPassed? } - never a distance, a dwell or a point value - and capturedAt is freshness-checked against the server clock. Every sample runs through the same anti-fraud pipeline as a Kronjakt claim (crown-hunt-risk.ts evaluateClaimRisk: stale position, implausible jump vs the last trusted RTDB position, poor accuracy, attempts per minute); a score >= 60 records the sample as rejected and it contributes no dwell. Risk scores/reasons are backend-only and never returned. Rate-limited to 10 calls/minute per uid. No points are credited here - the points-onAttendanceVerified trigger awards event_attend_verified (50 KP, once per event) on the false->true edge, and event_host_success (75 KP) to the host once the event reaches 3 verified attendees. Intended client flow is two explicit taps ~10 min apart (one-shot GPS fixes, no background-location permission, no location trail), but the evaluation is written against a list of samples so periodic foreground posting works unchanged. Deployed via grouped export as events-checkIn (functions/src/events/checkIn.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/gamification-system.md (points economy - event attendance verification)"
+    },
+    {
       "name": "garage.addVehicle",
       "domain": "garage",
       "description": "Adds a vehicle to the caller's garage (max 5 per user, enforced transactionally). Schema: make/model/modelYear/powertrain/engineDescription/description/color plus registrationPlate — a DELIBERATELY PUBLIC, user-entered plate (Seb product decision) normalised server-side (trim/collapse-whitespace/uppercase, ≤12 chars, format-agnostic). VIN, insurance, and location remain unrepresentable because vehicles/{vehicleId} is authenticated-readable and those were never meant to be public. Deployed via grouped export as garage-addVehicle (functions/src/garage/manageVehicle.ts).",
@@ -386,6 +395,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (Points ledger -> Firestore transactions)"
+    },
+    {
+      "name": "points.recordDailyOpen",
+      "domain": "points",
+      "description": "Records the caller's first app open of the current Europe/Stockholm day and credits daily_open: 5 KP x the streak multiplier (1 + min(streak, 7) / 10, so 1.0x at streak 0 up to 1.7x at streak >= 7, where the streak is the run of consecutive local days ENDING YESTERDAY). Takes NO arguments (strict empty schema): the day, the streak and the award are all derived from the server clock and the stored pointsStreaks/{uid} document, so a client cannot supply a day, a streak or a point value. This is the ONLY client-triggered award in the economy - every other rule hangs off a document the backend already writes - so it is additionally rate-limited to 10 calls/minute per uid and is idempotent on the ledger key pe__daily_open__{uid}__{YYYY-MM-DD}: repeat calls on the same local day return alreadyCountedToday with pointsAwarded 0. Local days are computed via the IANA Europe/Stockholm zone (DST-correct), never UTC. The streak is advanced in its own transaction BEFORE the credit, so a member who has already hit the 300 KP daily cap keeps their streak even though the open pays nothing (dailyCapReached true). Deployed via grouped export as points-recordDailyOpen (functions/src/points/dailyOpen.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/gamification-system.md (points economy - daily open + streak)"
     },
     {
       "name": "partners.submitApplication",
