@@ -60,7 +60,10 @@ EXIF. Only a device can prove that.
     the next tier and your Kronpoäng. Open **another** member's profile: their earned
     badges and tiers must render (badges are public), and there must be **no**
     progress bars or counter numbers on that screen — the telemetry behind a badge
-    (streak, distance, meets) stays private to its owner.
+    (streak, distance, meets) is never shown publicly. `badgeProgress/{uid}` is
+    backend-only, denied to every client including its owner; the progress you see
+    on your OWN profile is derived client-side from reads the app already makes
+    (your drives, your garage), not from that document.
     Requires the `firebase deploy --only firestore:rules` that ships with this
     change; run against an un-deployed project the other member's wall correctly
     degrades to a neutral "not visible" note, which is not a bug.

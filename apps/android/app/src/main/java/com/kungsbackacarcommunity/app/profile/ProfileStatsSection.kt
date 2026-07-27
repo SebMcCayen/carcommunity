@@ -74,8 +74,11 @@ fun ProfileStatsSection(
             // have their own richer sections on this same profile
             // ([ProfileBadgesSection] shows the wall and the next rung,
             // [ProfilePointsSection] the balance and what earned it), and a
-            // second bare number would read as a duplicate. They are still part
-            // of [ProfileStatsSummary] because `hasActivity` is decided by them.
+            // second bare number would read as a duplicate. Both stay part of
+            // [ProfileStatsSummary] because the badge count feeds `hasActivity`
+            // (drives OR badges). The Kronpoäng balance deliberately does NOT:
+            // a brand-new member has a balance of 0 and would otherwise be shown
+            // a wall of zeroes instead of the encouraging empty state.
             summary.memberSinceMillis?.let { millis ->
                 StatRow(
                     stringResource(R.string.profile_statsMemberSince),
