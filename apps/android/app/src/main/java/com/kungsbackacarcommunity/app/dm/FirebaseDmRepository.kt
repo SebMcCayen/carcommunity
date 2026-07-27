@@ -8,10 +8,14 @@ import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
+import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import kotlin.coroutines.resume
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.combine
 
 /**
  * [DmRepository] backed by member-readable Firestore listeners plus the
@@ -29,13 +33,46 @@ import kotlinx.coroutines.flow.callbackFlow
  * conversation set; this relies on the `members` array-contains + `lastMessageAt`
  * descending composite index (firebase/firestore.indexes.json). Rows are
  * additionally sorted client-side via [DmMapper.sortConversations].
+ *
+ * BLOCKING: a blocked pair's thread disappears for BOTH parties.
+ *  - The THREAD listener needs nothing here: firebase/firestore.rules denies the
+ *    messages subcollection outright for a blocked pair (it can, because every
+ *    message in one conversation shares the same pair), and the existing
+ *    PERMISSION_DENIED branch below already renders that as an empty thread.
+ *  - The INBOX row is dropped here, client-side, because the inbox is a LIST
+ *    query and a Firestore rule cannot filter one per document without failing
+ *    the whole query. The document is therefore still delivered — but the
+ *    blocking-onBlockWrite trigger blanks its `lastMessage` preview while the
+ *    block stands (functions/src/dm/blockedConversation.ts), so the delivered
+ *    copy carries no counterparty content.
+ *
+ *    TWO independent signals drop that row, matching dm.listConversations on the
+ *    server: the caller's `blockVisibility` hidden set, and the `blockedPair`
+ *    marker stored on the conversation itself. The hidden set is
+ *    trigger-maintained (so briefly behind a fresh block) and stops growing at
+ *    MAX_HIDDEN_UIDS; the marker covers both gaps, and costs nothing because it
+ *    rides on a document the listener already receives.
  */
 class FirebaseDmRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
+    private val blockVisibility: BlockVisibilityRepository,
 ) : DmRepository {
 
-    override fun observeConversations(uid: String): Flow<DmConversationsState> = callbackFlow {
+    override fun observeConversations(uid: String): Flow<DmConversationsState> =
+        combine(observeRawConversations(uid), blockVisibility.observeHiddenUids()) { state, hidden ->
+            when (state) {
+                is DmConversationsState.Loaded ->
+                    DmConversationsState.Loaded(
+                        BlockVisibility.filterHiddenAuthors(state.conversations, hidden) {
+                            it.otherUser.uid
+                        },
+                    )
+                else -> state
+            }
+        }
+
+    private fun observeRawConversations(uid: String): Flow<DmConversationsState> = callbackFlow {
         val registration =
             firestore
                 .collection(CONVERSATIONS)
@@ -191,6 +228,7 @@ class FirebaseDmRepository private constructor(
             return FirebaseDmRepository(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(REGION),
+                FirebaseBlockVisibilityRepository.createOrEmpty(context),
             )
         }
     }
@@ -227,7 +265,13 @@ private fun DocumentSnapshot.toConversation(callerUid: String): DmConversation? 
             lastMessageSenderUid = lastMessage?.get("senderUid") as? String,
             lastMessageAtMillis = getTimestamp("lastMessageAt")?.toDate()?.time,
             unread = unread,
+            blockedPair = getBoolean("blockedPair") == true,
         )
+    // Dropped here rather than downstream so the row never reaches the UI: this
+    // is the marker signal that covers the window before the blockVisibility
+    // mirror catches up (and the case where the mirror is at its cap). See
+    // DmMapper.isHiddenByBlock.
+    if (DmMapper.isHiddenByBlock(doc)) return null
     return DmMapper.conversation(id, doc, callerUid)
 }
 

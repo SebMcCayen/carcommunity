@@ -47,6 +47,10 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
+import com.kungsbackacarcommunity.app.usersearch.MemberSearchField
+import com.kungsbackacarcommunity.app.usersearch.MemberSearchResultRow
+import com.kungsbackacarcommunity.app.usersearch.UserSearchState
+import com.kungsbackacarcommunity.app.usersearch.visibleResults
 
 /**
  * The Friends surface: add-by-nickname (with an ambiguity picker), incoming and
@@ -56,6 +60,15 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
  *
  * Each friend row's "Message" button opens the 1:1 DM thread with that friend
  * via [onMessageFriend] (the conversation is created on the first message).
+ *
+ * SEARCH: above the add-by-nickname form sits the live member typeahead
+ * ([searchQuery] / [searchState], driven by
+ * com.kungsbackacarcommunity.app.usersearch). It answers the question the
+ * add-by-nickname field cannot — "who IS on here whose name starts like this?" —
+ * because sending a request needs a nickname you already know, whereas the
+ * search shows you the candidates as you type. Its rows carry no actions; they
+ * open the member's profile via [onOpenMemberProfile], which is where adding,
+ * messaging and blocking live.
  */
 @Composable
 fun FriendsScreen(
@@ -63,6 +76,10 @@ fun FriendsScreen(
     addState: AddFriendState,
     actionError: FriendActionError?,
     busyRows: Set<String>,
+    searchQuery: String,
+    searchState: UserSearchState?,
+    onSearchQueryChange: (String) -> Unit,
+    onOpenMemberProfile: (String) -> Unit,
     onSend: (String) -> Unit,
     onChooseCandidate: (String) -> Unit,
     onDismissAdd: () -> Unit,
@@ -88,6 +105,42 @@ fun FriendsScreen(
         ) {
             item(key = "title") {
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
+            }
+
+            // A null state means no search backend is wired (a config-less
+            // build): the field is omitted entirely rather than rendered inert.
+            // A search box that accepts typing and can never answer is worse than
+            // no search box — it reads as "nobody matches" for every query.
+            if (searchState != null) {
+                item(key = "member-search") {
+                    MemberSearchField(
+                        query = searchQuery,
+                        onQueryChange = onSearchQueryChange,
+                        state = searchState,
+                    )
+                }
+            }
+
+            // Suggestion rows are LazyColumn items rather than a Column inside
+            // the search card, so a full page of matches composes lazily and each
+            // row keeps a stable key across keystrokes.
+            //
+            // Rendered for Searching TOO, from its carried `previous` list — that
+            // is the whole reason the coordinator carries one. Dropping the rows
+            // the moment the next keystroke lands would blank the list on every
+            // character and yank a row out from under a finger already moving to
+            // tap it; the field's own spinner is what signals the refresh.
+            val suggestions = searchState?.visibleResults().orEmpty()
+            if (suggestions.isNotEmpty()) {
+                item(key = "member-search-header") {
+                    SectionHeader(stringResource(R.string.userSearch_resultsTitle))
+                }
+                items(suggestions, key = { "member-search-${it.uid}" }) { member ->
+                    MemberSearchResultRow(
+                        member = member,
+                        onOpenProfile = { onOpenMemberProfile(member.uid) },
+                    )
+                }
             }
 
             item(key = "add-friend") {

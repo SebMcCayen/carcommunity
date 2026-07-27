@@ -113,6 +113,13 @@ data class DmConversationDoc(
     val lastMessageSenderUid: String?,
     val lastMessageAtMillis: Long?,
     val unread: Map<String, Long>,
+    /**
+     * Backend marker: this pair is blocked, so the `blocking-onBlockWrite`
+     * trigger has blanked the document's `lastMessage` preview
+     * (functions/src/dm/blockedConversation.ts). Defaults false, so a document
+     * written before the marker existed reads as visible rather than vanishing.
+     */
+    val blockedPair: Boolean = false,
 )
 
 /**
@@ -246,6 +253,25 @@ object DmMapper {
             lastMessageAtMillis = doc.lastMessageAtMillis,
         )
     }
+
+    /**
+     * True when this inbox row must not be rendered at all because the pair is
+     * blocked — a hidden DM thread is hidden for BOTH parties.
+     *
+     * This is the SECOND of two independent signals the inbox uses, mirroring
+     * `dm.listConversations` on the server. The other is the caller's
+     * `blockVisibility` hidden set, which is trigger-maintained and therefore
+     * eventually consistent, and which stops growing at MAX_HIDDEN_UIDS. This
+     * marker is written by the same trigger onto the conversation document
+     * itself, so it covers both of those gaps — and it matters because the
+     * trigger blanks `lastMessage` while leaving `lastMessageAt` set, so a row
+     * that slips through renders as a contentless entry still holding its place
+     * in the newest-first ordering.
+     *
+     * A pure predicate rather than an inline check in the Firebase repository,
+     * so the rule is unit-testable off-device.
+     */
+    fun isHiddenByBlock(doc: DmConversationDoc): Boolean = doc.blockedPair
 
     /**
      * Defensively re-sorts inbox rows newest-first. The server query already

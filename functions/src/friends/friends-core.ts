@@ -1,7 +1,8 @@
 /**
  * Friends domain core (pure logic): input parsing, id derivation, document
  * builders, and summary mappers for the friend-graph callables
- * (friend.sendRequest / friend.respondRequest / friend.remove / friend.list).
+ * (friend.sendRequest / friend.respondRequest / friend.cancelRequest /
+ * friend.remove / friend.list).
  *
  * Data model (all owner-readable, backend-only writes — firebase/firestore.rules):
  *  - friendRequests/{requestId} where requestId = friendRequestId(fromUid,
@@ -114,6 +115,24 @@ const removeFriendSchema = z
 
 export type RemoveFriendInput = z.infer<typeof removeFriendSchema>;
 
+/**
+ * cancelRequest addresses the request by its RECIPIENT, not by a requestId.
+ *
+ * The doc id is a deterministic hash of the ordered (fromUid, toUid) pair, so
+ * deriving it server-side from (caller, toUid) means a caller can only ever
+ * address their OWN outgoing request: no requestId belonging to anyone else can
+ * be named at all, which makes the authorization structural rather than an
+ * ownership check on a client-supplied id. It also makes the call idempotent by
+ * construction — the same { toUid } always resolves to the same document.
+ */
+const cancelRequestSchema = z
+  .object({
+    toUid: uidSchema,
+  })
+  .strict();
+
+export type CancelRequestInput = z.infer<typeof cancelRequestSchema>;
+
 const listSchema = z.object({}).strict();
 
 function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
@@ -128,6 +147,7 @@ export const SEND_REQUEST_EXPECTED =
   'Expected exactly one of { nickname } (a display name) or { toUid } (a user id).';
 export const RESPOND_REQUEST_EXPECTED = 'Expected { requestId, action } where action is accept|decline.';
 export const REMOVE_FRIEND_EXPECTED = 'Expected { friendUid } (a non-empty user id).';
+export const CANCEL_REQUEST_EXPECTED = 'Expected { toUid } (a non-empty user id).';
 
 export function parseSendRequestInput(data: unknown): ParseResult<SendRequestInput> {
   return parse(sendRequestSchema, data, SEND_REQUEST_EXPECTED);
@@ -139,6 +159,10 @@ export function parseRespondRequestInput(data: unknown): ParseResult<RespondRequ
 
 export function parseRemoveFriendInput(data: unknown): ParseResult<RemoveFriendInput> {
   return parse(removeFriendSchema, data, REMOVE_FRIEND_EXPECTED);
+}
+
+export function parseCancelRequestInput(data: unknown): ParseResult<CancelRequestInput> {
+  return parse(cancelRequestSchema, data, CANCEL_REQUEST_EXPECTED);
 }
 
 export function parseListInput(data: unknown): ParseResult<Record<string, never>> {

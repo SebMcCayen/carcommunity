@@ -140,6 +140,51 @@ service cloud.firestore {
         && validUserPrivateFields(keys);
     }
 
+    // ---- DM message read gate (membership + mutual block) --------------------
+    // This is a CONFIDENTIALITY boundary, so it FAILS CLOSED: the shape of the
+    // conversation document is validated before the counterparty is derived from
+    // it, rather than assumed. A malformed `members` (not a list, not exactly two
+    // entries, or non-string entries) denies the read outright instead of
+    // producing a counterparty that might be the wrong uid — with three members,
+    // for example, "whichever isn't me" is ambiguous and could resolve to someone
+    // the caller has NOT blocked, silently reopening a blocked thread.
+    //
+    // Only conversations/{pairId} documents written by dm.sendMessage exist (no
+    // client writes), and it always writes exactly two uids, so this is a guard
+    // against a future shape change rather than a live hole. Denying is the safe
+    // side: a genuinely broken conversation is unreadable, not leaky.
+    //
+    // `get()` results are cached within a request, so the membership check and
+    // the counterparty derivation share ONE read: 1 get + 2 exists = 3 of the
+    // 10-document-access budget a query gets.
+    function dmMembers(pairId) {
+      return get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+    }
+
+    function dmWellFormed(members) {
+      return members is list
+        && members.size() == 2
+        && members[0] is string
+        && members[1] is string;
+    }
+
+    // True when NEITHER party has blocked the other. Both directions are checked
+    // because blocking is mutual invisibility: the blocker stops seeing the
+    // blocked party's messages AND vice versa.
+    function dmNotBlockedWith(other) {
+      return !exists(/databases/$(database)/documents/userBlocks/$(request.auth.uid)/blocked/$(other))
+        && !exists(/databases/$(database)/documents/userBlocks/$(other)/blocked/$(request.auth.uid));
+    }
+
+    // The whole gate for conversations/{pairId}/messages: a well-formed two-party
+    // conversation, the caller is one of the two, and the pair is not blocked.
+    function dmMessagesReadable(pairId) {
+      let members = dmMembers(pairId);
+      return dmWellFormed(members)
+        && request.auth.uid in members
+        && dmNotBlockedWith(members[0] == request.auth.uid ? members[1] : members[0]);
+    }
+
     // -------------------------------------------------------------------------
     // Deny-all catch-all (rules below override for specific paths)
     // -------------------------------------------------------------------------
@@ -169,9 +214,17 @@ service cloud.firestore {
       // exposes other users' badges. Admin workflows use the Admin SDK /
       // callables — no privileged client-side read (same rule as
       // userPrivate).
+      // NOTE (tiered ladders): read stays OWNER-ONLY. Showing a member's
+      // badges on their PUBLIC profile would be a separate, deliberate
+      // privacy decision (badges leak activity: streaks, distance driven,
+      // events attended) and is not made here.
       match /badges/{badgeKey} {
         allow read: if isOwner(userId);
-        // No client writes: awards are backend-only and never revoked here.
+        // No client writes — for the tiered ladders too. A tier is derived
+        // exclusively from server-verified counters by the badges Firestore
+        // triggers (functions/src/badges/progressTriggers.ts): there is no
+        // callable and no client write path by which one could be forged,
+        // and a badge is never revoked here.
       }
 
       // Saved partner offers (Phase 9i) — a pure member bookmark. Document
@@ -442,6 +495,30 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // blockVisibility – the SYMMETRIC mirror of the block graph
+    // (functions/src/blocking/block-visibility.ts), maintained solely by the
+    // blocking-onBlockWrite trigger.
+    //
+    // blockVisibility/{uid}.hiddenUids is the UNION of "uids this user blocked"
+    // and "uids that blocked this user". It exists because the chat surfaces
+    // need the second half and userBlocks cannot give it to them: that half
+    // lives in the OTHER party's owner-read-only subcollection, so the client
+    // cannot read it at all and the server can only reach it with one point read
+    // per candidate. One document read (or one snapshot listener) replaces that.
+    //
+    // Owner-only read, no client writes. The document carries uids and nothing
+    // else — no displayName, no direction, no timestamp — so it never says who
+    // blocked whom, only that the pair is mutually hidden. That is still a
+    // deliberate, documented weakening of "a block never reveals itself to its
+    // target": the product requires the blocked party to stop seeing the
+    // blocker, which is observable from the missing messages regardless.
+    // -------------------------------------------------------------------------
+    match /blockVisibility/{userId} {
+      allow read: if isOwner(userId);
+      // No client writes: the blocking-onBlockWrite trigger only.
+    }
+
+    // -------------------------------------------------------------------------
     // Friends – friend graph (friend.sendRequest / respondRequest / remove /
     // list). Messaging/DMs are a SEPARATE follow-up, not modelled here.
     //
@@ -485,13 +562,31 @@ service cloud.firestore {
     // a parent lookup.
     // -------------------------------------------------------------------------
     match /conversations/{pairId} {
+      // NOTE: no block check here, deliberately. The inbox is a LIST query
+      // (members array-contains uid), and Firestore rules are not filters — a
+      // condition that varies per document fails the ENTIRE query rather than
+      // dropping the offending row, so a block gate here would break the inbox
+      // of anyone who has one blocked thread. The blocked row is instead
+      // dropped by dm.listConversations (server) and by the client's inbox
+      // listener, and the trigger blanks the document's `lastMessage` preview
+      // (functions/src/dm/blockedConversation.ts) so the copy that is still
+      // delivered carries no counterparty content.
       allow read: if isAuthenticated() && request.auth.uid in resource.data.members;
       // No client writes: dm.* callables only.
 
       match /messages/{messageId} {
-        allow read: if isAuthenticated()
-          && request.auth.uid in
-            get(/databases/$(database)/documents/conversations/$(pairId)).data.members;
+        // Blocking IS rules-enforced here, and this is the one chat surface
+        // where it can be: every message in a conversation belongs to the SAME
+        // pair, so the block condition is CONSTANT across the query and the
+        // rules-are-not-filters problem above does not arise — the whole listen
+        // is denied, which is exactly the intent. The Android thread listener
+        // already renders PERMISSION_DENIED as an empty thread.
+        //
+        // Both directions: the caller having blocked the counterparty, or the
+        // counterparty having blocked the caller, each hides the thread.
+        // dmMessagesReadable also carries the membership check and fails closed
+        // on a malformed conversation — see its definition above.
+        allow read: if isAuthenticated() && dmMessagesReadable(pairId);
         // No client writes: dm.sendMessage callable only.
       }
     }
@@ -737,6 +832,20 @@ service cloud.firestore {
     // liveSessions / crownHuntAwardGuards.)
     // -------------------------------------------------------------------------
     match /incidentListRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // memberSearchRateLimits – per-user fixed-window counter for
+    // userSearch.members (the member typeahead). Same shape and same reasoning
+    // as incidentListRateLimits above: deterministic doc id
+    // `{uid}_{epochMinute}`, read by id and bumped with FieldValue.increment via
+    // the Admin SDK before the displayNameLower range scan, `expireAt` carrying
+    // a Firestore TTL policy so spent windows self-delete. Fully backend-only —
+    // a member must not be able to inspect or reset their own throttle, which is
+    // the entire point of putting the search behind a callable.
+    // -------------------------------------------------------------------------
+    match /memberSearchRateLimits/{windowId} {
       allow read, write: if false;
     }
 
@@ -1035,10 +1144,27 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
-    // badgeProgress – backend-only attendance counters (Phase 9f)
-    // Maintained by events.complete; feeds first_event / five_events.
+    // badgeProgress – backend-only achievement counters (Phase 9f + ladders)
+    //
+    // Maintained by events.complete (completedEventsAttended → first_event /
+    // five_events / Träffräv) and by the badges Firestore triggers
+    // (functions/src/badges/progressTriggers.ts): crownsCollected,
+    // lifetimeDistanceMeters, bestDayStreak, convoysLed, vehiclesInGarage.
+    //
+    // DENIED TO EVERY CLIENT — read included. This is the anti-abuse core of
+    // the tiered badges: every ladder threshold is tested against these
+    // numbers, so if a client could write one it could mint any badge, and the
+    // Admin SDK (which bypasses rules) is the only writer.
     // -------------------------------------------------------------------------
     match /badgeProgress/{userId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // badgeSweepState – backend-only cursor for the badges-evaluateBacklog
+    // scheduled sweep (functions/src/badges/scheduled.ts). No client access.
+    // -------------------------------------------------------------------------
+    match /badgeSweepState/{docId} {
       allow read, write: if false;
     }
 

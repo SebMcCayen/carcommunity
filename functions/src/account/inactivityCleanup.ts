@@ -34,9 +34,12 @@
  *    - delete: DISABLE the Auth user + revoke its refresh tokens FIRST (fail-safe
  *      lockdown, mirroring account.deleteAccount), then REUSE the account-deletion
  *      routine (purgeUserData from account/scheduled.ts) to purge Firestore trees,
- *      owned docs, storage, and the Auth user, then retain an
- *      accountDeletionRequests proof-of-deletion record (reason
- *      inactivity_auto_cleanup).
+ *      owned docs, social-graph mirrors (friend rows on other users, friend
+ *      requests, convoy membership), chat, storage, and the Auth user, then
+ *      retain an accountDeletionRequests proof-of-deletion record (reason
+ *      inactivity_auto_cleanup). Reusing purgeUserData is deliberate and load-
+ *      bearing: it keeps this path and account-purgeDeleted erasing EXACTLY the
+ *      same set, so a gap can never be closed on one path only.
  *    - would_delete: the hard-delete gate is closed — logged, no mutation.
  *
  * CRITICAL GATE. `delete` is only ever returned when deletionEnabled is true,

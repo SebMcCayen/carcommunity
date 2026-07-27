@@ -45,6 +45,15 @@ import {
 } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
+import {
+  onBadgeProgressWritten,
+  onConvoyWritten as onConvoyWrittenForBadges,
+  onCrownClaimWritten,
+  onRideCreated,
+  onUserLifecycleWritten,
+  onVehicleCreated as onVehicleCreatedForBadges,
+} from './badges/progressTriggers';
+import { evaluateBacklog as badgesEvaluateBacklog } from './badges/scheduled';
 import { adminAdjust, adminReverse } from './points/adminPoints';
 import { recordDailyOpen } from './points/dailyOpen';
 import {
@@ -109,11 +118,14 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
+  cancelRequest as cancelFriendRequest,
   list as listFriends,
   remove as removeFriend,
   respondRequest as respondFriendRequest,
   sendRequest as sendFriendRequest,
 } from './friends/manageFriends';
+import { searchMembers } from './users/searchMembers';
+import { onUserProfileWrite } from './users/onUserProfileWrite';
 import {
   getMessages as dmGetMessages,
   listConversations as dmListConversations,
@@ -302,18 +314,35 @@ export const garage = {
 };
 
 /**
- * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`).
+ * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`,
+ * `badges-adminSummary`, the six Firestore triggers below and the scheduled
+ * `badges-evaluateBacklog`).
  *
  * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
- * writes). Automatic badges are evaluated inline by their source domains
+ * writes). Flat badges are evaluated inline by their source domains
  * (garage.addVehicle → garage_created; events.complete → first_event /
  * five_events via badgeProgress counters); helpful_member is the only
  * manually awardable badge (contracts/functions/functions.json:
  * badges.awardHelpfulMember).
+ *
+ * The six TIERED LADDERS (Kronjägare / Vägfarare / Träffräv / Trogen /
+ * Konvojledare / Samlare — badges/badge-core.ts) are awarded from TRIGGERS, not
+ * callables, so a tier cannot be forged: five source triggers bump
+ * server-verified counters on badgeProgress/{uid} (a `risk_review` Kronjakt
+ * claim never counts), and the single badges-onBadgeProgressWritten trigger
+ * evaluates every ladder for that one member. badges-evaluateBacklog is the
+ * bounded, cursor-paged self-healing sweep. See badges/progressTriggers.ts.
  */
 export const badges = {
   awardHelpfulMember,
   adminSummary: badgesAdminSummary,
+  onBadgeProgressWritten,
+  onCrownClaimWritten,
+  onRideCreated,
+  onConvoyWritten: onConvoyWrittenForBadges,
+  onVehicleCreated: onVehicleCreatedForBadges,
+  onUserLifecycleWritten,
+  evaluateBacklog: badgesEvaluateBacklog,
 };
 
 /**
@@ -682,10 +711,11 @@ export const groupDrive = {
 
 /**
  * Friends domain (grouped export → deployed as `friend-sendRequest`,
- * `friend-respondRequest`, `friend-remove`, `friend-list`).
+ * `friend-respondRequest`, `friend-cancelRequest`, `friend-remove`,
+ * `friend-list`).
  *
  * The friend-GRAPH foundation (contracts/functions/functions.json:
- * friend.sendRequest/respondRequest/remove/list) — messaging/DMs are a
+ * friend.sendRequest/respondRequest/cancelRequest/remove/list) — messaging/DMs are a
  * separate follow-up and are NOT part of this domain. Model:
  * friendRequests/{requestId} — one directional request per ordered pair, keyed
  * by a deterministic hash of the (fromUid, toUid) pair (friendRequestId in
@@ -698,13 +728,45 @@ export const groupDrive = {
  * client disambiguation via { toUid }. Blocking is honoured both ways
  * (neutral NOT_ADDABLE); an incoming pending request is auto-accepted when
  * the caller sends the reverse. Established friendship — not request status —
- * is the source of truth for "already friends".
+ * is the source of truth for "already friends". A pending request is
+ * withdrawable by its SENDER via cancelRequest, which addresses it by RECIPIENT
+ * and derives the doc id server-side (so no other member's request can be named
+ * or probed) and deletes it, leaving the pair free to send again later.
  */
 export const friend = {
   sendRequest: sendFriendRequest,
   respondRequest: respondFriendRequest,
+  cancelRequest: cancelFriendRequest,
   remove: removeFriend,
   list: listFriends,
+};
+
+/**
+ * User-search domain (grouped export → deployed as `userSearch-members` and the
+ * `userSearch-onUserProfileWrite` Firestore trigger).
+ *
+ * Powers the "find a person" typeahead on the Friends surface
+ * (contracts/functions/functions.json: userSearch.members). Case-insensitive
+ * PREFIX matching over the denormalized `users/{uid}.displayNameLower` key —
+ * typing 'gt' finds 'gt_86'; a mid-word substring like '86' does NOT match,
+ * because Firestore offers no substring operator and an n-gram token index is
+ * deliberately not built (functions/src/users/user-search-core.ts).
+ *
+ * Server-side rather than a client query even though `users/{uid}` is
+ * authenticated-readable: only a callable can enforce a minimum query length, a
+ * hard result cap with no cursor, a per-user rate limit, an allowlisted
+ * three-field projection (uid/displayName/avatarPath — never email or any
+ * backend-managed flag), and either-way block exclusion. A client-side range
+ * query would be a paginated member-directory dump.
+ *
+ * onUserProfileWrite re-derives `displayNameLower` from `displayName` on every
+ * users/{uid} write, whoever wrote it — the OWNER may update `displayName`
+ * directly under firestore.rules but cannot write the key, so without this a
+ * renamed member stays findable only under their OLD nickname.
+ */
+export const userSearch = {
+  members: searchMembers,
+  onUserProfileWrite,
 };
 
 /**
@@ -801,8 +863,11 @@ export const convoy = {
  * aggregate — a lightweight per-user last-read marker lives at
  * userPrivate/{uid}.communityChatLastReadAt (owner-only readable) so the client
  * derives the unread dot from its newest-message live listener (O(1) per user).
- * Blocking is NOT filtered server-side (global town square — a client display
- * concern). See functions/src/chatchannels/chat-core.ts.
+ * Blocking IS filtered, in BOTH directions, off the symmetric
+ * blockVisibility/{uid}.hiddenUids mirror — one document read per page in
+ * communityChat.list, and the same mirror drives the client's live-window filter
+ * (a Firestore rule cannot filter a list query per document). See
+ * functions/src/chatchannels/chat-core.ts and blocking/block-visibility.ts.
  *
  * There is deliberately NO per-message notification producer (that would be an
  * O(members × messages) fan-out on the town square). Instead the channel notifies

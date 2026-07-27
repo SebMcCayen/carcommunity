@@ -6,6 +6,7 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
+import com.kungsbackacarcommunity.app.appcheck.AppCheckDebugSecret
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.push.PushChannels
@@ -15,8 +16,16 @@ import com.kungsbackacarcommunity.app.push.PushChannels
  * early as possible so every SDK call carries an App Check token.
  *
  * - Release builds attest with Play Integrity.
- * - Debug builds use the debug provider (token printed to logcat on
- *   first run; register it in the Firebase console / emulator).
+ * - Debug builds use the debug provider, seeded with a STABLE secret from
+ *   `BuildConfig.APP_CHECK_DEBUG_TOKEN` (set via `appcheck.debugToken` in the
+ *   gitignored `apps/android/local.properties`). Without it the SDK generates
+ *   a random secret that is wiped on every uninstall/reinstall, so each debug
+ *   rebuild produces an unregistered token and every App-Check-gated callable
+ *   — "report an issue" included — fails with `UNAUTHENTICATED` until the new
+ *   token is registered by hand. With it, one console registration survives
+ *   every rebuild. When the value is blank (CI, fresh clones) nothing is
+ *   seeded and the SDK falls back to its generated token. See
+ *   docs/app-check.md for the one-time setup.
  *
  * Guarded like the rest of the Firebase wiring: when google-services.json
  * is absent (CI/local validation builds), FirebaseApp never initializes
@@ -48,6 +57,15 @@ class KccApplication : Application() {
 
         val appCheck = FirebaseAppCheck.getInstance(firebaseApp)
         if (BuildConfig.DEBUG) {
+            // MUST precede installAppCheckProviderFactory: the debug provider
+            // reads the store the first time it resolves a secret, and only
+            // generates its own when the store is empty.
+            AppCheckDebugSecret.seedIfConfigured(
+                context = this,
+                firebaseApp = firebaseApp,
+                isDebugBuild = BuildConfig.DEBUG,
+                rawToken = BuildConfig.APP_CHECK_DEBUG_TOKEN,
+            )
             appCheck.installAppCheckProviderFactory(
                 DebugAppCheckProviderFactory.getInstance(),
             )

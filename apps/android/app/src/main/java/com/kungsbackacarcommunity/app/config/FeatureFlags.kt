@@ -23,6 +23,22 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
 
     /** Phase 9j privacy gate: default OFF; also requires explicit opt-in. */
     PARTNER_INSIGHTS_PASS_BY("partnerInsightsPassBy", false),
+
+    /**
+     * The AUTO-SPAWNED half of Kronjakt — crowns that appear by themselves and
+     * are collected while parked. Default OFF, and unusually for this enum that
+     * default is load-bearing rather than cautious.
+     *
+     * A hand-placed Kronjakt point carries a named admin's confirmation that
+     * that exact spot is safe to stop at; an automatically-placed crown cannot.
+     * Until the allow-list of approved areas is populated and the operator
+     * deliberately switches this on, the client issues NO `crownSpawns` queries
+     * and draws no crown layer at all — see `CrownSpawnController`.
+     *
+     * [CROWN_HUNT] gates the feature as a whole; this gates only the automatic
+     * half, so the hand-placed points keep working with this off.
+     */
+    CROWN_HUNT_SPAWN("crownHuntSpawn", false),
 }
 
 class FeatureFlags private constructor(private val values: Map<FeatureFlag, Boolean>) {

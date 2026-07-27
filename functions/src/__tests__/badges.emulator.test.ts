@@ -30,8 +30,10 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { BADGE_CATALOG_ORDER } from '../badges/badge-core';
+import { runBadgeBacklogSweep } from '../badges/scheduled';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -274,7 +276,11 @@ describe('badges-adminSummary', () => {
       }
     ).summary;
 
-    expect(summary.map((s) => s.key)).toEqual([
+    // Catalog order: the five historic milestones first, then the 22 ladder
+    // rungs bottom-to-top (badge-core.ts::BADGE_CATALOG_ORDER). 22 not 24:
+    // Trogen and Samlare each stop at Guld.
+    expect(summary.map((s) => s.key)).toEqual([...BADGE_CATALOG_ORDER]);
+    expect(summary.slice(0, 5).map((s) => s.key)).toEqual([
       'first_event',
       'five_events',
       'helpful_member',
@@ -293,4 +299,166 @@ describe('badges-adminSummary', () => {
     // Aggregate only — never a per-user leaderboard.
     expect(result.data).not.toHaveProperty('users');
   });
+});
+
+/**
+ * Tiered ladders — the trigger chain end to end.
+ *
+ * These exercise what the pure unit tests (badge-tiers.test.ts) cannot: that a
+ * counter write really does reach the evaluator through
+ * badges-onBadgeProgressWritten, that the Kronpoäng credit lands in the ledger
+ * exactly once, and that a risk_review Kronjakt claim is excluded by the
+ * badges-onCrownClaimWritten trigger rather than only by the pure guard.
+ */
+describe('tiered badge ladders', () => {
+  const ledgerEntries = (uid: string) =>
+    adminDb.collection('pointsLedger').doc(uid).collection('entries');
+
+  it('awards every tier crossed in one jump, credits points once, and is idempotent', async () => {
+    const climber = await createProvisionedUser('badges-tier-climb');
+    await adminDb.collection('users').doc(climber.uid).set({ activeMember: true }, { merge: true });
+
+    // A counter write is the ONLY input — no callable exists for tiers.
+    await adminDb
+      .collection('badgeProgress')
+      .doc(climber.uid)
+      .set({ crownsCollected: 300, updatedAt: new Date() }, { merge: true });
+
+    // 300 crowns crosses Brons (10), Silver (50) AND Guld (250) at once.
+    await pollUntil(async () => {
+      const snap = await badgeDoc(climber.uid, 'kronjagare_guld').get();
+      return snap.exists ? snap.data() : undefined;
+    });
+    for (const key of ['kronjagare_brons', 'kronjagare_silver', 'kronjagare_guld']) {
+      const snap = await badgeDoc(climber.uid, key).get();
+      expect(snap.exists).toBe(true);
+      expect(snap.data()!.ladder).toBe('kronjagare');
+      expect(snap.data()!.source).toBe('automatic');
+    }
+    // Platina (1000) is not reached.
+    expect((await badgeDoc(climber.uid, 'kronjagare_platina').get()).exists).toBe(false);
+
+    // 25 + 75 + 200 Kronpoäng, on deterministic idempotency keys.
+    await pollUntil(async () => {
+      const ledger = await adminDb.collection('pointsLedger').doc(climber.uid).get();
+      return ledger.data()?.balance === 300 ? true : undefined;
+    });
+    for (const key of ['kronjagare_brons', 'kronjagare_silver', 'kronjagare_guld']) {
+      const entry = await ledgerEntries(climber.uid).doc(`badge_award_${key}`).get();
+      expect(entry.exists).toBe(true);
+      expect(entry.data()!.source).toBe('badge');
+    }
+    const entriesAfterFirst = (await ledgerEntries(climber.uid).get()).size;
+    expect(entriesAfterFirst).toBe(3);
+
+    // Re-evaluation must be safe: touch the counter document again (new
+    // updatedAt guarantees a real write, so the trigger definitely re-fires)
+    // and confirm nothing is awarded or credited twice.
+    const brons = (await badgeDoc(climber.uid, 'kronjagare_brons').get()).data()!.awardedAt;
+    await adminDb
+      .collection('badgeProgress')
+      .doc(climber.uid)
+      .set({ crownsCollected: 300, updatedAt: new Date() }, { merge: true });
+    await new Promise((resolve) => setTimeout(resolve, 3_000));
+    expect((await badgeDoc(climber.uid, 'kronjagare_brons').get()).data()!.awardedAt).toEqual(
+      brons,
+    );
+    expect((await ledgerEntries(climber.uid).get()).size).toBe(entriesAfterFirst);
+    expect((await adminDb.collection('pointsLedger').doc(climber.uid).get()).data()!.balance).toBe(
+      300,
+    );
+  }, 120_000);
+
+  it('never counts a risk_review Kronjakt claim toward Kronjägare', async () => {
+    const hunter = await createProvisionedUser('badges-tier-risk');
+    await adminDb.collection('users').doc(hunter.uid).set({ activeMember: true }, { merge: true });
+
+    // One claim the anti-fraud path sent to review, plus exactly ten awarded.
+    await adminDb.collection('crownHuntClaims').doc(`${hunter.uid}__risk`).set({
+      userId: hunter.uid,
+      pointId: 'p-risk',
+      result: 'risk_review',
+      claimedAt: new Date(),
+    });
+    for (let index = 0; index < 10; index += 1) {
+      await adminDb.collection('crownHuntClaims').doc(`${hunter.uid}__ok${index}`).set({
+        userId: hunter.uid,
+        pointId: `p-${index}`,
+        result: 'awarded',
+        claimedAt: new Date(),
+      });
+    }
+
+    await pollUntil(async () => {
+      const snap = await badgeDoc(hunter.uid, 'kronjagare_brons').get();
+      return snap.exists ? true : undefined;
+    });
+    // Exactly ten — the risk_review claim contributed nothing.
+    await pollUntil(async () => {
+      const progress = await adminDb.collection('badgeProgress').doc(hunter.uid).get();
+      return progress.data()?.crownsCollected === 10 ? true : undefined;
+    });
+    expect(
+      (await adminDb.collection('badgeProgress').doc(hunter.uid).get()).data()!.crownsCollected,
+    ).toBe(10);
+  }, 120_000);
+
+  /**
+   * The backlog sweep is the ONLY path by which a garage that predates the
+   * ladders ever earns a Samlare tier: `vehiclesInGarage` is a snapshot counter
+   * re-derived on a vehicle CREATE, so a member already sitting at the
+   * five-vehicle cap can never fire that trigger again. Without the
+   * reconciliation step in badges/scheduled.ts they would hold a full garage
+   * and no Samlare badge, forever.
+   */
+  it('back-fills Samlare for a garage that predates the ladders', async () => {
+    const collector = await createProvisionedUser('badges-tier-samlare');
+    await adminDb
+      .collection('users')
+      .doc(collector.uid)
+      .set({ activeMember: true }, { merge: true });
+
+    for (let index = 0; index < 3; index += 1) {
+      await adminDb
+        .collection('vehicles')
+        .doc(`${collector.uid}__v${index}`)
+        .set({ userId: collector.uid, make: 'Volvo', model: `240-${index}` });
+    }
+    // Let onVehicleCreated settle, then rewind to the pre-ladders state: the
+    // counter never existed and no Samlare badge was ever awarded.
+    await pollUntil(async () => {
+      const snap = await badgeDoc(collector.uid, 'samlare_silver').get();
+      return snap.exists ? true : undefined;
+    });
+    await adminDb
+      .collection('badgeProgress')
+      .doc(collector.uid)
+      .set({ vehiclesInGarage: FieldValue.delete() }, { merge: true });
+    await badgeDoc(collector.uid, 'samlare_brons').delete();
+    await badgeDoc(collector.uid, 'samlare_silver').delete();
+    expect((await badgeDoc(collector.uid, 'samlare_brons').get()).exists).toBe(false);
+
+    // The sweep pages through `badgeProgress` from a shared cursor, so reset it
+    // and run until it has wrapped at least once — that guarantees this member
+    // was visited regardless of where a previous test left the cursor.
+    await adminDb.collection('badgeSweepState').doc('backlog').delete();
+    for (let pass = 0; pass < 10; pass += 1) {
+      const { wrapped } = await runBadgeBacklogSweep();
+      if (wrapped) {
+        break;
+      }
+    }
+
+    // Re-derived to 3 → Brons (1) and Silver (3), but not Guld (5).
+    await pollUntil(async () => {
+      const snap = await badgeDoc(collector.uid, 'samlare_silver').get();
+      return snap.exists ? true : undefined;
+    });
+    expect((await badgeDoc(collector.uid, 'samlare_brons').get()).exists).toBe(true);
+    expect((await badgeDoc(collector.uid, 'samlare_guld').get()).exists).toBe(false);
+    expect(
+      (await adminDb.collection('badgeProgress').doc(collector.uid).get()).data()!
+        .vehiclesInGarage,
+    ).toBe(3);
+  }, 120_000);
 });
