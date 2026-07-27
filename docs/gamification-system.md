@@ -32,7 +32,7 @@ Two reasons, both load-bearing:
 1. **Safety.** A points system that pays out for speed is a system that pays people to drive dangerously. There is no safe way to A/B test that.
 2. **Brand differentiation.** Competitor X gamifies driving behaviour. Our stance — that a car community is about the cars, the meets and the people, not about how fast you went — is a deliberate market position, not an oversight. It is also the reason we can market to owners' clubs, insurers and families without a reputational asterisk.
 
-This constraint is already encoded in the codebase: `functions/src/drives/drive-calculations.ts` has an explicit "No top-speed calculation or storage. No driving-quality scores." rule in its header, and `functions/src/badges/badge-core.ts` states "no speed/distance/racing badges; nothing may encourage unsafe driving."
+This constraint is already encoded in the codebase: `functions/src/drives/drive-calculations.ts` has an explicit "No top-speed calculation or storage. No driving-quality scores." rule in its header, and `functions/src/badges/badge-core.ts` states that no badge — in wording or artwork — rewards speed. (That rule was originally worded "no speed/distance/racing badges"; it was corrected when Vägfarare shipped, since Vägfarare *is* a distance ladder. The binding constraint is speed, per Q3.)
 
 > **Note on the distance badges proposed in §7.** They are *lifetime milestone* badges, not per-kilometre payouts. The marginal KP for one more kilometre is zero once the (capped) daily distance award is taken. See §5.4 and §7.2 for why that keeps them inside the spirit of the rule, and open question **Q3** for Seb's call on whether they belong at all.
 
@@ -113,7 +113,7 @@ The proposed 75 m collect radius and 10/25/100/500 KP rewards all sit comfortabl
 `functions/src/points/points-core.ts` + `ledger.ts` already give us exactly what a gamification economy needs:
 
 - Transaction types: `earn`, `spend`, `adjustment_credit`, `adjustment_debit`, `reversal`.
-- Sources: `badge`, `event`, `garage`, `admin_adjustment`, `system`, `crown_hunt` (plus a deprecated `future_crown_hunt` kept only for legacy rows). **The enum was always complete; the writers were the gap.** §5 shipped the callers, so `event`, `garage` and `system` are now written by the economy rule table (`points-economy-core.ts`), alongside the pre-existing `crown_hunt` (both crown paths) and `admin_adjustment`. **`badge` is still declared and still unwritten** — the §7 ladders are unbuilt. No enum change was needed, exactly as predicted.
+- Sources: `badge`, `event`, `garage`, `admin_adjustment`, `system`, `crown_hunt` (plus a deprecated `future_crown_hunt` kept only for legacy rows). **The enum was always complete; the writers were the gap — and that gap is now closed.** §5 shipped the economy callers, so `event`, `garage` and `system` are written by the economy rule table (`points-economy-core.ts`), alongside the pre-existing `crown_hunt` (both crown paths) and `admin_adjustment`. §7's ladders supply the last one: `badge` is written by `badges/tierAwards.ts` for the tier milestones. Every source now has a writer, and no enum change was ever needed — exactly as predicted.
 - Idempotency key **is** the entry document ID *when one is supplied*, so a replayed award is a transactional no-op that returns the original entry. The key is **optional** and falls back to an auto-ID, so this is a property of well-behaved callers, not an invariant of the ledger — see §5.5.
 - An `AtomicReadGuard` hook that lets a caller run reads *inside* the award transaction and abort it — this is how the Kronjakt daily cap is enforced without a race, and it is the same mechanism every cap in §5 will use.
 
@@ -129,7 +129,7 @@ Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): c
 
 ### 1.3 Badges — built, but flat and thin
 
-`functions/src/badges/badge-core.ts` has exactly **five** badges, all single-tier:
+`functions/src/badges/badge-core.ts` originally had exactly **five** badges, all single-tier. They are still present and unchanged, and are now joined by the 22 tiered rungs of §7:
 
 | Key | Swedish name | Automatic? |
 |---|---|---|
@@ -139,7 +139,7 @@ Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): c
 | `early_member` | Tidig medlem | yes |
 | `garage_created` | Garageprofil skapad | yes |
 
-There is no progression, no tiering, no crown-related badge, and no relationship at all between badges and Kronpoäng. Event attendance uses a deliberately conservative proxy — a `going` RSVP on an event that reaches `completed` — counted on a backend-only `badgeProgress/{uid}` document. That proxy is **not** presence verification; §6 adds real verification and keeps the proxy as the fallback.
+At the time this document was first written there was no progression, no tiering, no crown-related badge and no relationship at all between badges and Kronpoäng; §7 has since shipped all four. Event attendance uses a deliberately conservative proxy — a `going` RSVP on an event that reaches `completed` — counted on a backend-only `badgeProgress/{uid}` document. That proxy is **not** presence verification; §6 adds real verification and keeps the proxy as the fallback.
 
 ### 1.4 Drives — distance exists, speed deliberately does not
 
@@ -549,11 +549,20 @@ The proxy path awards **badge progress but not `event_attend_verified` KP.** Oth
 
 ## 7. Badges (Märken)
 
-> **STATUS: the ladders are PROPOSED.** What exists is the five flat badges in §1.3 — `BadgeDefinition` in `badge-core.ts` has no tier field, and there is no badge↔KP link of any kind. Note in particular that **no code anywhere currently writes a ledger entry with `source: 'badge'`.** The ledger now has several writers — `submitClaim.ts` and `claimSpawn.ts` (`crown_hunt`), `adminPoints.ts` (`admin_adjustment`), and the §5 award engine (`event`, `garage`, `system`) — but none of them writes `badge`. The source *value* is valid; the writer does not exist.
+> **STATUS: BUILT.** The ladders below are implemented in `functions/src/badges/` — `BadgeDefinition` carries `ladder` / `tier` / `metric` / `threshold`, and `badges/tierAwards.ts` credits the KP milestone through the ledger with `source: 'badge'` on a deterministic `badge_award_{key}` idempotency key. Awarding is trigger-driven from server-verified counters on the backend-only `badgeProgress/{uid}` document; there is deliberately **no callable**, so a tier cannot be requested by a client. This section is now a description of the system, not a proposal — keep it and the catalog in step.
 
 ### 7.1 Structure
 
-Tiered badges will use a consistent four-rung ladder — **Brons → Silver → Guld → Platina** — with a KP milestone bonus of **25 / 75 / 200 / 500**, credited via ledger source `badge` and exempt from the daily cap (§5.3).
+Tiered badges use the ladder **Brons → Silver → Guld → Platina**, with a KP milestone bonus of **25 / 75 / 200 / 500**, credited via ledger source `badge` and exempt from the daily cap (§5.3).
+
+Four rungs is the default, not an invariant. A ladder stops short where a fourth rung would be **unreachable** or **undesirable**, and exactly two do:
+
+| Ladder | Rungs | Why it stops early |
+|---|---|---|
+| **Trogen** | 3 | A 365-day Platina rung is the loss-aversion hook §9 rules out (**Q6**). |
+| **Samlare** | 3 | The garage is hard-capped at `MAX_VEHICLES_PER_USER` = 5, so any rung above 5 cars could never be earned by anyone. |
+
+Every other ladder has all four.
 
 All user-facing names are **Swedish**, matching the existing catalog convention. English names below are for internal reference and design briefs only; they never appear in the app.
 
@@ -616,11 +625,16 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 | Tier | Requirement |
 |---|---|
-| Brons | 5 convoys led |
-| Silver | 25 |
-| Guld | 100 |
+| Brons | 1 convoy led |
+| Silver | 5 |
+| Guld | 25 |
+| Platina | 100 |
 
 *How to earn:* Be the initiating member of a convoy that completes with at least one other participant.
+
+*On the Brons rung:* leading your **first** convoy is a milestone worth marking, in the same way `first_event` and `garage_created` mark a member's first meet and first car — and it gives the ladder the fourth rung §7.1 asks for without inventing a new upper threshold. The 5 / 25 / 100 above it are unchanged.
+
+*On "completes with at least one other participant":* all three parts are enforced, and the last two are what make the ladder unfarmable. A convoy is **born active** with `startedAt` already set (`convoy-core.ts::buildConvoyDocument`), so crediting on start would let a member mint a rung per tap by creating and abandoning solo convoys. Credit therefore fires on the transition into `endedAt`, and only when a member other than the owner has `inviteStatus: 'accepted'` — an invite that was never answered, or declined, does not count.
 
 *Icon design:* Three car silhouettes in staggered convoy formation, viewed from a low three-quarter angle, the lead car carrying a small pennant on its aerial. Tier is metal plus the pennant's detail. The **staggered** formation is the point — it reads as *travelling together*, not *racing*, which two side-by-side cars would.
 
@@ -630,12 +644,13 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 |---|---|
 | Brons | 1 car in garage |
 | Silver | 3 cars |
-| Guld | 6 cars |
-| Platina | 10 cars |
+| Guld | 5 cars |
 
 *How to earn:* Complete vehicle profiles in Mitt garage.
 
-*Icon design:* A roller garage door raised to two-thirds, with the noses of cars visible in the darkness behind it. Tier is the number of visible noses (1/2/3/4 — abstracted, not literal counts). Warm interior light spilling from under the door; this is the "home" badge of the set and should feel like it.
+*Three rungs, capped by the product:* `MAX_VEHICLES_PER_USER` is **5** (`packages/shared/src/garage.ts`, enforced inside a transaction in `garage/manageVehicle.ts`). Guld at 6 cars and Platina at 10 — as this section originally specified — are unreachable by construction: no member could ever hold that many. Guld therefore sits at the cap itself.
+
+*Icon design:* A roller garage door raised to two-thirds, with the noses of cars visible in the darkness behind it. Tier is the number of visible noses (1/2/3 — abstracted, not literal counts). Warm interior light spilling from under the door; this is the "home" badge of the set and should feel like it.
 
 ### 7.3 The five existing badges
 
@@ -853,13 +868,14 @@ These need a product call before implementation locks in. Ordered by how much re
 | **Q3** | Should the **Vägfarare** distance ladder exist at all? | It is the only place the system acknowledges kilometres as an achievement. Defensible (milestones, zero marginal KP) but it is the closest thing here to a distance incentive. | **Yes**, with strict icon rules |
 | **Q4** | May auto-spawned crowns bypass the admin `safeLocationConfirmed` gate, or must launch use an **admin-approved cell allow-list**? | The only item with a physical-safety failure mode. Allow-list is slower but auditable. | Policy mask, no per-crown admin |
 | **Q5** | Legacy `first_event` / `five_events` / `garage_created` — show alongside the ladders, or demote to a "tidiga märken" section? | Cosmetic, but affects whether profiles look cluttered or duplicated. | Grandfather, demote in UI |
-| **Q6** | **Trogen** has 3 tiers, everything else has 4. Accept the asymmetry, or add a Platina at a 365-day streak? | A 365-day streak badge is exactly the kind of thing §9 warns about. | 3 tiers, no Platina |
+| **Q6** | ~~**Trogen** has 3 tiers, everything else has 4. Accept the asymmetry, or add a Platina at a 365-day streak?~~ **DECIDED: 3 tiers, no Platina** — implemented; `trogen_platina` does not exist as a badge key. | A 365-day streak badge is exactly the kind of thing §9 warns about. | 3 tiers, no Platina |
 | **Q7** | Will KP **ever** redeem for anything of value? | Flips the entire §8.2 threat model. Needs to be known *now*, not discovered later. | **No redemption** |
 | **Q8** | Legendary at p = 0.01 / 500 KP → roughly **2 per day nationally** at 30 users. Right scarcity? | Too rare = nobody believes they exist; too common = the jackpot stops being one. | 0.01 |
 | **Q9** | Capped-out KP: **forfeited** (proposed) or banked to next period? | Banking re-creates the incentive the cap removes. | Forfeited, shown transparently |
 | **Q10** | Approve the per-(cell, user) `lastSeenAt` presence rows (7-day TTL, HMAC'd uid) for computing `A`? | It is location data, however minimal. Needs a privacy sign-off, not just an engineering one. | Approve, with sketch as escalation |
 | **Q11** | `N_target` jumps 0 → 2 at the `A ≥ 1` gate. Accept, or floor the first rung at 1? | Minor tuning; affects how sparse rural areas feel. | Accept (2) |
 | **Q12** | Approve badge milestone bonuses **25 / 75 / 200 / 500** and their exemption from the daily cap? | Platina alone is 500 KP — larger than any single non-legendary earn. | Approve |
+| **Q17** | Should `first_event` / `five_events` be retired now that **Träffräv** Brons/Silver measure the same 1 and 5 attendances? | They are duplicates on a profile, but the keys are frozen and members already hold them (§7.3, Q5). Kept for now; both are awarded, and `garage_created` carries the same overlap with `samlare_brons`. | Grandfather all three |
 | **Q13** | Launch **nationwide** or opt-in regions? | Nationwide with 30 users spreads `A` thin and many cells will never qualify. | Nationwide, monitor `A` |
 | **Q14** | Keep **all** windows on UTC boundaries (matching existing crown-cap code), or move the **daily-open streak** to `Europe/Stockholm`? | A UTC day rolls over at 01:00/02:00 local. Invisible for a cap, but a member will judge a *streak* against their own calendar and will feel robbed. | Caps stay UTC, streak moves to local |
 | **Q15** | Route `points.adminReverse` through `creditPoints`/`debitPoints` before building any cap, or exempt reversals from caps by design? | `adminReverse` writes its own transaction today, so `ledger.ts` is **not** a single choke point (C4). A cap built there silently misses reversals. | Route it through first |

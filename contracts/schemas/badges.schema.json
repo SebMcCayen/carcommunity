@@ -2,12 +2,57 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/badges.schema.json",
   "title": "Badges contract",
-  "description": "Language-neutral badge shapes shared by iOS, Android, backend, and admin. awardedBadge mirrors the Firestore `users/{uid}/badges/{badgeKey}` document (document ID = badge key; catalog definition denormalized). The catalog itself lives in functions/src/badges/badge-core.ts (single source of truth, ported from the legacy badge-catalog): wording stays positive and non-competitive, no speed/distance/racing badges, all user-facing text in Swedish. Badges are backend-awarded only and never revoked. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "description": "Language-neutral badge shapes shared by iOS, Android, backend, and admin. awardedBadge mirrors the Firestore `users/{uid}/badges/{badgeKey}` document (document ID = badge key; catalog definition denormalized). The catalog itself lives in functions/src/badges/badge-core.ts (single source of truth, ported from the legacy badge-catalog): wording stays positive and non-competitive, no badge rewards speed, all user-facing text in Swedish. Badges are backend-awarded only and never revoked. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.\n\nTIERED LADDERS: alongside the five original flat achievements there are six tiered ladders — Kronjägare (crowns collected), Vägfarare (lifetime distance driven), Träffräv (events attended), Trogen (best consecutive-day app-open streak), Konvojledare (convoys led), Samlare (cars in garage). Each TIER IS ITS OWN badge key so a member can display the exact tier reached. The ladders are MONOTONIC: earning a higher tier never removes a lower one, and a member's badges are a permanent display collection, not a current rank. Tiers are awarded exclusively by Firestore triggers from server-verified counters (functions/src/badges/progressTriggers.ts) — never by a callable and never from a client-reported number — and each first award also credits Kronpoäng (25/75/200/500 for brons/silver/guld/platina) through the points ledger with a deterministic idempotency key.",
   "$defs": {
+    "badgeTier": {
+      "type": "string",
+      "enum": ["brons", "silver", "guld", "platina"],
+      "description": "Ladder rung. Two ladders stop at guld: Samlare, because the garage caps at five vehicles so a higher rung would be unreachable; and Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9)."
+    },
+    "badgeLadder": {
+      "type": "string",
+      "enum": [
+        "kronjagare",
+        "vagfarare",
+        "traffrav",
+        "trogen",
+        "konvojledare",
+        "samlare"
+      ],
+      "description": "Tiered ladder a badge is a rung of. Null on the five standalone badges."
+    },
     "badgeKey": {
       "type": "string",
-      "enum": ["first_event", "five_events", "helpful_member", "early_member", "garage_created"],
-      "description": "Canonical badge keys. helpful_member is the only manually awardable key; the rest are automatic."
+      "enum": [
+        "first_event",
+        "five_events",
+        "helpful_member",
+        "early_member",
+        "garage_created",
+        "kronjagare_brons",
+        "kronjagare_silver",
+        "kronjagare_guld",
+        "kronjagare_platina",
+        "vagfarare_brons",
+        "vagfarare_silver",
+        "vagfarare_guld",
+        "vagfarare_platina",
+        "traffrav_brons",
+        "traffrav_silver",
+        "traffrav_guld",
+        "traffrav_platina",
+        "trogen_brons",
+        "trogen_silver",
+        "trogen_guld",
+        "konvojledare_brons",
+        "konvojledare_silver",
+        "konvojledare_guld",
+        "konvojledare_platina",
+        "samlare_brons",
+        "samlare_silver",
+        "samlare_guld"
+      ],
+      "description": "Canonical badge keys. The first five are FROZEN — members already hold documents at those IDs, so a key is never renamed or remapped. helpful_member is the only manually awardable key; every other key is awarded automatically by the backend. garage_created is HISTORIC: it is still awarded on the first vehicle and is superseded for new design work by samlare_brons, which measures the same moment as the bottom rung of the Samlare ladder — both are kept so existing holders are untouched, and garage_created carries no points so holding both is not a double payout."
     },
     "badgeSource": {
       "type": "string",
@@ -15,7 +60,7 @@
     },
     "awardedBadge": {
       "type": "object",
-      "description": "Firestore `users/{uid}/badges/{badgeKey}`. Owner-only read; backend-only writes.",
+      "description": "Firestore `users/{uid}/badges/{badgeKey}`. Owner-only read; backend-only writes; never revoked.",
       "properties": {
         "badgeKey": { "$ref": "#/$defs/badgeKey" },
         "name": { "type": "string", "description": "Denormalized catalog name (Swedish)." },
@@ -25,7 +70,15 @@
         },
         "iconIdentifier": {
           "type": "string",
-          "description": "Opaque icon reference for the client UI."
+          "description": "Opaque icon reference for the client UI (badge_{badgeKey})."
+        },
+        "ladder": {
+          "oneOf": [{ "$ref": "#/$defs/badgeLadder" }, { "type": "null" }],
+          "description": "Ladder this badge is a rung of; null for the five standalone badges. OPTIONAL: badge documents awarded before the ladders shipped do not carry this field, and are not back-filled (a rewrite would move awardedAt). Clients must treat an absent value as null."
+        },
+        "tier": {
+          "oneOf": [{ "$ref": "#/$defs/badgeTier" }, { "type": "null" }],
+          "description": "Rung on `ladder`; null for the standalone badges. OPTIONAL for the same reason as `ladder`."
         },
         "source": { "$ref": "#/$defs/badgeSource" },
         "awardedByUserId": {

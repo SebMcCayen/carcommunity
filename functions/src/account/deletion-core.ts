@@ -82,6 +82,11 @@ export const PURGE_DOC_TREES = [
   'userLifecycle',
   'notifications',
   'pointsLedger',
+  // Backend-only achievement counters (functions/src/badges). Same rule as
+  // userLifecycle: this document holds per-user activity — crowns collected,
+  // lifetime distance driven, events attended, convoys led and the local-day
+  // key of the member's last app open — so it must not survive erasure.
+  'badgeProgress',
 ] as const;
 
 export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
