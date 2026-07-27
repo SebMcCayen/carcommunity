@@ -51,6 +51,7 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { haversineDistanceMeters, isSpeedSafe, isWithinGeofence } from './crown-hunt-geo';
+import { MAX_REPORTED_ACCURACY_METERS } from './crownhunt-core';
 
 // ---------------------------------------------------------------------------
 // Feature flag
@@ -828,7 +829,17 @@ const fixSchema = z
   .object({
     latitude: z.number(),
     longitude: z.number(),
-    accuracyMeters: z.number().nonnegative().nullable().optional(),
+    // Bounded exactly like the submitClaim path (crownhunt-core.ts). `.finite()`
+    // restates an invariant zod's base number check already enforces; `.max()`
+    // is the bound that actually adds a ceiling, keeping an absurd-but-finite
+    // accuracy from being accepted here while submitClaim rejects it.
+    accuracyMeters: z
+      .number()
+      .finite()
+      .nonnegative()
+      .max(MAX_REPORTED_ACCURACY_METERS)
+      .nullable()
+      .optional(),
     speedMetersPerSecond: z.number().finite().nonnegative().nullable().optional(),
     recordedAt: z.string().datetime(),
   })
@@ -845,7 +856,14 @@ const claimSpawnInputSchema = z
       .refine((id) => id !== '.' && id !== '..'),
     latitude: z.number(),
     longitude: z.number(),
-    accuracyMeters: z.number().nonnegative().nullable().optional(),
+    /** Bounded as on `fixSchema` above and the submitClaim path. */
+    accuracyMeters: z
+      .number()
+      .finite()
+      .nonnegative()
+      .max(MAX_REPORTED_ACCURACY_METERS)
+      .nullable()
+      .optional(),
     speedMetersPerSecond: z.number().finite().nonnegative().nullable().optional(),
     recordedAt: z.string().datetime(),
     /**
