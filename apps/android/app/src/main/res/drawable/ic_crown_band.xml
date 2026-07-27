@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Crown glyph: BAND — the COMMON tier.
+
+  The plainest crown in the set: three low points on a solid band, no stones, no
+  finial. Rarity is carried by the SILHOUETTE first (see CrownMarkerStyle), so
+  this one has to be readable as "a crown" while still being obviously the least
+  ornate of the four at a glance — hence the shallow points and the unbroken band.
+
+  Tinted at runtime (see CrownMarkerStyle.glyphColorArgb).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <!-- Three shallow points rising from the band. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,9L6.5,13L12,7L17.5,13L21,9V16H3V9Z" />
+    <!-- The band itself, separated by a gap so the shape reads at marker size. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M3,17.5H21V20H3V17.5Z" />
+</vector>

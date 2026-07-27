@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Crown glyph: ROYAL — the LEGENDARY tier.
+
+  Five points, an arched jewelled band, and an orb finial standing clear above
+  the whole shape. The finial is what makes this one identifiable in pure
+  silhouette from further away than any colour is readable — which is the job,
+  since a legendary crown is a 1%-weight spawn someone may cross a car park for.
+
+  This is also the only tier that gets a halo, drawn around the disc rather than
+  in the glyph (see CrownMarkerStyle.glowColorArgb). The two cues are
+  independent on purpose: the halo is the far-away signal, the finial is the
+  confirm-it-up-close one.
+
+  Tinted at runtime (see CrownMarkerStyle.glyphColorArgb).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <!-- Orb finial, standing clear at the top. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M12,1.4m-1.7,0a1.7,1.7 0,1 1,3.4 0a1.7,1.7 0,1 1,-3.4 0Z" />
+    <!-- Balls on the outer and inner points. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2.4,7.2m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M7.2,5.6m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16.8,5.6m-1.3,0a1.3,1.3 0,1 1,2.6 0a1.3,1.3 0,1 1,-2.6 0Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M21.6,7.2m-1.5,0a1.5,1.5 0,1 1,3 0a1.5,1.5 0,1 1,-3 0Z" />
+    <!-- Five-point body, with the centre point carrying the finial. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2.4,8.4L4.8,12.2L7.2,6.7L9.6,11.4L12,3.4L14.4,11.4L16.8,6.7L19.2,12.2L21.6,8.4V15.6H2.4V8.4Z" />
+    <!-- Arched band with three stones set into it. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2.4,17H21.6V20.4H2.4V17ZM6,17H8V20.4H6V17ZM11,17H13V20.4H11V17ZM16,17H18V20.4H16V17Z" />
+</vector>
