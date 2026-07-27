@@ -293,6 +293,11 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                 val detail =
                     rememberRungDetail(ladder, rung, earned, showcase.awardedAtByKey[rung.badgeKey])
                 val label = stringResource(tierNameRes(rung.tier))
+                // The ladder name is only a VISUAL section header, so a tier name
+                // alone ("Brons") repeats identically across all six ladders for a
+                // screen reader. Announce ladder + tier; the visible label stays
+                // the tier, which the header already disambiguates on screen.
+                val spokenName = stringResource(ladderNameRes(ladder.id)) + " " + label
                 BadgeMedallionTile(
                     glyph = BadgeGlyph.Ladder(ladder.id),
                     tier = rung.tier,
@@ -305,7 +310,7 @@ private fun AllAwardsGrid(showcase: BadgeShowcase, onSelect: (BadgeDetail) -> Un
                             } else {
                                 R.string.badgeShowcase_medallionLocked
                             },
-                            label,
+                            spokenName,
                         ),
                     onClick = { onSelect(detail) },
                 )
