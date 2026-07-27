@@ -7,14 +7,18 @@
  * 1. Firestore document trees (users/{uid} incl. badges,
  *    userPrivate/{uid} incl. pushTokens, userLifecycle/{uid}
  *    (last-login + inactivity state), notifications/{uid} incl.
- *    items, pointsLedger/{uid} incl. entries) via recursiveDelete.
+ *    items, pointsLedger/{uid} incl. entries, badgeProgress/{uid},
+ *    userBlocks/{uid} incl. blocked) via recursiveDelete.
  * 2. Owned documents by query (vehicles, rides where userId == uid).
  * 3. Social-graph MIRRORS — the rows other users' documents carry about
  *    the deleted user, which no owned-doc purge can reach: the mirror
  *    friendship rows users/{otherUid}/friends/{uid}, the friendRequests
- *    documents in both directions, and convoy membership
- *    (memberUids/members/memberProfiles, plus the stored summary's
- *    participantUids and the shared destination's setByDisplayName).
+ *    documents in both directions, the block rows
+ *    userBlocks/{otherUid}/blocked/{uid} (plus the block graph's
+ *    Realtime Database mirror under liveLocationBlocks/, on BOTH sides),
+ *    and convoy membership (memberUids/members/memberProfiles, plus the
+ *    stored summary's participantUids and the shared destination's
+ *    setByDisplayName).
  * 4. Chat erasure: the user's 1:1 DM conversations (conversation doc +
  *    messages subcollection) wholesale, and the community + convoy
  *    channel messages the user authored (by senderUid).
@@ -39,13 +43,15 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import type { Query } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { adminAuth, adminStorage, db } from '../firebase';
+import { adminAuth, adminRtdb, adminStorage, db } from '../firebase';
 import {
   buildLeaveConvoyUpdate,
   computeConvoySummary,
   isConvoyMember,
 } from '../convoy/convoy-core';
 import {
+  LIVE_LOCATION_BLOCKS_RTDB_ROOT,
+  PURGE_BLOCK_MIRROR,
   PURGE_CONVOY_MEMBERSHIP,
   PURGE_DOC_TREES,
   PURGE_FRIEND_MIRROR,
@@ -106,6 +112,62 @@ async function deleteFriendGraphMirror(uid: string): Promise<void> {
   );
   for (const userField of PURGE_FRIEND_REQUEST_USER_FIELDS) {
     await deleteOwnedDocuments('friendRequests', userField, uid);
+  }
+}
+
+/**
+ * Erases the deleted user from the BLOCK graph — the half the `userBlocks` doc
+ * tree cannot reach, in both of the places the graph is stored (see
+ * PURGE_BLOCK_MIRROR / LIVE_LOCATION_BLOCKS_RTDB_ROOT in deletion-core.ts for
+ * the data shapes, the unblock-semantics argument, and the index argument):
+ *
+ * 1. RTDB `liveLocationBlocks/{uid}` — the deleted user's OWN outgoing edges,
+ *    removed as one subtree. Done first and UNCONDITIONALLY, on a path derived
+ *    from the uid alone: the Firestore rows that seeded it are purged with the
+ *    `userBlocks` doc tree before this runs, so a retry after a partial purge
+ *    has nothing left to read them from.
+ * 2. `userBlocks/{otherUid}/blocked/{uid}` — every blocker's row naming the
+ *    deleted user (with their denormalized displayName), found by a
+ *    collection-group query on `blockedUserId`.
+ * 3. RTDB `liveLocationBlocks/{otherUid}/{uid}` — the RTDB mirror of each row
+ *    in (2). Removed BEFORE the Firestore row it was derived from, so a failure
+ *    between the two leaves the row in place for the next run to find rather
+ *    than orphaning the RTDB node; re-running just rewrites the same `null`.
+ *
+ * The PURGE_BLOCK_MIRROR.root guard keeps the collection-group query from ever
+ * deleting a `blocked` subcollection that belongs to some other parent, the
+ * same way CHANNEL_MESSAGE_ROOTS guards the message sweep.
+ */
+async function purgeBlockGraph(uid: string): Promise<void> {
+  await adminRtdb.ref(`${LIVE_LOCATION_BLOCKS_RTDB_ROOT}/${uid}`).set(null);
+
+  for (;;) {
+    const snap = await db
+      .collectionGroup(PURGE_BLOCK_MIRROR.collectionGroup)
+      .where(PURGE_BLOCK_MIRROR.blockedField, '==', uid)
+      .limit(QUERY_BATCH_SIZE)
+      .get();
+    const targets = snap.docs.filter(
+      (docSnap) => docSnap.ref.parent.parent?.parent.id === PURGE_BLOCK_MIRROR.root,
+    );
+    // No mirror rows left to delete — stop (also prevents a re-fetch loop if
+    // only non-userBlocks docs remain).
+    if (targets.length === 0) break;
+
+    const mirrorRemovals: Record<string, null> = {};
+    for (const docSnap of targets) {
+      // The blocker's uid is the PARENT document's id — a Firebase Auth uid, so
+      // it can never contain the '/' that would re-target the multi-path update.
+      mirrorRemovals[`${docSnap.ref.parent.parent!.id}/${uid}`] = null;
+    }
+    await adminRtdb.ref(LIVE_LOCATION_BLOCKS_RTDB_ROOT).update(mirrorRemovals);
+
+    const batch = db.batch();
+    for (const docSnap of targets) {
+      batch.delete(docSnap.ref);
+    }
+    await batch.commit();
+    if (snap.size < QUERY_BATCH_SIZE) break;
   }
 }
 
@@ -324,6 +386,7 @@ export async function purgeUserData(uid: string): Promise<void> {
   // Social-graph mirrors: the rows OTHER users' documents carry about this
   // user, which the doc-tree/owned-doc purges above cannot reach.
   await deleteFriendGraphMirror(uid);
+  await purgeBlockGraph(uid);
   await removeConvoyMemberships(uid);
   // Chat erasure: DM conversations wholesale, then authored community + convoy
   // messages. DMs go first so no DM message survives into the channel sweep.
