@@ -1074,8 +1074,10 @@ describe('parseStoredAttendanceSamples — corrupt evidence is dropped, not carr
     }
     // Nothing that survives can be a NaN.
     const kept = parseStoredAttendanceSamples([{ ...good, latitude: 'x' }, good]);
-    expect(kept).toHaveLength(1);
-    expect(Number.isNaN(kept[0].latitude)).toBe(false);
+    expect(kept).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: 10, capturedAtMs: START },
+    ]);
+    expect(kept.every((sample) => Number.isFinite(sample.latitude))).toBe(true);
   });
 
   it('drops entries without a usable capture instant', () => {
@@ -1113,10 +1115,12 @@ describe('parseStoredAttendanceSamples — corrupt evidence is dropped, not carr
       longitude: EVENT_LON,
       capturedAtMs: START,
     };
-    expect(parseStoredAttendanceSamples([withoutAccuracy])[0].accuracyMeters).toBeNull();
-    expect(
-      parseStoredAttendanceSamples([{ ...good, accuracyMeters: null }])[0].accuracyMeters,
-    ).toBeNull();
+    expect(parseStoredAttendanceSamples([withoutAccuracy])).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: null, capturedAtMs: START },
+    ]);
+    expect(parseStoredAttendanceSamples([{ ...good, accuracyMeters: null }])).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: null, capturedAtMs: START },
+    ]);
   });
 
   // Dropping loses no evidence: a malformed entry could never have counted.
