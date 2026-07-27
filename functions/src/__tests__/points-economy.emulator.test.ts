@@ -138,6 +138,24 @@ async function entryCount(uid: string): Promise<number> {
 }
 
 /**
+ * Entries for ONE source. Since the §7 badge ladders landed, a single domain
+ * event can legitimately credit twice from different systems (adding a first
+ * car pays garage_first_car AND unlocks Samlare Brons, whose threshold is 1),
+ * so a "once and never again" assertion has to name the source it guards
+ * rather than counting the whole ledger.
+ */
+async function entryCountBySource(uid: string, source: string): Promise<number> {
+  const snap = await adminDb
+    .collection('pointsLedger')
+    .doc(uid)
+    .collection('entries')
+    .where('source', '==', source)
+    .count()
+    .get();
+  return snap.data().count;
+}
+
+/**
  * A valid `garage.addVehicle` payload — the callable's schema is strict, so
  * the powertrain is required and the year field is `modelYear`
  * (contracts/schemas/garage.schema.json).
@@ -312,7 +330,10 @@ describe('garage_first_car via the vehicles trigger', () => {
 
     await call('garage-addVehicle', VEHICLE({ make: 'Saab', model: '900', modelYear: 1993 }));
     await new Promise((resolve) => setTimeout(resolve, 3_000));
-    expect(await entryCount(user.uid)).toBe(1);
+    // Only the garage award is guarded here. The ledger also carries a
+    // separate `badge` entry for Samlare Brons (threshold 1 vehicle), which is
+    // a different award from a different system, not a double-credit.
+    expect(await entryCountBySource(user.uid, 'garage')).toBe(1);
   });
 });
 
