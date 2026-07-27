@@ -39,6 +39,7 @@ import {
   dailyTotalDocId,
   economyIdempotencyKey,
   ledgerFoldDocId,
+  readCount,
   stockholmDayKey,
 } from './points-economy-core';
 
@@ -256,8 +257,12 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
   try {
     verifiedCount = await db.runTransaction(async (tx) => {
       const [countsSnap, countedSnap] = await Promise.all([tx.get(countsRef), tx.get(countedRef)]);
-      const current = countsSnap.data()?.verifiedCount;
-      const stored = typeof current === 'number' && Number.isSafeInteger(current) ? current : 0;
+      // Read through the shared `readCount`, like every other economy counter.
+      // A local `Number.isSafeInteger` check would accept a NEGATIVE tally,
+      // and this counter is the gate on the host award: a stored `-3` would
+      // return -2 here and keep `event_host_success` from ever firing, no
+      // matter how many members verified. Non-negative or nothing.
+      const stored = readCount(countsSnap.data()?.verifiedCount);
       if (countedSnap.exists) {
         return stored;
       }

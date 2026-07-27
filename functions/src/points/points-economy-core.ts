@@ -667,6 +667,67 @@ export interface AttendanceSample {
   capturedAtMs: number;
 }
 
+/**
+ * Defensive read of the stored `eventAttendance.samples` array — DROPS every
+ * malformed entry instead of repairing it.
+ *
+ * Only `events.checkIn` ever writes this array, and only from a
+ * schema-validated payload, so in practice every entry is well-formed. The
+ * read side still refuses to trust that, and the reason it DROPS rather than
+ * coerces is that the array is READ-MODIFY-WRITTEN on every check-in: the
+ * transaction reads the stored samples, appends the new one and writes the
+ * whole (truncated) list back. Coercing a bad entry to `NaN` and keeping it
+ * would persist that `NaN` forever, one write at a time, and each junk entry
+ * would also consume one of the MAX_ATTENDANCE_SAMPLES slots that a real
+ * sample needs. Nothing is lost by dropping: an entry that fails these
+ * checks could never qualify under `isSampleInsideFence` anyway.
+ *
+ * `accuracyMeters` is the one field where coercion would be UNSAFE rather
+ * than merely untidy — a stored `"500"` coerced to `null` reads as "no
+ * accuracy reported", which is treated as a perfect fix and skips the
+ * MAX_ATTENDANCE_ACCURACY_METERS bound. A missing or explicitly null
+ * accuracy is legitimate (it is what the client sends when the platform
+ * reports none); anything else present but not a finite number drops the
+ * whole entry.
+ */
+export function parseStoredAttendanceSamples(raw: unknown): AttendanceSample[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const samples: AttendanceSample[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const { latitude, longitude, capturedAtMs, accuracyMeters } = record;
+    if (
+      typeof latitude !== 'number' ||
+      typeof longitude !== 'number' ||
+      !isValidCoordinate(latitude, longitude)
+    ) {
+      continue;
+    }
+    if (typeof capturedAtMs !== 'number' || !Number.isFinite(capturedAtMs)) {
+      continue;
+    }
+    if (
+      accuracyMeters !== undefined &&
+      accuracyMeters !== null &&
+      (typeof accuracyMeters !== 'number' || !Number.isFinite(accuracyMeters))
+    ) {
+      continue;
+    }
+    samples.push({
+      latitude,
+      longitude,
+      accuracyMeters: typeof accuracyMeters === 'number' ? accuracyMeters : null,
+      capturedAtMs,
+    });
+  }
+  return samples;
+}
+
 export interface AttendanceWindowInput {
   startsAtMs: number;
   /** null -> DEFAULT_EVENT_DURATION_MS after the start. */
@@ -1007,7 +1068,10 @@ export function isUnderEconomyRateLimit(currentCount: number): boolean {
  *    onward as an attempt count — `events.checkIn` feeds this number straight
  *    into the anti-fraud risk pipeline, where a fractional attempt rate is
  *    meaningless;
- *  - a negative value silently GRANTS extra headroom under every cap.
+ *  - a negative value silently GRANTS extra headroom under every cap — and in
+ *    the one place a counter is a THRESHOLD rather than a ceiling (the
+ *    verified-attendee tally behind `event_host_success`) it does the
+ *    opposite, holding the tally below the threshold forever.
  *
  * Treating a nonsense counter as 0 is the honest reading — "no attempts
  * recorded in this window" — and it fails in the direction that costs the
@@ -1016,8 +1080,9 @@ export function isUnderEconomyRateLimit(currentCount: number): boolean {
  *
  * This is the single implementation for the whole economy: `economy-award.ts`
  * (rule limit, daily total, weekly driving total), `events/checkIn.ts` and
- * `points/dailyOpen.ts` (rate-limit windows) all read through it, so the
- * three call sites cannot drift apart on what a corrupt counter means.
+ * `points/dailyOpen.ts` (rate-limit windows) and `economyTriggers.ts` (the
+ * verified-attendee tally) all read through it, so no call site can drift on
+ * what a corrupt counter means.
  */
 export function readCount(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;

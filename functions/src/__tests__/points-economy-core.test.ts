@@ -48,6 +48,7 @@ import {
   liveDistanceIncrementMeters,
   parseCheckInInput,
   parseRecordDailyOpenInput,
+  parseStoredAttendanceSamples,
   previousDayKey,
   readCount,
   ruleCounterDocId,
@@ -642,6 +643,25 @@ describe('counter document IDs', () => {
       expect(Number.isSafeInteger(stored + 1)).toBe(true);
     }
   });
+
+  // Most economy counters are CEILINGS, where a negative reads as extra
+  // headroom. The verified-attendee tally behind `event_host_success` is the
+  // one that is a THRESHOLD, where a negative fails the other way: the tally
+  // never climbs back to HOST_SUCCESS_MIN_VERIFIED_ATTENDEES and the host is
+  // never paid. Clamping at 0 is what makes the next attendee's increment
+  // count, which is why economyTriggers reads through this helper too.
+  it('never lets a negative tally hold a threshold award below its bar', () => {
+    for (const corrupt of [-1, -300, Number.NEGATIVE_INFINITY]) {
+      const stored = readCount(corrupt);
+      expect(stored).toBe(0);
+      // One more verified attendee after the corruption must move the tally.
+      expect(stored + 1).toBe(1);
+    }
+    // And a healthy tally is still counted as itself.
+    expect(readCount(HOST_SUCCESS_MIN_VERIFIED_ATTENDEES) + 1).toBe(
+      HOST_SUCCESS_MIN_VERIFIED_ATTENDEES + 1,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1017,6 +1037,104 @@ describe('liveDistanceIncrementMeters', () => {
       previous = next;
     }
     expect(total).toBeGreaterThanOrEqual(LIVE_SESSION_AWARD_MIN_DISTANCE_METERS);
+  });
+});
+
+// The stored samples array is READ-MODIFY-WRITTEN on every check-in, so
+// whatever this read hands back is what gets written to Firestore again. A
+// coerced-but-kept junk entry is therefore permanent, and it also eats one of
+// the MAX_ATTENDANCE_SAMPLES slots a real sample needs.
+describe('parseStoredAttendanceSamples — corrupt evidence is dropped, not carried', () => {
+  const good = { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: 10, capturedAtMs: START };
+
+  it('keeps a well-formed sample unchanged', () => {
+    expect(parseStoredAttendanceSamples([good])).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: 10, capturedAtMs: START },
+    ]);
+  });
+
+  it('reads a missing or non-array field as no samples', () => {
+    for (const raw of [undefined, null, {}, 'samples', 7]) {
+      expect(parseStoredAttendanceSamples(raw)).toEqual([]);
+    }
+  });
+
+  it('drops entries with a missing or non-numeric coordinate instead of storing NaN', () => {
+    for (const bad of [
+      { ...good, latitude: undefined },
+      { ...good, longitude: null },
+      { ...good, latitude: 'NaN' },
+      { ...good, longitude: Number.NaN },
+      { ...good, latitude: Number.POSITIVE_INFINITY },
+      // A number, but not a coordinate — the same predicate the fence uses.
+      { ...good, latitude: 500 },
+      { ...good, longitude: -200 },
+    ]) {
+      expect(parseStoredAttendanceSamples([bad])).toEqual([]);
+    }
+    // Nothing that survives can be a NaN.
+    const kept = parseStoredAttendanceSamples([{ ...good, latitude: 'x' }, good]);
+    expect(kept).toHaveLength(1);
+    expect(Number.isNaN(kept[0].latitude)).toBe(false);
+  });
+
+  it('drops entries without a usable capture instant', () => {
+    for (const bad of [
+      { ...good, capturedAtMs: undefined },
+      { ...good, capturedAtMs: null },
+      { ...good, capturedAtMs: Number.NaN },
+      { ...good, capturedAtMs: '1700000000000' },
+    ]) {
+      expect(parseStoredAttendanceSamples([bad])).toEqual([]);
+    }
+  });
+
+  it('drops non-object entries', () => {
+    expect(parseStoredAttendanceSamples([null, 'sample', 42, [], good])).toEqual([
+      { latitude: EVENT_LAT, longitude: EVENT_LON, accuracyMeters: 10, capturedAtMs: START },
+    ]);
+  });
+
+  // The one field where coercion would LOOSEN the check: a bad accuracy read
+  // as null means "no accuracy reported", which skips the 100 m bound.
+  it('never launders a corrupt accuracy into "none reported"', () => {
+    for (const bad of [
+      { ...good, accuracyMeters: '500' },
+      { ...good, accuracyMeters: Number.NaN },
+      { ...good, accuracyMeters: Number.POSITIVE_INFINITY },
+    ]) {
+      expect(parseStoredAttendanceSamples([bad])).toEqual([]);
+    }
+  });
+
+  it('accepts a legitimately absent accuracy as null', () => {
+    const withoutAccuracy = {
+      latitude: EVENT_LAT,
+      longitude: EVENT_LON,
+      capturedAtMs: START,
+    };
+    expect(parseStoredAttendanceSamples([withoutAccuracy])[0].accuracyMeters).toBeNull();
+    expect(
+      parseStoredAttendanceSamples([{ ...good, accuracyMeters: null }])[0].accuracyMeters,
+    ).toBeNull();
+  });
+
+  // Dropping loses no evidence: a malformed entry could never have counted.
+  it('drops only samples that could never have qualified anyway', () => {
+    const corrupt = [
+      { ...good, latitude: Number.NaN },
+      { ...good, capturedAtMs: Number.NaN },
+      { ...good, accuracyMeters: 'lots' },
+    ];
+    expect(parseStoredAttendanceSamples(corrupt)).toEqual([]);
+    expect(
+      evaluateAttendance(
+        corrupt as unknown as AttendanceSample[],
+        EVENT_LAT,
+        EVENT_LON,
+        WINDOW,
+      ).qualifyingSampleCount,
+    ).toBe(0);
   });
 });
 
