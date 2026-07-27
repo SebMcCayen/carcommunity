@@ -6,13 +6,14 @@
 
 This document describes **both** what exists in the codebase today **and** the proposed extension. Nothing here is implemented purely from this document — it is the shared reference the implementation slices are written against.
 
-**How to read it.** The default is **proposed**. §1 is the honest inventory of what exists; §8.1's Status column and the `STATUS:` banners on §6 and §7 mark the built/unbuilt boundary where it is easy to get wrong. Everything else — §4, the numbers in §10, and the still-unbuilt parts of §7 — is design, even where it is written in the present indicative for readability.
+**How to read it.** The default is **proposed**. §1 is the honest inventory of what exists; §8.1's Status column and the `STATUS:` banners on §4, §6 and §7 mark the built/unbuilt boundary where it is easy to get wrong. Everything else — the numbers in §10 and the still-unbuilt parts of §7 — is design, even where it is written in the present indicative for readability.
 
-> **SINCE THIS DRAFT: §5 and §6 have SHIPPED, and so has the auto-spawn half of §3.**
+> **SINCE THIS DRAFT: §4, §5 and §6 have SHIPPED — but §4 only in part.**
 >
 > - **§5 (the earning rules, caps and streak) is BUILT.** `functions/src/points/points-economy-core.ts` is the canonical rule table, cap arithmetic and streak maths; `points/economy-award.ts` is the single award door; `points/economyTriggers.ts` holds the five triggers. All eight `Action` identifiers exist, both caps have real counter collections, and partial clipping is real (`creditPointsResolved` in `ledger.ts`). Where the numbers below differ from `points-economy-core.ts`, **the code is canonical.**
 > - **§6 (event-attendance verification) is BUILT** as the `events.checkIn` callable + the `eventAttendance` collection. Its per-banner caveats are corrected in place below.
-> - **§3's auto-spawn engine is BUILT** (`functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts`, `claimSpawn.ts`) — see the §3 table.
+> - **§4's auto-spawn engine is BUILT** (PR #570: `functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts`, `spawnCells.ts`, `spawnActivity.ts`, `claimSpawn.ts`) — see the §1.1 table. It is behind the `crownHuntSpawn` flag, **contract default OFF**.
+>   **Two parts of §4 did NOT ship as written and are still design:** the **Poisson replenishment** of §4.4 (the code tops a cell straight up to target — §4.4's banner) and the **placement policy mask** of §4.7 (replaced by an admin cell allow-list — §4.7's banner). Do not cite either as a live property.
 > - **Still unbuilt:** the §7 badge ladders (no tier field, nothing writes `source: 'badge'`), cap exemption, and a `readGuard` on `debitPoints`.
 
 **If you are implementing from this document, assume nothing described here exists until you have grepped for it.** The repo has a recurring failure mode where a doc asserts an invariant that no code enforces, and several of the callouts below exist specifically because an earlier draft of this document did exactly that.
@@ -40,15 +41,26 @@ This constraint is already encoded in the codebase: `functions/src/drives/drive-
 
 A crown may only be collected when the device is **not moving**: sustained speed ≤ **2.0 m/s** (7.2 km/h — walking pace) plus a short dwell. The user must have stopped safely before they can reach for the phone.
 
-This is already partially enforced: `MAX_CLAIM_SPEED_MPS = 1.4` in `functions/src/crownHunt/crownhunt-core.ts` (~5 km/h), checked by `isSpeedSafe()` in `crown-hunt-geo.ts` and applied at step 10 of `submitClaim.ts`. The proposed value is slightly more permissive (2.0 vs 1.4) to reduce false rejections from GPS speed jitter at a genuine standstill. **Which value ships is open question Q1.**
+**The two crown paths now enforce this differently, and only one of them still has gaps.**
 
-**Three gaps between C2 as written and C2 as enforced — read these before assuming the constraint holds:**
+| | Hand-placed points (`submitClaim.ts`) | Auto-spawned crowns (`claimSpawn.ts`) |
+|---|---|---|
+| Speed ceiling | `MAX_CLAIM_SPEED_MPS = 1.4` (~5 km/h) | `MAX_COLLECT_SPEED_MPS = 2.0` (7.2 km/h) |
+| Samples checked | **one** client-reported speed | **two** fixes, both reported speeds |
+| Dwell | none | `MIN_DWELL_SECONDS = 4` .. `MAX_DWELL_SECONDS = 300` |
+| Server-derived speed | **no** | **yes** — `movedMeters / dwellSeconds ≤ 2.0` |
+| Omitting `speedMetersPerSecond` | **passes** | still caught by the derived check |
 
-1. **The gate is currently omittable.** `speedMetersPerSecond` is *optional* in the request schema, and `isSpeedSafe` opens with `if (speedMps === null || speedMps === undefined) return true;` — a **missing** speed is treated as safe. A client that simply never sends the field is never speed-checked. This is a deliberate, documented allowance for devices with no speed fix, but it means C2 is presently a constraint on *honest* clients only. Closing it means deciding what to do when speed is genuinely unavailable — reject, or fall back to a server-derived speed from the previous trusted position (the data for which already exists, since `isPlausibleJump` uses it). See **Q16**.
-2. **There is no "sustained" measurement.** The check reads a *single* client-reported instantaneous sample. "Sustained" is the proposal, not the code.
-3. **There is no dwell requirement anywhere yet**, and — note — **no section of this document specifies one either.** Event dwell is defined in §6.1; crown dwell is not defined anywhere. It needs writing before implementation, and until it is, the "plus a short dwell" clause above is an intention rather than a specification.
+Both live in `crown-spawn-core.ts` / `crownhunt-core.ts` and route through `isSpeedSafe()` in `crown-hunt-geo.ts`; the spawn path bundles all four conditions into `evaluateStationaryCollection`, which also requires **both** fixes to be inside the (accuracy-buffered) collect radius. Failing it returns the plain result code `must_be_stationary` and deliberately feeds **nothing** into the risk score — the common case is an honest member rolling through a car park, not a cheat.
 
-Note the distinction: gap 1 is a *safety* gap (C2 is the constraint that stops phone-reaching while driving), whereas the 1.4-vs-2.0 question is mere tuning. Q16 is the one that matters.
+**Remaining gaps between C2 as written and C2 as enforced — these now apply to the hand-placed path only:**
+
+1. **The gate is omittable on `submitClaim`.** `speedMetersPerSecond` is *optional* in the request schema, and `isSpeedSafe` opens with `if (speedMps === null || speedMps === undefined) return true;` — a **missing** speed is treated as safe, so a client that never sends the field is never speed-checked there. This is a deliberate, documented allowance for devices with no speed fix, but it means C2 is a constraint on *honest* clients only on that path. `claimSpawn` closes it with the server-derived speed, which needs no client cooperation beyond two coordinates it has already committed to — that is the pattern **Q16** should adopt for `submitClaim`.
+2. **There is no "sustained" measurement on `submitClaim`.** It reads a *single* client-reported instantaneous sample. `claimSpawn`'s two-fix window is the nearest thing to "sustained" that ships, and it is a 4–300 s window rather than a continuous track.
+
+Note the distinction: gap 1 is a *safety* gap (C2 is the constraint that stops phone-reaching while driving), whereas the 1.4-vs-2.0 question is mere tuning. Q16 is the one that matters, and it is now open for one path rather than two.
+
+**Q1 has been answered by divergence rather than by decision.** 2.0 m/s shipped for spawned crowns and 1.4 m/s stayed on hand-placed points, so both values are live in production at once. Whether that is the intended end state or wants reconciling is still Seb's call — see **Q1**.
 
 The user-facing copy already exists and is correct, but note it is **two separate keys** in `contracts/localization/{en,sv}.json`, not one sentence — do not grep for the concatenation:
 
@@ -88,11 +100,16 @@ Reading the current code, the system is roughly half-built. This is the honest i
 | Haversine, geofence w/ accuracy buffer, freshness, speed, jump | **Built** | `functions/src/crownHunt/crown-hunt-geo.ts` |
 | Risk scoring, threshold 60 → `risk_review` | **Built** | `functions/src/crownHunt/crown-hunt-risk.ts` |
 | Idempotency + concurrent-award guards | **Built** | `crownhunt-core.ts`, `submitClaim.ts` |
-| **Spawn algorithm** | **Built** | `functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts` |
+| **Spawn algorithm** | **Built, backend only** | `functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts` |
 | **Rarity tiers / TTL** | **Built** (`CROWN_RARITY_TABLE`: 10/25/100/500 KP, 6/12/24/48 h) | `crown-spawn-core.ts` |
-| **Auto-spawn claim** (`crownHunt.claimSpawn`) | **Built** — stopped + dwelling required | `functions/src/crownHunt/claimSpawn.ts` |
+| **Auto-spawn claim** (`crownHunt.claimSpawn`) | **Built, backend only** — stopped + dwelling required | `functions/src/crownHunt/claimSpawn.ts` |
+| Admin cell allow-list (`setSpawnCellApproval`) | **Built, backend only** | `functions/src/crownHunt/spawnCells.ts` |
+| Activity aggregate `A(cell)` | **Built, backend only** | `functions/src/crownHunt/spawnActivity.ts` |
+| **Android client for any of the above** | **DOES NOT EXIST** | — |
 
-**Crowns now come from two sources.** Hand-placed `crownHuntPoints/{pointId}` documents an admin created and explicitly activated with a safety confirmation, *and* ephemeral `crownSpawns` placed automatically near recent member activity. Because no human reviews an auto-spawned coordinate, the safety approval moves up to the **area**: `crownHunt.setSpawnCellApproval` is an admin allow-list of grid cells the spawner may place in, and the whole automatic half sits behind the `crownHuntSpawn` feature flag, **contract default OFF**. Both crown paths credit the ledger with `source: 'crown_hunt'` and are folded into the daily cap after the fact (§5.3).
+**Crowns now come from two sources — but only one of them is reachable by a member.** Hand-placed `crownHuntPoints/{pointId}` documents an admin created and explicitly activated with a safety confirmation, *and* ephemeral `crownSpawns` placed automatically near recent member activity. Because no human reviews an auto-spawned coordinate, the safety approval moves up to the **area**: `crownHunt.setSpawnCellApproval` is an admin allow-list of grid cells the spawner may place in, and the whole automatic half sits behind the `crownHuntSpawn` feature flag, **contract default OFF**. Both crown paths credit the ledger with `source: 'crown_hunt'` and are folded into the daily cap after the fact (§5.3), with separate per-day claim counters (10 hand-placed, 20 spawned).
+
+> **The auto-spawn half is inert today, in both directions.** The flag is OFF, so nothing spawns and no activity data is collected; and `grep -rn "claimSpawn\|crownSpawn" apps/android` returns **nothing**, so even with the flag on, no client could show or collect a spawned crown. Treat every auto-spawn row above as "server-side code that is deployed and tested but has never served a member". §4's banner lists what is left before that changes.
 
 Current constants (`crownhunt-core.ts`):
 
@@ -158,8 +175,9 @@ There is no progression, no tiering, no crown-related badge, and no relationship
                                 ▼
     ┌────────────────────────────────────────────────┐
     │  CROWN SPAWNER  (§4)                           │
+    │  admin-approved cells only · flag default OFF  │
     │  N_target = ceil(1.5 · ln(1+A)), cap 5         │
-    │  Poisson replenish · 150 m min separation      │
+    │  top-up to target · 150 m min separation       │
     │  rarity 70/22/7/1 · TTL 6/12/24/48 h           │
     └──────────────────────┬─────────────────────────┘
                            │ crowns appear on map
@@ -185,7 +203,7 @@ There is no progression, no tiering, no crown-related badge, and no relationship
     └────────────────────────────────────────────────┘
 ```
 
-**Three of the four boxes are now built; the badge box is not.** The ledger's *append-only, idempotent-on-a-derived-key* property, the earning rules, and both caps annotated on the diagram (300/day, 400/week) are real: `pointsDailyTotals` and `pointsWeeklyDriving` are the counter collections and `DAILY_POINTS_CAP` / `WEEKLY_DRIVING_POINTS_CAP` the constants, both in `points-economy-core.ts`, read and incremented inside the award transaction. Presence aggregation and spawning shipped with the auto-spawn engine (§3). **Badge tiers remain unbuilt**, so the bottom box and its `source=badge` arrow are still design. The older `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` cap on hand-placed crown claims still exists and is unchanged.
+**Three of the four boxes are now built; the badge box is not.** The ledger's *append-only, idempotent-on-a-derived-key* property, the earning rules, and both caps annotated on the diagram (300/day, 400/week) are real: `pointsDailyTotals` and `pointsWeeklyDriving` are the counter collections and `DAILY_POINTS_CAP` / `WEEKLY_DRIVING_POINTS_CAP` the constants, both in `points-economy-core.ts`, read and incremented inside the award transaction. Presence aggregation and spawning shipped with the auto-spawn engine (§4, §1.1) — though the spawner **tops a cell straight up to target** rather than drawing Poisson arrivals, so the diagram's replenishment box is labelled for what the code does, not for §4.4. **Badge tiers remain unbuilt**, so the bottom box and its `source=badge` arrow are still design. Both crown daily caps exist side by side and are unchanged: `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` on hand-placed claims and `MAX_DAILY_SPAWN_CLAIMS = 20` on spawned ones, counted separately.
 
 Three feedback loops, deliberately different in tempo:
 
@@ -205,14 +223,32 @@ Three feedback loops, deliberately different in tempo:
 | `K` | Spawn coefficient = **1.5** |
 | `N_target(c)` | Desired number of live crowns in cell `c` |
 | `N_current(c)` | Live (unclaimed, unexpired) crowns in cell `c` right now |
-| `τ_spawn` | Replenishment time constant = **3 hours** |
-| `λ(c)` | Poisson spawn rate for cell `c`, crowns per hour |
+| `τ_spawn` | Replenishment time constant = **3 hours** — **§4.4 only, not implemented** |
+| `λ(c)` | Poisson spawn rate for cell `c`, crowns per hour — **§4.4 only, not implemented** |
 | `d_min` | Minimum separation between live crowns = **150 m** |
 | `r_collect` | Collection radius = **75 m** |
+
+`τ_spawn` and `λ` appear nowhere in the code. The shipped spawner places `N_target − N_current` crowns in a single pass; see the §4.4 banner.
 
 ---
 
 ## 4. Crown spawning
+
+> **STATUS: BUILT in PR #570, behind the `crownHuntSpawn` flag (contract default OFF) — but not all of it, and not all as written.** Per-subsection status:
+>
+> | § | Status |
+> |---|---|
+> | 4.1 The grid | **Built as specified** — `CROWN_CELL_DEGREES = 0.01`, `crownCellKey()` |
+> | 4.2 Activity score `A(c)` | **Built, with real differences** — see its banner (storage shape, hashing, and a new slow-sighting filter the design never mentioned) |
+> | 4.3 Target crown count | **Built as specified** — `targetCrownCount()` |
+> | 4.4 Poisson replenishment | **NOT BUILT.** The spawner tops straight up to target |
+> | 4.5 Placement / dart throwing | **Built**, 24 attempts not 20, and with no safety mask in the rejection test |
+> | 4.6 Rarity, value, lifetime | **Built as specified** — `CROWN_RARITY_TABLE` |
+> | 4.7 Placement safety | **NOT BUILT as written.** The policy mask does not exist; an admin cell allow-list shipped instead (**Q4**) |
+>
+> The maths that shipped is in `functions/src/crownHunt/crown-spawn-core.ts` (pure, unit-tested in `crown-spawn-core.test.ts`); the I/O is in `spawnScheduled.ts`, `spawnCells.ts` and `spawnActivity.ts`. Where this section and the code disagree, **the code is canonical** — the numbers below have been checked against it and the differences are called out in place.
+>
+> **BACKEND ONLY — there is no client for this yet.** `grep -rn "claimSpawn\|crownSpawn" apps/android` returns **nothing**: the Android app cannot display a spawned crown and cannot call `crownHunt.claimSpawn`. Combined with the flag defaulting OFF, that means the engine is currently inert in both directions — nothing spawns, and nothing could be collected if it did. Everything in §8.1 about the spawn claim path describes server code that no client exercises today. The remaining work before this is a feature a member can see is: the Android map layer, the claim UI (which must send **two** position fixes — see C2), the `isMockLocation` flag, an admin screen for `setSpawnCellApproval`, a Firestore TTL policy on the activity rows (§4.2), and then the flag flip plus a first approved cell.
 
 ### 4.1 The grid
 
@@ -222,7 +258,18 @@ At Swedish latitudes (~59°N) a cell is **1.11 km north–south × 0.57 km east�
 
 **This does not matter**, and it is worth being explicit about why: the grid exists only to *aggregate activity and target a crown count*. All actual geometry — separation, collection radius, geofencing — is computed in **metres** via Haversine. A slightly oblong aggregation bucket has no geometric consequence.
 
+Shipped as `crownCellKey()`, which clamps both axes before flooring. `parseCrownCellKey()` additionally **rejects keys that are not a place on Earth** — the regex alone would accept `"50000_0"` (latitude 500), and an admin can name a cell key directly on `setSpawnCellApproval`, so the range check is load-bearing rather than cosmetic.
+
 ### 4.2 Activity score `A(c)`
+
+> **STATUS: BUILT, but read the four differences below before citing this subsection.** The decay maths shipped exactly as written (`activityWeight`, `activityScore`); the *storage shape*, the *hashing*, and the *eligibility rule for what counts as a sighting at all* did not.
+>
+> 1. **Collection names.** Shipped as `crownCellActivity/{cellKey}` + `crownCellActivity/{cellKey}/recentUsers/{hash}`, not the `crownCells/…/presence/…` of §11.
+> 2. **The digest is a plain SHA-256, not an HMAC under a rotating salt.** `crownActivityUserHash(cellKey, uid)` is a length-prefixed SHA-256 over the pair. It is genuinely cell-scoped, so the same member is a different identifier in every cell and the rows cannot be joined into a route — but **it is not keyed**, so anyone holding the UID list can recompute a digest and confirm a guess. The code says so in its own header. The defence is against *correlation*, not against an actor who already has the UIDs. This is a real weakening of what the privacy sketch below promised, and it is the thing **Q10** should now be answered against.
+> 3. **`A` is NOT stored as an aggregate number on the cell document.** The cell document holds only `lastActivityAt` and `expireAt`. Each spawn pass **recomputes** `A` from up to `MAX_ACTIVITY_USERS_PER_CELL = 200` `recentUsers` documents.
+> 4. **A slow-sighting filter exists that this design never specified**, and it is the most safety-relevant part of what shipped — see the callout under the weights table.
+>
+> Where the signal comes from is also narrower than "presence": the **only** writer is `live.updatePosition` (`spawnActivity.ts`), so a member contributes nothing unless they have an active, user-started live-sharing session. Writes are throttled to one per user per cell per `CROWN_ACTIVITY_MIN_INTERVAL_MS = 10 min`, with an immediate write when crossing into a new cell. The whole path is best-effort and swallows every error — a heat-map write must never be able to fail live location sharing.
 
 ```
 A(c) = Σ  exp( −Δt_{u,c} / τ )        τ = 3 days
@@ -245,19 +292,31 @@ The 7-day window with a 3-day constant means the system effectively has a **thre
 
 **Distinctness matters.** Without it, one person parked in a cell for eight hours emitting pings would look like a crowd, and the system would carpet their driveway in crowns. Distinct-user counting means a cell needs *actual different people* to qualify.
 
+**Only SLOW sightings count — this shipped, and this design never asked for it.** `isActivitySightingEligible` discards any sample whose reported speed exceeds `MAX_ACTIVITY_SPEED_MPS = 8` (28.8 km/h), and a sample with **no** speed is discarded too (the opposite of `isSpeedSafe`'s "absent means safe" — here an unknown speed is an unproven claim about a place, and the only cost of a false negative is a slightly lower score).
+
+The reason is the worst failure mode this engine has. Raw presence would rank a **motorway** as the busiest place in the country, and a crown beside one is an invitation to stop on a hard shoulder. Requiring slow presence means a cell can only score from places people are actually *at* — car parks, meets, queues, on foot — and a cell nobody ever slows down in scores exactly zero however much traffic passes through it. The threshold sits above walking, cycling and car-park crawl but well below an urban 50 km/h limit (13.9 m/s), so ordinary through-traffic does not qualify either.
+
+This runs **under** the admin allow-list (§4.7), not instead of it: it is what stops an approved area that happens to contain a through-road from spawning beside it.
+
 #### Privacy: how `A` is computed without keeping traces
 
-`A` needs exactly one fact per (cell, user): **when did this user last appear in this cell.** Nothing else. The proposal:
+`A` needs exactly one fact per (cell, user): **when did this user last appear in this cell.** Nothing else. What shipped, against what was proposed:
 
-- A backend-only collection keyed by cell, holding one small document per (cell, hashed-uid) with a single `lastSeenAt` timestamp — **no coordinates, no sequence, no trajectory**.
-- The uid is HMAC'd under a rotating server-side salt, so the presence set cannot be joined back to profiles or across cells by anyone who obtains it.
-- A **7-day TTL** deletes rows automatically; nothing accumulates.
-- Backend-only in `firestore.rules` — no client read or write path exists.
-- `A` itself is stored as an aggregate number on the cell document. That aggregate is the only thing the spawner reads.
+| Proposed | Shipped |
+|---|---|
+| Backend-only collection keyed by cell, one small doc per (cell, hashed-uid) holding a single `lastSeenAt` — no coordinates, no sequence, no trajectory | **Yes.** `crownCellActivity/{cellKey}/recentUsers/{hash}`; the document body is `lastSeenAt` + `expireAt` and nothing else — no uid, no coordinate, no speed, no heading |
+| Uid **HMAC'd under a rotating server-side salt** | **No.** Unkeyed, unsalted, length-prefixed **SHA-256** over `(cellKey, uid)` (`crownActivityUserHash`). Cell-scoped, so still unjoinable across cells; but recomputable by anyone holding the UID list |
+| A **7-day TTL** deletes rows automatically | **Yes, two ways.** An `expireAt` field ready for a Firestore TTL policy, *plus* the sweeper `recursiveDelete`s any cell quiet for the whole 7-day window, taking its `recentUsers` sub-collection with it |
+| Backend-only in `firestore.rules`, no client read or write path | **Yes.** `allow read, write: if false` on both the cell and the sub-collection |
+| `A` stored as an aggregate number on the cell doc; the only thing the spawner reads | **No.** Recomputed each pass from up to 200 `recentUsers` docs; the cell doc holds only `lastActivityAt` and `expireAt` |
 
-**Honest caveat:** a (cell, user, timestamp) row *is* location data at ~1 km resolution, even without a trace. It is the minimum required for distinctness and it self-deletes in a week, but it is in scope for the privacy review and should not be described internally as "anonymous". At larger scale the escalation path is a probabilistic distinct-count sketch (HyperLogLog), which removes per-user rows entirely at the cost of ~2% counting error — unnecessary overhead at 20–30 users, correct at 20 000. See **Q10**.
+> **The Firestore TTL policy on `expireAt` is a manual console step and is not in `firestore.indexes.json`.** Until it is created, the *only* thing deleting these rows is `crownHunt-sweepSpawns`, and it reaps whole quiet **cells** — it does not expire individual `recentUsers` rows inside a cell that is still active. In a cell with continuous activity, a one-off visitor's row therefore persists past 7 days even though it stops contributing to `A` (`activityWeight` returns 0 outside the window). That is a retention gap, not a scoring bug, and it should be closed before the flag goes on.
+
+**Honest caveat, unchanged and now more pointed:** a (cell, user, timestamp) row *is* location data at ~1 km resolution, even without a trace. It is the minimum required for distinctness, but with an unkeyed digest and the TTL gap above it should not be described internally as "anonymous" — pseudonymous is the accurate word. At larger scale the escalation path is a probabilistic distinct-count sketch (HyperLogLog), which removes per-user rows entirely at the cost of ~2% counting error — unnecessary overhead at 20–30 users, correct at 20 000. See **Q10**, which is now a question about code that exists rather than about a proposal.
 
 ### 4.3 Target crown count — and why logarithmic
+
+> **STATUS: BUILT exactly as written** — `targetCrownCount()` in `crown-spawn-core.ts`, with `DENSITY_K = 1.5`, `MAX_CROWNS_PER_CELL = 5` and `MIN_ACTIVITY_FOR_SPAWN = 1`. A non-finite activity score also yields 0.
 
 ```
 N_target(c) = min( 5, ceil( K · ln(1 + A(c)) ) )     K = 1.5
@@ -289,6 +348,23 @@ The **cap of 5** binds from `A ≈ 27` upward. It exists so a city centre can ne
 
 ### 4.4 Replenishment — a Poisson process
 
+> **STATUS: NOT BUILT. This subsection describes a design the code does not implement, and the difference changes a stated anti-farming property.**
+>
+> `runCrownSpawnPass` computes `deficit = N_target − N_current` and attempts **the whole deficit in that one pass** (`spawnScheduled.ts`). There is no `λ`, no `τ_spawn`, and no Poisson draw anywhere in the repo — `pickCrownRarity` is the only consumer of the RNG besides position sampling.
+>
+> Concretely, what actually happens:
+>
+> | | §4.4 as designed | `spawnScheduled.ts` as built |
+> |---|---|---|
+> | Refill of an emptied 5-crown cell | ~6.8 h on average | **one pass — at most 10 minutes** |
+> | Tick interval | 15 min | **10 min** (`*/10 * * * *`; the 15-min job is the *sweeper*) |
+> | Arrival process | `k ~ Poisson(λ·Δt)` | deterministic top-up to target |
+> | Timing predictability | unlearnable by design | **a fixed 10-minute cron** |
+>
+> **The "Non-deterministic" property claimed in point 2 below does not hold.** A member can learn that crowns appear on the 10-minute boundary, and a cleared cell refills by the next one. What remains unpredictable is *rarity* and *position within the cell* (both RNG-driven), not *when*. Anything in §9 or §8.2 that leans on unpredictable spawn timing as an anti-farming measure is leaning on something that did not ship.
+>
+> Two things do still bound farming, and they are the honest defence today: **every crown expires** (§4.6), so no coordinate becomes a permanent fixture, and the per-user cap of `MAX_DAILY_SPAWN_CLAIMS = 20` spawned claims per UTC day is enforced inside the award transaction. Whether Poisson replenishment is still wanted on top of those is a live question — it is genuinely more work, and its main benefit (unlearnable timing) may not be worth it at 30 users.
+
 Crowns are **not** topped up to target instantly. Instant refill makes the map static and farmable: collect, wait one tick, collect again in the same spot.
 
 ```
@@ -312,12 +388,16 @@ Two properties this buys us:
 
 ### 4.5 Placement — Poisson-disc / dart throwing
 
+> **STATUS: BUILT** as `sampleCrownPosition` + `isFarEnoughFromAll` + `neighbourCrownCells`, with two differences: the attempt budget is **`MAX_SPAWN_SAMPLE_ATTEMPTS = 24`**, not 20, and **the second rejection test below does not exist** because the §4.7 safety mask was never built. A candidate is rejected on separation alone.
+>
+> One check shipped that is not described below: the sampled point is **re-keyed and compared against the cell it was drawn for**, and discarded on mismatch, so floating-point drift at a cell edge cannot emit a crown that belongs to the neighbouring cell and corrupt that cell's density accounting. Newly placed crowns are also appended to the `occupied` list *within* the same pass, so one run cannot create its own clump.
+
 Within a cell, a candidate position is drawn uniformly, then **rejected** if:
 
 - it is within `d_min = 150 m` of any *live* crown — checked across the **3×3 cell neighbourhood**, since the smallest cell dimension (572 m) exceeds 150 m, so a 3×3 window provably covers every crown that could conflict; or
-- it fails the placement-safety mask (§4.7).
+- ~~it fails the placement-safety mask (§4.7)~~ — **not implemented**; see §4.7.
 
-Up to 20 candidates are tried per placement; if all fail, the placement is abandoned until the next tick. It will almost never fail: at hexagonal packing a 0.64 km² cell holds
+Up to 24 candidates are tried per placement; if all fail, the placement is abandoned until the next tick. It will almost never fail: at hexagonal packing a 0.64 km² cell holds
 
 ```
 A_cell / (d_min² · √3/2) = 640 000 / (22 500 · 0.866) ≈ 33 crowns
@@ -328,6 +408,10 @@ before 150 m separation becomes impossible. We place at most **5**, roughly 15% 
 **Why separation at all?** Without it, uniform sampling clumps — that is what uniform sampling *does*. Three crowns 20 m apart is one stop for three rewards, which turns a "get out and explore" mechanic into a "park once and tap thrice" mechanic, and looks broken on the map. 150 m guarantees each crown is a genuinely separate stop, while staying well inside comfortable walking distance from a single parking spot for two adjacent ones.
 
 ### 4.6 Rarity, value and lifetime
+
+> **STATUS: BUILT exactly as written** — `CROWN_RARITY_TABLE` in `crown-spawn-core.ts` holds all four tiers at these weights, KP values and TTLs, and `COLLECT_RADIUS_METERS = 75`. `pickCrownRarity` walks the tiers in table order against a uniform roll, falling back to `common` on a non-finite or out-of-range draw so a bad RNG value can never fail a placement.
+>
+> One guard shipped that is worth knowing when reading a crown document: `resolveCollectRadiusMeters` ignores a stored radius that is not a finite positive number `≤ MAX_STORED_COLLECT_RADIUS_METERS = 250` and falls back to 75 m. An oversized radius is the one corruption that would fail *open* — a wider geofence pays out to someone who was never there — so "wrong" can only ever mean a **smaller** gate.
 
 | Rarity | Weight | KP | TTL | Collect radius |
 |---|---|---|---|---|
@@ -366,6 +450,31 @@ And because `A` drives `N_target`, **the whole thing scales itself.** More membe
 
 ### 4.7 Placement safety
 
+> **STATUS: the policy mask below was NOT BUILT. Q4 was answered the other way — an admin-approved cell allow-list shipped instead.** Nothing in the repo consults a road class, a land mask, a property boundary or a school/hospital campus, and there is no `crownExclusionZones` collection. Do not cite the bullet list below as a live defence; it is the design that was rejected in favour of a human gate.
+
+**What actually shipped: three independent gates, each sufficient on its own to produce zero spawns.**
+
+| # | Gate | Where |
+|---|---|---|
+| 1 | The **`crownHuntSpawn` feature flag**, contract default **OFF** | `readFeatureFlag` at the top of `runCrownSpawnPass`, `recordCrownActivity` and `claimSpawn` |
+| 2 | The **admin cell allow-list** — the candidate set *is* `crownSpawnCells where approved == true` | `spawnCells.ts`, `spawnScheduled.ts` |
+| 3 | The **activity floor** (`A < 1` → target 0) and the **slow-sighting filter** (§4.2) narrowing placement *within* an approved area | `crown-spawn-core.ts`, `spawnActivity.ts` |
+
+Gate 2 is the one that replaces `safeLocationConfirmed`, and it is deliberately structured so that approval is **the starting point of the query, not a filter applied afterwards** — an unapproved cell is invisible to the spawner however much activity it accumulates. `setSpawnCellApproval` mirrors `activatePoint`'s gate one level up: an explicit `safeAreaConfirmed: true` **literal** (so it cannot be satisfied by a default or a truthy accident) plus a note of ≥3 characters that lands in `adminAuditEvents`, so every area ever opened has a named admin and a reason attached. Auto-spawned crowns record `safeLocationConfirmed: false` explicitly — rather than omitting the field — plus `approvedCellBy`, so an incident review can tell at a glance which crowns had a person behind them and which had an algorithm inside a human-approved *area*.
+
+Three properties of the allow-list worth knowing, because each closes a failure the naive version has:
+
+- **Approval is re-checked at write time, inside a transaction.** A pass reads the allow-list once and may then run for minutes. Without the re-check, a revocation landing mid-pass would commit fresh crowns into an area an admin had just declared unsafe — and nothing downstream would remove them, because the sweeper only takes *expired* crowns, so they would stand for their full TTL (up to 48 h for a legendary). Both orderings are now safe.
+- **Revoking is cheaper than approving, and takes effect immediately.** Revocation needs no confirmation literal (turning an area off must never be harder than turning it on) and it **deletes the cell's live crowns** in pages rather than waiting out their TTL — revocation is the lever an admin reaches for after a near-miss or a complaint.
+- **Re-approval reseeds the round-robin cursor to the epoch sentinel**, so a re-approved area is repopulated on the next pass rather than waiting out a full cycle.
+
+The `A ≥ 1` gate does much of the rest implicitly: we only place where people already stop, and collection requires being stationary within 75 m. But implicit safety is not audited safety — which is exactly why gate 2 exists rather than gate 3 alone.
+
+**Still open even so:** the allow-list approves a **~1.1 × 0.57 km cell**, not a coordinate. An admin confirming a cell is confirming that *the area is broadly sensible to place in*, and the algorithm may still put a crown on a through-road inside it. The slow-sighting filter is what narrows that, and it is a proxy (nobody slows down there → it never scores) rather than a road-class check. An exclusion list at sub-cell resolution — the fourth bullet of the original mask — remains the obvious next increment if that proxy proves too coarse in practice.
+
+<details>
+<summary>The original policy-mask design, retained for reference (not implemented)</summary>
+
 Auto-spawning removes the human from `activatePoint`'s `safeLocationConfirmed` gate. That gate exists for a reason, so it is replaced — not dropped — by a policy mask. A candidate is rejected if it falls:
 
 - on a motorway or other limited-access carriageway, or on a slip road;
@@ -373,7 +482,7 @@ Auto-spawning removes the human from `activatePoint`'s `safeLocationConfirmed` g
 - on marked private property, or inside a school/hospital campus;
 - inside an admin-maintained **exclusion list** (cells or radii an admin has permanently banned — accident blackspots, sites where neighbours complained, etc.).
 
-The `A ≥ 1` gate does much of this work implicitly: we only place where people already stop, and collection requires being stationary within 75 m. But implicit safety is not audited safety. **Whether auto-spawn is allowed to bypass admin approval entirely, or requires an admin-approved cell allow-list at launch, is open question Q4** — and it is the single item on this list most worth Seb's attention, because it is the only one with a physical-safety failure mode.
+</details>
 
 ---
 
@@ -668,7 +777,17 @@ Crown claims, event attendance, and any future location-based earn go through **
 
 ### 8.1 Stages
 
-**Read the Status column before implementing against this table.** It is a target-state pipeline, not an inventory of what runs today. Two stages are *scored but never triggered* in the current code, and treating them as live defences would badly overstate what the system actually stops (§8.2).
+**Read the Status column before implementing against this table.** It is a target-state pipeline, not an inventory of what runs today. **Three stages (13, 14a, 14b) are scored by a rule that no input ever populates**, so each contributes exactly zero risk to every claim ever made; treating any of them as a live defence would badly overstate what the system actually stops (§8.2). 14a is the subtlest of the three, because its rule *is* new and *is* wired server-side — only the client half is missing.
+
+**There are now three claim paths through this pipeline, not one**, and they do not carry identical checks:
+
+| Path | Callable | Claim record / risk record | Daily cap |
+|---|---|---|---|
+| Hand-placed crowns | `crownHunt.submitClaim` | `crownHuntClaims` / `crownHuntClaimRisk` | `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` |
+| **Auto-spawned crowns** | `crownHunt.claimSpawn` | `crownSpawnClaims` / **`crownSpawnClaimRisk`** | **`MAX_DAILY_SPAWN_CLAIMS = 20`** |
+| Event attendance | `events.checkIn` | `eventAttendance` | n/a (per-event) |
+
+Where a stage below differs by path, the footnote says so. The two crown paths share every geo and risk primitive by import — `evaluateClaimRisk` at the same 60-point threshold, the same `isPositionFresh` / `isPlausibleJump` / `isWithinGeofence` — and diverge only in the stationary gate (note ²), the mock-location signal (note ⁴) and the cap (note ⁵).
 
 | # | Stage | Rule | Failure | Status |
 |---|---|---|---|---|
@@ -678,14 +797,15 @@ Crown claims, event attendance, and any future location-based earn go through **
 | 4 | Idempotency replay | Scoped key already seen → replay stored result | replay | **built** |
 | 5 | Freshness | Position age ≤ **60 s** | `position_too_old`, +35 risk | **built** |
 | 6 | Server-side distance | Haversine, server-computed | client distance never read | **built** |
-| 7 | Geofence | `d ≤ radius + 0.5 · accuracy` | `outside_geofence` | **built** |
-| 8 | Stationary gate | Speed ≤ **2.0 m/s** sustained (crowns) | `moving_too_fast` | **partial** ² |
+| 7 | Geofence | `d ≤ radius + 0.5 · accuracy` | `outside_geofence` / `outside_radius` | **built** ⁶ |
+| 8 | Stationary gate | Speed ≤ **2.0 m/s** sustained (crowns) | `moving_too_fast` / `must_be_stationary` | **partial** ² |
 | 9 | Plausible jump | Implied speed vs last trusted position ≤ **130 m/s** | +40 risk | **built** |
 | 10 | Accuracy | ≤ **50 m** | +10 risk | **built** |
 | 11 | Attempt rate | ≥ 4 attempts/min | +25 risk | **built** |
 | 12 | Success velocity | ≥ 5 awards / 5 min | +15 risk | **built** |
 | 13 | Fence-edge probing | ≥ 3 edge attempts/hour | +20 risk | **PLANNED** ³ |
-| 14 | Device integrity | Play Integrity / App Attest / mock-location flag | +40 risk | **PLANNED** ⁴ |
+| 14a | Mock location (self-reported) | `isMockLocation === true` | **+60 risk** (= threshold) | **built, spawn path only** ⁴ |
+| 14b | Device attestation | Play Integrity / App Attest | +40 risk | **PLANNED** ⁴ |
 | 15 | **Risk threshold** | Score ≥ **60** → `risk_review`, **zero KP** | recorded, not awarded | **built** |
 | 16 | Caps | Enforced **inside** the award transaction | `cap_reached` (clipped to headroom) / `limit_reached` | **built** ⁵ |
 | 17 | Ledger | Append-only, idempotency key = entry ID | replay-safe | **built** |
@@ -694,13 +814,29 @@ Crown claims, event attendance, and any future location-based earn go through **
 
 ² **The two crown paths now differ, and only one of them still has the hole.** Hand-placed claims (`submitClaim.ts`) run at **`MAX_CLAIM_SPEED_MPS = 1.4`** against a **single reported speed sample**, and a claim that omits `speedMetersPerSecond` entirely still passes — see C2 gap 1 and **Q16**. Auto-spawn claims (`claimSpawn.ts`) close both holes: **`MAX_COLLECT_SPEED_MPS = 2.0`** applied to **two** fixes at least `MIN_DWELL_SECONDS` apart, *and* a **server-derived** speed computed from those two positions and the elapsed time — which needs no client cooperation, so omitting the field no longer buys anything. That server-derived check is the pattern Q16 should adopt for `submitClaim` too.
 
-³ **Scored but never triggered.** `crown-hunt-risk.ts` has the `geofenceEdgeAttempts >= 3 → +20` rule, but `submitClaim.ts` passes `geofenceEdgeAttempts: 0` as a literal (`// legacy TODO: geofence-edge counting`). Nothing counts edge attempts, so this stage contributes zero risk for every claim ever made. Implementing it means adding the counter, not the rule.
+³ **Scored but never triggered, on *both* crown paths.** `crown-hunt-risk.ts` has the `geofenceEdgeAttempts >= 3 → +20` rule, but `submitClaim.ts` passes `geofenceEdgeAttempts: 0` as a literal (`// legacy TODO: geofence-edge counting`) and `claimSpawn.ts` passes the same literal. Nothing counts edge attempts, so this stage contributes zero risk for every claim ever made. Implementing it means adding the counter, not the rule.
 
-⁴ **Scored, but the input is self-reported and nothing populates it.** The `platformIntegrityPassed === false → +40` rule exists, but the value comes straight from the *client request body* (`crownhunt-core.ts` schema: `platformIntegrityPassed: z.boolean().nullable().optional()`), and no Android code sends it — the field has zero non-test callers in the repo. So today it is always `null`, and even once the client does send it, an attacker simply omits it or sends `true`. **This stage is not a device-integrity check until a real attestation token is verified server-side against Play Integrity / App Attest.** Until then it must not be counted as a defence.
+⁴ **Split, because one half now ships and the other still does not.**
 
-⁵ Built **for the crown daily-claim cap** (10/day, read-and-incremented inside the award transaction) and now also for the KP economy caps in §5.3, which have real counters: `pointsDailyTotals` (300/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits. All three are read and incremented **inside** the award transaction via `creditPointsResolved`, so two concurrent awards serialise on the ledger balance document and cannot race each other past a cap.
+**14a — mock location: the SERVER rule is built; nothing populates it yet.** `claimSpawn` accepts `isMockLocation` (Android's `Location.isMock`) and passes it to `evaluateClaimRisk` as `mockLocationReported`. The rule scores `MOCK_LOCATION_SCORE = RISK_REVIEW_THRESHOLD` — i.e. **exactly 60** — so a reported mock location **on its own** would send the claim to `risk_review` with zero KP. It is deliberately **one-way**: only `true` scores, and `false` is treated identically to absent, because a spoofing client would simply not set it.
 
-Risk **score and reasons are written to a backend-only collection** (`crownHuntClaimRisk`) and never returned to a client. Firestore rules cannot redact fields per-read, so separation is by collection, not by field. Thresholds are never exposed either — a client that can see the threshold can tune against it.
+**But grep before believing it fires.** `isMockLocation` has **no Android caller** — `grep -rn "isMock" apps/android` returns nothing, and the client has no auto-spawn support at all (see the §4 banner). So the field is always absent today and this stage contributes zero risk to every claim, exactly like stage 13 and stage 14b. It is a rule waiting for a client, not a live defence, and it must not be counted as one until the Android claim path sends the flag.
+
+Two further limits for when it *is* wired. It is **client-supplied**, so it will catch the careless (a mock-location app left running, a debug build) and nobody who is actually trying. And **`submitClaim` does not pass it at all** — `mockLocationReported` is optional on `RiskSignals` precisely so the older path scores exactly as before, which means hand-placed points have no mock-location defence even in principle. Wiring it there is a small change and an obvious follow-up.
+
+**14b — device attestation: still PLANNED, unchanged.** The `platformIntegrityPassed === false → +40` rule exists on both paths, but the value comes straight from the *client request body* (`platformIntegrityPassed: z.boolean().nullable().optional()` in both schemas) and **no Android code sends it** — the field has zero non-test callers in the repo. So today it is always `null`, and even once the client does send it, an attacker simply omits it or sends `true`. **This is not a device-integrity check until a real attestation token is verified server-side against Play Integrity / App Attest.** Until then it must not be counted as a defence.
+
+⁵ Built for **three** separate crown caps plus the KP economy caps, all read-and-incremented inside the award transaction:
+
+- `MAX_DAILY_SUCCESSFUL_CLAIMS = 10`/UTC day on hand-placed claims (`crownHuntDailyClaims`), plus the per-point repeat rule via `crownHuntAwardGuards`;
+- **`MAX_DAILY_SPAWN_CLAIMS = 20`/UTC day on spawned claims (`crownSpawnDailyClaims`)** — a **separate** counter on purpose, because the two are different economies (curated 1–1 000 KP points vs a 10/25/100/500 spawn table) and sharing one would mean a busy hunting afternoon silently locked a member out of an admin's event point;
+- the §5.3 KP economy caps: `pointsDailyTotals` (300/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits, all via `creditPointsResolved`.
+
+The spawn path additionally enforces its **once-globally** rule in the same transaction: the read guard re-reads the crown document and the write phase flips it to `status: 'claimed'` with `expiresAt` set to the claim instant, so concurrent taps serialise on the crown and exactly one wins. The pre-transaction status read is a fast path, never the authority. Setting `expiresAt` to *now* rather than leaving the rarity TTL is what makes the client read rule (`status == 'live' && expiresAt > request.time`) hide a taken crown immediately instead of leaving it on the map until the sweeper arrives.
+
+⁶ The spawn path checks the geofence **twice in one evaluation** — both the current and the previous fix must be inside the accuracy-buffered radius — because radius and dwell are decided together in `evaluateStationaryCollection` so the two cannot drift apart. Its failure code is `outside_radius`, not `outside_geofence`.
+
+Risk **score and reasons are written to backend-only collections** — `crownHuntClaimRisk` for hand-placed claims and **`crownSpawnClaimRisk`** for spawned ones — and never returned to a client. Firestore rules cannot redact fields per-read, so separation is by collection, not by field (`allow read, write: if false` on both). Note the asymmetry in *when* a risk record is written: on both paths a `risk_review` rejection always writes one, and an **awarded** claim writes one only when `riskScore > 0`, so a clean claim leaves no risk document at all. Thresholds are never exposed either — a client that can see the threshold can tune against it.
 
 Note the deliberate hardening already in `crown-hunt-geo.ts`: the legacy port treated an invalid speed as *safe*, which made the stationary gate bypassable with `speed = -1`. The current code treats non-finite and negative speeds as **unsafe**. Preserve that.
 
@@ -725,7 +861,9 @@ Different jobs. Do not unify them.
 
 **What we can make expensive but cannot prevent:**
 
-- A rooted or jailbroken device running a system-level mock-location provider that feeds a *plausible, smooth, correctly-timed* track. Every signal above is satisfiable by a good simulator. Play Integrity and App Attest **would** raise the cost to "a device you are willing to burn" — a real deterrent at our scale, though never a wall. Note that this is stated in the conditional: neither is integrated today (stage 14, note ⁴), so **at present there is nothing raising that cost at all**, and a mock-location provider currently defeats the geographic signals outright.
+- A rooted or jailbroken device running a system-level mock-location provider that feeds a *plausible, smooth, correctly-timed* track. Every signal above is satisfiable by a good simulator — including the spawn path's two-fix dwell check, which a simulator satisfies by simply holding a position for four seconds. Play Integrity and App Attest **would** raise the cost to "a device you are willing to burn" — a real deterrent at our scale, though never a wall. Neither is integrated today (stage 14b, note ⁴).
+
+  A mock-location **rule** now exists on the spawn path and would score straight to review (stage 14a) — but no client sends the flag, so it fires for nobody today. The honest statement is therefore unchanged from the previous draft: **there is currently nothing raising the cost of a mock-location provider**, on either crown path. What shipped is the seat, not the occupant.
 - Hardware GPS simulators. Nothing app-side touches these.
 - Account sharing / one person collecting on a friend's phone.
 
@@ -752,7 +890,7 @@ Caps are the real anti-abuse mechanism. The risk pipeline exists to catch the ca
 | Mechanic | Why it works |
 |---|---|
 | **Variable-ratio reward** (rarity) | The single strongest engagement driver known. Unpredictable payoff size sustains interest where a fixed payoff does not. Here it is bounded by a 10-claim daily cap, so the loop has a built-in end. |
-| **Poisson spawning** | You cannot learn the schedule, so the map is worth checking. |
+| ~~**Poisson spawning**~~ | ~~You cannot learn the schedule, so the map is worth checking.~~ **Not built** — the spawner runs on a fixed 10-minute cron and tops straight up to target (§4.4), so the schedule *is* learnable. What stays unpredictable is which rarity appears and where in the cell, plus the churn from 6–48 h TTLs. Weaker than intended, and worth knowing before citing this row as a live engagement mechanic. |
 | **Streaks** | Low-cost daily re-entry ritual — capped at ×1.7, so it is a nudge, not a hook. |
 | **Tiered progression** | Long-horizon goals that survive the novelty. The one mechanic still working in month six. |
 | **Near-miss visibility** | Crowns are shown on the map with rarity colour and remaining TTL **before** collection. Seeing a legendary you did not reach is a real, honest near-miss, and it is motivating. |
@@ -827,18 +965,31 @@ The message the system sends is precisely the intended one: **turn up, host, con
 
 Names are indicative; the implementing slices own the final shapes and the contract updates. All new collections are **backend-only** in `firestore.rules` unless stated.
 
-| Collection | Purpose | Access |
-|---|---|---|
-| `crownCells/{cellId}` | Aggregate `A`, `N_target`, `N_current`, `lastSweptAt` | backend only |
-| `crownCells/{cellId}/presence/{hmacUid}` | Single `lastSeenAt`, 7-day TTL, no coordinates | backend only |
-| `crownHuntPoints/{pointId}` | **Existing.** Extend with `rarity`, `expiresAt`, `cellId`, `spawnedBy: 'auto' \| 'admin'` | members read active |
-| `pointsDailyCounters/{derivedId}` | Global 300/day counter, transactionally enforced | backend only |
-| `pointsWeeklyDrivingCounters/{derivedId}` | Bucket `D` 400/week counter | backend only |
-| `eventAttendance/{eventId}_{uid}` | Verified boolean, dwell seconds, sample count — **no trace** | owner reads own |
-| `badgeProgress/{uid}` | **Existing.** Extend with per-ladder lifetime counters | backend only |
-| `crownExclusionZones/{id}` | Admin-maintained no-spawn areas | admin write |
+> **STATUS: mostly BUILT, and the shipped names differ from this sketch.** The table below has been rewritten to the collections that actually exist in `firebase/firestore.rules`; the "Sketched as" column records what this document originally proposed, because several of the old names are still cited elsewhere in the repo's older notes.
 
-A scheduled sweep (every 15 min) recomputes `A`, updates `N_target`, expires TTL'd crowns, and draws Poisson spawns. A separate nightly job recomputes badge ladder counters defensively and runs the §8.2 anomaly pass.
+| Collection | Purpose | Access | Sketched as |
+|---|---|---|---|
+| `crownSpawns/{spawnId}` | **Auto-spawned crowns.** A *separate* collection, not an extension of `crownHuntPoints` — mixing them would have made every admin safety guarantee optional | members read `status == 'live' && expiresAt > now`; no client writes | `crownHuntPoints` + `rarity`/`expiresAt`/`cellId`/`spawnedBy` |
+| `crownSpawnCells/{cellKey}` | **Admin allow-list** of areas the spawner may place in (§4.7) | admin read; no client writes | — (this is Q4's answer) |
+| `crownCellActivity/{cellKey}` | `lastActivityAt`, `expireAt`. **`A` is not stored here** — it is recomputed per pass | backend only | `crownCells/{cellId}` w/ stored `A` |
+| `crownCellActivity/{cellKey}/recentUsers/{hash}` | Single `lastSeenAt` + `expireAt` per distinct user; cell-scoped SHA-256 ID, no uid, no coordinate | backend only | `…/presence/{hmacUid}` |
+| `crownSpawnClaims/{scopedKey}` | Every spawn claim attempt; ID = namespaced SHA-256 of (uid, client key) | owner reads own | — |
+| `crownSpawnClaimRisk/{scopedKey}` | Risk score + reasons for spawn claims | backend only | — |
+| `crownSpawnDailyClaims/{derivedId}` | Per-user/per-UTC-day spawn-claim counter (cap 20) | backend only | — |
+| `pointsDailyTotals/{derivedId}` | Global 300/day counter, transactionally enforced | backend only | `pointsDailyCounters` |
+| `pointsWeeklyDriving/{derivedId}` | Bucket `D` 400/week counter | backend only | `pointsWeeklyDrivingCounters` |
+| `eventAttendance/{eventId}_{uid}` | Verified boolean, dwell seconds, sample count — **no trace** | owner reads own | as sketched |
+| `badgeProgress/{uid}` | **Existing.** Extend with per-ladder lifetime counters | backend only | **still unbuilt** |
+| ~~`crownExclusionZones/{id}`~~ | Admin-maintained no-spawn areas | — | **never built** (§4.7) |
+
+**Two scheduled jobs shipped, not one**, and neither matches the sentence this section used to carry:
+
+- `crownHunt-spawnCrowns`, **every 10 min** — recomputes `A` per approved cell, derives `N_target`, and tops the cell up to it. It does **not** expire crowns and does **not** draw Poisson arrivals (§4.4).
+- `crownHunt-sweepSpawns`, **every 15 min** — deletes crowns past `expiresAt` (oldest-first, paged, ≤1 000/run) and `recursiveDelete`s activity cells quiet for the whole 7-day window. Deliberately **not** feature-flag gated, so turning the engine off still lets placed crowns age off the map.
+
+Both pin `maxInstances: 1` and `concurrency: 1`: the spawner reads a cell's live neighbourhood and then writes into it, so two concurrent passes would each place crowns the other could not see and violate the 150 m separation rule without either run doing anything wrong.
+
+The nightly job that recomputes badge ladder counters and runs the §8.2 anomaly pass is **still unbuilt**.
 
 ---
 
@@ -846,54 +997,65 @@ A scheduled sweep (every 15 min) recomputes `A`, updates `N_target`, expires TTL
 
 These need a product call before implementation locks in. Ordered by how much rework the answer causes.
 
+**Five of these were overtaken by PR #570.** Q4 and Q11 are settled by what shipped; Q1 and Q16 are half-settled (answered on the spawn path, still open on the hand-placed one); Q10's *subject* now exists in code and differs from what was proposed, so the sign-off it asks for is now more urgent, not less. Resolved rows are marked **RESOLVED** with what actually shipped, and are kept rather than deleted so the reasoning stays auditable.
+
 | # | Question | Why it matters | Doc's assumption |
 |---|---|---|---|
-| **Q1** | Stationary gate: keep **1.4 m/s** (current code) or relax to **2.0 m/s**? | 1.4 will reject some genuine standstills on GPS jitter; 2.0 is a brisk walk. Pure safety-vs-frustration trade. | 2.0 m/s + short dwell |
+| **Q1** | Stationary gate: keep **1.4 m/s** (current code) or relax to **2.0 m/s**? | 1.4 will reject some genuine standstills on GPS jitter; 2.0 is a brisk walk. Pure safety-vs-frustration trade. | **PARTLY RESOLVED — both shipped, on different paths.** `claimSpawn` uses **2.0 m/s + a real 4–300 s dwell + a server-derived speed**; `submitClaim` still uses **1.4 m/s** on a single sample. That was not a decision, it was a consequence of building the new path independently. Still open: whether to reconcile them (and if so, in which direction). See C2. |
 | **Q2** | Does `crown_collect` belong in the driving-derived weekly bucket `D`? | Excluding it makes the 400/week cap nearly toothless; including it makes the cap bite after ~2 heavy days. | **Included** |
 | **Q3** | Should the **Vägfarare** distance ladder exist at all? | It is the only place the system acknowledges kilometres as an achievement. Defensible (milestones, zero marginal KP) but it is the closest thing here to a distance incentive. | **Yes**, with strict icon rules |
-| **Q4** | May auto-spawned crowns bypass the admin `safeLocationConfirmed` gate, or must launch use an **admin-approved cell allow-list**? | The only item with a physical-safety failure mode. Allow-list is slower but auditable. | Policy mask, no per-crown admin |
+| **Q4** | May auto-spawned crowns bypass the admin `safeLocationConfirmed` gate, or must launch use an **admin-approved cell allow-list**? | The only item with a physical-safety failure mode. Allow-list is slower but auditable. | ~~Policy mask, no per-crown admin~~ → **RESOLVED: the allow-list, not the policy mask.** `crownHunt.setSpawnCellApproval` writes `crownSpawnCells/{cellKey}` (explicit `safeAreaConfirmed: true` literal + a ≥3-char note, audited to `adminAuditEvents`), and the spawner's candidate set **is** `approved == true` — an unapproved cell is invisible to it. Re-checked transactionally at write time; revocation deletes the cell's live crowns immediately. Layered under it: the `crownHuntSpawn` flag (**default OFF**), the `A ≥ 1` floor, and the 8 m/s slow-sighting filter. **The policy mask (motorway/water/private-property/exclusion list) was NOT built** — see §4.7 for what remains open at sub-cell resolution. |
 | **Q5** | Legacy `first_event` / `five_events` / `garage_created` — show alongside the ladders, or demote to a "tidiga märken" section? | Cosmetic, but affects whether profiles look cluttered or duplicated. | Grandfather, demote in UI |
 | **Q6** | **Trogen** has 3 tiers, everything else has 4. Accept the asymmetry, or add a Platina at a 365-day streak? | A 365-day streak badge is exactly the kind of thing §9 warns about. | 3 tiers, no Platina |
 | **Q7** | Will KP **ever** redeem for anything of value? | Flips the entire §8.2 threat model. Needs to be known *now*, not discovered later. | **No redemption** |
 | **Q8** | Legendary at p = 0.01 / 500 KP → roughly **2 per day nationally** at 30 users. Right scarcity? | Too rare = nobody believes they exist; too common = the jackpot stops being one. | 0.01 |
 | **Q9** | Capped-out KP: **forfeited** (proposed) or banked to next period? | Banking re-creates the incentive the cap removes. | Forfeited, shown transparently |
-| **Q10** | Approve the per-(cell, user) `lastSeenAt` presence rows (7-day TTL, HMAC'd uid) for computing `A`? | It is location data, however minimal. Needs a privacy sign-off, not just an engineering one. | Approve, with sketch as escalation |
-| **Q11** | `N_target` jumps 0 → 2 at the `A ≥ 1` gate. Accept, or floor the first rung at 1? | Minor tuning; affects how sparse rural areas feel. | Accept (2) |
+| **Q10** | Approve the per-(cell, user) `lastSeenAt` presence rows (7-day TTL, HMAC'd uid) for computing `A`? | It is location data, however minimal. Needs a privacy sign-off, not just an engineering one. | **STILL OPEN, and now urgent — the code exists and it is weaker than the question assumes.** Built as `crownCellActivity/{cellKey}/recentUsers/{hash}`, backend-only, written only from `live.updatePosition` (so it requires an active user-started sharing session) and only for sub-8 m/s samples. **Two deltas from what this question asked you to approve:** the digest is an **unkeyed, unsalted SHA-256** of (cellKey, uid), not an HMAC under a rotating salt — cell-scoped, so unjoinable across cells, but recomputable by anyone holding the UID list; and the **7-day TTL policy does not exist yet** (`expireAt` is written, but no Firestore TTL policy is configured, and the sweeper only reaps whole quiet *cells*). Mitigating: the `crownHuntSpawn` flag is OFF, so **nothing is being collected today**. The sign-off should happen before it is switched on, against §4.2's shipped-vs-proposed table rather than against the original proposal. |
+| **Q11** | `N_target` jumps 0 → 2 at the `A ≥ 1` gate. Accept, or floor the first rung at 1? | Minor tuning; affects how sparse rural areas feel. | ~~Accept (2)~~ → **RESOLVED as assumed: accepted.** `targetCrownCount` applies `ceil(1.5·ln(1+A))` with no first-rung override, so `A = 1` yields `ceil(1.0397) = 2`. Shipped, but never explicitly decided — it is the default falling through. Cheap to revisit: it is one `Math.max`/clamp in a pure, unit-tested function with no data migration. |
 | **Q12** | Approve badge milestone bonuses **25 / 75 / 200 / 500** and their exemption from the daily cap? | Platina alone is 500 KP — larger than any single non-legendary earn. | Approve |
 | **Q13** | Launch **nationwide** or opt-in regions? | Nationwide with 30 users spreads `A` thin and many cells will never qualify. | Nationwide, monitor `A` |
 | **Q14** | Keep **all** windows on UTC boundaries (matching existing crown-cap code), or move the **daily-open streak** to `Europe/Stockholm`? | A UTC day rolls over at 01:00/02:00 local. Invisible for a cap, but a member will judge a *streak* against their own calendar and will feel robbed. | Caps stay UTC, streak moves to local |
 | **Q15** | Route `points.adminReverse` through `creditPoints`/`debitPoints` before building any cap, or exempt reversals from caps by design? | `adminReverse` writes its own transaction today, so `ledger.ts` is **not** a single choke point (C4). A cap built there silently misses reversals. | Route it through first |
-| **Q16** | When a claim arrives with **no** `speedMetersPerSecond`, reject, or derive speed server-side from the last trusted position? | Today a missing speed is treated as safe, so the C2 stationary gate — a *safety* constraint, not a fairness one — is bypassable by omitting one optional field. The data for a server-derived fallback already exists (`isPlausibleJump` uses it). | Server-derived fallback, reject if unavailable |
+| **Q16** | When a claim arrives with **no** `speedMetersPerSecond`, reject, or derive speed server-side from the last trusted position? | Today a missing speed is treated as safe, so the C2 stationary gate — a *safety* constraint, not a fairness one — is bypassable by omitting one optional field. The data for a server-derived fallback already exists (`isPlausibleJump` uses it). | **PARTLY RESOLVED — the assumption shipped, on the spawn path only.** `claimSpawn` requires a `previousFix` and derives speed from the two coordinates and the elapsed time (`movedMeters / dwellSeconds ≤ 2.0`), so omitting the reported field buys nothing there. It derives from the client's **own second fix** rather than from the RTDB trusted position, which is simpler and needs no cooperation beyond coordinates the client has already committed to. **`submitClaim` is unchanged and still bypassable.** The remaining question is narrow: port the same two-fix pattern to `submitClaim` (a breaking request-schema change for the Android client), or reject a missing speed there outright? |
 
 ---
 
 ## 13. Summary of canonical constants
 
-Everything an implementer needs, in one table.
+Everything an implementer needs, in one table. Crown-side values have been checked against `crown-spawn-core.ts` / `crownhunt-core.ts`; where the two crown paths differ, both rows appear.
 
-| Constant | Value |
-|---|---|
-| Grid cell | 0.01° × 0.01° |
-| Activity decay `τ` | 3 days (7-day window) |
-| Spawn coefficient `K` | 1.5 |
-| `N_target` | `min(5, ceil(1.5·ln(1+A)))`, 0 if `A < 1` |
-| Replenish `τ_spawn` | 3 h |
-| Sweep interval | 15 min |
-| Min separation `d_min` | 150 m |
-| Collect radius `r_collect` | 75 m |
-| Rarity weights | 0.70 / 0.22 / 0.07 / 0.01 |
-| Rarity KP | 10 / 25 / 100 / 500 |
-| Rarity TTL | 6 h / 12 h / 24 h / 48 h |
-| Expected KP per crown | 24.5 |
-| Stationary gate | ≤ 2.0 m/s sustained (current code: 1.4) |
-| Position freshness | 60 s |
-| Accuracy risk threshold | 50 m |
-| Risk review threshold | 60 |
-| Crown claims/day | 10 (fixed UTC day, from 00:00Z) |
-| Global earn cap | 300 KP (Europe/Stockholm civil day, from local midnight) |
-| Driving-derived cap `D` | 400 KP (Europe/Stockholm week, from local Monday midnight) |
-| Streak multiplier | `min(1.7, 1 + min(s,7)/10)` |
-| Event fence | 150 m |
-| Event dwell | ≥ 10 min cumulative, ≥ 2 in-fence samples spanning ≥ 10 min; any single gap credits at most 30 min |
-| Event window | `[start − 30 min, end + 30 min]` |
-| Badge tier bonuses | 25 / 75 / 200 / 500 KP (cap-exempt) |
+| Constant | Value | In code |
+|---|---|---|
+| Grid cell | 0.01° × 0.01° | `CROWN_CELL_DEGREES` |
+| Activity decay `τ` | 3 days (7-day window) | `ACTIVITY_TAU_DAYS` / `ACTIVITY_WINDOW_DAYS` |
+| Activity sighting speed ceiling | **8 m/s** (absent speed does **not** count) | `MAX_ACTIVITY_SPEED_MPS` |
+| Activity write throttle | 10 min per user per cell | `CROWN_ACTIVITY_MIN_INTERVAL_MS` |
+| Spawn coefficient `K` | 1.5 | `DENSITY_K` |
+| `N_target` | `min(5, ceil(1.5·ln(1+A)))`, 0 if `A < 1` | `targetCrownCount()` |
+| ~~Replenish `τ_spawn`~~ | ~~3 h~~ — **not implemented**; the spawner tops straight up to target (§4.4) | — |
+| **Spawn pass interval** | **10 min** | `crownHunt-spawnCrowns` |
+| Sweep interval | 15 min | `crownHunt-sweepSpawns` |
+| Per-run bounds | 50 cells, 100 spawns, 200 activity docs/cell, 1 000 sweep deletions | `spawnScheduled.ts` |
+| Min separation `d_min` | 150 m (3×3 neighbourhood) | `MIN_CROWN_SEPARATION_METERS` |
+| Dart-throwing attempts | **24** | `MAX_SPAWN_SAMPLE_ATTEMPTS` |
+| Collect radius `r_collect` | 75 m (stored radius trusted only if `0 < r ≤ 250`) | `COLLECT_RADIUS_METERS` |
+| Rarity weights | 0.70 / 0.22 / 0.07 / 0.01 | `CROWN_RARITY_TABLE` |
+| Rarity KP | 10 / 25 / 100 / 500 | `CROWN_RARITY_TABLE` |
+| Rarity TTL | 6 h / 12 h / 24 h / 48 h | `CROWN_RARITY_TABLE` |
+| Expected KP per crown | 24.5 | (derived) |
+| Stationary gate — hand-placed | ≤ **1.4 m/s**, single sample, omittable | `MAX_CLAIM_SPEED_MPS` |
+| Stationary gate — spawned | ≤ **2.0 m/s** on both fixes **and** on the server-derived speed | `MAX_COLLECT_SPEED_MPS` |
+| Dwell window — spawned | **4 s .. 300 s** between the two fixes | `MIN_DWELL_SECONDS` / `MAX_DWELL_SECONDS` |
+| Position freshness | 60 s (current fix only; the previous fix is bounded by the dwell window) | `MAX_POSITION_AGE_SECONDS` |
+| Accuracy risk threshold | 50 m | `POOR_ACCURACY_THRESHOLD_METERS` |
+| Risk review threshold | 60 | `RISK_REVIEW_THRESHOLD` |
+| Mock-location penalty | **60** (= threshold, so it alone triggers review); spawn path only | `MOCK_LOCATION_SCORE` |
+| Crown claims/day — hand-placed | 10 (fixed UTC day, from 00:00Z) | `MAX_DAILY_SUCCESSFUL_CLAIMS` |
+| Crown claims/day — spawned | **20** (fixed UTC day, separate counter) | `MAX_DAILY_SPAWN_CLAIMS` |
+| Global earn cap | 300 KP (Europe/Stockholm civil day, from local midnight) | `DAILY_POINTS_CAP` |
+| Driving-derived cap `D` | 400 KP (Europe/Stockholm week, from local Monday midnight) | `WEEKLY_DRIVING_POINTS_CAP` |
+| Streak multiplier | `min(1.7, 1 + min(s,7)/10)` | `points-economy-core.ts` |
+| Event fence | 150 m | `events/checkIn.ts` |
+| Event dwell | ≥ 10 min cumulative, ≥ 2 in-fence samples spanning ≥ 10 min; any single gap credits at most 30 min | `events/checkIn.ts` |
+| Event window | `[start − 30 min, end + 30 min]` | `events/checkIn.ts` |
+| Badge tier bonuses | 25 / 75 / 200 / 500 KP (cap-exempt) | **unbuilt** |
