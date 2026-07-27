@@ -45,14 +45,15 @@ describe('badge-core inputs and builders', () => {
   it('denormalizes the catalog definition onto the award document', () => {
     const docData = buildBadgeDocument(
       'garage_created',
-      { source: 'automatic', awardedByUserId: null },
+      { source: 'automatic' },
       () => 'SERVER_TS',
     );
     expect(docData.badgeKey).toBe('garage_created');
     expect(docData.name).toBe('Garageprofil skapad');
     expect(docData.iconIdentifier).toBe('badge_garage_created');
     expect(docData.source).toBe('automatic');
-    expect(docData.awardedByUserId).toBeNull();
+    // Never present — the badge document is publicly readable.
+    expect(docData).not.toHaveProperty('awardedByUserId');
     expect(docData.awardedAt).toBe('SERVER_TS');
   });
 

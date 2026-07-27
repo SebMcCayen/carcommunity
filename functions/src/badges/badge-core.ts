@@ -622,7 +622,7 @@ export function parseAwardHelpfulMemberInput(
  */
 export function buildBadgeDocument(
   badgeKey: BadgeKey,
-  context: { source: 'automatic' | 'admin_manual'; awardedByUserId: string | null },
+  context: { source: 'automatic' | 'admin_manual' },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
   const definition = BADGE_CATALOG[badgeKey];
@@ -634,7 +634,11 @@ export function buildBadgeDocument(
     ladder: definition.ladder,
     tier: definition.tier,
     source: context.source,
-    awardedByUserId: context.awardedByUserId,
+    // NOT the awarding admin's UID. This document is publicly readable by any
+    // signed-in member (the badge wall), and Firestore has no field-level read
+    // security, so anything written here is public. The awarder identity lives
+    // in adminAuditEvents, which is admin-only and written in the same
+    // transaction.
     awardedAt: serverTimestamp(),
   };
 }

@@ -221,9 +221,13 @@ service cloud.firestore {
       // nor the garage it accompanies is member-gated, and gating only the
       // awards would leave a half-rendered profile.
       //
-      // WHAT BECOMES PUBLIC IS THE TROPHY, NOT THE TELEMETRY. An award document
-      // carries { badgeKey, name, source, awardedAt } — that a threshold was
-      // crossed, and when. The raw counters it was crossed against (streak
+      // WHAT BECOMES PUBLIC IS THE TROPHY, NOT THE TELEMETRY. Firestore has no
+      // field-level read security, so EVERY field of an award document is
+      // public: { badgeKey, name, description, iconIdentifier, ladder, tier,
+      // source, awardedAt } — the catalog text for the badge, plus that a
+      // threshold was crossed and when. The awarding admin's UID is
+      // deliberately NOT written here (it lives in adminAuditEvents); see
+      // buildBadgeDocument. The raw counters it was crossed against (streak
       // length, lifetime distance driven, events attended, crowns collected)
       // live on badgeProgress/{uid}, which stays denied to EVERY client,
       // including the owner (see that block below). Widening this rule

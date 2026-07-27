@@ -64,7 +64,7 @@ export async function awardBadge(params: {
       badgeRef,
       buildBadgeDocument(
         params.badgeKey,
-        { source: params.source, awardedByUserId: params.awardedByUserId ?? null },
+        { source: params.source },
         () => FieldValue.serverTimestamp(),
       ),
     );
