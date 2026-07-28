@@ -56,6 +56,17 @@ EXIF. Only a device can prove that.
    on the map chat bubble clears when opened.
 10. **Convoy** — create one and invite a friend; on accept they get a green dot;
     start then end it; the summary is visible to both members.
+11. **Badge wall (public)** — your own profile shows the medallion wall, the climb to
+    the next tier and your Kronpoäng. Open **another** member's profile: their earned
+    badges and tiers must render (badges are public), and there must be **no**
+    progress bars or counter numbers on that screen — the telemetry behind a badge
+    (streak, distance, meets) is never shown publicly. `badgeProgress/{uid}` is
+    backend-only, denied to every client including its owner; the progress you see
+    on your OWN profile is derived client-side from reads the app already makes
+    (your drives, your garage), not from that document.
+    Requires the `firebase deploy --only firestore:rules` that ships with this
+    change; run against an un-deployed project the other member's wall correctly
+    degrades to a neutral "not visible" note, which is not a bug.
 
 ## Known gaps — do NOT report these as bugs
 
@@ -66,7 +77,6 @@ These are tracked, expected, and waiting on something outside the app:
 | Sign-in and "Report a problem" fail | **App Check / Play release SHA not provisioned** — the device sends `app: MISSING` and enforced callables reject it |
 | Convoy summary shows no distance | Backend convoy route roll-up not built; `summary.distanceMeters` is always null |
 | Drive detail has no map replay | The recorded route path isn't persisted/exposed to the client — only aggregate stats are |
-| Other members' badges show "not shown" | Badges are owner-only under current Firestore rules |
 | Push / email notifications never arrive | FCM send path + email provider aren't set up yet |
 | Terms / Privacy links open placeholder pages | Real hosted content pending |
 

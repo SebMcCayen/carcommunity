@@ -69,7 +69,7 @@ export const awardHelpfulMember = onCall(
         badgeRef,
         buildBadgeDocument(
           'helpful_member',
-          { source: 'admin_manual', awardedByUserId: actor.uid },
+          { source: 'admin_manual' },
           serverTimestamp,
         ),
       );

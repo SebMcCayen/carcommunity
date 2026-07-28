@@ -23,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,8 +36,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.badges.Badge
+import com.kungsbackacarcommunity.app.badges.BadgeGlyph
+import com.kungsbackacarcommunity.app.badges.BadgeGridRows
+import com.kungsbackacarcommunity.app.badges.BadgeMedallionSize
+import com.kungsbackacarcommunity.app.badges.BadgeMedallionTile
+import com.kungsbackacarcommunity.app.badges.MilestoneBadge
+import com.kungsbackacarcommunity.app.badges.PublicBadgeWall
 import com.kungsbackacarcommunity.app.badges.badgeNameRes
+import com.kungsbackacarcommunity.app.badges.ladderNameRes
+import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.friends.messageRes
@@ -48,8 +56,6 @@ import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
 import com.kungsbackacarcommunity.app.shell.AeroPage
-import java.text.DateFormat
-import java.util.Date
 
 /**
  * Read-only view of another member's public profile: avatar, display name, bio,
@@ -75,8 +81,10 @@ import java.util.Date
  *    [com.kungsbackacarcommunity.app.moderation.MessageModeration] for the exact
  *    backend this is waiting on.
  *
- * Badges collapse to a soft "not shown" note when they aren't readable under the
- * current Security Rules (they are owner-only today) — see [MemberBadges].
+ * Badges are PUBLIC and render as the member's badge wall — medallions at the
+ * tier they reached — because achievements are meant to be shown off. The wall
+ * carries no progress bar and no counter: see [MemberBadgeWall]. It collapses to
+ * a soft note if the read is denied or fails — see [MemberBadges].
  *
  * @param onBlock blocks the viewed member; null (config-less build, or the
  *   viewer's own profile) omits the block action.
@@ -476,6 +484,21 @@ private fun VehiclePhoto(imagePath: String?) {
     }
 }
 
+/**
+ * The other member's badge wall — the trophies, and nothing else.
+ *
+ * Badges are public (firebase/firestore.rules: `users/{uid}/badges` is readable
+ * by any authenticated user) precisely so they can be shown off, so this renders
+ * the same medallions the owner sees on their own profile, at the tier they
+ * reached.
+ *
+ * WHAT IS DELIBERATELY ABSENT: progress bars, counter numbers, next-rung goals,
+ * and the ladders they have not started. Reaching a rung is the public fact; how
+ * far along they are toward the next one is not, and the ladders they have never
+ * touched are a to-do list that belongs on their own profile, not on a stranger's
+ * view of them. This is enforced by the model, not by discipline —
+ * [PublicBadgeWall] has no field that could carry any of it.
+ */
 @Composable
 private fun BadgesSection(badges: MemberBadges) {
     Text(
@@ -498,43 +521,78 @@ private fun BadgesSection(badges: MemberBadges) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-        is MemberBadges.Available ->
-            if (badges.badges.isEmpty()) {
+        is MemberBadges.Available -> {
+            // Folded during composition and keyed on the award list, so scrolling
+            // the profile doesn't refold the wall on every recomposition.
+            val wall = remember(badges.badges) { PublicBadgeWall.from(badges.badges) }
+            if (!wall.hasAnyBadge) {
                 Text(
                     text = stringResource(R.string.memberProfile_badgesEmpty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
-                badges.badges.forEach { BadgeCard(it) }
+                MemberBadgeWall(wall)
             }
+        }
     }
 }
 
 @Composable
-private fun BadgeCard(badge: Badge) {
-    val nameRes = badgeNameRes(badge.key)
-    val name = if (nameRes != null) stringResource(nameRes) else (badge.fallbackName ?: badge.key)
+private fun MemberBadgeWall(wall: PublicBadgeWall) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Text(
-                text = name,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                text = stringResource(R.string.badgeShowcase_subtitle, wall.earnedCount, wall.totalCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            badge.awardedAtMillis?.let { millis ->
-                val awardedDate = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(millis))
+
+            if (wall.ladders.isNotEmpty()) {
+                BadgeGridRows(items = wall.ladders, perRow = 3) { standing ->
+                    val name =
+                        stringResource(ladderNameRes(standing.ladder.id)) + " " +
+                            stringResource(tierNameRes(standing.highestRung.tier))
+                    BadgeMedallionTile(
+                        glyph = BadgeGlyph.Ladder(standing.ladder.id),
+                        tier = standing.highestRung.tier,
+                        earned = true,
+                        label = stringResource(ladderNameRes(standing.ladder.id)),
+                        contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
+                        caption = stringResource(tierNameRes(standing.highestRung.tier)),
+                        medallionSize = BadgeMedallionSize,
+                    )
+                }
+            }
+
+            if (wall.milestones.isNotEmpty()) {
                 Text(
-                    text = stringResource(R.string.memberProfile_awardedOn, awardedDate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = stringResource(R.string.badgeShowcase_milestonesTitle),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
+                BadgeGridRows(items = wall.milestones, perRow = 4) { milestone ->
+                    val name = milestoneName(milestone)
+                    BadgeMedallionTile(
+                        glyph = BadgeGlyph.Milestone(milestone.key),
+                        tier = null,
+                        earned = true,
+                        label = name,
+                        contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun milestoneName(milestone: MilestoneBadge): String {
+    val res = badgeNameRes(milestone.key)
+    return if (res != null) stringResource(res) else (milestone.fallbackName ?: milestone.key)
 }
 
 @Composable

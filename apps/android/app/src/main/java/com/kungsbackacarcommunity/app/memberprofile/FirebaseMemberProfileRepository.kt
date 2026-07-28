@@ -21,12 +21,16 @@ import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
  *  - users/{targetUid} — public profile (rules: any authenticated user).
  *  - vehicles where userId == targetUid — the member's garage (rules: any
  *    authenticated user).
- *  - users/{targetUid}/badges — best-effort. Under the current rules this
- *    subcollection is OWNER-ONLY read, so the query is denied for any other
- *    viewer; a PERMISSION_DENIED is mapped to [MemberBadges.Unavailable] while
- *    any transient failure maps to [MemberBadges.Unknown] (the rest of the
- *    profile still renders in both cases). Exposing another member's badges
- *    would require a backend rule/callable change (out of the Android lane).
+ *  - users/{targetUid}/badges — the member's badge wall (rules: any
+ *    authenticated user; badges are public so achievements can be shown off).
+ *    Still read best-effort: a PERMISSION_DENIED maps to
+ *    [MemberBadges.Unavailable] and any other failure to [MemberBadges.Unknown],
+ *    so an older deployed ruleset or a transient error degrades to a note
+ *    instead of failing the whole profile.
+ *
+ * NOT read: `badgeProgress/{targetUid}`. The counters a badge was earned against
+ * (streak, lifetime distance, meets attended, crowns) are denied to every
+ * client, and the member-profile screen shows trophies only — no progress.
  */
 class FirebaseMemberProfileRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -53,12 +57,12 @@ class FirebaseMemberProfileRepository private constructor(
                 // failing the whole profile — name/avatar/bio still render.
                 .getOrDefault(emptyList())
 
-        // Badges are owner-only readable today: a denied read is EXPECTED, so a
-        // PERMISSION_DENIED collapses to the definitive "not available" note.
-        // Any OTHER failure (offline, timeout, misconfig) is transient and maps
-        // to Unknown, so a temporary hiccup isn't misreported as "awards aren't
-        // shown on other members' profiles". The rest of the profile still
-        // renders in both cases.
+        // Badges are publicly readable, so this is expected to SUCCEED. The two
+        // failure shapes are still told apart: a PERMISSION_DENIED (an older
+        // deployed ruleset, or visibility narrowed again later) is definitive
+        // and collapses to the "not available" note, while any OTHER failure
+        // (offline, timeout, misconfig) is transient and maps to Unknown. The
+        // rest of the profile still renders in both cases.
         val badges: MemberBadges =
             runCatchingCancellable {
                 firestore

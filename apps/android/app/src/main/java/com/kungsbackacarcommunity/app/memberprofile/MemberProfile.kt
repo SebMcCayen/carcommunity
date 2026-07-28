@@ -18,19 +18,22 @@ data class MemberProfile(
 )
 
 /**
- * The other member's badges. Under the current Security Rules
- * (users/{uid}/badges is owner-only read), another user's badges are NOT
- * readable — so a read attempt is expected to be denied and collapses to
- * [Unavailable] rather than erroring the whole screen. When a future backend
- * rule/callable exposes them publicly this becomes [Available].
+ * The other member's badges. `users/{uid}/badges` is readable by any
+ * authenticated user (Security Rules), so the expected outcome is now
+ * [Available] — badges are a public showcase. [Unavailable] and [Unknown] are
+ * kept as the two failure shapes: neither must take the whole profile down, and
+ * the two must not be conflated (one is a decision, the other a hiccup).
  */
 sealed interface MemberBadges {
     data class Available(val badges: List<Badge>) : MemberBadges
 
     /**
-     * Genuinely not visible to this viewer: the read was denied
-     * (PERMISSION_DENIED) under the current owner-only rules. A definitive
-     * "awards aren't shown on other members' profiles" state, not a failure.
+     * The read was DENIED (PERMISSION_DENIED) — the definitive "these awards
+     * aren't visible to you" state rather than a failure. No longer the normal
+     * case now that badges are public; it remains reachable if the deployed
+     * rules are older than this build, or if a future rule narrows visibility
+     * again, and the screen must degrade to a neutral note rather than a retry
+     * loop against a read that will never succeed.
      */
     data object Unavailable : MemberBadges
 

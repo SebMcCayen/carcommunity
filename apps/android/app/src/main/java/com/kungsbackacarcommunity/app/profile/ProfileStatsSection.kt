@@ -70,16 +70,15 @@ fun ProfileStatsSection(
                 stringResource(R.string.savedDrives_statsTotalTime),
                 DriveFormatters.formatDuration(summary.totalDurationSeconds),
             )
-            StatRow(
-                stringResource(R.string.profile_badges),
-                summary.badgeCount.toString(),
-            )
-            summary.pointsBalance?.let { balance ->
-                StatRow(
-                    stringResource(R.string.profile_points),
-                    balance.toString(),
-                )
-            }
+            // Badge count and Kronpoäng balance are NOT repeated here: both now
+            // have their own richer sections on this same profile
+            // ([ProfileBadgesSection] shows the wall and the next rung,
+            // [ProfilePointsSection] the balance and what earned it), and a
+            // second bare number would read as a duplicate. Both stay part of
+            // [ProfileStatsSummary] because the badge count feeds `hasActivity`
+            // (drives OR badges). The Kronpoäng balance deliberately does NOT:
+            // a brand-new member has a balance of 0 and would otherwise be shown
+            // a wall of zeroes instead of the encouraging empty state.
             summary.memberSinceMillis?.let { millis ->
                 StatRow(
                     stringResource(R.string.profile_statsMemberSince),

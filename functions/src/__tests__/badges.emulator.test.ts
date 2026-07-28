@@ -235,7 +235,9 @@ describe('badges-awardHelpfulMember', () => {
 
     const badge = (await badgeDoc(member.uid, 'helpful_member').get()).data()!;
     expect(badge.source).toBe('admin_manual');
-    expect(badge.awardedByUserId).toBe(adminUser.uid);
+    // The awarding admin's UID must never reach this publicly-readable
+    // document; adminAuditEvents carries it instead.
+    expect(badge).not.toHaveProperty('awardedByUserId');
 
     const second = (
       await call('badges-awardHelpfulMember', {

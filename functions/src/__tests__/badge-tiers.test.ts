@@ -656,7 +656,7 @@ describe('presentation', () => {
   it('denormalizes ladder and tier onto the award document', () => {
     const document = buildBadgeDocument(
       'vagfarare_guld',
-      { source: 'automatic', awardedByUserId: null },
+      { source: 'automatic' },
       () => 'TS',
     );
     expect(document).toMatchObject({
@@ -666,7 +666,6 @@ describe('presentation', () => {
       ladder: 'vagfarare',
       tier: 'guld',
       source: 'automatic',
-      awardedByUserId: null,
       awardedAt: 'TS',
     });
   });
@@ -674,10 +673,14 @@ describe('presentation', () => {
   it('writes null ladder/tier for the standalone badges', () => {
     const document = buildBadgeDocument(
       'helpful_member',
-      { source: 'admin_manual', awardedByUserId: 'admin1' },
+      { source: 'admin_manual' },
       () => 'TS',
     );
-    expect(document).toMatchObject({ ladder: null, tier: null, awardedByUserId: 'admin1' });
+    expect(document).toMatchObject({ ladder: null, tier: null });
+    // The awarding admin's UID must NOT be here: this document is publicly
+    // readable and Firestore has no field-level read security. The identity
+    // lives in adminAuditEvents.
+    expect(document).not.toHaveProperty('awardedByUserId');
   });
 });
 

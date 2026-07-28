@@ -19,4 +19,25 @@ object Points {
     /** Newest transaction first; undated entries sort last. */
     fun sortedForList(entries: List<PointsEntry>): List<PointsEntry> =
         entries.sortedByDescending { it.createdAtMillis ?: Long.MIN_VALUE }
+
+    /** Default number of recent earnings shown on the profile. */
+    const val PROFILE_HIGHLIGHT_COUNT = 4
+
+    /**
+     * The newest few EARNINGS, for the "why did I get these points?" line on the
+     * profile.
+     *
+     * Credits only: a debit (a redeemed reward) answers a different question and
+     * would read as a punishment next to a badge wall, so it is left to the full
+     * Kronpoäng screen. Input order is not trusted — the list is re-sorted with
+     * [sortedForList] so an unordered snapshot still yields the genuinely newest
+     * entries.
+     */
+    fun recentEarnings(
+        entries: List<PointsEntry>,
+        limit: Int = PROFILE_HIGHLIGHT_COUNT,
+    ): List<PointsEntry> {
+        if (limit <= 0) return emptyList()
+        return sortedForList(entries.filter { it.amount > 0 }).take(limit)
+    }
 }

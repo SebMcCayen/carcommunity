@@ -208,23 +208,52 @@ service cloud.firestore {
       // Admins have unrestricted access.
       allow read, write: if isAdmin();
 
-      // Badges (Phase 9f) — users/{uid}/badges/{badgeKey}. Awarded by the
-      // backend only (automatic evaluators + badges.awardHelpfulMember);
-      // strictly owner-only read, matching the legacy API which never
-      // exposes other users' badges. Admin workflows use the Admin SDK /
-      // callables — no privileged client-side read (same rule as
-      // userPrivate).
-      // NOTE (tiered ladders): read stays OWNER-ONLY. Showing a member's
-      // badges on their PUBLIC profile would be a separate, deliberate
-      // privacy decision (badges leak activity: streaks, distance driven,
-      // events attended) and is not made here.
+      // Badges (Phase 9f + tiered ladders) — users/{uid}/badges/{badgeKey}.
+      // Awarded by the backend only (automatic tier evaluators +
+      // badges.awardHelpfulMember).
+      //
+      // PUBLIC READ — a deliberate product decision (2026-07): an earned badge
+      // is a trophy meant to be shown off, so any authenticated user may read
+      // it. That is the SAME gate as the users/{uid} profile document the
+      // badges hang off and the /vehicles garage rendered beside them on a
+      // member profile, so the read-only member-profile screen renders as one
+      // consistent page. Deliberately NOT isActiveMember(): neither the profile
+      // nor the garage it accompanies is member-gated, and gating only the
+      // awards would leave a half-rendered profile.
+      //
+      // WHAT BECOMES PUBLIC IS THE TROPHY, NOT THE TELEMETRY. Firestore has no
+      // field-level read security, so EVERY field of an award document is
+      // public: { badgeKey, name, description, iconIdentifier, ladder, tier,
+      // source, awardedAt } — the catalog text for the badge, plus that a
+      // threshold was crossed and when. The awarding admin's UID is
+      // deliberately NOT written here (it lives in adminAuditEvents); see
+      // buildBadgeDocument. The raw counters it was crossed against (streak
+      // length, lifetime distance driven, events attended, crowns collected)
+      // live on badgeProgress/{uid}, which stays denied to EVERY client,
+      // including the owner (see that block below). Widening this rule
+      // therefore exposes rungs reached, never the activity totals behind them.
+      //
+      // AND IT IS PER-MEMBER, NOT A GLOBAL INDEX. This grant does NOT make
+      // badges enumerable across users via collectionGroup('badges'). Firestore
+      // authorises a collection group query only from a rule written against a
+      // recursive-wildcard path (match /{path=**}/badges/{badgeKey}); a rule
+      // nested under a concrete ancestor like /users/{userId} is never
+      // consulted for one. The only recursive-wildcard rule in this file is the
+      // deny-all catch-all above, so every client collection group query over
+      // `badges` is denied — viewer, activeMember and admin alike. Do not add a
+      // /{path=**}/badges/… grant: badges.adminSummary
+      // (functions/src/badges/adminSummary.ts) and the functions.json contract
+      // both state that no client can scan across members, and the emulator
+      // test "no client can scan badges across members — collectionGroup is
+      // denied" will fail if that stops being true.
       match /badges/{badgeKey} {
-        allow read: if isOwner(userId);
+        allow read: if isAuthenticated();
         // No client writes — for the tiered ladders too. A tier is derived
         // exclusively from server-verified counters by the badges Firestore
         // triggers (functions/src/badges/progressTriggers.ts): there is no
         // callable and no client write path by which one could be forged,
-        // and a badge is never revoked here.
+        // and a badge is never revoked here. Not even the owner may write, so
+        // a publicly readable wall can never become a self-minted one.
       }
 
       // Saved partner offers (Phase 9i) — a pure member bookmark. Document
@@ -1151,10 +1180,19 @@ service cloud.firestore {
     // (functions/src/badges/progressTriggers.ts): crownsCollected,
     // lifetimeDistanceMeters, bestDayStreak, convoysLed, vehiclesInGarage.
     //
-    // DENIED TO EVERY CLIENT — read included. This is the anti-abuse core of
-    // the tiered badges: every ladder threshold is tested against these
-    // numbers, so if a client could write one it could mint any badge, and the
-    // Admin SDK (which bypasses rules) is the only writer.
+    // DENIED TO EVERY CLIENT — read included, owner included. Two separate
+    // reasons, and both still hold now that users/{uid}/badges is public:
+    //
+    //  1. ANTI-ABUSE. Every ladder threshold is tested against these numbers,
+    //     so if a client could write one it could mint any badge. The Admin SDK
+    //     (which bypasses rules) is the only writer.
+    //  2. PRIVACY. Badges are the showpiece; these counters are not. Publish
+    //     the trophies, not the telemetry — an award says a rung was reached,
+    //     while `bestDayStreak`, `lifetimeDistanceMeters`,
+    //     `completedEventsAttended` and `crownsCollected` are a running log of
+    //     how much someone drives, when they open the app and where they go.
+    //     Making the badge wall readable widened exactly one collection and
+    //     deliberately did NOT widen this one, not even to its owner.
     // -------------------------------------------------------------------------
     match /badgeProgress/{userId} {
       allow read, write: if false;

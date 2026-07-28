@@ -248,7 +248,13 @@
     "avatarChange": "Change picture",
     "avatarUploading": "Uploading…",
     "avatarUploadError": "Couldn’t upload the image. Please try again.",
-    "avatarTooLarge": "The image is too large."
+    "avatarTooLarge": "The image is too large.",
+    "pointsTitle": "Kronpoäng",
+    "pointsSubtitle": "How active you have been",
+    "pointsRecentTitle": "Recently earned",
+    "pointsRecentEmpty": "Drive, collect crowns and attend meets – your points will show up here.",
+    "pointsAmount": "+%1$d p",
+    "pointsUnit": "p"
   },
   "map": {
     "title": "Map",
@@ -620,7 +626,7 @@
     "mainCar": "Main car",
     "badgesTitle": "Awards",
     "badgesEmpty": "No awards yet.",
-    "badgesUnavailable": "Awards aren't shown on other members' profiles.",
+    "badgesUnavailable": "These awards aren't visible to you right now.",
     "badgesLoadError": "Awards couldn't be loaded.",
     "awardedOn": "Awarded %1$s",
     "blocked": "You've blocked this member. Unblock them to see their profile again.",
@@ -876,6 +882,57 @@
       "samlare_brons": "Collector Bronze",
       "samlare_silver": "Collector Silver",
       "samlare_guld": "Collector Gold"
+    }
+  },
+  "badgeShowcase": {
+    "title": "My awards",
+    "subtitle": "%1$d of %2$d unlocked",
+    "emptyTitle": "Your collection starts here",
+    "emptyBody": "Six ladders to climb – every tier pays Kronpoäng. Here is how to unlock the first one:",
+    "progressTitle": "Next tier",
+    "nextTier": "Next: %1$s",
+    "ladderComplete": "All tiers complete",
+    "progressCount": "%1$s / %2$s",
+    "noTierYet": "No tier yet",
+    "showAll": "Show all awards",
+    "showLess": "Show fewer",
+    "milestonesTitle": "Milestones",
+    "awardedOn": "Unlocked %1$s",
+    "howToEarn": "How to unlock it",
+    "close": "Close",
+    "reward": "Pays %1$d Kronpoäng",
+    "progressUnavailable": "Your standing is counted on the server – the tier appears here as soon as it is earned.",
+    "medallionEarned": "%1$s, unlocked",
+    "medallionLocked": "%1$s, locked",
+    "tierNames": {
+      "brons": "Bronze",
+      "silver": "Silver",
+      "guld": "Gold",
+      "platina": "Platinum"
+    },
+    "ladderNames": {
+      "kronjagare": "Kronjägare",
+      "vagfarare": "Vägfarare",
+      "traffrav": "Träffräv",
+      "trogen": "Trogen",
+      "konvojledare": "Konvojledare",
+      "samlare": "Samlare"
+    },
+    "ladderRequirements": {
+      "kronjagare": "Collect %1$s crowns in Kronjakten.",
+      "vagfarare": "Drive %1$s in total.",
+      "traffrav": "Attend %1$s meets.",
+      "trogen": "Open the app %1$s days in a row.",
+      "konvojledare": "Lead %1$s convoys.",
+      "samlare": "Keep %1$s vehicles in your garage."
+    },
+    "ladderTaglines": {
+      "kronjagare": "Crowns you have picked up on the map.",
+      "vagfarare": "The distance you have put behind you.",
+      "traffrav": "Meets you have taken part in.",
+      "trogen": "Days in a row in the app.",
+      "konvojledare": "Convoys you have led.",
+      "samlare": "Vehicles in your garage."
     }
   },
   "points": {
