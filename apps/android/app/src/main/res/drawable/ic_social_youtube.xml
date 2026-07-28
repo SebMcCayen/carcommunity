@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Social glyph: YOUTUBE.
+
+  TRADEMARK NOTE — this is NOT YouTube's official mark. It is a neutral,
+  monochrome "play in a rounded rectangle" glyph drawn for this app and tinted
+  by the caller. Swapping in the official brand asset needs the platform's
+  brand guidelines checked first — see the PR that introduced this file.
+
+  Silhouette is the primary cue (this app's icons must read without colour):
+  WIDE rounded rectangle + knocked-out triangle, against Facebook's SOLID
+  square and Instagram's HOLLOW square.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:pathData="M6.5,5H17.5A4.5,4.5 0 0 1 22,9.5V14.5A4.5,4.5 0 0 1 17.5,19H6.5A4.5,4.5 0 0 1 2,14.5V9.5A4.5,4.5 0 0 1 6.5,5ZM10,8.5L16.5,12L10,15.5Z" />
+</vector>

@@ -4392,8 +4392,10 @@ private fun RouteHost(
                 ProfileScreen(
                     profile = profile,
                     saveStatus = saveStatus,
-                    onSave = { name, bio ->
-                        profileEditCoordinator?.let { c -> scope.launch { c.save(uid, name, bio) } }
+                    onSave = { name, bio, social ->
+                        profileEditCoordinator?.let { c ->
+                            scope.launch { c.save(uid, name, bio, social) }
+                        }
                     },
                     onBack = onClose,
                     onSignOut = onSignOut,

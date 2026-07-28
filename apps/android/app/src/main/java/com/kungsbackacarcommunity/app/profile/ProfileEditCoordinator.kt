@@ -26,12 +26,23 @@ class ProfileEditCoordinator(
     private val state = MutableStateFlow<ProfileEditStatus>(ProfileEditStatus.Idle)
     val status: StateFlow<ProfileEditStatus> = state.asStateFlow()
 
-    /** Saves once; re-entrant calls while saving are ignored. */
-    suspend fun save(uid: String, displayName: String, bio: String) {
+    /**
+     * Saves once; re-entrant calls while saving are ignored.
+     *
+     * [social] must be the CANONICAL handles from
+     * [ProfileValidation.Result.social] — this coordinator does not re-parse
+     * member input, so passing raw text here would store it verbatim.
+     */
+    suspend fun save(
+        uid: String,
+        displayName: String,
+        bio: String,
+        social: SocialHandles = SocialHandles.EMPTY,
+    ) {
         if (state.value == ProfileEditStatus.Saving) return
         state.value = ProfileEditStatus.Saving
         try {
-            repository.updateProfile(uid, displayName, bio)
+            repository.updateProfile(uid, displayName, bio, social)
             state.value = ProfileEditStatus.Saved
         } catch (cancellation: CancellationException) {
             state.value = ProfileEditStatus.Idle

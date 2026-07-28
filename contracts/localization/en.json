@@ -254,7 +254,23 @@
     "pointsRecentTitle": "Recently earned",
     "pointsRecentEmpty": "Drive, collect crowns and attend meets – your points will show up here.",
     "pointsAmount": "+%1$d p",
-    "pointsUnit": "p"
+    "pointsUnit": "p",
+    "social": {
+      "sectionTitle": "Social media",
+      "publicNotice": "These links are shown on your public profile. Leave a field empty to remove it.",
+      "hint": "Username or link to your page",
+      "facebookLabel": "Facebook",
+      "instagramLabel": "Instagram",
+      "youtubeLabel": "YouTube",
+      "errorForeignHost": "That link doesn’t point to %1$s. Enter your username instead.",
+      "errorUnsupportedLink": "Use the link to your profile page – or just your username.",
+      "errorMalformed": "Enter a valid username or profile link.",
+      "errorTooLong": "That’s too long for a username.",
+      "openFacebook": "Open Facebook profile %1$s",
+      "openInstagram": "Open Instagram profile %1$s",
+      "openYoutube": "Open YouTube channel %1$s",
+      "openFailed": "No app on this device can open that link."
+    }
   },
   "map": {
     "title": "Map",

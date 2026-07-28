@@ -254,7 +254,23 @@
     "pointsRecentTitle": "Senast intjänat",
     "pointsRecentEmpty": "Kör, samla kronor och delta i träffar – dina poäng dyker upp här.",
     "pointsAmount": "+%1$d p",
-    "pointsUnit": "p"
+    "pointsUnit": "p",
+    "social": {
+      "sectionTitle": "Sociala medier",
+      "publicNotice": "Länkarna visas på din publika profil. Lämna fältet tomt för att ta bort det.",
+      "hint": "Användarnamn eller länk till din sida",
+      "facebookLabel": "Facebook",
+      "instagramLabel": "Instagram",
+      "youtubeLabel": "YouTube",
+      "errorForeignHost": "Länken leder inte till %1$s. Skriv ditt användarnamn i stället.",
+      "errorUnsupportedLink": "Använd länken till din profilsida – eller bara ditt användarnamn.",
+      "errorMalformed": "Ange ett giltigt användarnamn eller en profillänk.",
+      "errorTooLong": "Det där är för långt för ett användarnamn.",
+      "openFacebook": "Öppna Facebook-profilen %1$s",
+      "openInstagram": "Öppna Instagram-profilen %1$s",
+      "openYoutube": "Öppna YouTube-kanalen %1$s",
+      "openFailed": "Ingen app på den här enheten kan öppna länken."
+    }
   },
   "map": {
     "title": "Karta",

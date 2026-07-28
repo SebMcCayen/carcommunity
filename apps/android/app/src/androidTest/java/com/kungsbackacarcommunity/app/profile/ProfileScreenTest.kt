@@ -31,7 +31,7 @@ class ProfileScreenTest {
                 ProfileScreen(
                     profile = profile,
                     saveStatus = ProfileEditStatus.Idle,
-                    onSave = { _, _ -> },
+                    onSave = { _, _, _ -> },
                     onBack = {},
                     onSignOut = {},
                 )
@@ -52,7 +52,7 @@ class ProfileScreenTest {
                 ProfileScreen(
                     profile = profile,
                     saveStatus = ProfileEditStatus.Idle,
-                    onSave = { name, bio -> saved = name to bio },
+                    onSave = { name, bio, _ -> saved = name to bio },
                     onBack = {},
                     onSignOut = {},
                 )

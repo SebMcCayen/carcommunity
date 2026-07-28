@@ -47,6 +47,9 @@ Document ID: Firebase UID.
 | `displayName`           | `string`     | Visible username                                                                     |
 | `avatarPath`            | `string?`    | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}`                             |
 | `bio`                   | `string?`    | Short profile description                                                            |
+| `facebook`              | `string?`    | Facebook **handle** (username or numeric id), never a URL — rendered as `https://www.facebook.com/{handle}`; absent when unset |
+| `instagram`             | `string?`    | Instagram **handle**, never a URL — rendered as `https://www.instagram.com/{handle}`; absent when unset |
+| `youtube`               | `string?`    | YouTube channel **handle** without the leading `@`, never a URL or channel id — rendered as `https://www.youtube.com/@{handle}`; absent when unset |
 | `role`                  | `string`     | `'user'` \| `'admin'` — **backend-managed only**                                     |
 | `activeMember`          | `boolean`    | Subscription entitlement — **backend-managed only**                                  |
 | `suspended`             | `boolean`    | Moderation state — **backend-managed only**                                          |
@@ -56,6 +59,8 @@ Document ID: Firebase UID.
 | `updatedAt`             | `Timestamp`  | Server timestamp                                                                     |
 
 Security: any authenticated user can read; owner can update non-protected fields; backend (Admin SDK) manages protected fields.
+
+The three social fields store a **handle, not a URL**, on purpose: the rendered link's host is a constant the app owns, so a member-supplied value cannot point a public profile link at a foreign host. Firestore Security Rules apply the per-platform character pattern and length bound (there is no callable in front of the write), and clearing a field **removes** it rather than storing an empty string.
 
 ---
 

@@ -54,6 +54,7 @@ import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
+import com.kungsbackacarcommunity.app.profile.ProfileSocialLinksRow
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
@@ -354,6 +355,10 @@ private fun ProfileHeader(profile: MemberProfile) {
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
             Avatar(profile.avatarPath)
+            // Directly under the profile picture, as asked. Renders NOTHING
+            // when this member has filled none in — no empty row, no
+            // placeholders (ProfileSocialLinksRow).
+            ProfileSocialLinksRow(handles = profile.social)
             Text(
                 text = profile.displayName?.takeIf { it.isNotBlank() }
                     ?: stringResource(R.string.memberProfile_unknownMember),
