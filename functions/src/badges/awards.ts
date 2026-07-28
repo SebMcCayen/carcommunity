@@ -42,7 +42,10 @@ export async function awardBadge(params: {
   targetUid: string;
   badgeKey: BadgeKey;
   source: 'automatic' | 'admin_manual';
-  awardedByUserId?: string | null;
+  // No awarder parameter by design: the badge document is publicly readable
+  // and Firestore has no field-level read security, so an admin UID must never
+  // be persisted here. Callers that award manually record the actor in
+  // adminAuditEvents instead (see awardHelpfulMember).
 }): Promise<AwardResult | null> {
   const userSnap = await db.collection('users').doc(params.targetUid).get();
   if (!userSnap.exists || isRestricted(toUserAccessState(userSnap.data()))) {
