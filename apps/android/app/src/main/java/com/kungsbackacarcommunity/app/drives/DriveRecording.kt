@@ -325,8 +325,18 @@ object DriveSummary {
     /** Mean spherical Earth radius in metres (backend EARTH_RADIUS_METRES). */
     private const val EARTH_RADIUS_METRES = 6_371_000.0
 
-    /** Backend MAX_PLAUSIBLE_SPEED_MPS: segments faster than this are GPS jumps. */
-    private const val MAX_PLAUSIBLE_SPEED_MPS = 55.6
+    /**
+     * Backend MAX_PLAUSIBLE_SPEED_MPS: segments faster than this are GPS jumps.
+     *
+     * Public because this is no longer only a drives concern: the map's
+     * live-marker smoother
+     * ([com.kungsbackacarcommunity.app.map.LiveMarkerSmoothing.acceptsFix])
+     * throws away an incoming convoy position implying more than this since the
+     * last accepted one, for exactly the reason this scan skips such a segment.
+     * Read from here rather than restated there, so the app has ONE answer to
+     * "too fast to be a car" and retuning it moves both.
+     */
+    const val MAX_PLAUSIBLE_SPEED_MPS = 55.6
 
     private fun toRadians(degrees: Double): Double = degrees * Math.PI / 180.0
 
