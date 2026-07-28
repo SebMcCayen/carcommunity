@@ -577,6 +577,7 @@
     <string name="memberProfile_carsTitle">Bilar</string>
     <string name="memberProfile_carsEmpty">Inga bilar i garaget ännu.</string>
     <string name="memberProfile_mainCar">Huvudbil</string>
+    <string name="memberProfile_registrationPlate">Reg.nr %1$s</string>
     <string name="memberProfile_badgesTitle">Utmärkelser</string>
     <string name="memberProfile_badgesEmpty">Inga utmärkelser ännu.</string>
     <string name="memberProfile_badgesUnavailable">De här utmärkelserna går inte att visa just nu.</string>

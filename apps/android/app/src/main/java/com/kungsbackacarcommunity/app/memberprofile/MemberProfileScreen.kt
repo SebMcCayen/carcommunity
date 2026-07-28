@@ -436,6 +436,17 @@ private fun VehicleCard(vehicle: Vehicle) {
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
+            // Ordered as on the owner's own detail screen: plate directly under
+            // the make/model line. The field is deliberately public — the owner
+            // is told so at entry time — so it renders for every viewer, not
+            // just the owner. See Vehicle.registrationPlate.
+            vehicle.registrationPlate?.takeIf { it.isNotBlank() }?.let { plate ->
+                Text(
+                    text = stringResource(R.string.memberProfile_registrationPlate, plate),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             Text(
                 text = stringResource(vehicle.powertrain.labelRes()),
                 style = MaterialTheme.typography.labelMedium,

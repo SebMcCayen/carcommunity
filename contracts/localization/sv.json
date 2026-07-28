@@ -624,6 +624,7 @@
     "carsTitle": "Bilar",
     "carsEmpty": "Inga bilar i garaget ännu.",
     "mainCar": "Huvudbil",
+    "registrationPlate": "Reg.nr %1$s",
     "badgesTitle": "Utmärkelser",
     "badgesEmpty": "Inga utmärkelser ännu.",
     "badgesUnavailable": "De här utmärkelserna går inte att visa just nu.",

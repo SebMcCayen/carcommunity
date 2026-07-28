@@ -77,6 +77,13 @@ data class Vehicle(
      * withdrawn from suspended accounts. Do not describe it as "shown to other
      * members"; that understates it. Narrowing the audience means changing that
      * Firestore rule, not just which screens render the field.
+     *
+     * Rendered on the owner's own [VehicleDetailScreen] AND on another member's
+     * profile card
+     * ([com.kungsbackacarcommunity.app.memberprofile.MemberProfileScreen]), so
+     * every mapper that feeds those screens must carry the field — the
+     * member-profile mapper originally dropped it, which made a deliberately
+     * public field owner-only in practice.
      */
     val registrationPlate: String? = null,
     /**

@@ -624,6 +624,7 @@
     "carsTitle": "Cars",
     "carsEmpty": "No cars in the garage yet.",
     "mainCar": "Main car",
+    "registrationPlate": "Reg. no. %1$s",
     "badgesTitle": "Awards",
     "badgesEmpty": "No awards yet.",
     "badgesUnavailable": "These awards aren't visible to you right now.",
