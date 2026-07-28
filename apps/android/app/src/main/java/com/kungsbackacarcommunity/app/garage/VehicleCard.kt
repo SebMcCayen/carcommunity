@@ -145,7 +145,7 @@ internal fun VehicleCard(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(contentSpacing),
         ) {
-            if (onOpen == null) {
+            val summary: @Composable ColumnScope.() -> Unit = {
                 VehicleCardSummary(
                     vehicle = vehicle,
                     photoStyle = photoStyle,
@@ -153,24 +153,21 @@ internal fun VehicleCard(
                     mainCarLabelRes = mainCarLabelRes,
                     registrationPlateFormatRes = registrationPlateFormatRes,
                 )
+            }
+            if (onOpen == null) {
+                summary()
             } else {
                 // The photo + details is the tap target that opens the full
                 // car-detail page (announced as a button). The manage buttons
-                // stay OUTSIDE this clickable region.
+                // stay OUTSIDE this clickable region, so a tap on
+                // Edit/Delete/Set-main is not also read as "open detail".
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable(role = Role.Button, onClick = onOpen),
                     verticalArrangement = Arrangement.spacedBy(contentSpacing),
-                ) {
-                    VehicleCardSummary(
-                        vehicle = vehicle,
-                        photoStyle = photoStyle,
-                        photoContentDescriptionRes = photoContentDescriptionRes,
-                        mainCarLabelRes = mainCarLabelRes,
-                        registrationPlateFormatRes = registrationPlateFormatRes,
-                    )
-                }
+                    content = summary,
+                )
             }
             actions()
         }
