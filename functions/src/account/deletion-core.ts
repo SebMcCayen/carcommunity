@@ -27,9 +27,12 @@
  * graph mirrors onto OTHER users' documents has to be swept separately, or
  * the deleted user survives as a dangling row in everyone else's data —
  * see PURGE_FRIEND_MIRROR / PURGE_FRIEND_REQUEST_USER_FIELDS /
- * PURGE_CONVOY_MEMBERSHIP / PURGE_BLOCK_MIRROR below. The block graph is
- * additionally mirrored OUTSIDE Firestore, into Realtime Database — see
- * LIVE_LOCATION_BLOCKS_RTDB_ROOT.
+ * PURGE_CONVOY_MEMBERSHIP / PURGE_BLOCK_MIRROR below.
+ *
+ * A doc-tree purge also only reaches FIRESTORE. Two domains keep per-user state
+ * OUTSIDE it, in Realtime Database, and each needs its own removal step: the
+ * block graph's marker-rules mirror (LIVE_LOCATION_BLOCKS_RTDB_ROOT) and the
+ * live-location session/marker subtree (LIVE_LOCATION_RTDB_ROOTS).
  *
  * What is deliberately retained (documented, not an oversight):
  * - moderationActions / adminAuditEvents / moderationReports — immutable
@@ -107,6 +110,28 @@ export const PURGE_DOC_TREES = [
   // rows other members hold about this user) is swept separately — see
   // PURGE_BLOCK_MIRROR.
   'userBlocks',
+  // The nearby-discovery index, liveSessions/{uid} (live/nearby-core.ts): a
+  // uid-keyed doc carrying the sharer's LAST POSITION (latitude/longitude +
+  // geoCell) and their denormalized displayName — the same leak shape as the
+  // friend/block mirrors, with a coordinate attached.
+  //
+  // It has its own TTL, so in normal operation it is deleted within
+  // DISCOVERY_TTL_MS (15 minutes) by live-cleanupExpired's sweepDiscoveryDocs,
+  // long before the 30-day purge runs. It is listed here anyway because
+  // ERASURE MUST NOT DEPEND ON A DIFFERENT SCHEDULED JOB HAVING SUCCEEDED: a
+  // sweep that is failing, throttled or undeployed removes nothing at all, and
+  // one that is merely behind removes late — it is hard-capped at 400 deletes
+  // per run, so a backlog above that rate is worked off across several runs.
+  // (That backlog drains OLDEST-EXPIRY-FIRST, not in uid order: the
+  // `expiresAt <= now` inequality makes Firestore order the query by expiresAt
+  // ascending, so no individual doc is starved indefinitely and the failure
+  // mode of a lagging sweep is delay rather than permanent survival. It is the
+  // not-running case that leaves the doc forever.) Deleting it here costs one
+  // no-op delete in the overwhelmingly common case where the sweep already
+  // got it.
+  //
+  // No subcollections beneath it — recursiveDelete just removes the document.
+  'liveSessions',
 ] as const;
 
 export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
@@ -256,6 +281,34 @@ export function blockMirrorRtdbKey(rowPath: string): string | null {
   if (subcollection !== PURGE_BLOCK_MIRROR.collectionGroup) return null;
   return `${blockerUid}/${blockedUid}`;
 }
+
+/**
+ * The Realtime Database subtrees holding the user's own LIVE-LOCATION state,
+ * each removed wholesale at `{root}/{uid}`.
+ *
+ * `liveLocation/{uid}` is the one that actually leaks. Its `session` child is
+ * NEVER DELETED on any path — live/session.ts stopSession/hideMeNow and
+ * stopConvoyAutoSession only transition `status` to `stopped`, and the TTL sweep
+ * (live/scheduled.ts runLiveCleanup) only flips it to `expired`; all three remove
+ * `latest` alone. So the node outlives the account indefinitely, carrying the
+ * denormalized `displayName`, the `mainCar` snapshot (make/model/modelYear/
+ * imagePath), and — written by points/liveDistance.ts — `pointsLastLatitude` /
+ * `pointsLastLongitude`, the last GPS coordinate the session recorded. Removing
+ * the `{uid}` PARENT rather than its two known children also covers `latest` and
+ * anything the domain adds under the uid later.
+ *
+ * `presence/{uid}` (online + lastSeen, documented in live-core.ts as part of the
+ * same live-location data model) is included for completeness: it is
+ * client-written and readable by every authenticated user, and no repo code
+ * writes it today, so this is forward-cover — a subtree that was never written
+ * costs one no-op removal.
+ *
+ * Both removals are UNCONDITIONAL and derived from the uid alone, for the same
+ * reason the liveLocationBlocks/{uid} removal is: nothing is read first, so a
+ * retry after a partially-failed purge still finds the path, and re-running only
+ * ever rewrites the same `null`.
+ */
+export const LIVE_LOCATION_RTDB_ROOTS = ['liveLocation', 'presence'] as const;
 
 export const PURGE_STORAGE_PREFIXES = (uid: string): string[] => [
   `profileImages/${uid}/`,

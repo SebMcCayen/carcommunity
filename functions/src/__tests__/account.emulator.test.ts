@@ -8,7 +8,7 @@
  * storage prefixes, Auth user, processed request record retained).
  *
  * Requires the Functions + Database emulators (the purge clears the block
- * graph's RTDB mirror) — run via:
+ * graph's RTDB mirror and the live-location subtrees) — run via:
  *   pnpm emulators:test
  */
 
@@ -348,6 +348,52 @@ describe('account purge (hard delete after retention)', () => {
         : undefined;
     });
 
+    // (i) LIVE-LOCATION state, in both stores.
+    //     The RTDB session node is seeded in the state a properly STOPPED share
+    //     leaves behind (status 'stopped', stoppedAt set, `latest` already
+    //     removed by stopAndClear) — the realistic worst case, because that node
+    //     is never deleted by stopSession/hideMeNow, stopConvoyAutoSession, or
+    //     the TTL sweep: all of them only transition `status`. It carries the
+    //     denormalized displayName, the main-car snapshot, and the last
+    //     coordinate points/liveDistance.ts recorded on it.
+    //     `latest` is seeded anyway so the assertion covers the whole subtree
+    //     (a session that expired mid-drive between sweeps looks like this).
+    await adminRtdb.ref(`liveLocation/${uid}/session`).set({
+      id: 'live-session-1',
+      status: 'stopped',
+      duration: '1h',
+      startedAt: new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString(),
+      expiresAt: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+      stoppedAt: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+      stopReason: 'user_stop',
+      displayName: 'Raderad',
+      mainCar: { make: 'Volvo', model: '240', modelYear: 1989, imagePath: null },
+      pointsDistanceMeters: 4200,
+      pointsLastLatitude: 57.7,
+      pointsLastLongitude: 11.97,
+    });
+    await adminRtdb.ref(`liveLocation/${uid}/latest`).set({
+      latitude: 57.7,
+      longitude: 11.97,
+      recordedAt: now.toISOString(),
+      displayName: 'Raderad',
+    });
+    await adminRtdb.ref(`presence/${uid}`).set({ online: false, lastSeen: now.getTime() });
+    //     The Firestore nearby-discovery doc, deliberately given a FUTURE
+    //     expiresAt: the TTL sweep (sweepDiscoveryDocs) would NOT delete this,
+    //     so it can only go if the purge removes it in its own right.
+    const discoveryRef = adminDb.collection('liveSessions').doc(uid);
+    await discoveryRef.set({
+      uid,
+      geoCell: '57.70,11.97',
+      latitude: 57.7,
+      longitude: 11.97,
+      displayName: 'Raderad',
+      status: 'active',
+      updatedAt: Timestamp.fromDate(now),
+      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60 * 1000)),
+    });
+
     // Controls that must SURVIVE the purge:
     // - another user's community message,
     const otherCommunityMsg = await adminDb
@@ -382,6 +428,29 @@ describe('account purge (hard delete after retention)', () => {
     await pollUntil(async () => {
       const snap = await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/bystander-uid`).get();
       return snap.val() === true ? true : undefined;
+    });
+    // - and ANOTHER member's live-location state, in both stores: the removals
+    //   are per-uid paths, so a bystander sharing at the same time (and sitting
+    //   in the same geo cell) must be untouched.
+    const bystanderLiveUid = 'live-bystander-uid';
+    await adminRtdb.ref(`liveLocation/${bystanderLiveUid}/session`).set({
+      id: 'live-session-2',
+      status: 'active',
+      displayName: 'Kvar',
+    });
+    await adminRtdb
+      .ref(`presence/${bystanderLiveUid}`)
+      .set({ online: true, lastSeen: now.getTime() });
+    const bystanderDiscoveryRef = adminDb.collection('liveSessions').doc(bystanderLiveUid);
+    await bystanderDiscoveryRef.set({
+      uid: bystanderLiveUid,
+      geoCell: '57.70,11.97',
+      latitude: 57.7,
+      longitude: 11.97,
+      displayName: 'Kvar',
+      status: 'active',
+      updatedAt: Timestamp.fromDate(now),
+      expiresAt: Timestamp.fromDate(new Date(now.getTime() + 15 * 60 * 1000)),
     });
 
     // A due (31-day-old pending) request and soft-delete state.
@@ -454,6 +523,20 @@ describe('account purge (hard delete after retention)', () => {
     expect(
       (await adminRtdb.ref(`liveLocationBlocks/${blockerCUid}/${legacyBlockDocId}`).get()).exists(),
     ).toBe(false);
+
+    // Live-location state erased in BOTH stores. The RTDB subtree goes whole —
+    // including the `session` node no stop/hide/sweep path ever deletes, which
+    // is what kept the erased member's displayName, main car and last recorded
+    // coordinate alive indefinitely — and so does the presence node. The
+    // Firestore discovery doc goes even though its own expiresAt is still in the
+    // FUTURE, proving erasure does not ride on the live TTL sweep.
+    expect((await adminRtdb.ref(`liveLocation/${uid}`).get()).exists()).toBe(false);
+    expect((await adminRtdb.ref(`presence/${uid}`).get()).exists()).toBe(false);
+    expect((await discoveryRef.get()).exists).toBe(false);
+    // A bystander sharing at the same moment, in the same geo cell, is untouched.
+    expect((await adminRtdb.ref(`liveLocation/${bystanderLiveUid}`).get()).exists()).toBe(true);
+    expect((await adminRtdb.ref(`presence/${bystanderLiveUid}`).get()).exists()).toBe(true);
+    expect((await bystanderDiscoveryRef.get()).exists).toBe(true);
 
     // Convoy membership: stripped from the convoy the user belonged to (the
     // convoy itself and the other member survive)...
