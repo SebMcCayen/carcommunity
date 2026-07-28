@@ -4,9 +4,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -20,12 +20,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -156,7 +158,10 @@ private fun VehicleCard(
                     .clickable(role = Role.Button, onClick = onOpen),
                 verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
             ) {
-                VehiclePhoto(vehicle.imagePath)
+                VehiclePhoto(
+                    imagePath = vehicle.imagePath,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
                 Text(
                     text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
                     style = MaterialTheme.typography.titleMedium,
@@ -222,17 +227,29 @@ private fun VehicleCard(
 }
 
 /**
+ * Diameter of the circular car photo in the garage list.
+ *
+ * Deliberately a fixed size rather than `fillMaxWidth()`: a full-width circle is
+ * as tall as the card is wide (~300dp+ on a phone), so a single car filled the
+ * screen and the list could not be skimmed. There is no size token for this —
+ * [KccSpacing] tops out at 48dp and is a spacing scale, not a component scale —
+ * so a literal dp here matches how the rest of the app sizes images (e.g. the
+ * 96dp profile avatar).
+ */
+private val VehiclePhotoDiameter = 180.dp
+
+/**
  * The car's photo, resolved from its Storage path at render time. Rendered as a
- * CIRCLE in My Garage: a square (1:1) box clipped to [CircleShape], with
- * `ContentScale.Crop` centre-cropping whatever ratio the source was into the
- * circle — no stretching, just a centred round cut.
+ * CIRCLE in My Garage: a fixed-diameter square box clipped to [CircleShape],
+ * with `ContentScale.Crop` centre-cropping whatever ratio the source was into
+ * the circle — no stretching, just a centred round cut.
  *
  * Renders nothing when the car has no photo, or while/if the URL cannot be
  * resolved (config-less build) — the card simply starts at its title, exactly
  * as it did before photos existed.
  */
 @Composable
-private fun VehiclePhoto(imagePath: String?) {
+private fun VehiclePhoto(imagePath: String?, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val url = rememberStorageImageUrl(context, imagePath)
     if (url != null) {
@@ -241,9 +258,8 @@ private fun VehiclePhoto(imagePath: String?) {
             contentDescription = stringResource(R.string.garage_photoAlt),
             contentScale = ContentScale.Crop,
             modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
+                modifier
+                    .size(VehiclePhotoDiameter)
                     .clip(CircleShape),
         )
     }
