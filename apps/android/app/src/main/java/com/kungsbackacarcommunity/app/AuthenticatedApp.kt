@@ -285,9 +285,13 @@ import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveSharePopup
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.CameraRequeryDecision
+import com.kungsbackacarcommunity.app.incidents.ClearOutcome
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentClearRejection
+import com.kungsbackacarcommunity.app.incidents.IncidentDetails
 import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
+import com.kungsbackacarcommunity.app.incidents.IncidentPoint
 import com.kungsbackacarcommunity.app.incidents.ConfirmOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
@@ -315,6 +319,8 @@ import com.kungsbackacarcommunity.app.shell.GARAGE_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.HISTORY_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.SOCIAL_PANEL_TEST_TAG
 import com.kungsbackacarcommunity.app.shell.rememberMapSurface
+import com.kungsbackacarcommunity.app.shell.currentIncidentClearFix
+import com.kungsbackacarcommunity.app.shell.runIncidentClearVote
 import com.kungsbackacarcommunity.app.shell.runIncidentConfirmation
 import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
@@ -820,10 +826,26 @@ fun AuthenticatedApp(
                             // the only one. Resolved here because the map
                             // surface seam deliberately knows nothing about
                             // IncidentType.
-                            colorArgb = IncidentPalette.colorArgb(incident.type),
+                            // Both the disc and the glyph tint follow the
+                            // reported-gone state: a marker somebody has voted
+                            // gone is washed out and struck through, and the
+                            // glyph colour has to be re-picked to stay readable
+                            // on the pale disc. Resolved through the one pure
+                            // style object so the map marker, the sheet's badge
+                            // and the tests cannot compute the fade three
+                            // different ways.
+                            colorArgb =
+                                IncidentMarkerStyle.discColorArgb(
+                                    incident.type,
+                                    incident.reportedCleared,
+                                ),
                             iconRes = incidentGlyphRes(incident.type),
                             glyphColorArgb =
-                                IncidentMarkerStyle.glyphColorArgb(incident.type),
+                                IncidentMarkerStyle.glyphColorArgb(
+                                    incident.type,
+                                    incident.reportedCleared,
+                                ),
+                            reportedCleared = incident.reportedCleared,
                         )
                     }
                 }
@@ -918,6 +940,32 @@ fun AuthenticatedApp(
             // does not arrive disabled on the next one.
             var incidentConfirmInFlight by
                 remember(tappedIncidentId) { mutableStateOf(false) }
+            // Same one-call-per-press guard for the "Nej, den är borta" clear vote.
+            var incidentClearInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
+            // The viewer's own position, read ONCE per opened sheet, purely to
+            // decide whether to OFFER the clear vote. It is not the position the
+            // vote is made from — that is a fresh high-accuracy fix taken at the
+            // moment of the tap (see the onReportCleared wiring) — and it is not a
+            // security control either: the server re-computes the distance and
+            // rejects the vote itself. This only spares a member 30 km away a
+            // round-trip to be told what we could already tell them.
+            val incidentViewerLocation by
+                produceState<IncidentPoint?>(initialValue = null, key1 = tappedIncidentId) {
+                    value =
+                        if (tappedIncidentId == null) {
+                            null
+                        } else {
+                            CurrentLocation
+                                .lastKnown(context.applicationContext)
+                                ?.let {
+                                    IncidentPoint(
+                                        latitude = it.latitude,
+                                        longitude = it.longitude,
+                                    )
+                                }
+                        }
+                }
             // Same condition rememberMapSurface uses to pick the real Mapbox
             // surface over the config-less/CI StubMapSurface. Only the real
             // surface has a GPS puck, so only it needs the runtime location
@@ -1085,6 +1133,15 @@ fun AuthenticatedApp(
             val incidentVerifySuccessText = stringResource(R.string.incidents_verifySuccess)
             val incidentVerifyAlreadyText = stringResource(R.string.incidents_verifyAlready)
             val incidentVerifyErrorText = stringResource(R.string.incidents_verifyError)
+            val incidentClearedSuccessText = stringResource(R.string.incidents_clearedSuccess)
+            val incidentClearedRemovedText = stringResource(R.string.incidents_clearedRemoved)
+            val incidentClearedAlreadyText = stringResource(R.string.incidents_clearedAlready)
+            val incidentClearedErrorText = stringResource(R.string.incidents_clearedError)
+            val incidentClearedTooFarText = stringResource(R.string.incidents_clearedTooFar)
+            val incidentClearedNoLocationText =
+                stringResource(R.string.incidents_clearedNoLocation)
+            val incidentClearedImportedText =
+                stringResource(R.string.incidents_clearedImportedExplanation)
 
             // ── The ONE incident-reporting path ─────────────────────────────
             //
@@ -3411,8 +3468,86 @@ fun AuthenticatedApp(
                                                 }
                                             }
                                         },
+                                        // "Nej, den är borta". Takes a FRESH
+                                        // high-accuracy fix at the moment of the tap —
+                                        // reusing the cached last-known position that
+                                        // gated the button would be exactly the stale
+                                        // sample the backend's freshness check exists
+                                        // to reject, and would also be weaker evidence
+                                        // than the member deserves credit for.
+                                        onReportCleared = {
+                                            val controller = incidentController
+                                            if (controller != null && !incidentClearInFlight) {
+                                                incidentClearInFlight = true
+                                                scope.launch {
+                                                    val outcome =
+                                                        try {
+                                                            runIncidentClearVote(
+                                                                controller = controller,
+                                                                mapSurface = mapSurface,
+                                                                incidentId = openIncident.id,
+                                                                fixProvider = {
+                                                                    currentIncidentClearFix(
+                                                                        context,
+                                                                    )
+                                                                },
+                                                            )
+                                                        } finally {
+                                                            incidentClearInFlight = false
+                                                        }
+                                                    snackbarHostState.showSnackbar(
+                                                        when (outcome) {
+                                                            is ClearOutcome.Success ->
+                                                                when {
+                                                                    outcome.alreadyVoted ->
+                                                                        incidentClearedAlreadyText
+                                                                    outcome.removed ->
+                                                                        incidentClearedRemovedText
+                                                                    else ->
+                                                                        incidentClearedSuccessText
+                                                                }
+                                                            ClearOutcome.NoLocation ->
+                                                                incidentClearedNoLocationText
+                                                            // Each rejection says what
+                                                            // would actually make it
+                                                            // work; only the anti-fraud
+                                                            // one is deliberately vague,
+                                                            // because naming the signal
+                                                            // that tripped would tell an
+                                                            // abuser what to change.
+                                                            is ClearOutcome.Rejected ->
+                                                                when (outcome.rejection) {
+                                                                    IncidentClearRejection
+                                                                        .OUT_OF_RANGE,
+                                                                    ->
+                                                                        incidentClearedTooFarText
+                                                                    IncidentClearRejection
+                                                                        .IMPORTED,
+                                                                    ->
+                                                                        incidentClearedImportedText
+                                                                    IncidentClearRejection
+                                                                        .POSITION_TOO_OLD,
+                                                                    IncidentClearRejection.INACTIVE,
+                                                                    IncidentClearRejection
+                                                                        .NOT_COUNTED,
+                                                                    ->
+                                                                        incidentClearedErrorText
+                                                                }
+                                                            is ClearOutcome.Failed ->
+                                                                incidentClearedErrorText
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        clearEligibility =
+                                            IncidentDetails.clearVoteEligibility(
+                                                incident = openIncident,
+                                                viewerLocation = incidentViewerLocation,
+                                            ),
                                         removeInProgress = incidentRemoveInFlight,
                                         confirmInProgress = incidentConfirmInFlight,
+                                        clearInProgress = incidentClearInFlight,
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }

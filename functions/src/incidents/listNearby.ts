@@ -33,6 +33,7 @@ import {
   isUnderIncidentListRateLimit,
   isWithinRadius,
   parseListNearbyInput,
+  readClearedCount,
   readConfirmationCount,
   type IncidentType,
   type IncidentSource,
@@ -133,6 +134,15 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         // fractional) degrades to 0 for this one marker rather than failing the
         // batch — see readConfirmationCount.
         confirmationCount: readConfirmationCount(data.confirmationCount),
+        // Both clear-vote fields travel with the marker so the client can draw
+        // the faded "reported gone by N" state and show BOTH signals side by
+        // side. Absent until the first clear vote; same degrade-to-0 posture.
+        clearedCount: readClearedCount(data.clearedCount),
+        // Only a literal `true` fades a marker. A missing or non-boolean value
+        // reads as "not reported gone", so a malformed document can never dim a
+        // live hazard on everyone's map — of the two ways to be wrong, making a
+        // real incident look stale is the one that gets someone hurt.
+        reportedCleared: data.reportedCleared === true,
       });
     }
   }

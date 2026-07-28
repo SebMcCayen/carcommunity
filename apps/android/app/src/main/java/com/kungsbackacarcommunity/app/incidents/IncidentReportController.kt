@@ -42,6 +42,39 @@ sealed interface ConfirmOutcome {
 }
 
 /**
+ * Outcome of an "it's gone" vote ([IncidentReportController.reportCleared]).
+ *
+ * The rejections are modelled separately from [Failed] on purpose. "You need to
+ * be closer" and "this one comes from Trafikverket" are things the user can act
+ * on; showing them the same "couldn't do that, try again" as a network blip would
+ * leave someone standing in the wrong place tapping forever.
+ */
+sealed interface ClearOutcome {
+    /**
+     * The vote landed. [removed] is true when it took the incident off the map —
+     * either the net threshold was reached, or the caller is the original
+     * reporter (or an admin), who need no corroboration to clear their own
+     * report. [alreadyVoted] is true for an idempotent repeat.
+     */
+    data class Success(
+        val clearedCount: Int,
+        val confirmationCount: Int,
+        val reportedCleared: Boolean,
+        val removed: Boolean,
+        val alreadyVoted: Boolean,
+    ) : ClearOutcome
+
+    /** No usable device fix, so NOTHING was sent — a vote needs a position. */
+    data object NoLocation : ClearOutcome
+
+    /** The backend declined, with a reason worth explaining to the user. */
+    data class Rejected(val rejection: IncidentClearRejection) : ClearOutcome
+
+    /** Anything else — a network failure, an unrecognised backend error. */
+    data class Failed(val cause: Throwable) : ClearOutcome
+}
+
+/**
  * The small, reusable incidents API surfaced to the map shell AND the sibling
  * turn-by-turn navigation PR: report an incident at the user's current
  * location, and keep a live list of nearby incidents to draw on the map.
@@ -179,7 +212,16 @@ class IncidentReportController(
             nearbyFlow.value =
                 nearbyFlow.value.map { incident ->
                     if (incident.id == incidentId) {
-                        incident.copy(confirmationCount = result.confirmationCount)
+                        // The clear-vote fields move too: a confirmation can SWITCH
+                        // the caller's earlier "it's gone" vote, which un-fades the
+                        // marker. Patching only the confirmation count would leave a
+                        // re-corroborated hazard drawn as questioned until the next
+                        // poll — the wrong way round to be stale.
+                        incident.copy(
+                            confirmationCount = result.confirmationCount,
+                            clearedCount = result.clearedCount,
+                            reportedCleared = result.reportedCleared,
+                        )
                     } else {
                         incident
                     }
@@ -192,6 +234,74 @@ class IncidentReportController(
             throw cancellation
         } catch (error: Throwable) {
             ConfirmOutcome.Failed(error)
+        }
+    }
+
+    /**
+     * Votes that [incidentId] is GONE, from a position supplied by [fixProvider],
+     * and reflects the new counts on [nearbyIncidents].
+     *
+     * The fix is REQUIRED and is not optional politeness: the backend refuses a
+     * vote from outside a geofence around the incident, because what makes "it's
+     * gone" worth acting on is that the voter just looked at the spot. No fix ⇒
+     * [ClearOutcome.NoLocation] and NOTHING is sent — there is no useful request
+     * to make without one.
+     *
+     * The local list is patched only AFTER the backend accepts, and follows the
+     * outcome exactly:
+     *  - `removed` ⇒ the marker is dropped, because it is off everyone's map;
+     *  - otherwise the counts and the fade flag are taken FROM THE RESPONSE, not
+     *    inferred. The threshold and tie-breaking rules live on the backend, and
+     *    a second copy of them here would be one more place for them to drift —
+     *    with "live hazard drawn as stale" as the failure mode.
+     *
+     * A rejection leaves the list untouched, so a vote that did not count never
+     * dims a marker that is still live for everyone else.
+     */
+    suspend fun reportCleared(
+        incidentId: String,
+        fixProvider: suspend () -> IncidentClearFix?,
+    ): ClearOutcome {
+        val fix =
+            try {
+                fixProvider()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Throwable) {
+                null
+            } ?: return ClearOutcome.NoLocation
+
+        return try {
+            val result = repository.reportCleared(incidentId, fix)
+            nearbyFlow.value =
+                if (result.removed) {
+                    nearbyFlow.value.filterNot { it.id == incidentId }
+                } else {
+                    nearbyFlow.value.map { incident ->
+                        if (incident.id == incidentId) {
+                            incident.copy(
+                                clearedCount = result.clearedCount,
+                                confirmationCount = result.confirmationCount,
+                                reportedCleared = result.reportedCleared,
+                            )
+                        } else {
+                            incident
+                        }
+                    }
+                }
+            ClearOutcome.Success(
+                clearedCount = result.clearedCount,
+                confirmationCount = result.confirmationCount,
+                reportedCleared = result.reportedCleared,
+                removed = result.removed,
+                alreadyVoted = result.alreadyVoted,
+            )
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (rejected: IncidentClearRejectedException) {
+            ClearOutcome.Rejected(rejected.rejection)
+        } catch (error: Throwable) {
+            ClearOutcome.Failed(error)
         }
     }
 

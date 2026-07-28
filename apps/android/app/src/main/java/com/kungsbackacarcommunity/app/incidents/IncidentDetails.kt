@@ -3,6 +3,16 @@ package com.kungsbackacarcommunity.app.incidents
 import java.time.Duration
 import java.time.Instant
 import java.time.format.DateTimeParseException
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+/**
+ * A plain WGS-84 coordinate, so the pure eligibility logic below stays free of
+ * the navigation package's `LatLng` (and of Android entirely). The host converts.
+ */
+data class IncidentPoint(val latitude: Double, val longitude: Double)
 
 /**
  * Pure, Android-free logic behind the incident detail sheet: how old a report
@@ -77,6 +87,45 @@ enum class ConfirmAvailability {
     BackendMissing,
 }
 
+/**
+ * Whether the "no, it's gone" clear vote can be offered for a given incident and
+ * viewer — and if not, WHY, so the sheet can say something true instead of
+ * hiding a button or showing a dead one.
+ *
+ * Pure and unit-tested, because "can this member take this hazard off everyone
+ * else's map?" is exactly the kind of decision that must not be verified by
+ * squinting at a screen.
+ */
+enum class ClearVoteEligibility {
+    /** Offer it. */
+    Available,
+
+    /**
+     * The incident came from Trafikverket. Their importer full-overwrites the
+     * document every 30 minutes, so a vote would simply be erased, and upstream
+     * is the authority on whether the situation is still live. The backend
+     * rejects it for everyone, admins included, so offering it would be a lie.
+     */
+    ImportedSource,
+
+    /**
+     * The viewer is not near enough. The backend enforces a geofence — the value
+     * of "it's gone" is entirely that the voter just looked at the spot — so the
+     * action is shown DISABLED with "drive closer" rather than hidden: a hidden
+     * button teaches nothing, and this user is one short drive from being able
+     * to help.
+     */
+    TooFar,
+
+    /**
+     * No usable device position at all (permission off, no fix yet). Distinct
+     * from [TooFar] because "turn on location" and "drive closer" are different
+     * instructions, and telling someone whose location is switched off to drive
+     * closer would send them on a pointless journey.
+     */
+    NoLocation,
+}
+
 /** The action the sheet offers for a given incident and viewer. */
 enum class IncidentAction {
     /**
@@ -142,6 +191,70 @@ object IncidentDetails {
             isOwnReport(incident, viewerUid) -> IncidentAction.Remove
             else -> IncidentAction.Confirm
         }
+
+    /**
+     * The geofence the backend enforces on a clear vote, mirrored here ONLY to
+     * decide whether to offer the button.
+     *
+     * It is not a security control and must never be read as one — the server
+     * re-computes the distance from the STORED incident position and rejects the
+     * vote itself. This exists so a member 30 km away is told "drive closer"
+     * before spending a round-trip to be told the same thing, and it is
+     * deliberately checked with the SAME 300 m the backend uses
+     * (INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS in functions/src/incidents/
+     * incidents-core.ts). If the two ever drift, the server wins and the only
+     * cost is a wasted call or a button offered slightly early.
+     */
+    const val CLEAR_VOTE_RADIUS_METERS: Double = 300.0
+
+    /**
+     * Whether [viewerLocation] may vote [incident] gone.
+     *
+     * Deliberately generous at the boundary in ONE direction only: an unknown
+     * location is [ClearVoteEligibility.NoLocation], never "available". Offering
+     * an action we know the server will refuse would be the dishonest failure
+     * this whole surface is trying to avoid.
+     */
+    fun clearVoteEligibility(
+        incident: Incident,
+        viewerLocation: IncidentPoint?,
+    ): ClearVoteEligibility =
+        when {
+            originOf(incident) == IncidentOrigin.Trafikverket -> ClearVoteEligibility.ImportedSource
+            viewerLocation == null -> ClearVoteEligibility.NoLocation
+            distanceMeters(
+                viewerLocation.latitude,
+                viewerLocation.longitude,
+                incident.latitude,
+                incident.longitude,
+            ) > CLEAR_VOTE_RADIUS_METERS -> ClearVoteEligibility.TooFar
+            else -> ClearVoteEligibility.Available
+        }
+
+    /**
+     * Great-circle distance in metres between two WGS-84 coordinates (haversine),
+     * matching the server-side `haversineDistanceMeters` the backend actually
+     * decides on.
+     *
+     * A non-finite coordinate yields [Double.MAX_VALUE] rather than NaN: NaN
+     * fails every comparison, so it would silently take the `else` branch above
+     * and report a garbled position as "close enough". Failing to the far side
+     * is the direction that cannot take a live hazard off the map.
+     */
+    fun distanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        if (!lat1.isFinite() || !lon1.isFinite() || !lat2.isFinite() || !lon2.isFinite()) {
+            return Double.MAX_VALUE
+        }
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a =
+            sin(dLat / 2) * sin(dLat / 2) +
+                cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) *
+                sin(dLon / 2) * sin(dLon / 2)
+        return EARTH_RADIUS_METERS * 2 * atan2(sqrt(a), sqrt(1 - a))
+    }
+
+    private const val EARTH_RADIUS_METERS = 6_371_000.0
 
     /**
      * How long ago [createdAtIso] was, relative to [nowMillis].

@@ -2,10 +2,16 @@
  * Incidents TTL sweep (navigation feature).
  *
  * incidents-cleanupExpired (every 15 minutes): deletes incidents whose
- * `expiresAt` has passed — and their `confirmations` sub-collection with them
- * (recursiveDelete). Short-lived crowd-sourced markers must
+ * `expiresAt` has passed — and their `confirmations` and `clearVotes`
+ * sub-collections with them (recursiveDelete, which takes every sub-collection,
+ * so a new ledger needs no change here). Short-lived crowd-sourced markers must
  * disappear promptly; the read rule already hides expired docs (status +
  * `expiresAt > request.time`), and this sweep reclaims them.
+ *
+ * This sweep is ALSO what reclaims an incident that members voted GONE: crossing
+ * the clear-vote threshold sets `expiresAt` to the vote instant rather than
+ * deleting the document, so the marker leaves every user's map at once and the
+ * vote ledger survives here as the audit trail for 15 more minutes.
  *
  * BOUNDED, PAGED + OLDEST-FIRST: expired docs are walked in `expiresAt` order,
  * a page at a time, with at most DELETE_CONCURRENCY recursiveDeletes in flight
@@ -36,8 +42,10 @@ const CLEANUP_BATCH_SIZE = 400;
  * with the page size rather than with anything the sweep chose.
  *
  * Cost of ONE recursiveDelete here: the incident document plus its
- * `confirmations/{uid}` ledger — one doc per member who confirmed, which on a
- * busy road is tens, not thousands. Call it ~1..50 deletes per call. 10 in
+ * `confirmations/{uid}` and `clearVotes/{uid}` ledgers — one doc per member who
+ * voted either way, and a member can hold at most one of the two at a time
+ * (switching moves the vote rather than adding one), so on a busy road this is
+ * tens, not thousands. Call it ~1..50 deletes per call. 10 in
  * flight is then a few hundred writes outstanding at the peak, the same order
  * as a SINGLE BulkWriter's own steady state (the regime the client library is
  * tuned for), and 10 concurrent streams instead of 400. The bound comes from
@@ -105,8 +113,8 @@ export async function runIncidentsCleanup(
 
   // recursiveDelete, NOT a batched `delete` of the doc: deleting a Firestore
   // document does not touch its sub-collections, so a plain batch delete would
-  // leave every `confirmations/{uid}` doc behind as an unreachable orphan that
-  // nothing ever collects.
+  // leave every `confirmations/{uid}` and `clearVotes/{uid}` doc behind as an
+  // unreachable orphan that nothing ever collects.
   const deleteOne = async (ref: FirebaseFirestore.DocumentReference): Promise<void> => {
     inFlight += 1;
     peakConcurrency = Math.max(peakConcurrency, inFlight);

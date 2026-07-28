@@ -1420,7 +1420,19 @@
     "removeAction": "Ta bort min rapport",
     "removeSuccess": "Din rapport togs bort.",
     "removeError": "Det gick inte att ta bort rapporten. Försök igen.",
-    "removeImportedExplanation": "Händelser från Trafikverket sköts av dem och försvinner av sig själva."
+    "removeImportedExplanation": "Händelser från Trafikverket sköts av dem och försvinner av sig själva.",
+    "stillHereQuestion": "Är den kvar?",
+    "stillHereYes": "Ja, den är kvar",
+    "stillHereNo": "Nej, den är borta",
+    "clearedBy": "Rapporterad som borta av %1$d",
+    "clearedSuccess": "Tack – vi har noterat att den är borta.",
+    "clearedRemoved": "Tack – händelsen är borttagen från kartan.",
+    "clearedAlready": "Du har redan rapporterat den som borta.",
+    "clearedError": "Det gick inte att rapportera just nu. Försök igen.",
+    "clearedTooFar": "Kör närmare för att rapportera att den är borta.",
+    "clearedNoLocation": "Din position är inte tillgänglig. Slå på platstjänster för att rapportera.",
+    "clearedImportedExplanation": "Uppgiften kommer från Trafikverket och kan inte rapporteras som borta.",
+    "clearedMarkerHint": "Någon har rapporterat att den är borta, men den kan finnas kvar. Kör försiktigt."
   },
   "whatsNew": {
     "title": "Vad är nytt",

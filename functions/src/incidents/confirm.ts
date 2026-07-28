@@ -17,6 +17,18 @@
  *    client's button settles into a stable "confirmed" state either way.
  *  - The reporter cannot confirm their own report (self-corroboration is not
  *    evidence).
+ *  - A member who had voted the incident CLEAR (`incidents.reportCleared`) may
+ *    switch back to confirming: their clear vote is deleted and `clearedCount`
+ *    decremented in the SAME transaction that claims the confirmation, so a
+ *    switcher is never counted on both sides. This is the mirror of the
+ *    confirm→clear switch handled in reportCleared.ts, and it exists for the
+ *    same reason: a member whose information changed must be able to correct
+ *    their own vote, or the map stops tracking reality.
+ *  - Every confirmation RE-DERIVES `reportedCleared` from the resulting counts.
+ *    That flag is what makes clients draw the marker faded, so a confirmation
+ *    that brings confirms level with (or ahead of) clears must un-fade it —
+ *    leaving a stale `true` behind would keep a re-corroborated hazard looking
+ *    like it had been reported gone.
  *  - Confirming extends `expiresAt` to a fresh TTL from now, bounded by the
  *    hard lifetime cap in extendedExpiryFor — a popular incident persists but
  *    never becomes immortal.
@@ -34,11 +46,15 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import {
-  INCIDENT_ACTIVE_STATUS,
+  CLEAR_VOTES_SUBCOLLECTION,
   INCIDENT_TYPES,
+  evaluateClearVote,
   extendedExpiryFor,
+  isIncidentLive,
+  isValidClearedCount,
   isValidConfirmationCount,
   parseConfirmInput,
+  readClearedCount,
   readConfirmationCount,
   type IncidentType,
 } from './incidents-core';
@@ -57,10 +73,16 @@ export interface ConfirmResponse {
   incidentId: string;
   /** Total confirmations after this call. */
   confirmationCount: number;
+  /** Total "it's gone" votes after this call (a switch decrements it). */
+  clearedCount: number;
+  /** True when clear votes still lead — the marker stays faded. */
+  reportedCleared: boolean;
   /** Incident expiry after this call (ISO-8601). */
   expiresAt: string;
   /** True when this caller had already confirmed (no double count). */
   alreadyConfirmed: boolean;
+  /** True when this confirmation replaced the caller's earlier clear vote. */
+  switchedFromClearVote: boolean;
 }
 
 export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmResponse> => {
@@ -74,10 +96,15 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
 
   const ref = db.collection('incidents').doc(incidentId);
   const confirmationRef = ref.collection(CONFIRMATIONS_SUBCOLLECTION).doc(actor.uid);
+  const clearVoteRef = ref.collection(CLEAR_VOTES_SUBCOLLECTION).doc(actor.uid);
 
   return db.runTransaction(async (tx) => {
-    // Both reads must precede any write in a Firestore transaction.
-    const [snap, existing] = await Promise.all([tx.get(ref), tx.get(confirmationRef)]);
+    // All reads must precede any write in a Firestore transaction.
+    const [snap, existing, existingClearVote] = await Promise.all([
+      tx.get(ref),
+      tx.get(confirmationRef),
+      tx.get(clearVoteRef),
+    ]);
     if (!snap.exists) {
       throw new HttpsError('not-found', 'Incident not found.');
     }
@@ -108,11 +135,13 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     // A dead incident cannot be confirmed back to life — the sweep may not have
     // reached it yet, but it is already invisible to every reader (the read rule
     // gates on status + expiresAt). Report it fresh instead.
+    // The `instanceof` stays in the condition so it also NARROWS
+    // `currentExpiresAt` for the `.toDate()` reads further down; `isIncidentLive`
+    // owns the status + deadline rule itself.
     const currentExpiresAt = data.expiresAt;
     if (
-      data.status !== INCIDENT_ACTIVE_STATUS ||
       !(currentExpiresAt instanceof Timestamp) ||
-      currentExpiresAt.toMillis() <= now.getTime()
+      !isIncidentLive(data.status, currentExpiresAt.toMillis(), now.getTime())
     ) {
       throw new HttpsError('failed-precondition', 'This incident is no longer active.');
     }
@@ -158,16 +187,35 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     }
     const storedCount = readConfirmationCount(data.confirmationCount);
 
+    // Same reasoning for the clear-vote counter: this path WRITES a value
+    // derived from it (the fade flag and, on a switch, the count itself), so a
+    // corrupt number must stop the call rather than be built upon.
+    if (data.clearedCount !== undefined && !isValidClearedCount(data.clearedCount)) {
+      logger.error('incidents.confirm: incident has a corrupt clearedCount', {
+        incidentId,
+        clearedCount: String(data.clearedCount),
+      });
+      throw new HttpsError('internal', 'This incident cannot be confirmed right now.');
+    }
+    const storedClearedCount = readClearedCount(data.clearedCount);
+
     // Already confirmed → idempotent success, nothing written. The expiry is NOT
     // extended again: otherwise one member could hold an incident open forever
     // by re-tapping (the lifetime cap bounds it anyway, but not writing is both
     // cheaper and clearer).
     if (existing.exists) {
+      const tally = evaluateClearVote({
+        clearedCount: storedClearedCount,
+        confirmationCount: storedCount,
+      });
       return {
         incidentId,
         confirmationCount: storedCount,
+        clearedCount: storedClearedCount,
+        reportedCleared: tally.reportedCleared,
         expiresAt: currentExpiresAt.toDate().toISOString(),
         alreadyConfirmed: true,
+        switchedFromClearVote: false,
       };
     }
 
@@ -220,6 +268,20 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
       now,
     });
 
+    // A member who had voted this incident GONE is switching back. Their clear
+    // vote is dropped and the counter moved in this SAME transaction, so they
+    // are never counted on both sides. (The mirror-image switch lives in
+    // reportCleared.ts; see its header for why switching is allowed at all.)
+    const switchedFromClearVote = existingClearVote.exists;
+    const nextClearedCount = switchedFromClearVote
+      ? Math.max(0, storedClearedCount - 1)
+      : storedClearedCount;
+    const nextConfirmationCount = storedCount + 1;
+    const tally = evaluateClearVote({
+      clearedCount: nextClearedCount,
+      confirmationCount: nextConfirmationCount,
+    });
+
     // `create` (not `set`): if a concurrent call for the same uid slipped in
     // between the read above and this commit, the transaction aborts and
     // retries rather than double-counting.
@@ -227,16 +289,31 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
       uid: actor.uid,
       createdAt: FieldValue.serverTimestamp(),
     });
+    if (switchedFromClearVote) {
+      tx.delete(clearVoteRef);
+    }
+    // ABSOLUTE counts rather than FieldValue.increment, now that a value DERIVED
+    // from them (`reportedCleared`) is written in the same update: an increment
+    // could commit a count that disagrees with the flag written beside it. Safe
+    // because this transaction READ the document — a concurrent write aborts it
+    // and it retries with fresh values.
     tx.update(ref, {
-      confirmationCount: FieldValue.increment(1),
+      confirmationCount: nextConfirmationCount,
+      clearedCount: nextClearedCount,
+      // Re-derived every time, so a confirmation that brings confirms level with
+      // the clears un-fades the marker instead of leaving a stale `true`.
+      reportedCleared: tally.reportedCleared,
       expiresAt: Timestamp.fromDate(expiresAt),
     });
 
     return {
       incidentId,
-      confirmationCount: storedCount + 1,
+      confirmationCount: nextConfirmationCount,
+      clearedCount: nextClearedCount,
+      reportedCleared: tally.reportedCleared,
       expiresAt: expiresAt.toISOString(),
       alreadyConfirmed: false,
+      switchedFromClearVote,
     };
   });
 });

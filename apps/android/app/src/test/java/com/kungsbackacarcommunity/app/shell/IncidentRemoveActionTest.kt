@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.shell
 
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentClearFix
+import com.kungsbackacarcommunity.app.incidents.IncidentClearResult
 import com.kungsbackacarcommunity.app.incidents.IncidentConfirmResult
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentRepository
@@ -50,6 +52,11 @@ class IncidentRemoveActionTest {
         }
 
         override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+        override suspend fun reportCleared(
+            incidentId: String,
+            fix: IncidentClearFix,
+        ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
     }
 
     private fun incidentAt(id: String) =
@@ -181,6 +188,11 @@ class IncidentRemoveActionTest {
                     override suspend fun remove(incidentId: String) = gate.await()
 
                     override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                    override suspend fun reportCleared(
+                        incidentId: String,
+                        fix: IncidentClearFix,
+                    ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
                 }
             val controller = controllerWith(repository)
             val surface = StubMapSurface(autoLoad = false)

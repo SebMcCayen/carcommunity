@@ -38,6 +38,11 @@ private class RecordingRepository(
 
     override suspend fun confirm(incidentId: String): IncidentConfirmResult =
         IncidentConfirmResult(0, false)
+
+    override suspend fun reportCleared(
+        incidentId: String,
+        fix: IncidentClearFix,
+    ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
 }
 
 class IsValidReportCoordinateTest {

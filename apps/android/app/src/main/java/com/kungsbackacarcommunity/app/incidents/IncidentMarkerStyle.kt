@@ -110,6 +110,112 @@ object IncidentMarkerStyle {
      */
     const val GLYPH_SCALE: Float = 0.58f
 
+    // -----------------------------------------------------------------------
+    // "Reported gone" (faded) treatment
+    // -----------------------------------------------------------------------
+    //
+    // An incident somebody has voted GONE, but which has not reached the
+    // backend's removal threshold, stays on the map DIMMED rather than
+    // disappearing — the whole point of the feature is that one member's vote
+    // must not erase a real hazard for everyone. So the marker has to say
+    // "someone says this is gone" without ever saying "this is not there", and
+    // it has to say it on both basemaps and to a colour-blind driver.
+    //
+    // TWO INDEPENDENT CHANNELS, neither of them hue:
+    //
+    //  1. LIGHTNESS — the category disc is drawn at [CLEARED_DISC_ALPHA] over
+    //     the marker's own opaque [RING_LIGHT] backing, so it washes out to a
+    //     pale version of itself. This is a deterministic composite against a
+    //     KNOWN colour, not against the basemap: the light ring is a filled
+    //     circle drawn underneath the disc (see IncidentMarkerBitmaps' draw
+    //     order), so the result is identical on the day and night maps and can
+    //     be computed — and therefore tested — exactly.
+    //  2. SHAPE — a diagonal [CLEARED_SLASH_COLOR] bar across the badge. This is
+    //     the channel that survives ANY colour deficiency, and it is why the
+    //     fade is not merely "the same badge, lighter": a lightness difference
+    //     can only really be judged with a normal badge beside it for
+    //     comparison, and on a map there usually is not one.
+    //
+    // The two RINGS are deliberately left at FULL opacity. They are what carries
+    // the marker's edge against a dark basemap (RING_LIGHT) and a light one
+    // (RING_DARK), so fading them would make a questioned marker hard to FIND
+    // rather than merely visibly questioned — and a hazard you cannot find is
+    // exactly the outcome this whole design refuses. Because they are untouched,
+    // the measured day/night separation below applies unchanged to both states.
+
+    /**
+     * Opacity of the category disc on a "reported gone" marker, composited over
+     * [RING_LIGHT].
+     *
+     * 0.4 rather than something subtler: the difference has to be unmistakable
+     * at a glance on a moving map, from a single marker with nothing to compare
+     * it against. It is not lower because the glyph still has to be readable on
+     * the washed-out disc — `IncidentMarkerStyleTest` holds every category to the
+     * same >= 4.5:1 floor the opaque markers meet.
+     */
+    const val CLEARED_DISC_ALPHA: Float = 0.4f
+
+    /** Width of the diagonal "reported gone" slash, as a fraction of the disc. */
+    const val CLEARED_SLASH_WIDTH_SCALE: Float = 0.14f
+
+    /**
+     * Length of the slash as a fraction of the disc diameter. Over 1 so it
+     * visibly crosses the whole badge and reads as a strike-through rather than
+     * a stray mark inside it; it is clipped to the disc when drawn.
+     */
+    const val CLEARED_SLASH_LENGTH_SCALE: Float = 1.05f
+
+    /**
+     * The slash's own colour: [RING_DARK], the same soft ink the dark glyph uses.
+     * Reusing an existing token rather than introducing a colour nobody can
+     * account for. The disc it sits on is opaque and known, so this contrast is
+     * measurable — and measured ([clearedSlashContrast]).
+     */
+    const val CLEARED_SLASH_COLOR: Int = RING_DARK
+
+    /**
+     * Composites [foregroundArgb] at [alpha] over an opaque [backgroundArgb],
+     * returning the opaque result.
+     *
+     * Straight source-over in sRGB space — the same arithmetic `Canvas` performs
+     * when the disc is drawn with a translucent paint — so the value asserted in
+     * tests is the value that ends up in the bitmap. Alpha is clamped to 0..1 so
+     * a mis-set constant degrades to one of the two endpoints rather than
+     * producing a nonsense colour.
+     */
+    fun compositeOver(foregroundArgb: Int, backgroundArgb: Int, alpha: Float): Int {
+        val a = alpha.coerceIn(0f, 1f)
+        fun blend(shift: Int): Int {
+            val fg = (foregroundArgb shr shift) and 0xFF
+            val bg = (backgroundArgb shr shift) and 0xFF
+            return (fg * a + bg * (1f - a)).toInt().coerceIn(0, 255)
+        }
+        return (0xFF shl 24) or (blend(16) shl 16) or (blend(8) shl 8) or blend(0)
+    }
+
+    /**
+     * The disc colour actually drawn for [type], given whether the incident has
+     * been [reportedCleared].
+     *
+     * A single entry point so the map marker, the detail sheet's badge and the
+     * tests cannot end up computing the fade three slightly different ways.
+     */
+    fun discColorArgb(type: IncidentType, reportedCleared: Boolean): Int =
+        if (reportedCleared) {
+            compositeOver(IncidentPalette.colorArgb(type), RING_LIGHT, CLEARED_DISC_ALPHA)
+        } else {
+            IncidentPalette.colorArgb(type)
+        }
+
+    /**
+     * Contrast between the "reported gone" slash and the disc it is drawn on —
+     * i.e. whether the shape channel is actually legible. Exposed so the test can
+     * hold it to a floor rather than trusting that a dark bar on a pale disc
+     * "obviously" works for every category.
+     */
+    fun clearedSlashContrast(type: IncidentType): Double =
+        contrastRatio(CLEARED_SLASH_COLOR, discColorArgb(type, reportedCleared = true))
+
     /**
      * Representative luminance reference for the Standard basemap's DAY light
      * preset — the pale road/landcover fill a marker most often sits on. Used
@@ -132,14 +238,20 @@ object IncidentMarkerStyle {
 
     /**
      * The glyph colour for [type] — whichever of [GLYPH_LIGHT]/[GLYPH_DARK]
-     * contrasts better with that category's disc.
+     * contrasts better with the disc it will actually be drawn on.
      *
      * Computed rather than tabulated so that changing a disc colour in
      * [IncidentPalette] cannot leave an unreadable glyph behind: the choice
      * follows the colour automatically, and the test still enforces the floor.
+     *
+     * [reportedCleared] matters, and is not cosmetic. Fading the disc changes
+     * which glyph colour wins — every category's washed-out disc is pale, so the
+     * white glyph that reads perfectly on the opaque red accident disc would be
+     * nearly invisible on its faded twin. Following [discColorArgb] here is what
+     * keeps a questioned marker legible instead of turning it into a smudge.
      */
-    fun glyphColorArgb(type: IncidentType): Int {
-        val disc = IncidentPalette.colorArgb(type)
+    fun glyphColorArgb(type: IncidentType, reportedCleared: Boolean = false): Int {
+        val disc = discColorArgb(type, reportedCleared)
         return if (contrastRatio(GLYPH_LIGHT, disc) >= contrastRatio(GLYPH_DARK, disc)) {
             GLYPH_LIGHT
         } else {

@@ -28,16 +28,30 @@
  *                    it out ({@link extendedExpiryFor}) up to a hard lifetime
  *                    cap, so a confirmed incident persists but never forever.
  *  - `confirmationCount` — how many other members have confirmed it is still
- *                    there. Maintained ONLY by `incidents.confirm`, in the same
- *                    transaction that claims the confirmation doc.
+ *                    there. Maintained by `incidents.confirm` and adjusted by
+ *                    `incidents.reportCleared` when a member switches sides.
+ *  - `clearedCount` — how many members have voted it is GONE. Maintained by
+ *                    `incidents.reportCleared` (and decremented by
+ *                    `incidents.confirm` on a switch back).
+ *  - `reportedCleared` — derived flag, re-computed on every vote by
+ *                    {@link evaluateClearVote}: true while clears LEAD but have
+ *                    not reached {@link CLEAR_VOTES_TO_REMOVE}. Clients draw
+ *                    such a marker faded; both counts still travel, so the
+ *                    reader sees the disagreement rather than a verdict. At the
+ *                    threshold the incident is EXPIRED (`expiresAt` set to now)
+ *                    rather than deleted, so it leaves every map at once and the
+ *                    existing sweep reclaims it with its ledgers.
  *
- * Sub-collection — `incidents/{incidentId}/confirmations/{uid}`:
- *  The confirmation ledger. The document id IS the confirming uid, which makes
- *  "one confirmation per user per incident" a primary-key property rather than
- *  a scan: the claim is a `tx.create` that fails if the doc already exists, so
- *  concurrent double-taps cannot both win. Callable-only (denied by the rules'
- *  deny-all catch-all — the `match /incidents/{incidentId}` block does not
- *  recurse into sub-collections).
+ * Sub-collections — `incidents/{incidentId}/confirmations/{uid}` and
+ * `incidents/{incidentId}/clearVotes/{uid}`:
+ *  The two vote ledgers, same shape. The document id IS the voting uid, which
+ *  makes "one vote per user per incident" a primary-key property rather than a
+ *  scan: the claim is a `tx.create` that fails if the doc already exists, so
+ *  concurrent double-taps cannot both win. A member holds at most ONE of the two
+ *  at a time — switching sides deletes the other in the same transaction.
+ *  `clearVotes` additionally stores the voter's position as proof of presence.
+ *  Callable-only (denied by the rules' deny-all catch-all — the
+ *  `match /incidents/{incidentId}` block does not recurse into sub-collections).
  *
  * Pure module — no Firebase Admin SDK imports. Geo maths reuse the crownHunt
  * Haversine helper (single source of truth for great-circle distance).
@@ -45,6 +59,7 @@
 
 import { z } from 'zod';
 import { haversineDistanceMeters, isValidCoordinate } from '../crownHunt/crown-hunt-geo';
+import { MAX_REPORTED_ACCURACY_METERS } from '../crownHunt/crownhunt-core';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -59,6 +74,35 @@ export const INCIDENT_SOURCES = ['user', 'trafikverket'] as const;
 export type IncidentSource = (typeof INCIDENT_SOURCES)[number];
 
 export const INCIDENT_ACTIVE_STATUS = 'active' as const;
+
+/**
+ * Is an incident still live at the instant `nowMs`?
+ *
+ * The single liveness rule shared by `incidents.confirm` and
+ * `incidents.reportCleared`, mirroring what the security rule
+ * (`expiresAt > request.time`) and `listNearby` already enforce for readers: an
+ * expired incident is invisible to everyone, so it cannot be voted on either.
+ *
+ * `nowMs` is a PARAMETER rather than a `Date.now()` inside, and that is the
+ * whole point. Both callers evaluate this inside a Firestore transaction, and
+ * Firestore re-runs a transaction body on contention. A clock captured before
+ * the transaction would be re-used unchanged by every retry, so an incident that
+ * another writer expired in the meantime would still be judged live on the
+ * retry — see the tests that pass two different attempt clocks against one
+ * snapshot. Passing the clock in forces each attempt to say which instant it is
+ * deciding at.
+ *
+ * Callers narrow the stored `expiresAt` to a real Timestamp before calling (a
+ * missing or non-Timestamp value is corruption and is rejected there, which also
+ * narrows the value for their own later reads of it).
+ */
+export function isIncidentLive(status: unknown, expiresAtMs: number, nowMs: number): boolean {
+  if (status !== INCIDENT_ACTIVE_STATUS) return false;
+  if (!Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) return false;
+  // Strictly greater: an incident expiring exactly at `nowMs` is already gone,
+  // matching the readers' `expiresAt > request.time`.
+  return expiresAtMs > nowMs;
+}
 
 /** Maximum length of the optional free-text note. */
 export const MAX_NOTE_LENGTH = 200;
@@ -337,6 +381,162 @@ export function readConfirmationCount(value: unknown): number {
   return isValidConfirmationCount(value) ? value : 0;
 }
 
+// ---------------------------------------------------------------------------
+// Clear votes ("it's gone") — transparent decay, never instant deletion
+// ---------------------------------------------------------------------------
+//
+// WHY A VOTE AND NOT A DELETE. One tap deleting a marker for everyone means a
+// single mistaken — or malicious — member can erase a real accident or road
+// closure from every other driver's map. Wrongly REMOVING a live hazard is far
+// worse than briefly showing a stale one, so a clear vote WEAKENS an incident
+// visibly instead of deleting it, and only removes it on corroboration.
+//
+// The signal is a NET score, not a raw count: `clearedCount - confirmationCount`.
+// Both numbers stay on the document and both are sent to clients, so an arriving
+// member sees "3 say it's still there, 1 says it's gone" and judges for
+// themselves rather than being handed one side's conclusion.
+
+/** Whether a stored `clearedCount` is a value the contract can honour. */
+export const isValidClearedCount = isValidConfirmationCount;
+
+/** A stored `clearedCount` normalised for a READ path: absent or corrupt → 0. */
+export const readClearedCount = readConfirmationCount;
+
+/**
+ * NET clear votes required to take an incident off the map — clears must exceed
+ * confirms by this much.
+ *
+ * 2, not 1. One vote is one person's judgement and can be honestly wrong (they
+ * passed the other carriageway, the queue had just cleared where they were but
+ * not 400 m back) or dishonestly motivated. Two INDEPENDENT members, each of
+ * whom had to be physically near the spot, agreeing against everyone who
+ * confirmed it is the smallest number that is evidence rather than an opinion.
+ * Higher would leave stale markers up on quiet roads where two passers-by is
+ * already a lot to ask.
+ */
+export const CLEAR_VOTES_TO_REMOVE = 2;
+
+/**
+ * How close a member must be to vote an incident gone.
+ *
+ * You cannot report a hazard cleared from your sofa: the whole value of the vote
+ * is that the voter just LOOKED at the spot. 300 m rather than the events
+ * geofence's 150 m because an incident is on a road taken at speed — the fix a
+ * phone hands back as you pass is routinely a few hundred metres behind where
+ * you actually were, and refusing an honest driver who genuinely drove past is
+ * the failure that makes people stop voting at all.
+ *
+ * The fence is accuracy-buffered through the shared crownHunt `isWithinGeofence`
+ * (crown-hunt-geo.ts), which bounds the client-supplied accuracy twice
+ * (clamped to MAX_GEOFENCE_ACCURACY_METERS, then capped at 2x the radius), so
+ * the effective fence here is provably within [300, 350] m.
+ */
+export const INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS = 300;
+
+/** Sub-collection holding the per-uid clear-vote ledger. */
+export const CLEAR_VOTES_SUBCOLLECTION = 'clearVotes';
+
+/**
+ * The tally an incident is in after a set of confirm/clear votes.
+ *
+ * Pure and derived — nothing here reads or writes Firestore — so the whole
+ * threshold decision (fade? remove? neither?) is unit-testable without an
+ * emulator, and the callable cannot quietly disagree with the tests about what
+ * "2 net clear votes" means.
+ */
+export interface ClearTally {
+  clearedCount: number;
+  confirmationCount: number;
+  /** `clearedCount - confirmationCount`. Negative when confirmations lead. */
+  netClearedCount: number;
+  /**
+   * True when clears LEAD but have not reached the removal threshold: the
+   * incident stays on the map, flagged so clients render it faded with
+   * "reported gone by N". Both counts are still shown — the fade is a warning,
+   * not a verdict.
+   */
+  reportedCleared: boolean;
+  /** True once the net lead reaches {@link CLEAR_VOTES_TO_REMOVE}. */
+  shouldRemove: boolean;
+}
+
+/**
+ * The tally for a pair of counts.
+ *
+ * Worked examples (these are the cases the unit tests pin):
+ *  - 1 clear, 0 confirms → net 1 → faded, still on the map.
+ *  - 1 clear, 1 confirm  → net 0 → NOT faded. One member says gone, one says
+ *    there; that is a tie, and a tie must not degrade a live hazard's marker.
+ *  - 2 clears, 0 confirms → net 2 → removed.
+ *  - 3 clears, 1 confirm → net 2 → removed.
+ *  - 2 clears, 5 confirms → net -3 → not faded, not removed.
+ *
+ * Corrupt/absent inputs are normalised to 0 by the callers via
+ * {@link readClearedCount}; this function assumes non-negative integers.
+ */
+export function evaluateClearVote(params: {
+  clearedCount: number;
+  confirmationCount: number;
+}): ClearTally {
+  const clearedCount = params.clearedCount;
+  const confirmationCount = params.confirmationCount;
+  const netClearedCount = clearedCount - confirmationCount;
+  const shouldRemove = netClearedCount >= CLEAR_VOTES_TO_REMOVE;
+  return {
+    clearedCount,
+    confirmationCount,
+    netClearedCount,
+    // A removed incident is not "faded" — it is gone. Reporting both would ask
+    // clients to render a state that no longer exists on the map.
+    reportedCleared: !shouldRemove && netClearedCount > 0,
+    shouldRemove,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// reportCleared per-user rate limit
+// ---------------------------------------------------------------------------
+//
+// Same fixed-window mechanism as the listNearby limiter above (deterministic
+// `{uid}_{epochMinute}` counter doc, read by id, bumped with
+// FieldValue.increment, TTL-reaped via `expireAt`) — reused rather than
+// re-invented, and deliberately in its OWN collection so a burst of map
+// refreshes can never consume a member's ability to vote, or vice versa.
+//
+// The cap is far tighter than listNearby's 60/min because the shapes are
+// opposite: listNearby is a hot poll a legitimate client makes tens of times a
+// minute, while a clear vote is a deliberate human tap on a marker you had to
+// drive to. Nobody honestly votes on 6 different incidents in one minute.
+
+/** Backend-only fixed-window rate-limit counter collection (client-denied). */
+export const INCIDENT_CLEAR_RATE_LIMIT_COLLECTION = 'incidentClearRateLimits';
+
+/** Max admitted `incidents.reportCleared` calls per uid per fixed 60 s window. */
+export const INCIDENT_CLEAR_RATE_LIMIT_MAX = 6;
+
+/**
+ * Deterministic counter doc id for (uid, window). Shares the window index — and
+ * therefore the window length and the `expireAt` grace — with the listNearby
+ * limiter; only the collection and the cap differ.
+ */
+export function incidentClearRateLimitDocId(uid: string, nowMs: number): string {
+  return `${uid}_${incidentListRateLimitWindowIndex(nowMs)}`;
+}
+
+/**
+ * Pure limit decision for a clear vote, given the uid's count BEFORE this call.
+ *
+ * Fails OPEN on a corrupt counter for the same reason the listNearby limiter
+ * does: a garbled rate-limit document must never be what stops a member
+ * reporting that a hazard is gone.
+ */
+export function isUnderIncidentClearRateLimit(
+  currentCount: number,
+  max: number = INCIDENT_CLEAR_RATE_LIMIT_MAX,
+): boolean {
+  return isUnderIncidentListRateLimit(currentCount, max);
+}
+
 /** Expiry instant for a freshly-reported incident of `type`. */
 export function expiryFor(type: IncidentType, now: Date): Date {
   return new Date(now.getTime() + INCIDENT_TTL_MS[type]);
@@ -461,10 +661,44 @@ const removeInputSchema = z.object({ incidentId: incidentIdSchema }).strict();
 
 const confirmInputSchema = z.object({ incidentId: incidentIdSchema }).strict();
 
+/**
+ * `incidents.reportCleared` — the "it's gone" vote. Unlike `confirm` this
+ * carries a POSITION, because the vote is only meaningful from someone who was
+ * actually there.
+ *
+ * ACCURACY IS BOUNDED HERE, at the input boundary, deliberately and
+ * independently of anything downstream. `accuracyMeters` is client-supplied and
+ * it BUFFERS the geofence, so an unbounded value is a way to stand anywhere and
+ * still be "inside" the fence — exactly the hole PR #573 closed inside
+ * `isWithinGeofence` (which now clamps the buffer to
+ * MAX_GEOFENCE_ACCURACY_METERS and caps the effective radius at 2x). This bound
+ * OVERLAPS that fix on purpose: two independent limits means neither one is
+ * load-bearing, and this callable is safe even if the shared helper is ever
+ * relaxed. Zod 4's bare `z.number()` already rejects NaN and ±Infinity, so the
+ * `.max()` is the only thing left to state; the shared crownHunt constant is
+ * imported rather than re-picked so the two paths cannot drift.
+ *
+ * `capturedAt` is the FIX's own timestamp, not "now" — the server checks it for
+ * freshness, and a fix stamped with the moment the client got round to sending
+ * it would hide precisely the staleness that check exists to catch.
+ */
+const reportClearedInputSchema = z
+  .object({
+    incidentId: incidentIdSchema,
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    accuracyMeters: z.number().nonnegative().max(MAX_REPORTED_ACCURACY_METERS).nullish(),
+    capturedAt: z.string().datetime(),
+    /** Android `Location.isMock`. One-way signal — only `true` scores. */
+    mockLocationReported: z.boolean().nullish(),
+  })
+  .strict();
+
 export type ReportInput = z.infer<typeof reportInputSchema>;
 export type ListNearbyInput = z.infer<typeof listNearbyInputSchema>;
 export type RemoveInput = z.infer<typeof removeInputSchema>;
 export type ConfirmInput = z.infer<typeof confirmInputSchema>;
+export type ReportClearedInput = z.infer<typeof reportClearedInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -488,6 +722,12 @@ export const parseRemoveInput = (d: unknown) =>
   parse(removeInputSchema, d, 'Expected { incidentId }.');
 export const parseConfirmInput = (d: unknown) =>
   parse(confirmInputSchema, d, 'Expected { incidentId }.');
+export const parseReportClearedInput = (d: unknown) =>
+  parse(
+    reportClearedInputSchema,
+    d,
+    'Expected { incidentId, latitude, longitude, capturedAt, accuracyMeters?, mockLocationReported? }.',
+  );
 
 // ---------------------------------------------------------------------------
 // Builders
@@ -543,6 +783,18 @@ export interface IncidentView {
   expiresAt: string | null;
   /** How many OTHER members have confirmed it is still there (0 when none). */
   confirmationCount: number;
+  /**
+   * How many members have voted that it is GONE (`incidents.reportCleared`).
+   * Sent ALONGSIDE `confirmationCount`, never netted into it: the client shows
+   * both so a driver arriving at the spot can weigh the two signals itself.
+   */
+  clearedCount: number;
+  /**
+   * True when the clear votes LEAD but have not reached the removal threshold —
+   * clients draw the marker faded and say "reported gone by N". A removed
+   * incident never carries this: it is expired, so it is simply not returned.
+   */
+  reportedCleared: boolean;
 }
 
 // ---------------------------------------------------------------------------

@@ -194,4 +194,106 @@ class IncidentDetailsTest {
         val reported = incident(createdAtIso = now.minus(Duration.ofMinutes(20)).toString())
         assertEquals(IncidentAge.Minutes(20), IncidentDetails.ageOf(reported, nowMillis))
     }
+
+    // ---- clear-vote eligibility -------------------------------------------
+    //
+    // "Can this member take this hazard off everyone else's map?" is exactly the
+    // decision that must not be verified by squinting at a screen.
+
+    /** The incident sits at 57.0 N, 12.0 E; this walks north from it. */
+    private fun northOfIncident(meters: Double) = IncidentPoint(57.0 + meters / 111_320.0, 12.0)
+
+    @Test
+    fun `a member standing at the incident may vote it gone`() {
+        assertEquals(
+            ClearVoteEligibility.Available,
+            IncidentDetails.clearVoteEligibility(incident(), IncidentPoint(57.0, 12.0)),
+        )
+    }
+
+    @Test
+    fun `a member just inside the radius may vote, just outside may not`() {
+        val radius = IncidentDetails.CLEAR_VOTE_RADIUS_METERS
+        assertEquals(
+            ClearVoteEligibility.Available,
+            IncidentDetails.clearVoteEligibility(incident(), northOfIncident(radius - 20)),
+        )
+        assertEquals(
+            ClearVoteEligibility.TooFar,
+            IncidentDetails.clearVoteEligibility(incident(), northOfIncident(radius + 20)),
+        )
+    }
+
+    @Test
+    fun `a member across town is told to drive closer, not shown a dead button`() {
+        assertEquals(
+            ClearVoteEligibility.TooFar,
+            IncidentDetails.clearVoteEligibility(incident(), northOfIncident(5_000.0)),
+        )
+    }
+
+    @Test
+    fun `no location is its own reason, never mistaken for being in range`() {
+        // "Turn on location" and "drive closer" are different instructions, and
+        // sending someone with location switched off on a drive would be a lie.
+        assertEquals(
+            ClearVoteEligibility.NoLocation,
+            IncidentDetails.clearVoteEligibility(incident(), null),
+        )
+    }
+
+    @Test
+    fun `an imported Trafikverket row can never be voted gone, even from on top of it`() {
+        // The importer full-overwrites it every 30 minutes, so the vote would be
+        // erased; the backend rejects it for everyone including admins. The
+        // source check therefore has to come FIRST, before proximity.
+        assertEquals(
+            ClearVoteEligibility.ImportedSource,
+            IncidentDetails.clearVoteEligibility(
+                incident(source = INCIDENT_SOURCE_TRAFIKVERKET, reporterUid = null),
+                IncidentPoint(57.0, 12.0),
+            ),
+        )
+        // ...and still, with no location at all, for the same reason.
+        assertEquals(
+            ClearVoteEligibility.ImportedSource,
+            IncidentDetails.clearVoteEligibility(
+                incident(source = INCIDENT_SOURCE_TRAFIKVERKET, reporterUid = null),
+                null,
+            ),
+        )
+    }
+
+    @Test
+    fun `a garbled coordinate fails to the FAR side, never to available`() {
+        // NaN fails every comparison, so a naive distance check would let a
+        // garbled position through as "close enough". Failing far is the
+        // direction that cannot take a live hazard off the map.
+        for (bad in listOf(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY)) {
+            assertEquals(
+                ClearVoteEligibility.TooFar,
+                IncidentDetails.clearVoteEligibility(incident(), IncidentPoint(bad, 12.0)),
+            )
+            assertEquals(
+                ClearVoteEligibility.TooFar,
+                IncidentDetails.clearVoteEligibility(incident(), IncidentPoint(57.0, bad)),
+            )
+        }
+    }
+
+    @Test
+    fun `the distance helper agrees with known great-circle distances`() {
+        // Sanity-check the haversine itself, so the eligibility tests above are
+        // measuring the right thing. Kungsbacka to Gothenburg is ~25 km.
+        val km = IncidentDetails.distanceMeters(57.4874, 12.0757, 57.7089, 11.9746) / 1000.0
+        assertTrue("expected ~25 km, got %.1f km".format(km), km > 23 && km < 27)
+        assertEquals(0.0, IncidentDetails.distanceMeters(57.0, 12.0, 57.0, 12.0), 0.001)
+    }
+
+    @Test
+    fun `the client radius matches the radius the backend enforces`() {
+        // Mirrored ONLY to avoid a wasted round-trip; the server re-computes and
+        // decides. Pinned so a drift is a deliberate edit rather than a surprise.
+        assertEquals(300.0, IncidentDetails.CLEAR_VOTE_RADIUS_METERS, 0.0)
+    }
 }

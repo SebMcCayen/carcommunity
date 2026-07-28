@@ -34,27 +34,50 @@ const val INCIDENT_DETAILS_REMOVE_TAG = "incident_details_remove"
 /** Test tag on the "confirmed by N" line shown for a confirmable incident. */
 const val INCIDENT_DETAILS_CONFIRM_COUNT_TAG = "incident_details_confirm_count"
 
+/** Test tag on the "no, it's gone" clear-vote action. */
+const val INCIDENT_DETAILS_CLEAR_TAG = "incident_details_clear"
+
+/** Test tag on the "reported gone by N" line. */
+const val INCIDENT_DETAILS_CLEARED_COUNT_TAG = "incident_details_cleared_count"
+
+/** Test tag on the line explaining why the clear vote is unavailable. */
+const val INCIDENT_DETAILS_CLEAR_BLOCKED_TAG = "incident_details_clear_blocked"
+
 /**
  * The sheet opened by TAPPING an incident marker on the map.
  *
- * Answers the three things the badge itself cannot: what category it is, how
- * long ago it was reported, and where it came from (a member, or the
- * Trafikverket import) — then offers the ONE action that makes sense for this
- * viewer, per [IncidentDetails.actionFor]:
+ * Answers the three things the badge itself cannot — what category it is, how
+ * long ago it was reported, and where it came from — and then asks the ONE
+ * question that keeps the shared map honest: **"Är den kvar?"**
  *
- *  - someone else's member report → "I confirm it's still here", the
- *    verification statement Seb asked for.
- *    It is wired to `incidents-confirm` (see [ConfirmAvailability]): tapping it
- *    corroborates the incident, extends its life, and bumps the shared
- *    confirmation count. When others have already confirmed, a "confirmed by N"
- *    line shows above the button as social proof. The button disables while a
- *    confirmation is in flight ([confirmInProgress]) so a double-tap cannot fire
- *    two calls.
+ *  - someone else's member report → BOTH answers are offered.
+ *    **[Ja, den är kvar]** confirms it (`incidents-confirm`), extending its life
+ *    and bumping the shared confirmation count. **[Nej, den är borta]** votes it
+ *    gone (`incidents-reportCleared`).
+ *
+ *    The two are deliberately NOT symmetrical in consequence, and the sheet does
+ *    not pretend otherwise. A confirmation is cheap and reversible. A clear vote
+ *    can take a marker off every other driver's map, so the backend makes it
+ *    earn that: the voter must be physically near the incident, and one vote only
+ *    FADES the incident — it takes two net clear votes (or the original
+ *    reporter) to remove it. That is why the sheet shows both counts at once
+ *    rather than a single verdict: whoever reads this is about to drive into the
+ *    spot, and "3 say it's there, 1 says it's gone" is more use to them than
+ *    somebody else's arithmetic.
+ *
  *  - your own member report → the existing remove action, which IS wired
  *    (`incidents-remove`). You are never offered "still there?" on your own
- *    report.
+ *    report, and remove is the more direct route to the same outcome, so the
+ *    clear vote is not duplicated onto it.
  *  - an imported Trafikverket row → neither, with a line saying why. The backend
- *    rejects removing imported incidents for everyone, admins included.
+ *    rejects removing and clearing imported incidents for everyone, admins
+ *    included.
+ *
+ * WHEN THE CLEAR VOTE CANNOT BE OFFERED the button is rendered DISABLED with the
+ * real reason beside it ("Kör närmare", "Uppgiften kommer från Trafikverket")
+ * rather than hidden. A hidden control teaches nothing and looks like a bug; an
+ * enabled one that always fails is worse. [ClearVoteEligibility] decides, purely
+ * and unit-tested.
  *
  * All the branching logic is in [IncidentDetails] (pure, unit-tested); this
  * composable only renders the decision.
@@ -67,6 +90,13 @@ fun IncidentDetailsSheet(
     onConfirm: () -> Unit,
     onRemove: () -> Unit,
     onDismiss: () -> Unit,
+    // "Nej, den är borta". Null in a build/host that has no clear-vote wiring;
+    // the action is then simply not rendered rather than rendered dead.
+    onReportCleared: (() -> Unit)? = null,
+    // Whether this viewer may actually vote it gone right now, and if not, why.
+    // Defaults to NoLocation so a host that forgets to supply a position renders
+    // an honest "location unavailable" rather than an action that always fails.
+    clearEligibility: ClearVoteEligibility = ClearVoteEligibility.NoLocation,
     // True while a removal is in flight. The sheet now stays open across the
     // round-trip (it closes when the incident leaves the map, not when the
     // button is pressed), which would otherwise leave the button live long
@@ -75,6 +105,8 @@ fun IncidentDetailsSheet(
     // True while a confirmation is in flight — same one-call-per-press guard as
     // removeInProgress, so a double-tap cannot fire two `incidents-confirm` calls.
     confirmInProgress: Boolean = false,
+    // True while a clear vote is in flight — same one-call-per-press guard.
+    clearInProgress: Boolean = false,
 ) {
     val action = IncidentDetails.actionFor(incident, viewerUid)
     val confirmWired = IncidentDetails.confirmAvailability == ConfirmAvailability.Wired
@@ -87,7 +119,7 @@ fun IncidentDetailsSheet(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
-                IncidentBadge(type = incident.type)
+                IncidentBadge(type = incident.type, reportedCleared = incident.reportedCleared)
                 Text(text = label, style = MaterialTheme.typography.titleMedium)
             }
         },
@@ -112,23 +144,68 @@ fun IncidentDetailsSheet(
                 incident.note?.trim()?.takeIf { it.isNotEmpty() }?.let { note ->
                     Text(text = note, style = MaterialTheme.typography.bodyMedium)
                 }
+                // BOTH tallies, always, whenever either is non-zero — never a
+                // single netted verdict. The person reading this is about to
+                // drive into the spot, and two honest numbers serve them better
+                // than one conclusion drawn on their behalf.
+                if (incident.confirmationCount > 0) {
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.incidents_confirmedBy,
+                                incident.confirmationCount,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_COUNT_TAG),
+                    )
+                }
+                if (incident.clearedCount > 0) {
+                    Text(
+                        text = stringResource(R.string.incidents_clearedBy, incident.clearedCount),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(INCIDENT_DETAILS_CLEARED_COUNT_TAG),
+                    )
+                }
+                // The standing caution on a faded marker: it may well still be
+                // there, so the advice is "take care", never "it's gone".
+                if (incident.reportedCleared) {
+                    Text(
+                        text = stringResource(R.string.incidents_clearedMarkerHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 when (action) {
-                    IncidentAction.Confirm ->
-                        // "Confirmed by N" as ambient social proof, shown only once
-                        // someone has actually confirmed. The button below does the
-                        // confirming; this line just reflects the shared count.
-                        if (incident.confirmationCount > 0) {
+                    IncidentAction.Confirm -> {
+                        // The question itself, asked once, directly above the two
+                        // answers in the button row.
+                        Text(
+                            text = stringResource(R.string.incidents_stillHereQuestion),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        // WHY the "no" answer is unavailable, when it is. Shown
+                        // instead of hiding the button, so the user learns what
+                        // would make it work rather than wondering where it went.
+                        val blockedReason =
+                            when (clearEligibility) {
+                                ClearVoteEligibility.Available -> null
+                                ClearVoteEligibility.TooFar -> R.string.incidents_clearedTooFar
+                                ClearVoteEligibility.NoLocation ->
+                                    R.string.incidents_clearedNoLocation
+                                ClearVoteEligibility.ImportedSource ->
+                                    R.string.incidents_clearedImportedExplanation
+                            }
+                        if (blockedReason != null) {
                             Text(
-                                text =
-                                    stringResource(
-                                        R.string.incidents_confirmedBy,
-                                        incident.confirmationCount,
-                                    ),
+                                text = stringResource(blockedReason),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_COUNT_TAG),
+                                modifier = Modifier.testTag(INCIDENT_DETAILS_CLEAR_BLOCKED_TAG),
                             )
                         }
+                    }
                     IncidentAction.None ->
                         Text(
                             text = stringResource(R.string.incidents_removeImportedExplanation),
@@ -150,7 +227,7 @@ fun IncidentDetailsSheet(
                         enabled = confirmWired && !confirmInProgress,
                         modifier = Modifier.testTag(INCIDENT_DETAILS_CONFIRM_TAG),
                     ) {
-                        Text(stringResource(R.string.incidents_verifyAction))
+                        Text(stringResource(R.string.incidents_stillHereYes))
                     }
                 IncidentAction.Remove ->
                     TextButton(
@@ -167,27 +244,50 @@ fun IncidentDetailsSheet(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.incidents_close))
+            // "Nej, den är borta" sits beside Close rather than opposite the
+            // confirm action: both are answers to the same question, and putting
+            // the destructive-sounding one in the primary slot would invite the
+            // reflex tap this whole design is built to survive.
+            Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+                if (action == IncidentAction.Confirm && onReportCleared != null) {
+                    TextButton(
+                        onClick = onReportCleared,
+                        // Rendered even when it cannot be used — disabled, with the
+                        // reason above — because a missing button explains nothing.
+                        enabled =
+                            clearEligibility == ClearVoteEligibility.Available && !clearInProgress,
+                        modifier = Modifier.testTag(INCIDENT_DETAILS_CLEAR_TAG),
+                    ) {
+                        Text(stringResource(R.string.incidents_stillHereNo))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.incidents_close))
+                }
             }
         },
     )
 }
 
 /**
- * The same badge the map draws, at dialog size: category colour disc with the
- * white category glyph on it. Rendered from the SAME drawable table
- * ([incidentGlyphRes]) as the marker, so the thing you tapped and the thing you are
- * now reading about are visibly the same object.
+ * The same badge the map draws, at dialog size: the category disc with its
+ * contrast-chosen glyph on it, washed out identically when the incident has been
+ * reported gone. Rendered from the SAME drawable table ([incidentGlyphRes]) and
+ * the SAME colour functions as the marker, so the thing you tapped and the thing
+ * you are now reading about are visibly the same object in the same state.
  */
 @Composable
-private fun IncidentBadge(type: IncidentType) {
+private fun IncidentBadge(type: IncidentType, reportedCleared: Boolean) {
     Box(
         modifier =
             Modifier
                 .size(BADGE_SIZE)
                 .clip(CircleShape)
-                .background(IncidentPalette.color(type)),
+                // The SAME washed-out disc the map marker uses when the incident
+                // has been reported gone, computed by the same pure function, so
+                // the badge you tapped and the badge you are now reading about
+                // cannot end up in different states.
+                .background(Color(IncidentMarkerStyle.discColorArgb(type, reportedCleared))),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -197,8 +297,9 @@ private fun IncidentBadge(type: IncidentType) {
             // noise to a screen-reader user.
             contentDescription = null,
             // The SAME contrast-chosen tint the map marker uses: a fixed white
-            // glyph is unreadable on the amber and orange discs.
-            tint = Color(IncidentMarkerStyle.glyphColorArgb(type)),
+            // glyph is unreadable on the amber and orange discs, and on EVERY
+            // faded disc.
+            tint = Color(IncidentMarkerStyle.glyphColorArgb(type, reportedCleared)),
             modifier = Modifier.size(BADGE_GLYPH_SIZE),
         )
     }
