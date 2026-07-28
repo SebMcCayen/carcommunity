@@ -37,6 +37,11 @@ class IncidentRemoveTest {
         }
 
         override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+        override suspend fun reportCleared(
+            incidentId: String,
+            fix: IncidentClearFix,
+        ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
     }
 
     private fun incidentAt(id: String) =

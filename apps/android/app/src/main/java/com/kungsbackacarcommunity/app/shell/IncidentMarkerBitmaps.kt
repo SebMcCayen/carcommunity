@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.PorterDuff
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
@@ -11,6 +12,7 @@ import androidx.core.graphics.createBitmap
 import com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle
 import kotlin.math.ceil
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Builds the incident marker images the map draws — a category glyph on a
@@ -26,12 +28,33 @@ import kotlin.math.roundToInt
  * 1. [IncidentMarkerStyle.RING_DARK] hairline — the outermost edge, which is
  *    what separates the marker from a LIGHT basemap.
  * 2. [IncidentMarkerStyle.RING_LIGHT] ring — separates it from a DARK basemap.
- * 3. The category disc.
+ * 3. The category disc — washed out over the light ring when the incident has
+ *    been reported gone (see below).
  * 4. The glyph, tinted for contrast against that disc.
+ * 5. On a reported-gone marker only, a diagonal strike-through bar.
  *
  * The two rings are why ONE image works on both the day and night basemaps; see
  * [IncidentMarkerStyle]'s KDoc for the measured contrast and why per-mode icon
  * sets would not survive this map's day/night mechanism anyway.
+ *
+ * ## The "reported gone" state
+ *
+ * An incident somebody has voted gone — but which has not reached the backend's
+ * removal threshold — is still drawn, dimmed. Two things make that legible
+ * rather than merely faint, and neither is hue:
+ *
+ *  - the disc is composited at [IncidentMarkerStyle.CLEARED_DISC_ALPHA] over the
+ *    marker's OWN opaque light ring, which is already painted underneath it by
+ *    step 2. That is why the wash is deterministic: it never touches the
+ *    basemap, so the same bitmap reads identically on the day and night maps and
+ *    the resulting colour is the exact one the unit tests measure; and
+ *  - a diagonal bar is struck across the badge, which is a SHAPE difference and
+ *    therefore survives any colour-vision deficiency — and, unlike lightness, is
+ *    readable without a normal marker beside it to compare against.
+ *
+ * Both rings stay fully opaque, so a questioned marker is exactly as easy to
+ * FIND on either basemap as a normal one. Dimming a hazard into invisibility is
+ * the one outcome this design will not accept.
  */
 internal object IncidentMarkerBitmaps {
     /**
@@ -45,7 +68,10 @@ internal object IncidentMarkerBitmaps {
         @DrawableRes iconRes: Int,
         discColorArgb: Int,
         glyphColorArgb: Int,
-    ): String = "kcc-incident-$iconRes-$discColorArgb-$glyphColorArgb"
+        reportedCleared: Boolean = false,
+    ): String =
+        "kcc-incident-$iconRes-$discColorArgb-$glyphColorArgb" +
+            if (reportedCleared) "-cleared" else ""
 
     /**
      * Rasterises one marker. Returns null if the drawable cannot be inflated, so
@@ -57,6 +83,7 @@ internal object IncidentMarkerBitmaps {
         @DrawableRes iconRes: Int,
         discColorArgb: Int,
         glyphColorArgb: Int,
+        reportedCleared: Boolean = false,
     ): Bitmap? {
         val density = context.resources.displayMetrics.density
         fun px(dp: Float) = dp * density
@@ -91,7 +118,11 @@ internal object IncidentMarkerBitmaps {
         paint.color = IncidentMarkerStyle.RING_LIGHT
         canvas.drawCircle(centre, centre, outerRadius - darkRing, paint)
 
-        // 3. Category disc.
+        // 3. Category disc. The caller passes the ALREADY-COMPOSITED colour for a
+        // reported-gone marker (IncidentMarkerStyle.discColorArgb), so this stays
+        // one opaque fill either way — the wash is computed in the pure,
+        // unit-tested style object rather than by handing Canvas an alpha here
+        // and hoping the result matches what the tests measured.
         paint.color = discColorArgb
         canvas.drawCircle(centre, centre, discDiameter / 2f, paint)
 
@@ -112,6 +143,40 @@ internal object IncidentMarkerBitmaps {
         )
         glyph.setColorFilter(glyphColorArgb, PorterDuff.Mode.SRC_IN)
         glyph.draw(canvas)
+
+        // 5. The strike-through, LAST so it reads over both the disc and the
+        // glyph — the non-colour channel that says "someone reports this is
+        // gone". Clipped to the disc so it never crosses the rings that carry
+        // the marker's edge against the basemap.
+        if (reportedCleared) {
+            canvas.save()
+            val clip =
+                Path().apply {
+                    addCircle(centre, centre, discDiameter / 2f, Path.Direction.CW)
+                }
+            canvas.clipPath(clip)
+            paint.color = IncidentMarkerStyle.CLEARED_SLASH_COLOR
+            paint.strokeWidth = discDiameter * IncidentMarkerStyle.CLEARED_SLASH_WIDTH_SCALE
+            paint.strokeCap = Paint.Cap.BUTT
+            paint.style = Paint.Style.STROKE
+            val reach = discDiameter * IncidentMarkerStyle.CLEARED_SLASH_LENGTH_SCALE / 2f
+            val offset = reach / sqrtTwo
+            canvas.drawLine(
+                centre - offset,
+                centre + offset,
+                centre + offset,
+                centre - offset,
+                paint,
+            )
+            canvas.restore()
+        }
         return bitmap
     }
+
+    /**
+     * Half the diagonal of a unit square — the factor that turns the slash's
+     * LENGTH into equal horizontal and vertical offsets from the centre, so the
+     * bar is 45 degrees whatever size the badge is in pixels.
+     */
+    private val sqrtTwo = sqrt(2f)
 }

@@ -10,7 +10,13 @@ package com.kungsbackacarcommunity.app.incidents
  *  - `incidents-report`     { type, latitude, longitude, note? } → the created incident.
  *  - `incidents-listNearby` { latitude, longitude, radiusMeters? } → { incidents: [...] }.
  *  - `incidents-remove`     { incidentId } → { removed }.
- *  - `incidents-confirm`    { incidentId } → { confirmationCount, expiresAt, alreadyConfirmed }.
+ *  - `incidents-confirm`    { incidentId } → { confirmationCount, clearedCount,
+ *                           reportedCleared, expiresAt, alreadyConfirmed,
+ *                           switchedFromClearVote }.
+ *  - `incidents-reportCleared` { incidentId, latitude, longitude, capturedAt,
+ *                           accuracyMeters?, mockLocationReported? } →
+ *                           { clearedCount, confirmationCount, reportedCleared,
+ *                           removed, alreadyVoted, switchedFromConfirmation }.
  *
  * The wire `type` strings here MUST match the backend INCIDENT_TYPES enum.
  */
@@ -62,6 +68,29 @@ data class Incident(
      * the "confirmed by N" line on the detail sheet as ambient social proof.
      */
     val confirmationCount: Int = 0,
+    /**
+     * How many members have voted that this incident is GONE
+     * (`incidents-reportCleared`).
+     *
+     * Deliberately carried ALONGSIDE [confirmationCount] rather than netted into
+     * it. The backend decides fade/removal on the net score, but the client shows
+     * BOTH numbers, because the person reading the sheet is about to drive into
+     * the spot and is better served by "3 say it's there, 1 says it's gone" than
+     * by someone else's arithmetic.
+     */
+    val clearedCount: Int = 0,
+    /**
+     * True when the clear votes LEAD but have not reached the backend's removal
+     * threshold: the incident is still real enough to draw, so the marker is
+     * drawn FADED and the sheet says "reported gone by N".
+     *
+     * Server-derived, never computed here. The client must not infer the fade
+     * from `clearedCount > confirmationCount` of its own accord: the threshold
+     * and the tie-breaking rules live on the backend (evaluateClearVote), and a
+     * second implementation here would be one more place for them to drift —
+     * with a live hazard drawn as stale as the failure mode.
+     */
+    val reportedCleared: Boolean = false,
 )
 
 /** The backend's `source` value for incidents imported from Trafikverket. */

@@ -118,6 +118,13 @@ data class MapRouteOverlay(
  * @property glyphColorArgb the colour to tint [iconRes] with — chosen by the
  *   host per category for contrast against [colorArgb], since a single fixed
  *   glyph colour is unreadable on some discs.
+ * @property reportedCleared whether members have voted this incident GONE
+ *   without yet reaching the backend's removal threshold. The marker is still
+ *   drawn — one member's vote must not erase a real hazard for everyone — but
+ *   struck through with a diagonal bar, a SHAPE difference that survives any
+ *   colour-vision deficiency. The host has already washed out [colorArgb] and
+ *   re-picked [glyphColorArgb] to match, so this flag only selects the extra
+ *   mark and keeps the two states on distinct style-image names.
  */
 data class MapIncidentMarker(
     val id: String,
@@ -126,6 +133,7 @@ data class MapIncidentMarker(
     val colorArgb: Int,
     @DrawableRes val iconRes: Int,
     val glyphColorArgb: Int,
+    val reportedCleared: Boolean = false,
 )
 
 /**

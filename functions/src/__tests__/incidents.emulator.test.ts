@@ -46,6 +46,7 @@ import { runTrafikverketSync } from '../incidents/trafikverket';
 import type { TrafikverketResponse } from '../incidents/trafikverket-core';
 import { importedIncidentDocId } from '../incidents/trafikverket-core';
 import {
+  INCIDENT_CLEAR_RATE_LIMIT_MAX,
   INCIDENT_LIST_RATE_LIMIT_COLLECTION,
   INCIDENT_LIST_RATE_LIMIT_MAX,
   INCIDENT_LIST_RATE_LIMIT_WINDOW_MS,
@@ -1051,5 +1052,450 @@ describe('incidents Trafikverket importer', () => {
     // Re-run overwrites the same doc (no duplicate).
     const second = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
     expect(second.upserted).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// incidents.reportCleared — "no, it's gone"
+// ---------------------------------------------------------------------------
+//
+// The safety-critical half of the feature: these tests pin WHEN a real hazard
+// leaves everyone's map. Each `describe` provisions its own members because the
+// callable is rate-limited to INCIDENT_CLEAR_RATE_LIMIT_MAX votes per uid per
+// minute — sharing the top-level `member` across every case would eventually
+// trip the limiter and turn a real assertion into a flake.
+
+/** A fix AT the incident, captured now — the honest happy-path sample. */
+function clearVoteAt(
+  incidentId: string,
+  position: { latitude: number; longitude: number } = KBA,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    incidentId,
+    latitude: position.latitude,
+    longitude: position.longitude,
+    accuracyMeters: 12,
+    capturedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+interface ClearResponse {
+  clearedCount: number;
+  confirmationCount: number;
+  reportedCleared: boolean;
+  removed: boolean;
+  alreadyVoted: boolean;
+  switchedFromConfirmation: boolean;
+}
+
+async function reportIncidentAs(user: TestUser, type = 'hazard'): Promise<string> {
+  await signInAs(user);
+  const created = (
+    await call('incidents-report', {
+      type,
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+    })
+  ).data as { id: string };
+  return created.id;
+}
+
+describe('incidents.reportCleared', () => {
+  let reporter: TestUser;
+
+  beforeAll(async () => {
+    reporter = await createProvisionedUser('inc-clear-reporter');
+    await makeMember(reporter);
+  });
+
+  it('fades an incident on the first clear vote but leaves it on the map', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const voter = await createProvisionedUser('inc-clear-v1');
+    await makeMember(voter);
+    await signInAs(voter);
+    const result = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+
+    expect(result.clearedCount).toBe(1);
+    expect(result.confirmationCount).toBe(0);
+    expect(result.reportedCleared).toBe(true);
+    expect(result.removed).toBe(false);
+    expect(result.alreadyVoted).toBe(false);
+
+    // Persisted on the document, and the vote ledger is keyed by the voting uid.
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.clearedCount).toBe(1);
+    expect(stored.data()?.reportedCleared).toBe(true);
+    const ledger = await adminDb
+      .collection('incidents')
+      .doc(incidentId)
+      .collection('clearVotes')
+      .doc(voter.uid)
+      .get();
+    expect(ledger.exists).toBe(true);
+    expect(ledger.data()?.uid).toBe(voter.uid);
+
+    // STILL VISIBLE to everyone, carrying both signals — the whole point of
+    // transparent decay rather than deletion.
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as {
+      incidents: Array<{
+        id: string;
+        clearedCount: number;
+        confirmationCount: number;
+        reportedCleared: boolean;
+      }>;
+    };
+    const onMap = nearby.incidents.find((i) => i.id === incidentId);
+    expect(onMap).toBeDefined();
+    expect(onMap?.clearedCount).toBe(1);
+    expect(onMap?.confirmationCount).toBe(0);
+    expect(onMap?.reportedCleared).toBe(true);
+  });
+
+  it('is idempotent: a second vote from the same member does not double-count', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const voter = await createProvisionedUser('inc-clear-idem');
+    await makeMember(voter);
+    await signInAs(voter);
+    const first = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(first.clearedCount).toBe(1);
+    expect(first.alreadyVoted).toBe(false);
+
+    const repeat = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(repeat.clearedCount).toBe(1);
+    expect(repeat.alreadyVoted).toBe(true);
+    expect(repeat.removed).toBe(false);
+
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.clearedCount).toBe(1);
+  });
+
+  it('removes the incident for everyone at 2 NET clear votes', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const voterA = await createProvisionedUser('inc-clear-a');
+    await makeMember(voterA);
+    await signInAs(voterA);
+    const first = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(first.removed).toBe(false);
+
+    const voterB = await createProvisionedUser('inc-clear-b');
+    await makeMember(voterB);
+    await signInAs(voterB);
+    const second = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(second.clearedCount).toBe(2);
+    expect(second.removed).toBe(true);
+    // Removed, therefore not "faded" — it is gone, not dimmed.
+    expect(second.reportedCleared).toBe(false);
+
+    // EXPIRED, not deleted: the audit trail (document + vote ledger) survives
+    // for the cleanupExpired sweep, but the marker is off every user's map.
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.exists).toBe(true);
+    expect(stored.data()?.expiresAt.toMillis()).toBeLessThanOrEqual(Date.now());
+
+    const nearby = (
+      await call('incidents-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { incidents: Array<{ id: string }> };
+    expect(nearby.incidents.some((i) => i.id === incidentId)).toBe(false);
+  });
+
+  it('one confirm plus one clear is a TIE: no fade, no removal', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const confirmer = await createProvisionedUser('inc-tie-confirm');
+    await makeMember(confirmer);
+    await signInAs(confirmer);
+    await call('incidents-confirm', { incidentId });
+
+    const clearer = await createProvisionedUser('inc-tie-clear');
+    await makeMember(clearer);
+    await signInAs(clearer);
+    const result = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+
+    expect(result.clearedCount).toBe(1);
+    expect(result.confirmationCount).toBe(1);
+    expect(result.reportedCleared).toBe(false);
+    expect(result.removed).toBe(false);
+
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.reportedCleared).toBe(false);
+    expect(stored.exists).toBe(true);
+  });
+
+  it('lets a member SWITCH from confirming to clearing, adjusting both counters once', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const switcher = await createProvisionedUser('inc-switch-to-clear');
+    await makeMember(switcher);
+    await signInAs(switcher);
+    await call('incidents-confirm', { incidentId });
+
+    const result = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(result.switchedFromConfirmation).toBe(true);
+    expect(result.clearedCount).toBe(1);
+    // Never counted on BOTH sides: the confirmation is gone, not merely
+    // outweighed.
+    expect(result.confirmationCount).toBe(0);
+    expect(result.reportedCleared).toBe(true);
+
+    const incidentRef = adminDb.collection('incidents').doc(incidentId);
+    expect((await incidentRef.get()).data()?.confirmationCount).toBe(0);
+    expect(
+      (await incidentRef.collection('confirmations').doc(switcher.uid).get()).exists,
+    ).toBe(false);
+    expect((await incidentRef.collection('clearVotes').doc(switcher.uid).get()).exists).toBe(true);
+  });
+
+  it('lets a member SWITCH BACK from clearing to confirming, un-fading the marker', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const switcher = await createProvisionedUser('inc-switch-to-confirm');
+    await makeMember(switcher);
+    await signInAs(switcher);
+    const cleared = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(cleared.reportedCleared).toBe(true);
+
+    const confirmed = (await call('incidents-confirm', { incidentId })).data as {
+      confirmationCount: number;
+      clearedCount: number;
+      reportedCleared: boolean;
+      switchedFromClearVote: boolean;
+    };
+    expect(confirmed.switchedFromClearVote).toBe(true);
+    expect(confirmed.confirmationCount).toBe(1);
+    expect(confirmed.clearedCount).toBe(0);
+    // The fade must LIFT — a re-corroborated hazard drawn faded is the failure
+    // that gets someone hurt.
+    expect(confirmed.reportedCleared).toBe(false);
+
+    const incidentRef = adminDb.collection('incidents').doc(incidentId);
+    expect((await incidentRef.get()).data()?.reportedCleared).toBe(false);
+    expect((await incidentRef.collection('clearVotes').doc(switcher.uid).get()).exists).toBe(false);
+  });
+
+  it('removes IMMEDIATELY when the original reporter clears their own report', async () => {
+    const ownReporter = await createProvisionedUser('inc-clear-own');
+    await makeMember(ownReporter);
+    const incidentId = await reportIncidentAs(ownReporter);
+
+    const result = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    // ONE vote, no threshold: the reporter has the best information about their
+    // own report.
+    expect(result.clearedCount).toBe(1);
+    expect(result.removed).toBe(true);
+    expect(result.reportedCleared).toBe(false);
+
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.expiresAt.toMillis()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('removes IMMEDIATELY when an admin clears it (moderation)', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    await signInAs(adminUser);
+    const result = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+      .data as ClearResponse;
+    expect(result.removed).toBe(true);
+
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.expiresAt.toMillis()).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('rejects a vote from OUT OF RANGE, however the accuracy is reported', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const distant = await createProvisionedUser('inc-clear-far');
+    await makeMember(distant);
+    await signInAs(distant);
+
+    // ~30 km away. An unbounded accuracy must not buy that distance: this is the
+    // exploit shape PR #573 closed inside isWithinGeofence, re-asserted here at
+    // the callable so neither bound is load-bearing on its own.
+    expect(
+      await callableErrorCode(
+        call('incidents-reportCleared', clearVoteAt(incidentId, FAR, { accuracyMeters: 5_000 })),
+      ),
+    ).toBe('functions/failed-precondition');
+    expect(
+      await callableErrorCode(
+        call('incidents-reportCleared', clearVoteAt(incidentId, FAR, { accuracyMeters: 50 })),
+      ),
+    ).toBe('functions/failed-precondition');
+
+    // Nothing was counted.
+    const stored = await adminDb.collection('incidents').doc(incidentId).get();
+    expect(stored.data()?.clearedCount ?? 0).toBe(0);
+    expect(stored.data()?.reportedCleared ?? false).toBe(false);
+  });
+
+  it('rejects an absurd or non-finite accuracy at the input boundary', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const spoofer = await createProvisionedUser('inc-clear-accuracy');
+    await makeMember(spoofer);
+    await signInAs(spoofer);
+
+    for (const accuracyMeters of [50_000, 1e9, -1]) {
+      expect(
+        await callableErrorCode(
+          call('incidents-reportCleared', clearVoteAt(incidentId, FAR, { accuracyMeters })),
+        ),
+      ).toBe('functions/invalid-argument');
+    }
+    // NaN and Infinity are not JSON values, so they never reach the wire as
+    // themselves — the schema-level rejection is pinned directly in
+    // incidents-core.test.ts (`parseReportClearedInput`), which is where zod's
+    // behaviour actually lives.
+  });
+
+  it('rejects a stale position', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const staleVoter = await createProvisionedUser('inc-clear-stale');
+    await makeMember(staleVoter);
+    await signInAs(staleVoter);
+    const code = await callableErrorCode(
+      call(
+        'incidents-reportCleared',
+        clearVoteAt(incidentId, KBA, {
+          capturedAt: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+        }),
+      ),
+    );
+    expect(code).toBe('functions/failed-precondition');
+  });
+
+  it('rejects a clear vote on an IMPORTED (Trafikverket) incident', async () => {
+    // The importer full-overwrites every tv_ doc every 30 minutes, so a member
+    // vote would simply be erased — and upstream is the authority anyway.
+    const docId = importedIncidentDocId('CLEAR-VOTE-IMPORTED');
+    await adminDb
+      .collection('incidents')
+      .doc(docId)
+      .set({
+        type: 'roadwork',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        geoCell: '319_67',
+        status: 'active',
+        source: 'trafikverket',
+        reporterUid: null,
+        note: null,
+        createdAt: Timestamp.fromDate(new Date()),
+        expiresAt: Timestamp.fromDate(new Date(Date.now() + 6 * 60 * 60 * 1000)),
+      });
+
+    const voter = await createProvisionedUser('inc-clear-tv');
+    await makeMember(voter);
+    await signInAs(voter);
+    expect(await callableErrorCode(call('incidents-reportCleared', clearVoteAt(docId)))).toBe(
+      'functions/failed-precondition',
+    );
+
+    // Rejected for ADMINS too — the importer would just re-upsert it.
+    await signInAs(adminUser);
+    expect(await callableErrorCode(call('incidents-reportCleared', clearVoteAt(docId)))).toBe(
+      'functions/failed-precondition',
+    );
+
+    const stored = await adminDb.collection('incidents').doc(docId).get();
+    expect(stored.data()?.clearedCount).toBeUndefined();
+  });
+
+  it('rejects a missing incident and a non-member caller', async () => {
+    const incidentId = await reportIncidentAs(reporter);
+
+    const voter = await createProvisionedUser('inc-clear-missing');
+    await makeMember(voter);
+    await signInAs(voter);
+    expect(
+      await callableErrorCode(call('incidents-reportCleared', clearVoteAt('does-not-exist'))),
+    ).toBe('functions/not-found');
+
+    // A suspended member cannot vote (requireMemberActor).
+    const suspended = await createProvisionedUser('inc-clear-suspended');
+    await makeMember(suspended);
+    await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
+    await signInAs(suspended);
+    expect(
+      await callableErrorCode(call('incidents-reportCleared', clearVoteAt(incidentId))),
+    ).toBe('functions/permission-denied');
+  });
+
+  it('rate-limits a member hammering clear votes', async () => {
+    const spammer = await createProvisionedUser('inc-clear-spam');
+    await makeMember(spammer);
+
+    // Distinct incidents so nothing is rejected as an idempotent repeat — the
+    // ONLY thing that may stop this loop is the limiter.
+    const ids: string[] = [];
+    for (let i = 0; i < INCIDENT_CLEAR_RATE_LIMIT_MAX + 1; i += 1) {
+      ids.push(await reportIncidentAs(reporter));
+    }
+
+    await signInAs(spammer);
+    let throttled = false;
+    for (const id of ids) {
+      const code = await callableErrorCode(call('incidents-reportCleared', clearVoteAt(id)));
+      if (code === 'functions/resource-exhausted') {
+        throttled = true;
+        break;
+      }
+    }
+    expect(throttled).toBe(true);
+  });
+});
+
+describe('incidents.reportCleared idempotency', () => {
+  it('reports a repeat vote as an idempotent success even from OUT OF RANGE', () => {
+    // A repeat writes nothing, so the proximity gate has nothing to protect —
+    // and running it anyway would tell a member who voted at the scene and then
+    // drove on to "drive closer" about a vote they had already cast. Pinned here
+    // because the ordering that makes this true is easy to "tidy" away.
+    return (async () => {
+      const reporter = await createProvisionedUser('inc-clear-idem-far-r');
+      await makeMember(reporter);
+      const incidentId = await reportIncidentAs(reporter);
+
+      const voter = await createProvisionedUser('inc-clear-idem-far-v');
+      await makeMember(voter);
+      await signInAs(voter);
+      const first = (await call('incidents-reportCleared', clearVoteAt(incidentId)))
+        .data as ClearResponse;
+      expect(first.alreadyVoted).toBe(false);
+
+      // Same member, same incident, now 30 km away.
+      const repeat = (await call('incidents-reportCleared', clearVoteAt(incidentId, FAR)))
+        .data as ClearResponse;
+      expect(repeat.alreadyVoted).toBe(true);
+      expect(repeat.clearedCount).toBe(1);
+      expect(repeat.removed).toBe(false);
+
+      const stored = await adminDb.collection('incidents').doc(incidentId).get();
+      expect(stored.data()?.clearedCount).toBe(1);
+    })();
   });
 });

@@ -74,5 +74,9 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<IncidentVie
     // A brand-new report has no confirmations yet; the field is not written to
     // the document until the first incidents.confirm bumps it.
     confirmationCount: 0,
+    // Nor any "it's gone" votes: neither field is written until the first
+    // incidents.reportCleared, so a fresh report is never faded.
+    clearedCount: 0,
+    reportedCleared: false,
   };
 });

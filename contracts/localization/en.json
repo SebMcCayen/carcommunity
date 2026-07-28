@@ -1415,7 +1415,19 @@
     "removeAction": "Remove my report",
     "removeSuccess": "Your report was removed.",
     "removeError": "Couldn't remove your report. Try again.",
-    "removeImportedExplanation": "Imported incidents are managed by Trafikverket and clear on their own."
+    "removeImportedExplanation": "Imported incidents are managed by Trafikverket and clear on their own.",
+    "stillHereQuestion": "Is it still there?",
+    "stillHereYes": "Yes, it's still there",
+    "stillHereNo": "No, it's gone",
+    "clearedBy": "Reported gone by %1$d",
+    "clearedSuccess": "Thanks — we've noted that it's gone.",
+    "clearedRemoved": "Thanks — the incident has been removed from the map.",
+    "clearedAlready": "You've already reported this one as gone.",
+    "clearedError": "Couldn't report that right now. Try again.",
+    "clearedTooFar": "Drive closer to report that it's gone.",
+    "clearedNoLocation": "Your location isn't available. Turn on location to report.",
+    "clearedImportedExplanation": "This comes from Trafikverket and can't be reported as gone.",
+    "clearedMarkerHint": "Someone has reported this as gone, but it may still be there. Take care."
   },
   "whatsNew": {
     "title": "What’s new",

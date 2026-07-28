@@ -20,9 +20,13 @@ private class FakeIncidentRepository(
     private val reportError: Throwable? = null,
     private val confirmError: Throwable? = null,
     private val confirmResult: IncidentConfirmResult = IncidentConfirmResult(1, false),
+    private val clearError: Throwable? = null,
+    private val clearResult: IncidentClearResult =
+        IncidentClearResult(1, 0, reportedCleared = true, removed = false, alreadyVoted = false),
 ) : IncidentRepository {
     val reported = mutableListOf<Triple<IncidentType, LatLng, String?>>()
     val confirmed = mutableListOf<String>()
+    val clearVotes = mutableListOf<Pair<String, IncidentClearFix>>()
     var listNearbyCalls = 0
         private set
 
@@ -61,6 +65,15 @@ private class FakeIncidentRepository(
         confirmed += incidentId
         confirmError?.let { throw it }
         return confirmResult
+    }
+
+    override suspend fun reportCleared(
+        incidentId: String,
+        fix: IncidentClearFix,
+    ): IncidentClearResult {
+        clearVotes += incidentId to fix
+        clearError?.let { throw it }
+        return clearResult
     }
 }
 
@@ -230,6 +243,11 @@ class IncidentReportControllerTest {
 
                     override suspend fun confirm(incidentId: String) =
                         IncidentConfirmResult(0, false)
+
+                    override suspend fun reportCleared(
+                        incidentId: String,
+                        fix: IncidentClearFix,
+                    ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
                 }
             val controller = IncidentReportController(repo) { here }
 
@@ -265,6 +283,11 @@ class IncidentReportControllerTest {
                 override suspend fun remove(incidentId: String) = Unit
 
                 override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                override suspend fun reportCleared(
+                    incidentId: String,
+                    fix: IncidentClearFix,
+                ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -312,6 +335,11 @@ class IncidentReportControllerTest {
                 }
                 override suspend fun remove(incidentId: String) = Unit
                 override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                override suspend fun reportCleared(
+                    incidentId: String,
+                    fix: IncidentClearFix,
+                ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -357,6 +385,11 @@ class IncidentReportControllerTest {
                     throw CancellationException("cancelled")
                 override suspend fun remove(incidentId: String) = Unit
                 override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                override suspend fun reportCleared(
+                    incidentId: String,
+                    fix: IncidentClearFix,
+                ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -767,6 +800,11 @@ class IncidentReportControllerTest {
                 }
                 override suspend fun remove(incidentId: String) = Unit
                 override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                override suspend fun reportCleared(
+                    incidentId: String,
+                    fix: IncidentClearFix,
+                ) = IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
             }
         val controller = IncidentReportController(repo) { here }
 
@@ -911,5 +949,268 @@ class IncidentReportControllerTest {
 
         val thrown = catchCancellation { controller.confirm("x") }
         assertTrue("cancellation must propagate, not become Failed", thrown is CancellationException)
+    }
+}
+
+/**
+ * Covers [IncidentReportController.reportCleared] — the "Nej, den är borta" vote.
+ *
+ * Two things must hold, and both are about the map telling the truth:
+ *
+ *  - the local list is only touched AFTER the backend accepts, so a vote that
+ *    did not count never dims or hides a marker that is still live for everyone
+ *    else, and
+ *  - the new state is taken FROM THE RESPONSE rather than inferred. The
+ *    threshold and tie-breaking rules live on the backend; a second copy of them
+ *    here would be one more place for them to drift, with "live hazard drawn as
+ *    stale" as the failure mode.
+ */
+class IncidentClearVoteTest {
+
+    private val fix =
+        IncidentClearFix(
+            latitude = 57.0,
+            longitude = 12.0,
+            capturedAtIso = "2026-07-28T10:00:00Z",
+            accuracyMeters = 11.0,
+        )
+
+    private fun incidentAt(id: String) =
+        Incident(id = id, type = IncidentType.HAZARD, longitude = 12.0, latitude = 57.0)
+
+    private suspend fun controllerSeededWith(
+        repository: IncidentRepository,
+        seeded: List<Incident>,
+    ): IncidentReportController {
+        val controller =
+            IncidentReportController(
+                repository = repository,
+                locationProvider = { LatLng(57.0, 12.0) },
+            )
+        controller.refresh(LatLng(57.0, 12.0))
+        assertEquals(seeded.map { it.id }, controller.nearbyIncidents.value.map { it.id })
+        return controller
+    }
+
+    @Test
+    fun `a vote that only fades the incident keeps it on the map, marked`() = runTest {
+        val seeded = listOf(incidentAt("gone-maybe"), incidentAt("other"))
+        val repository =
+            FakeIncidentRepository(
+                nearby = seeded,
+                clearResult =
+                    IncidentClearResult(
+                        clearedCount = 1,
+                        confirmationCount = 0,
+                        reportedCleared = true,
+                        removed = false,
+                        alreadyVoted = false,
+                    ),
+            )
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("gone-maybe") { fix }
+
+        assertTrue(outcome is ClearOutcome.Success)
+        assertFalse((outcome as ClearOutcome.Success).removed)
+        // STILL THERE — one member's vote must not erase a real hazard.
+        val markers = controller.nearbyIncidents.value
+        assertEquals(listOf("gone-maybe", "other"), markers.map { it.id })
+        val voted = markers.first { it.id == "gone-maybe" }
+        assertEquals(1, voted.clearedCount)
+        assertTrue(voted.reportedCleared)
+        // ...and the untouched one is untouched.
+        assertFalse(markers.first { it.id == "other" }.reportedCleared)
+    }
+
+    @Test
+    fun `a vote that removes the incident drops it from the map`() = runTest {
+        val seeded = listOf(incidentAt("gone"), incidentAt("other"))
+        val repository =
+            FakeIncidentRepository(
+                nearby = seeded,
+                clearResult =
+                    IncidentClearResult(
+                        clearedCount = 2,
+                        confirmationCount = 0,
+                        reportedCleared = false,
+                        removed = true,
+                        alreadyVoted = false,
+                    ),
+            )
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("gone") { fix }
+
+        assertTrue((outcome as ClearOutcome.Success).removed)
+        assertEquals(listOf("other"), controller.nearbyIncidents.value.map { it.id })
+    }
+
+    @Test
+    fun `the fade state is taken from the response, never inferred locally`() = runTest {
+        // The backend says NOT faded even though clears (1) exceed confirms (0)
+        // in the response — a deliberately contradictory answer. The client must
+        // report what it was told: the threshold rules live on the server, and a
+        // second copy here is exactly the drift this pins against.
+        val seeded = listOf(incidentAt("i1"))
+        val repository =
+            FakeIncidentRepository(
+                nearby = seeded,
+                clearResult =
+                    IncidentClearResult(
+                        clearedCount = 1,
+                        confirmationCount = 0,
+                        reportedCleared = false,
+                        removed = false,
+                        alreadyVoted = false,
+                    ),
+            )
+        val controller = controllerSeededWith(repository, seeded)
+
+        controller.reportCleared("i1") { fix }
+
+        assertFalse(controller.nearbyIncidents.value.first().reportedCleared)
+    }
+
+    @Test
+    fun `an idempotent repeat is a success, not a failure`() = runTest {
+        val seeded = listOf(incidentAt("i1"))
+        val repository =
+            FakeIncidentRepository(
+                nearby = seeded,
+                clearResult =
+                    IncidentClearResult(
+                        clearedCount = 1,
+                        confirmationCount = 0,
+                        reportedCleared = true,
+                        removed = false,
+                        alreadyVoted = true,
+                    ),
+            )
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("i1") { fix }
+
+        assertTrue((outcome as ClearOutcome.Success).alreadyVoted)
+        assertEquals(1, controller.nearbyIncidents.value.first().clearedCount)
+    }
+
+    @Test
+    fun `a rejected vote leaves the map completely untouched`() = runTest {
+        // Out of range, imported, declined by anti-fraud — whichever, the marker
+        // is still live for everyone else and must not be dimmed or hidden here.
+        for (rejection in IncidentClearRejection.entries) {
+            val seeded = listOf(incidentAt("i1"))
+            val repository =
+                FakeIncidentRepository(
+                    nearby = seeded,
+                    clearError = IncidentClearRejectedException(rejection),
+                )
+            val controller = controllerSeededWith(repository, seeded)
+
+            val outcome = controller.reportCleared("i1") { fix }
+
+            assertEquals(rejection, (outcome as ClearOutcome.Rejected).rejection)
+            val marker = controller.nearbyIncidents.value.single()
+            assertEquals(0, marker.clearedCount)
+            assertFalse(marker.reportedCleared)
+        }
+    }
+
+    @Test
+    fun `an unrecognised failure is Failed, not a silent success`() = runTest {
+        val seeded = listOf(incidentAt("i1"))
+        val repository =
+            FakeIncidentRepository(nearby = seeded, clearError = IllegalStateException("boom"))
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("i1") { fix }
+
+        assertTrue(outcome is ClearOutcome.Failed)
+        assertFalse(controller.nearbyIncidents.value.single().reportedCleared)
+    }
+
+    @Test
+    fun `no position means nothing is sent at all`() = runTest {
+        // A vote without a position is not a weaker vote, it is not a vote — the
+        // backend would reject it, and there is nothing useful to ask.
+        val seeded = listOf(incidentAt("i1"))
+        val repository = FakeIncidentRepository(nearby = seeded)
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("i1") { null }
+
+        assertSame(ClearOutcome.NoLocation, outcome)
+        assertTrue(repository.clearVotes.isEmpty())
+    }
+
+    @Test
+    fun `a failing position provider degrades to NoLocation rather than throwing`() = runTest {
+        val seeded = listOf(incidentAt("i1"))
+        val repository = FakeIncidentRepository(nearby = seeded)
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("i1") { error("no GPS") }
+
+        assertSame(ClearOutcome.NoLocation, outcome)
+        assertTrue(repository.clearVotes.isEmpty())
+    }
+
+    @Test
+    fun `cancellation propagates instead of becoming a quiet failure`() = runTest {
+        val seeded = listOf(incidentAt("i1"))
+        val repository =
+            FakeIncidentRepository(nearby = seeded, clearError = CancellationException("cancelled"))
+        val controller = controllerSeededWith(repository, seeded)
+
+        var propagated = false
+        try {
+            controller.reportCleared("i1") { fix }
+        } catch (_: CancellationException) {
+            propagated = true
+        }
+        assertTrue("structured concurrency must be honoured", propagated)
+    }
+
+    @Test
+    fun `the exact fix is passed through to the backend, unmodified`() = runTest {
+        // The position IS the evidence. Anything the client quietly substitutes
+        // here — a rounded coordinate, a "now" timestamp — is the client lying
+        // about where its user was.
+        val seeded = listOf(incidentAt("i1"))
+        val repository = FakeIncidentRepository(nearby = seeded)
+        val controller = controllerSeededWith(repository, seeded)
+
+        controller.reportCleared("i1") { fix }
+
+        assertEquals(listOf("i1" to fix), repository.clearVotes)
+    }
+
+    @Test
+    fun `a confirmation carries the clear-vote state back too, un-fading the marker`() = runTest {
+        // A confirmation can SWITCH the caller's earlier "it's gone" vote. If the
+        // client only patched the confirmation count, a re-corroborated hazard
+        // would stay drawn as questioned until the next poll — stale in the one
+        // direction that matters.
+        val seeded = listOf(incidentAt("i1").copy(clearedCount = 1, reportedCleared = true))
+        val repository =
+            FakeIncidentRepository(
+                nearby = seeded,
+                confirmResult =
+                    IncidentConfirmResult(
+                        confirmationCount = 1,
+                        alreadyConfirmed = false,
+                        clearedCount = 0,
+                        reportedCleared = false,
+                    ),
+            )
+        val controller = controllerSeededWith(repository, seeded)
+
+        controller.confirm("i1")
+
+        val marker = controller.nearbyIncidents.value.single()
+        assertEquals(1, marker.confirmationCount)
+        assertEquals(0, marker.clearedCount)
+        assertFalse(marker.reportedCleared)
     }
 }

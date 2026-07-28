@@ -120,6 +120,7 @@ import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
 import { confirm as confirmIncident } from './incidents/confirm';
+import { reportCleared as reportIncidentCleared } from './incidents/reportCleared';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import {
@@ -600,7 +601,7 @@ export const errors = {
 /**
  * Crowd-sourced incidents / roadwork domain (grouped export → deployed as
  * `incidents-report`, `incidents-listNearby`, `incidents-remove`,
- * `incidents-confirm`, the
+ * `incidents-confirm`, `incidents-reportCleared`, the
  * scheduled `incidents-cleanupExpired`, and the scheduled
  * `incidents-syncTrafikverket`) — the navigation feature's Waze-style map
  * layer. NEW additive domain.
@@ -614,7 +615,15 @@ export const errors = {
  * (or admins) clear their own via `incidents.remove`. Any OTHER member confirms a
  * report is still there via `incidents.confirm`, which counts one confirmation
  * per user (sub-collection doc keyed by uid) and pushes `expiresAt` out up to a
- * hard lifetime cap — confirmed incidents persist, stale ones fade.
+ * hard lifetime cap — confirmed incidents persist, stale ones fade. The
+ * opposite signal is `incidents.reportCleared`: a member who is physically NEAR
+ * an incident votes that it is GONE. That vote never deletes anything on its
+ * own — one tap erasing a real accident for everyone is the failure mode that
+ * matters — it counts into `clearedCount`, and while clears LEAD the incident
+ * stays on the map flagged `reportedCleared` so clients draw it faded with both
+ * counts visible. Only 2 NET clear votes (or the reporter/an admin clearing it)
+ * expires it. Imported (Trafikverket) incidents reject clear votes: the importer
+ * full-overwrites them every 30 minutes, so a vote would simply be erased.
  * `incidents-cleanupExpired`
  * sweeps expired docs every 15 min. `incidents-syncTrafikverket` imports Swedish
  * roadwork/traffic situations from the Trafikverket open API — GUARDED on the
@@ -625,6 +634,7 @@ export const incidents = {
   listNearby: listNearbyIncidents,
   remove: removeIncident,
   confirm: confirmIncident,
+  reportCleared: reportIncidentCleared,
   cleanupExpired: cleanupExpiredIncidents,
   syncTrafikverket,
 };

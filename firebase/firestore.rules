@@ -842,18 +842,22 @@ service cloud.firestore {
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time;
       // No client writes — incidents.report / incidents.remove /
-      // incidents.confirm (callables).
+      // incidents.confirm / incidents.reportCleared (callables).
       //
-      // The `confirmations/{uid}` sub-collection (the one-per-user confirmation
-      // ledger written by incidents.confirm) is deliberately NOT matched here:
-      // this block does not recurse into sub-collections, so the deny-all
-      // catch-all governs it and it stays callable-only — unreadable and
-      // unwritable by clients. That is intended: a member must not be able to
-      // forge a confirmation, enumerate who confirmed what, or extend an
-      // incident's life by writing the ledger directly. The confirmation state
-      // a client needs comes back from incidents.confirm itself
-      // (confirmationCount / alreadyConfirmed) and from listNearby
-      // (confirmationCount on each incident).
+      // The `confirmations/{uid}` and `clearVotes/{uid}` sub-collections (the
+      // one-per-user confirm and "it's gone" ledgers, written by
+      // incidents.confirm and incidents.reportCleared) are deliberately NOT
+      // matched here: this block does not recurse into sub-collections, so the
+      // deny-all catch-all governs them and they stay callable-only —
+      // unreadable and unwritable by clients. That is intended: a member must
+      // not be able to forge a vote, enumerate who voted what, extend an
+      // incident's life by writing the confirmation ledger, or take a live
+      // hazard off everyone's map by writing the clear ledger. `clearVotes`
+      // additionally stores the voter's POSITION as proof of presence, which is
+      // exactly the kind of thing no other member may read. The vote state a
+      // client needs comes back from the callables themselves and from
+      // listNearby (confirmationCount / clearedCount / reportedCleared on each
+      // incident).
     }
 
     // -------------------------------------------------------------------------
@@ -868,6 +872,30 @@ service cloud.firestore {
     // liveSessions / crownHuntAwardGuards.)
     // -------------------------------------------------------------------------
     match /incidentListRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // incidentClearRateLimits – per-user fixed-window counter for
+    // incidents.reportCleared ("it's gone" votes). Same mechanism, same
+    // backend-only posture and same `expireAt` TTL as incidentListRateLimits
+    // above, in a SEPARATE collection so a burst of map refreshes can never
+    // consume a member's ability to report a hazard cleared. Never
+    // client-readable or client-writable: a member must not be able to inspect
+    // or reset their own vote throttle.
+    // -------------------------------------------------------------------------
+    match /incidentClearRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // incidentClearVoteRisk – backend-only anti-fraud scores for REJECTED
+    // incidents.reportCleared votes. Mirrors eventAttendanceRisk /
+    // crownHuntClaimRisk: risk scores and reason categories are for admins, and
+    // returning them to a client would tell an abuser precisely which signal
+    // tripped and what to change next time.
+    // -------------------------------------------------------------------------
+    match /incidentClearVoteRisk/{voteId} {
       allow read, write: if false;
     }
 

@@ -29,7 +29,37 @@ import {
   incidentListRateLimitExpiry,
   incidentListRateLimitWindowIndex,
   isUnderIncidentListRateLimit,
+  CLEAR_VOTES_TO_REMOVE,
+  INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS,
+  INCIDENT_CLEAR_RATE_LIMIT_COLLECTION,
+  INCIDENT_CLEAR_RATE_LIMIT_MAX,
+  INCIDENT_LIST_RATE_LIMIT_COLLECTION,
+  evaluateClearVote,
+  incidentClearRateLimitDocId,
+  isUnderIncidentClearRateLimit,
+  parseReportClearedInput,
 } from '../incidents/incidents-core';
+import { haversineDistanceMeters, isWithinGeofence } from '../crownHunt/crown-hunt-geo';
+import { MAX_REPORTED_ACCURACY_METERS } from '../crownHunt/crownhunt-core';
+
+/**
+ * The exact proximity decision `incidents.reportCleared` makes, expressed
+ * against the SHARED crownHunt helpers rather than a local re-implementation —
+ * a forked copy here would happily pass while the callable stayed broken.
+ */
+function withinClearFence(
+  incidentLat: number,
+  incidentLng: number,
+  fixLat: number,
+  fixLng: number,
+  accuracyMeters: number | null,
+): boolean {
+  return isWithinGeofence(
+    haversineDistanceMeters(incidentLat, incidentLng, fixLat, fixLng),
+    INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS,
+    accuracyMeters,
+  );
+}
 import {
   buildTrafikverketRequestBody,
   classifyIncidentType,
@@ -578,5 +608,220 @@ describe('incidents-core listNearby rate limit', () => {
     const expiry = incidentListRateLimitExpiry(midWindow).getTime();
     // Strictly after this window ends, so the counter outlives its own window.
     expect(expiry).toBeGreaterThan(windowStart + WINDOW_MS);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Clear votes ("it's gone") — the net-score / threshold maths
+// ---------------------------------------------------------------------------
+//
+// These are the safety-critical numbers of the whole feature: they decide when a
+// marker fades and, more importantly, when a real hazard LEAVES everyone's map.
+// Every branch is pinned by value, not by re-deriving the formula.
+
+describe('evaluateClearVote — net score, fade and removal thresholds', () => {
+  it('does not fade an incident with no clear votes', () => {
+    const tally = evaluateClearVote({ clearedCount: 0, confirmationCount: 0 });
+    expect(tally.netClearedCount).toBe(0);
+    expect(tally.reportedCleared).toBe(false);
+    expect(tally.shouldRemove).toBe(false);
+  });
+
+  it('fades on a net lead of 1 but keeps the incident on the map', () => {
+    const tally = evaluateClearVote({ clearedCount: 1, confirmationCount: 0 });
+    expect(tally.netClearedCount).toBe(1);
+    expect(tally.reportedCleared).toBe(true);
+    expect(tally.shouldRemove).toBe(false);
+  });
+
+  it('1 confirm + 1 clear is a TIE: no fade, no removal', () => {
+    // The case Seb asked about directly. A tie is two members disagreeing, and a
+    // disagreement must not degrade a live hazard's marker in either direction.
+    const tally = evaluateClearVote({ clearedCount: 1, confirmationCount: 1 });
+    expect(tally.netClearedCount).toBe(0);
+    expect(tally.reportedCleared).toBe(false);
+    expect(tally.shouldRemove).toBe(false);
+  });
+
+  it('removes at exactly 2 NET clear votes', () => {
+    const tally = evaluateClearVote({ clearedCount: 2, confirmationCount: 0 });
+    expect(tally.netClearedCount).toBe(CLEAR_VOTES_TO_REMOVE);
+    expect(tally.shouldRemove).toBe(true);
+    // A removed incident is NOT also "faded" — it is gone, and reporting both
+    // would ask clients to render a state that no longer exists on the map.
+    expect(tally.reportedCleared).toBe(false);
+  });
+
+  it('needs the clears to EXCEED the confirms by 2, not merely reach 2', () => {
+    // 2 clears against 1 confirm is a net lead of 1 → still on the map, faded.
+    const contested = evaluateClearVote({ clearedCount: 2, confirmationCount: 1 });
+    expect(contested.shouldRemove).toBe(false);
+    expect(contested.reportedCleared).toBe(true);
+    // 3 against 1 reaches the net threshold.
+    expect(evaluateClearVote({ clearedCount: 3, confirmationCount: 1 }).shouldRemove).toBe(true);
+  });
+
+  it('a well-confirmed incident is neither faded nor removable by a couple of clears', () => {
+    const tally = evaluateClearVote({ clearedCount: 2, confirmationCount: 5 });
+    expect(tally.netClearedCount).toBe(-3);
+    expect(tally.reportedCleared).toBe(false);
+    expect(tally.shouldRemove).toBe(false);
+  });
+
+  it('keeps removing once past the threshold (monotonic in the net lead)', () => {
+    for (let cleared = CLEAR_VOTES_TO_REMOVE; cleared <= 10; cleared += 1) {
+      expect(evaluateClearVote({ clearedCount: cleared, confirmationCount: 0 }).shouldRemove).toBe(
+        true,
+      );
+    }
+  });
+
+  it('reports both counts back unchanged so clients can show both signals', () => {
+    const tally = evaluateClearVote({ clearedCount: 4, confirmationCount: 7 });
+    expect(tally.clearedCount).toBe(4);
+    expect(tally.confirmationCount).toBe(7);
+  });
+});
+
+describe('reportCleared input parsing — the accuracy / coordinate boundary', () => {
+  const valid = {
+    incidentId: 'abc123',
+    latitude: 57.4874,
+    longitude: 12.0757,
+    capturedAt: '2026-07-28T10:00:00.000Z',
+  };
+
+  it('accepts a well-formed vote, with or without the optional fields', () => {
+    expect(parseReportClearedInput(valid).ok).toBe(true);
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: 12 }).ok).toBe(true);
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: null }).ok).toBe(true);
+    expect(parseReportClearedInput({ ...valid, mockLocationReported: true }).ok).toBe(true);
+  });
+
+  // THE POINT OF THIS BLOCK. `accuracyMeters` BUFFERS the geofence, so an
+  // unbounded value is a way to stand anywhere and still be "inside" the fence
+  // (the hole PR #573 closed inside isWithinGeofence). This bound is the second,
+  // independent limit at the callable's own input boundary.
+  it('rejects an absurd, non-finite or negative accuracy outright', () => {
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: 50_000 }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: 1e9 }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: Number.MAX_SAFE_INTEGER }).ok).toBe(
+      false,
+    );
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: Number.POSITIVE_INFINITY }).ok).toBe(
+      false,
+    );
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: Number.NaN }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, accuracyMeters: -1 }).ok).toBe(false);
+  });
+
+  it('accepts accuracy exactly at the shared crownHunt bound and nothing above it', () => {
+    expect(
+      parseReportClearedInput({ ...valid, accuracyMeters: MAX_REPORTED_ACCURACY_METERS }).ok,
+    ).toBe(true);
+    expect(
+      parseReportClearedInput({ ...valid, accuracyMeters: MAX_REPORTED_ACCURACY_METERS + 1 }).ok,
+    ).toBe(false);
+  });
+
+  it('rejects a missing position, an out-of-range coordinate or a bad timestamp', () => {
+    expect(parseReportClearedInput({ incidentId: 'abc123' }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, latitude: 91 }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, longitude: 181 }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, latitude: Number.NaN }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, capturedAt: 'yesterday' }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, capturedAt: 1234 }).ok).toBe(false);
+  });
+
+  it('rejects a path-traversing incident id and any unknown field', () => {
+    expect(parseReportClearedInput({ ...valid, incidentId: '../other' }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, incidentId: '..' }).ok).toBe(false);
+    expect(parseReportClearedInput({ ...valid, extra: 1 }).ok).toBe(false);
+  });
+});
+
+describe('clear-vote geofence — you must be near the incident', () => {
+  // Kungsbacka, and points at known distances from it.
+  const lat = 57.4874;
+  const lng = 12.0757;
+  const northOf = (meters: number) => lat + meters / 111_320;
+
+  it('accepts a fix at the incident and just inside the radius', () => {
+    expect(withinClearFence(lat, lng, lat, lng, null)).toBe(true);
+    expect(
+      withinClearFence(lat, lng, northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS - 20), lng, null),
+    ).toBe(true);
+  });
+
+  it('rejects a fix outside the radius', () => {
+    expect(
+      withinClearFence(lat, lng, northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS + 60), lng, null),
+    ).toBe(false);
+    expect(withinClearFence(lat, lng, northOf(5_000), lng, null)).toBe(false);
+  });
+
+  // The regression that matters: a hostile accuracy must not buy distance. Every
+  // value here is one the schema would already have rejected OR one it admits;
+  // either way the fence itself must hold, so neither guard is load-bearing.
+  it('cannot be stretched by a hostile or unusable accuracy', () => {
+    const farAway = northOf(5_000);
+    for (const accuracy of [
+      50_000,
+      1e9,
+      Number.POSITIVE_INFINITY,
+      Number.NaN,
+      -1,
+      Number.MAX_SAFE_INTEGER,
+      MAX_REPORTED_ACCURACY_METERS,
+    ]) {
+      expect(withinClearFence(lat, lng, farAway, lng, accuracy)).toBe(false);
+    }
+  });
+
+  it('keeps the effective fence provably within [radius, radius + 50] however accuracy is reported', () => {
+    // MAX_GEOFENCE_ACCURACY_METERS (100) x the 0.5 buffer = at most +50 m, and
+    // the 2x multiplier cannot bind at a 300 m radius. So a fix 351 m out is
+    // ALWAYS rejected and one 300 m out is ALWAYS accepted.
+    for (const accuracy of [null, 0, 10, 50, 100, 500, 5_000, MAX_REPORTED_ACCURACY_METERS]) {
+      expect(
+        withinClearFence(lat, lng, northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS - 1), lng, accuracy),
+      ).toBe(true);
+      expect(
+        withinClearFence(
+          lat,
+          lng,
+          northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS + 51),
+          lng,
+          accuracy,
+        ),
+      ).toBe(false);
+    }
+  });
+});
+
+describe('reportCleared rate limit', () => {
+  it('admits up to the cap and throttles at it', () => {
+    expect(isUnderIncidentClearRateLimit(0)).toBe(true);
+    expect(isUnderIncidentClearRateLimit(INCIDENT_CLEAR_RATE_LIMIT_MAX - 1)).toBe(true);
+    expect(isUnderIncidentClearRateLimit(INCIDENT_CLEAR_RATE_LIMIT_MAX)).toBe(false);
+    expect(isUnderIncidentClearRateLimit(INCIDENT_CLEAR_RATE_LIMIT_MAX + 100)).toBe(false);
+  });
+
+  it('is far tighter than the listNearby poll limit (opposite call shapes)', () => {
+    expect(INCIDENT_CLEAR_RATE_LIMIT_MAX).toBeLessThan(INCIDENT_LIST_RATE_LIMIT_MAX);
+  });
+
+  it('fails OPEN on a corrupt counter — a bad doc must never block reporting a hazard gone', () => {
+    expect(isUnderIncidentClearRateLimit(Number.NaN)).toBe(true);
+    expect(isUnderIncidentClearRateLimit(Number.POSITIVE_INFINITY)).toBe(true);
+  });
+
+  it('shares the window with the listNearby limiter but never the collection', () => {
+    const uid = 'user-1';
+    const now = 1_800_000_000_000;
+    expect(incidentClearRateLimitDocId(uid, now)).toBe(incidentListRateLimitDocId(uid, now));
+    // Same id, DIFFERENT collections — which is what keeps a burst of map
+    // refreshes from consuming a member's ability to vote.
+    expect(INCIDENT_CLEAR_RATE_LIMIT_COLLECTION).not.toBe(INCIDENT_LIST_RATE_LIMIT_COLLECTION);
   });
 });

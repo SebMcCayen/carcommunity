@@ -65,7 +65,8 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
 
   if (removed) {
     // A document delete does not remove its sub-collections, so the transaction
-    // above leaves the `confirmations/{uid}` ledger orphaned. recursiveDelete
+    // above leaves the `confirmations/{uid}` and `clearVotes/{uid}` ledgers
+    // orphaned. recursiveDelete
     // cannot run inside a transaction, so sweep it immediately after the commit
     // (the incident is already gone for readers at this point).
     //
@@ -77,11 +78,11 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
     // idempotent no-op branch and returns `{ removed: false }`, telling the
     // user nothing was removed when in fact it was.
     //
-    // What an orphan costs: nothing user-visible. The ledger is callable-only
-    // (the rules' deny-all catch-all covers the sub-collection), no query reads
-    // it — there is no collection-group query over `confirmations` anywhere in
-    // the codebase — and document ids are never reused, so a future report
-    // cannot inherit one. It is dead storage and nothing else.
+    // What an orphan costs: nothing user-visible. The ledgers are callable-only
+    // (the rules' deny-all catch-all covers the sub-collections), no query reads
+    // them — there is no collection-group query over `confirmations` or
+    // `clearVotes` anywhere in the codebase — and document ids are never reused,
+    // so a future report cannot inherit one. It is dead storage and nothing else.
     //
     // NOTE it is NOT reclaimed later: the TTL sweep queries the `incidents`
     // collection, and this incident's document no longer exists, so the sweep

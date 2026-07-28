@@ -1999,6 +1999,11 @@ class MapboxMapSurface : MapSurface {
                     iconRes = marker.iconRes,
                     discColorArgb = marker.colorArgb,
                     glyphColorArgb = marker.glyphColorArgb,
+                    // Part of the KEY, not just the pixels: a normal marker and
+                    // its struck-through twin differ only by the slash, so
+                    // without this they would collide on one style-image name
+                    // and whichever was registered first would be drawn for both.
+                    reportedCleared = marker.reportedCleared,
                 )
             // Register this category's image on first use against the current
             // style. If the style handle or context is unavailable the image
@@ -2011,6 +2016,7 @@ class MapboxMapSurface : MapSurface {
                             iconRes = marker.iconRes,
                             discColorArgb = marker.colorArgb,
                             glyphColorArgb = marker.glyphColorArgb,
+                            reportedCleared = marker.reportedCleared,
                         )
                     } else {
                         null
