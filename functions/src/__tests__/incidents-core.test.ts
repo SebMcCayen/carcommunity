@@ -36,6 +36,7 @@ import {
   INCIDENT_LIST_RATE_LIMIT_COLLECTION,
   evaluateClearVote,
   incidentClearRateLimitDocId,
+  isIncidentLive,
   isUnderIncidentClearRateLimit,
   parseReportClearedInput,
 } from '../incidents/incidents-core';
@@ -618,6 +619,70 @@ describe('incidents-core listNearby rate limit', () => {
 // These are the safety-critical numbers of the whole feature: they decide when a
 // marker fades and, more importantly, when a real hazard LEAVES everyone's map.
 // Every branch is pinned by value, not by re-deriving the formula.
+
+describe('isIncidentLive — the shared vote-liveness rule', () => {
+  const ACTIVE = 'active';
+  const T = 1_000_000;
+
+  it('is live only while the deadline is still ahead of the given clock', () => {
+    expect(isIncidentLive(ACTIVE, T, T - 1)).toBe(true);
+    // Exactly at the deadline is GONE, matching the readers' rule
+    // (`expiresAt > request.time`) and listNearby's bound.
+    expect(isIncidentLive(ACTIVE, T, T)).toBe(false);
+    expect(isIncidentLive(ACTIVE, T, T + 1)).toBe(false);
+  });
+
+  it('is never live for a non-active status, whatever the deadline says', () => {
+    for (const status of ['removed', 'pending', '', null, undefined, 0]) {
+      expect(isIncidentLive(status, T, T - 60_000)).toBe(false);
+    }
+  });
+
+  it('is never live on a non-finite deadline or clock', () => {
+    expect(isIncidentLive(ACTIVE, Number.NaN, T)).toBe(false);
+    expect(isIncidentLive(ACTIVE, Number.POSITIVE_INFINITY, T)).toBe(false);
+    expect(isIncidentLive(ACTIVE, T, Number.NaN)).toBe(false);
+  });
+
+  // ---------------------------------------------------------------------------
+  // The regression this function exists for.
+  //
+  // incidents.reportCleared used to compare `expiresAt` against a clock captured
+  // BEFORE db.runTransaction. Firestore re-runs a transaction body on
+  // contention, so every retry re-used that same stale instant: an incident
+  // another writer expired in between — including the writer whose clear vote
+  // crossed the removal threshold and stamped `expiresAt` — was still judged
+  // live on the retry, and a vote was counted onto an incident that was already
+  // gone. The fix reads the clock inside the body; these pin that the verdict
+  // actually MOVES with the clock, which is what makes reading it per attempt
+  // meaningful.
+  // ---------------------------------------------------------------------------
+  it('re-evaluates per attempt: ONE snapshot, two attempt clocks, two verdicts', () => {
+    // A single unchanged incident snapshot, as a retry would re-read it.
+    const snapshot = { status: ACTIVE, expiresAtMs: T };
+
+    // Attempt 1 runs before the deadline; attempt 2 after (a concurrent writer
+    // expired it, we backed off, and retried).
+    const attemptClocks = [T - 5_000, T + 5_000];
+    const verdicts = attemptClocks.map((nowMs) =>
+      isIncidentLive(snapshot.status, snapshot.expiresAtMs, nowMs),
+    );
+
+    expect(verdicts).toEqual([true, false]);
+  });
+
+  it('a stale clock re-used across attempts would keep saying "live" — the bug', () => {
+    // Same snapshot, but both attempts pass the SAME pre-transaction instant.
+    // This is the old shape, and it demonstrates why the clock must be a
+    // per-attempt reading rather than a captured constant.
+    const staleNow = T - 5_000;
+    const verdicts = [staleNow, staleNow].map((nowMs) => isIncidentLive(ACTIVE, T, nowMs));
+
+    expect(verdicts).toEqual([true, true]);
+    // ...even though real time has moved past the deadline by then.
+    expect(isIncidentLive(ACTIVE, T, T + 5_000)).toBe(false);
+  });
+});
 
 describe('evaluateClearVote — net score, fade and removal thresholds', () => {
   it('does not fade an incident with no clear votes', () => {

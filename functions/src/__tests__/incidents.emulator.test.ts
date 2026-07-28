@@ -1161,6 +1161,39 @@ describe('incidents.reportCleared', () => {
     expect(onMap?.reportedCleared).toBe(true);
   });
 
+  it('refuses to count a clear vote on an already-expired incident', async () => {
+    // An expired incident is invisible to every reader (the read rule and
+    // listNearby both gate on `expiresAt`), so a vote must not land on it — the
+    // counters and the removal decision would be written onto a document that is
+    // already gone. The liveness check runs INSIDE the transaction against that
+    // attempt's own clock; see isIncidentLive.
+    const now = Date.now();
+    const deadRef = adminDb.collection('incidents').doc();
+    await deadRef.set({
+      type: 'hazard',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_66',
+      status: 'active',
+      source: 'user',
+      reporterUid: reporter.uid,
+      note: null,
+      createdAt: Timestamp.fromDate(new Date(now - 5 * 60 * 60 * 1000)),
+      expiresAt: Timestamp.fromDate(new Date(now - 60 * 1000)),
+    });
+
+    const voter = await createProvisionedUser('inc-clear-expired');
+    await makeMember(voter);
+    await signInAs(voter);
+    expect(await callableErrorCode(call('incidents-reportCleared', clearVoteAt(deadRef.id)))).toBe(
+      'functions/failed-precondition',
+    );
+
+    // Nothing was written: no ledger entry, no counter bump.
+    expect((await deadRef.collection('clearVotes').doc(voter.uid).get()).exists).toBe(false);
+    expect((await deadRef.get()).data()?.clearedCount).toBeUndefined();
+  });
+
   it('is idempotent: a second vote from the same member does not double-count', async () => {
     const incidentId = await reportIncidentAs(reporter);
 

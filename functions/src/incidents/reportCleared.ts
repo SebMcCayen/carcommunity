@@ -104,12 +104,12 @@ import {
 import { evaluateClaimRisk } from '../crownHunt/crown-hunt-risk';
 import {
   CLEAR_VOTES_SUBCOLLECTION,
-  INCIDENT_ACTIVE_STATUS,
   INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS,
   INCIDENT_CLEAR_RATE_LIMIT_COLLECTION,
   evaluateClearVote,
   incidentClearRateLimitDocId,
   incidentListRateLimitExpiry,
+  isIncidentLive,
   isUnderIncidentClearRateLimit,
   isValidClearedCount,
   isValidConfirmationCount,
@@ -333,11 +333,27 @@ export const reportCleared = onCall(
         );
       }
 
+      // ONE clock reading per ATTEMPT, taken INSIDE the transaction body — the
+      // same rule incidents.confirm states, for the same reason: the liveness
+      // check below and the removal expiry stamped further down must agree on
+      // what "now" is.
+      //
+      // Reading it inside is load-bearing, not stylistic. Firestore re-runs this
+      // body on contention, and the outer `now` (captured before the rate limit,
+      // the pre-reads and the transaction's own reads) would be re-used unchanged
+      // by every retry. The race that opens is exactly the one this feature
+      // creates: two members vote to clear at once, the first crosses the
+      // threshold and stamps `expiresAt` to ITS `now`, the second's transaction
+      // retries on the conflict — and comparing the fresh `expiresAt` against a
+      // clock captured at roughly the same instant is a coin flip, so the retry
+      // could count a vote onto an incident that is already gone. A clock read
+      // here is always after the conflicting commit, so the retry rejects.
+      const txNow = new Date();
+
       const currentExpiresAt = data.expiresAt;
       if (
-        data.status !== INCIDENT_ACTIVE_STATUS ||
         !(currentExpiresAt instanceof Timestamp) ||
-        currentExpiresAt.toMillis() <= now.getTime()
+        !isIncidentLive(data.status, currentExpiresAt.toMillis(), txNow.getTime())
       ) {
         reject(
           'failed-precondition',
@@ -445,7 +461,11 @@ export const reportCleared = onCall(
         // Expire rather than delete — the read rule and listNearby both gate on
         // `expiresAt`, so it leaves the map at once, and incidents-cleanupExpired
         // reclaims the document AND its vote ledgers 15 minutes later.
-        update.expiresAt = Timestamp.fromDate(now);
+        //
+        // `txNow` (this attempt's clock), so the stamp agrees with the liveness
+        // check above and is still in the past at commit time — the property that
+        // makes removal immediate.
+        update.expiresAt = Timestamp.fromDate(txNow);
       }
       tx.update(ref, update);
 

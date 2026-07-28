@@ -47,10 +47,10 @@ import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
 import {
   CLEAR_VOTES_SUBCOLLECTION,
-  INCIDENT_ACTIVE_STATUS,
   INCIDENT_TYPES,
   evaluateClearVote,
   extendedExpiryFor,
+  isIncidentLive,
   isValidClearedCount,
   isValidConfirmationCount,
   parseConfirmInput,
@@ -135,11 +135,13 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     // A dead incident cannot be confirmed back to life — the sweep may not have
     // reached it yet, but it is already invisible to every reader (the read rule
     // gates on status + expiresAt). Report it fresh instead.
+    // The `instanceof` stays in the condition so it also NARROWS
+    // `currentExpiresAt` for the `.toDate()` reads further down; `isIncidentLive`
+    // owns the status + deadline rule itself.
     const currentExpiresAt = data.expiresAt;
     if (
-      data.status !== INCIDENT_ACTIVE_STATUS ||
       !(currentExpiresAt instanceof Timestamp) ||
-      currentExpiresAt.toMillis() <= now.getTime()
+      !isIncidentLive(data.status, currentExpiresAt.toMillis(), now.getTime())
     ) {
       throw new HttpsError('failed-precondition', 'This incident is no longer active.');
     }

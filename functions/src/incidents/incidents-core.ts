@@ -75,6 +75,35 @@ export type IncidentSource = (typeof INCIDENT_SOURCES)[number];
 
 export const INCIDENT_ACTIVE_STATUS = 'active' as const;
 
+/**
+ * Is an incident still live at the instant `nowMs`?
+ *
+ * The single liveness rule shared by `incidents.confirm` and
+ * `incidents.reportCleared`, mirroring what the security rule
+ * (`expiresAt > request.time`) and `listNearby` already enforce for readers: an
+ * expired incident is invisible to everyone, so it cannot be voted on either.
+ *
+ * `nowMs` is a PARAMETER rather than a `Date.now()` inside, and that is the
+ * whole point. Both callers evaluate this inside a Firestore transaction, and
+ * Firestore re-runs a transaction body on contention. A clock captured before
+ * the transaction would be re-used unchanged by every retry, so an incident that
+ * another writer expired in the meantime would still be judged live on the
+ * retry — see the tests that pass two different attempt clocks against one
+ * snapshot. Passing the clock in forces each attempt to say which instant it is
+ * deciding at.
+ *
+ * Callers narrow the stored `expiresAt` to a real Timestamp before calling (a
+ * missing or non-Timestamp value is corruption and is rejected there, which also
+ * narrows the value for their own later reads of it).
+ */
+export function isIncidentLive(status: unknown, expiresAtMs: number, nowMs: number): boolean {
+  if (status !== INCIDENT_ACTIVE_STATUS) return false;
+  if (!Number.isFinite(expiresAtMs) || !Number.isFinite(nowMs)) return false;
+  // Strictly greater: an incident expiring exactly at `nowMs` is already gone,
+  // matching the readers' `expiresAt > request.time`.
+  return expiresAtMs > nowMs;
+}
+
 /** Maximum length of the optional free-text note. */
 export const MAX_NOTE_LENGTH = 200;
 
