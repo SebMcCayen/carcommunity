@@ -54,12 +54,25 @@ data class NavRouteLineColors(
  * basemap a dimmed blue disappears into the asphalt, so night uses a LIGHTER,
  * slightly cyan-shifted blue with a much darker casing to hold its edge.
  *
+ * ## One continuous ribbon, NOT a congestion ramp
+ * The SDK colours the route per segment by congestion class by default. That is
+ * deliberately turned OFF: `TurnByTurnNavScreen.buildRouteLineView` sets every
+ * congestion class — low, moderate, heavy, severe and unknown — to
+ * [NavRouteLineColors.remaining], so the road you must drive reads as one
+ * unbroken line. A green/amber/red ramp
+ * would both break that line up and duplicate the map's own traffic overlay,
+ * which is a separate layer the driver can switch on from the nav screen. The
+ * overlay is where congestion IS colour-coded; `NavRouteLineColorsTest` asserts
+ * the route stays far from every band of it, precisely so the two can never be
+ * confused for one another.
+ *
+ * [NavRouteLineColors.closure] and [NavRouteLineColors.restricted] do keep their
+ * own colours: they change whether you may use the road at all, which is a
+ * different question from how busy it is.
+ *
  * ## Explicitly NOT speed
  * Nothing here is derived from how fast the driver is going, and there is no
- * hook to make it so. The SDK's per-segment CONGESTION colouring stays enabled
- * (it describes the traffic on the road ahead, exactly like the map home's
- * traffic layer) and takes its colours from the shared traffic palette, so the
- * two agree; it is a property of the road, not of the driver.
+ * hook to make it so. Every colour above is a property of the ROAD.
  */
 object NavRouteLinePalette {
     /**
