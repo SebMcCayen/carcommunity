@@ -2200,6 +2200,14 @@ class MapboxMapSurface : MapSurface {
         // Convert the dp padding to px so the camera fit is consistent across
         // screen densities (EdgeInsets expects device pixels).
         val density = mapView.resources.displayMetrics.density
+        // Bottom inset: whatever the HOST reports it is covering (the route-preview
+        // sheet, at its measured COLLAPSED height), falling back to the built-in dp
+        // constant for callers that draw nothing over the map. Without this the fit
+        // always reserved room for a fully EXPANDED sheet, so the route was framed
+        // into the top of the screen — half of the "I can't see the whole route"
+        // problem, the other half being that the sheet opened expanded at all.
+        val bottomPad =
+            overlay.bottomInsetPx?.toDouble() ?: (ROUTE_PAD_BOTTOM * density)
         runCatching {
             val camera =
                 mapView.mapboxMap.cameraForCoordinates(
@@ -2208,7 +2216,7 @@ class MapboxMapSurface : MapSurface {
                     EdgeInsets(
                         ROUTE_PAD_TOP * density,
                         ROUTE_PAD_SIDE * density,
-                        ROUTE_PAD_BOTTOM * density,
+                        bottomPad,
                         ROUTE_PAD_SIDE * density,
                     ),
                     null,
@@ -2301,7 +2309,9 @@ class MapboxMapSurface : MapSurface {
         // unit-tested for light/dark legibility.)
 
         // Camera-fit padding (dp; multiplied by display density → px before use):
-        // extra room at the bottom for the summary sheet.
+        // extra room at the bottom for the summary sheet. ROUTE_PAD_BOTTOM is only
+        // the FALLBACK now — a host that draws a sheet over the map reports its
+        // real height as MapRouteOverlay.bottomInsetPx and that wins.
         const val ROUTE_PAD_TOP = 140.0
         const val ROUTE_PAD_SIDE = 80.0
         const val ROUTE_PAD_BOTTOM = 320.0

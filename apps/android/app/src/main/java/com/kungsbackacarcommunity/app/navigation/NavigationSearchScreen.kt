@@ -49,34 +49,60 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapRouteOverlay
 import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.PanelDragHandle
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 /** Test tag on the whole navigation search overlay, for UI tests. */
 const val NAV_SEARCH_TEST_TAG = "nav_search"
 
 /** Test tag on the route preview's "Start" (turn-by-turn) button. */
 const val NAV_START_TEST_TAG = "nav_start"
+
+/** Test tag on the bottom route-preview sheet itself. */
+const val NAV_ROUTE_SHEET_TEST_TAG = "nav_route_sheet"
+
+/** Test tag on the route-preview sheet's drag handle (expand/collapse). */
+const val NAV_ROUTE_SHEET_HANDLE_TEST_TAG = "nav_route_sheet_handle"
+
+/** Test tag on the route-preview sheet's revealed step-by-step directions area. */
+const val NAV_ROUTE_STEPS_TEST_TAG = "nav_route_steps"
 
 /** Test tag on the "set this place as the convoy's shared destination" action. */
 const val NAV_CONVOY_DESTINATION_TEST_TAG = "nav_convoy_destination"
@@ -241,13 +267,27 @@ fun NavigationSearchScreen(
         }
     }
 
+    // The route sheet's COLLAPSED height, reported by the sheet once measured (0
+    // until then). The camera fit below reserves exactly this much screen, so the
+    // whole route is framed above the sheet in the state it actually appears in —
+    // collapsed. Before the sheet fixed itself to a peek this reservation was a
+    // fixed ~320dp of "expanded sheet", i.e. the map framed the route into the
+    // top half of the screen and the sheet then covered the rest.
+    var collapsedSheetHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+
     // Mirror the picked destination onto the map surface behind (cleared when
     // gone). The destination marker shows as soon as a destination is selected —
     // an empty path is a valid marker-only overlay (see MapRouteOverlay) — so the
     // marker is visible while the route is still loading or when routing fails
     // (NavError.NoOrigin / NavError.Route). The route line is added only once the
     // route has resolved.
-    LaunchedEffect(state.destination, state.route) {
+    //
+    // Also keyed on the measured collapsed height, so the fit is REDONE the moment
+    // the sheet reports its real size: the first overlay (drawn the instant a
+    // destination is picked, before any layout pass) uses the phone-sized fallback
+    // and is corrected one frame later, rather than being stuck at a guess.
+    LaunchedEffect(state.destination, state.route, collapsedSheetHeightPx) {
         val dest = state.destination
         val route = state.route
         mapSurface.setRouteOverlay(
@@ -255,6 +295,11 @@ fun NavigationSearchScreen(
                 MapRouteOverlay(
                     destination = MapPoint(dest.point.longitude, dest.point.latitude),
                     path = route?.geometry?.map { MapPoint(it.longitude, it.latitude) } ?: emptyList(),
+                    bottomInsetPx =
+                        RouteSheetMetrics.cameraBottomPadPx(
+                            collapsedSheetHeightPx = collapsedSheetHeightPx,
+                            density = density.density,
+                        ),
                 )
             } else {
                 null
@@ -364,6 +409,7 @@ fun NavigationSearchScreen(
                         }
                     },
                 convoyDestinationEnabled = convoyDestinationEnabled,
+                onCollapsedHeightChanged = { collapsedSheetHeightPx = it },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -1136,10 +1182,18 @@ private fun RouteSheet(
                 // The revealed part. Its height is read in the LAYOUT phase (not
                 // composition), so the expand/collapse animation re-lays-out
                 // without recomposing the whole sheet 60 times a second.
+                //
+                // Modifier ORDER matters twice here: `onSizeChanged` sits OUTSIDE
+                // `layout` so it reports the height this area actually occupies in
+                // the card (the reveal) rather than the height the list would have
+                // liked; and `clipToBounds` sits outside it too, so a list measured
+                // taller than the current reveal is cut off at the reveal instead
+                // of spilling over the Start button below.
                 Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
+                            .onSizeChanged { stepsHeightPx = it.height }
                             .clipToBounds()
                             .layout { measurable, constraints ->
                                 val revealed = reveal.value.roundToInt().coerceAtLeast(0)
@@ -1149,7 +1203,6 @@ private fun RouteSheet(
                                     )
                                 layout(placeable.width, revealed) { placeable.place(0, 0) }
                             }
-                            .onSizeChanged { stepsHeightPx = it.height }
                             .testTag(NAV_ROUTE_STEPS_TEST_TAG),
                 ) {
                     if (route != null) RouteSteps(route = route)

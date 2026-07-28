@@ -1248,6 +1248,8 @@
     <string name="addressSearch_noOrigin">Din plats är inte tillgänglig. Aktivera plats för att få vägbeskrivning.</string>
     <string name="addressSearch_routeSummary">%1$s · %2$s</string>
     <string name="addressSearch_directionsTitle">Vägbeskrivning</string>
+    <string name="addressSearch_directionsExpand">Visa vägbeskrivning</string>
+    <string name="addressSearch_directionsCollapse">Dölj vägbeskrivning</string>
     <string name="addressSearch_clearRoute">Rensa rutt</string>
     <string name="addressSearch_loading">Laddar…</string>
     <string name="addressSearch_unitMeters">m</string>

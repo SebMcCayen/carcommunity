@@ -92,10 +92,20 @@ data class MapPoint(
  * of the navigation package's types) so the [MapSurface] seam stays
  * self-contained; the host maps a resolved route onto this. An empty [path]
  * still marks the destination (line simply not drawn).
+ *
+ * @property bottomInsetPx device pixels along the BOTTOM edge the camera fit must
+ *   leave clear, because the host is covering that much of the map with its own
+ *   chrome — in practice the route-preview sheet at its collapsed height. Null
+ *   (the default) keeps the surface's own built-in bottom padding, so a caller
+ *   that draws nothing over the map does not have to say so. Reported by the
+ *   host rather than assumed here: only the host knows how tall its sheet ended
+ *   up at the current font scale and navigation-bar inset, and a fixed guess is
+ *   what previously framed routes into the top half of the screen.
  */
 data class MapRouteOverlay(
     val destination: MapPoint,
     val path: List<MapPoint>,
+    val bottomInsetPx: Float? = null,
 )
 
 /**

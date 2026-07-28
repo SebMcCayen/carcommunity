@@ -1343,6 +1343,8 @@
     "noOrigin": "Din plats är inte tillgänglig. Aktivera plats för att få vägbeskrivning.",
     "routeSummary": "%1$s · %2$s",
     "directionsTitle": "Vägbeskrivning",
+    "directionsExpand": "Visa vägbeskrivning",
+    "directionsCollapse": "Dölj vägbeskrivning",
     "clearRoute": "Rensa rutt",
     "loading": "Laddar…",
     "unitMeters": "m",

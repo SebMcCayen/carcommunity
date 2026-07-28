@@ -1,8 +1,10 @@
 package com.kungsbackacarcommunity.app.navigation
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -70,7 +72,7 @@ class NavigationSearchScreenTest {
     }
 
     @Test
-    fun typingShowsSuggestion_andSelectingShowsDirections() {
+    fun selectingAPlace_opensTheSheetCOLLAPSED_withStartButNoManeuvers() {
         composeTestRule.setContent {
             KccTheme {
                 NavigationSearchScreen(
@@ -97,20 +99,47 @@ class NavigationSearchScreenTest {
 
         composeTestRule.onNodeWithText(suggestion.name).performClick()
 
-        // Route resolved → the directions list + first maneuver are shown.
+        // Route resolved → the sheet appears at its PEEK. This is the whole fix:
+        // the directions are composed but revealed to zero height, so the map
+        // behind shows the entire route instead of being half-covered by a wall
+        // of maneuvers nobody asked for yet.
         composeTestRule.waitUntil(timeoutMillis = 5_000) {
             composeTestRule
-                .onAllNodesWithText(str(R.string.addressSearch_directionsTitle))
+                .onAllNodesWithText(str(R.string.turnByTurn_start))
                 .fetchSemanticsNodes()
                 .isNotEmpty()
+        }
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Head north on Main Street").assertIsNotDisplayed()
+
+        // Dragging is not the only way in: the handle is also a tap target, so
+        // the directions are reachable without a gesture.
+        composeTestRule.onNodeWithTag(NAV_ROUTE_SHEET_HANDLE_TEST_TAG).performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule
+                .onAllNodesWithText("Head north on Main Street")
+                .fetchSemanticsNodes()
+                .any { it.size.height > 0 }
         }
         composeTestRule.onNodeWithText(str(R.string.addressSearch_directionsTitle))
             .assertIsDisplayed()
         composeTestRule.onNodeWithText("Head north on Main Street").assertIsDisplayed()
 
-        // The "Start" CTA appears once a route is resolved in EVERY build: the host
+        // The "Start" CTA is present in BOTH detents and in EVERY build: the host
         // decides how it navigates (in-app Mapbox turn-by-turn when the SDK is
-        // bundled, else a maps-app handoff), so the preview never dead-ends.
+        // bundled, else a maps-app handoff), so the preview never dead-ends —
+        // and expanding the directions must never push it off screen.
+        composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
+
+        // ...and collapsing again puts the maneuvers away without taking Start
+        // with them.
+        composeTestRule.onNodeWithTag(NAV_ROUTE_SHEET_HANDLE_TEST_TAG).performClick()
+        composeTestRule.waitUntil(timeoutMillis = 5_000) {
+            composeTestRule
+                .onAllNodesWithText("Head north on Main Street")
+                .fetchSemanticsNodes()
+                .all { it.size.height == 0 }
+        }
         composeTestRule.onNodeWithText(str(R.string.turnByTurn_start)).assertIsDisplayed()
     }
 
