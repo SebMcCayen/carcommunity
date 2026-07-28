@@ -192,11 +192,17 @@ async function purgeBlockGraph(uid: string): Promise<void> {
  * Each root is removed at `{root}/{uid}` — a path built from the uid alone, so
  * there is nothing to read first and nothing a partial purge can orphan. Writing
  * `null` to a path that is already empty is a no-op, so this is idempotent.
+ *
+ * The roots are disjoint subtrees with no ordering between them — neither
+ * removal reads anything the other writes — so they are issued in PARALLEL
+ * rather than one await after another. A rejection still propagates and fails
+ * the purge, leaving the request pending for the daily sweep to retry, exactly
+ * as the sequential form did.
  */
 async function purgeLiveLocationState(uid: string): Promise<void> {
-  for (const root of LIVE_LOCATION_RTDB_ROOTS) {
-    await adminRtdb.ref(`${root}/${uid}`).set(null);
-  }
+  await Promise.all(
+    LIVE_LOCATION_RTDB_ROOTS.map((root) => adminRtdb.ref(`${root}/${uid}`).set(null)),
+  );
 }
 
 function toDate(value: unknown): Date | null {
@@ -415,11 +421,17 @@ export async function purgeUserData(uid: string): Promise<void> {
   // user, which the doc-tree/owned-doc purges above cannot reach.
   await deleteFriendGraphMirror(uid);
   await purgeBlockGraph(uid);
+  await removeConvoyMemberships(uid);
   // Live-location state the doc-tree purge cannot reach: the RTDB session/marker
   // subtree (its `session` node is never deleted by stop/hide/sweep) and the
   // presence node. The Firestore discovery doc went with the doc trees above.
+  //
+  // Placed AFTER the three mirror sweeps so the call order matches the numbered
+  // phases in this file's KDoc (3 = social-graph mirrors, 4 = live location).
+  // The position carries no dependency either way: these paths are derived from
+  // the uid alone and live in RTDB, which none of the mirror sweeps above reads
+  // or writes except for their own liveLocationBlocks subtree.
   await purgeLiveLocationState(uid);
-  await removeConvoyMemberships(uid);
   // Chat erasure: DM conversations wholesale, then authored community + convoy
   // messages. DMs go first so no DM message survives into the channel sweep.
   await deleteDmConversations(uid);

@@ -118,13 +118,17 @@ export const PURGE_DOC_TREES = [
   // It has its own TTL, so in normal operation it is deleted within
   // DISCOVERY_TTL_MS (15 minutes) by live-cleanupExpired's sweepDiscoveryDocs,
   // long before the 30-day purge runs. It is listed here anyway because
-  // ERASURE MUST NOT DEPEND ON A DIFFERENT SCHEDULED JOB HAVING SUCCEEDED:
-  // sweepDiscoveryDocs is hard-capped at 400 deletes per run and its query
-  // carries no orderBy, so a sustained backlog above that rate starves the
-  // docs Firestore orders last (by document id — i.e. by uid) indefinitely;
-  // and a sweep that is failing, throttled or undeployed stops removing
-  // anything at all. Deleting it here costs one no-op delete in the
-  // overwhelmingly common case where the sweep already got it.
+  // ERASURE MUST NOT DEPEND ON A DIFFERENT SCHEDULED JOB HAVING SUCCEEDED: a
+  // sweep that is failing, throttled or undeployed removes nothing at all, and
+  // one that is merely behind removes late — it is hard-capped at 400 deletes
+  // per run, so a backlog above that rate is worked off across several runs.
+  // (That backlog drains OLDEST-EXPIRY-FIRST, not in uid order: the
+  // `expiresAt <= now` inequality makes Firestore order the query by expiresAt
+  // ascending, so no individual doc is starved indefinitely and the failure
+  // mode of a lagging sweep is delay rather than permanent survival. It is the
+  // not-running case that leaves the doc forever.) Deleting it here costs one
+  // no-op delete in the overwhelmingly common case where the sweep already
+  // got it.
   //
   // No subcollections beneath it — recursiveDelete just removes the document.
   'liveSessions',
