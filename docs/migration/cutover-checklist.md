@@ -1,5 +1,11 @@
 # Cutover Checklist
 
+> **Status: historical record.** The migration described here is complete. `apps/mobile` (Expo /
+> React Native) and `services/api` (Fastify / Prisma / PostgreSQL) were **removed from the
+> repository on 2026-07-28**; the removed code is recoverable from the `legacy-final` git tag. This
+> document is kept as written and is not maintained against the current codebase — see
+> [architecture.md](../architecture.md#removed-legacy-stack) for the live architecture.
+
 This checklist defines the mandatory gates that must be satisfied before legacy code (`apps/mobile` and `services/api`) may be deleted and before production traffic is switched to the native applications and Firebase backend.
 
 Each item must be explicitly verified, not assumed. Legacy deletion requires a separate pull request with explicit approval from the repository owner.

@@ -4,8 +4,7 @@
   "private": true,
   "workspaces": [
     "packages/shared",
-    "apps/admin",
-    "services/api"
+    "apps/admin"
   ],
   "scripts": {
     "format": "prettier --write .",

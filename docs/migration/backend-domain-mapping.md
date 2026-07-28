@@ -1,5 +1,11 @@
 # Backend Domain Mapping
 
+> **Status: historical record.** The migration described here is complete. `apps/mobile` (Expo /
+> React Native) and `services/api` (Fastify / Prisma / PostgreSQL) were **removed from the
+> repository on 2026-07-28**; the removed code is recoverable from the `legacy-final` git tag. This
+> document is kept as written and is not maintained against the current codebase — see
+> [architecture.md](../architecture.md#removed-legacy-stack) for the live architecture.
+
 This document maps every concept in the existing `services/api` (Fastify, Prisma, PostgreSQL) backend to its equivalent in the target Firebase architecture.
 
 See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [firebase-data-model.md](../firebase-data-model.md) for Firestore collection field definitions.

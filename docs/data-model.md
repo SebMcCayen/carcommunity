@@ -1,9 +1,11 @@
 # Data model design (PostgreSQL) — LEGACY REFERENCE
 
-> ⚠️ **Legacy document — not the target persistence architecture.**
+> ⚠️ **Historical document — not the persistence architecture.**
 >
-> This document describes the legacy PostgreSQL data model that belongs to `services/api`
-> (the frozen Fastify / Prisma backend). It is kept as a migration reference only.
+> This document describes the PostgreSQL data model of the former `services/api` backend
+> (Fastify / Prisma). That service was **removed from the repository on 2026-07-28** and never
+> held production data; the schema and its migrations are recoverable from the `legacy-final`
+> git tag. The document is kept only as a reference for where Firestore's shapes came from.
 >
 > **Do not add new Firebase schema decisions to this document.**
 >
@@ -13,7 +15,7 @@
 > - [`docs/migration/backend-domain-mapping.md`](migration/backend-domain-mapping.md) — PostgreSQL → Firebase domain mapping
 > - [`docs/adr/001-firebase-platform.md`](adr/001-firebase-platform.md) — authoritative platform decision
 
-This document defines the legacy PostgreSQL data model for **carcommunity** (`services/api`).
+This document defines the PostgreSQL data model used by the former `services/api` backend of **carcommunity**.
 
 It is a conceptual design document and intentionally does **not** contain SQL migrations or ORM-specific code.
 

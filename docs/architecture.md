@@ -2,7 +2,9 @@
 
 ## Overview
 
-> **Note:** This document describes the _target_ post-migration architecture. The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + TypeScript, PostgreSQL). The migration to Firebase and separate native mobile apps is in progress. See [ADR-001](adr/001-firebase-platform.md) for the migration decision.
+> **Note:** This document describes the live architecture. The migration decided in
+> [ADR-001](adr/001-firebase-platform.md) is complete — see
+> [Removed legacy stack](#removed-legacy-stack) below.
 
 carcommunity is a monorepo targeting native mobile clients, an admin web client, and a Firebase backend as the system of truth. The architecture targets a production-only MVP on Firebase, with strong control over privacy, subscription entitlement, moderation, and operational safety.
 
@@ -32,22 +34,18 @@ apps/admin   (React + Vite web)         ─┘         │               Firebas
 
 ## Monorepo structure
 
-Planned structure:
-
 ```text
 .
 ├── apps/
-│   ├── ios/            # Swift / SwiftUI native iOS app (planned)
-│   ├── android/        # Kotlin / Jetpack Compose native Android app (planned)
-│   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
+│   ├── ios/            # Swift / SwiftUI native iOS app (descoped from MVP — not scaffolded)
+│   ├── android/        # Kotlin / Jetpack Compose native Android app
 │   └── admin/          # React + Vite admin web app (hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase
-├── firebase/           # Firebase CLI config, Security Rules, indexes
-├── contracts/          # Language-neutral cross-platform contracts (planned)
-├── services/
-│   └── api/            # LEGACY: Node.js + Fastify + PostgreSQL API (frozen — migration source)
+├── firebase/           # Security Rules, Firestore indexes, RTDB rules
+├── contracts/          # Language-neutral cross-platform contracts
 ├── packages/
-│   └── shared/         # Versioned TypeScript API contracts (backend/admin)
+│   └── shared/         # TypeScript contracts consumed by the admin web app
+├── scripts/            # Repository tooling
 ├── docs/
 │   └── adr/            # Architecture decision records
 └── .github/
@@ -284,3 +282,37 @@ Flags/config are backend-controlled and consumed by clients for safe rollout and
 - Realtime architecture can evolve from Firestore/Realtime Database listeners to additional Cloud Functions fan-out as load grows.
 - Domain modules (chat, group driving, rewards, partner analytics) can be isolated into separate function groups when required.
 - Feature flagging enables incremental rollout of new capabilities without destabilizing core MVP flows.
+
+## Removed legacy stack
+
+The migration decided in [ADR-001](adr/001-firebase-platform.md) is complete. On **2026-07-28** the
+two legacy implementations were deleted from this repository:
+
+| Removed        | What it was                                              | Superseded by                               |
+| -------------- | -------------------------------------------------------- | ------------------------------------------- |
+| `apps/mobile`  | React Native / Expo mobile app                           | `apps/android` (Kotlin / Jetpack Compose)   |
+| `services/api` | Node.js + Fastify + Prisma + PostgreSQL REST API (`/v1`) | `functions/` (Cloud Functions for Firebase) |
+
+Notes for anyone reading the current code:
+
+- **There is no relational database.** All durable data is in Cloud Firestore; ephemeral live
+  location and presence are in the Realtime Database. The PostgreSQL schema in
+  [data-model.md](data-model.md) is a historical reference only.
+- **There is no REST API service.** Clients call Callable Cloud Functions and read Firestore
+  directly under Security Rules.
+- **Provenance comments are deliberate.** Many files under `functions/`, and the `source` fields in
+  `contracts/functions/functions.json`, still name `services/api` paths — for example
+  `Ports services/api/src/lib/badge-catalog.ts`. These are historical references that record where a
+  business rule came from and why its semantics are what they are. They are **not** live paths, and
+  they should not be rewritten or removed.
+- **The removed code is recoverable** from the `legacy-final` git tag, which points at the commit
+  immediately before the deletion:
+
+  ```bash
+  git show legacy-final:services/api/src/lib/badge-catalog.ts
+  git ls-tree -r --name-only legacy-final apps/mobile
+  ```
+
+The migration records under [docs/migration/](migration/) are kept as written; they describe the
+migration as it was carried out and are not updated to reflect the post-deletion state beyond a
+status banner at the top of each.

@@ -85,11 +85,6 @@ design here must preserve that invariant.
   year / powertrain / engine fields plus `VehicleValidation` mirroring the
   backend bounds. A plate field + "Fetch details" button would sit above the
   existing fields and populate the same `VehicleForm` state.
-- **React-Native app** (`apps/mobile/src/screens/VehicleFormScreen.tsx`) is the
-  legacy/parallel client; per current MVP scope (Android + admin web +
-  backend) new work targets native Android. The RN screen even documents
-  "Does not request registration number, VIN, insurance, or location" — that
-  comment would need revisiting if this ships.
 - **Contracts:** a new `lookupPlateRequest` / `lookupPlateResponse` pair in
   `contracts/schemas/garage.schema.json`, plus a `contracts/functions/functions.json` entry.
 

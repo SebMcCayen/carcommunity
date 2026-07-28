@@ -25,7 +25,7 @@
  *  - TODO: Activate `partner_offer` category once partner notification rules are approved.
  *  - TODO: Activate `event_chat` category once chat notification design is finalised.
  *  - TODO: Activate `nearby_event` category when proximity feature is designed.
- *  - TODO: Add production APNs / FCM / Expo push credentials after security review.
+ *  - TODO: Add production APNs / FCM push credentials after security review.
  *  - TODO: Add background worker / queue for large audience fan-out.
  *  - TODO: Add Azure scheduling for event reminders.
  */
@@ -231,7 +231,7 @@ export interface RegisterPushDeviceRequest {
   /** Device platform. */
   platform: NotificationDevicePlatform;
   /**
-   * Push token from the device OS / Expo.
+   * Push token from the device OS.
    * Backend stores only an encrypted form and a lookup hash.
    * Never log this value.
    */

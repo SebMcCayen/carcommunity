@@ -1,5 +1,11 @@
 # Feature Parity Matrix
 
+> **Status: historical record.** The migration described here is complete. `apps/mobile` (Expo /
+> React Native) and `services/api` (Fastify / Prisma / PostgreSQL) were **removed from the
+> repository on 2026-07-28**; the removed code is recoverable from the `legacy-final` git tag. This
+> document is kept as written and is not maintained against the current codebase — see
+> [architecture.md](../architecture.md#removed-legacy-stack) for the live architecture.
+
 This matrix tracks the implementation status of every product feature across all target platforms. A feature is not considered complete until both iOS and Android columns are marked complete.
 
 **Status legend:**
@@ -10,7 +16,7 @@ This matrix tracks the implementation status of every product feature across all
 - N/A Not applicable to this platform
 - ❄️ Frozen (legacy source — do not add features)
 
-> **Note:** `apps/mobile` and `services/api` columns reflect the current legacy implementation status. They are migration sources and are frozen to new product features.
+> **Note:** the `apps/mobile` and `services/api` columns record the state of the legacy implementations at the time of the migration. Both directories were removed on 2026-07-28; the columns are retained so the parity history stays readable.
 
 ---
 

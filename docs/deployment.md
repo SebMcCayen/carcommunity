@@ -10,7 +10,7 @@ See [ADR-001](adr/001-firebase-platform.md) for the decision to migrate from Azu
 
 ## Service Overview
 
-> **Note:** The table below lists _planned_ post-migration deployment targets. The current implementation uses `services/api` (Node.js container), `apps/mobile` (React Native / Expo), and `apps/admin` (React + Vite). The migration to Firebase and separate native mobile apps is in progress.
+> **Note:** the legacy `services/api` container and the `apps/mobile` Expo app were removed on 2026-07-28. Nothing outside the targets listed below is deployed.
 
 | Service                                    | Hosting                                                            |
 | ------------------------------------------ | ------------------------------------------------------------------ |

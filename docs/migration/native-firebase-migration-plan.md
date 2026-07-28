@@ -1,5 +1,11 @@
 # Native Firebase Migration Plan
 
+> **Status: historical record.** The migration described here is complete. `apps/mobile` (Expo /
+> React Native) and `services/api` (Fastify / Prisma / PostgreSQL) were **removed from the
+> repository on 2026-07-28**; the removed code is recoverable from the `legacy-final` git tag. This
+> document is kept as written and is not maintained against the current codebase — see
+> [architecture.md](../architecture.md#removed-legacy-stack) for the live architecture.
+
 This document defines the phased migration from the current React Native / Fastify / PostgreSQL implementation to the target architecture: separate native iOS and Android applications backed by Firebase.
 
 See [ADR-001](../adr/001-firebase-platform.md) and [current-state-inventory.md](current-state-inventory.md) for context.

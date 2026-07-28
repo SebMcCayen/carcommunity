@@ -13,9 +13,9 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 
 ## High-level architecture
 
-> **Migration in progress.** The current implementation uses `apps/mobile` (React Native / Expo) and `services/api` (Node.js + Fastify + PostgreSQL). These are **legacy migration sources** frozen to new product features. The target architecture below is what the codebase is actively migrating towards. See [ADR-001](docs/adr/001-firebase-platform.md) and [docs/migration/](docs/migration/) for the migration plan.
+> **Migration complete.** The legacy React Native / Expo app (`apps/mobile`) and the legacy Node.js + Fastify + PostgreSQL API (`services/api`) were removed from this repository on 2026-07-28. All durable data lives in Cloud Firestore; there is no relational database and no REST API service. The removed code remains recoverable from the `legacy-final` git tag. See [ADR-001](docs/adr/001-firebase-platform.md) and [docs/migration/](docs/migration/) for the migration record.
 
-**Target architecture:**
+**Architecture:**
 
 - Android native app (Kotlin / Jetpack Compose) — `apps/android` (MVP mobile client)
 - iOS native app — descoped from MVP (parked on the Future Ideas board)
@@ -34,39 +34,31 @@ The codebase is intentionally **brand-ready** so it can support a future nationa
 .
 ├── apps/
 │   ├── android/        # Kotlin / Jetpack Compose native Android app (MVP)
-│   ├── mobile/         # LEGACY: React Native / Expo app (frozen — migration source)
-│   └── admin/          # Admin web app (React, hosted on Firebase Hosting)
+│   └── admin/          # Admin web app (React + Vite, hosted on Firebase Hosting)
 ├── functions/          # Cloud Functions for Firebase
-├── firebase/           # Firebase CLI config, Security Rules, indexes
-├── contracts/          # Language-neutral cross-platform contracts (planned)
-├── services/
-│   └── api/            # LEGACY: Node.js + Fastify + PostgreSQL API (frozen — migration source)
+├── firebase/           # Security Rules, indexes, RTDB rules
+├── contracts/          # Language-neutral cross-platform contracts
 ├── packages/
-│   └── shared/         # TypeScript contracts (backend/admin use)
+│   └── shared/         # TypeScript contracts (admin web use)
+├── scripts/            # Repository tooling (e.g. Firestore index drift check)
 ├── docs/               # Product, architecture, security, data and design docs
-│   └── migration/      # Migration plan, inventory, and cutover checklist
+│   └── migration/      # Migration record: plan, inventory, and cutover checklist
 └── .github/            # CI workflows and Copilot instructions
 ```
 
 ## Local development
 
-For migration-target development, local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `functions/`). No cloud account is required for day-to-day development. (The legacy `services/api` backend still requires PostgreSQL + Prisma if you need to run it.)
+Local backend work uses the **Firebase Emulator Suite** (rules in `firebase/`, Functions in `functions/`). No cloud account is required for day-to-day development.
 
 Minimum prerequisites:
 
-- Node.js `>=24` (LTS line for this repository)
-- npm (current stable release)
-- Java 11+ (required by Firebase Emulator Suite)
+- Node.js `>=24` for the root npm workspaces (`packages/shared`, `apps/admin`)
+- Node.js `>=22.13` and pnpm for `functions/`
+- JDK 21 (required by the Firebase Emulator Suite for the functions emulator tests)
 - Firebase CLI (`npm install -g firebase-tools`)
+- JDK 21 and the Android SDK for `apps/android` (Gradle wrapper included)
 
-Start Firebase emulators:
-
-```bash
-cd firebase
-firebase emulators:start
-```
-
-Run workspace checks:
+Run the root workspace checks (`packages/shared` and `apps/admin`):
 
 ```bash
 npm install
@@ -74,6 +66,29 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+```
+
+Run the Cloud Functions checks:
+
+```bash
+pnpm -C functions install
+pnpm -C functions run lint
+pnpm -C functions run typecheck
+pnpm -C functions run test
+pnpm -C functions run build
+```
+
+Start the Firebase emulators (from the repository root — `firebase.json` lives there):
+
+```bash
+firebase emulators:start
+```
+
+Build and test the Android app:
+
+```bash
+cd apps/android
+./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 ```
 
 > See [docs/deployment.md](docs/deployment.md) for CI and production deployment details.

@@ -2,7 +2,10 @@
 
 These guidelines define how backend APIs must be designed for consistency, security, and product correctness.
 
-> **Migration in progress.** The target backend interaction model is Firebase-native (Callable Cloud Functions, direct Firebase SDK access, and HTTP Cloud Functions for external integrations). The legacy `/v1` REST conventions that apply only to the frozen `services/api` implementation are documented in the [Legacy `/v1` REST conventions (frozen)](#legacy-v1-rest-conventions-frozen) section at the bottom of this document.
+> **Firebase-native only.** The backend interaction model is Callable Cloud Functions, direct
+> Firebase SDK access, and HTTP Cloud Functions for external integrations. The legacy `/v1` REST
+> API (`services/api`) was removed on 2026-07-28; its conventions no longer apply anywhere in this
+> repository. They are recoverable from the `legacy-final` git tag if a historical detail is needed.
 
 ## API principles
 
@@ -162,58 +165,3 @@ Reject unknown/invalid fields. Validate all types, ranges, enums, and formats. D
 - Callable function integration tests (emulator) for every business-rule path.
 - Kronjakt claim tests: geofence, speed, active session, cooldown, risk score.
 - Partner statistics tests: aggregated-only, threshold enforcement, no individual-user exposure.
-
----
-
-## Legacy `/v1` REST conventions (frozen)
-
-> ⚠️ **This section applies only to the frozen legacy `services/api` implementation (Node.js / Fastify / Prisma / PostgreSQL).** These conventions do not apply to the target Firebase backend. Do not add new endpoints here.
-
-The legacy `services/api` uses REST endpoints under `/v1`. The conventions below remain in effect only for bug fixes and migration-compatibility work in that frozen directory.
-
-### Versioning
-
-- All legacy endpoints are namespaced under `/v1`.
-- Breaking changes would require `/v2` — but new versions must not be added; target new features in Firebase callable functions.
-
-### Authentication (legacy)
-
-- Protected legacy endpoints require `Authorization: Bearer <Firebase ID token>`.
-- The legacy backend verifies the token with Firebase Admin SDK `verifyIdToken()`.
-
-### Response format (legacy)
-
-```json
-{
-  "ok": true,
-  "data": {},
-  "meta": {}
-}
-```
-
-### Error format (legacy)
-
-```json
-{
-  "ok": false,
-  "error": {
-    "code": "forbidden",
-    "message": "You are not allowed to perform this action.",
-    "details": {}
-  }
-}
-```
-
-### Pagination (legacy)
-
-Page-based: `page`, `pageSize` query parameters with `meta.total`, `meta.hasNext`.
-
-### Legacy endpoint groups
-
-- `/v1/auth`, `/v1/me`, `/v1/subscription`, `/v1/live`, `/v1/events`, `/v1/chat`
-- `/v1/groups`, `/v1/vehicles`, `/v1/badges`, `/v1/points`, `/v1/crown-hunt`
-- `/v1/partners`, `/v1/offers`, `/v1/reports`, `/v1/feedback`
-- `/v1/notifications`, `/v1/settings`, `/v1/feature-flags`
-- `/v1/admin/*`
-
-These endpoint groups exist as migration reference only. New product features must not be added to them.

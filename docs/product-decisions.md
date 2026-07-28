@@ -19,8 +19,8 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 - The mobile platform consists of two separate native applications: iOS (Swift / SwiftUI) and Android (Kotlin / Jetpack Compose).
 - Both native apps provide equivalent product functionality, security, privacy, localization, and accessibility.
-- Cross-platform mobile frameworks (React Native, Expo, Flutter, Kotlin Multiplatform) are not used in the target architecture.
-- `apps/mobile` (React Native / Expo) is the legacy migration source and is frozen to new product features.
+- Cross-platform mobile frameworks (React Native, Expo, Flutter, Kotlin Multiplatform) are not used.
+- The legacy `apps/mobile` (React Native / Expo) client was removed on 2026-07-28.
 
 ## Repository and Open Source principles
 
@@ -39,7 +39,7 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 - Backend använder Cloud Functions for Firebase (2nd gen), Node.js 22, TypeScript.
 - Cloud Firestore är primär durable databas; Firebase Realtime Database används för kortlivad realtidsdata (live location, presence).
 - Firebase Authentication hanterar autentisering för iOS, Android och admin web.
-- Firebase Admin SDK används för serverprivilegier. PostgreSQL och Prisma är legacy migration sources och används inte i targetarkitekturen.
+- Firebase Admin SDK används för serverprivilegier. PostgreSQL och Prisma användes endast av det borttagna `services/api` och ingår inte i arkitekturen.
 - Backend är source of truth för autentisering, admin-roll (via Firebase custom claims), subscription, access checks, Kronpoäng och andra känsliga beslut.
 
 ## Admin web

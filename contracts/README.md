@@ -14,8 +14,8 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 | `errors/errors.json`              | Canonical machine-readable error codes                                               | ✅ Seeded (PR 2a)                                                                                        |
 | `functions/functions.json`        | Callable function names, access levels, and status                                   | ✅ Seeded (PR 2b)                                                                                        |
 | `features/feature-flags.json`     | Feature flag key names and defaults                                                  | ✅ Seeded (PR 2b)                                                                                        |
-| `localization/sv.json`, `en.json` | Source localization strings                                                          | ✅ Seeded from `apps/mobile/src/i18n/` (PR 2c)                                                           |
-| `design-tokens/tokens.json`       | KCC Crown UI design tokens (palette, spacing, radius, typography, light/dark themes) | ✅ Seeded from `apps/mobile/src/design/` (PR 2d)                                                         |
+| `localization/sv.json`, `en.json` | Source localization strings                                                          | ✅ Seeded from the removed `apps/mobile` app (PR 2c)                                                     |
+| `design-tokens/tokens.json`       | KCC Crown UI design tokens (palette, spacing, radius, typography, light/dark themes) | ✅ Seeded from the removed `apps/mobile` app (PR 2d)                                                     |
 
 ## Conventions
 
@@ -24,7 +24,7 @@ See [docs/migration/native-firebase-migration-plan.md](../docs/migration/native-
 - **Timestamps are ISO 8601 strings** in JSON representations. Firestore stores native `Timestamp` values; the contract describes the serialized form. Timestamps are backend-written (`FieldValue.serverTimestamp()`) — never trust client clocks.
 - **Backend is the source of truth.** Nothing in these contracts permits a client to assert roles, subscription status, moderation state, or access decisions.
 - **Error codes** use the Firebase `HttpsError` vocabulary (see `errors/errors.json`). Clients branch on `code`, never on the human-readable message.
-- **Localization**: `localization/sv.json` and `en.json` are the canonical string sources (nested dot-path keys, e.g. `liveLocation.start`). Swedish is the primary product language; both files must have identical key sets (CI-enforced). Native apps consume these directly; the frozen legacy app keeps its copy in `apps/mobile/src/i18n/`.
+- **Localization**: `localization/sv.json` and `en.json` are the canonical string sources (nested dot-path keys, e.g. `liveLocation.start`). Swedish is the primary product language; both files must have identical key sets (CI-enforced). Native apps and the admin web app consume these directly.
 
 ## How platforms consume this
 

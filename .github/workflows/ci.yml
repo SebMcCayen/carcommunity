@@ -33,9 +33,6 @@ jobs:
             npm install
           fi
 
-      - name: API prisma generate
-        run: npm --workspace services/api run prisma:generate
-
       - name: Build shared package
         run: npm --workspace @carcommunity/shared run build
 
@@ -56,24 +53,6 @@ jobs:
 
       - name: Root build
         run: npm run build
-
-      - name: API lint
-        run: npm --workspace services/api run lint
-
-      - name: API typecheck
-        run: npm --workspace services/api run typecheck
-
-      - name: API test
-        run: npm --workspace services/api test
-
-      - name: API build
-        run: npm --workspace services/api run build
-
-      # NOTE: apps/mobile (legacy Expo/React Native app) is deliberately not built
-      # here. It is descoped from the MVP and parked: the code stays on disk but is
-      # no longer a root npm workspace, so the "Root *" steps above skip it too.
-      # To bring it back into CI, re-add "apps/mobile" to the "workspaces" array in
-      # the root package.json and run `npm install`.
 
       - name: Admin lint
         run: npm --workspace apps/admin run lint
@@ -190,15 +169,3 @@ jobs:
           check contracts/functions/functions.json '.functions[].name'
           check contracts/features/feature-flags.json '.flags[].key'
           exit $fail
-
-  container-build:
-    name: Container build check
-    runs-on: ubuntu-latest
-    needs: ci
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Build API container (validation only — no push)
-        run: docker build -f services/api/Dockerfile -t carcommunity-api:build-check .

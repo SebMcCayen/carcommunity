@@ -15,26 +15,20 @@ When documentation conflicts, use this priority order:
 9. `docs/product-decisions.md`
 10. Legacy implementation code — as evidence of existing product behavior only
 
-## Legacy freeze
+## Legacy stack removed
 
-`apps/mobile` (React Native / Expo) and `services/api` (Node.js / Fastify / Prisma / PostgreSQL) are **frozen to new product features**.
+The legacy React Native / Expo app (`apps/mobile`) and the legacy Node.js / Fastify / Prisma / PostgreSQL API (`services/api`) were **deleted from the repository on 2026-07-28**. The migration to native apps plus Firebase Cloud Functions is complete. Do not recreate either directory.
 
-Changes in those directories are only allowed for:
+The removed code is recoverable from the `legacy-final` git tag, for example
+`git show legacy-final:services/api/src/lib/badge-service.ts`.
 
-- Critical security fixes.
-- Keeping the legacy build operational during migration.
-- Extracting behavior descriptions into migration documentation or contracts.
-- Migration-specific compatibility work explicitly requested by a task.
+Some files under `functions/` carry provenance comments such as `Ports services/api/src/lib/badge-catalog.ts`. These are deliberate historical references explaining where the semantics came from; do not "fix" them and do not treat them as live paths.
 
-New mobile features must be implemented in both `apps/ios` and `apps/android`.
-
-New backend business logic must target Firebase Cloud Functions, Firestore, Realtime Database, Storage, Security Rules, and App Check.
+New backend business logic must target Firebase Cloud Functions, Firestore, Realtime Database, Storage, Security Rules, and App Check. There is no REST API service and no relational database — all durable data lives in Firestore.
 
 The TypeScript package `packages/shared` is **not** an executable shared mobile library. It contains TypeScript contracts for the backend and admin web. Native platforms must align through language-neutral contracts, not shared runtime code.
 
 A mobile feature is incomplete until both native platform implementations and their tests are present.
-
-Copilot must not continue extending React Native (`apps/mobile`) or Fastify (`services/api`) merely because those implementations currently contain more code.
 
 ## Mandatory mobile parity
 
@@ -67,8 +61,6 @@ Follow the full mobile parity instructions defined in:
   - Firebase Authentication, App Check, Cloud Messaging
   - Mapbox Maps SDK (iOS and Android native SDKs)
   - Sign in with Apple through Firebase Authentication (iOS), Google Sign-In through Firebase Authentication (Android and admin web)
-  - **LEGACY (frozen):** React Native / Expo mobile app at `apps/mobile`
-  - **LEGACY (frozen):** Node.js + Fastify + Prisma + PostgreSQL API at `services/api`
 
 ## Language and naming rules
 
