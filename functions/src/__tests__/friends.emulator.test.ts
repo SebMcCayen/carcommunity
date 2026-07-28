@@ -740,6 +740,117 @@ describe('friend request lifecycle', () => {
  * across test files and nickname resolution is by displayName, so a name reused
  * from another file would make these members ambiguous.
  */
+/**
+ * REGRESSION (2026-07-27): "when opening the Friends page I don't always see a
+ * picture on all friends, but on that friend's profile page I can see it".
+ * users/{uid}/friends/{friendUid} carries a COPY of the friend's
+ * displayName/avatarPath frozen at accept time, and nothing rewrites it — so a
+ * member who set or changed their avatar afterwards stayed picture-less in the
+ * list while the member-profile screen (which reads live users/{uid}) showed
+ * the real one. friend-list now re-reads the live profiles.
+ */
+describe('friend-list live profile hydration', () => {
+  const friendEdge = (ownerUid: string, friendUid: string) =>
+    adminDb.collection('users').doc(ownerUid).collection('friends').doc(friendUid);
+
+  it('serves an avatar + rename applied AFTER the friendship was established', async () => {
+    const per = await newMember('PerLH');
+    const eva = await newMember('EvaLH');
+
+    // Befriend while Eva has NO avatar: the friendship documents freeze
+    // avatarPath: null onto both sides.
+    await signInAs(per);
+    await call('friend-sendRequest', { toUid: eva.uid });
+    await signInAs(eva);
+    await call('friend-respondRequest', {
+      requestId: friendRequestId(per.uid, eva.uid),
+      action: 'accept',
+    });
+    expect((await friendEdge(per.uid, eva.uid).get()).data()?.avatarPath ?? null).toBeNull();
+
+    // Eva then uploads an avatar and renames herself. This is exactly the write
+    // the Android profile screen makes — users/{uid} only, no friend edge is
+    // (or can be) touched by a client.
+    await adminDb
+      .collection('users')
+      .doc(eva.uid)
+      .set(
+        { avatarPath: 'profileImages/eva/new.jpg', displayName: 'EvaRenamedLH' },
+        { merge: true },
+      );
+
+    await signInAs(per);
+    const list = (await call('friend-list', {})).data as {
+      friends: Array<{ uid: string; displayName: string | null; avatarPath: string | null }>;
+    };
+    const evaRow = list.friends.find((f) => f.uid === eva.uid);
+    expect(evaRow?.avatarPath).toBe('profileImages/eva/new.jpg');
+    expect(evaRow?.displayName).toBe('EvaRenamedLH');
+
+    // Hydration happens on READ: the stored copy is left exactly as written, so
+    // the fix needs no backfill and rewrites nobody's documents.
+    expect((await friendEdge(per.uid, eva.uid).get()).data()?.avatarPath ?? null).toBeNull();
+  });
+
+  it('serves the current avatar of the OTHER party of a pending request', async () => {
+    const olle = await newMember('OlleLH');
+    const tina = await newMember('TinaLH');
+
+    await signInAs(olle);
+    await call('friend-sendRequest', { toUid: tina.uid });
+
+    // Tina uploads an avatar while the request is still sitting in her inbox.
+    await adminDb
+      .collection('users')
+      .doc(tina.uid)
+      .set({ avatarPath: 'profileImages/tina/new.jpg' }, { merge: true });
+
+    // The sender sees it on the outgoing row...
+    const outgoing = (await call('friend-list', {})).data as {
+      outgoing: Array<{ otherUser: { uid: string; avatarPath: string | null } }>;
+    };
+    expect(outgoing.outgoing.find((r) => r.otherUser.uid === tina.uid)?.otherUser.avatarPath).toBe(
+      'profileImages/tina/new.jpg',
+    );
+
+    // ...and the recipient sees the sender's live profile on the incoming row.
+    await adminDb
+      .collection('users')
+      .doc(olle.uid)
+      .set({ avatarPath: 'profileImages/olle/new.jpg' }, { merge: true });
+    await signInAs(tina);
+    const incoming = (await call('friend-list', {})).data as {
+      incoming: Array<{ otherUser: { uid: string; avatarPath: string | null } }>;
+    };
+    expect(incoming.incoming.find((r) => r.otherUser.uid === olle.uid)?.otherUser.avatarPath).toBe(
+      'profileImages/olle/new.jpg',
+    );
+  });
+
+  it('falls back to the stored copy when the member has no user document left', async () => {
+    const gustav = await newMember('GustavLH');
+    const hanna = await newMember('HannaLH');
+
+    await signInAs(gustav);
+    await call('friend-sendRequest', { toUid: hanna.uid });
+    await signInAs(hanna);
+    await call('friend-respondRequest', {
+      requestId: friendRequestId(gustav.uid, hanna.uid),
+      action: 'accept',
+    });
+
+    // Hanna's profile disappears (deleted account). An absent live profile must
+    // leave the last known name in place rather than blanking the row.
+    await adminDb.collection('users').doc(hanna.uid).delete();
+
+    await signInAs(gustav);
+    const list = (await call('friend-list', {})).data as {
+      friends: Array<{ uid: string; displayName: string | null }>;
+    };
+    expect(list.friends.find((f) => f.uid === hanna.uid)?.displayName).toBe('HannaLH');
+  });
+});
+
 describe('friend-cancelRequest', () => {
   it('lets the sender withdraw a pending request, and is idempotent', async () => {
     const olle = await newMember('OlleCX');
