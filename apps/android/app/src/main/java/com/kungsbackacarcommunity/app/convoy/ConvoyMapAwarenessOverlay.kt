@@ -17,9 +17,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -49,6 +51,8 @@ import com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
+import com.kungsbackacarcommunity.app.map.LiveMarkerSmoother
+import com.kungsbackacarcommunity.app.map.LiveMarkerSmoothing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import kotlin.math.roundToInt
@@ -81,9 +85,18 @@ const val CONVOY_EDGE_ARROW_TAG = "convoy_edge_arrow_"
  * are repositioned per settled camera frame rather than composited in the GL
  * layer, so during a fling they lag the basemap by a frame.
  *
- * All the maths is in `map/ConvoyEdgeGeometry.kt` and `map/ConvoyArrowPlanner.kt`
- * (pure and unit-tested); this file only draws what they return. In particular
- * the rotation and pitch corrections are NOT here — see those files.
+ * ## Why the markers glide
+ * Positions arrive as sparse published fixes, not a stream (see
+ * [LiveMarkerSmoothing]), so drawing each one where it lands makes the person
+ * driving beside you sit still for five seconds and then jump ~100 m. Every
+ * roster snapshot therefore goes through a [LiveMarkerSmoother] first, which
+ * throws away impossible fixes and animates the marker between believable ones —
+ * see [rememberSmoothedMembers].
+ *
+ * All the maths is in `map/ConvoyEdgeGeometry.kt`, `map/ConvoyArrowPlanner.kt`
+ * and `map/LiveMarkerSmoothing.kt` (pure and unit-tested); this file only draws
+ * what they return. In particular the rotation and pitch corrections are NOT
+ * here — see those files.
  *
  * Renders nothing at all when not in a convoy, when no member position is known,
  * or on a surface with no camera (the stub, i.e. CI and the token-less build).
@@ -98,6 +111,12 @@ fun ConvoyMapAwarenessOverlay(
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
+    // Deliberately OUTSIDE the Box: the smoother's per-member glide state must
+    // survive the frames on which the Box bails out early (no camera yet, empty
+    // viewport during a resize). Remembering it past a conditional return inside
+    // the Box would reset every marker to a standing start each time.
+    val smoothedMembers = rememberSmoothedMembers(members = members, nowMillis = nowMillis)
+
     Box(
         modifier =
             modifier
@@ -106,7 +125,12 @@ fun ConvoyMapAwarenessOverlay(
                 .testTag(CONVOY_AWARENESS_OVERLAY_TAG),
     ) {
         val snapshot = camera ?: return@Box
-        if (members.isEmpty() || viewportSize.width <= 0 || viewportSize.height <= 0) return@Box
+        // smoothedMembers, not members: the smoother also DROPS anyone whose
+        // only known position is undrawable, and a roster of nothing but those
+        // has nothing to plan.
+        if (smoothedMembers.isEmpty() || viewportSize.width <= 0 || viewportSize.height <= 0) {
+            return@Box
+        }
 
         val edgeInsetPx = with(LocalDensity.current) { EDGE_INSET.toPx() }
         // The inside/outside margin is the chip's RADIUS, converted at the
@@ -145,9 +169,16 @@ fun ConvoyMapAwarenessOverlay(
         // into the live map, which is why it is keyed on the snapshot rather than
         // memoised on the members alone.
         val placements =
-            remember(snapshot, members, viewportSize, edgeInsetPx, viewportMarginPx, staleTick) {
+            remember(
+                snapshot,
+                smoothedMembers,
+                viewportSize,
+                edgeInsetPx,
+                viewportMarginPx,
+                staleTick,
+            ) {
                 ConvoyArrowPlanner.plan(
-                    members = members,
+                    members = smoothedMembers,
                     cameraLatitude = snapshot.latitude,
                     cameraLongitude = snapshot.longitude,
                     cameraBearing = snapshot.bearing,
@@ -195,6 +226,63 @@ fun ConvoyMapAwarenessOverlay(
             )
         }
     }
+}
+
+/**
+ * [members], but with each position replaced by where that marker should be
+ * drawn RIGHT NOW — impossible fixes discarded, believable ones glided to.
+ *
+ * ## How the animation is driven
+ * A fresh roster restarts the effect, which is what "cancel and replace the
+ * running animation when a newer fix arrives" amounts to here: there is at most
+ * one loop, and it is torn down and restarted rather than stacked. The loop then
+ * republishes a render time until every marker has settled, and stops — a parked
+ * convoy costs nothing.
+ *
+ * Progress is measured on the FRAME clock rather than by re-reading [nowMillis],
+ * for two reasons: the frame clock is monotonic (a wall-clock correction
+ * mid-glide cannot make a marker jump or freeze), and it is the clock a Compose
+ * test drives, so a test that moves a member terminates instead of spinning
+ * against a frozen `nowMillis`. [nowMillis] still seeds the epoch, so the
+ * smoother's own bookkeeping stays on the same scale as the reported fix
+ * timestamps it compares against.
+ */
+@Composable
+private fun rememberSmoothedMembers(
+    members: List<ConvoyMemberPosition>,
+    nowMillis: () -> Long,
+): List<ConvoyMemberPosition> {
+    val smoother = remember { LiveMarkerSmoother() }
+    // The instant the markers are currently drawn AT. Every published change is
+    // one recomposition of the overlay, which is why the loop below throttles.
+    var renderAtMillis by remember { mutableLongStateOf(nowMillis()) }
+
+    LaunchedEffect(members) {
+        val startMillis = nowMillis()
+        smoother.onPositions(members, startMillis)
+        renderAtMillis = startMillis
+
+        var frameBaseMillis: Long? = null
+        var publishedAtMillis = startMillis
+        var atMillis = startMillis
+        while (smoother.isGliding(atMillis)) {
+            val frameMillis = withFrameMillis { it }
+            // The first frame of this glide sets the origin the rest measure from.
+            val base = frameBaseMillis ?: frameMillis
+            frameBaseMillis = base
+            atMillis = startMillis + (frameMillis - base)
+            if (atMillis - publishedAtMillis >= LiveMarkerSmoothing.GLIDE_FRAME_INTERVAL_MS) {
+                publishedAtMillis = atMillis
+                renderAtMillis = atMillis
+            }
+        }
+        // Land exactly on the target: the throttle above can skip the last
+        // frame, and a marker parked a metre short of its reported position
+        // would quietly desynchronise from the convoy fit camera.
+        renderAtMillis = atMillis
+    }
+
+    return remember(members, renderAtMillis) { smoother.rendered(members, renderAtMillis) }
 }
 
 /**

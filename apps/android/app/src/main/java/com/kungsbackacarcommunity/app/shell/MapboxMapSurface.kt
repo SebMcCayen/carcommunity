@@ -85,6 +85,7 @@ import com.mapbox.maps.plugin.gestures.gestures
 import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorBearingChangedListener
 import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListener
+import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
 import kotlinx.coroutines.CoroutineScope
@@ -120,7 +121,9 @@ import kotlin.math.roundToInt
  * position, so it stays anchored to the ground when the map pans (there is no
  * centre-locked Compose overlay). The [MapUserMarker] pushed via
  * [setUserMarker] now only carries live-sharing state: the puck pulses green
- * while sharing and blue otherwise.
+ * while sharing and blue otherwise. The puck also carries a small DIRECTION
+ * ARROW showing which way the user is heading, added once a real heading is
+ * known — see [showPuckBearingArrow].
  *
  * Every native-map mutation is wrapped defensively: a missing token, a style
  * that has not finished loading, or an absent location permission degrades to a
@@ -245,6 +248,22 @@ class MapboxMapSurface : MapSurface {
     // camera in course-up. Reset on MapView release so a fresh map does not rotate
     // to a stale heading before its first fix.
     private var lastBearing: Double = 0.0
+
+    // Whether the puck is currently drawn WITH its direction arrow.
+    //
+    // The arrow is not on from the start, and that is the point. A puck created
+    // with a bearing image renders the arrow immediately, pointing at whatever
+    // the indicator's bearing happens to be — which, before any heading has ever
+    // been reported, is 0: an arrow confidently claiming you are facing north.
+    // So the puck starts as the plain dot and gains its arrow the first time a
+    // real bearing arrives (see the bearing listener), after which the Mapbox
+    // location component keeps it pointing at the last reported one.
+    //
+    // Read by every place that (re)applies the location-component settings — a
+    // permission grant, a tab return, a style reload — so the arrow is not lost
+    // the moment any of those re-assert the puck. Reset on MapView release so a
+    // fresh map goes back to the plain dot until it has its own heading.
+    private var puckBearingArrowShown: Boolean = false
 
     // The private "past ~1 km" breadcrumb tail of the user's OWN travel, drawn
     // only while THIS user is live-sharing (see [BreadcrumbTrail] for the rolling
@@ -724,8 +743,45 @@ class MapboxMapSurface : MapSurface {
                 // on it). Matches the style-load settings above.
                 puckBearingEnabled = true
                 puckBearing = PuckBearing.COURSE
+                // Re-assert the puck itself too, or a re-applied settings block
+                // would drop the direction arrow back to the plain dot on a
+                // permission grant / tab return. Still the plain dot until a real
+                // heading has been seen — see [puckBearingArrowShown].
+                locationPuck = createDefault2DPuck(withBearing = puckBearingArrowShown)
             }
         }
+    }
+
+    /**
+     * Swap the plain dot for the dot-with-an-arrow, once, the first time this map
+     * learns which way the user is facing.
+     *
+     * ### Why the arrow is the COURSE, not the compass
+     * "The direction you are looking at" is, on a driving map, the direction you
+     * are driving: the phone is in a cradle or a pocket and its compass says
+     * where the HANDSET is pointed, which flips as it is picked up and swings
+     * wildly while stationary. The Maps SDK also drives one bearing signal, not
+     * two — the same [PuckBearing] feeds the arrow AND the camera's course-up
+     * rotation — so switching the puck to compass heading would silently make the
+     * whole map spin with the handset. The arrow therefore shows course over
+     * ground, matching the map's existing rotation behaviour, and it holds the
+     * last reported course when the car stops rather than swinging on the spot.
+     *
+     * Idempotent and cheap: the guard means a fix arriving every second does not
+     * re-apply the location-component settings. Wrapped defensively like every
+     * other native call, and the flag is only raised once the swap actually
+     * LANDED — a no-op before the map exists, or a call that throws, simply
+     * leaves the next heading to try again rather than stranding the dot without
+     * its arrow for the rest of the session.
+     */
+    private fun showPuckBearingArrow() {
+        if (puckBearingArrowShown) return
+        val map = mapViewRef ?: return
+        runCatching {
+            map.location.updateSettings {
+                locationPuck = createDefault2DPuck(withBearing = true)
+            }
+        }.onSuccess { puckBearingArrowShown = true }
     }
 
     override fun setActive(active: Boolean) {
@@ -1124,6 +1180,15 @@ class MapboxMapSurface : MapSurface {
             remember {
                 OnIndicatorBearingChangedListener { heading ->
                     lastBearing = heading
+                    // First real heading of this map: give the dot its arrow.
+                    //
+                    // This listener only fires for a fix that actually CARRIES a
+                    // bearing — the location provider maps the platform fix's
+                    // bearing and drops the sample when there is none — so
+                    // reaching here is the proof that "which way am I pointing?"
+                    // has an answer. Guarded, so it is one settings update per
+                    // map, not one per fix.
+                    showPuckBearingArrow()
                     // north-up ignores the heading entirely (the map stays at 0).
                     if (compassMode != MapCompassMode.CourseUp) {
                         return@OnIndicatorBearingChangedListener
@@ -1525,6 +1590,19 @@ class MapboxMapSurface : MapSurface {
                                 // moving is what should point up.
                                 puckBearingEnabled = true
                                 puckBearing = PuckBearing.COURSE
+                                // The dot's DIRECTION ARROW. The Maps SDK's
+                                // default puck for a programmatically created
+                                // MapView has no bearing image at all (the
+                                // attribute parser builds
+                                // `createDefault2DPuck(withBearing = false)` when
+                                // there are no XML attrs), so enabling the bearing
+                                // computation above only fed the camera — nothing
+                                // was ever drawn. This is what actually puts the
+                                // arrow on the dot, and it starts OFF: see
+                                // [puckBearingArrowShown] for why the arrow waits
+                                // for a real heading.
+                                locationPuck =
+                                    createDefault2DPuck(withBearing = puckBearingArrowShown)
                             }
                             location.addOnIndicatorPositionChangedListener(positionListener)
                             location.addOnIndicatorBearingChangedListener(bearingListener)
@@ -1593,6 +1671,10 @@ class MapboxMapSurface : MapSurface {
                 // compass MODE itself is a preference and deliberately kept across
                 // the recreate — the fresh map's listeners re-apply it.
                 lastBearing = 0.0
+                // …and with the heading goes the arrow that visualised it: a
+                // recreated map shows the plain dot again until its own first
+                // heading arrives, rather than an arrow left pointing north.
+                puckBearingArrowShown = false
                 cameraChangeListener?.let { l ->
                     runCatching { mapView.mapboxMap.removeOnCameraChangeListener(l) }
                 }
