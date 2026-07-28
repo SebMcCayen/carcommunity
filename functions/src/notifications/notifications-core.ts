@@ -391,6 +391,16 @@ export interface PushDeepLink {
 }
 
 /**
+ * A blank/whitespace-only relatedEntityId is not an entity. Normalising to null
+ * here keeps a malformed inbox item degrading to the LIST screen instead of
+ * putting an empty `entityId` on the wire for the client to open by.
+ */
+function entityIdOrNull(relatedEntityId: string | null | undefined): string | null {
+  const trimmed = relatedEntityId?.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
  * Derives the tap destination from the category + the `relatedEntityId` that
  * producers ALREADY write — no producer changes and no new wire field.
  *
@@ -427,22 +437,33 @@ export function buildPushDeepLink(
       return otherUid ? { target: 'dm', entityId: otherUid } : { target: 'dm', entityId: null };
     }
     case 'convoy_chat':
-      return { target: 'convoy_chat', entityId: relatedEntityId ?? null };
+      return { target: 'convoy_chat', entityId: entityIdOrNull(relatedEntityId) };
     case 'community_chat':
-      // relatedEntityId is the message id; the community channel has no
-      // per-message anchor, so the channel itself is the destination.
+      // Deliberately null: the two producers write DIFFERENT id kinds into this
+      // one field (a message id from the @mention path, the singleton channel id
+      // from the digest), so it names no single entity the client could open by.
+      // The channel itself is the only unambiguous destination.
       return { target: 'community_chat', entityId: null };
     case 'convoy_invite':
-      return { target: 'convoys', entityId: null };
+      // relatedEntityId is the convoy id (manageConvoy.notifyInvitees). Passing
+      // it through is what lets a tapped invite open THAT convoy rather than
+      // dumping the member on the convoy list.
+      return { target: 'convoys', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
-      return { target: 'friends', entityId: relatedEntityId ?? null };
+      return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };
     case 'event_reminder':
     case 'event_updated':
     case 'event_cancelled':
-      return { target: 'event', entityId: relatedEntityId ?? null };
+      return { target: 'event', entityId: entityIdOrNull(relatedEntityId) };
     case 'subscription_status':
+      // Deliberately null: the subscription screen is a single destination with
+      // no per-entity anchor.
       return { target: 'subscription', entityId: null };
     default:
+      // admin_message / account_warning / account_suspension / system_notice.
+      // Deliberately null: these land on the notifications list, and their
+      // relatedEntityId is an operator-supplied free-text reference with no
+      // client-side meaning — it must not be handed to a navigator.
       return { target: 'notifications', entityId: null };
   }
 }
