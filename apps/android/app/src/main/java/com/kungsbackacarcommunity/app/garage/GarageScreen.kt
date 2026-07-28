@@ -1,16 +1,10 @@
 package com.kungsbackacarcommunity.app.garage
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -20,18 +14,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
@@ -93,7 +80,7 @@ fun GarageScreen(
                         )
                     } else {
                         state.vehicles.forEach { vehicle ->
-                            VehicleCard(
+                            OwnedVehicleCard(
                                 vehicle = vehicle,
                                 onOpen = { onOpen(vehicle) },
                                 onEdit = { onEdit(vehicle) },
@@ -135,97 +122,6 @@ fun GarageScreen(
     }
 }
 
-@Composable
-private fun VehicleCard(
-    vehicle: Vehicle,
-    onOpen: () -> Unit,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit,
-    onSetMain: (isMain: Boolean) -> Unit,
-) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            // The photo + summary is the tap target that opens the full
-            // car-detail page (announced as a button). The manage buttons below
-            // stay OUTSIDE this clickable region so a tap on Edit/Delete/Set-main
-            // is not also read as "open detail".
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(role = Role.Button, onClick = onOpen),
-                verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-            ) {
-                VehiclePhoto(
-                    imagePath = vehicle.imagePath,
-                    modifier = Modifier.align(Alignment.CenterHorizontally),
-                )
-                Text(
-                    text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = stringResource(vehicle.powertrain.labelRes()),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (vehicle.isMainCar) {
-                    Text(
-                        text = stringResource(R.string.garage_mainCarBadge),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
-                    Text(
-                        text = engine,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
-                    Text(
-                        text = mods,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            // Main-car toggle: filled when this car is the main car (tapping
-            // clears it), outlined otherwise (tapping makes it the main car).
-            if (vehicle.isMainCar) {
-                Button(
-                    onClick = { onSetMain(false) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.garage_unsetMainCar))
-                }
-            } else {
-                OutlinedButton(
-                    onClick = { onSetMain(true) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.garage_setMainCar))
-                }
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-            ) {
-                OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.garage_editVehicle))
-                }
-                OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.garage_deleteVehicle))
-                }
-            }
-        }
-    }
-}
-
 /**
  * Diameter of the circular car photo in the garage list.
  *
@@ -239,28 +135,61 @@ private fun VehicleCard(
 private val VehiclePhotoDiameter = 180.dp
 
 /**
- * The car's photo, resolved from its Storage path at render time. Rendered as a
- * CIRCLE in My Garage: a fixed-diameter square box clipped to [CircleShape],
- * with `ContentScale.Crop` centre-cropping whatever ratio the source was into
- * the circle — no stretching, just a centred round cut.
- *
- * Renders nothing when the car has no photo, or while/if the URL cannot be
- * resolved (config-less build) — the card simply starts at its title, exactly
- * as it did before photos existed.
+ * My Garage renders the car photo as a fixed-diameter CIRCLE, centre-cropped
+ * into the circle from whatever ratio the source was. Declared after
+ * [VehiclePhotoDiameter] because top-level properties initialise in file order.
+ */
+private val GarageVehiclePhotoStyle = VehiclePhotoStyle.Circle(VehiclePhotoDiameter)
+
+/**
+ * One of the owner's own cars in the garage list: the shared [VehicleCard] with
+ * My Garage's look (circular photo, 4dp rows) plus the manage actions that only
+ * the owner gets. The plate is deliberately not shown here — it belongs to the
+ * detail page ([VehicleDetailScreen]), not the skimmable list.
  */
 @Composable
-private fun VehiclePhoto(imagePath: String?, modifier: Modifier = Modifier) {
-    val context = LocalContext.current
-    val url = rememberStorageImageUrl(context, imagePath)
-    if (url != null) {
-        AsyncImage(
-            model = url,
-            contentDescription = stringResource(R.string.garage_photoAlt),
-            contentScale = ContentScale.Crop,
-            modifier =
-                modifier
-                    .size(VehiclePhotoDiameter)
-                    .clip(CircleShape),
-        )
+private fun OwnedVehicleCard(
+    vehicle: Vehicle,
+    onOpen: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onSetMain: (isMain: Boolean) -> Unit,
+) {
+    VehicleCard(
+        vehicle = vehicle,
+        photoStyle = GarageVehiclePhotoStyle,
+        mainCarLabelRes = R.string.garage_mainCarBadge,
+        photoContentDescriptionRes = R.string.garage_photoAlt,
+        contentSpacing = KccSpacing.s1,
+        onOpen = onOpen,
+    ) {
+        // Main-car toggle: filled when this car is the main car (tapping
+        // clears it), outlined otherwise (tapping makes it the main car).
+        if (vehicle.isMainCar) {
+            Button(
+                onClick = { onSetMain(false) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.garage_unsetMainCar))
+            }
+        } else {
+            OutlinedButton(
+                onClick = { onSetMain(true) },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(text = stringResource(R.string.garage_setMainCar))
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            OutlinedButton(onClick = onEdit, modifier = Modifier.weight(1f)) {
+                Text(text = stringResource(R.string.garage_editVehicle))
+            }
+            OutlinedButton(onClick = onDelete, modifier = Modifier.weight(1f)) {
+                Text(text = stringResource(R.string.garage_deleteVehicle))
+            }
+        }
     }
 }

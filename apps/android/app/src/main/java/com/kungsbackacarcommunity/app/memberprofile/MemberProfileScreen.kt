@@ -4,12 +4,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
@@ -49,7 +47,8 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.garage.Vehicle
-import com.kungsbackacarcommunity.app.garage.labelRes
+import com.kungsbackacarcommunity.app.garage.VehicleCard
+import com.kungsbackacarcommunity.app.garage.VehiclePhotoStyle
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
@@ -419,80 +418,33 @@ private fun CarsSection(vehicles: List<Vehicle>) {
         )
     } else {
         // Main car(s) first so the highlighted photo leads the list.
-        vehicles.sortedByDescending { it.isMainCar }.forEach { VehicleCard(it) }
+        vehicles.sortedByDescending { it.isMainCar }.forEach { MemberVehicleCard(it) }
     }
 }
 
-@Composable
-private fun VehicleCard(vehicle: Vehicle) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
-        ) {
-            VehiclePhoto(vehicle.imagePath)
-            Text(
-                text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            // Ordered as on the owner's own detail screen: plate directly under
-            // the make/model line. The field is deliberately public — the owner
-            // is told so at entry time — so it renders for every viewer, not
-            // just the owner. See Vehicle.registrationPlate.
-            vehicle.registrationPlate?.takeIf { it.isNotBlank() }?.let { plate ->
-                Text(
-                    text = stringResource(R.string.memberProfile_registrationPlate, plate),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                text = stringResource(vehicle.powertrain.labelRes()),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            if (vehicle.isMainCar) {
-                Text(
-                    text = stringResource(R.string.memberProfile_mainCar),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            vehicle.engineDescription?.takeIf { it.isNotBlank() }?.let { engine ->
-                Text(
-                    text = engine,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            vehicle.modifications?.takeIf { it.isNotBlank() }?.let { mods ->
-                Text(
-                    text = mods,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
+/**
+ * A public profile shows the car photo as a full-width 16:9 postcard with softly
+ * rounded corners, rather than My Garage's circular badge: a stranger's car is
+ * being introduced, so it gets the wider, more photographic crop. Declared at
+ * file scope so the style object is not rebuilt on every recomposition.
+ */
+private val MemberVehiclePhotoStyle =
+    VehiclePhotoStyle.FullWidth(aspectRatio = 16f / 9f, cornerRadius = KccSpacing.s2)
 
+/**
+ * One of the member's cars, read-only: the shared [VehicleCard] with the public
+ * profile's look (wide photo, 8dp rows, the plate line) and no manage actions —
+ * this screen never mutates the profile it is viewing.
+ */
 @Composable
-private fun VehiclePhoto(imagePath: String?) {
-    val context = LocalContext.current
-    val url = rememberStorageImageUrl(context, imagePath)
-    if (url != null) {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(KccSpacing.s2)),
-        )
-    }
+private fun MemberVehicleCard(vehicle: Vehicle) {
+    VehicleCard(
+        vehicle = vehicle,
+        photoStyle = MemberVehiclePhotoStyle,
+        mainCarLabelRes = R.string.memberProfile_mainCar,
+        registrationPlateFormatRes = R.string.memberProfile_registrationPlate,
+        contentSpacing = KccSpacing.s2,
+    )
 }
 
 /**
