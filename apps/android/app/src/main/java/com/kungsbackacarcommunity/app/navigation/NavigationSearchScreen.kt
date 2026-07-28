@@ -952,6 +952,24 @@ private fun RouteSheet(
     var sheetHeightPx by remember { mutableIntStateOf(0) }
     var stepsHeightPx by remember { mutableIntStateOf(0) }
 
+    // The live pixel reveal has to be reset per DESTINATION as well as per detent.
+    // `detent` gets that for free from rememberSaveable(destination.id) above, but
+    // `reveal` is a plain remember whose Animatable survives the swap — so picking
+    // a new destination while the sheet was expanded kept the OLD reveal. That
+    // reads as a tall EMPTY gap, because NavigationController.select() sets the new
+    // destination and `route = null` in the SAME update: there are no maneuvers to
+    // draw in the space being held open.
+    //
+    // snapTo, not animateTo: a new destination's sheet should already BE at the
+    // peek the first time it is drawn, not animate down to it.
+    //
+    // The Animatable INSTANCE is deliberately kept rather than re-remembered on
+    // the destination key: the nested-scroll connection below is remembered once
+    // and closes over it, so swapping the instance would leave the drag writing
+    // into a dead Animatable — the same trap the rememberUpdatedState comment
+    // further down exists to avoid.
+    LaunchedEffect(destination.id) { reveal.snapTo(0f) }
+
     // Drive the reveal from the settled detent. Also re-runs when the range
     // changes — a rotation, or the route resolving — so the sheet re-lands
     // exactly on a detent instead of keeping a pixel value that no longer means
@@ -976,6 +994,21 @@ private fun RouteSheet(
     val settle: (Float) -> Unit = { velocity ->
         val target = RouteSheetDrag.settleDetent(reveal.value, velocity, currentRange)
         detent = target
+        // BOTH the detent write above and this animateTo are required — do NOT
+        // "simplify" this to rely on LaunchedEffect(detent, rangePx) alone.
+        //
+        // The common settle is back to the detent the drag STARTED from: nudge the
+        // sheet up 20% of the range, release with no real velocity, and
+        // settleDetent returns Collapsed again. Writing an equal value to a
+        // MutableState does not invalidate its readers, so the LaunchedEffect key
+        // is unchanged and the effect never re-runs — this animateTo is the only
+        // thing that returns the sheet to the peek. Without it the sheet would
+        // hang wherever the finger left it.
+        //
+        // When the detent DOES change, the effect also animates to the same
+        // target. That is redundant but harmless: both calls drive the same
+        // Animatable through its MutatorMutex, so the second re-targets the first
+        // from its current value and velocity rather than fighting it.
         scope.launch { reveal.animateTo(RouteSheetDrag.revealForDetent(target, currentRange)) }
     }
     val currentSettle by rememberUpdatedState(settle)
