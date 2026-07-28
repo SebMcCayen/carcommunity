@@ -81,7 +81,12 @@ import {
   setStatus as setBillboardStatus,
   update as updateBillboard,
 } from './billboards/manageBillboard';
-import { markAllRead, markRead } from './notifications/manageNotifications';
+import {
+  deleteAllNotifications,
+  deleteNotification,
+  markAllRead,
+  markRead,
+} from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
 import { onNotificationCreated } from './notifications/sendPush';
 import { adminSend as notificationsAdminSend } from './notifications/adminSend';
@@ -484,14 +489,21 @@ export const billboards = {
 /**
  * Notifications domain (grouped export → deployed as
  * `notifications-markRead`, `notifications-markAllRead`,
+ * `notifications-delete`, `notifications-deleteAll`,
  * `notifications-registerPushToken`, `notifications-unregisterPushToken`,
  * the scheduled `notifications-cleanupExpired`, and the Firestore trigger
  * `notifications-onNotificationCreated`).
  *
  * Durable in-app inbox (contracts/functions/functions.json): owner-only
  * reads of `notifications/{uid}/items/`, backend-only writes (delivery via
- * writeInAppNotification, read-state via the mark callables), push token
- * registrations, and the daily retention sweep (unread 30 days, read 7 days).
+ * writeInAppNotification, read-state via the mark callables, member-initiated
+ * removal via the delete callables), push token registrations, and the daily
+ * retention sweep (unread 30 days, read 7 days).
+ *
+ * The delete callables are what let a member clear their own inbox (the
+ * Android swipe-to-delete and "delete all"); retention still expires whatever
+ * they leave behind. Their ownership is structural — every reference is built
+ * from the authenticated uid — so no caller can name another member's inbox.
  *
  * `notifications-onNotificationCreated` is the FCM delivery path: a create
  * trigger on `notifications/{uid}/items/{id}` that pushes the item to the
@@ -506,6 +518,10 @@ export const billboards = {
 export const notifications = {
   markRead,
   markAllRead,
+  // Aliased because `delete` is a reserved word and cannot be an import
+  // binding; the deployed name is still `notifications-delete`.
+  delete: deleteNotification,
+  deleteAll: deleteAllNotifications,
   registerPushToken,
   unregisterPushToken,
   adminSend: notificationsAdminSend,

@@ -1,19 +1,25 @@
 /**
- * notifications.markRead / notifications.markAllRead — authenticated
- * callables (contracts/functions/functions.json).
+ * notifications.markRead / notifications.markAllRead / notifications.delete /
+ * notifications.deleteAll — authenticated callables
+ * (contracts/functions/functions.json).
  *
- * The inbox is backend-write-only, so read-state changes go through these
- * callables instead of direct document writes. Ownership is structural:
- * the callables only ever touch `notifications/{caller}/items/...`, so a
- * notification ID belonging to another user is simply not-found (legacy
- * parity). Both are idempotent.
+ * The inbox is backend-write-only, so read-state changes and removals go
+ * through these callables instead of direct document writes. Ownership is
+ * structural for ALL FOUR: they only ever address
+ * `notifications/{caller}/items/...`, so a notification ID belonging to
+ * another user resolves to a document that does not exist in the caller's
+ * inbox and can never be touched — there is no code path that takes a uid
+ * from the request. All four are idempotent.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
-import { parseMarkNotificationReadInput } from './notifications-core';
+import {
+  parseDeleteNotificationInput,
+  parseMarkNotificationReadInput,
+} from './notifications-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -23,6 +29,7 @@ const CALLABLE_OPTS = {
 };
 
 const MARK_ALL_BATCH_SIZE = 500;
+const DELETE_ALL_BATCH_SIZE = 500;
 
 export interface MarkReadResponse {
   notificationId: string;
@@ -89,5 +96,104 @@ export const markAllRead = onCall(
     }
 
     return { markedCount };
+  },
+);
+
+export interface DeleteNotificationResponse {
+  notificationId: string;
+  /** False when there was nothing to delete (idempotent replay). */
+  deleted: boolean;
+}
+
+/**
+ * Deletes ONE of the caller's own inbox items (the per-row swipe-to-delete on
+ * the Android inbox).
+ *
+ * Ownership needs no check because it is structural: the reference is built
+ * from `actor.uid`, never from the request, so the only collection this
+ * callable can address is the caller's own. Another member's notification id
+ * therefore names a document that does not exist HERE — their item is left
+ * untouched and the response is the same as any other miss.
+ *
+ * That miss is a silent `{ deleted: false }` rather than a not-found error
+ * (deliberately unlike markRead, which reports not-found because failing to
+ * mark something read is worth surfacing). A delete has nothing to report:
+ * the requested end state — "this notification is gone from my inbox" —
+ * already holds. It makes a double-swipe, a retry after a dropped response,
+ * and a race with the retention sweep all no-ops instead of errors the client
+ * would have to special-case, and it keeps the response from being an oracle
+ * for whether an id exists in someone else's inbox.
+ */
+export const deleteNotification = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<DeleteNotificationResponse> => {
+    const actor = await requireActiveActor(request);
+
+    const parsed = parseDeleteNotificationInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const ref = db
+      .collection('notifications')
+      .doc(actor.uid)
+      .collection('items')
+      .doc(parsed.input.notificationId);
+
+    const deleted = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) {
+        return false;
+      }
+      tx.delete(ref);
+      return true;
+    });
+
+    return { notificationId: parsed.input.notificationId, deleted };
+  },
+);
+
+export interface DeleteAllNotificationsResponse {
+  deletedCount: number;
+}
+
+/**
+ * Empties the caller's inbox (the "delete all" action, which the client puts
+ * behind a confirmation because it is irreversible).
+ *
+ * Same structural ownership as the single delete: the collection is derived
+ * from `actor.uid` and the callable takes no input at all, so there is no
+ * value a caller could supply that would reach another member's inbox.
+ *
+ * Batched and re-queried the way markAllRead is, because a batch is capped at
+ * 500 writes; the loop terminates because each committed batch removes the
+ * documents the next query would return. Idempotent — a replay finds an empty
+ * collection and reports 0. A run that exhausts the 30s timeout part-way is
+ * safe for the same reason: the deletes it did commit stand, and re-running
+ * finishes the rest.
+ */
+export const deleteAllNotifications = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<DeleteAllNotificationsResponse> => {
+    const actor = await requireActiveActor(request);
+
+    const items = db.collection('notifications').doc(actor.uid).collection('items');
+    let deletedCount = 0;
+    for (;;) {
+      const page = await items.limit(DELETE_ALL_BATCH_SIZE).get();
+      if (page.empty) {
+        break;
+      }
+      const batch = db.batch();
+      for (const doc of page.docs) {
+        batch.delete(doc.ref);
+      }
+      await batch.commit();
+      deletedCount += page.size;
+      if (page.size < DELETE_ALL_BATCH_SIZE) {
+        break;
+      }
+    }
+
+    return { deletedCount };
   },
 );

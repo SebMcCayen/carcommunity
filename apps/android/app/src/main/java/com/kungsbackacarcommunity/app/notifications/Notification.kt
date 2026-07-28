@@ -96,6 +96,41 @@ object Notifications {
     /** Number of unread items. */
     fun unreadCount(items: List<AppNotification>): Int = items.count { !it.isRead }
 
+    /**
+     * The rows the inbox should actually render: the server's items minus the
+     * ones a delete has optimistically removed.
+     *
+     * Optimistic removal is a VIEW over the snapshot, never an edit of it. The
+     * snapshot stays the single source of truth, so a delete that the server
+     * refuses is undone by dropping its id from [pendingDeletedIds] — the row
+     * reappears with its real contents, because it was never taken out of the
+     * list it is derived from. Deleting an item that isn't there is a no-op,
+     * so a stale id can only ever fail to match.
+     */
+    fun visibleItems(
+        items: List<AppNotification>,
+        pendingDeletedIds: Set<String>,
+    ): List<AppNotification> =
+        if (pendingDeletedIds.isEmpty()) items else items.filterNot { it.id in pendingDeletedIds }
+
+    /**
+     * The pending-delete set narrowed to ids the server still returns.
+     *
+     * Run against every snapshot. A delete that SUCCEEDED takes its item out of
+     * the snapshot, and this is what then retires the id: the set holds only
+     * ids that are still being hidden from something, so it cannot grow without
+     * bound over a long-lived screen. An id whose call is still in flight is
+     * kept, because its item is still in the snapshot.
+     */
+    fun prunePendingDeletes(
+        pendingDeletedIds: Set<String>,
+        items: List<AppNotification>,
+    ): Set<String> {
+        if (pendingDeletedIds.isEmpty()) return pendingDeletedIds
+        val present = items.mapTo(HashSet()) { it.id }
+        return pendingDeletedIds.filterTo(LinkedHashSet()) { it in present }
+    }
+
     /** Newest first; items without a timestamp sort last. */
     fun sortedForInbox(items: List<AppNotification>): List<AppNotification> =
         items.sortedWith(compareByDescending { it.createdAtMillis ?: Long.MIN_VALUE })

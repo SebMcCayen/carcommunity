@@ -296,13 +296,20 @@ service cloud.firestore {
     // suspended users can still see the essential account notices that are
     // delivered to them (the backend writer enforces that suspended users
     // receive ONLY those categories). Backend-only writes: delivery goes
-    // through writeInAppNotification and read-state through
-    // notifications.markRead / markAllRead, keeping the backend the sole
-    // authority for notification content and eligibility.
+    // through writeInAppNotification, read-state through
+    // notifications.markRead / markAllRead, and member-initiated removal
+    // (the Android inbox's swipe-to-delete and "delete all") through
+    // notifications.delete / notifications.deleteAll — keeping the backend
+    // the sole authority for notification content and eligibility.
+    // Removal is a callable rather than a client delete permission on
+    // purpose: the callables address only notifications/{caller}/items,
+    // derived from the authenticated uid, so ownership is structural. A
+    // delete rule here would have to re-state that ownership in rules AND
+    // open the collection to client writes, for no gain.
     // -------------------------------------------------------------------------
     match /notifications/{userId}/items/{notificationId} {
       allow read: if isOwner(userId);
-      // No client writes.
+      // No client writes — deletes go through the callables above.
     }
 
     // -------------------------------------------------------------------------

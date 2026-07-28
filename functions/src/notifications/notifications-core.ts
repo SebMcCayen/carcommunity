@@ -229,6 +229,13 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 
 export const parseMarkNotificationReadInput = (d: unknown) =>
   parse(markNotificationReadInputSchema, d, 'Expected { notificationId }.');
+/**
+ * notifications.delete addresses an item exactly the way markRead does — one
+ * `notificationId`, validated as a well-formed Firestore id — so it shares the
+ * schema instead of declaring a byte-identical twin that could drift. The
+ * alias exists so the callable parses against its own name.
+ */
+export const parseDeleteNotificationInput = parseMarkNotificationReadInput;
 export const parseRegisterPushTokenInput = (d: unknown) =>
   parse(
     registerPushTokenInputSchema,

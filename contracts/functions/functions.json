@@ -568,6 +568,24 @@
       "source": "docs/migration/backend-domain-mapping.md (Notifications)"
     },
     {
+      "name": "notifications.delete",
+      "domain": "notifications",
+      "description": "Deletes ONE of the caller's own in-app notifications ({ notificationId }) — the Android inbox's swipe-to-delete. The inbox is backend-write-only, so removal goes through this callable rather than a client delete, and the firestore.rules match stays read-only. Ownership is structural rather than checked: the document reference is built from the authenticated uid and the callable accepts no uid, so the only collection it can address is notifications/{caller}/items — another member's notification id names a document that does not exist there, and their item is untouched. A miss is a silent { deleted: false } rather than not-found (deliberately unlike markRead): the requested end state already holds, which makes a double-swipe, a retry after a dropped response, and a race with the retention sweep all no-ops instead of errors, and keeps the response from being an oracle for another member's inbox. The client removes the row optimistically and restores it when this callable fails, so a failed delete never silently drops a notification that still exists. Deployed via grouped export as notifications-delete (functions/src/notifications/manageNotifications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
+      "name": "notifications.deleteAll",
+      "domain": "notifications",
+      "description": "Empties the caller's in-app inbox and returns deletedCount — the Android inbox's \"delete all\", which the client puts behind a confirmation because it is irreversible. Takes no input at all and derives the collection from the authenticated uid, so there is no value a caller could supply that would reach another member's inbox. Batched at 500 and re-queried the way markAllRead is; the loop terminates because each committed batch removes the documents the next query would return. Idempotent (a replay reports 0), and a run cut short by the timeout is safe for the same reason — the committed deletes stand and a re-run finishes the rest. Deployed via grouped export as notifications-deleteAll (functions/src/notifications/manageNotifications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
       "name": "notifications.registerPushToken",
       "domain": "notifications",
       "description": "Registers a push device token. The raw FCM token is stored in the userPrivate/{uid}/pushTokens document (FCM addresses a device BY the token, so a hash-only registry cannot send); the SHA-256 hash remains the document ID, which keeps registration idempotent — re-registers bump lastSeenAt. Multiple devices per member are supported (one document per token). The raw token is never logged and never returned: the response carries only the tokenId hash, and the collection denies ALL client access in firestore.rules. Gated by the pushNotifications feature flag. Deployed via grouped export as notifications-registerPushToken (functions/src/notifications/pushTokens.ts).",
