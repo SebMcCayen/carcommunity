@@ -534,130 +534,122 @@ fun MapHome(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            // 1. Report-incident control — opens the type picker. Shown only
-            //    when incident reporting is available (a repository configured);
-            //    when it is not, the remaining controls close up by one slot and
-            //    the layers control leads — no gap, no placeholder holding its
-            //    place. Their order relative to each other is what does not change.
-            //    Deliberately takes CircleControl's DEFAULT surface/onSurface
-            //    colours (like the compass and recenter controls) rather than
-            //    the amber warning colour: it is an "open the report picker"
-            //    affordance, not a live warning state, and an always-amber
-            //    button in a stack of neutral ones reads as a permanent alert.
-            if (incidentReportingEnabled) {
-                CircleControl(
-                    icon = Icons.Filled.Warning,
-                    contentDescription = stringResource(R.string.incidents_reportButton),
-                    onClick = { reportOpen = true },
-                    modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
-                )
-            }
-            // The live-location broadcast control that used to sit here has been
-            // REMOVED. Starting a session is the centre "+" → Create → Single
-            // session; while a session runs, the centre control's manage sheet
-            // (shell-level [LiveSharePopup]) hosts Stop, Hide me now, and Who can
-            // see me — so neither privacy capability was lost with the button.
-            // The live-sharing state still tints the map puck (see
+            // The live-location broadcast control that used to sit in this stack
+            // has been REMOVED. Starting a session is the centre "+" → Create →
+            // Single session; while a session runs, the centre control's manage
+            // sheet (shell-level [LiveSharePopup]) hosts Stop, Hide me now, and
+            // Who can see me — so neither privacy capability was lost with the
+            // button. The live-sharing state still tints the map puck (see
             // [isLiveSharing]); it just no longer has a dedicated right-side disc.
             //
-            // 2. Map-layers control — opens the transparent layers popup
-            //    (traffic / day-night / 3D toggles). Highlighted while any of
-            //    those non-default layers is active, so an enabled overlay is
-            //    still discoverable from the collapsed control. Day/night counts
-            //    as "active" only when the user has manually DEVIATED from the
-            //    system default (desiredMapMode set AND different from the theme
-            //    default) — a system-driven default Night (dark theme, untouched)
-            //    must NOT light up the button.
-            val layersActive =
-                trafficOn ||
-                    (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
-                    !is3d
-            CircleControl(
-                icon = Icons.Filled.Layers,
-                contentDescription = stringResource(R.string.shell_layersButton),
-                containerColor =
-                    if (layersActive) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.surface
-                    },
-                // The GLYPH always takes the same onSurface colour as every other
-                // control in this stack — near-white on the dark theme, ink on the
-                // light one. It used to switch to onPrimaryContainer while active,
-                // which in the dark theme is crownGold, i.e. a yellow layers icon
-                // that matched nothing else on the map. The active state is carried
-                // by the container tint above, not by recolouring the icon.
-                contentColor = MaterialTheme.colorScheme.onSurface,
-                onClick = { layersOpen = true },
-                modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
-            )
-            // 4. Compass — a TWO-MODE orientation toggle:
-            //    - NORTH-UP (default): true north stays at the top. The glyph is a
-            //      compass rose rotated by the live map bearing so it keeps
-            //      pointing at true north as the user rotates the map.
-            //    - COURSE-UP: the map rotates so the user's direction of travel
-            //      points up. The glyph is the navigation arrow, fixed "up" (your
-            //      heading is always up), so it does NOT rotate.
-            //    Tapping toggles the two and applies it immediately — rotate to
-            //    north-up, or to the current heading — while re-centring on the
-            //    user, so the old "reset to north AND re-centre" behaviour is not
-            //    regressed (it is now the north-up half of the toggle). Only the
-            //    ICON differs between modes; the button keeps CircleControl's
-            //    DEFAULT container/content colours in BOTH modes (no colour or
-            //    container change), exactly like the layers/recenter controls. The
-            //    built-in Mapbox compass stays disabled so this is the only compass.
-            //    Sits directly ABOVE the my-location control, the pair they form.
-            CircleControl(
-                icon =
-                    when (compassMode) {
-                        MapCompassMode.NorthUp -> Icons.Filled.Explore
-                        MapCompassMode.CourseUp -> Icons.Filled.Navigation
-                    },
-                contentDescription =
-                    stringResource(
-                        when (compassMode) {
-                            MapCompassMode.NorthUp -> R.string.shell_compassNorthUp
-                            MapCompassMode.CourseUp -> R.string.shell_compassCourseUp
-                        },
-                    ),
-                onClick = {
-                    val next =
-                        when (compassMode) {
-                            MapCompassMode.NorthUp -> MapCompassMode.CourseUp
-                            MapCompassMode.CourseUp -> MapCompassMode.NorthUp
-                        }
-                    compassMode = next
-                    // Apply now for immediacy (the LaunchedEffect above re-syncs a
-                    // frame later, and setCompassMode is idempotent for the same
-                    // mode, so this direct call is what makes the rotation feel
-                    // instant). setCompassMode eases to the new orientation and
-                    // re-centres.
-                    mapSurface.setCompassMode(next)
-                },
-                // north-up: rotate the rose by the map bearing to keep it pointing
-                // north. course-up: no rotation (heading is always screen-up).
-                iconRotationDegrees =
-                    when (compassMode) {
-                        MapCompassMode.NorthUp -> -bearing
-                        MapCompassMode.CourseUp -> 0f
-                    },
-                modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
-            )
-            // 5. Recenter / my-location — calls MapSurface.recenter(). Re-centres
-            //    WITHOUT touching bearing, which is what still separates it from
-            //    the compass above: it keeps the map rotated the way the user left
-            //    it.
-            CircleControl(
-                icon = Icons.Filled.MyLocation,
-                contentDescription = stringResource(R.string.shell_recenter),
-                onClick = onRecenter,
-            )
-            // 6. Chat bubble — opens the chat hub; shows a badge with
-            //    the unread ("missed") message count when > 0.
-            ChatCircleControl(
-                unreadCount = unreadChatCount,
-                onClick = onOpenChat,
-            )
+            // WHICH controls, and in WHAT order, is [MapControlSet.rightSideStack]
+            // — the one list turn-by-turn renders too, so the two stacks cannot
+            // drift apart again. This `when` is exhaustive, so adding a member to
+            // [MapCircleControlKind] fails to compile here until this screen draws
+            // it. What each control DOES is still local to its own screen (a
+            // re-centre means something different to a follow camera), which is
+            // why the list carries kinds rather than composables.
+            MapControlSet.rightSideStack(incidentReportingEnabled).forEach { control ->
+                when (control) {
+                    // Report-incident control — opens the type picker. Present
+                    // only when incident reporting is available (a repository
+                    // configured); when it is not, the remaining controls close up
+                    // by one slot and the layers control leads — no gap, no
+                    // placeholder holding its place.
+                    //
+                    // Deliberately takes CircleControl's DEFAULT surface/onSurface
+                    // colours (like the compass and recenter controls) rather than
+                    // the amber warning colour: it is an "open the report picker"
+                    // affordance, not a live warning state, and an always-amber
+                    // button in a stack of neutral ones reads as a permanent alert.
+                    MapCircleControlKind.Report ->
+                        CircleControl(
+                            icon = Icons.Filled.Warning,
+                            contentDescription = stringResource(R.string.incidents_reportButton),
+                            onClick = { reportOpen = true },
+                            modifier = Modifier.testTag(MAP_HOME_REPORT_TAG),
+                        )
+
+                    // Map-layers control — opens the transparent layers popup
+                    // (alerts / traffic / day-night / 3D toggles). Highlighted
+                    // while any of those non-default layers is active, so an
+                    // enabled overlay is still discoverable from the collapsed
+                    // control. Day/night counts as "active" only when the user has
+                    // manually DEVIATED from the system default (desiredMapMode set
+                    // AND different from the theme default) — a system-driven
+                    // default Night (dark theme, untouched) must NOT light it up.
+                    MapCircleControlKind.Layers -> {
+                        val layersActive =
+                            trafficOn ||
+                                (desiredMapMode != null && desiredMapMode != systemDefaultMode) ||
+                                !is3d
+                        CircleControl(
+                            icon = Icons.Filled.Layers,
+                            contentDescription = stringResource(R.string.shell_layersButton),
+                            containerColor =
+                                if (layersActive) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                },
+                            // The GLYPH always takes the same onSurface colour as
+                            // every other control in this stack — near-white on the
+                            // dark theme, ink on the light one. It used to switch to
+                            // onPrimaryContainer while active, which in the dark
+                            // theme is crownGold, i.e. a yellow layers icon that
+                            // matched nothing else on the map. The active state is
+                            // carried by the container tint above, not by
+                            // recolouring the icon.
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                            onClick = { layersOpen = true },
+                            modifier = Modifier.testTag(MAP_HOME_LAYERS_TAG),
+                        )
+                    }
+
+                    // Compass — the shared two-mode orientation toggle (see
+                    // [CompassCircleControl]). Sits directly ABOVE the my-location
+                    // control, the pair they form. Tapping applies the new mode
+                    // immediately — rotate to north-up, or to the current heading —
+                    // while re-centring on the user, so the pre-toggle "reset to
+                    // north AND re-centre" behaviour is not regressed (it is now
+                    // the north-up half of the toggle).
+                    MapCircleControlKind.Compass ->
+                        CompassCircleControl(
+                            compassMode = compassMode,
+                            bearing = bearing,
+                            onModeChange = { next ->
+                                compassMode = next
+                                // Apply now for immediacy (the LaunchedEffect above
+                                // re-syncs a frame later, and setCompassMode is
+                                // idempotent for the same mode, so this direct call
+                                // is what makes the rotation feel instant).
+                                // setCompassMode eases to the new orientation and
+                                // re-centres.
+                                mapSurface.setCompassMode(next)
+                            },
+                            modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
+                        )
+
+                    // Recenter / my-location — calls MapSurface.recenter().
+                    // Re-centres WITHOUT touching bearing, which is what still
+                    // separates it from the compass above: it keeps the map rotated
+                    // the way the user left it.
+                    MapCircleControlKind.Recenter ->
+                        CircleControl(
+                            icon = Icons.Filled.MyLocation,
+                            contentDescription = stringResource(R.string.shell_recenter),
+                            onClick = onRecenter,
+                        )
+
+                    // Chat bubble — opens the chat hub; shows a badge with the
+                    // unread ("missed") message count when > 0.
+                    MapCircleControlKind.Chat ->
+                        ChatCircleControl(
+                            unreadCount = unreadChatCount,
+                            onClick = onOpenChat,
+                        )
+                }
+            }
         }
 
         // Incident-report flow, in three steps (see the state block above).
@@ -806,7 +798,7 @@ const val MAP_HOME_LIVE_POPUP_TAG = "map_home_live_popup"
  * switches still move so the wiring is exercised without a device.
  */
 @Composable
-private fun MapLayersPopup(
+internal fun MapLayersPopup(
     incidentsOn: Boolean,
     onIncidentsChange: (Boolean) -> Unit,
     trafikverketDataShown: Boolean,
@@ -1343,7 +1335,7 @@ const val MAP_HOME_CHAT_TAG = "map_home_chat"
  * when [unreadCount] is 0.
  */
 @Composable
-private fun ChatCircleControl(
+internal fun ChatCircleControl(
     unreadCount: Int,
     onClick: () -> Unit,
 ) {
@@ -1372,6 +1364,69 @@ private fun ChatCircleControl(
             onClick = onClick,
         )
     }
+}
+
+/**
+ * The map's compass: a TWO-MODE orientation toggle.
+ *
+ * - NORTH-UP: true north stays at the top. The glyph is a compass rose rotated
+ *   by the live map [bearing] so it keeps pointing at true north as the map
+ *   rotates under it.
+ * - COURSE-UP: the map rotates so the direction of travel points up. The glyph
+ *   is the navigation arrow, fixed "up" (your heading is always up), so it does
+ *   NOT rotate.
+ *
+ * Tapping toggles the two and reports the NEW mode through [onModeChange]; only
+ * the ICON differs between modes — the button keeps [CircleControl]'s DEFAULT
+ * container/content colours in BOTH, exactly like the layers and recenter
+ * controls beside it. The built-in Mapbox compass is disabled on both maps so
+ * this is the only compass on screen.
+ *
+ * `internal` and hoisted out of [MapHome] because turn-by-turn draws the SAME
+ * compass. It used to have its own: a one-way "reset to north" button with a
+ * different glyph (the navigation arrow, in the north-up ROLE) and a different
+ * label, which is exactly the kind of drift this composable now makes
+ * impossible. What each screen DOES with the new mode still differs — the map
+ * home eases its camera, navigation overrides its follow camera's bearing — so
+ * the action stays with the caller.
+ */
+@Composable
+internal fun CompassCircleControl(
+    compassMode: MapCompassMode,
+    bearing: Float,
+    onModeChange: (MapCompassMode) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    CircleControl(
+        icon =
+            when (compassMode) {
+                MapCompassMode.NorthUp -> Icons.Filled.Explore
+                MapCompassMode.CourseUp -> Icons.Filled.Navigation
+            },
+        contentDescription =
+            stringResource(
+                when (compassMode) {
+                    MapCompassMode.NorthUp -> R.string.shell_compassNorthUp
+                    MapCompassMode.CourseUp -> R.string.shell_compassCourseUp
+                },
+            ),
+        onClick = {
+            onModeChange(
+                when (compassMode) {
+                    MapCompassMode.NorthUp -> MapCompassMode.CourseUp
+                    MapCompassMode.CourseUp -> MapCompassMode.NorthUp
+                },
+            )
+        },
+        // north-up: rotate the rose by the map bearing to keep it pointing north.
+        // course-up: no rotation (heading is always screen-up).
+        iconRotationDegrees =
+            when (compassMode) {
+                MapCompassMode.NorthUp -> -bearing
+                MapCompassMode.CourseUp -> 0f
+            },
+        modifier = modifier,
+    )
 }
 
 /**
@@ -1690,16 +1745,17 @@ private fun ParticipantChip(count: Int) {
  * chat, top-to-bottom).
  *
  * `internal`, not private, because the turn-by-turn navigation screen draws the
- * SAME controls (see `navigation/turnbyturn/TurnByTurnNavScreen.kt`): its
- * compass and live-location buttons must be the same control as the map home's,
- * not a look-alike, so a change to the map's control language reaches
- * navigation automatically instead of drifting from it.
+ * SAME stack (see `navigation/turnbyturn/TurnByTurnNavScreen.kt`). Navigation is
+ * a MODE of the map, so pressing "Start" must not change which buttons are on
+ * screen, what they look like or what they do: same controls, same order (from
+ * [MapControlSet.rightSideStack]), same glyphs, same colour rules — not more,
+ * not fewer, and no navigation-only kinds of button.
  *
- * What is shared is the control LANGUAGE — shape, size, glyph, colour rules —
- * not the stack ORDER or the tap behaviour. Those two deliberately diverge:
- * navigation drives a follow-mode camera, where re-centring means resuming
- * follow and the my-location control only appears once follow has detached, so
- * its compass resets bearing only while the map home's compass also re-centres.
+ * What still differs is what each control DOES with the tap, and only where the
+ * two cameras genuinely differ: navigation drives a FOLLOW camera, so re-centring
+ * means resuming follow and the compass pins an override on that camera rather
+ * than easing a free one. Same button, same promise, different machinery behind
+ * it.
  */
 @Composable
 internal fun CircleControl(
