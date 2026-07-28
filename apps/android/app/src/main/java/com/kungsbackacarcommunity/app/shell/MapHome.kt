@@ -1042,11 +1042,11 @@ internal fun EventMarkerInfoPopup(
  * the caller). Which rows appear is decided by the pure-logic
  * [com.kungsbackacarcommunity.app.shell.LiveManageSheet.actions], so the
  * "everything stays reachable" guarantee is unit-tested:
- * - While sharing: the never-gated Hide-me-now, plus a prominent Stop-sharing
- *   action WHEN [onStop] is wired. This is the sheet the map's centre live
- *   control opens while a session runs, and it is the home the right-side
- *   broadcast button's two unique capabilities moved into — Hide me now here,
- *   and Who-can-see-me via "More options".
+ * - While sharing WITH [onStop] wired (the bottom bar's STOP control): the
+ *   Stop-sharing action, and nothing else. This is a stop sheet — "Hide me now"
+ *   and "More options" were removed from it.
+ * - While sharing WITHOUT [onStop] (turn-by-turn navigation): no Stop, but the
+ *   never-gated Hide-me-now and the "More options" audience entry, unchanged.
  * - Not sharing and [canShareLive]: a single "start sharing" action. The 1h/2h/4h
  *   duration choice is NOT here — [onStart] hands off to the single-session start
  *   flow (shared with the "+" Create → Single session), which is where the
@@ -1054,18 +1054,19 @@ internal fun EventMarkerInfoPopup(
  * - Not sharing and not [canShareLive]: an "unavailable" notice (starting is
  *   FLAG-gated by LIVE_LOCATION, NOT member-gated — sharing your own position is
  *   free); Hide stays reachable in the sharing state.
- * A "More options" row opens the full [com.kungsbackacarcommunity.app.live.LiveLocationScreen]
- * for the complete controls + privacy details — the audience screen where the
- * caller sees and manages exactly who can see them. Every row, including this
- * one, is driven by [LiveManageSheet.actions] so the model is the single source
- * of truth for what the sheet shows. Each action closes the popup.
+ * The "More options" row opens the full
+ * [com.kungsbackacarcommunity.app.live.LiveLocationScreen] for the complete
+ * controls + privacy details — the audience screen where the caller sees and
+ * manages exactly who can see them. Every row, including this one, is driven by
+ * [LiveManageSheet.actions] so the model is the single source of truth for what
+ * the sheet shows. Each action closes the popup.
  *
- * @param onStop optional stop-sharing handler. When null (turn-by-turn
- *   navigation) NO Stop row is shown, keeping stopping to the map's single stop
- *   affordance there; when supplied (the shell's centre-control sheet) Stop leads
- *   the sheet. Splitting it out this way lets the same sheet host Stop for the
- *   map home while staying stop-free in navigation, instead of forking into two
- *   live-sharing UIs.
+ * @param onStop optional stop-sharing handler, and the flag that picks between
+ *   the two sheets above. When null (turn-by-turn navigation) NO Stop row is
+ *   shown, keeping stopping to the map's single stop affordance there; when
+ *   supplied (the shell's centre control) the sheet becomes the stop sheet.
+ *   Splitting it out this way lets one sheet serve both instead of forking into
+ *   two live-sharing UIs.
  *
  * `internal`, not private, because turn-by-turn navigation shows THIS sheet too:
  * a live-location session keeps running while the user navigates, so the
@@ -1171,8 +1172,9 @@ internal fun LiveSharePopup(
                     // "Hide me now" — the immediate privacy escape hatch. Distinct
                     // from Stop: it works even while suspended (when stopSession
                     // does not), so it stays offered for the whole life of a
-                    // session. This is one of the two capabilities relocated off
-                    // the removed right-side broadcast button.
+                    // session — in turn-by-turn navigation and on the full
+                    // live-location screen. The bottom bar's stop sheet no longer
+                    // carries it (see [LiveManageSheet.actions]).
                     OutlinedButton(
                         onClick = {
                             onHideMeNow()
@@ -1212,10 +1214,10 @@ internal fun LiveSharePopup(
                 if (rows.showAudienceEntry) {
                     // The full live-location screen for the complete controls +
                     // privacy details — this is the "Who can see me" /
-                    // audience-management entry point (the second capability
-                    // relocated off the removed right-side broadcast button).
-                    // Driven by the model so a single source of truth decides
-                    // when it appears, matching what the ShellNavTest asserts.
+                    // audience-management entry point. Driven by the model so a
+                    // single source of truth decides when it appears (the bottom
+                    // bar's stop sheet drops it), matching what ShellNavTest
+                    // asserts.
                     TextButton(
                         onClick = {
                             onOpenDetails()

@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 /**
  * Compose UI tests for the bottom bar's dual-purpose centre control: "+" when
  * idle, and — while a live session runs — the live-session disc that raises the
- * manage sheet (Stop / Hide me now / Who can see me).
+ * stop sheet (whose only action is ending the session).
  *
  * Tested against [ShellBottomBar] directly rather than the whole shell, because
  * the sharing state needs a live-location repository the shell test has no way

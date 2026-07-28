@@ -644,15 +644,14 @@ class MapFirstShellTest {
     }
 
     /**
-     * The live-share MANAGE sheet — the [LiveSharePopup] the centre live control
-     * raises while a session runs — must expose all three session controls, so
-     * removing the map's right-side broadcast button loses none of them: Stop
-     * (the prominent action), Hide me now (the privacy escape hatch), and "More
-     * options" (the audience / "who can see me" screen). Rendered directly here
+     * The live-share STOP sheet — the [LiveSharePopup] the bottom bar's live
+     * control raises while a session runs — is a stop sheet and nothing more:
+     * "Hide me now" and "More options" were removed from it, so the only thing
+     * pressing the stop sign can lead to is stopping. Rendered directly here
      * because a running session cannot be reached from the no-Firebase shell.
      */
     @Test
-    fun liveManageSheet_whileSharing_exposesStopHideAndAudience() {
+    fun liveStopSheet_whileSharing_exposesStopAndNothingElse() {
         var stopped = 0
         composeTestRule.setContent {
             KccTheme {
@@ -668,10 +667,10 @@ class MapFirstShellTest {
             }
         }
         composeTestRule.onNodeWithTag(MAP_HOME_LIVE_POPUP_TAG).assertIsDisplayed()
-        // All three relocated controls are present.
         composeTestRule.onNodeWithText(str(R.string.liveLocation_stop)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.liveLocation_hideNow)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertIsDisplayed()
+        // The two rows Seb asked to be removed are gone.
+        composeTestRule.onNodeWithText(str(R.string.liveLocation_hideNow)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.shell_liveDetails)).assertDoesNotExist()
         // While sharing there is no Start row.
         composeTestRule.onNodeWithText(str(R.string.liveLocation_start)).assertDoesNotExist()
         // The prominent Stop action drives the wired handler.
@@ -681,7 +680,8 @@ class MapFirstShellTest {
 
     /**
      * The SAME sheet without a stop handler (turn-by-turn navigation's reuse)
-     * shows no Stop row, but must keep the two privacy controls reachable.
+     * shows no Stop row, but must keep the two privacy controls reachable —
+     * removing them from the STOP sheet must not remove them from the app.
      */
     @Test
     fun liveManageSheet_withoutStopHandler_keepsHideAndAudience() {

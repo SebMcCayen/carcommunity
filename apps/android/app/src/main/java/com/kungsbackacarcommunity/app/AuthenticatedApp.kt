@@ -197,15 +197,19 @@ import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
 import com.kungsbackacarcommunity.app.live.LiveActionStatus
+import com.kungsbackacarcommunity.app.live.LiveCommandResult
 import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
+import com.kungsbackacarcommunity.app.live.LiveShareStart
+import com.kungsbackacarcommunity.app.live.LiveStartAttempt
 import com.kungsbackacarcommunity.app.live.NearbyLiveController
 import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
+import com.kungsbackacarcommunity.app.live.OptimisticLiveStart
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.location.LocationAccess
 import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
@@ -318,6 +322,7 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import java.util.Calendar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -1036,6 +1041,10 @@ fun AuthenticatedApp(
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
             val unavailableText = stringResource(R.string.shell_unavailable)
+            // Shown when STARTING a live session fails (the callable errored, or
+            // never answered) — the optimistic STOP sign is taken back at the same
+            // moment, so the user is told why the control returned to "+".
+            val liveErrorText = stringResource(R.string.liveLocation_error)
             // Upsell shown when a non-member tries to view others' live locations
             // on the map (sharing your own remains free).
             val viewLiveMembersOnlyText = stringResource(R.string.shell_viewLiveMembersOnly)
@@ -1509,6 +1518,45 @@ fun AuthenticatedApp(
                     }
                 }
 
+            // --- Optimistic start (instant STOP sign + live bar) -------------
+            // [isSharing] above is the TRUTH, but it only becomes true once the
+            // start callable has returned AND the server's session write has
+            // echoed back down the RTDB listener. Waiting for that left the "+"
+            // sitting there for the whole round trip after a tap. The tap now
+            // also records an attempt in [LiveShareStart], and everything the
+            // user LOOKS at reads [isSharingUi] = observed OR attempt-pending, so
+            // the control flips on the next frame.
+            //
+            // Deliberately NOT used for the session-bound side effects (drive
+            // recording, foreground publisher, KeepScreenOn): those stay on the
+            // observed session, so a start that fails can never leave a phantom
+            // recording or a running service behind.
+            val startAttempt by LiveShareStart.attempt.collectAsState()
+            // Truth landed → drop the overlay. Keyed on the attempt too, so an
+            // attempt recorded while a session is ALREADY observed (a convoy tap
+            // by someone who is already sharing) is discarded straight away
+            // rather than lingering to outlive the session it can't belong to.
+            LaunchedEffect(isSharing, startAttempt) {
+                if (isSharing) LiveShareStart.reconcile(true)
+            }
+            // Expiry backstop: no attempt may outlive its deadline, so a hung or
+            // silently-sessionless start always returns the control to "+".
+            // A never-answered command (InFlight) also says so; a command that
+            // SUCCEEDED but produced no session (live-share disabled server-side,
+            // a convoy that was still forming) reverts silently — nothing failed
+            // from the user's point of view. clearIf keeps a deadline firing at
+            // the same moment as a newer tap from wiping the newer attempt.
+            LaunchedEffect(startAttempt) {
+                val until = OptimisticLiveStart.pendingUntilMillis(startAttempt) ?: return@LaunchedEffect
+                val remaining = until - nowMillis()
+                if (remaining > 0) delay(remaining)
+                LiveShareStart.clearIf(startAttempt)
+                if (startAttempt is LiveStartAttempt.InFlight) {
+                    snackbarHostState.showSnackbar(liveErrorText)
+                }
+            }
+            val isSharingUi = OptimisticLiveStart.isSharing(isSharing, startAttempt, nowMillis())
+
             // --- Single-session drive recording -----------------------------
             // A Single (solo live-sharing) session records the drive alongside
             // the live marker so it can land in History. The recorder is fed by
@@ -1695,7 +1743,7 @@ fun AuthenticatedApp(
             // when a session starts), NOT per-second: the once-a-second ticker
             // lives inside [LiveSessionBar], so a running session recomposes only
             // the small bar rather than this whole (very large) composable.
-            val liveSessionStartMillis: Long? =
+            val observedSessionStartMillis: Long? =
                 activeRecording?.startedAtMillis
                     ?: liveSession?.let { session ->
                         val expiry = session.expiresAtMillis
@@ -1703,6 +1751,17 @@ fun AuthenticatedApp(
                             session.duration?.let { it.hours.toLong() * 60L * 60L * 1000L }
                         if (expiry != null && durationMs != null) expiry - durationMs else null
                     }
+            // While a start is still optimistic there is no recording and no
+            // session to derive from, so tick from the moment of the TAP. Without
+            // it the STOP sign would show with the bar still hidden — the same
+            // inconsistency, in reverse. The real start replaces it the instant it
+            // is known, and the bar keeps its elapsed time (the tap is ~the start).
+            val liveSessionStartMillis: Long? =
+                OptimisticLiveStart.sessionStartMillis(
+                    observedStartMillis = observedSessionStartMillis,
+                    current = startAttempt,
+                    nowMillis = nowMillis(),
+                )
             // Distance driven this session, straight off the recorder's running
             // total (0 before the first fix / when nothing is recording). Only
             // changes on GPS fixes, which the shell already observes via
@@ -1714,7 +1773,7 @@ fun AuthenticatedApp(
             // in the search strip).
             val liveSessionStart = liveSessionStartMillis
             val liveSessionBarSlot: (@Composable () -> Unit)? =
-                if (isSharing && liveSessionStart != null) {
+                if (isSharingUi && liveSessionStart != null) {
                     {
                         LiveSessionBar(
                             sessionStartMillis = liveSessionStart,
@@ -1747,16 +1806,15 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Whether the live-share MANAGE sheet is shown. Raised by the centre
-            // live control while a session runs (the bottom bar's live disc), it is
-            // the new home for the three session controls that the removed
-            // right-side broadcast button used to own: Stop, Hide me now, and Who
-            // can see me (the audience screen). Only meaningful while sharing, so
-            // it is force-closed the instant a session ends (expiry, sign-out, or
-            // Stop from inside the sheet) by the effect below.
+            // Whether the live-share STOP sheet is shown. Raised by the centre live
+            // control while a session runs (the bottom bar's live disc), it is the
+            // confirm step for ending the session and holds nothing else: "Hide me
+            // now" and "More options" were removed from it. Only meaningful while
+            // sharing, so it is force-closed the instant a session ends (expiry,
+            // sign-out, or Stop from inside the sheet) by the effect below.
             var liveManageOpen by remember { mutableStateOf(false) }
-            LaunchedEffect(isSharing) {
-                if (!isSharing) liveManageOpen = false
+            LaunchedEffect(isSharingUi) {
+                if (!isSharingUi) liveManageOpen = false
             }
 
             // Start the Single session for the given duration. The drive
@@ -1765,8 +1823,46 @@ fun AuthenticatedApp(
             // neither is started explicitly here — LaunchedEffect(isSharing) is the
             // single source of truth for the publisher (the same wiring that makes
             // a convoy AUTO-started session publish).
+            //
+            // What IS done here is the optimistic overlay: the attempt is recorded
+            // BEFORE the callable is issued so the control flips immediately, and
+            // it is resolved the moment the callable answers — settled (wait for
+            // the session to echo back) or failed (take the STOP sign back and say
+            // so). [LiveShareStart.request] returning false is the double-tap
+            // guard: a second tap while the first is in flight issues nothing.
             fun startSingleSession(duration: LiveSessionDuration) {
-                liveLocationCoordinator?.let { c -> scope.launch { c.start(duration) } }
+                val c = liveLocationCoordinator ?: return
+                if (!LiveShareStart.request(nowMillis(), observedSharing = isSharing)) return
+                scope.launch {
+                    val result =
+                        try {
+                            c.start(duration)
+                        } catch (cancellation: CancellationException) {
+                            // The scope died mid-start (sign-out, Activity teardown):
+                            // nothing will resolve this attempt, so drop it rather
+                            // than leave a STOP sign waiting on the timeout.
+                            LiveShareStart.failed()
+                            throw cancellation
+                        }
+                    when (result) {
+                        LiveCommandResult.Success ->
+                            // Issued and accepted: hold the overlay for the short
+                            // echo window while the session finds its way down.
+                            LiveShareStart.settled(nowMillis())
+                        LiveCommandResult.Failed, LiveCommandResult.Busy ->
+                            // Busy belongs HERE, not with Success: the coordinator
+                            // short-circuits on a command already in flight, so
+                            // startSession was never called and there is no session
+                            // coming. Holding the overlay for the echo window would
+                            // show a STOP sign for something that never started.
+                            //
+                            // Only speak up if the attempt was still ours: a start
+                            // that had already timed out has said this once.
+                            if (LiveShareStart.failed()) {
+                                snackbarHostState.showSnackbar(liveErrorText)
+                            }
+                    }
+                }
             }
 
             // Start the Single session IMMEDIATELY — no time/duration choice is
@@ -1793,6 +1889,12 @@ fun AuthenticatedApp(
              * delete the saved drive" choice.
              */
             fun stopLiveShare() {
+                // Drop any optimistic "starting…" overlay first: stopping while a
+                // start is still in flight must return the control to "+" at once,
+                // not keep a STOP sign alive on an attempt the user just abandoned.
+                // (If that start does land server-side, the observed session brings
+                // the STOP sign back and this stop path is available again.)
+                LiveShareStart.clear()
                 val c = liveLocationCoordinator
                 if (c != null) {
                     scope.launch { c.stop() }
@@ -1810,7 +1912,10 @@ fun AuthenticatedApp(
             fun toggleLiveShare() {
                 when (
                     LiveShareToggle.action(
-                        isSharing = isSharing,
+                        // The UI state, so a toggle tapped during an optimistic
+                        // start reads as Stop (matching what is on screen) rather
+                        // than firing a second Start.
+                        isSharing = isSharingUi,
                         canShare = canShareLive,
                         wired = liveLocationCoordinator != null,
                     )
@@ -2549,7 +2654,7 @@ fun AuthenticatedApp(
                         // screen — wired to the same coordinator and the same
                         // start/hide actions as the map home's control below, so
                         // there is one live-sharing behaviour, not two.
-                        isLiveSharing = isSharing,
+                        isLiveSharing = isSharingUi,
                         canShareLive = canShareLive,
                         onStartLiveShare = { requestStartSingleSession() },
                         onHideMeNow = {
@@ -3470,14 +3575,12 @@ fun AuthenticatedApp(
                                     }
                                 },
                                 // While a session runs the centre "+" becomes the
-                                // live-session disc: tapping it raises the manage
-                                // sheet (Stop / Hide me now / Who can see me) rather
-                                // than stopping outright, so the two privacy
-                                // controls that lived only on the removed right-side
-                                // broadcast button are reachable here. Stop is the
-                                // sheet's prominent first action, so ending a
-                                // session is still one flow through this one control.
-                                isSharing = isSharing,
+                                // live-session disc: tapping it raises the stop
+                                // sheet, whose ONLY action is ending the session.
+                                // Reads the optimistic UI state so the disc turns
+                                // into the STOP sign the moment a start is tapped,
+                                // not when the server's session echoes back.
+                                isSharing = isSharingUi,
                                 onManageLiveShare = { liveManageOpen = true },
                             )
                         }
@@ -3556,10 +3659,10 @@ fun AuthenticatedApp(
                             // (which records the drive and prompts to save it to
                             // History at end-of-session). Starts IMMEDIATELY for
                             // the default window — no time/duration is chosen.
-                            // Guard on isSharing so confirming can never disturb
-                            // an active session — the fallback still runs when
-                            // unwired.
-                            if (!isSharing) requestStartSingleSession()
+                            // Guard on the UI sharing state so confirming can never
+                            // disturb an active — or just-requested — session; the
+                            // fallback still runs when unwired.
+                            if (!isSharingUi) requestStartSingleSession()
                         },
                         onConvoy = {
                             showCreateChooser = false
@@ -3572,17 +3675,24 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // Live-share MANAGE sheet: the transparent [LiveSharePopup] the
-                // centre live control raises while a session runs. This is where
-                // the two capabilities the removed right-side broadcast button used
-                // to solely own now live — Hide me now, and Who can see me (the
-                // full LiveLocationScreen via "More options") — alongside a
-                // prominent Stop. Rendered at the shell (not in MapHome) so it is
-                // reachable from every tab the bottom bar is on, and gated on
-                // isSharing so it only ever appears for a live session. Wired to
-                // the SAME stop/hide/details handlers as before, so nothing about
-                // what these actions do changed — only where they are reached.
-                if (liveManageOpen && isSharing) {
+                // Live-share STOP sheet: the transparent [LiveSharePopup] the centre
+                // live control raises while a session runs. It exists to do ONE
+                // thing — end the session — and is the confirm step in front of a
+                // control that sits in the middle of the bottom bar, where a stray
+                // tap would otherwise kill a running session outright.
+                //
+                // "Hide me now" and "More options" were REMOVED from it (Seb,
+                // 2026-07): the stop control should stop, not present a menu. Both
+                // remain wired everywhere else they were — the full
+                // [LiveLocationScreen] and turn-by-turn navigation's copy of this
+                // same sheet (which has no Stop) — so nothing was deleted from the
+                // app, only from this one sheet. That is expressed once, in
+                // [LiveManageSheet.actions], not restated here.
+                //
+                // Rendered at the shell (not in MapHome) so it is reachable from
+                // every tab the bottom bar is on, and gated on the same UI sharing
+                // state as the disc that raises it so the two cannot disagree.
+                if (liveManageOpen && isSharingUi) {
                     LiveSharePopup(
                         isSharing = true,
                         canShareLive = canShareLive,
@@ -3590,6 +3700,10 @@ fun AuthenticatedApp(
                         // shared signature.
                         onStart = {},
                         onStop = { stopLiveShare() },
+                        // Not shown by this sheet (see above); the shared signature
+                        // still requires handlers, and they stay CORRECT rather than
+                        // becoming no-ops, so re-enabling a row can never wire it to
+                        // nothing.
                         onHideMeNow = {
                             val c = liveLocationCoordinator
                             if (c != null) {
@@ -3716,17 +3830,17 @@ internal val ShellBottomBarHeight = 64.dp
  * The 5-tab bottom navigation; Map is the default, highlighted home tab.
  *
  * The centre item is dual-purpose: a "+" that raises the create chooser, and —
- * while [isSharing] — the live-session disc that raises the live-share manage
- * sheet ([onManageLiveShare]). That sheet is the single home for the whole
- * session's controls — Stop (its prominent first action), Hide me now, and Who
- * can see me — so this control still owns ending a session, and the two privacy
- * capabilities that used to live only on the map's now-removed right-side
- * broadcast button are reachable through it.
+ * while [isSharing] — the live-session disc that raises the STOP sheet
+ * ([onManageLiveShare]), whose only action is ending the session.
  *
  * The disc keeps its error-red fill while sharing (an active session drawing
- * attention); tapping it opens the sheet rather than stopping outright, so
- * stopping is one flow-through-one-control away instead of a single tap. The
- * content description reflects that it opens the live controls.
+ * attention); tapping it opens the sheet rather than stopping outright, so a
+ * stray tap on a control in the middle of the bottom bar cannot kill a running
+ * session. The content description reflects that it opens the live controls.
+ *
+ * [isSharing] is the host's OPTIMISTIC sharing state, not the observed session:
+ * the disc must become the STOP sign on the frame the user taps start, not after
+ * the server round trip (see LiveShareStart / OptimisticLiveStart).
  *
  * `internal` rather than private so the "+"→live-disc swap can be tested against
  * this composable directly: the swap needs a RUNNING session, which the
@@ -3771,13 +3885,11 @@ internal fun ShellBottomBar(
             label = null,
         )
         // The centre action is a "+" that starts a session, and — while one RUNS —
-        // the live-session disc that raises the manage sheet: one control for the
+        // the live-session disc that raises the stop sheet: one control for the
         // session's whole life, so the way out is exactly where the way in was.
-        // The sheet leads with Stop (which auto-saves the drive and raises the
-        // Keep/Delete summary via the isSharing effect, where the "keep it or
-        // delete the saved drive" choice is made);
-        // it also carries Hide me now and Who can see me, the two controls the
-        // map's removed right-side broadcast button used to own.
+        // The sheet's single action is Stop (which auto-saves the drive and raises
+        // the Keep/Delete summary via the isSharing effect, where the "keep it or
+        // delete the saved drive" choice is made).
         NavigationBarItem(
             selected = !isSharing && selected == ShellTab.Create,
             onClick = { if (isSharing) onManageLiveShare() else onSelect(ShellTab.Create) },
@@ -3814,8 +3926,8 @@ internal fun ShellBottomBar(
                     Icon(
                         if (isSharing) Icons.Filled.Stop else Icons.Filled.Add,
                         // While sharing the glyph stays the recognisable stop
-                        // square on the red disc, but tapping now opens the manage
-                        // sheet (whose first action is Stop), so the label says
+                        // square on the red disc, but tapping opens the stop sheet
+                        // (one confirm, then the session ends), so the label says
                         // "live location controls" rather than "stop" — honest for
                         // TalkBack about what the tap does.
                         contentDescription =
@@ -4500,6 +4612,11 @@ private fun RouteHost(
                     onViewMember = openProfileIfWired,
                     viewerUid = uid,
                     onConvoyCreated = onConvoyCreated,
+                    // Lets the convoy taps that start a live session server-side
+                    // (create / accept into an active convoy / start) flip the
+                    // shell's live control immediately instead of waiting for the
+                    // session to echo back — the same gate the manual start uses.
+                    liveShareEnabled = canShareLive,
                 )
             } else {
                 LoadingScreen()

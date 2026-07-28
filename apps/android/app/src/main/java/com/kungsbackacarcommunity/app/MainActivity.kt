@@ -72,6 +72,7 @@ import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
+import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.profile.FirebaseProfileRepository
@@ -301,6 +302,13 @@ class MainActivity : ComponentActivity() {
             val signedInUid = (authState as? AuthState.SignedIn)?.uid
             LaunchedEffect(signedInUid) {
                 SingleSessionRecording.clearIfNotOwnedBy(signedInUid)
+                // Same reasoning for the optimistic live-start overlay: it is
+                // process-scoped, so signing out mid-start must not carry a "you
+                // are sharing" claim into the next session. Only on sign-out
+                // (null), never on a re-run with the same uid — an Activity
+                // recreation must LEAVE a start in flight alone, which is half the
+                // reason the overlay is process-scoped in the first place.
+                if (signedInUid == null) LiveShareStart.clear()
             }
 
             // Tint the OS bars from the CURRENTLY displayed theme, not once in
