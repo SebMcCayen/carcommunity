@@ -40,8 +40,10 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -93,6 +95,24 @@ import kotlinx.coroutines.launch
  * (the pair was blocked meanwhile, the request was withdrawn) would leave the
  * row asserting a friendship that does not exist. The coordinator re-fetches
  * after every response and the row re-derives from the new snapshot.
+ *
+ * CONVOY INVITES. A convoy-invite row is TAPPABLE and opens the convoy list,
+ * where that invite is accepted or declined. Before this it rendered as a plain,
+ * inert card: only an UNREAD row was clickable at all, and the only thing that
+ * click did was mark it read — so an invite could be read about here but never
+ * acted on, which is exactly the "tapping does nothing" report.
+ *
+ * A convoy row is also re-derived against live convoy state ([convoyLink]),
+ * because the notification itself is a historical record that is never rewritten
+ * — the same staleness [Notifications.pendingFriendRequestId] handles for friend
+ * requests. A row whose convoy has ENDED is struck through AND labelled
+ * "Konvojen är avslutad" AND carries that in its content description:
+ * strikethrough alone is a visual-only signal that a screen reader does not
+ * announce and a hurried eye misses. It navigates nowhere, because the only
+ * screen it could open would have nothing on it — the explanation is already on
+ * the row, which is better than a screen that repeats it. An invite that has
+ * merely been ANSWERED keeps its tap (the convoy is alive and worth opening) but
+ * says so, so it stops implying something is waiting.
  */
 @Composable
 fun NotificationsScreen(
@@ -111,6 +131,7 @@ fun NotificationsScreen(
     onDeleteAll: () -> Unit = {},
     deleteError: NotificationDeleteError? = null,
     onDismissDeleteError: () -> Unit = {},
+    convoyLink: ConvoyNotificationLink? = null,
 ) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
 
@@ -204,6 +225,16 @@ fun NotificationsScreen(
                         items(state.items, key = { it.id }) { item ->
                             val requestId =
                                 Notifications.pendingFriendRequestId(item, pendingFriendRequestIds)
+                            // Re-derived every composition from whatever convoy
+                            // facts the shell currently holds, so a convoy that
+                            // ends while the inbox is open restyles its rows on
+                            // the next snapshot instead of staying inviting.
+                            val convoyState =
+                                ConvoyNotifications.rowState(
+                                    item,
+                                    convoyLink?.facts.orEmpty(),
+                                )
+                            val tapAction = ConvoyNotifications.tapAction(item, convoyState)
                             SwipeToDeleteRow(onDelete = { onDeleteNotification(item.id) }) {
                                 NotificationCard(
                                     item = item,
@@ -213,6 +244,14 @@ fun NotificationsScreen(
                                         requestId in busyFriendRequestIds,
                                     onAcceptFriendRequest = onAcceptFriendRequest,
                                     onDeclineFriendRequest = onDeclineFriendRequest,
+                                    convoyState = convoyState,
+                                    // Null when there is nowhere to go: the card
+                                    // then keeps its old behaviour (clickable
+                                    // only while unread, to mark read).
+                                    onOpen =
+                                        convoyLink
+                                            ?.takeIf { ConvoyNotifications.navigates(tapAction) }
+                                            ?.let { link -> { link.onOpen(tapAction) } },
                                 )
                             }
                         }
@@ -395,10 +434,38 @@ private fun NotificationCard(
     friendRequestBusy: Boolean = false,
     onAcceptFriendRequest: (String) -> Unit = {},
     onDeclineFriendRequest: (String) -> Unit = {},
+    convoyState: ConvoyRowState = ConvoyRowState.NOT_CONVOY,
+    onOpen: (() -> Unit)? = null,
 ) {
-    val clickModifier = if (item.isRead) Modifier else Modifier.clickable(onClick = onMarkRead)
+    val dead = convoyState.isDead
+    // Tapping still marks read exactly as it always did — opening is ADDED to
+    // that, never instead of it — so unread/read behaviour is unchanged whether
+    // or not the row navigates. A read row becomes clickable only once there is
+    // something to open, so a plain read row stays as inert as before.
+    val onTap: (() -> Unit)? =
+        when {
+            onOpen != null -> {
+                {
+                    if (!item.isRead) onMarkRead()
+                    onOpen()
+                }
+            }
+            !item.isRead -> onMarkRead
+            else -> null
+        }
+    val clickModifier = onTap?.let { Modifier.clickable(onClick = it) } ?: Modifier
+    // One description for the whole card, so an ended convoy is ANNOUNCED as
+    // ended rather than left to a strikethrough a screen reader cannot see.
+    val endedDescription =
+        stringResource(R.string.notifications_convoyEndedRowDescription, item.title)
+    val deadSemantics =
+        if (dead) {
+            Modifier.semantics(mergeDescendants = true) { contentDescription = endedDescription }
+        } else {
+            Modifier
+        }
     Card(
-        modifier = Modifier.fillMaxWidth().then(clickModifier),
+        modifier = Modifier.fillMaxWidth().then(clickModifier).then(deadSemantics),
         colors =
             CardDefaults.cardColors(
                 containerColor =
@@ -421,8 +488,31 @@ private fun NotificationCard(
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
+                color =
+                    if (dead) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+                textDecoration = if (dead) TextDecoration.LineThrough else null,
             )
+            // The label the strikethrough cannot say out loud. Both, always —
+            // never one or the other.
+            when (convoyState) {
+                ConvoyRowState.ENDED ->
+                    Text(
+                        text = stringResource(R.string.notifications_convoyEndedLabel),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                ConvoyRowState.INVITE_ANSWERED ->
+                    Text(
+                        text = stringResource(R.string.notifications_convoyInviteAnsweredLabel),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                else -> Unit
+            }
             (item.previewText ?: item.body)?.takeIf { it.isNotBlank() }?.let { text ->
                 Text(
                     text = text,

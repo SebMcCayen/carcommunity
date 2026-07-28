@@ -569,6 +569,9 @@
     <string name="convoy_barDestinationDismissNotice">Stäng</string>
     <string name="convoy_barDestinationPickTitle">Välj ett mål för konvojen</string>
     <string name="convoy_barDestinationPickAction">Sätt för konvojen</string>
+    <string name="convoy_inviteLinkEnded">Konvojen är avslutad.</string>
+    <string name="convoy_inviteLinkAnswered">Du har redan svarat på inbjudan.</string>
+    <string name="convoy_inviteLinkGone">Inbjudan är inte längre tillgänglig.</string>
     <string name="memberProfile_title">Profil</string>
     <string name="memberProfile_unknownMember">Medlem</string>
     <string name="memberProfile_unavailable">Den här profilen är inte tillgänglig.</string>
@@ -1069,6 +1072,9 @@
     <string name="notifications_channelSocialDescription">Meddelanden, vänförfrågningar och konvoj-inbjudningar från andra medlemmar.</string>
     <string name="notifications_channelGeneralName">Allmänt</string>
     <string name="notifications_channelGeneralDescription">Medlemskapsuppdateringar och andra meddelanden från klubben.</string>
+    <string name="notifications_convoyEndedLabel">Konvojen är avslutad</string>
+    <string name="notifications_convoyEndedRowDescription">%1$s. Konvojen är avslutad.</string>
+    <string name="notifications_convoyInviteAnsweredLabel">Du har redan svarat på inbjudan</string>
     <string name="feedback_title">Rapportera ett problem</string>
     <string name="feedback_openButton">Rapportera ett problem</string>
     <string name="feedback_publicNoticeTitle">Rapporten är offentlig</string>

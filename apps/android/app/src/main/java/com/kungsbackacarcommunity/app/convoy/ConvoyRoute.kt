@@ -52,6 +52,22 @@ private enum class ConvoyView { List, Create, Detail }
  * the create screen. Null (a config-less/test host with no map to land on) falls
  * back to opening the new convoy's detail so the flow never dead-ends.
  *
+ * INVITE DEEP LINK. [inviteDeepLinkConvoyId] is the convoy a tapped convoy-invite
+ * notification was about. The invite is answered on the LIST that is already
+ * here (see ConvoyListScreen's pending-invite section) — no second invite screen
+ * exists or should — so the deep link does two small things: it pulls that
+ * invite to the top of the section, and it re-checks what actually became of it
+ * against THIS route's freshly loaded list. That second part is the race: the
+ * inbox decided the row looked actionable from a snapshot that could be minutes
+ * old, and by the time the tap lands the convoy may have ended or the invite may
+ * have been answered on another device. Rather than dropping the member on a
+ * list with no matching invite and no explanation — "tapping does nothing", in a
+ * new costume — [ConvoyInviteDeepLink] names the outcome and the list shows it.
+ *
+ * The id is consumed once ([onInviteDeepLinkConsumed]) so a later plain visit to
+ * the convoy route cannot re-raise a notice about an invite the member has since
+ * dealt with.
+ *
  * [liveShareEnabled] mirrors the shell's "this caller may share live" gate and
  * exists only for the OPTIMISTIC live-start overlay below: creating a convoy,
  * accepting into an already-active one and starting a forming one all begin a
@@ -67,6 +83,8 @@ fun ConvoyRoute(
     viewerUid: String? = null,
     onConvoyCreated: (() -> Unit)? = null,
     liveShareEnabled: Boolean = false,
+    inviteDeepLinkConvoyId: String? = null,
+    onInviteDeepLinkConsumed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val coordinator = remember(repository) { ConvoyCoordinator(repository) }
@@ -151,6 +169,25 @@ fun ConvoyRoute(
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
+    // The invite deep link, held locally for as long as this route is showing
+    // its notice. Latched on entry and the shell's copy cleared immediately, so
+    // re-entering the route later starts clean; the notice itself is dismissed
+    // by the member (or by the invite appearing, which needs no notice).
+    var inviteLinkConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
+    var inviteNoticeDismissed by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(inviteDeepLinkConvoyId) {
+        val id = inviteDeepLinkConvoyId?.takeIf { it.isNotBlank() }
+        if (id != null) {
+            inviteLinkConvoyId = id
+            inviteNoticeDismissed = false
+            // A deep link always lands on the list — a tap on an invite must not
+            // be swallowed by whatever sub-screen the route was last left in.
+            view = ConvoyView.List
+            onInviteDeepLinkConsumed()
+        }
+    }
+    val inviteOutcome = ConvoyInviteDeepLink.outcome(inviteLinkConvoyId, status)
+
     // Load the friends snapshot whenever the invite-picker is shown. Declarative
     // (keyed on the sub-view) so it fires on EVERY entry into Create — the list
     // "Create" button, the map "+" deep-link, and a process-death restoration
@@ -221,6 +258,12 @@ fun ConvoyRoute(
                 status = status,
                 actionError = actionError,
                 busyConvoys = busyConvoys,
+                inviteDeepLinkConvoyId = inviteLinkConvoyId,
+                inviteDeepLinkOutcome =
+                    inviteOutcome.takeIf {
+                        !inviteNoticeDismissed && ConvoyInviteDeepLink.needsNotice(it)
+                    },
+                onDismissInviteDeepLinkNotice = { inviteNoticeDismissed = true },
                 onCreate = {
                     // Fresh form each time the picker opens; the friends snapshot
                     // is (re)loaded by the LaunchedEffect(view) once view == Create.

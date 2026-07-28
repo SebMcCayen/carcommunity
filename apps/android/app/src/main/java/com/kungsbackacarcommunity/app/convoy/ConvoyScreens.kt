@@ -77,6 +77,15 @@ fun ConvoyListScreen(
     onDecline: (String) -> Unit,
     onClearActionError: () -> Unit,
     modifier: Modifier = Modifier,
+    // The convoy a tapped invite notification was about, if that is why we are
+    // here: its invite is pulled to the top of the section so a member with
+    // several open invites is not left hunting for the one they just tapped.
+    inviteDeepLinkConvoyId: String? = null,
+    // Set only when that invite is NOT waiting any more — ended, already
+    // answered, or gone. Shown as a notice so the tap is answered with a reason
+    // instead of an unexplained list. Null in every other case.
+    inviteDeepLinkOutcome: ConvoyInviteDeepLinkOutcome? = null,
+    onDismissInviteDeepLinkNotice: () -> Unit = {},
 ) {
     // ITEM 1 client guard (UX only — the backend is the real gate): a caller who
     // is already an ACTIVE participant of a convoy (owner, or an accepted member
@@ -115,6 +124,18 @@ fun ConvoyListScreen(
                 }
             }
 
+            // Why the invite you tapped isn't here. Deliberately an ErrorBanner
+            // rather than a silent omission: the member acted, and an action
+            // that produces no visible consequence is the bug being fixed.
+            inviteDeepLinkOutcome?.let { outcome ->
+                item(key = "invite-deep-link-notice") {
+                    ErrorBanner(
+                        text = stringResource(outcome.messageRes()),
+                        onDismiss = onDismissInviteDeepLinkNotice,
+                    )
+                }
+            }
+
             when (status) {
                 ConvoyListStatus.Loading -> item(key = "loading") { CircularProgressIndicator() }
 
@@ -128,7 +149,12 @@ fun ConvoyListScreen(
                         item(key = "invites-header") {
                             SectionHeader(stringResource(R.string.convoy_invitesTitle))
                         }
-                        items(status.pendingInvites, key = { "invite-${it.convoyId}" }) { convoy ->
+                        val invites =
+                            ConvoyInviteDeepLink.inviteesFirst(
+                                status.pendingInvites,
+                                inviteDeepLinkConvoyId,
+                            )
+                        items(invites, key = { "invite-${it.convoyId}" }) { convoy ->
                             PendingInviteRow(
                                 convoy = convoy,
                                 working = convoy.convoyId in busyConvoys,
@@ -911,6 +937,17 @@ private fun ConvoyInviteStatus.labelRes(): Int =
         ConvoyInviteStatus.Invited -> R.string.convoy_inviteInvited
         ConvoyInviteStatus.Accepted -> R.string.convoy_inviteAccepted
         ConvoyInviteStatus.Declined -> R.string.convoy_inviteDeclined
+    }
+
+/** The notice wording for an invite deep link that no longer leads anywhere. */
+internal fun ConvoyInviteDeepLinkOutcome.messageRes(): Int =
+    when (this) {
+        // PENDING never reaches a notice (the invite is on screen), but the
+        // mapping is total so a future caller cannot get a blank banner.
+        ConvoyInviteDeepLinkOutcome.PENDING -> R.string.convoy_invitesTitle
+        ConvoyInviteDeepLinkOutcome.ENDED -> R.string.convoy_inviteLinkEnded
+        ConvoyInviteDeepLinkOutcome.ANSWERED -> R.string.convoy_inviteLinkAnswered
+        ConvoyInviteDeepLinkOutcome.GONE -> R.string.convoy_inviteLinkGone
     }
 
 internal fun ConvoyActionError.messageRes(): Int =

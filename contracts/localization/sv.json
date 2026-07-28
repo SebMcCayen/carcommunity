@@ -613,7 +613,10 @@
     "barDestinationNavigateNew": "Navigera till det nya målet",
     "barDestinationDismissNotice": "Stäng",
     "barDestinationPickTitle": "Välj ett mål för konvojen",
-    "barDestinationPickAction": "Sätt för konvojen"
+    "barDestinationPickAction": "Sätt för konvojen",
+    "inviteLinkEnded": "Konvojen är avslutad.",
+    "inviteLinkAnswered": "Du har redan svarat på inbjudan.",
+    "inviteLinkGone": "Inbjudan är inte längre tillgänglig."
   },
   "memberProfile": {
     "title": "Profil",
@@ -1149,7 +1152,10 @@
     "channelSocialName": "Chatt & vänner",
     "channelSocialDescription": "Meddelanden, vänförfrågningar och konvoj-inbjudningar från andra medlemmar.",
     "channelGeneralName": "Allmänt",
-    "channelGeneralDescription": "Medlemskapsuppdateringar och andra meddelanden från klubben."
+    "channelGeneralDescription": "Medlemskapsuppdateringar och andra meddelanden från klubben.",
+    "convoyEndedLabel": "Konvojen är avslutad",
+    "convoyEndedRowDescription": "%1$s. Konvojen är avslutad.",
+    "convoyInviteAnsweredLabel": "Du har redan svarat på inbjudan"
   },
   "feedback": {
     "title": "Rapportera ett problem",

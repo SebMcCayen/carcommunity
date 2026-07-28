@@ -52,6 +52,7 @@ import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
+import com.kungsbackacarcommunity.app.notifications.ConvoyNotificationLink
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
@@ -148,6 +149,9 @@ fun ChatHubRoute(
     // convoy channel) the notification was about instead of the default
     // Community tab. Consumed once — backing out must not re-apply it.
     pushDeepLink: PushDeepLink? = null,
+    // Lets the Notifications tab's convoy rows resolve their convoy's state and
+    // open it. Forwarded untouched; see [NotificationsRoute].
+    convoyLink: ConvoyNotificationLink? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
@@ -167,6 +171,7 @@ fun ChatHubRoute(
             onViewProfile = onViewProfile,
             blockingRepository = blockingRepository,
             pushDeepLink = pushDeepLink,
+            convoyLink = convoyLink,
         )
     }
 }
@@ -222,6 +227,7 @@ fun ChatHubPopup(
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    convoyLink: ConvoyNotificationLink? = null,
 ) {
     // The whole overlay — the bottom-anchored translucent card, the uncovered
     // tappable map strip above it, the drag handle + drag-to-dismiss, the
@@ -254,6 +260,7 @@ fun ChatHubPopup(
             applyStatusBarInset = false,
             onViewProfile = onViewProfile,
             blockingRepository = blockingRepository,
+            convoyLink = convoyLink,
         )
     }
 }
@@ -306,6 +313,7 @@ private fun ChatHubContent(
     onViewProfile: ((String) -> Unit)?,
     blockingRepository: BlockingRepository?,
     pushDeepLink: PushDeepLink? = null,
+    convoyLink: ConvoyNotificationLink? = null,
 ) {
     // Seeded from any push deep-link so the hub OPENS on the linked tab (and the
     // pager below opens on the matching page with no scroll animation). Absent a
@@ -616,6 +624,7 @@ private fun ChatHubContent(
                                 // The inbox has no Back of its own inside the hub;
                                 // closing routes through the hub's close.
                                 onBack = onClose,
+                                convoyLink = convoyLink,
                             )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
