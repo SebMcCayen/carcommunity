@@ -9,10 +9,17 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.blocking.BlockVisibility
 import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /**
  * [ConvoyChatRepository] backed by the `convoy-list` callable (for the caller's
@@ -27,11 +34,17 @@ import kotlinx.coroutines.flow.combine
  * Older pages are filtered SERVER-side by `convoyChat-list`; the live window
  * cannot be, because a Firestore rule cannot filter a list query per document —
  * see [BlockVisibility].
+ *
+ * LIVE PROFILES: as in the community channel, the sender profile stamped on each
+ * message is overlaid with the sender's current `users/{uid}` profile
+ * ([LiveProfileRepository], [ChannelThread.hydrate]) on both the live window and
+ * older pages.
  */
 class FirebaseConvoyChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
     private val blockVisibility: BlockVisibilityRepository,
+    private val liveProfiles: LiveProfileRepository,
 ) : ConvoyChatRepository {
 
     override suspend fun listConvoys(): ConvoyListState =
@@ -40,6 +53,7 @@ class FirebaseConvoyChatRepository private constructor(
             onFailure = { ConvoyListState.Error },
         )
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMessages(convoyId: String): Flow<ChannelMessagesState> =
         combine(observeRawMessages(convoyId), blockVisibility.observeHiddenUids()) { state, hidden ->
             // One document listener supplies the hidden set for the whole
@@ -52,6 +66,15 @@ class FirebaseConvoyChatRepository private constructor(
                 ChannelMessagesState.Loading -> state
             }
         }
+            // Sender profiles refreshed from live users/{uid}; see the community
+            // repository for the cost argument (one read per distinct sender).
+            .flatMapLatest { state ->
+                if (state !is ChannelMessagesState.Loaded) return@flatMapLatest flowOf(state)
+                val uids = LiveProfiles.uidsOf(state.messages) { it.senderUid }
+                liveProfiles.observeProfiles(uids).map { live ->
+                    ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live))
+                }
+            }
 
     private fun observeRawMessages(convoyId: String): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
@@ -114,7 +137,16 @@ class FirebaseConvoyChatRepository private constructor(
 
     override suspend fun loadOlder(convoyId: String, before: String): ChannelOlderResult =
         functions.callChannel(LIST, mapOf("convoyId" to convoyId, "before" to before)).fold(
-            onSuccess = { ChannelOlderResult.Loaded(ChannelResponseParser.parseMessagesPage(it)) },
+            onSuccess = {
+                val page = ChannelResponseParser.parseMessagesPage(it)
+                val live =
+                    liveProfiles.loadProfiles(
+                        LiveProfiles.uidsOf(page.messages) { message -> message.senderUid },
+                    )
+                ChannelOlderResult.Loaded(
+                    page.copy(messages = ChannelThread.hydrate(page.messages, live)),
+                )
+            },
             onFailure = { ChannelOlderResult.Failed },
         )
 
@@ -132,6 +164,7 @@ class FirebaseConvoyChatRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.createOrEmpty(context),
             )
         }
     }

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -139,6 +140,13 @@ class ConvoyCoordinator(
      */
     private val destinationRepository: ConvoyDestinationRepository =
         UnavailableConvoyDestinationRepository,
+    /**
+     * Refreshes the roster's DENORMALIZED member profiles from live `users/{uid}`
+     * ([hydrateConvoy]). Defaults to [LiveProfileRepository.EMPTY] — "no live
+     * opinion", i.e. render the stored copies exactly as before — so a
+     * config-less build and the unit tests need no profile source.
+     */
+    private val liveProfiles: LiveProfileRepository = LiveProfileRepository.EMPTY,
 ) {
     private val statusState = MutableStateFlow<ConvoyListStatus>(ConvoyListStatus.Loading)
     val status: StateFlow<ConvoyListStatus> = statusState.asStateFlow()
@@ -200,21 +208,52 @@ class ConvoyCoordinator(
                 if (convoyId == null) return@collectLatest
                 repository.observeConvoy(convoyId, viewerUid).collect { fresh ->
                     if (fresh != null) {
-                        statusState.update { mergeConvoyUpdate(it, fresh) }
+                        // Hydrate BEFORE merging. The listener's snapshot carries
+                        // the stored (stale) memberProfiles, so merging it raw
+                        // would overwrite the profiles [load] already refreshed —
+                        // the roster would silently revert to old avatars the
+                        // moment anything about the convoy changed.
+                        //
+                        // Resolved OUTSIDE `update`: that is an inline function
+                        // whose lambda re-runs on CAS contention, so a suspending
+                        // read left inside it would be re-issued on every retry.
+                        val refreshed = hydrated(fresh)
+                        statusState.update { mergeConvoyUpdate(it, refreshed) }
                     }
                 }
             }
     }
 
+    /**
+     * The convoy with every roster profile refreshed from live `users/{uid}`.
+     *
+     * Best-effort by construction: [LiveProfileRepository.loadProfiles] never
+     * throws and returns an absent entry for anything it could not read, so a
+     * profile-read failure leaves the stored copies in place instead of failing
+     * the convoy load.
+     */
+    private suspend fun hydrated(convoy: ConvoySummary): ConvoySummary =
+        hydrateConvoy(convoy, liveProfiles.loadProfiles(convoyProfileUids(listOf(convoy))))
+
     suspend fun load() {
         try {
             when (val result = repository.list()) {
-                is ConvoyListResult.Loaded ->
+                is ConvoyListResult.Loaded -> {
+                    // ONE batched profile read covers both lists. They overlap by
+                    // convoyId, and gathering the uids across both means a pending
+                    // invite is hydrated even if it were ever absent from
+                    // `convoys` — without paying twice for the shared members.
+                    val live =
+                        liveProfiles.loadProfiles(
+                            convoyProfileUids(result.convoys + result.pendingInvites),
+                        )
                     statusState.value =
                         ConvoyListStatus.Loaded(
-                            convoys = result.convoys,
-                            pendingInvites = result.pendingInvites,
+                            convoys = result.convoys.map { hydrateConvoy(it, live) },
+                            pendingInvites =
+                                result.pendingInvites.map { hydrateConvoy(it, live) },
                         )
+                }
                 is ConvoyListResult.Failed -> statusState.value = ConvoyListStatus.Error(result.error)
             }
         } catch (cancellation: CancellationException) {

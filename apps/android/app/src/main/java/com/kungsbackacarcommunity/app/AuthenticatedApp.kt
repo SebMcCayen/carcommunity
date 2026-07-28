@@ -254,6 +254,7 @@ import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingStatus
 import com.kungsbackacarcommunity.app.profile.AuthedDestination
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileEditCoordinator
 import com.kungsbackacarcommunity.app.profile.ProfileEditStatus
 import com.kungsbackacarcommunity.app.profile.ProfileRepository
@@ -2133,10 +2134,18 @@ fun AuthenticatedApp(
                 // time — re-running load() and resetting convoy state in a loop.
                 val convoyDestinationRepository: ConvoyDestinationRepository =
                     remember { UnavailableConvoyDestinationRepository }
+                // Refreshes the bar's roster profiles from live users/{uid}; see
+                // ConvoyCoordinator.liveProfiles. Remembered like the destination
+                // repository above so it stays a stable coordinator key.
+                val convoyProfileContext = LocalContext.current
+                val convoyLiveProfiles =
+                    remember(convoyProfileContext) {
+                        FirebaseLiveProfileRepository.createOrEmpty(convoyProfileContext)
+                    }
                 val convoyBarCoordinator =
-                    remember(convoyRepository, convoyDestinationRepository) {
+                    remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles) {
                         convoyRepository?.let {
-                            ConvoyCoordinator(it, convoyDestinationRepository)
+                            ConvoyCoordinator(it, convoyDestinationRepository, convoyLiveProfiles)
                         }
                     }
                 LaunchedEffect(convoyBarCoordinator) { convoyBarCoordinator?.load() }

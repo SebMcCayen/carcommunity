@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
+
 /**
  * Pure mapping of a RAW `convoys/{convoyId}` Firestore document into the wire
  * [ConvoySummary], plus the merge that folds a live doc update back into a
@@ -190,6 +193,50 @@ object ConvoyDocument {
  * list must not be injected into it (it would appear from nowhere and, lacking
  * the list's context, could misrender).
  */
+/**
+ * Replaces each roster entry's DENORMALIZED profile with that member's current
+ * one, where a live profile was loaded.
+ *
+ * `convoys/{id}.memberProfiles` is captured at create/invite time and never
+ * refreshed — `convoy.respond` writes invite status only — so a member who
+ * changes their avatar after being invited keeps the old one on the roster for
+ * the convoy's whole life. [LiveProfiles.resolve] carries the fallback rules.
+ *
+ * Applied on BOTH convoy read paths (the `convoy-list` callable and the live
+ * document listener) before they meet in [mergeConvoyUpdate]. That is not
+ * belt-and-braces: hydrating only the callable would be undone the moment the
+ * listener delivered its next snapshot of the same convoy.
+ *
+ * Only [ConvoyMember.displayName] / [ConvoyMember.avatarPath] change. Membership
+ * and authorization are derived from `memberUids` / `members[uid].inviteStatus`,
+ * never from the profile map, so this cannot alter who is in a convoy or what
+ * they may do.
+ */
+fun hydrateConvoy(convoy: ConvoySummary, live: Map<String, LiveProfile>): ConvoySummary {
+    if (live.isEmpty()) return convoy
+    return convoy.copy(
+        members =
+            convoy.members.map { member ->
+                val resolved =
+                    LiveProfiles.resolve(
+                        member.uid,
+                        LiveProfile(member.displayName, member.avatarPath),
+                        live,
+                    )
+                member.copy(
+                    displayName = resolved.displayName,
+                    avatarPath = resolved.avatarPath,
+                )
+            },
+    )
+}
+
+/** The distinct member uids named by [convoys], for one batched profile read. */
+fun convoyProfileUids(convoys: List<ConvoySummary>): Set<String> =
+    convoys.flatMapTo(mutableSetOf()) { convoy ->
+        LiveProfiles.uidsOf(convoy.members) { it.uid }
+    }
+
 fun mergeConvoyUpdate(
     status: ConvoyListStatus,
     fresh: ConvoySummary,
