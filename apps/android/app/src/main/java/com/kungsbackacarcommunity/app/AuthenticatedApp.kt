@@ -122,11 +122,13 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationNavigationEvent
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
+import com.kungsbackacarcommunity.app.convoy.ConvoyInviteStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyInvitePickerScreen
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
+import com.kungsbackacarcommunity.app.convoy.ConvoyStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
 import com.kungsbackacarcommunity.app.convoy.invitableSelection
@@ -176,6 +178,9 @@ import com.kungsbackacarcommunity.app.garage.GarageRoute
 import com.kungsbackacarcommunity.app.garage.GarageState
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
+import com.kungsbackacarcommunity.app.notifications.ConvoyFacts
+import com.kungsbackacarcommunity.app.notifications.ConvoyNotificationLink
+import com.kungsbackacarcommunity.app.notifications.NotificationTapAction
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRepository
@@ -700,6 +705,11 @@ fun AuthenticatedApp(
             // Events route is reachable by normal navigation too, so a lingering
             // id would wrongly re-open the event on a later plain visit).
             var pendingEventDeepLinkId by remember { mutableStateOf<String?>(null) }
+            // Convoy id from a convoy-invite notification tap — the in-app inbox
+            // row, and (once the backend sends it) the push. Consumed by
+            // ConvoyRoute on entry, which clears it, so a later plain visit to
+            // the convoy list cannot re-raise a notice about an old invite.
+            var pendingConvoyInviteId by remember { mutableStateOf<String?>(null) }
             val pushLink by PushNavigator.pending.collectAsState()
             LaunchedEffect(pushLink) {
                 val link = PushNavigator.consume() ?: return@LaunchedEffect
@@ -727,7 +737,19 @@ fun AuthenticatedApp(
                         pendingChatHubLink = link
                         openRootRoute(ShellRoute.ChatHub)
                     }
-                    PushTarget.CONVOYS -> openRootRoute(ShellRoute.Convoys)
+                    PushTarget.CONVOYS -> {
+                        // BACKEND GAP: buildPushDeepLink in
+                        // functions/src/notifications/notifications-core.ts maps
+                        // 'convoy_invite' to { target: 'convoys', entityId: null }
+                        // — it DROPS the convoy id it was handed, even though the
+                        // inbox item stores it as relatedEntityId. So this is null
+                        // today and the tap lands on the convoy list, which is at
+                        // least where the invite is answered. Threaded anyway, so
+                        // the day the backend stops dropping the id the push lands
+                        // on the exact invite with no client change.
+                        pendingConvoyInviteId = link.entityId
+                        openRootRoute(ShellRoute.Convoys)
+                    }
                     PushTarget.FRIENDS -> openRootRoute(ShellRoute.Friends)
                     PushTarget.EVENT -> {
                         // The backend sends the reminder's event id as entityId;
@@ -2192,6 +2214,74 @@ fun AuthenticatedApp(
                     convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
                 val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid)
 
+                // The convoy facts the notification inbox re-derives its convoy
+                // rows against.
+                //
+                // COST: nothing. This is a projection of the snapshot the convoy
+                // BAR is already holding — one `convoy-list` call the shell makes
+                // on entry and refreshes when the map comes back to the front —
+                // so an inbox of any length resolves for zero extra reads, with
+                // no per-row fetch and no second listener. The trade is
+                // staleness, and it is deliberately one-directional: a convoy
+                // that ended since the last load still looks live, so the worst
+                // case is a row that stays tappable and is then told the truth on
+                // arrival (see ConvoyInviteDeepLink). The opposite error —
+                // striking through a live invite because we happen to hold no
+                // facts — is the one that must not happen, which is why an
+                // unknown convoy resolves to UNRESOLVED and not to ENDED.
+                val convoyNotificationFacts: Map<String, ConvoyFacts> =
+                    remember(convoyBarStatus) {
+                        (convoyBarStatus as? ConvoyListStatus.Loaded)
+                            ?.convoys
+                            ?.associate { convoy ->
+                                val ended = convoy.status == ConvoyStatus.Ended
+                                convoy.convoyId to
+                                    ConvoyFacts(
+                                        ended = ended,
+                                        inviteOpen =
+                                            !ended &&
+                                                convoy.viewer?.inviteStatus ==
+                                                ConvoyInviteStatus.Invited,
+                                    )
+                            }
+                            .orEmpty()
+                    }
+
+                // Tapping a convoy row in the inbox. Not remembered: it closes
+                // over shell state that changes, and it is a two-field data class
+                // whose expensive half (the facts map) is remembered above.
+                //
+                // The convoy list is the EXISTING invite/respond UI (its
+                // pending-invite section is wired to convoy-respond), so this
+                // opens that — no parallel invite screen is introduced. A null
+                // convoy id still opens it: the invite is on that list either
+                // way, which is the honest degradation when the id is missing.
+                val convoyNotificationLink =
+                    ConvoyNotificationLink(
+                        facts = convoyNotificationFacts,
+                        onOpen = { action ->
+                            when (action) {
+                                is NotificationTapAction.OpenConvoyInvite -> {
+                                    // The inbox can be the chat hub POPUP's tab,
+                                    // and the popup's gate only holds while no
+                                    // route is open. Close it in the same frame
+                                    // as the navigation rather than leaning on
+                                    // the auto-close effect — the same rule the
+                                    // hub's onViewProfile already follows.
+                                    chatHubOpen = false
+                                    pendingConvoyInviteId = action.convoyId
+                                    openRootRoute(ShellRoute.Convoys)
+                                }
+                                // The screen never dispatches these (it only
+                                // calls onOpen for actions that navigate); the
+                                // branch keeps the when exhaustive.
+                                NotificationTapAction.ConvoyEnded,
+                                NotificationTapAction.None,
+                                -> Unit
+                            }
+                        },
+                    )
+
                 // A failed leave/end from the bar surfaces as a snackbar rather than
                 // a silent no-op: the coordinator sets actionError, which we show
                 // once and then clear. (Invite failures are surfaced inline in the
@@ -2901,6 +2991,9 @@ fun AuthenticatedApp(
                         chatHubPushLink = pendingChatHubLink,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
+                        convoyInviteDeepLinkId = pendingConvoyInviteId,
+                        onConvoyInviteDeepLinkConsumed = { pendingConvoyInviteId = null },
+                        convoyNotificationLink = convoyNotificationLink,
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
@@ -3773,6 +3866,7 @@ fun AuthenticatedApp(
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
                         onClose = { chatHubOpen = false },
+                        convoyLink = convoyNotificationLink,
                         // Tapping a sender in a channel / the DM title opens their
                         // read-only profile — a shell ROUTE, which the hub popup's
                         // gate (route == null) does not survive. Close the hub
@@ -4102,6 +4196,14 @@ private fun RouteHost(
     // the shell's pending id once EventsRoute has taken it.
     eventDeepLinkId: String?,
     onEventDeepLinkConsumed: () -> Unit,
+    // Convoy id from a convoy-invite notification tap (null otherwise).
+    // Forwarded to ConvoyRoute, which lands on its pending-invite list and — if
+    // the invite is no longer there — says what became of it.
+    convoyInviteDeepLinkId: String?,
+    onConvoyInviteDeepLinkConsumed: () -> Unit,
+    // Convoy state + "open this" for the notification inbox's convoy rows,
+    // wherever the inbox is hosted (its own route, or the chat hub's tab).
+    convoyNotificationLink: ConvoyNotificationLink?,
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
@@ -4532,6 +4634,7 @@ private fun RouteHost(
                     // Null in a config-less build: the inbox then renders
                     // without friend actions.
                     friendsRepository = friendsRepository,
+                    convoyLink = convoyNotificationLink,
                 )
             } else {
                 LoadingScreen()
@@ -4617,6 +4720,8 @@ private fun RouteHost(
                     // shell's live control immediately instead of waiting for the
                     // session to echo back — the same gate the manual start uses.
                     liveShareEnabled = canShareLive,
+                    inviteDeepLinkConvoyId = convoyInviteDeepLinkId,
+                    onInviteDeepLinkConsumed = onConvoyInviteDeepLinkConsumed,
                 )
             } else {
                 LoadingScreen()
@@ -4681,6 +4786,7 @@ private fun RouteHost(
                 // Backs the block action on the hub's long-press message sheet.
                 blockingRepository = blockingRepository,
                 pushDeepLink = chatHubPushLink,
+                convoyLink = convoyNotificationLink,
             )
 
         ShellRoute.Badges ->

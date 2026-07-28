@@ -613,7 +613,10 @@
     "barDestinationNavigateNew": "Navigate to the new destination",
     "barDestinationDismissNotice": "Dismiss",
     "barDestinationPickTitle": "Choose a destination for the convoy",
-    "barDestinationPickAction": "Set for the convoy"
+    "barDestinationPickAction": "Set for the convoy",
+    "inviteLinkEnded": "That convoy has ended.",
+    "inviteLinkAnswered": "You've already answered that invite.",
+    "inviteLinkGone": "That invite is no longer available."
   },
   "memberProfile": {
     "title": "Profile",
@@ -1149,7 +1152,10 @@
     "channelSocialName": "Chat & friends",
     "channelSocialDescription": "Messages, friend requests, and convoy invites from other members.",
     "channelGeneralName": "General",
-    "channelGeneralDescription": "Membership updates and other messages from the club."
+    "channelGeneralDescription": "Membership updates and other messages from the club.",
+    "convoyEndedLabel": "Convoy has ended",
+    "convoyEndedRowDescription": "%1$s. Convoy has ended.",
+    "convoyInviteAnsweredLabel": "You have already answered this invite"
   },
   "feedback": {
     "title": "Report a problem",

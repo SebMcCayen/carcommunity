@@ -569,6 +569,9 @@
     <string name="convoy_barDestinationDismissNotice">Dismiss</string>
     <string name="convoy_barDestinationPickTitle">Choose a destination for the convoy</string>
     <string name="convoy_barDestinationPickAction">Set for the convoy</string>
+    <string name="convoy_inviteLinkEnded">That convoy has ended.</string>
+    <string name="convoy_inviteLinkAnswered">You\'ve already answered that invite.</string>
+    <string name="convoy_inviteLinkGone">That invite is no longer available.</string>
     <string name="memberProfile_title">Profile</string>
     <string name="memberProfile_unknownMember">Member</string>
     <string name="memberProfile_unavailable">This profile isn\'t available.</string>
@@ -1069,6 +1072,9 @@
     <string name="notifications_channelSocialDescription">Messages, friend requests, and convoy invites from other members.</string>
     <string name="notifications_channelGeneralName">General</string>
     <string name="notifications_channelGeneralDescription">Membership updates and other messages from the club.</string>
+    <string name="notifications_convoyEndedLabel">Convoy has ended</string>
+    <string name="notifications_convoyEndedRowDescription">%1$s. Convoy has ended.</string>
+    <string name="notifications_convoyInviteAnsweredLabel">You have already answered this invite</string>
     <string name="feedback_title">Report a problem</string>
     <string name="feedback_openButton">Report a problem</string>
     <string name="feedback_publicNoticeTitle">This report is public</string>

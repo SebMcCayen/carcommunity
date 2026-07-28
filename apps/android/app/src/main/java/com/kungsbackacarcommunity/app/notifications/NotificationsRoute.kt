@@ -37,6 +37,14 @@ import kotlinx.coroutines.launch
  * already live, and a second implementation would be a second place for those
  * to drift.
  *
+ * CONVOYS: [convoyLink] carries the convoy facts a row is re-derived against
+ * plus the "open this" callback. It is PASSED IN rather than loaded here, and
+ * that is the whole cost story — the shell already holds a convoy-list snapshot
+ * for the map's convoy bar, so resolving every convoy row in the inbox costs
+ * zero additional reads, no per-row fetch and no listener. Deliberately not a
+ * second ConvoyCoordinator (which is what the friend wiring below does): the
+ * friend list has no shell-level holder to borrow, convoys do.
+ *
  * A config-less build (no Firebase) passes null and the inbox renders exactly as
  * it did before, with no friend actions and no extra callable traffic. The two
  * cases are separate composables rather than one with nullable state so neither
@@ -49,6 +57,7 @@ fun NotificationsRoute(
     uid: String,
     onBack: () -> Unit,
     friendsRepository: FriendsRepository? = null,
+    convoyLink: ConvoyNotificationLink? = null,
 ) {
     val scope = rememberCoroutineScope()
     val serverState by
@@ -105,6 +114,7 @@ fun NotificationsRoute(
             onDeleteAll = actions.onDeleteAll,
             deleteError = actions.deleteError,
             onDismissDeleteError = actions.onDismissDeleteError,
+            convoyLink = convoyLink,
         )
         return
     }
@@ -116,6 +126,7 @@ fun NotificationsRoute(
         scope = scope,
         onBack = onBack,
         deleteActions = actions,
+        convoyLink = convoyLink,
     )
 }
 
@@ -148,6 +159,7 @@ private fun FriendAwareNotificationsInbox(
     scope: CoroutineScope,
     onBack: () -> Unit,
     deleteActions: InboxDeleteActions,
+    convoyLink: ConvoyNotificationLink?,
 ) {
     val context = LocalContext.current
     val friends =
@@ -189,6 +201,7 @@ private fun FriendAwareNotificationsInbox(
         onDeleteAll = deleteActions.onDeleteAll,
         deleteError = deleteActions.deleteError,
         onDismissDeleteError = deleteActions.onDismissDeleteError,
+        convoyLink = convoyLink,
     )
 }
 
