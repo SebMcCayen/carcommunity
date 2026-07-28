@@ -11,15 +11,10 @@ import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
-import com.kungsbackacarcommunity.app.profile.LiveProfiles
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
 /**
  * [ConvoyChatRepository] backed by the `convoy-list` callable (for the caller's
@@ -53,7 +48,6 @@ class FirebaseConvoyChatRepository private constructor(
             onFailure = { ConvoyListState.Error },
         )
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMessages(convoyId: String): Flow<ChannelMessagesState> =
         combine(observeRawMessages(convoyId), blockVisibility.observeHiddenUids()) { state, hidden ->
             // One document listener supplies the hidden set for the whole
@@ -66,15 +60,7 @@ class FirebaseConvoyChatRepository private constructor(
                 ChannelMessagesState.Loading -> state
             }
         }
-            // Sender profiles refreshed from live users/{uid}; see the community
-            // repository for the cost argument (one read per distinct sender).
-            .flatMapLatest { state ->
-                if (state !is ChannelMessagesState.Loaded) return@flatMapLatest flowOf(state)
-                val uids = LiveProfiles.uidsOf(state.messages) { it.senderUid }
-                liveProfiles.observeProfiles(uids).map { live ->
-                    ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live))
-                }
-            }
+            .hydrateSenders(liveProfiles)
 
     private fun observeRawMessages(convoyId: String): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
@@ -138,13 +124,8 @@ class FirebaseConvoyChatRepository private constructor(
     override suspend fun loadOlder(convoyId: String, before: String): ChannelOlderResult =
         functions.callChannel(LIST, mapOf("convoyId" to convoyId, "before" to before)).fold(
             onSuccess = {
-                val page = ChannelResponseParser.parseMessagesPage(it)
-                val live =
-                    liveProfiles.loadProfiles(
-                        LiveProfiles.uidsOf(page.messages) { message -> message.senderUid },
-                    )
                 ChannelOlderResult.Loaded(
-                    page.copy(messages = ChannelThread.hydrate(page.messages, live)),
+                    ChannelResponseParser.parseMessagesPage(it).hydrateSenders(liveProfiles),
                 )
             },
             onFailure = { ChannelOlderResult.Failed },
@@ -164,7 +145,7 @@ class FirebaseConvoyChatRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
-                FirebaseLiveProfileRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

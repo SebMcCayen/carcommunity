@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -225,34 +226,62 @@ class ConvoyCoordinator(
     }
 
     /**
-     * The convoy with every roster profile refreshed from live `users/{uid}`.
+     * The convoy with every roster profile refreshed from live `users/{uid}`, or
+     * the convoy unchanged if the profiles could not be read.
      *
-     * Best-effort by construction: [LiveProfileRepository.loadProfiles] never
-     * throws and returns an absent entry for anything it could not read, so a
-     * profile-read failure leaves the stored copies in place instead of failing
-     * the convoy load.
+     * ENFORCED here rather than assumed: [LiveProfileRepository.loadProfiles]
+     * documents itself as never throwing, but this is called from inside the live
+     * `observeConvoy` collector, where an exception would unwind out of
+     * [observeActiveConvoy], kill the screen-scoped coroutine and detach the
+     * Firestore listener for good — the convoy bar would silently stop receiving
+     * shared destinations and membership changes, with no error state to show for
+     * it. A cosmetic overlay must not be able to do that, whatever repository is
+     * injected, so the guarantee is a `runCatching` here and not a doc comment
+     * somewhere else. Cancellation still propagates, so leaving the screen still
+     * detaches the listener.
      */
     private suspend fun hydrated(convoy: ConvoySummary): ConvoySummary =
-        hydrateConvoy(convoy, liveProfiles.loadProfiles(convoyProfileUids(listOf(convoy))))
+        runCatchingCancellable {
+            hydrateConvoy(convoy, liveProfiles.loadProfiles(convoyProfileUids(listOf(convoy))))
+        }
+            .getOrDefault(convoy)
 
     suspend fun load() {
         try {
             when (val result = repository.list()) {
                 is ConvoyListResult.Loaded -> {
-                    // ONE batched profile read covers both lists. They overlap by
-                    // convoyId, and gathering the uids across both means a pending
-                    // invite is hydrated even if it were ever absent from
-                    // `convoys` — without paying twice for the shared members.
-                    val live =
-                        liveProfiles.loadProfiles(
-                            convoyProfileUids(result.convoys + result.pendingInvites),
-                        )
+                    // Publish the stored snapshot FIRST, then refresh the profiles
+                    // onto it. The list must not wait on a second round-trip for a
+                    // cosmetic overlay: gating it would add a profile RTT to every
+                    // screen entry AND to every accept/decline/start/end, which all
+                    // re-run load(). The stored copies are the correct fallback, so
+                    // the first publish is exactly the pre-hydration behaviour.
+                    //
+                    // No flicker on the re-publish: after the first refresh the
+                    // profiles are cached, so subsequent load()s hydrate without
+                    // touching the network and both publishes land in the same tick.
                     statusState.value =
                         ConvoyListStatus.Loaded(
-                            convoys = result.convoys.map { hydrateConvoy(it, live) },
-                            pendingInvites =
-                                result.pendingInvites.map { hydrateConvoy(it, live) },
+                            convoys = result.convoys,
+                            pendingInvites = result.pendingInvites,
                         )
+
+                    // ONE batched read for both lists. Pending invites go FIRST so
+                    // that when the cap bites (see MAX_HYDRATED_CONVOY_PROFILES) it
+                    // drops members of old ended convoys rather than of the convoy
+                    // the member is being asked to answer right now.
+                    val live =
+                        liveProfiles.loadProfiles(
+                            convoyProfileUids(result.pendingInvites + result.convoys),
+                        )
+                    if (live.isNotEmpty()) {
+                        statusState.value =
+                            ConvoyListStatus.Loaded(
+                                convoys = result.convoys.map { hydrateConvoy(it, live) },
+                                pendingInvites =
+                                    result.pendingInvites.map { hydrateConvoy(it, live) },
+                            )
+                    }
                 }
                 is ConvoyListResult.Failed -> statusState.value = ConvoyListStatus.Error(result.error)
             }

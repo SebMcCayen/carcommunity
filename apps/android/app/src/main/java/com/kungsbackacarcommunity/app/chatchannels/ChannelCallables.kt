@@ -3,7 +3,15 @@ package com.kungsbackacarcommunity.app.chatchannels
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
+import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
 import kotlin.coroutines.resume
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /** The europe-west1 region every chat-channels callable is deployed to. */
 internal const val CHANNEL_FUNCTIONS_REGION = "europe-west1"
@@ -73,4 +81,48 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         // Reconciliation matches on the doc id, so this is carried only for parity.
         clientId = getString("clientId")?.takeIf { it.isNotBlank() },
     )
+}
+
+/**
+ * Overlays each sender's CURRENT `users/{uid}` profile onto the copy stamped on
+ * the message at post time ([ChannelThread.hydrate] carries the decision and the
+ * fallback rules).
+ *
+ * Shared by BOTH channel repositories, alongside the other helpers in this file,
+ * for the same reason [BlockVisibility.filterHiddenAuthors] is shared rather than
+ * written twice: the community and convoy live windows are the same shape, and a
+ * change to the overlay policy must not be able to land on one and miss the
+ * other.
+ *
+ * De-duplicated by sender BEFORE the read, so a window of hundreds of messages
+ * costs a read per distinct SENDER, never one per message. Apply it AFTER the
+ * block filter so a hidden sender is never paid for with a profile read.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+internal fun Flow<ChannelMessagesState>.hydrateSenders(
+    liveProfiles: LiveProfileRepository,
+): Flow<ChannelMessagesState> = flatMapLatest { state ->
+    if (state !is ChannelMessagesState.Loaded) return@flatMapLatest flowOf(state)
+    val uids = LiveProfiles.uidsOf(state.messages) { it.senderUid }
+    liveProfiles.observeProfiles(uids).map { live ->
+        ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live))
+    }
+}
+
+/**
+ * [hydrateSenders] for an older page fetched through `*-list`.
+ *
+ * An older page needs the overlay just as much as the live window — without it,
+ * scrolling back would show a member's old avatar above their new one. Unlike the
+ * live window this genuinely costs reads: an older page is BY DEFINITION messages
+ * outside the live window, so its senders are the ones the live hydration has not
+ * already cached. That is bounded by the distinct senders in one page, and
+ * pagination already shows a spinner, so it is paid inline rather than by
+ * publishing the page twice.
+ */
+internal suspend fun ChannelMessagesPage.hydrateSenders(
+    liveProfiles: LiveProfileRepository,
+): ChannelMessagesPage {
+    val live = liveProfiles.loadProfiles(LiveProfiles.uidsOf(messages) { it.senderUid })
+    return copy(messages = ChannelThread.hydrate(messages, live))
 }

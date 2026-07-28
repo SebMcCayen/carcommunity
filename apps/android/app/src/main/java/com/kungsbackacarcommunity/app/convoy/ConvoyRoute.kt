@@ -71,11 +71,11 @@ fun ConvoyRoute(
     liveShareEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
-    val context = LocalContext.current
     // Refreshes the roster's denormalized member profiles from live users/{uid}
-    // (ConvoyCoordinator.liveProfiles). Process-shared cache, so this costs
-    // nothing when the members are already on screen elsewhere.
-    val liveProfiles = remember(context) { FirebaseLiveProfileRepository.createOrEmpty(context) }
+    // (ConvoyCoordinator.liveProfiles). Not remembered: sharedOrEmpty returns the
+    // process-wide instance (or the EMPTY singleton), so it is already a stable
+    // reference and cannot churn the coordinator's remember key.
+    val liveProfiles = FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current)
     val coordinator =
         remember(repository, liveProfiles) {
             ConvoyCoordinator(repository, liveProfiles = liveProfiles)

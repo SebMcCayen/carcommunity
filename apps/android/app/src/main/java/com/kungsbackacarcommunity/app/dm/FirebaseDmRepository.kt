@@ -94,10 +94,11 @@ class FirebaseDmRepository private constructor(
             //
             // flatMapLatest rather than combine, because the uid set is DERIVED
             // from the rows: a new conversation must trigger a read for its
-            // counterparty. Superseding the previous lookup is the behaviour we
-            // want — an inbox update makes the in-flight read for the older row set
-            // obsolete. Hydration runs AFTER the block filter so a hidden row is
-            // never paid for with a profile read.
+            // counterparty. Superseding the previous lookup is safe here only
+            // because the reads outlive it — FirebaseLiveProfileRepository issues
+            // them in its own scope, so a cancelled lookup still lands in the cache
+            // and the next emission is a hit (see readMissing). Hydration runs
+            // AFTER the block filter, so a hidden row is never paid for.
             .flatMapLatest { state ->
                 if (state !is DmConversationsState.Loaded) return@flatMapLatest flowOf(state)
                 val uids = LiveProfiles.uidsOf(state.conversations) { it.otherUser.uid }
@@ -265,7 +266,7 @@ class FirebaseDmRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
-                FirebaseLiveProfileRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

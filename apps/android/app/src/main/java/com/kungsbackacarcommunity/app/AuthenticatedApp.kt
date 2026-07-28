@@ -2135,13 +2135,12 @@ fun AuthenticatedApp(
                 val convoyDestinationRepository: ConvoyDestinationRepository =
                     remember { UnavailableConvoyDestinationRepository }
                 // Refreshes the bar's roster profiles from live users/{uid}; see
-                // ConvoyCoordinator.liveProfiles. Remembered like the destination
-                // repository above so it stays a stable coordinator key.
-                val convoyProfileContext = LocalContext.current
+                // ConvoyCoordinator.liveProfiles. Unlike the destination repository
+                // above this needs no `remember`: sharedOrEmpty returns the
+                // process-wide instance (or the EMPTY singleton), so it is already
+                // stable and cannot rebuild the coordinator on recomposition.
                 val convoyLiveProfiles =
-                    remember(convoyProfileContext) {
-                        FirebaseLiveProfileRepository.createOrEmpty(convoyProfileContext)
-                    }
+                    FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current)
                 val convoyBarCoordinator =
                     remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles) {
                         convoyRepository?.let {

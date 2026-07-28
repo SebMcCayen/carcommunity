@@ -193,6 +193,22 @@ object ConvoyDocument {
  * list must not be injected into it (it would appear from nowhere and, lacking
  * the list's context, could misrender).
  */
+fun mergeConvoyUpdate(
+    status: ConvoyListStatus,
+    fresh: ConvoySummary,
+): ConvoyListStatus {
+    if (status !is ConvoyListStatus.Loaded) return status
+    val present =
+        status.convoys.any { it.convoyId == fresh.convoyId } ||
+            status.pendingInvites.any { it.convoyId == fresh.convoyId }
+    if (!present) return status
+    return ConvoyListStatus.Loaded(
+        convoys = status.convoys.map { if (it.convoyId == fresh.convoyId) fresh else it },
+        pendingInvites =
+            status.pendingInvites.map { if (it.convoyId == fresh.convoyId) fresh else it },
+    )
+}
+
 /**
  * Replaces each roster entry's DENORMALIZED profile with that member's current
  * one, where a live profile was loaded.
@@ -231,24 +247,38 @@ fun hydrateConvoy(convoy: ConvoySummary, live: Map<String, LiveProfile>): Convoy
     )
 }
 
-/** The distinct member uids named by [convoys], for one batched profile read. */
-fun convoyProfileUids(convoys: List<ConvoySummary>): Set<String> =
-    convoys.flatMapTo(mutableSetOf()) { convoy ->
-        LiveProfiles.uidsOf(convoy.members) { it.uid }
-    }
+/**
+ * Upper bound on how many member profiles one convoy snapshot will refresh.
+ *
+ * `convoy.list` is capped at MAX_CONVOYS_RETURNED (200) and does NOT filter by
+ * status — a long-standing member's list includes every convoy they have ever
+ * been in, ended ones included — at up to MAX_CONVOY_SIZE (25) members each. So
+ * the uid set is bounded by 5000, not by what is on screen, and hydrating it
+ * whole would turn opening the convoy screen into thousands of document reads
+ * for rosters nobody scrolls to.
+ *
+ * This cap keeps the refresh proportional to what a member actually looks at.
+ * [convoyProfileUids] fills it in the order it is given the convoys, so the
+ * caller decides who matters (active and pending convoys before ended ones), and
+ * anything past the cap simply keeps its stored copy — the same graceful
+ * degradation as a failed read.
+ */
+const val MAX_HYDRATED_CONVOY_PROFILES = 120
 
-fun mergeConvoyUpdate(
-    status: ConvoyListStatus,
-    fresh: ConvoySummary,
-): ConvoyListStatus {
-    if (status !is ConvoyListStatus.Loaded) return status
-    val present =
-        status.convoys.any { it.convoyId == fresh.convoyId } ||
-            status.pendingInvites.any { it.convoyId == fresh.convoyId }
-    if (!present) return status
-    return ConvoyListStatus.Loaded(
-        convoys = status.convoys.map { if (it.convoyId == fresh.convoyId) fresh else it },
-        pendingInvites =
-            status.pendingInvites.map { if (it.convoyId == fresh.convoyId) fresh else it },
-    )
+/**
+ * The distinct member uids named by [convoys], for one batched profile read,
+ * capped at [limit] and filled in the order [convoys] is given.
+ */
+fun convoyProfileUids(
+    convoys: List<ConvoySummary>,
+    limit: Int = MAX_HYDRATED_CONVOY_PROFILES,
+): Set<String> {
+    val uids = LinkedHashSet<String>()
+    for (convoy in convoys) {
+        for (member in convoy.members) {
+            if (uids.size >= limit) return uids
+            if (member.uid.isNotBlank()) uids += member.uid
+        }
+    }
+    return uids
 }

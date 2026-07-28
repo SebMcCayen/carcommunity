@@ -11,15 +11,10 @@ import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
 import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
-import com.kungsbackacarcommunity.app.profile.LiveProfiles
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.flow.map
 
 /**
  * [CommunityChatRepository] backed by the member-readable
@@ -61,7 +56,6 @@ class FirebaseCommunityChatRepository private constructor(
             .orderBy(CREATED_AT, Query.Direction.DESCENDING)
             .limit(limit)
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeMessages(): Flow<ChannelMessagesState> =
         combine(observeRawMessages(), blockVisibility.observeHiddenUids()) { state, hidden ->
             // The hidden set is loaded ONCE per session (one document listener),
@@ -74,19 +68,7 @@ class FirebaseCommunityChatRepository private constructor(
                 ChannelMessagesState.Loading -> state
             }
         }
-            // Overlay each sender's CURRENT profile onto the copy stamped on the
-            // message at post time (ChannelThread.hydrate explains the decision).
-            //
-            // De-duplicated by sender BEFORE the read, so a full window costs a
-            // read per distinct sender rather than per message. Runs after the
-            // block filter, so a hidden sender is never paid for.
-            .flatMapLatest { state ->
-                if (state !is ChannelMessagesState.Loaded) return@flatMapLatest flowOf(state)
-                val uids = LiveProfiles.uidsOf(state.messages) { it.senderUid }
-                liveProfiles.observeProfiles(uids).map { live ->
-                    ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live))
-                }
-            }
+            .hydrateSenders(liveProfiles)
 
     private fun observeRawMessages(): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
@@ -212,18 +194,8 @@ class FirebaseCommunityChatRepository private constructor(
     override suspend fun loadOlder(before: String): ChannelOlderResult =
         functions.callChannel(LIST, mapOf("before" to before)).fold(
             onSuccess = {
-                val page = ChannelResponseParser.parseMessagesPage(it)
-                // An older page carries the same frozen sender copies as the live
-                // window, so it needs the same overlay — otherwise scrolling back
-                // would show a member's old avatar above their new one. Usually
-                // free: the window's senders are already cached from the live
-                // hydration above.
-                val live =
-                    liveProfiles.loadProfiles(
-                        LiveProfiles.uidsOf(page.messages) { message -> message.senderUid },
-                    )
                 ChannelOlderResult.Loaded(
-                    page.copy(messages = ChannelThread.hydrate(page.messages, live)),
+                    ChannelResponseParser.parseMessagesPage(it).hydrateSenders(liveProfiles),
                 )
             },
             onFailure = { ChannelOlderResult.Failed },
@@ -254,7 +226,7 @@ class FirebaseCommunityChatRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
-                FirebaseLiveProfileRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

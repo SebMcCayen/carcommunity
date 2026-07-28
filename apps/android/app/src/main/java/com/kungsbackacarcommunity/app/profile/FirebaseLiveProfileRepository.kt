@@ -7,11 +7,15 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.kungsbackacarcommunity.app.firebase.await
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import java.util.concurrent.ConcurrentHashMap
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 /**
  * [LiveProfileRepository] backed by batched one-shot `users/{uid}` reads behind
@@ -61,6 +65,17 @@ class FirebaseLiveProfileRepository private constructor(
      */
     private val cache = ConcurrentHashMap<String, CacheEntry>()
 
+    /**
+     * Owns the profile reads, so an abandoned collector cannot throw away a read
+     * that was already issued (see [readMissing]). [SupervisorJob] keeps one
+     * failed batch from cancelling the others; the scope lives as long as the
+     * process, like the cache it fills.
+     */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Bounds how many profile queries are in flight at once (see [READ_CONCURRENCY]). */
+    private val readSemaphore = Semaphore(READ_CONCURRENCY)
+
     private data class CacheEntry(val profile: LiveProfile?, val readAtMillis: Long)
 
     override fun observeProfiles(uids: Set<String>): Flow<Map<String, LiveProfile>> = flow {
@@ -79,15 +94,23 @@ class FirebaseLiveProfileRepository private constructor(
     override suspend fun loadProfiles(uids: Set<String>): Map<String, LiveProfile> =
         readMissing(uids)
 
-    /** The subset of [uids] with an unexpired cached profile. */
+    /**
+     * Every cached profile among [uids], INCLUDING expired ones
+     * (stale-while-revalidate).
+     *
+     * Expiry decides whether to RE-READ a profile, never whether to show it. An
+     * expired entry is a profile that was correct five minutes ago; the stored
+     * denormalized copy it would otherwise fall back to is one that may be months
+     * out of date. Dropping the expired entry would therefore make the whole list
+     * revert to old names and avatars for one round-trip on the first update after
+     * any idle window, then snap back — a full-list identity flicker, in exchange
+     * for nothing.
+     */
     private fun cachedProfiles(uids: Set<String>): Map<String, LiveProfile> {
         if (uids.isEmpty()) return emptyMap()
-        val now = System.currentTimeMillis()
         val result = mutableMapOf<String, LiveProfile>()
         for (uid in uids) {
-            val entry = cache[uid] ?: continue
-            if (!entry.isFresh(now)) continue
-            entry.profile?.let { result[uid] = it }
+            cache[uid]?.profile?.let { result[uid] = it }
         }
         return result
     }
@@ -95,6 +118,24 @@ class FirebaseLiveProfileRepository private constructor(
     /**
      * Reads every uid that is not already cached-and-fresh, folds the results into
      * the cache, and returns the full picture for [uids].
+     *
+     * ## Why the reads run in a repository-owned scope
+     *
+     * The chat and inbox consumers call this from inside a `flatMapLatest`, which
+     * CANCELS the previous inner flow on every new snapshot — i.e. on every
+     * incoming message. A read launched in the caller's scope would then be
+     * abandoned mid-flight, and because the cache is only written when a read
+     * COMPLETES, nothing would be learned from it: the next message would start
+     * the same read again. In a busy channel, where messages can arrive faster
+     * than a round-trip completes, that never converges — the reads are issued
+     * (and billed) forever and the avatars never actually refresh, in exactly the
+     * channel where they are most visible.
+     *
+     * Launching in [scope] decouples the read's lifetime from the collector's: an
+     * abandoned read still finishes and still populates the cache, so the next
+     * emission is a hit and the overlay converges after ONE read cycle. The jobs
+     * are bare Firestore queries writing into [cache] — no user state, nothing to
+     * leak — and [READ_CONCURRENCY] bounds how many run at once.
      */
     private suspend fun readMissing(uids: Set<String>): Map<String, LiveProfile> {
         if (uids.isEmpty()) return emptyMap()
@@ -102,9 +143,10 @@ class FirebaseLiveProfileRepository private constructor(
         val missing = uids.filter { cache[it]?.isFresh(now) != true }
         if (missing.isEmpty()) return cachedProfiles(uids)
 
-        coroutineScope {
-            missing.chunked(READ_CHUNK).map { group -> async { readChunk(group) } }.awaitAll()
-        }
+        missing
+            .chunked(READ_CHUNK)
+            .map { group -> scope.async { readSemaphore.withPermit { readChunk(group) } } }
+            .awaitAll()
         return cachedProfiles(uids)
     }
 
@@ -143,6 +185,20 @@ class FirebaseLiveProfileRepository private constructor(
                     readAtMillis,
                 )
         }
+
+        // A uid the query did NOT return means "no such user" only if the query
+        // actually reached the server. Offline, `get()` does not fail — it falls
+        // back to Firestore's own local cache and SUCCEEDS with whatever is cached
+        // there, often nothing at all. Recording those absences as deleted accounts
+        // would poison this cache for a full TTL: every uid would read as
+        // resolved-and-absent, no further read would be issued, and hydration would
+        // go completely inert for five minutes after a moment of bad signal —
+        // silently restoring the exact bug this class exists to fix.
+        //
+        // Documents that DID come back are kept either way: Firestore's local cache
+        // holds real synced documents, so they are genuine profiles, merely not
+        // confirmed this second.
+        if (snapshot.metadata.isFromCache) return
         for (uid in uids) {
             if (uid !in found) cache[uid] = CacheEntry(null, readAtMillis)
         }
@@ -162,6 +218,15 @@ class FirebaseLiveProfileRepository private constructor(
         /** Firestore caps an `in` filter at 30 values. */
         private const val READ_CHUNK = 30
 
+        /**
+         * Concurrent profile queries. A caller can legitimately ask for hundreds
+         * of uids at once (the convoy list spans every convoy the member has ever
+         * been in), and firing every chunk at once would put a burst of dozens of
+         * simultaneous queries on a mobile connection for a purely cosmetic
+         * overlay. Four keeps it prompt without monopolising the link.
+         */
+        private const val READ_CONCURRENCY = 4
+
         private const val USERS = "users"
         private const val DISPLAY_NAME = "displayName"
         private const val AVATAR_PATH = "avatarPath"
@@ -180,11 +245,18 @@ class FirebaseLiveProfileRepository private constructor(
         @Volatile private var instance: FirebaseLiveProfileRepository? = null
 
         /**
-         * Returns the shared live repository, or [LiveProfileRepository.EMPTY] when
+         * Returns the SHARED live repository, or [LiveProfileRepository.EMPTY] when
          * Firebase is not configured. Never null: every consumer always has an
          * overlay to apply, and "no live opinion" is the safe config-less default.
+         *
+         * Named `sharedOrEmpty`, not `createOrEmpty`, precisely because it does NOT
+         * behave like this codebase's other `create*` factories: those hand back a
+         * fresh instance per call, whereas every caller here gets the SAME object,
+         * and that is load-bearing rather than incidental — the cache and the read
+         * scope are the whole point, and a per-consumer instance would silently
+         * multiply the read cost by the number of open surfaces.
          */
-        fun createOrEmpty(context: Context): LiveProfileRepository {
+        fun sharedOrEmpty(context: Context): LiveProfileRepository {
             if (FirebaseApp.getApps(context).isEmpty()) return LiveProfileRepository.EMPTY
             return instance
                 ?: synchronized(this) {

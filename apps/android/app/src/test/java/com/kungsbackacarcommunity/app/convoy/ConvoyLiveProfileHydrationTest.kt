@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.convoy
 import com.kungsbackacarcommunity.app.profile.LiveProfile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -125,6 +126,34 @@ class ConvoyLiveProfileHydrationTest {
 
         // "owner" is in both convoys and must be paid for once.
         assertEquals(setOf("owner", "eva", "nils"), convoyProfileUids(convoys))
+    }
+
+    @Test
+    fun `the uid set is capped, so a long convoy history cannot fan out`() {
+        // convoy.list returns up to 200 convoys and does NOT filter by status, at
+        // up to 25 members each — so an uncapped gather would be thousands of
+        // reads on screen entry, for rosters nobody scrolls to.
+        val convoys =
+            (1..200).map { c ->
+                summary("c$c", (1..25).map { m -> member("u$c-$m") })
+            }
+
+        assertEquals(MAX_HYDRATED_CONVOY_PROFILES, convoyProfileUids(convoys).size)
+    }
+
+    @Test
+    fun `the cap keeps the convoys offered first and drops the tail`() {
+        // The coordinator passes pending invites first, so when the cap bites it
+        // drops members of old ended convoys, never of the convoy the member is
+        // being asked to answer right now.
+        val urgent = summary("urgent", listOf(member("eva"), member("nils")))
+        val filler = (1..200).map { c -> summary("c$c", (1..25).map { m -> member("u$c-$m") }) }
+
+        val uids = convoyProfileUids(listOf(urgent) + filler)
+
+        assertTrue(uids.contains("eva"))
+        assertTrue(uids.contains("nils"))
+        assertEquals(MAX_HYDRATED_CONVOY_PROFILES, uids.size)
     }
 
     @Test
