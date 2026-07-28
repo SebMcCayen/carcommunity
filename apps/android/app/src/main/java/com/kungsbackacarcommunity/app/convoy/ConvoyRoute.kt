@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.convoy
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +15,7 @@ import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
+import com.kungsbackacarcommunity.app.live.LiveShareStart
 import kotlinx.coroutines.launch
 
 /** Which convoy sub-screen the route is currently showing. */
@@ -49,6 +51,12 @@ private enum class ConvoyView { List, Create, Detail }
  * shows the new (active) convoy. A FAILURE does NOT call it — the error stays on
  * the create screen. Null (a config-less/test host with no map to land on) falls
  * back to opening the new convoy's detail so the flow never dead-ends.
+ *
+ * [liveShareEnabled] mirrors the shell's "this caller may share live" gate and
+ * exists only for the OPTIMISTIC live-start overlay below: creating a convoy,
+ * accepting into an already-active one and starting a forming one all begin a
+ * live session for the CALLER server-side, and the shell's stop control would
+ * otherwise sit on "+" until that session echoed back down the RTDB listener.
  */
 @Composable
 fun ConvoyRoute(
@@ -58,6 +66,7 @@ fun ConvoyRoute(
     onViewMember: ((String) -> Unit)? = null,
     viewerUid: String? = null,
     onConvoyCreated: (() -> Unit)? = null,
+    liveShareEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val coordinator = remember(repository) { ConvoyCoordinator(repository) }
@@ -82,6 +91,63 @@ fun ConvoyRoute(
 
     // Create-flow local form state (reset each time the picker is opened).
     var selectedUids by rememberSaveable { mutableStateOf<Set<String>>(emptySet()) }
+
+    // --- Optimistic live-share start ------------------------------------
+    // A convoy live session is started SERVER-side: convoy-create auto-starts the
+    // owner's, convoy-respond auto-starts a late joiner accepting into an
+    // already-ACTIVE convoy, and convoy-start auto-starts every accepted member
+    // of a still-forming one (functions/src/convoy/manageConvoy.ts). For the
+    // member who TAPPED, a live session is beginning right now, so the shell's
+    // centre control should show the STOP sign immediately rather than after the
+    // callable + RTDB echo.
+    //
+    // Only the tapper is ever marked: a member auto-started by SOMEONE ELSE's
+    // convoy-start — or while the app is backgrounded — is untouched here and
+    // keeps the pure observer path, so the overlay can never invent sharing for a
+    // tap that did not happen.
+    //
+    // Tracks an outstanding mark for the dispose safety net below.
+    var liveStartMarked by remember { mutableStateOf(false) }
+
+    fun markLiveStarting(): Boolean {
+        val marked =
+            liveShareEnabled &&
+                LiveShareStart.request(
+                    nowMillis = System.currentTimeMillis(),
+                    // Not observable from this route; the shell reconciles an
+                    // attempt made while a session is already running and drops it.
+                    observedSharing = false,
+                )
+        if (marked) liveStartMarked = true
+        return marked
+    }
+
+    // Every mark is resolved by the very call that made it — settled when the
+    // callable succeeded (the session is then a moment away), dropped when it did
+    // not, so a failed accept/start never leaves a STOP sign with no session. A
+    // call that succeeds without producing a session for this caller (the
+    // server-side live-share flag is off) expires on its own after
+    // OptimisticLiveStart.ECHO_GRACE_MS.
+    fun resolveLiveStarting(marked: Boolean, succeeded: Boolean) {
+        if (!marked) return
+        liveStartMarked = false
+        if (succeeded) {
+            LiveShareStart.settled(System.currentTimeMillis())
+        } else {
+            LiveShareStart.failed()
+        }
+    }
+
+    // Safety net for the one flow that dismisses ITSELF on success: a successful
+    // create navigates away (see the createState effect below), which cancels the
+    // coroutine that would otherwise have resolved the mark — leaving it in
+    // flight for the full timeout with a STOP sign up. Settling on dispose caps
+    // that at the short echo window instead, which is the right window anyway:
+    // we only leave this route on a create that SUCCEEDED, so the session really
+    // is on its way, and if it never arrives the grace takes the sign back.
+    DisposableEffect(Unit) {
+        onDispose { if (liveStartMarked) LiveShareStart.settled(System.currentTimeMillis()) }
+    }
 
     LaunchedEffect(coordinator) { coordinator.load() }
 
@@ -166,7 +232,22 @@ fun ConvoyRoute(
                     detailConvoyId = convoyId
                     view = ConvoyView.Detail
                 },
-                onAccept = { convoyId -> scope.launch { coordinator.accept(convoyId) } },
+                onAccept = { convoyId ->
+                    // Accepting only auto-starts a session when the convoy is
+                    // ALREADY active; accepting into a still-forming one starts
+                    // nothing yet (convoy-start does that later), so nothing is
+                    // claimed optimistically for it.
+                    val marked =
+                        (status as? ConvoyListStatus.Loaded)?.convoy(convoyId)?.status ==
+                            ConvoyStatus.Active &&
+                            markLiveStarting()
+                    scope.launch {
+                        coordinator.accept(convoyId)
+                        // runRowAction clears the row error before each attempt and
+                        // sets it on failure, so this reads THIS call's outcome.
+                        resolveLiveStarting(marked, coordinator.actionError.value == null)
+                    }
+                },
                 onDecline = { convoyId -> scope.launch { coordinator.decline(convoyId) } },
                 onClearActionError = { coordinator.clearActionError() },
             )
@@ -186,9 +267,18 @@ fun ConvoyRoute(
                 onRetryFriends =
                     friendsCoordinator?.let { c -> { scope.launch { c.load() } } },
                 onSubmit = {
+                    // Convoys are born ACTIVE, so creating one starts the owner's
+                    // own live session server-side — mark it optimistically.
+                    val marked = markLiveStarting()
                     // Convoys are unnamed — the title is always absent and the
                     // list/detail fall back to the neutral "untitled" label.
-                    scope.launch { coordinator.create(selectedUids.toList(), null) }
+                    scope.launch {
+                        coordinator.create(selectedUids.toList(), null)
+                        resolveLiveStarting(
+                            marked,
+                            coordinator.createState.value is CreateConvoyState.Created,
+                        )
+                    }
                 },
                 // No onDone: a successful create is handled by the
                 // LaunchedEffect(createState) above, which dismisses to the map.
@@ -201,7 +291,16 @@ fun ConvoyRoute(
                     convoy = convoy,
                     working = convoy.convoyId in busyConvoys,
                     actionError = actionError,
-                    onStart = { scope.launch { coordinator.start(convoy.convoyId) } },
+                    onStart = {
+                        // Activating a forming convoy auto-starts a live session
+                        // for every accepted member, the owner tapping here
+                        // included.
+                        val marked = markLiveStarting()
+                        scope.launch {
+                            coordinator.start(convoy.convoyId)
+                            resolveLiveStarting(marked, coordinator.actionError.value == null)
+                        }
+                    },
                     onEnd = { scope.launch { coordinator.end(convoy.convoyId) } },
                     onClearActionError = { coordinator.clearActionError() },
                     onViewMember = onViewMember,

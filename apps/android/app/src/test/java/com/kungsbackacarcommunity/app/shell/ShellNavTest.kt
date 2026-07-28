@@ -169,20 +169,19 @@ class ShellNavTest {
         )
     }
 
-    // --- Live-share manage sheet rows -----------------------------------
-    // Guards the promise made when the map's right-side broadcast button was
-    // removed: while a session runs, Stop, Hide me now, and Who can see me
-    // (the audience screen) are ALL reachable from the sheet the centre live
-    // control opens.
+    // --- Live-share sheet rows -------------------------------------------
+    // hasStop is what splits the two surfaces: true = the bottom bar's STOP
+    // sheet (stopping and NOTHING else), false = turn-by-turn's reuse (no Stop,
+    // but the privacy escape hatch and the audience screen unchanged).
 
     @Test
-    fun `manage sheet while sharing exposes stop, hide-now and audience`() {
+    fun `stop sheet while sharing offers stopping and nothing else`() {
         val rows =
             LiveManageSheet.actions(isSharing = true, canShareLive = true, hasStop = true)
-        // The three relocated capabilities are all present.
         assertEquals(true, rows.showStop)
-        assertEquals(true, rows.showHideNow)
-        assertEquals(true, rows.showAudienceEntry)
+        // Removed from the stop sheet: pressing a stop sign must not open a menu.
+        assertEquals(false, rows.showHideNow)
+        assertEquals(false, rows.showAudienceEntry)
         // Not a start surface while already sharing.
         assertEquals(false, rows.showStart)
         assertEquals(false, rows.showUnavailableNotice)
@@ -191,7 +190,8 @@ class ShellNavTest {
     @Test
     fun `manage sheet without a stop handler still keeps hide-now and audience`() {
         // Turn-by-turn navigation reuses the sheet WITHOUT wiring stop, so no
-        // Stop row appears there — but the privacy controls must not vanish.
+        // Stop row appears there — but the privacy controls must not vanish:
+        // dropping them from the STOP sheet must not drop them from the app.
         val rows =
             LiveManageSheet.actions(isSharing = true, canShareLive = true, hasStop = false)
         assertEquals(false, rows.showStop)
@@ -202,12 +202,12 @@ class ShellNavTest {
     @Test
     fun `manage sheet when idle and permitted offers start plus the audience entry`() {
         val rows =
-            LiveManageSheet.actions(isSharing = false, canShareLive = true, hasStop = true)
+            LiveManageSheet.actions(isSharing = false, canShareLive = true, hasStop = false)
         assertEquals(true, rows.showStart)
         assertEquals(false, rows.showHideNow)
         assertEquals(false, rows.showStop)
         assertEquals(false, rows.showUnavailableNotice)
-        // Who-can-see-me is reachable in every state, sharing or not.
+        // Who-can-see-me is reachable in every state of the controls sheet.
         assertEquals(true, rows.showAudienceEntry)
     }
 
@@ -217,7 +217,7 @@ class ShellNavTest {
         // member-gated). The sheet must explain it's unavailable, never claim a
         // membership is required.
         val rows =
-            LiveManageSheet.actions(isSharing = false, canShareLive = false, hasStop = true)
+            LiveManageSheet.actions(isSharing = false, canShareLive = false, hasStop = false)
         assertEquals(false, rows.showStart)
         assertEquals(true, rows.showUnavailableNotice)
         assertEquals(false, rows.showStop)
