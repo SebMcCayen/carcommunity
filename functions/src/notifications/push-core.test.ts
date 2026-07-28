@@ -113,6 +113,33 @@ describe('pushPreviewsEnabled', () => {
   });
 });
 
+/**
+ * Every category whose branch in buildPushDeepLink hands relatedEntityId to
+ * `entityIdOrNull` — i.e. the id reaches the client and a navigator opens by it.
+ */
+const PASS_THROUGH_CATEGORIES = [
+  'convoy_chat',
+  'convoy_invite',
+  'friend_request',
+  'event_reminder',
+  'event_updated',
+  'event_cancelled',
+] as const satisfies readonly NotificationCategory[];
+
+/**
+ * Every category that returns a hard-coded null entityId: the target is a
+ * single screen with no per-entity anchor, or the id names nothing the client
+ * could open by.
+ */
+const DELIBERATE_NULL_CATEGORIES = [
+  'community_chat',
+  'subscription_status',
+  'admin_message',
+  'account_warning',
+  'account_suspension',
+  'system_notice',
+] as const satisfies readonly NotificationCategory[];
+
 describe('buildPushDeepLink', () => {
   it('resolves a DM to the OTHER member of the pairId', () => {
     expect(buildPushDeepLink('direct_message', 'aaa__bbb', 'aaa')).toEqual({
@@ -151,15 +178,62 @@ describe('buildPushDeepLink', () => {
     });
   });
 
-  it('maps friend requests and convoy invites to their screens', () => {
+  it('maps friend requests to their screen with the requester uid', () => {
     expect(buildPushDeepLink('friend_request', 'requester-uid', 'me')).toEqual({
       target: 'friends',
       entityId: 'requester-uid',
     });
-    expect(buildPushDeepLink('convoy_invite', 'invite-1', 'me')).toEqual({
+  });
+
+  it('PASSES THROUGH the convoy id for an invite so the tap opens THAT convoy', () => {
+    // Regression guard: this used to return a hard-coded null, which discarded
+    // the convoy id manageConvoy already writes and made every invite push land
+    // on the convoy list. Do NOT "simplify" this back to null.
+    expect(buildPushDeepLink('convoy_invite', 'convoy-7', 'me')).toEqual({
       target: 'convoys',
-      entityId: null,
+      entityId: 'convoy-7',
     });
+  });
+
+  it('degrades an id-less or blank convoy invite to the convoy list, not an empty id', () => {
+    for (const related of [null, undefined, '', '   ']) {
+      expect(buildPushDeepLink('convoy_invite', related, 'me')).toEqual({
+        target: 'convoys',
+        entityId: null,
+      });
+    }
+  });
+
+  it('passes a real id through on EVERY pass-through category', () => {
+    for (const category of PASS_THROUGH_CATEGORIES) {
+      expect(buildPushDeepLink(category, 'entity-1', 'me').entityId).toBe('entity-1');
+    }
+  });
+
+  it('never emits a blank entityId on any pass-through category', () => {
+    for (const category of PASS_THROUGH_CATEGORIES) {
+      for (const blank of [null, undefined, '', '   ']) {
+        expect(buildPushDeepLink(category, blank, 'me').entityId).toBeNull();
+      }
+    }
+  });
+
+  it('keeps null only where the target has no single per-entity anchor', () => {
+    // community_chat: the two producers write DIFFERENT id kinds (a message id
+    // from @mentions, the singleton channel id from the digest).
+    // subscription/admin/account notices have no navigable entity at all — their
+    // relatedEntityId is operator-supplied free text with no client-side meaning.
+    for (const category of DELIBERATE_NULL_CATEGORIES) {
+      expect(buildPushDeepLink(category, 'ref-1', 'me').entityId).toBeNull();
+    }
+  });
+
+  it('sorts every category into exactly one bucket — a new one cannot slip through', () => {
+    // direct_message is in neither list: it does not pass relatedEntityId
+    // through, it PARSES the pairId (covered by its own tests above). If a new
+    // category is added without being classified here, this fails.
+    const classified = [...PASS_THROUGH_CATEGORIES, ...DELIBERATE_NULL_CATEGORIES, 'direct_message'];
+    expect([...classified].sort()).toEqual([...NOTIFICATION_CATEGORIES].sort());
   });
 
   it('gives every category a target', () => {
@@ -204,6 +278,17 @@ describe('buildPushPayload', () => {
     for (const value of Object.values(payload)) {
       expect(typeof value).toBe('string');
     }
+  });
+
+  it('puts the convoy id on the wire for an invite (the client opens by it)', () => {
+    const payload = buildPushPayload({
+      ...base,
+      category: 'convoy_invite',
+      relatedEntityId: 'convoy-7',
+      includePreview: true,
+    });
+    expect(payload.target).toBe('convoys');
+    expect(payload.entityId).toBe('convoy-7');
   });
 
   it('truncates to the notification content limits', () => {
