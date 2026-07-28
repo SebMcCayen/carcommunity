@@ -32,10 +32,10 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
  * How a car photo is sized, shaped and aligned at a given call site.
  *
  * The two variants are DELIBERATELY different looks, not drift: the owner's own
- * garage shows a portrait-friendly circular badge of a car they already know,
- * while a stranger's profile shows a wide postcard of a car they don't. Both go
- * through the same [VehiclePhoto] so the resolution, cropping and no-photo
- * behaviour can no longer diverge between the two screens.
+ * garage shows a compact circular badge of a car they already know, so the list
+ * stays skimmable, while a stranger's profile shows a wide postcard of a car
+ * they don't. Both go through the same [VehiclePhoto], so the resolution,
+ * cropping and no-photo behaviour can no longer diverge between the two screens.
  *
  * [alignment] is part of the style rather than a separate parameter because it
  * follows from the sizing: a fixed-diameter circle has to be told where to sit in
