@@ -2,6 +2,23 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 22,
+      "versionName": "0.8.11",
+      "releaseDate": "2026-07-25",
+      "highlights": [
+        "Sätt träffens plats på kartan – alla ser den",
+        "Registreringsnummer på din bil",
+        "Snabbare chatt"
+      ],
+      "changes": [
+        "När du skapar en träff väljer du platsen på kartan, och träffen visas sedan som en markör för alla",
+        "Lägg till registreringsnummer på bilarna i ditt garage",
+        "Rapportera en händelse med egen plats, och bekräfta att andras rapporter fortfarande stämmer",
+        "Chattmeddelanden syns direkt när du skickar dem",
+        "Bakåtknappen i undermenyer går tillbaka till rätt sida istället för till kartan"
+      ]
+    },
+    {
       "versionCode": 21,
       "versionName": "0.8.10",
       "releaseDate": "2026-07-22",
