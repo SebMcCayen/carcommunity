@@ -7,13 +7,15 @@
  * exported runAccountPurge runner (Firestore trees, owned documents,
  * storage prefixes, Auth user, processed request record retained).
  *
- * Requires the Functions emulator — run via:
+ * Requires the Functions + Database emulators (the purge clears the block
+ * graph's RTDB mirror) — run via:
  *   pnpm emulators:test
  */
 
 process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099';
 process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 process.env.FIREBASE_STORAGE_EMULATOR_HOST ??= '127.0.0.1:9199';
+process.env.FIREBASE_DATABASE_EMULATOR_HOST ??= '127.0.0.1:9000';
 process.env.GCLOUD_PROJECT ??= 'demo-test';
 
 import { deleteApp, FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
@@ -34,6 +36,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { getStorage as getAdminStorage } from 'firebase-admin/storage';
+import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runAccountPurge } from '../account/scheduled';
 
@@ -46,6 +49,9 @@ const adminApp =
 const adminAuth = getAdminAuth(adminApp);
 const adminDb = getAdminFirestore(adminApp);
 const adminBucket = getAdminStorage(adminApp).bucket(`${PROJECT_ID}.appspot.com`);
+// Same app the purge's own adminRtdb resolves from, so both agree on the
+// database namespace the emulator serves.
+const adminRtdb = getAdminDatabase(adminApp);
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -288,6 +294,60 @@ describe('account purge (hard delete after retention)', () => {
       endedAt: Timestamp.now(),
     });
 
+    // (h) The block graph, on BOTH sides. blocking-onBlockWrite mirrors each of
+    //     these rows into RTDB (liveLocationBlocks/{blocker}/{blocked}), so the
+    //     seed exercises the Firestore rows and their RTDB mirror together.
+    const blockedByUserUid = 'block-target-uid';
+    const blockerAUid = 'blocker-a-uid';
+    const blockerBUid = 'blocker-b-uid';
+    const blockRef = (blockerUid: string, blockedUid: string) =>
+      adminDb.collection('userBlocks').doc(blockerUid).collection('blocked').doc(blockedUid);
+    const blockDoc = (blockedUid: string, displayName: string) => ({
+      blockedUserId: blockedUid,
+      displayName,
+      createdAt: Timestamp.now(),
+    });
+    // OWN side: someone the deleted user blocked.
+    const ownBlockRef = blockRef(uid, blockedByUserUid);
+    await ownBlockRef.set(blockDoc(blockedByUserUid, 'Blockerad'));
+    // MIRROR side: two members who blocked the deleted user, each row carrying
+    // their denormalized displayName.
+    const mirrorBlockARef = blockRef(blockerAUid, uid);
+    const mirrorBlockBRef = blockRef(blockerBUid, uid);
+    await mirrorBlockARef.set(blockDoc(uid, 'Raderad'));
+    await mirrorBlockBRef.set(blockDoc(uid, 'Raderad'));
+    // A mirror row whose DOCUMENT ID is not the deleted uid while its
+    // `blockedUserId` field is. The block callable always writes the two equal,
+    // so this is not a state the API can produce — it is here because it is the
+    // only fixture that tells the two possible RTDB key derivations apart end to
+    // end: blocking-onBlockWrite keys the mirror off the document PATH, so the
+    // node it writes is liveLocationBlocks/{blockerC}/{legacyDocId}, and only a
+    // purge that derives its key from the same path clears that node rather than
+    // a non-existent one named after the swept uid. (The deterministic pin on
+    // that derivation is the blockMirrorRtdbKey unit test in
+    // account/deletion-core.test.ts; this asserts the two stores agree in situ.)
+    const blockerCUid = 'blocker-c-uid';
+    const legacyBlockDocId = 'legacy-block-doc-id';
+    const mirrorBlockCRef = blockRef(blockerCUid, legacyBlockDocId);
+    await mirrorBlockCRef.set(blockDoc(uid, 'Raderad'));
+    // An RTDB node with NO Firestore row behind it, under the deleted user's own
+    // subtree: only the unconditional liveLocationBlocks/{uid} removal clears
+    // this — a trigger-driven cleanup or a sweep derived from the (by then
+    // purged) Firestore rows would leave it.
+    await adminRtdb.ref(`liveLocationBlocks/${uid}/orphan-uid`).set(true);
+    // Wait for the trigger to settle before purging, so a late mirror write
+    // cannot re-create a node the purge just removed.
+    await pollUntil(async () => {
+      const snap = await adminRtdb.ref('liveLocationBlocks').get();
+      const tree = (snap.val() ?? {}) as Record<string, Record<string, boolean>>;
+      return tree[uid]?.[blockedByUserUid] === true &&
+        tree[blockerAUid]?.[uid] === true &&
+        tree[blockerBUid]?.[uid] === true &&
+        tree[blockerCUid]?.[legacyBlockDocId] === true
+        ? true
+        : undefined;
+    });
+
     // Controls that must SURVIVE the purge:
     // - another user's community message,
     const otherCommunityMsg = await adminDb
@@ -308,10 +368,20 @@ describe('account purge (hard delete after retention)', () => {
     await bystanderFriendRef.set({
       friendUid: 'bystander-uid', displayName: 'Kvar', avatarPath: null, createdAt: Timestamp.now(),
     });
-    // - a friend request between two other members.
+    // - a friend request between two other members,
     const bystanderReqRef = adminDb.collection('friendRequests').doc('req-sender__req-target');
     await bystanderReqRef.set({
       fromUid: 'req-sender', toUid: 'req-target', status: 'pending', createdAt: Timestamp.now(),
+    });
+    // - a block between two OTHER members, sitting in the same `blocked`
+    //   subcollection as one of the mirror rows: the collection-group sweep must
+    //   take only the rows naming the deleted user, and must not clear that
+    //   blocker's other RTDB mirror nodes along with theirs.
+    const bystanderBlockRef = blockRef(blockerAUid, 'bystander-uid');
+    await bystanderBlockRef.set(blockDoc('bystander-uid', 'Kvar'));
+    await pollUntil(async () => {
+      const snap = await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/bystander-uid`).get();
+      return snap.val() === true ? true : undefined;
     });
 
     // A due (31-day-old pending) request and soft-delete state.
@@ -360,6 +430,31 @@ describe('account purge (hard delete after retention)', () => {
     expect((await outgoingReqRef.get()).exists).toBe(false);
     expect((await incomingReqRef.get()).exists).toBe(false);
 
+    // Block graph erased on BOTH sides and in BOTH stores: the deleted user's
+    // own list went with the userBlocks tree, and every blocker's mirror row —
+    // which would otherwise keep rendering the erased member's displayName in
+    // their block list — is gone, along with the liveLocationBlocks nodes that
+    // back the RTDB read rule. The orphaned RTDB node under the deleted user's
+    // own subtree goes too, proving that removal is unconditional rather than
+    // derived from the (already purged) Firestore rows.
+    expect((await ownBlockRef.get()).exists).toBe(false);
+    expect((await mirrorBlockARef.get()).exists).toBe(false);
+    expect((await mirrorBlockBRef.get()).exists).toBe(false);
+    expect((await adminRtdb.ref(`liveLocationBlocks/${uid}`).get()).exists()).toBe(false);
+    expect(
+      (await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/${uid}`).get()).exists(),
+    ).toBe(false);
+    expect(
+      (await adminRtdb.ref(`liveLocationBlocks/${blockerBUid}/${uid}`).get()).exists(),
+    ).toBe(false);
+    // ...including the row whose document id is not the deleted uid: the sweep
+    // deletes it and clears the RTDB node keyed on that id — the one
+    // blocking-onBlockWrite actually wrote.
+    expect((await mirrorBlockCRef.get()).exists).toBe(false);
+    expect(
+      (await adminRtdb.ref(`liveLocationBlocks/${blockerCUid}/${legacyBlockDocId}`).get()).exists(),
+    ).toBe(false);
+
     // Convoy membership: stripped from the convoy the user belonged to (the
     // convoy itself and the other member survive)...
     const memberConvoy = (await memberConvoyRef.get()).data()!;
@@ -404,12 +499,17 @@ describe('account purge (hard delete after retention)', () => {
 
     // Controls survive: another user's community message, a DM the user isn't in,
     // the user's EVENT chat message (authorUserId-keyed, deliberately retained),
-    // and the friend row / friend request between two OTHER members.
+    // and the friend row / friend request / block between two OTHER members
+    // (the last with its RTDB mirror node still intact).
     expect((await otherCommunityMsg.get()).exists).toBe(true);
     expect((await otherConvRef.get()).exists).toBe(true);
     expect((await eventMsg.get()).exists).toBe(true);
     expect((await bystanderFriendRef.get()).exists).toBe(true);
     expect((await bystanderReqRef.get()).exists).toBe(true);
+    expect((await bystanderBlockRef.get()).exists).toBe(true);
+    expect(
+      (await adminRtdb.ref(`liveLocationBlocks/${blockerAUid}/bystander-uid`).get()).val(),
+    ).toBe(true);
 
     // Storage prefixes gone.
     const [profileFiles] = await adminBucket.getFiles({ prefix: `profileImages/${uid}/` });

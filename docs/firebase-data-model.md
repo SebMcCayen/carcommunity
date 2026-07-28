@@ -641,12 +641,22 @@ user) and flips the request to `processed` — the record is retained as
 the proof of deletion. SOCIAL-GRAPH MIRRORS are the rows other users'
 documents carry about the deleted user, unreachable from their own tree:
 the mirror friendship rows `users/{otherUid}/friends/{uid}`, the
-`friendRequests` documents in both directions, and convoy membership
+`friendRequests` documents in both directions, the block rows
+`userBlocks/{otherUid}/blocked/{uid}` (whose denormalized `displayName`
+would otherwise keep naming the erased member in each blocker's list —
+removing the row is an unblock only in form, since the account it
+shielded them from no longer exists), and convoy membership
 (`memberUids` + `members`/`memberProfiles`, the stored
 `summary.participantUids`/`participantCount`, and the shared
 `destination.setByDisplayName`; a convoy the deleted user OWNED is ended
 so the survivors aren't stranded with an un-endable drive, and one they
-were alone in is deleted). All of it runs through the single
+were alone in is deleted). The block graph's Realtime Database mirror
+(`liveLocationBlocks/{blocker}/{blocked}`, written by
+`blocking-onBlockWrite`) is cleared by the purge itself on both sides —
+the deleted user's whole `liveLocationBlocks/{uid}` subtree and each
+blocker's node for them — rather than left to the trigger the Firestore
+deletes fire, so a dropped trigger cannot strand a node whose Firestore
+row is already gone. All of it runs through the single
 `purgeUserData` routine, which the inactive-account sweep
 (`account-cleanupInactive`) reuses — both erasure paths delete the same set.
 Deliberately retained: moderation/audit history, hashed partner-insight

@@ -27,7 +27,9 @@
  * graph mirrors onto OTHER users' documents has to be swept separately, or
  * the deleted user survives as a dangling row in everyone else's data —
  * see PURGE_FRIEND_MIRROR / PURGE_FRIEND_REQUEST_USER_FIELDS /
- * PURGE_CONVOY_MEMBERSHIP below.
+ * PURGE_CONVOY_MEMBERSHIP / PURGE_BLOCK_MIRROR below. The block graph is
+ * additionally mirrored OUTSIDE Firestore, into Realtime Database — see
+ * LIVE_LOCATION_BLOCKS_RTDB_ROOT.
  *
  * What is deliberately retained (documented, not an oversight):
  * - moderationActions / adminAuditEvents / moderationReports — immutable
@@ -99,6 +101,12 @@ export const PURGE_DOC_TREES = [
   // lifetime distance driven, events attended, convoys led and the local-day
   // key of the member's last app open — so it must not survive erasure.
   'badgeProgress',
+  // The deleted user's OWN block list, userBlocks/{uid}/blocked/* — who they
+  // chose to block, each row carrying that person's denormalized displayName.
+  // recursiveDelete reaches the `blocked` subcollection. The MIRROR side (the
+  // rows other members hold about this user) is swept separately — see
+  // PURGE_BLOCK_MIRROR.
+  'userBlocks',
 ] as const;
 
 export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
@@ -163,6 +171,91 @@ export const PURGE_CONVOY_MEMBERSHIP = {
   collection: 'convoys',
   memberField: 'memberUids',
 } as const;
+
+/**
+ * MIRROR side of the block graph: `userBlocks/{otherUid}/blocked/{uid}` — the
+ * row every member who blocked the deleted user still holds, carrying their
+ * denormalized `displayName` (blocking-core.ts buildBlockDocument). The
+ * deleted user's own list goes with the `userBlocks` doc tree above; these
+ * rows live under OTHER owners and no owned-doc purge can reach them, so the
+ * blocker's list keeps rendering the erased member's name indefinitely.
+ *
+ * DELETING the row is technically an unblock, and that is the right call here:
+ * by the time this runs the account no longer exists (the Auth user is deleted
+ * in the same purge and `users/{uid}` is already gone), so there is nobody left
+ * to be shielded from — every callable that consults the block graph is
+ * unreachable for a uid that cannot authenticate, appear in a listing, or be
+ * looked up. What survives instead is a ghost entry naming a deleted account,
+ * with an unblock button that acts on nothing. Same shape, and same resolution,
+ * as the friend mirror above.
+ *
+ * QUERIED on the `blockedUserId` FIELD, not the document id: a collection-group
+ * query cannot filter on a bare id (documentId() there matches full paths), and
+ * the field is written on every block and preserved by the idempotent re-block
+ * merge. As with the friend mirror, sweeping the mirror rows themselves rather
+ * than reading the deleted user's own list first keeps the sweep
+ * order-independent and idempotent under a retried partial purge. One equality
+ * filter, no orderBy → the automatic single-field index (collection-group
+ * scoped) covers it; no composite index needed.
+ *
+ * The field selects the rows; it does NOT key the RTDB mirror. That key comes
+ * from each row's own path segments — see blockMirrorRtdbKey below.
+ */
+export const PURGE_BLOCK_MIRROR = {
+  collectionGroup: 'blocked',
+  blockedField: 'blockedUserId',
+  /**
+   * Guard: the only parent collection whose `blocked` rows this may delete.
+   * Enforced by blockMirrorRtdbKey, which rejects any other path.
+   */
+  root: 'userBlocks',
+} as const;
+
+/**
+ * The block graph is mirrored a second time, into Realtime Database, by
+ * blocking/onBlockWrite.ts: `liveLocationBlocks/{blockerUid}/{blockedUid} =
+ * true`, which is what the RTDB rules read to deny a live-location marker
+ * (rules cannot read Firestore). The purge clears those nodes ITSELF rather
+ * than leaving them to the trigger the Firestore deletes above would fire: a
+ * trigger that fails or is dropped after its row is gone leaves a node no
+ * later retry can find again, because the retry derives the blocker uids from
+ * exactly the rows the previous run deleted. Nothing here DEPENDS on the
+ * trigger either way — a delete only ever makes it write `null`, the same
+ * value the purge writes, and no purge write can make it write `true`.
+ */
+export const LIVE_LOCATION_BLOCKS_RTDB_ROOT = 'liveLocationBlocks';
+
+/**
+ * The `liveLocationBlocks` multi-path update key for ONE mirror row, derived
+ * from that row's Firestore path — or null when the path is not a
+ * `userBlocks/{blockerUid}/blocked/{blockedUid}` block at all, which also
+ * serves as the root guard the collection-group sweep needs (a `blocked`
+ * subcollection can hang off any parent).
+ *
+ * Derived ENTIRELY from the row's PATH SEGMENTS, because those are exactly the
+ * `{blockerUid}` / `{blockedUid}` wildcard params blocking/onBlockWrite.ts
+ * builds `liveLocationBlocks/{blockerUid}/{blockedUid}` from. Deriving the key
+ * the same way the trigger that WROTE the node did is what makes the purge
+ * unable to clear a different node than the one that exists — a mirror written
+ * under one key and purged under another is how a node survives erasure.
+ *
+ * Note what this deliberately does NOT use: the `blockedUserId` FIELD the sweep
+ * queries on (equal to the document id for every row the block callable writes,
+ * but the id is what the trigger keyed the node on), and any assumption about
+ * the Auth uid character set — blocking-core.ts states outright that the
+ * character set is intentionally unconstrained beyond a length bound. A
+ * Firestore document id is a single path segment and so cannot contain the '/'
+ * that would re-target a multi-path update; that is a structural property of
+ * the path, not a property of uids.
+ */
+export function blockMirrorRtdbKey(rowPath: string): string | null {
+  const segments = rowPath.split('/');
+  if (segments.length !== 4) return null;
+  const [root, blockerUid, subcollection, blockedUid] = segments;
+  if (root !== PURGE_BLOCK_MIRROR.root) return null;
+  if (subcollection !== PURGE_BLOCK_MIRROR.collectionGroup) return null;
+  return `${blockerUid}/${blockedUid}`;
+}
 
 export const PURGE_STORAGE_PREFIXES = (uid: string): string[] => [
   `profileImages/${uid}/`,
