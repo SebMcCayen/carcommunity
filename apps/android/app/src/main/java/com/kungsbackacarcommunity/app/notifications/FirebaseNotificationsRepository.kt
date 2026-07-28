@@ -13,8 +13,8 @@ import kotlinx.coroutines.flow.callbackFlow
 
 /**
  * [NotificationsRepository] backed by an owner-only Firestore listener on the
- * inbox plus the notifications.markRead / markAllRead callables (europe-west1),
- * Phase 12 slice 21. The listener is bounded to the newest
+ * inbox plus the notifications.markRead / markAllRead / delete / deleteAll
+ * callables (europe-west1), Phase 12 slice 21. The listener is bounded to the newest
  * [Notifications.INBOX_QUERY_LIMIT] items (createdAt descending — a
  * single-field orderBy, so Firestore's automatic index suffices); items are
  * additionally sorted newest-first client-side ([Notifications.sortedForInbox])
@@ -52,6 +52,14 @@ class FirebaseNotificationsRepository private constructor(
         call(MARK_ALL_READ, emptyMap())
     }
 
+    override suspend fun deleteNotification(notificationId: String) {
+        call(DELETE, mapOf("notificationId" to notificationId))
+    }
+
+    override suspend fun deleteAll() {
+        call(DELETE_ALL, emptyMap())
+    }
+
     private suspend fun call(name: String, data: Map<String, Any>) {
         functions.getHttpsCallable(name).call(data)
             .awaitOrThrow { "$name failed without a cause" }
@@ -64,6 +72,8 @@ class FirebaseNotificationsRepository private constructor(
         private const val REGION = "europe-west1"
         private const val MARK_READ = "notifications-markRead"
         private const val MARK_ALL_READ = "notifications-markAllRead"
+        private const val DELETE = "notifications-delete"
+        private const val DELETE_ALL = "notifications-deleteAll"
 
         fun createIfAvailable(context: Context): NotificationsRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

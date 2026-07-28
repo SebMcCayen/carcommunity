@@ -260,6 +260,63 @@ describe('notifications-markRead / markAllRead', () => {
   });
 });
 
+describe('notifications-delete / deleteAll', () => {
+  it('deletes only the caller’s own item, idempotently', async () => {
+    const owner = await createProvisionedUser('notif-del-owner');
+    const { notificationId } = await writeInAppNotification(owner.uid, baseNotification);
+
+    await signInAs(owner);
+    const first = (await call('notifications-delete', { notificationId })).data as {
+      deleted: boolean;
+    };
+    expect(first.deleted).toBe(true);
+    expect((await itemsOf(owner.uid).doc(notificationId!).get()).exists).toBe(false);
+
+    // Replay (a double-swipe, or a retry after a dropped response) is a
+    // silent no-op rather than an error.
+    const replay = (await call('notifications-delete', { notificationId })).data as {
+      deleted: boolean;
+    };
+    expect(replay.deleted).toBe(false);
+  });
+
+  it('cannot delete another member’s notification', async () => {
+    const victim = await createProvisionedUser('notif-del-victim');
+    const attacker = await createProvisionedUser('notif-del-attacker');
+    const { notificationId } = await writeInAppNotification(victim.uid, baseNotification);
+
+    // The attacker knows the exact id and calls with it. The reference is
+    // built from THEIR uid, so it addresses a document that does not exist in
+    // their own inbox: the answer is the same silent miss as any other, and
+    // the victim's item survives.
+    await signInAs(attacker);
+    const attempt = (await call('notifications-delete', { notificationId })).data as {
+      deleted: boolean;
+    };
+    expect(attempt.deleted).toBe(false);
+    expect((await itemsOf(victim.uid).doc(notificationId!).get()).exists).toBe(true);
+  });
+
+  it('deleteAll empties only the caller’s inbox and is idempotent', async () => {
+    const purger = await createProvisionedUser('notif-del-purger');
+    const bystander = await createProvisionedUser('notif-del-bystander');
+    for (let i = 0; i < 3; i += 1) {
+      await writeInAppNotification(purger.uid, baseNotification, `purge-${i}`);
+    }
+    await writeInAppNotification(bystander.uid, baseNotification, 'bystander-keep');
+
+    await signInAs(purger);
+    const first = (await call('notifications-deleteAll', {})).data as { deletedCount: number };
+    expect(first.deletedCount).toBe(3);
+    expect((await itemsOf(purger.uid).get()).size).toBe(0);
+    // Nobody else's inbox is reachable from a callable that takes no input.
+    expect((await itemsOf(bystander.uid).get()).size).toBe(1);
+
+    const replay = (await call('notifications-deleteAll', {})).data as { deletedCount: number };
+    expect(replay.deletedCount).toBe(0);
+  });
+});
+
 describe('notifications push token registration', () => {
   const tokensOf = (uid: string) =>
     adminDb.collection('userPrivate').doc(uid).collection('pushTokens');

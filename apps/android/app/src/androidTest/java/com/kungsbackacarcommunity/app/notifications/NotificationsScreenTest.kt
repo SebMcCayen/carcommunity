@@ -1,11 +1,17 @@
 package com.kungsbackacarcommunity.app.notifications
 
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -242,8 +248,208 @@ class NotificationsScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.friends_errorRequestGone)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.friends_close)).performScrollTo().performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_errorDismiss))
+            .performScrollTo()
+            .performClick()
         assertEquals(1, dismissed)
+    }
+
+    // ── Deleting ───────────────────────────────────────────────────────────
+
+    @Test
+    fun deleteAll_isOfferedOnlyWhenThereIsSomethingToDelete() {
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(emptyList()),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.notifications_deleteAll)).assertDoesNotExist()
+    }
+
+    @Test
+    fun deleteAll_asksBeforeDoingIt() {
+        // Irreversible, so the small text must not be a one-tap sweep.
+        var deletedAll = 0
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onDeleteAll = { deletedAll++ },
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAll))
+            .performScrollTo()
+            .performClick()
+        // Nothing has happened yet — the dialog is the gate.
+        assertEquals(0, deletedAll)
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAllConfirmTitle))
+            .assertIsDisplayed()
+
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAllConfirmAction))
+            .performClick()
+        assertEquals(1, deletedAll)
+    }
+
+    @Test
+    fun deleteAll_cancelLeavesEverythingAlone() {
+        var deletedAll = 0
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onDeleteAll = { deletedAll++ },
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAll))
+            .performScrollTo()
+            .performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAllCancel))
+            .performClick()
+
+        assertEquals(0, deletedAll)
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAllConfirmTitle))
+            .assertDoesNotExist()
+        // The row it would have deleted is still there.
+        composeTestRule.onNodeWithText("Event soon").assertIsDisplayed()
+    }
+
+    @Test
+    fun swipingARowRightToLeftDeletesIt() {
+        var deleted: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onDeleteNotification = { deleted = it },
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithTag(NOTIFICATION_ROW_TEST_TAG)
+            .performScrollTo()
+            .performTouchInput {
+                // Across the ROW's full width — well past the half-width
+                // threshold, so this is a committed swipe rather than a flick
+                // that should spring back.
+                swipeLeft(startX = right - 1f, endX = left + 1f)
+            }
+        composeTestRule.waitForIdle()
+        assertEquals("n1", deleted)
+    }
+
+    @Test
+    fun deleteIsReachableWithoutSwiping() {
+        // A drag is invisible to a screen reader, so the same action is also
+        // published as a semantics custom action on every row.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onDeleteNotification = {},
+                )
+            }
+        }
+        val label = str(R.string.notifications_deleteAction)
+        composeTestRule
+            .onNode(
+                SemanticsMatcher("has a '$label' custom action") { node ->
+                    node.config
+                        .getOrNull(SemanticsActions.CustomActions)
+                        ?.any { it.label == label } == true
+                },
+            )
+            .assertExists()
+    }
+
+    @Test
+    fun aFailedDeleteIsSurfacedAndTheRowIsStillThere() {
+        // What must never happen is a notification quietly vanishing while it
+        // still exists on the server.
+        var dismissed = 0
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    deleteError = NotificationDeleteError.SINGLE,
+                    onDismissDeleteError = { dismissed++ },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.notifications_deleteError)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Event soon").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_errorDismiss))
+            .performScrollTo()
+            .performClick()
+        assertEquals(1, dismissed)
+    }
+
+    @Test
+    fun aFailedDeleteAllSaysSoInItsOwnWords() {
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    deleteError = NotificationDeleteError.ALL,
+                    onDismissDeleteError = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAllError))
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.notifications_deleteError)).assertDoesNotExist()
+    }
+
+    @Test
+    fun deletingTheLastRowLandsOnTheEmptyState() {
+        // The caller filters deleted rows out of the state it passes down, so
+        // an inbox emptied by deleting must read exactly like one that was
+        // never filled — not a blank page.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(emptyList()),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onDeleteNotification = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.notifications_empty)).assertIsDisplayed()
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.notifications
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class NotificationTest {
@@ -47,6 +48,54 @@ class NotificationTest {
                 item("mid", createdAt = 200L),
             )
         assertEquals(listOf("new", "mid", "old", "none"), Notifications.sortedForInbox(items).map { it.id })
+    }
+
+    // ── Optimistic-delete view ─────────────────────────────────────────────
+
+    @Test
+    fun `visibleItems hides pending deletes and keeps the order`() {
+        val items = listOf(item("a"), item("b"), item("c"))
+        assertEquals(
+            listOf("a", "c"),
+            Notifications.visibleItems(items, setOf("b")).map { it.id },
+        )
+        // Nothing pending returns the very same list rather than a copy — this
+        // is the common case, hit on every recomposition.
+        assertSame(items, Notifications.visibleItems(items, emptySet()))
+    }
+
+    @Test
+    fun `visibleItems ignores ids that are not in the list`() {
+        val items = listOf(item("a"))
+        assertEquals(listOf("a"), Notifications.visibleItems(items, setOf("ghost")).map { it.id })
+    }
+
+    @Test
+    fun `visibleItems can empty the list, which is what shows the empty state`() {
+        val items = listOf(item("a"), item("b"))
+        assertEquals(
+            emptyList<String>(),
+            Notifications.visibleItems(items, setOf("a", "b")).map { it.id },
+        )
+    }
+
+    @Test
+    fun `prunePendingDeletes retires ids the server no longer returns`() {
+        // "landed" was deleted successfully and has left the snapshot;
+        // "inFlight" is still on screen while its call is running.
+        val items = listOf(item("inFlight"), item("other"))
+        assertEquals(
+            setOf("inFlight"),
+            Notifications.prunePendingDeletes(setOf("landed", "inFlight"), items),
+        )
+    }
+
+    @Test
+    fun `prunePendingDeletes empties once every delete has landed`() {
+        assertEquals(
+            emptySet<String>(),
+            Notifications.prunePendingDeletes(setOf("a", "b"), emptyList()),
+        )
     }
 
     private fun item(id: String, read: Boolean = false, createdAt: Long? = 0L) =

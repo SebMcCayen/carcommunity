@@ -16,7 +16,8 @@ sealed interface NotificationsState {
  * so the screen/coordinator logic is unit-testable with fakes.
  *
  * The inbox is an owner-only Firestore read; read-state changes go through the
- * notifications.markRead / markAllRead callables (all item writes are
+ * notifications.markRead / markAllRead callables and removals through
+ * notifications.delete / notifications.deleteAll (all item writes are
  * backend-only).
  */
 interface NotificationsRepository {
@@ -25,4 +26,14 @@ interface NotificationsRepository {
     suspend fun markRead(notificationId: String)
 
     suspend fun markAllRead()
+
+    /**
+     * Deletes one of the caller's own notifications. Throws on failure — the
+     * caller ([NotificationsCoordinator.delete]) needs the failure so it can
+     * put the optimistically removed row back.
+     */
+    suspend fun deleteNotification(notificationId: String)
+
+    /** Empties the caller's inbox. Throws on failure, for the same reason. */
+    suspend fun deleteAll()
 }

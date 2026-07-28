@@ -12,11 +12,21 @@ import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
 /**
  * Notification inbox integration route (Phase 12 slice 21): wires the inbox
  * stream and the mark-read coordinator into [NotificationsScreen].
+ *
+ * DELETES. This route owns the optimistic view: the screen is handed the
+ * server's list minus the ids the coordinator is currently hiding, so a swipe
+ * takes its row away immediately and a delete the server refuses puts it
+ * straight back (see [NotificationsCoordinator]). Nothing is copied or mutated
+ * — the snapshot stays the source of truth and the hiding is a filter over it —
+ * so a restore cannot resurrect a stale version of the row, and an inbox that
+ * empties through deleting lands on the same empty state as one that was never
+ * filled.
  *
  * FRIEND REQUESTS: when a [friendsRepository] is available the route also owns
  * a [FriendsCoordinator], so a friend-request row can be accepted or declined
@@ -41,9 +51,49 @@ fun NotificationsRoute(
     friendsRepository: FriendsRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
-    val state by
+    val serverState by
         remember(repository, uid) { repository.observeNotifications(uid) }
             .collectAsState(initial = NotificationsState.Loading)
+
+    // Stand-ins for the config-less build, where there is no coordinator and so
+    // nothing can be deleted. Remembered UNCONDITIONALLY — a `remember` inside
+    // an elvis branch would claim a different composition slot depending on
+    // whether the coordinator is null.
+    val noPendingDeletes = remember { MutableStateFlow(emptySet<String>()) }
+    val noDeleteError = remember { MutableStateFlow<NotificationDeleteError?>(null) }
+    val pendingDeletes by (coordinator?.pendingDeletes ?: noPendingDeletes).collectAsState()
+    val deleteError by (coordinator?.deleteError ?: noDeleteError).collectAsState()
+
+    // Every snapshot retires the ids whose delete has landed, so the hidden set
+    // holds only rows that are still being hidden from something.
+    LaunchedEffect(serverState, coordinator) {
+        (serverState as? NotificationsState.Loaded)?.let { coordinator?.onSnapshot(it.items) }
+    }
+
+    // The optimistic view: the server's list minus the rows a delete has taken
+    // out. Filtering here — rather than mutating a copy of the list — is what
+    // makes a failed delete a one-line restore (drop the id) instead of a
+    // re-insert that has to guess where the row belonged.
+    val state =
+        when (val current = serverState) {
+            is NotificationsState.Loaded ->
+                NotificationsState.Loaded(
+                    Notifications.visibleItems(current.items, pendingDeletes),
+                )
+            else -> current
+        }
+    val visibleIds =
+        (state as? NotificationsState.Loaded)?.items?.map { it.id }.orEmpty()
+
+    val actions =
+        InboxDeleteActions(
+            onDeleteNotification = { id ->
+                coordinator?.let { c -> scope.launch { c.delete(id) } }
+            },
+            onDeleteAll = { coordinator?.let { c -> scope.launch { c.deleteAll(visibleIds) } } },
+            deleteError = deleteError,
+            onDismissDeleteError = { coordinator?.clearDeleteError() },
+        )
 
     if (friendsRepository == null) {
         NotificationsScreen(
@@ -51,6 +101,10 @@ fun NotificationsRoute(
             onMarkRead = markReadHandler(coordinator, scope),
             onMarkAllRead = { coordinator?.let { c -> scope.launch { c.markAllRead() } } },
             onBack = onBack,
+            onDeleteNotification = actions.onDeleteNotification,
+            onDeleteAll = actions.onDeleteAll,
+            deleteError = actions.deleteError,
+            onDismissDeleteError = actions.onDismissDeleteError,
         )
         return
     }
@@ -61,8 +115,20 @@ fun NotificationsRoute(
         friendsRepository = friendsRepository,
         scope = scope,
         onBack = onBack,
+        deleteActions = actions,
     )
 }
+
+/**
+ * The delete wiring, bundled so the two inbox variants below receive one
+ * parameter instead of four identical ones (and cannot drift apart).
+ */
+private data class InboxDeleteActions(
+    val onDeleteNotification: (String) -> Unit,
+    val onDeleteAll: () -> Unit,
+    val deleteError: NotificationDeleteError?,
+    val onDismissDeleteError: () -> Unit,
+)
 
 /**
  * The inbox with friend-request actions wired in.
@@ -81,6 +147,7 @@ private fun FriendAwareNotificationsInbox(
     friendsRepository: FriendsRepository,
     scope: CoroutineScope,
     onBack: () -> Unit,
+    deleteActions: InboxDeleteActions,
 ) {
     val context = LocalContext.current
     val friends =
@@ -118,6 +185,10 @@ private fun FriendAwareNotificationsInbox(
         onAcceptFriendRequest = { requestId -> scope.launch { friends.accept(requestId) } },
         onDeclineFriendRequest = { requestId -> scope.launch { friends.decline(requestId) } },
         onDismissFriendActionError = { friends.clearActionError() },
+        onDeleteNotification = deleteActions.onDeleteNotification,
+        onDeleteAll = deleteActions.onDeleteAll,
+        deleteError = deleteActions.deleteError,
+        onDismissDeleteError = deleteActions.onDismissDeleteError,
     )
 }
 

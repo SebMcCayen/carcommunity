@@ -1021,6 +1021,15 @@
     <string name="notifications_loadError">Kunde inte hämta notiser. Försök igen.</string>
     <string name="notifications_retry">Försök igen</string>
     <string name="notifications_markAllRead">Markera alla som lästa</string>
+    <string name="notifications_deleteAll">Ta bort alla notiser</string>
+    <string name="notifications_deleteAllConfirmTitle">Ta bort alla notiser?</string>
+    <string name="notifications_deleteAllConfirmBody">Alla dina notiser tas bort. Det går inte att ångra.</string>
+    <string name="notifications_deleteAllConfirmAction">Ta bort alla</string>
+    <string name="notifications_deleteAllCancel">Avbryt</string>
+    <string name="notifications_deleteAction">Ta bort notis</string>
+    <string name="notifications_deleteError">Kunde inte ta bort notisen. Försök igen.</string>
+    <string name="notifications_deleteAllError">Kunde inte ta bort dina notiser. Försök igen.</string>
+    <string name="notifications_errorDismiss">Stäng</string>
     <string name="notifications_unreadLabel">Nytt</string>
     <string name="notifications_categoryEvent">Event</string>
     <string name="notifications_categoryEventReminder">Påminnelse</string>
