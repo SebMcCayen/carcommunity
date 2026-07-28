@@ -1343,6 +1343,8 @@
     "noOrigin": "Your location isn't available. Turn on location to get directions.",
     "routeSummary": "%1$s · %2$s",
     "directionsTitle": "Directions",
+    "directionsExpand": "Show directions",
+    "directionsCollapse": "Hide directions",
     "clearRoute": "Clear route",
     "loading": "Loading…",
     "unitMeters": "m",

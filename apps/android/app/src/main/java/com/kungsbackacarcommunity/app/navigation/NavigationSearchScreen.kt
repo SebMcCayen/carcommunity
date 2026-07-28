@@ -1,12 +1,15 @@
 package com.kungsbackacarcommunity.app.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -46,34 +49,60 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapRouteOverlay
 import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.PanelDragHandle
+import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.launch
 
 /** Test tag on the whole navigation search overlay, for UI tests. */
 const val NAV_SEARCH_TEST_TAG = "nav_search"
 
 /** Test tag on the route preview's "Start" (turn-by-turn) button. */
 const val NAV_START_TEST_TAG = "nav_start"
+
+/** Test tag on the bottom route-preview sheet itself. */
+const val NAV_ROUTE_SHEET_TEST_TAG = "nav_route_sheet"
+
+/** Test tag on the route-preview sheet's drag handle (expand/collapse). */
+const val NAV_ROUTE_SHEET_HANDLE_TEST_TAG = "nav_route_sheet_handle"
+
+/** Test tag on the route-preview sheet's revealed step-by-step directions area. */
+const val NAV_ROUTE_STEPS_TEST_TAG = "nav_route_steps"
 
 /** Test tag on the "set this place as the convoy's shared destination" action. */
 const val NAV_CONVOY_DESTINATION_TEST_TAG = "nav_convoy_destination"
@@ -238,13 +267,27 @@ fun NavigationSearchScreen(
         }
     }
 
+    // The route sheet's COLLAPSED height, reported by the sheet once measured (0
+    // until then). The camera fit below reserves exactly this much screen, so the
+    // whole route is framed above the sheet in the state it actually appears in —
+    // collapsed. Before the sheet fixed itself to a peek this reservation was a
+    // fixed ~320dp of "expanded sheet", i.e. the map framed the route into the
+    // top half of the screen and the sheet then covered the rest.
+    var collapsedSheetHeightPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+
     // Mirror the picked destination onto the map surface behind (cleared when
     // gone). The destination marker shows as soon as a destination is selected —
     // an empty path is a valid marker-only overlay (see MapRouteOverlay) — so the
     // marker is visible while the route is still loading or when routing fails
     // (NavError.NoOrigin / NavError.Route). The route line is added only once the
     // route has resolved.
-    LaunchedEffect(state.destination, state.route) {
+    //
+    // Also keyed on the measured collapsed height, so the fit is REDONE the moment
+    // the sheet reports its real size: the first overlay (drawn the instant a
+    // destination is picked, before any layout pass) uses the phone-sized fallback
+    // and is corrected one frame later, rather than being stuck at a guess.
+    LaunchedEffect(state.destination, state.route, collapsedSheetHeightPx) {
         val dest = state.destination
         val route = state.route
         mapSurface.setRouteOverlay(
@@ -252,6 +295,11 @@ fun NavigationSearchScreen(
                 MapRouteOverlay(
                     destination = MapPoint(dest.point.longitude, dest.point.latitude),
                     path = route?.geometry?.map { MapPoint(it.longitude, it.latitude) } ?: emptyList(),
+                    bottomInsetPx =
+                        RouteSheetMetrics.cameraBottomPadPx(
+                            collapsedSheetHeightPx = collapsedSheetHeightPx,
+                            density = density.density,
+                        ),
                 )
             } else {
                 null
@@ -361,6 +409,7 @@ fun NavigationSearchScreen(
                         }
                     },
                 convoyDestinationEnabled = convoyDestinationEnabled,
+                onCollapsedHeightChanged = { collapsedSheetHeightPx = it },
                 modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
@@ -822,6 +871,34 @@ private fun HintCard(text: String) {
     }
 }
 
+/**
+ * The bottom route-preview sheet: a bottom-anchored, draggable, TWO-DETENT card
+ * over the live map.
+ *
+ * It appears [RouteSheetDetent.Collapsed] — destination, distance/ETA and Start,
+ * nothing else — so the first thing the user sees after picking a place is the
+ * WHOLE route on the map rather than a wall of maneuvers. The step-by-step
+ * directions are revealed by dragging the handle up (or tapping it), and put
+ * away by dragging back down. Previously this sheet always rendered its full
+ * step list, took over half the screen and could not be moved.
+ *
+ * **Start is in the layout above the reveal, not inside it**, so it is on screen
+ * in BOTH detents by construction: the sheet grows UPWARDS out of the bottom
+ * edge (the revealed list is a variable-height gap in the middle of the card)
+ * instead of translating, which also keeps the button clear of the navigation
+ * bar in both states. A translating sheet would have had to push its own bottom
+ * — and therefore Start — off-screen to collapse.
+ *
+ * The drag handle, the drag arithmetic and the list-vs-sheet nested-scroll split
+ * are the shell panels' ([TranslucentShellPanel] / the chat hub), not a second
+ * hand-rolled gesture — see [RouteSheetDrag].
+ *
+ * @param onCollapsedHeightChanged reports the sheet's COLLAPSED height in px so
+ *   the map camera can keep exactly that much of the screen clear when it fits
+ *   the route (see [RouteSheetMetrics.cameraBottomPadPx]). Measured rather than
+ *   assumed: the peek's height moves with the font scale, the navigation-bar
+ *   inset and whether the convoy action is present.
+ */
 @Composable
 private fun RouteSheet(
     state: NavUiState,
@@ -830,190 +907,448 @@ private fun RouteSheet(
     onSave: () -> Unit,
     onSetAsConvoyDestination: (() -> Unit)?,
     convoyDestinationEnabled: Boolean,
+    onCollapsedHeightChanged: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val destination = state.destination ?: return
     // Filled bookmark once this destination is already saved — so the button
     // doubles as the "is this a favourite?" indicator and its edit affordance.
     val alreadySaved = SavedPlaces.find(state.savedPlaces, destination) != null
-    Surface(
-        shape = RoundedCornerShape(topStart = KccRadius.xl, topEnd = KccRadius.xl),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LocationOn,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = destination.name,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                IconButton(onClick = onSave, modifier = Modifier.testTag(NAV_SAVE_TEST_TAG)) {
-                    Icon(
-                        imageVector =
-                            if (alreadySaved) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder,
-                        contentDescription =
-                            stringResource(
-                                if (alreadySaved) {
-                                    R.string.addressSearch_savedEdit
-                                } else {
-                                    R.string.addressSearch_savedAdd
-                                },
-                            ),
-                        tint =
-                            if (alreadySaved) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                    )
-                }
-                IconButton(onClick = onClear) {
-                    Icon(
-                        imageVector = Icons.Filled.Clear,
-                        contentDescription = stringResource(R.string.addressSearch_clearRoute),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+    val route = state.route
+    // Nothing to reveal without maneuvers to read: no route yet, a routing
+    // error, or a degenerate single-point route. The sheet is then peek-only and
+    // the handle neither drags nor toggles, rather than opening onto a void.
+    val hasSteps = route != null && route.steps.isNotEmpty()
 
-            when {
-                state.routeLoading ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            strokeWidth = 2.dp,
+    val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val configuration = LocalConfiguration.current
+
+    // How far the sheet can travel: the height the revealed step list gets.
+    val rangePx =
+        if (hasSteps) {
+            with(density) {
+                RouteSheetMetrics
+                    .stepsRevealHeightDp(configuration.screenHeightDp.toFloat())
+                    .dp
+                    .toPx()
+            }
+        } else {
+            0f
+        }
+
+    // The settled state. rememberSaveABLE so a rotation mid-read keeps the user
+    // where they were, KEYED ON THE DESTINATION so searching again while the
+    // sheet is open puts the new route's sheet back down at the peek — the
+    // "collapsed immediately when the route appears" rule holds for the second
+    // route as well as the first. The pixel offset below is always re-derived
+    // from this and the freshly measured range, so a config change can never
+    // leave the sheet stuck at a stale height.
+    var detent by
+        rememberSaveable(destination.id) { mutableStateOf(RouteSheetDetent.Collapsed) }
+    // Live reveal in px; 0 = collapsed, rangePx = expanded, in between only
+    // while a drag or the settle animation is in flight.
+    val reveal = remember { Animatable(0f) }
+    var sheetHeightPx by remember { mutableIntStateOf(0) }
+    var stepsHeightPx by remember { mutableIntStateOf(0) }
+
+    // The live pixel reveal has to be reset per DESTINATION as well as per detent.
+    // `detent` gets that for free from rememberSaveable(destination.id) above, but
+    // `reveal` is a plain remember whose Animatable survives the swap — so picking
+    // a new destination while the sheet was expanded kept the OLD reveal. That
+    // reads as a tall EMPTY gap, because NavigationController.select() sets the new
+    // destination and `route = null` in the SAME update: there are no maneuvers to
+    // draw in the space being held open.
+    //
+    // snapTo, not animateTo: a new destination's sheet should already BE at the
+    // peek the first time it is drawn, not animate down to it.
+    //
+    // The Animatable INSTANCE is deliberately kept rather than re-remembered on
+    // the destination key: the nested-scroll connection below is remembered once
+    // and closes over it, so swapping the instance would leave the drag writing
+    // into a dead Animatable — the same trap the rememberUpdatedState comment
+    // further down exists to avoid.
+    LaunchedEffect(destination.id) { reveal.snapTo(0f) }
+
+    // Drive the reveal from the settled detent. Also re-runs when the range
+    // changes — a rotation, or the route resolving — so the sheet re-lands
+    // exactly on a detent instead of keeping a pixel value that no longer means
+    // anything (collapsing to 0 when there is nothing left to show).
+    LaunchedEffect(detent, rangePx) {
+        reveal.animateTo(RouteSheetDrag.revealForDetent(detent, rangePx))
+    }
+
+    // Both heights come from the same layout pass, so the difference is the peek
+    // height even mid-animation (the card grows by exactly what the list grows
+    // by) and the camera is never told to clear a half-expanded sheet.
+    LaunchedEffect(sheetHeightPx, stepsHeightPx) {
+        onCollapsedHeightChanged(RouteSheetDrag.collapsedHeightPx(sheetHeightPx, stepsHeightPx))
+    }
+
+    // rememberUpdatedState so the nested-scroll connection — captured once —
+    // always sees the CURRENT range and settle, rather than the ones that
+    // happened to be in scope when it was created. (The detent's backing state is
+    // itself replaced whenever the destination changes, so capturing the setter
+    // directly would write into a dead state after a re-search.)
+    val currentRange by rememberUpdatedState(rangePx)
+    val settle: (Float) -> Unit = { velocity ->
+        val target = RouteSheetDrag.settleDetent(reveal.value, velocity, currentRange)
+        detent = target
+        // BOTH the detent write above and this animateTo are required — do NOT
+        // "simplify" this to rely on LaunchedEffect(detent, rangePx) alone.
+        //
+        // The common settle is back to the detent the drag STARTED from: nudge the
+        // sheet up 20% of the range, release with no real velocity, and
+        // settleDetent returns Collapsed again. Writing an equal value to a
+        // MutableState does not invalidate its readers, so the LaunchedEffect key
+        // is unchanged and the effect never re-runs — this animateTo is the only
+        // thing that returns the sheet to the peek. Without it the sheet would
+        // hang wherever the finger left it.
+        //
+        // When the detent DOES change, the effect also animates to the same
+        // target. That is redundant but harmless: both calls drive the same
+        // Animatable through its MutatorMutex, so the second re-targets the first
+        // from its current value and velocity rather than fighting it.
+        scope.launch { reveal.animateTo(RouteSheetDrag.revealForDetent(target, currentRange)) }
+    }
+    val currentSettle by rememberUpdatedState(settle)
+
+    val nestedScrollConnection =
+        remember {
+            object : NestedScrollConnection {
+                // UNDISPATCHED here and below: these callbacks READ reveal.value
+                // synchronously to clamp and WRITE it from a coroutine, so the
+                // write must land before the callback returns or the next scroll
+                // event in the same frame clamps against a stale reveal and the
+                // sheet overshoots its detents. (Same reasoning, and the same
+                // fix, as the shell panel's connection.)
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val taken =
+                        RouteSheetDrag.preScrollConsumption(
+                            availableY = available.y,
+                            revealPx = reveal.value,
+                            rangePx = currentRange,
                         )
-                        Text(
-                            text = stringResource(R.string.addressSearch_loading),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (taken == 0f) return Offset.Zero
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        reveal.snapTo(
+                            RouteSheetDrag.clampReveal(reveal.value - taken, currentRange),
                         )
                     }
-
-                state.error == NavError.NoOrigin ->
-                    Text(
-                        text = stringResource(R.string.addressSearch_noOrigin),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-
-                state.error == NavError.Route ->
-                    Text(
-                        text = stringResource(R.string.addressSearch_routeError),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-
-                state.route != null -> RouteDetails(route = state.route)
-            }
-
-            // Prominent "Start" CTA once a route is resolved — begins turn-by-turn
-            // navigation (Google-Maps style). Always shown with a usable route: the
-            // HOST decides HOW to navigate (see onStartNavigation) — the in-app
-            // Mapbox turn-by-turn screen when the Navigation SDK is bundled
-            // (BuildConfig.NAV_SDK_ENABLED), else a handoff to the device's maps
-            // app. Either way the button is reachable in every build, so the
-            // route preview never dead-ends without a way to start driving.
-            if (state.route != null) {
-                Button(
-                    onClick = onStart,
-                    modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Navigation,
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.turnByTurn_start),
-                        modifier = Modifier.padding(start = KccSpacing.s2),
-                    )
+                    return Offset(0f, taken)
                 }
-            }
 
-            // "Set for the convoy" — only present when the host opened this
-            // screen as the convoy bar's place picker. Shown as soon as a
-            // DESTINATION is resolved, not only once a ROUTE is: sharing a place
-            // with the group is meaningful even if this phone can't route to it
-            // right now (no GPS fix, directions request failed). Disabled while
-            // `convoy-setDestination` does not exist.
-            if (onSetAsConvoyDestination != null) {
-                OutlinedButton(
-                    onClick = onSetAsConvoyDestination,
-                    enabled = convoyDestinationEnabled,
-                    modifier = Modifier.fillMaxWidth().testTag(NAV_CONVOY_DESTINATION_TEST_TAG),
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource,
+                ): Offset {
+                    val taken =
+                        RouteSheetDrag.postScrollConsumption(
+                            availableY = available.y,
+                            revealPx = reveal.value,
+                        )
+                    if (taken == 0f) return Offset.Zero
+                    scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                        reveal.snapTo(
+                            RouteSheetDrag.clampReveal(reveal.value - taken, currentRange),
+                        )
+                    }
+                    return Offset(0f, taken)
+                }
+
+                // A fling that starts while the sheet is off a detent belongs to
+                // the SHEET: settle it and swallow the velocity so the step list
+                // does not also fling underneath.
+                override suspend fun onPreFling(available: Velocity): Velocity =
+                    if (reveal.value < currentRange) {
+                        currentSettle(available.y)
+                        available
+                    } else {
+                        Velocity.Zero
+                    }
+            }
+        }
+
+    val handleLabel =
+        stringResource(
+            if (detent == RouteSheetDetent.Expanded) {
+                R.string.addressSearch_directionsCollapse
+            } else {
+                R.string.addressSearch_directionsExpand
+            },
+        )
+
+    Surface(
+        shape = RoundedCornerShape(topStart = KccRadius.xl, topEnd = KccRadius.xl),
+        // Shared Aero translucency, like the shell panels and the map popups: the
+        // route line and the map keep showing through the sheet's edge, which is
+        // what stops a bottom-anchored card reading as a second screen.
+        color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+        tonalElevation = 4.dp,
+        shadowElevation = 8.dp,
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .onSizeChanged { sheetHeightPx = it.height }
+                .nestedScroll(nestedScrollConnection)
+                .testTag(NAV_ROUTE_SHEET_TEST_TAG),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().navigationBarsPadding()) {
+            PanelDragHandle(
+                onDrag = { delta ->
+                    // Positive delta is downwards, which CLOSES the reveal.
+                    scope.launch {
+                        reveal.snapTo(RouteSheetDrag.clampReveal(reveal.value - delta, rangePx))
+                    }
+                },
+                onDragStopped = settle,
+                description = handleLabel,
+                testTag = NAV_ROUTE_SHEET_HANDLE_TEST_TAG,
+                // Tap toggles, so the directions are reachable without a drag.
+                onClick =
+                    if (hasSteps) {
+                        { detent = RouteSheetDrag.toggle(detent) }
+                    } else {
+                        null
+                    },
+            )
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = KccSpacing.s4,
+                            end = KccSpacing.s4,
+                            bottom = KccSpacing.s4,
+                        ),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Group,
+                        imageVector = Icons.Filled.LocationOn,
                         contentDescription = null,
-                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
                     )
                     Text(
-                        text =
-                            stringResource(
-                                if (convoyDestinationEnabled) {
-                                    R.string.convoy_barDestinationPickAction
-                                } else {
-                                    R.string.convoy_barDestinationSetUnavailable
-                                },
-                            ),
-                        modifier = Modifier.padding(start = KccSpacing.s2),
+                        text = destination.name,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
+                    IconButton(onClick = onSave, modifier = Modifier.testTag(NAV_SAVE_TEST_TAG)) {
+                        Icon(
+                            imageVector =
+                                if (alreadySaved) {
+                                    Icons.Filled.Bookmark
+                                } else {
+                                    Icons.Filled.BookmarkBorder
+                                },
+                            contentDescription =
+                                stringResource(
+                                    if (alreadySaved) {
+                                        R.string.addressSearch_savedEdit
+                                    } else {
+                                        R.string.addressSearch_savedAdd
+                                    },
+                                ),
+                            tint =
+                                if (alreadySaved) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                        )
+                    }
+                    IconButton(onClick = onClear) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = stringResource(R.string.addressSearch_clearRoute),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(KccSpacing.s3))
+
+                // The peek's one line of substance: what this route costs. Shown
+                // in BOTH detents — collapsing hides the turns, never the answer
+                // to "is this trip worth it".
+                when {
+                    state.routeLoading ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Text(
+                                text = stringResource(R.string.addressSearch_loading),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+
+                    state.error == NavError.NoOrigin ->
+                        Text(
+                            text = stringResource(R.string.addressSearch_noOrigin),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                    state.error == NavError.Route ->
+                        Text(
+                            text = stringResource(R.string.addressSearch_routeError),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+
+                    route != null -> RouteSummaryLine(route = route)
+                }
+
+                // The revealed part. Its height is read in the LAYOUT phase (not
+                // composition), so the expand/collapse animation re-lays-out
+                // without recomposing the whole sheet 60 times a second.
+                //
+                // Modifier ORDER matters twice here: `onSizeChanged` sits OUTSIDE
+                // `layout` so it reports the height this area actually occupies in
+                // the card (the reveal) rather than the height the list would have
+                // liked; and `clipToBounds` sits outside it too, so a list measured
+                // taller than the current reveal is cut off at the reveal instead
+                // of spilling over the Start button below.
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .onSizeChanged { stepsHeightPx = it.height }
+                            .clipToBounds()
+                            .layout { measurable, constraints ->
+                                val revealed = reveal.value.roundToInt().coerceAtLeast(0)
+                                val placeable =
+                                    measurable.measure(
+                                        constraints.copy(minHeight = 0, maxHeight = revealed),
+                                    )
+                                layout(placeable.width, revealed) { placeable.place(0, 0) }
+                            }
+                            .testTag(NAV_ROUTE_STEPS_TEST_TAG),
+                ) {
+                    if (route != null) RouteSteps(route = route)
+                }
+
+                Spacer(modifier = Modifier.height(KccSpacing.s3))
+
+                // Prominent "Start" CTA once a route is resolved — begins
+                // turn-by-turn navigation (Google-Maps style). Always shown with a
+                // usable route, and in BOTH detents: the HOST decides HOW to
+                // navigate (see onStartNavigation) — the in-app Mapbox
+                // turn-by-turn screen when the Navigation SDK is bundled
+                // (BuildConfig.NAV_SDK_ENABLED), else a handoff to the device's
+                // maps app. Either way the button is reachable in every build and
+                // every sheet state, so the route preview never dead-ends without
+                // a way to start driving.
+                if (route != null) {
+                    Button(
+                        onClick = onStart,
+                        modifier = Modifier.fillMaxWidth().testTag(NAV_START_TEST_TAG),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Navigation,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.turnByTurn_start),
+                            modifier = Modifier.padding(start = KccSpacing.s2),
+                        )
+                    }
+                }
+
+                // "Set for the convoy" — only present when the host opened this
+                // screen as the convoy bar's place picker. Shown as soon as a
+                // DESTINATION is resolved, not only once a ROUTE is: sharing a place
+                // with the group is meaningful even if this phone can't route to it
+                // right now (no GPS fix, directions request failed). Disabled while
+                // `convoy-setDestination` does not exist.
+                if (onSetAsConvoyDestination != null) {
+                    Spacer(modifier = Modifier.height(KccSpacing.s2))
+                    OutlinedButton(
+                        onClick = onSetAsConvoyDestination,
+                        enabled = convoyDestinationEnabled,
+                        modifier = Modifier.fillMaxWidth().testTag(NAV_CONVOY_DESTINATION_TEST_TAG),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Group,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Text(
+                            text =
+                                stringResource(
+                                    if (convoyDestinationEnabled) {
+                                        R.string.convoy_barDestinationPickAction
+                                    } else {
+                                        R.string.convoy_barDestinationSetUnavailable
+                                    },
+                                ),
+                            modifier = Modifier.padding(start = KccSpacing.s2),
+                        )
+                    }
                 }
             }
         }
     }
 }
 
+/** Distance · ETA — the peek's headline, present in both detents. */
 @Composable
-private fun RouteDetails(route: RouteSummary) {
+private fun RouteSummaryLine(route: RouteSummary) {
     val unitM = stringResource(R.string.addressSearch_unitMeters)
     val unitKm = stringResource(R.string.addressSearch_unitKilometers)
     val unitMin = stringResource(R.string.addressSearch_unitMinutes)
     val unitH = stringResource(R.string.addressSearch_unitHours)
 
-    val distance = NavFormat.formatDistance(route.distanceMeters, unitM, unitKm)
-    val eta = NavFormat.formatDuration(route.durationSeconds, unitMin, unitH)
+    Text(
+        // Distance first, then duration/ETA — matching the app convention
+        // (e.g. DrivesScreen): "4.5 km · 12 min".
+        text =
+            stringResource(
+                R.string.addressSearch_routeSummary,
+                NavFormat.formatDistance(route.distanceMeters, unitM, unitKm),
+                NavFormat.formatDuration(route.durationSeconds, unitMin, unitH),
+            ),
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            // Distance first, then duration/ETA — matching the app convention
-            // (e.g. DrivesScreen): "4.5 km · 12 min".
-            text = stringResource(R.string.addressSearch_routeSummary, distance, eta),
-            style = MaterialTheme.typography.titleLarge,
-            color = MaterialTheme.colorScheme.primary,
-        )
+/**
+ * The step-by-step maneuver list — the part the sheet reveals.
+ *
+ * Fills whatever height the reveal currently gives it and scrolls inside that.
+ * The sheet's nested-scroll connection sits above this, so scrolling mid-list
+ * scrolls the list and only a downward drag with the list already at its top
+ * collapses the sheet.
+ */
+@Composable
+private fun RouteSteps(route: RouteSummary) {
+    val unitM = stringResource(R.string.addressSearch_unitMeters)
+    val unitKm = stringResource(R.string.addressSearch_unitKilometers)
+
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.addressSearch_directionsTitle),
+            modifier = Modifier.padding(top = KccSpacing.s3, bottom = KccSpacing.s2),
             style = MaterialTheme.typography.labelLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
         )
-        LazyColumn(modifier = Modifier.heightIn(max = 260.dp)) {
+        LazyColumn(modifier = Modifier.fillMaxWidth()) {
             itemsIndexed(route.steps) { index, step ->
                 if (index > 0) HorizontalDivider()
                 Row(

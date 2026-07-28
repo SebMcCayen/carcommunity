@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.shell
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
@@ -399,13 +400,23 @@ fun TranslucentShellPanel(
  * only visible sign that the page can be pulled away, so a screen reader must be
  * able to say so. The actual non-gesture dismissal is the card's `dismiss`
  * action (plus system Back and the outside tap).
+ *
+ * `internal` rather than private because the route-preview sheet
+ * (`NavigationSearchScreen`) is dragged the same way and must LOOK the same: the
+ * handle is the app's one "this surface moves" affordance, and a second
+ * hand-rolled pill would be the start of two of them drifting apart. Its
+ * [description], [testTag] and optional [onClick] are the only things that
+ * differ — a sheet with detents can be TAPPED to switch state, which a
+ * dismiss-only panel cannot.
  */
 @Composable
-private fun PanelDragHandle(
+internal fun PanelDragHandle(
     onDrag: (Float) -> Unit,
     onDragStopped: (Float) -> Unit,
+    description: String = stringResource(R.string.shell_panelDragHandle),
+    testTag: String = PANEL_DRAG_HANDLE_TEST_TAG,
+    onClick: (() -> Unit)? = null,
 ) {
-    val handleDescription = stringResource(R.string.shell_panelDragHandle)
     Box(
         modifier =
             Modifier
@@ -416,8 +427,19 @@ private fun PanelDragHandle(
                     orientation = Orientation.Vertical,
                     onDragStopped = { velocity -> onDragStopped(velocity) },
                 )
-                .semantics { contentDescription = handleDescription }
-                .testTag(PANEL_DRAG_HANDLE_TEST_TAG),
+                // A tap alternative to the drag, where one exists. Without it the
+                // only way to reach the other detent is a gesture, which is not a
+                // usable requirement for everyone — and `onClick` also gives
+                // TalkBack an announced, activatable action on the handle.
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(onClickLabel = description, onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
+                .semantics { contentDescription = description }
+                .testTag(testTag),
         contentAlignment = Alignment.Center,
     ) {
         Box(
