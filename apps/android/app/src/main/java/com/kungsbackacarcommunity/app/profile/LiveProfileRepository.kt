@@ -20,14 +20,17 @@ import kotlinx.coroutines.flow.flowOf
 interface LiveProfileRepository {
 
     /**
-     * Emits the live profiles for [uids], re-emitting as more of them resolve.
+     * Emits the live profiles for [uids]: what is already known, then the result
+     * once the outstanding reads have landed.
      *
-     * MUST emit at least once, promptly, even when nothing is known yet: every
+     * Exactly TWO emissions at most, not one per uid or per batch — callers must
+     * not rely on incremental resolution. The first is whatever is already cached
+     * (often empty) and is emitted PROMPTLY, before any network work: every
      * consumer folds this into a message/row flow, so a flow that only emitted
-     * once the network answered would hold the whole screen on Loading. The first
-     * emission is therefore whatever is already cached (often empty), and a
-     * second follows when the reads land. An empty map means "no live opinion" —
-     * every row falls back to its stored copy, i.e. exactly today's behaviour.
+     * once the network answered would hold the whole screen on Loading. The
+     * second is emitted only if the reads actually changed the picture. An empty
+     * map means "no live opinion" — every row falls back to its stored copy, i.e.
+     * exactly the pre-hydration behaviour.
      *
      * A uid is present in the map ONLY when its user document exists; see
      * [LiveProfiles.resolve] for why absent and null-valued must stay distinct.

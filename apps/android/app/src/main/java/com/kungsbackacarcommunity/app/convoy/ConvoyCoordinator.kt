@@ -270,10 +270,20 @@ class ConvoyCoordinator(
                     // that when the cap bites (see MAX_HYDRATED_CONVOY_PROFILES) it
                     // drops members of old ended convoys rather than of the convoy
                     // the member is being asked to answer right now.
+                    //
+                    // Contained for the same reason as [hydrated]: this sits inside
+                    // the catch-all below, which turns any throw into
+                    // ConvoyListStatus.Error — so an unguarded overlay failure would
+                    // replace the perfectly good snapshot just published above with
+                    // an error screen. A cosmetic refresh must never be able to take
+                    // the list down; failing to it simply leaves the stored copies.
                     val live =
-                        liveProfiles.loadProfiles(
-                            convoyProfileUids(result.pendingInvites + result.convoys),
-                        )
+                        runCatchingCancellable {
+                            liveProfiles.loadProfiles(
+                                convoyProfileUids(result.pendingInvites + result.convoys),
+                            )
+                        }
+                            .getOrDefault(emptyMap())
                     if (live.isNotEmpty()) {
                         statusState.value =
                             ConvoyListStatus.Loaded(
