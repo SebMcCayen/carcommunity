@@ -1,6 +1,13 @@
 package com.kungsbackacarcommunity.app.shell
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1367,6 +1374,59 @@ private fun ChatCircleControl(
     }
 }
 
+/**
+ * Duration of the search bar's expand/collapse transition, in milliseconds.
+ *
+ * Deliberately the same 200ms the shell's tab crossfade uses
+ * (`SHELL_TAB_FADE_MILLIS` in AuthenticatedApp) rather than a second, slightly
+ * different number: this repo has no shared motion token yet, and two chrome
+ * transitions a user can trigger back to back should feel like one system.
+ *
+ * The SAME value drives both halves of the transition (the round button
+ * shrinking out and the full bar wiping in), and that is load-bearing, not
+ * tidiness: the base row only drops the round button — and so reflows the
+ * live-session bar 8dp left — once its exit finishes, and that reflow is
+ * invisible exactly when the opaque overlay has finished covering the region.
+ * Give the two halves different durations and the reflow pops out from under a
+ * half-drawn overlay.
+ */
+private const val SEARCH_TRANSITION_MILLIS = 200
+
+/**
+ * The shared spec for every part of the search transition — one tween so the
+ * button and the bar move as a single object rather than two things that happen
+ * to overlap. [FastOutSlowInEasing] is Compose's standard easing (it is also
+ * `tween`'s own default; named here so the intent survives a future edit).
+ */
+private val searchTransitionSpec =
+    tween<Float>(durationMillis = SEARCH_TRANSITION_MILLIS, easing = FastOutSlowInEasing)
+
+private val searchTransitionSizeSpec =
+    tween<IntSize>(durationMillis = SEARCH_TRANSITION_MILLIS, easing = FastOutSlowInEasing)
+
+/**
+ * Expand/collapse for the search row, anchored at [Alignment.Start].
+ *
+ * Both animated pieces use the same pair, and both are start-anchored on
+ * purpose: the round button and the full "Where to?" bar share a left edge, so
+ * the bar reads as the button unrolling rightwards into the strip instead of
+ * two unrelated elements crossfading. Width is animated (not just alpha) so the
+ * live-session bar beside it slides rather than jumps.
+ */
+private val searchBarEnter =
+    fadeIn(animationSpec = searchTransitionSpec) +
+        expandHorizontally(
+            animationSpec = searchTransitionSizeSpec,
+            expandFrom = Alignment.Start,
+        )
+
+private val searchBarExit =
+    fadeOut(animationSpec = searchTransitionSpec) +
+        shrinkHorizontally(
+            animationSpec = searchTransitionSizeSpec,
+            shrinkTowards = Alignment.Start,
+        )
+
 @Composable
 private fun SearchBarRow(
     avatarUrl: String?,
@@ -1402,7 +1462,19 @@ private fun SearchBarRow(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
             ) {
-                if (!searchExpanded) {
+                // Animated rather than a bare `if (!searchExpanded)`: dropping the
+                // button outright snapped the whole strip (the live-session bar
+                // jumped 48dp+8dp left) on the very first frame of the expand,
+                // before the overlay had covered anything. Shrinking it out over
+                // the same [SEARCH_TRANSITION_MILLIS] the overlay takes to wipe in
+                // keeps the strip continuous, and the residual 8dp
+                // Arrangement.spacedBy gap only collapses when the child is finally
+                // removed — i.e. on the frame the overlay is fully opaque over it.
+                AnimatedVisibility(
+                    visible = !searchExpanded,
+                    enter = searchBarEnter,
+                    exit = searchBarExit,
+                ) {
                     Surface(
                         shape = CircleShape,
                         color = MaterialTheme.colorScheme.surface,
@@ -1462,7 +1534,23 @@ private fun SearchBarRow(
             // surface, full width of the region, fixed 48dp (matching the avatar and
             // the accessibility minimum) so it only extends horizontally. When
             // search closes the overlay is gone and the convoy bar reappears.
-            if (searchExpanded) {
+            //
+            // Animated in/out with the same start-anchored width transition the
+            // round button uses, so the bar unrolls from the button's left edge
+            // and rolls back into it instead of snapping over the strip. Purely
+            // presentational: `searchExpanded` still flips instantly, so the
+            // scrim, the BackHandler and the covered-bar semantics all change on
+            // the same frame as the tap — only the drawing catches up.
+            //
+            // Fully qualified on purpose: an unqualified call here resolves to the
+            // RowScope overload (the enclosing Row's scope wins the overload, but
+            // BoxScope's @LayoutScopeMarker then blocks that receiver, so it does
+            // not compile). This is the plain non-scoped AnimatedVisibility.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = searchExpanded,
+                enter = searchBarEnter,
+                exit = searchBarExit,
+            ) {
                 Surface(
                     modifier = Modifier.fillMaxWidth().height(KccSpacing.s12),
                     shape = RoundedCornerShape(KccRadius.full),
