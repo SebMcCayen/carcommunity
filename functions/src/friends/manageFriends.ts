@@ -52,8 +52,9 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { Timestamp } from 'firebase-admin/firestore';
-import type { DocumentSnapshot, QuerySnapshot } from 'firebase-admin/firestore';
+import type { DocumentReference, DocumentSnapshot, QuerySnapshot } from 'firebase-admin/firestore';
 import { db } from '../firebase';
+import { chunk } from '../incidents/incidents-core';
 import { requireMemberActor } from '../shared/memberActor';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
@@ -78,18 +79,22 @@ import {
   buildFriendRequestDocument,
   buildFriendshipDocument,
   friendRequestId,
+  hydrateFriendRequestSummary,
+  hydrateFriendSummary,
   parseCancelRequestInput,
   parseListInput,
   parseRemoveFriendInput,
   parseRespondRequestInput,
   parseSendRequestInput,
   prefixUpperBound,
+  profileUidsToHydrate,
   toFriendRequestSummary,
   toFriendSummary,
   toProfileProjection,
   toSearchKey,
   type FriendRequestSummary,
   type FriendSummary,
+  type LiveProfiles,
   type NicknameCandidate,
   type ProfileProjection,
 } from './friends-core';
@@ -131,6 +136,14 @@ export const NICKNAME_SCAN_LIMIT = AMBIGUOUS_CANDIDATE_LIMIT + 5;
  */
 const MAX_FRIENDS_RETURNED = 1000;
 const MAX_PENDING_REQUESTS_RETURNED = 500;
+
+/**
+ * Batch size for the live `users/{uid}` re-read in friend.list. `getAll` streams
+ * one RPC per call, so this only bounds how many document reads are in flight at
+ * once; it matches the READ_CHUNK used by the codebase's other batched identity
+ * join (events/listAttendees.ts loadProfiles).
+ */
+const PROFILE_READ_CHUNK = 30;
 
 // ---------------------------------------------------------------------------
 // Firestore references
@@ -772,6 +785,47 @@ async function readFriendGraph(
   }
 }
 
+/**
+ * Batched live read of `users/{uid}` for every member named by the response, so
+ * friend.list can serve the CURRENT name and avatar instead of the copy frozen
+ * onto the friendship/request document when it was written (the rationale, and
+ * why a live null must win, is on hydrateFriendSummary in friends-core.ts).
+ *
+ * COST: one extra document read per DISTINCT member in the response, on top of
+ * the friendship/request documents themselves — so at most a doubling of this
+ * callable's reads, bounded by the same MAX_* caps as the queries above. Reads
+ * are batched via `getAll` (one RPC per PROFILE_READ_CHUNK), never one query per
+ * uid. Results are keyed by `snap.id`, never by position: `getAll` does not
+ * guarantee result order, and pairing by index would silently hand one member's
+ * name and picture to another.
+ *
+ * BEST-EFFORT: a failure here degrades to the stored denormalized copies rather
+ * than failing the whole call — a slightly stale friends list beats no friends
+ * list. Whatever was read before the failure is kept.
+ */
+async function loadLiveProfiles(uids: string[]): Promise<LiveProfiles> {
+  const profiles = new Map<string, ProfileProjection>();
+  if (uids.length === 0) return profiles;
+  try {
+    for (const group of chunk(uids, PROFILE_READ_CHUNK)) {
+      const refs: DocumentReference[] = group.map((uid) => db.collection('users').doc(uid));
+      const snaps = await db.getAll(...refs);
+      for (const snap of snaps) {
+        // A missing user document (deleted account) is NOT recorded: an absent
+        // entry means "fall back to the stored copy", and recording an empty
+        // projection would instead blank the row's name and avatar.
+        if (!snap.exists) continue;
+        profiles.set(snap.id, toProfileProjection(snap.data()));
+      }
+    }
+  } catch (error) {
+    logger.warn('friend.list could not refresh member profiles; serving stored copies', {
+      error: String(error),
+    });
+  }
+  return profiles;
+}
+
 export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsResult> => {
   const actor = await requireMemberActor(request);
 
@@ -793,5 +847,14 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListFriendsRe
   const incoming = incomingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const outgoing = outgoingSnap.docs.map(toRequest).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  return { friends, incoming, outgoing };
+  // Refresh the denormalized names/avatars from the live profiles before
+  // answering. Ordering is already settled above and hydration never reorders,
+  // so the presented order (and any cap truncation) is unaffected.
+  const live = await loadLiveProfiles(profileUidsToHydrate(friends, [...incoming, ...outgoing]));
+
+  return {
+    friends: friends.map((friend) => hydrateFriendSummary(friend, live)),
+    incoming: incoming.map((entry) => hydrateFriendRequestSummary(entry, live)),
+    outgoing: outgoing.map((entry) => hydrateFriendRequestSummary(entry, live)),
+  };
 });

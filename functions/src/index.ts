@@ -732,6 +732,12 @@ export const groupDrive = {
  * withdrawable by its SENDER via cancelRequest, which addresses it by RECIPIENT
  * and derives the doc id server-side (so no other member's request can be named
  * or probed) and deletes it, leaving the pair free to send again later.
+ *
+ * The names/avatars denormalized onto those documents are a write-time snapshot
+ * nothing rewrites, so `list` re-reads live `users/{uid}` in one batched `getAll`
+ * and serves that (the stored copy remains the fallback). Without it a member
+ * who uploaded or changed their avatar AFTER becoming friends showed no picture
+ * in the friends list while their profile screen showed the real one.
  */
 export const friend = {
   sendRequest: sendFriendRequest,

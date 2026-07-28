@@ -3,6 +3,8 @@ import {
   buildFriendRequestDocument,
   buildFriendshipDocument,
   friendRequestId,
+  hydrateFriendRequestSummary,
+  hydrateFriendSummary,
   isMissingIndexError,
   parseCancelRequestInput,
   parseListInput,
@@ -10,10 +12,13 @@ import {
   parseRespondRequestInput,
   parseSendRequestInput,
   prefixUpperBound,
+  profileUidsToHydrate,
   toFriendRequestSummary,
   toFriendSummary,
   toProfileProjection,
   toSearchKey,
+  type FriendRequestSummary,
+  type FriendSummary,
 } from './friends-core';
 
 /**
@@ -221,6 +226,99 @@ describe('friends-core summaries', () => {
     );
     expect(summary.direction).toBe('outgoing');
     expect(summary.otherUser).toEqual({ uid: 'b', displayName: 'Bob', avatarPath: 'pb' });
+  });
+});
+
+/**
+ * REGRESSION (2026-07-27): the friends LIST showed no picture for friends whose
+ * avatar was set or changed AFTER the friendship was established, while the
+ * SAME member's profile screen showed it — because the list served the
+ * displayName/avatarPath copied onto users/{uid}/friends/{friendUid} at accept
+ * time and never rewritten, whereas the profile screen reads live users/{uid}.
+ */
+describe('live profile hydration', () => {
+  const friend = (uid: string, avatarPath: string | null, displayName: string | null = 'stored'): FriendSummary => ({
+    uid,
+    displayName,
+    avatarPath,
+    friendsSince: '2026-07-11T00:00:00.000Z',
+  });
+  const request = (otherUid: string, avatarPath: string | null): FriendRequestSummary => ({
+    requestId: 'r',
+    fromUid: otherUid,
+    toUid: 'me',
+    direction: 'incoming',
+    otherUser: { uid: otherUid, displayName: 'stored', avatarPath },
+    createdAt: '2026-07-11T00:00:00.000Z',
+  });
+
+  it('collects every named member exactly once, across friends AND requests', () => {
+    const uids = profileUidsToHydrate(
+      [friend('a', null), friend('b', null)],
+      [request('b', null), request('c', null)],
+    );
+    // 'b' is both a friend and a request counterparty — paying for the same
+    // user document twice would be pure waste.
+    expect(uids.sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('has nothing to read for an empty graph', () => {
+    expect(profileUidsToHydrate([], [])).toEqual([]);
+  });
+
+  it('fills in an avatar the stored friendship copy never had (the reported bug)', () => {
+    const live = new Map([['a', { displayName: 'Alice', avatarPath: 'profileImages/a/new.jpg' }]]);
+    expect(hydrateFriendSummary(friend('a', null), live)).toEqual({
+      uid: 'a',
+      displayName: 'Alice',
+      avatarPath: 'profileImages/a/new.jpg',
+      friendsSince: '2026-07-11T00:00:00.000Z',
+    });
+  });
+
+  it('replaces a stale avatar and a stale name with the current ones', () => {
+    const live = new Map([['a', { displayName: 'NewName', avatarPath: 'profileImages/a/new.jpg' }]]);
+    const hydrated = hydrateFriendSummary(friend('a', 'profileImages/a/old.jpg', 'OldName'), live);
+    expect(hydrated.avatarPath).toBe('profileImages/a/new.jpg');
+    expect(hydrated.displayName).toBe('NewName');
+  });
+
+  it('lets a live NULL win, so a removed avatar actually disappears', () => {
+    // The stored copy must not be treated as a fallback-fill here: a member who
+    // deleted their picture would otherwise keep showing it to every friend
+    // they made before deleting it.
+    const live = new Map([['a', { displayName: null, avatarPath: null }]]);
+    const hydrated = hydrateFriendSummary(friend('a', 'profileImages/a/old.jpg', 'OldName'), live);
+    expect(hydrated.avatarPath).toBeNull();
+    expect(hydrated.displayName).toBeNull();
+  });
+
+  it('keeps the stored copy when there is no live profile at all', () => {
+    // Deleted account, or a batched read that failed: the last known name and
+    // picture beat an anonymous row.
+    const stored = friend('a', 'profileImages/a/old.jpg', 'OldName');
+    expect(hydrateFriendSummary(stored, new Map())).toEqual(stored);
+    const storedRequest = request('a', 'profileImages/a/old.jpg');
+    expect(hydrateFriendRequestSummary(storedRequest, new Map())).toEqual(storedRequest);
+  });
+
+  it('hydrates the OTHER party of a pending request without touching the rest', () => {
+    const live = new Map([['a', { displayName: 'Alice', avatarPath: 'profileImages/a/new.jpg' }]]);
+    expect(hydrateFriendRequestSummary(request('a', null), live)).toEqual({
+      requestId: 'r',
+      fromUid: 'a',
+      toUid: 'me',
+      direction: 'incoming',
+      otherUser: { uid: 'a', displayName: 'Alice', avatarPath: 'profileImages/a/new.jpg' },
+      createdAt: '2026-07-11T00:00:00.000Z',
+    });
+  });
+
+  it('never hands one member the profile of another', () => {
+    const live = new Map([['b', { displayName: 'Bob', avatarPath: 'profileImages/b/x.jpg' }]]);
+    const hydrated = hydrateFriendSummary(friend('a', null, 'Alice'), live);
+    expect(hydrated.displayName).toBe('Alice');
+    expect(hydrated.avatarPath).toBeNull();
   });
 });
 

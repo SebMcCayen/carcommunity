@@ -17,6 +17,11 @@
  *    "already friends" check — a stale accepted/declined request never blocks
  *    a fresh request.
  *
+ * The denormalized displayName/avatarPath on BOTH document kinds are a snapshot
+ * taken at write time and are never rewritten, so friend.list refreshes them
+ * from live `users/{uid}` before answering (hydrateFriendSummary below) and
+ * treats the stored copy purely as a fallback.
+ *
  * Kept Firebase-free so it stays unit-testable without the emulator (mirrors
  * blocking/blocking-core.ts). The callables in manageFriends.ts own all
  * Firestore I/O, block-graph checks, and transactions.
@@ -401,6 +406,97 @@ export function toFriendSummary(
     displayName: typeof data?.displayName === 'string' ? data.displayName : null,
     avatarPath: typeof data?.avatarPath === 'string' ? data.avatarPath : null,
     friendsSince: friendsSinceIso,
+  };
+}
+
+/**
+ * Live `users/{uid}` projections keyed by uid, used to refresh the denormalized
+ * copies carried by friendship / friendRequest documents.
+ *
+ * A uid is present ONLY when its user document EXISTS. An absent entry
+ * therefore means "no live profile to speak for this member" (deleted account,
+ * or a read that failed) and NOT "this member has no avatar" — the two must not
+ * be conflated, because the first has to fall back to the stored copy while the
+ * second is an authoritative null. That distinction is the whole reason this is
+ * a Map of projections rather than a Map of avatar paths.
+ */
+export type LiveProfiles = ReadonlyMap<string, ProfileProjection>;
+
+/**
+ * The distinct member uids named by a friend.list response — every friend plus
+ * the other party of every pending request — for a single batched profile read.
+ *
+ * De-duplicated: the same member can appear both as a friend and (in a
+ * different pair state) as a request counterparty, and paying twice for the
+ * same user document would be pure waste.
+ */
+export function profileUidsToHydrate(
+  friends: readonly FriendSummary[],
+  requests: readonly FriendRequestSummary[],
+): string[] {
+  const uids = new Set<string>();
+  for (const friend of friends) {
+    if (friend.uid) uids.add(friend.uid);
+  }
+  for (const request of requests) {
+    if (request.otherUser.uid) uids.add(request.otherUser.uid);
+  }
+  return [...uids];
+}
+
+/**
+ * Overlays the LIVE profile onto a friendship summary.
+ *
+ * WHY THIS EXISTS (the bug it fixes, 2026-07-27)
+ * ---------------------------------------------
+ * `users/{uid}/friends/{friendUid}` carries a COPY of the friend's displayName
+ * and avatarPath, captured once by buildFriendshipDocument at the moment the
+ * request was accepted. Nothing ever rewrites it. A member who sets their first
+ * avatar — or changes it, or renames themselves — AFTER a friendship was
+ * established therefore stays, in that friend's list, exactly as they were on
+ * the day they became friends: forever avatar-less, or wearing an old picture.
+ * The member-profile screen reads live `users/{uid}` and shows the real one, so
+ * the same person renders with a picture on their profile and a grey silhouette
+ * one screen up. This is the same shape as the `displayNameLower` bug (see
+ * users/onUserProfileWrite.ts): a derived copy with no writer keeping it true.
+ *
+ * The fix reads the live document rather than maintaining the copy, so there is
+ * no trigger to miss a write path and no backfill for edges written before it.
+ * A member who REMOVES their avatar must also stop showing the old one, so a
+ * live `null` deliberately WINS over a stored non-null path — hydration is a
+ * replacement, not a fallback-fill.
+ *
+ * The stored copy is kept and is still the fallback: when the live profile is
+ * absent (deleted account, or the batched read failed) the list renders the
+ * last known name/avatar instead of an anonymous row.
+ */
+export function hydrateFriendSummary(summary: FriendSummary, live: LiveProfiles): FriendSummary {
+  const profile = live.get(summary.uid);
+  if (!profile) return summary;
+  return { ...summary, displayName: profile.displayName, avatarPath: profile.avatarPath };
+}
+
+/**
+ * Overlays the LIVE profile onto the other party of a pending request. Same
+ * rot, same rule as [hydrateFriendSummary]: friendRequests documents
+ * denormalize both parties' names and avatars at send time
+ * (buildFriendRequestDocument) and are never rewritten, so a request that has
+ * been sitting in someone's inbox since before they uploaded an avatar shows
+ * none.
+ */
+export function hydrateFriendRequestSummary(
+  summary: FriendRequestSummary,
+  live: LiveProfiles,
+): FriendRequestSummary {
+  const profile = live.get(summary.otherUser.uid);
+  if (!profile) return summary;
+  return {
+    ...summary,
+    otherUser: {
+      uid: summary.otherUser.uid,
+      displayName: profile.displayName,
+      avatarPath: profile.avatarPath,
+    },
   };
 }
 
