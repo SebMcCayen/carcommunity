@@ -211,6 +211,7 @@ import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.live.LiveStartAttempt
+import com.kungsbackacarcommunity.app.live.LiveMapLayers
 import com.kungsbackacarcommunity.app.live.NearbyLiveController
 import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
@@ -302,6 +303,7 @@ import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
+import com.kungsbackacarcommunity.app.shell.MapProjection
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
@@ -1997,6 +1999,13 @@ fun AuthenticatedApp(
                 // tests can't drift; everything downstream (standing the surface
                 // down, clearing its semantics, standing the map home's chrome
                 // down, gating the chat hub) derives from this ONE value.
+                // The surface's own layer state, read here so the turn-by-turn
+                // layers popup can show it. MapHome collects the same two flows
+                // for its own copy of the popup; these are the SAME flows, so the
+                // two popups cannot disagree about what is switched on.
+                val mapTrafficOn by mapSurface.trafficEnabled.collectAsState()
+                val mapIs3d by mapSurface.is3d.collectAsState()
+
                 val mapCover =
                     ShellNavigation.mapCover(
                         tab = selectedTab,
@@ -2565,20 +2574,6 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // Composes nothing at all unless there is somebody to draw, so a
-                // convoy where nobody is sharing yet adds no layer to the map.
-                val convoyOverlaySlot: (@Composable () -> Unit)? =
-                    if (convoyMemberPositions.isNotEmpty()) {
-                        {
-                            ConvoyMapAwarenessOverlay(
-                                mapSurface = mapSurface,
-                                members = convoyMemberPositions,
-                            )
-                        }
-                    } else {
-                        null
-                    }
-
                 // --- Nearby-public live sharers (live.listNearby discovery) ---
                 // Poll the discovery callable around the current map centre while
                 // the Map tab is showing. Each poll is one bounded geo query; a
@@ -2652,15 +2647,79 @@ fun AuthenticatedApp(
                 val nearbyLiveMarkers =
                     remember(nearbyMarkers) { nearbyMarkers.filterNotNull() }
 
+                // ONE answer to "is there anybody to draw?", used by all THREE
+                // overlay slots below — the map home's convoy layer, its nearby
+                // layer, and turn-by-turn's combined layer. Navigation showing a
+                // different set of people from the map is exactly the bug being
+                // fixed, so the decision is not restated per call site. Both
+                // rosters are the host's existing, already-gated ones (see
+                // [LiveMapLayers]); no navigation-specific source, no second
+                // subscription.
+                val liveLayerPlan =
+                    LiveMapLayers.plan(
+                        convoyMemberCount = convoyMemberPositions.size,
+                        nearbySharerCount = nearbyLiveMarkers.size,
+                    )
+
+                // Composes nothing at all unless there is somebody to draw, so a
+                // convoy where nobody is sharing yet adds no layer to the map.
+                // Declared here rather than beside the convoy roster above so all
+                // THREE overlay slots read the one [liveLayerPlan] and cannot
+                // disagree about who is on the map.
+                val convoyOverlaySlot: (@Composable () -> Unit)? =
+                    if (liveLayerPlan.convoy) {
+                        {
+                            ConvoyMapAwarenessOverlay(
+                                mapSurface = mapSurface,
+                                members = convoyMemberPositions,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 // Composes nothing at all unless somebody nearby is actually
                 // sharing (and visible), so an empty neighbourhood adds no layer.
                 val nearbyOverlaySlot: (@Composable () -> Unit)? =
-                    if (nearbyLiveMarkers.isNotEmpty()) {
+                    if (liveLayerPlan.nearby) {
                         {
                             NearbyLiveOverlay(
                                 mapSurface = mapSurface,
                                 sharers = nearbyLiveMarkers,
                             )
+                        }
+                    } else {
+                        null
+                    }
+
+                // The SAME live-member layers the map home draws, but bound to
+                // whatever map is asking rather than to the shell surface. That
+                // binding is the whole fix for "I couldn't see other people
+                // sharing their live location in Navigation": turn-by-turn owns a
+                // second, Navigation-SDK MapView, and every marker above was
+                // projected against `mapSurface`, which is stood down the moment
+                // navigation starts — so there was simply nothing drawing them.
+                //
+                // Deliberately the same values (`convoyMemberPositions`,
+                // `nearbyLiveMarkers`), the same per-uid RTDB listeners already
+                // open above, and therefore the same entitlement gating: this
+                // opens no second subscription and grants no visibility the map
+                // home does not already have.
+                val liveMembersOverlaySlot: (@Composable (MapProjection) -> Unit)? =
+                    if (liveLayerPlan.any) {
+                        { projection ->
+                            if (liveLayerPlan.convoy) {
+                                ConvoyMapAwarenessOverlay(
+                                    mapSurface = projection,
+                                    members = convoyMemberPositions,
+                                )
+                            }
+                            if (liveLayerPlan.nearby) {
+                                NearbyLiveOverlay(
+                                    mapSurface = projection,
+                                    sharers = nearbyLiveMarkers,
+                                )
+                            }
                         }
                     } else {
                         null
@@ -2739,28 +2798,38 @@ fun AuthenticatedApp(
                         onReportIncident = reportIncident,
                         modifier = Modifier.fillMaxSize(),
                         incidentReportingEnabled = incidentReportingEnabled,
-                        // Live location keeps running while the user navigates, so
-                        // its control has to come WITH them into the navigation
-                        // screen — wired to the same coordinator and the same
-                        // start/hide actions as the map home's control below, so
-                        // there is one live-sharing behaviour, not two.
-                        isLiveSharing = isSharingUi,
-                        canShareLive = canShareLive,
-                        onStartLiveShare = { requestStartSingleSession() },
-                        onHideMeNow = {
-                            val c = liveLocationCoordinator
-                            if (c != null) {
-                                scope.launch { c.hideMeNow() }
-                            } else {
-                                openLiveShareFallback()
-                            }
-                            BackgroundLocationController.stop(context)
+                        // The layers popup's rows, wired to the SAME state the map
+                        // home's are, so a toggle flipped while driving is the
+                        // same toggle when the user gets back to the map. The
+                        // navigation screen applies night/traffic/3D to its own
+                        // map; see its KDoc for the one row (incident markers)
+                        // whose effect is map-home-only.
+                        incidentsLayerEnabled = incidentsLayerEnabled,
+                        onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
+                        trafikverketDataShown = trafikverketDataShown,
+                        trafficEnabled = mapTrafficOn,
+                        onTrafficEnabledChange = { mapSurface.setTrafficEnabled(it) },
+                        nightMode = mapNightModeOverride.value?.let { it == MapMode.Night },
+                        onNightModeChange = { on ->
+                            val mode = if (on) MapMode.Night else MapMode.Day
+                            mapNightModeOverride.value = mode
+                            // Apply to the shell surface too, so the map home is
+                            // already in the chosen mode when navigation exits.
+                            mapSurface.setMapMode(mode)
                         },
-                        onOpenLiveShareDetails = { openLiveShareFallback() },
+                        is3d = mapIs3d,
+                        on3dEnabledChange = { mapSurface.set3dEnabled(it) },
+                        // The map home's chat bubble + unread badge, opening the
+                        // same hub popup.
+                        unreadChatCount = if (communityChatUnread) 1 else 0,
+                        onOpenChat = { chatHubOpen = true },
                         // Compact variant below the maneuver banner, WITH the
                         // shared-destination row (turn-by-turn has the vertical room
                         // for it — see the screen's KDoc).
                         convoyBar = convoyBarSlot?.let { bar -> { bar(true, true) } },
+                        // Convoy members + nearby public sharers, drawn on the
+                        // NAVIGATION map's own projection.
+                        liveMembersOverlay = liveMembersOverlaySlot,
                     )
                 } else if (navSearchOpen) {
                     // Full-screen address-search + directions overlay. Renders
@@ -3833,15 +3902,27 @@ fun AuthenticatedApp(
                 // map stays visible behind it — matching the map-layers and
                 // live-share popups.
                 //
-                // The gate: the popup floats over the map, so it may only show while
-                // the map home is the page in front — never over a full route, a
-                // non-map tab, turn-by-turn, or the nav-search overlay. That is
-                // precisely "nothing covers the map", so it reads the shell's single
-                // [mapCover] rather than restating the condition (which is how the
-                // nav-search term would have been missed when search stopped being
-                // its own branch). Both the auto-close effect below and the render
+                // The gate: the popup floats over A MAP, so it may only show while
+                // a map is the page in front — never over a full route, a non-map
+                // tab, or the nav-search overlay.
+                //
+                // Turn-by-turn USED to be excluded here as well, and that exclusion
+                // is now lifted: the navigation screen carries the map home's chat
+                // control (the two right-side stacks are the same set of buttons,
+                // by request), and a chat bubble that cannot open the hub is not
+                // the same button. Navigation is a full-screen map of its own, so
+                // the popup has exactly what it needs — a live map to float over.
+                //
+                // Everything else still reads the shell's single [mapCover] rather
+                // than restating the condition (which is how the nav-search term
+                // would have been missed when search stopped being its own
+                // branch). Both the auto-close effect below and the render
                 // condition read THIS value, so the two cannot drift apart.
-                val chatHubGateOpen = mapCover == MapCover.None
+                val chatHubGateOpen =
+                    ShellNavigation.chatHubAllowed(
+                        cover = mapCover,
+                        navigating = navDestination != null,
+                    )
 
                 // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
                 // (and still valid) hub survives process death — but the popup only

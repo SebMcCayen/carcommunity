@@ -19,6 +19,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.shell.MapProjection
 
 /**
  * Config-less / CI stub of the turn-by-turn navigation view.
@@ -42,15 +43,11 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  *   (wired by the host to the shared `incidents-report` path; unused here).
  * @param incidentReportingEnabled whether reporting is offered (unused here —
  *   this stub owns no map and no control stack).
- * @param isLiveSharing whether a live-location session is running (unused here;
- *   the real impl keeps the live control on screen while driving).
- * @param canShareLive whether the caller may start a session (unused here).
- * @param onStartLiveShare start a live-sharing session (unused here).
- * @param onHideMeNow the privacy stop (unused here).
- * @param onOpenLiveShareDetails open the full live-location screen (unused here).
  * @param convoyBar the convoy status bar slot (unused here; the real impl places
  *   it below the maneuver banner). This screen renders no map chrome at all, so
  *   there is nowhere honest to put it.
+ * @param liveMembersOverlay the other-members-sharing-live layer (unused here for
+ *   the same reason: no map, so no projection to draw it against).
  */
 @Composable
 fun TurnByTurnNavScreen(
@@ -64,12 +61,19 @@ fun TurnByTurnNavScreen(
     // implementation, so the single host call site compiles in both builds.
     // Unused: this screen renders an "unavailable" panel and owns no map.
     @Suppress("UNUSED_PARAMETER") incidentReportingEnabled: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") isLiveSharing: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") canShareLive: Boolean = false,
-    @Suppress("UNUSED_PARAMETER") onStartLiveShare: () -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") onHideMeNow: () -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") onOpenLiveShareDetails: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") incidentsLayerEnabled: Boolean = true,
+    @Suppress("UNUSED_PARAMETER") onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") trafikverketDataShown: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") trafficEnabled: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") onTrafficEnabledChange: (Boolean) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") nightMode: Boolean? = null,
+    @Suppress("UNUSED_PARAMETER") onNightModeChange: (Boolean) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") is3d: Boolean = true,
+    @Suppress("UNUSED_PARAMETER") on3dEnabledChange: (Boolean) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") unreadChatCount: Int = 0,
+    @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
+    @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
     BackHandler { onExit() }
     Box(

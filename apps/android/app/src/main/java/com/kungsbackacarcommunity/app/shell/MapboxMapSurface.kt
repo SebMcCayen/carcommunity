@@ -50,6 +50,7 @@ import com.mapbox.maps.plugin.animation.MapAnimationOptions.Companion.mapAnimati
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.extension.style.expressions.generated.Expression
 import com.mapbox.maps.extension.style.layers.addLayer
+import com.mapbox.maps.extension.style.layers.addLayerBelow
 import com.mapbox.maps.extension.style.layers.generated.lineLayer
 import com.mapbox.maps.extension.style.layers.getLayerAs
 import com.mapbox.maps.extension.style.layers.generated.LineLayer
@@ -2264,7 +2265,14 @@ class MapboxMapSurface : MapSurface {
         runCatching { setBreadcrumbVisible(style, false) }
     }
 
-    private companion object {
+    /**
+     * `internal`, not private: the turn-by-turn screen's own Navigation-SDK map
+     * reuses the traffic helpers here ([addTrafficLayer], [applyTrafficColors],
+     * [applyTrafficVisibility]) so the congestion overlay the layers popup
+     * toggles is the SAME source, the same tileset and the same day/night ramp
+     * on both maps, rather than a second implementation that can drift.
+     */
+    internal companion object {
         /**
          * How often the render watchdog samples its eligibility conditions.
          *
@@ -2423,20 +2431,39 @@ class MapboxMapSurface : MapSurface {
          * added while the map is already in night mode starts legible rather
          * than waiting for a toggle.
          */
-        fun addTrafficLayer(style: Style, mode: MapMode) {
+        fun addTrafficLayer(
+            style: Style,
+            mode: MapMode,
+            slotName: String? = "middle",
+            belowLayerId: String? = null,
+        ) {
             if (style.styleSourceExists(TRAFFIC_SOURCE_ID)) return
             style.addSource(
                 vectorSource(TRAFFIC_SOURCE_ID) { url(TRAFFIC_TILESET) },
             )
-            style.addLayer(
+            val layer =
                 lineLayer(TRAFFIC_LAYER_ID, TRAFFIC_SOURCE_ID) {
                     sourceLayer(TRAFFIC_SOURCE_LAYER)
-                    slot("middle")
+                    // Slots are a Standard-style concept. The turn-by-turn map
+                    // runs a CLASSIC navigation style, which defines none, so it
+                    // passes null and positions the layer by id instead (below),
+                    // rather than naming a slot that style has never heard of.
+                    if (slotName != null) slot(slotName)
                     lineWidth(TrafficPalette.lineWidth(mode))
                     visibility(Visibility.NONE)
                     lineColor(congestionColorExpression(mode))
-                },
-            )
+                }
+            // Explicit placement for styles without slots: turn-by-turn anchors
+            // the congestion lines below the same label layer its ROUTE line is
+            // anchored below, and adds them FIRST, so the route (inserted
+            // directly below that label layer afterwards) ends up on top of the
+            // traffic rather than buried under it. Falls back to a plain top-of-
+            // stack add if the named layer is not in this style, so a style
+            // without it still gets traffic rather than none.
+            val placed =
+                belowLayerId != null &&
+                    runCatching { style.addLayerBelow(layer, belowLayerId) }.isSuccess
+            if (!placed) style.addLayer(layer)
         }
 
         /**

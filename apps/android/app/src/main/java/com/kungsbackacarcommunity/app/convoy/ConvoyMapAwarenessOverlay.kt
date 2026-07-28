@@ -54,7 +54,7 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.map.LiveMarkerSmoother
 import com.kungsbackacarcommunity.app.map.LiveMarkerSmoothing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
-import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlin.math.roundToInt
 
 /** Test tag on the whole convoy awareness overlay. */
@@ -103,7 +103,7 @@ const val CONVOY_EDGE_ARROW_TAG = "convoy_edge_arrow_"
  */
 @Composable
 fun ConvoyMapAwarenessOverlay(
-    mapSurface: MapSurface,
+    mapSurface: MapProjection,
     members: List<ConvoyMemberPosition>,
     modifier: Modifier = Modifier,
     nowMillis: () -> Long = { System.currentTimeMillis() },

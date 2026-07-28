@@ -28,13 +28,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MyLocation
-import androidx.compose.material.icons.filled.Navigation
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -47,11 +45,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -71,14 +70,23 @@ import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
-import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.shell.ChatCircleControl
 import com.kungsbackacarcommunity.app.shell.CircleControl
-import com.kungsbackacarcommunity.app.shell.LiveSharePopup
+import com.kungsbackacarcommunity.app.shell.CompassCircleControl
+import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
+import com.kungsbackacarcommunity.app.shell.MapCircleControlKind
+import com.kungsbackacarcommunity.app.shell.MapCompassMode
+import com.kungsbackacarcommunity.app.shell.MapControlSet
+import com.kungsbackacarcommunity.app.shell.MapLayersPopup
+import com.kungsbackacarcommunity.app.shell.MapMode
+import com.kungsbackacarcommunity.app.shell.MapProjection
+import com.kungsbackacarcommunity.app.shell.MapScreenPoint
+import com.kungsbackacarcommunity.app.shell.MapboxMapSurface
 import com.mapbox.api.directions.v5.models.RouteOptions
 import com.mapbox.common.MapboxOptions
 import com.mapbox.common.location.Location
@@ -86,11 +94,9 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.ImageHolder
-import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.animation.camera
-import com.mapbox.maps.plugin.animation.easeTo
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
@@ -99,6 +105,7 @@ import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
+import com.mapbox.maps.Style
 import com.mapbox.navigation.base.ExperimentalPreviewMapboxNavigationAPI
 import com.mapbox.navigation.base.extensions.applyDefaultNavigationOptions
 import com.mapbox.navigation.base.extensions.applyLanguageAndVoiceUnitOptions
@@ -124,7 +131,6 @@ import com.mapbox.navigation.ui.maps.NavigationStyles
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
-import com.mapbox.navigation.ui.maps.camera.state.NavigationCameraState
 import com.mapbox.navigation.ui.maps.camera.transition.NavigationCameraTransitionOptions
 import com.mapbox.navigation.ui.maps.location.NavigationLocationProvider
 import com.mapbox.navigation.ui.maps.route.arrow.api.MapboxRouteArrowApi
@@ -134,6 +140,7 @@ import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineApi
 import com.mapbox.navigation.ui.maps.route.line.api.MapboxRouteLineView
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineApiOptions
 import com.mapbox.navigation.ui.maps.route.line.model.MapboxRouteLineViewOptions
+import com.mapbox.navigation.ui.maps.route.line.model.RouteLineColorResources
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -144,6 +151,15 @@ import kotlin.math.roundToInt
 
 /** Test tag on the whole turn-by-turn navigation view, for UI tests. */
 const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
+
+/**
+ * The navigation styles' road-label layer, used as the anchor for BOTH the route
+ * line and the congestion overlay: everything we draw goes below the street
+ * names, and the route goes above the traffic (see
+ * `TurnByTurnEngine.applyTrafficLayers`). One constant because the ordering only
+ * works while the two agree on the anchor.
+ */
+private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
 
 /**
  * Full-screen, Google-Maps-style turn-by-turn navigation view backed by the
@@ -164,26 +180,42 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * - keeps the map's compass and live-location controls reachable while driving.
  *
  * ## Chrome parity with the map home
- * The bottom-right control stack is deliberately built from the map home's
- * controls ([CircleControl], same glyphs, same shape and colour rules):
- * navigation is a MODE of the map, not a different app, so the compass and
- * live-location buttons must not change icon or treatment when the user presses
- * "Start".
+ * Navigation is a MODE of the map, not a different app, so the bottom-right
+ * control stack is EXACTLY the map home's: the same controls, in the same order,
+ * with the same glyphs, the same colour rules and the same actions. Not more,
+ * not fewer, and no navigation-only kinds of button. Which controls and in what
+ * order is [MapControlSet.rightSideStack] — one list, rendered by both screens —
+ * so the two can no longer drift apart the way they had:
  *
- * The parity is of control LANGUAGE, not of stack order or tap behaviour, and
- * the two diverge on purpose. This screen's camera is a FOLLOW camera: the
- * my-location control only exists once follow has detached, and re-centring
- * means resuming follow rather than a one-off camera move. So the compass here
- * resets bearing only (the engine's `resetNorth`), while the map home's compass
- * also re-centres — folding a re-centre in here would silently re-arm follow
- * from a control that does not say so. The map home's stack likewise leads with
- * its report control; this one keeps the compass on top, where a driver's thumb
- * expects it. Neither is required to track the other.
+ * - the stack led with the compass instead of the report control;
+ * - the compass was a one-way "reset to north" button with the wrong glyph
+ *   (the navigation arrow) rather than the map home's two-mode north-up ⇄
+ *   course-up toggle. It is now [CompassCircleControl], the same composable;
+ * - there was no LAYERS control and no CHAT control at all;
+ * - re-centring was a tinted 56.dp [androidx.compose.material3.FloatingActionButton]
+ *   that only appeared once follow had detached — a different SIZE and a
+ *   different KIND of affordance from everything beside it. It is now the map
+ *   home's 48.dp [CircleControl], always present;
+ * - and there was a live-broadcast disc the map home no longer has (PR #539
+ *   moved starting/stopping/hiding into the centre live control's manage sheet).
+ *   It is gone from here too. Consequence, stated plainly: while navigating there
+ *   is no bottom bar and therefore no centre live control, so Stop / Hide me now
+ *   / Who can see me are reachable only by leaving navigation. Sharing itself is
+ *   unaffected — a session started before "Start" keeps running and the puck
+ *   still shows it — and "no more, no fewer buttons" is the explicit
+ *   instruction, so the button does not come back on its own.
  *
- * The Mapbox SDK's own scale bar
- * (upper-left) and compass (upper-right) are switched OFF here for the same
- * reason [com.kungsbackacarcommunity.app.shell.MapboxMapSurface] switches them
- * off: they are a second, differently-styled set of the same affordances.
+ * The layers popup is the SAME [MapLayersPopup]. Night mode, traffic and 3D are
+ * all applied to THIS map (style URI, the shared congestion layer, and the
+ * follow camera's pitch respectively). The "Traffic alerts" (incident markers)
+ * row is the one toggle whose effect is not visible here: incident badges are
+ * drawn by the shell surface's annotation layer, which this screen does not
+ * have. Flipping it still records the choice, and the map home honours it.
+ *
+ * The Mapbox SDK's own scale bar (upper-left) and compass (upper-right) are
+ * switched OFF here for the same reason
+ * [com.kungsbackacarcommunity.app.shell.MapboxMapSurface] switches them off:
+ * they are a second, differently-styled set of the same affordances.
  *
  * ## Guarding
  * This file is only compiled when a build-time Mapbox downloads token is present
@@ -209,20 +241,41 @@ const val TURN_BY_TURN_TEST_TAG = "turn_by_turn_nav"
  * @param incidentReportingEnabled whether the report control is offered at all.
  *   Mirrors the map home's gate (a configured Firebase incidents controller + an
  *   active member); false hides the control rather than showing one that cannot
- *   file anything.
- * @param isLiveSharing whether a live-location session is currently running.
- *   Turns the live control GREEN, exactly as on the map home. Starting to
- *   navigate does NOT stop a session, so this control has to stay on screen: the
- *   driver must be able to see that they are still broadcasting, and stop it,
- *   without leaving navigation first.
- * @param canShareLive whether the caller may START a session (the LIVE_LOCATION
- *   flag); forwarded straight to the shared [LiveSharePopup], which owns the
- *   gating.
- * @param onStartLiveShare start a solo live-sharing session (host raises the
- *   same single-session start flow the map home does).
- * @param onHideMeNow the privacy stop — remove my position now.
- * @param onOpenLiveShareDetails open the full live-location screen (the complete
- *   controls, including exactly who can see the caller, and the privacy details).
+ *   file anything — and, exactly as on the map home, the rest of the stack then
+ *   closes up by one slot.
+ * @param incidentsLayerEnabled / [onIncidentsLayerEnabledChange] the "Traffic
+ *   alerts" row of the shared layers popup. The value and the callback are the
+ *   map home's, so the switch shows and records ONE choice across both screens.
+ *   See the parity note above for why its effect is not visible on this map.
+ * @param trafikverketDataShown gates the "Källa: Trafikverket" credit inside the
+ *   layers popup, same as on the map home.
+ * @param trafficEnabled / [onTrafficEnabledChange] the congestion overlay. The
+ *   value comes from the shell surface so both maps agree, and this screen
+ *   applies it to its OWN style using the shared traffic source/layer + day-night
+ *   ramp ([MapboxMapSurface.addTrafficLayer]).
+ * @param nightMode the day/night choice, or null to follow the app theme (the
+ *   pre-existing behaviour). Drives BOTH the navigation style URI and the
+ *   layers popup's switch. [onNightModeChange] reports a manual flip to the host,
+ *   which owns the override for the whole session.
+ * @param is3d / [on3dEnabledChange] tilted vs flat. Applied here as the
+ *   NAVIGATION camera's pitch override — a follow camera owns its own pitch, so
+ *   flattening it is the honest equivalent of the map home's flat 2D camera.
+ *   (The map home's other 3D effect, the Standard style's 3D buildings, has no
+ *   counterpart: the classic navigation styles do not draw any.)
+ * @param unreadChatCount / [onOpenChat] the chat bubble and its unread badge —
+ *   the map home's [ChatCircleControl], not a copy. The host raises the same
+ *   chat-hub popup it raises from the map.
+ * @param liveMembersOverlay the OTHER people sharing a live position — convoy
+ *   members and nearby public sharers — drawn on THIS map.
+ *
+ *   A slot rather than convoy/live parameters, for the same reason [convoyBar] is
+ *   one: this screen stays ignorant of both domains. It is handed [MapProjection]
+ *   — this screen's own camera + projection — because the whole bug was that the
+ *   overlays could only ever be projected against the SHELL's map, which is stood
+ *   down the instant navigation starts, so nothing drew them here. The host binds
+ *   the SAME roster, the same live listeners and the same entitlement gating it
+ *   uses for the map home; null (nobody to draw) composes nothing at all.
+ *
  * @param convoyBar the shared convoy status bar
  *   ([com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar]), composed only when
  *   the driver is in a convoy — a convoy does not stop existing because someone
@@ -249,14 +302,23 @@ fun TurnByTurnNavScreen(
     onReportIncident: (IncidentType, ReportLocation) -> Unit,
     modifier: Modifier = Modifier,
     incidentReportingEnabled: Boolean = false,
-    // Defaulted so callers/tests that don't wire live sharing still compile; the
-    // control then simply offers the (gated) start path.
-    isLiveSharing: Boolean = false,
-    canShareLive: Boolean = false,
-    onStartLiveShare: () -> Unit = {},
-    onHideMeNow: () -> Unit = {},
-    onOpenLiveShareDetails: () -> Unit = {},
+    // The layers popup's four rows, mirroring MapHome's own parameter list one
+    // for one. All defaulted so callers/tests that don't wire layers still
+    // compile (and get the map's defaults: alerts on, traffic off, 3D on,
+    // day/night following the app theme).
+    incidentsLayerEnabled: Boolean = true,
+    onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
+    trafikverketDataShown: Boolean = false,
+    trafficEnabled: Boolean = false,
+    onTrafficEnabledChange: (Boolean) -> Unit = {},
+    nightMode: Boolean? = null,
+    onNightModeChange: (Boolean) -> Unit = {},
+    is3d: Boolean = true,
+    on3dEnabledChange: (Boolean) -> Unit = {},
+    unreadChatCount: Int = 0,
+    onOpenChat: () -> Unit = {},
     convoyBar: (@Composable () -> Unit)? = null,
+    liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val token = stringResource(R.string.mapbox_access_token)
@@ -365,12 +427,17 @@ fun TurnByTurnNavScreen(
     // app. This screen composes inside AppRoot's KccTheme, so the local is
     // provided. On the default Automatic preference the two are identical, so
     // navigation styling is unchanged for anyone who never opens the setting.
+    // The manual override wins when the user has made one (the layers popup's
+    // Night switch); otherwise the app theme decides, exactly as before.
+    val themeIsDark = LocalKccDarkTheme.current
+    val night = nightMode ?: themeIsDark
     val navStyleUri =
-        if (LocalKccDarkTheme.current) {
+        if (night) {
             NavigationStyles.NAVIGATION_NIGHT_STYLE
         } else {
             NavigationStyles.NAVIGATION_DAY_STYLE
         }
+    val mapMode = if (night) MapMode.Night else MapMode.Day
     // ── Entry handoff: map home → navigation, without the white flash ────────
     //
     // See [NavHandoff] for the full rationale. In short: this screen builds a
@@ -407,9 +474,18 @@ fun TurnByTurnNavScreen(
     // The style load is started only once the map is actually mounted — starting
     // it earlier would not help (the surface has to exist to render it) and the
     // whole point is that every blank frame lands behind an opaque veil.
-    LaunchedEffect(engine, navStyleUri, phase.mapMounted) {
-        if (phase.mapMounted) engine.loadStyleAndInit(navStyleUri)
+    LaunchedEffect(engine, navStyleUri, mapMode, phase.mapMounted) {
+        if (phase.mapMounted) engine.loadStyleAndInit(navStyleUri, mapMode)
     }
+
+    // Push the remaining layer choices at the map. Each is idempotent and a
+    // no-op until the style is up (the engine also re-applies all of them from
+    // these same remembered values on every style (re)load, so a day/night flip
+    // cannot silently drop the traffic layer or the flat camera).
+    LaunchedEffect(engine, trafficEnabled, mapMode) {
+        engine.setTrafficEnabled(trafficEnabled, mapMode)
+    }
+    LaunchedEffect(engine, is3d) { engine.set3dEnabled(is3d) }
 
     DisposableEffect(engine, lifecycleOwner) {
         // Feature health: if the nav session cannot be stood up at all, the whole
@@ -473,20 +549,45 @@ fun TurnByTurnNavScreen(
         }
     }
 
-    val following by engine.cameraFollowing.collectAsState()
     val progress by engine.progress.collectAsState()
     val rerouting by engine.rerouting.collectAsState()
     val bearing by engine.bearing.collectAsState()
     val speed by engine.speed.collectAsState()
 
-    // Live-location sheet open/close is local UI state, same as on the map home:
-    // tapping the live control opens the shared transparent popup over the map.
-    var liveOpen by remember { mutableStateOf(false) }
-
     // Incident-report category picker open/close — local, transient UI state, the
     // same shape as the map home's `reportOpen` (a plain `remember`, deliberately
     // NOT saveable: a half-made report should not survive process death).
     var reportOpen by remember { mutableStateOf(false) }
+
+    // Map-layers popup open/close — same shape as the map home's `layersOpen`.
+    var layersOpen by remember { mutableStateOf(false) }
+
+    // Compass orientation, exactly the map home's two-mode toggle — but seeded
+    // COURSE-UP rather than north-up, because that is what this camera actually
+    // does. A navigation follow camera rotates the map to the direction of
+    // travel; opening on the north-up glyph would be a compass that disagrees
+    // with the map underneath it from the first frame. Tapping still toggles the
+    // pair, and north-up sticks for as long as the user holds it.
+    //
+    // rememberSaveable with a name-based Saver, matching the map home's: a future
+    // rename that drops an enum constant falls back to a valid mode instead of
+    // crashing activity recreation the way MapCompassMode.valueOf would.
+    var compassMode by rememberSaveable(
+        stateSaver =
+            Saver(
+                save = { it.name },
+                restore = { saved ->
+                    (saved as? String)
+                        ?.let { name -> MapCompassMode.entries.find { it.name == name } }
+                        ?: MapCompassMode.CourseUp
+                },
+            ),
+    ) { mutableStateOf(MapCompassMode.CourseUp) }
+
+    // Keep the navigation camera's bearing behaviour in sync with the chosen
+    // mode (mirrors the map home's LaunchedEffect(mapSurface, compassMode)).
+    // Idempotent, so this never forces a camera move on open.
+    LaunchedEffect(engine, compassMode) { engine.setCompassMode(compassMode) }
 
     BackHandler { onExit() }
 
@@ -498,6 +599,21 @@ fun TurnByTurnNavScreen(
         // it — it cannot be hidden by alpha, only by not being there yet.
         if (phase.mapMounted) {
             AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize())
+        }
+
+        // Other people sharing a live position — convoy members (with their
+        // off-screen direction arrows) and nearby public sharers. Composed
+        // directly over the map and UNDER every piece of floating chrome, the
+        // same placement and the same reasoning as on the map home: a car photo
+        // pinned to a screen edge must tuck behind the maneuver banner and the
+        // control stack, not cover them.
+        //
+        // Only once the map is mounted: the overlay projects through the engine,
+        // and before the MapView exists there is no camera to project with (the
+        // engine returns null and the overlay draws nothing anyway — this just
+        // avoids composing it to find that out).
+        if (phase.mapMounted) {
+            liveMembersOverlay?.invoke(engine)
         }
 
         // Top: exit bar + maneuver banner (current turn + upcoming).
@@ -596,81 +712,110 @@ fun TurnByTurnNavScreen(
                 // Bottom-LEFT: current speed, and the posted limit when known.
                 SpeedReadout(speed = speed)
                 Spacer(modifier = Modifier.weight(1f))
-                // Bottom-RIGHT: the map home's controls and glyphs, in this
-                // screen's own driving order — compass on top, live-location
-                // under it. See the file KDoc on why the order and the compass's
-                // tap behaviour deliberately do NOT track the map home's.
+                // Bottom-RIGHT: the map home's control stack, verbatim — same
+                // controls, same order, same glyphs, same colour rules. See the
+                // file KDoc for what this used to be and why each difference was
+                // a bug rather than a deliberate divergence.
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
                 ) {
-                    // Compass — identical control and glyph to the map home's
-                    // (Icons.Filled.Navigation rotated by the live map bearing).
-                    // Bearing reset ONLY here: re-centring is the follow camera's
-                    // job and belongs to the re-centre button below. The SDK's own
-                    // top-right compass is disabled so this is the only one on
-                    // screen.
-                    CircleControl(
-                        icon = Icons.Filled.Navigation,
-                        contentDescription = stringResource(R.string.shell_compass),
-                        onClick = { engine.resetNorth() },
-                        iconRotationDegrees = -bearing,
-                    )
-                    // Live-location — reachable WHILE driving. A session started
-                    // before "Start" keeps running, so hiding this control (as it
-                    // used to be hidden) left the driver broadcasting with no way
-                    // to see or stop it without exiting navigation first.
-                    CircleControl(
-                        icon = Icons.Filled.Podcasts,
-                        contentDescription =
-                            stringResource(
-                                if (isLiveSharing) {
-                                    R.string.shell_liveShareOn
-                                } else {
-                                    R.string.shell_liveShareOff
-                                },
-                            ),
-                        containerColor =
-                            if (isLiveSharing) {
-                                LocalKccStatusColors.current.success
-                            } else {
-                                MaterialTheme.colorScheme.surface
-                            },
-                        contentColor =
-                            if (isLiveSharing) Color.White else MaterialTheme.colorScheme.onSurface,
-                        onClick = { liveOpen = true },
-                    )
-                    // Report incident/roadwork — the map home's control, not a
-                    // navigation-specific one. It was a 56.dp tinted
-                    // FloatingActionButton, which read as a different KIND of
-                    // affordance sitting in a stack of 48.dp neutral circles; it
-                    // is now the same [CircleControl] with the same neutral
-                    // surface/onSurface treatment PR #468 established for the map
-                    // home's report button, so the stack is one family of
-                    // controls. Opens the SHARED category picker, whose choice
-                    // goes to the host's single reporting path.
-                    if (incidentReportingEnabled) {
-                        CircleControl(
-                            icon = Icons.Filled.Warning,
-                            contentDescription =
-                                stringResource(R.string.incidents_reportButton),
-                            onClick = { reportOpen = true },
-                            modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
-                        )
-                    }
-                    if (!following) {
-                        FloatingActionButton(
-                            onClick = { engine.recenter() },
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.MyLocation,
-                                contentDescription =
-                                    stringResource(R.string.turnByTurn_recenter),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            )
+                    // The SAME list the map home renders, so "which buttons, in
+                    // what order" has exactly one answer. Exhaustive `when`: a new
+                    // control kind fails to compile here until this screen draws
+                    // it, which is the point.
+                    MapControlSet
+                        .rightSideStack(incidentReportingEnabled)
+                        .forEach { control ->
+                            when (control) {
+                                // Report incident/roadwork — the map home's
+                                // control, not a navigation-specific one, opening
+                                // the SHARED category picker whose choice goes to
+                                // the host's single reporting path.
+                                MapCircleControlKind.Report ->
+                                    CircleControl(
+                                        icon = Icons.Filled.Warning,
+                                        contentDescription =
+                                            stringResource(R.string.incidents_reportButton),
+                                        onClick = { reportOpen = true },
+                                        modifier = Modifier.testTag(TURN_BY_TURN_REPORT_TAG),
+                                    )
+
+                                // Map layers — the map home's control opening the
+                                // map home's popup. The "active" tint follows the
+                                // same rule: traffic on, OR the user has manually
+                                // DEVIATED from the theme's day/night default, OR
+                                // 3D is off. A system-driven Night (dark theme,
+                                // untouched) must not light it up, which is why
+                                // the night term tests `nightMode != null` first.
+                                MapCircleControlKind.Layers -> {
+                                    val layersActive =
+                                        trafficEnabled ||
+                                            (nightMode != null && nightMode != themeIsDark) ||
+                                            !is3d
+                                    CircleControl(
+                                        icon = Icons.Filled.Layers,
+                                        contentDescription =
+                                            stringResource(R.string.shell_layersButton),
+                                        containerColor =
+                                            if (layersActive) {
+                                                MaterialTheme.colorScheme.primaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surface
+                                            },
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                        onClick = { layersOpen = true },
+                                        modifier = Modifier.testTag(TURN_BY_TURN_LAYERS_TAG),
+                                    )
+                                }
+
+                                // Compass — the map home's two-mode toggle, the
+                                // same composable. NORTH-UP pins the follow
+                                // camera's bearing to 0; COURSE-UP releases it so
+                                // the camera goes back to turning the map into the
+                                // direction of travel. Both also resume following,
+                                // because on this screen an orientation the camera
+                                // is not driving is not an orientation at all.
+                                MapCircleControlKind.Compass ->
+                                    CompassCircleControl(
+                                        compassMode = compassMode,
+                                        bearing = bearing,
+                                        onModeChange = { next ->
+                                            compassMode = next
+                                            // Apply now for immediacy, exactly like
+                                            // the map home's control; the effect
+                                            // above re-syncs a frame later and
+                                            // setCompassMode is idempotent.
+                                            engine.setCompassMode(next)
+                                        },
+                                        modifier = Modifier.testTag(TURN_BY_TURN_COMPASS_TAG),
+                                    )
+
+                                // Re-centre / my-location. ALWAYS present, like
+                                // the map home's: it used to appear only after the
+                                // follow camera had detached, which left a stack
+                                // that changed length while driving and a control
+                                // the driver could not find when they wanted it.
+                                // Re-arming follow when follow is already on is a
+                                // harmless no-op.
+                                MapCircleControlKind.Recenter ->
+                                    CircleControl(
+                                        icon = Icons.Filled.MyLocation,
+                                        contentDescription =
+                                            stringResource(R.string.shell_recenter),
+                                        onClick = { engine.recenter() },
+                                        modifier = Modifier.testTag(TURN_BY_TURN_RECENTER_TAG),
+                                    )
+
+                                // Chat bubble + unread badge — the map home's
+                                // control. The host raises the same chat-hub popup.
+                                MapCircleControlKind.Chat ->
+                                    ChatCircleControl(
+                                        unreadCount = unreadChatCount,
+                                        onClick = onOpenChat,
+                                    )
+                            }
                         }
-                    }
                 }
             }
 
@@ -678,18 +823,26 @@ fun TurnByTurnNavScreen(
             NavProgressBar(progress = progress, onExit = onExit)
         }
 
-        // The SHARED live-location sheet from the map home — same wording, same
-        // gating, same "More options" route into the full screen (where the
-        // caller sees and controls exactly who can see them). Deliberately not a
-        // second live-sharing UI.
-        if (liveOpen) {
-            LiveSharePopup(
-                isSharing = isLiveSharing,
-                canShareLive = canShareLive,
-                onStart = onStartLiveShare,
-                onHideMeNow = onHideMeNow,
-                onOpenDetails = onOpenLiveShareDetails,
-                onDismiss = { liveOpen = false },
+        // The SHARED map-layers popup from the map home — the same composable,
+        // so navigation offers the same rows, in the same order, with the same
+        // wording and the same Trafikverket credit. Every switch reads and writes
+        // the HOST's state, so a choice made while driving is the same choice the
+        // map home shows afterwards.
+        if (layersOpen) {
+            MapLayersPopup(
+                incidentsOn = incidentsLayerEnabled,
+                onIncidentsChange = onIncidentsLayerEnabledChange,
+                trafikverketDataShown = trafikverketDataShown,
+                trafficOn = trafficEnabled,
+                onTrafficChange = onTrafficEnabledChange,
+                // The switch shows the EFFECTIVE mode (manual override, else the
+                // theme), matching the map home, so it never disagrees with the
+                // map behind it while an override is unset.
+                nightMode = night,
+                onNightModeChange = onNightModeChange,
+                is3d = is3d,
+                on3dChange = on3dEnabledChange,
+                onDismiss = { layersOpen = false },
             )
         }
 
@@ -777,6 +930,15 @@ const val TURN_BY_TURN_SPEED_TEST_TAG = "turn_by_turn_speed"
 
 /** Test tag on the navigation view's round "report incident/roadwork" control. */
 const val TURN_BY_TURN_REPORT_TAG = "turn_by_turn_report"
+
+/** Test tag on the navigation view's round map-layers control. */
+const val TURN_BY_TURN_LAYERS_TAG = "turn_by_turn_layers"
+
+/** Test tag on the navigation view's round compass control. */
+const val TURN_BY_TURN_COMPASS_TAG = "turn_by_turn_compass"
+
+/** Test tag on the navigation view's round re-centre / my-location control. */
+const val TURN_BY_TURN_RECENTER_TAG = "turn_by_turn_recenter"
 
 /**
  * The bottom-left speed readout: the driver's CURRENT speed always, and the
@@ -1000,11 +1162,7 @@ private class TurnByTurnEngine(
     private val health: FeatureHealthReporter,
     /** Whether the app is in front of the user, sampled at report time. */
     private val isForeground: () -> Boolean,
-) {
-    /** True while the camera auto-follows the user (hides the re-centre button). */
-    private val cameraFollowingFlow = MutableStateFlow(true)
-    val cameraFollowing: StateFlow<Boolean> = cameraFollowingFlow.asStateFlow()
-
+) : MapProjection {
     /** Latest progress snapshot for the bottom ETA bar (null until the first tick). */
     private val progressFlow = MutableStateFlow<NavProgress?>(null)
     val progress: StateFlow<NavProgress?> = progressFlow.asStateFlow()
@@ -1029,6 +1187,29 @@ private class TurnByTurnEngine(
      */
     private val bearingFlow = MutableStateFlow(0f)
     val bearing: StateFlow<Float> = bearingFlow.asStateFlow()
+
+    /**
+     * The settled camera, for the live-member overlays drawn over this map (see
+     * [MapProjection]). Rounded by [MapCameraSnapshot.of] and de-duplicated by
+     * the flow, which matters far more here than on the map home: a following
+     * navigation camera moves on essentially every frame, and an un-rounded
+     * snapshot would re-project every member marker 60 times a second.
+     */
+    private val cameraSnapshotFlow = MutableStateFlow<MapCameraSnapshot?>(null)
+    override val cameraSnapshot: StateFlow<MapCameraSnapshot?> = cameraSnapshotFlow.asStateFlow()
+
+    /**
+     * Project a coordinate into this map's pixel space — the navigation map's
+     * OWN projection, so members land where the road under them actually is at
+     * this zoom, rotation and (steep) navigation pitch.
+     */
+    override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
+        return runCatching {
+            val screen =
+                mapView.mapboxMap.pixelForCoordinate(Point.fromLngLat(longitude, latitude))
+            MapScreenPoint(x = screen.x.toFloat(), y = screen.y.toFloat())
+        }.getOrNull()
+    }
 
     /**
      * Current speed + posted limit, or null until the first location fix.
@@ -1081,13 +1262,69 @@ private class TurnByTurnEngine(
     private val maneuverApi =
         MapboxManeuverApi(MapboxDistanceFormatter(DistanceFormatterOptions.Builder(context).build()))
 
-    private val routeLineApi = MapboxRouteLineApi(MapboxRouteLineApiOptions.Builder().build())
-    private val routeLineView =
-        MapboxRouteLineView(
-            MapboxRouteLineViewOptions.Builder(context)
-                .routeLineBelowLayerId("road-label-navigation")
+    /**
+     * Route-line API with the VANISHING line enabled, which is what gives the
+     * travelled/remaining split: the SDK keeps a vanishing point on the geometry
+     * and paints everything behind it in the traveled colour. It is not on by
+     * default.
+     */
+    private val routeLineApi =
+        MapboxRouteLineApi(
+            MapboxRouteLineApiOptions.Builder()
+                .vanishingRouteLineEnabled(true)
                 .build(),
         )
+
+    /**
+     * The renderer for those layers, holding the palette for the CURRENT
+     * day/night mode.
+     *
+     * A `var` rebuilt in [loadStyleAndInit], because the colours are baked into
+     * the layer paint properties when the layers are created and the view's
+     * options are immutable. That is safe precisely because the only thing that
+     * changes them is a day/night flip, and a day/night flip already reloads the
+     * whole style (dropping every layer) — so the rebuild lands exactly where
+     * the layers are about to be recreated anyway.
+     */
+    private var routeLineView: MapboxRouteLineView = buildRouteLineView(MapMode.Day)
+
+    /** The mode [routeLineView] was built for; null until the first style load. */
+    private var routeLineMode: MapMode? = null
+
+    private fun buildRouteLineView(mode: MapMode): MapboxRouteLineView {
+        val colors = NavRouteLinePalette.forNight(mode == MapMode.Night)
+        // Every congestion class takes the SAME colour as the rest of the route.
+        // The road you must drive has to read as one continuous ribbon — that is
+        // the whole request — and a per-segment green/amber/red ramp would both
+        // break it up and duplicate the map's own traffic overlay, which is a
+        // layer the user can now switch on from here. Closures and restricted
+        // sections DO keep their own colour: they are properties of the road that
+        // change whether you can use it, not a speed reading. Nothing here is
+        // derived from how fast the driver is going.
+        val colorResources =
+            RouteLineColorResources.Builder()
+                .routeDefaultColor(colors.remaining)
+                .routeCasingColor(colors.remainingCasing)
+                .routeLineTraveledColor(colors.traveled)
+                .routeLineTraveledCasingColor(colors.traveledCasing)
+                .routeLowCongestionColor(colors.remaining)
+                .routeModerateCongestionColor(colors.remaining)
+                .routeHeavyCongestionColor(colors.remaining)
+                .routeSevereCongestionColor(colors.remaining)
+                .routeUnknownCongestionColor(colors.remaining)
+                .routeClosureColor(colors.closure)
+                .restrictedRoadColor(colors.restricted)
+                .build()
+        return MapboxRouteLineView(
+            MapboxRouteLineViewOptions.Builder(context)
+                // Under the navigation styles' road labels, so street names stay
+                // readable over the route rather than being painted out by it.
+                .routeLineBelowLayerId(ROUTE_LINE_BELOW_LAYER_ID)
+                .routeLineColorResources(colorResources)
+                .build(),
+        )
+    }
+
     private val routeArrowApi = MapboxRouteArrowApi()
     private val routeArrowView = MapboxRouteArrowView(RouteArrowOptions.Builder(context).build())
 
@@ -1118,6 +1355,17 @@ private class TurnByTurnEngine(
     /** Camera-change listener feeding [bearingFlow]; held so it can be detached. */
     private var cameraChangeListener: OnCameraChangeListener? = null
 
+    // The layer/camera choices the screen has pushed, remembered so every one of
+    // them can be RE-APPLIED after a style reload. A style reload drops the
+    // traffic layer entirely, and the pitch/bearing overrides live on the
+    // viewport data source rather than the style — keeping the values here is
+    // what stops a day/night flip mid-drive from silently turning traffic off or
+    // un-flattening a camera the user flattened.
+    private var trafficEnabled = false
+    private var trafficMode = MapMode.Day
+    private var threeDEnabled = true
+    private var compassMode = MapCompassMode.CourseUp
+
     private var firstFixReceived = false
     private var routeRequested = false
 
@@ -1141,11 +1389,12 @@ private class TurnByTurnEngine(
         mapView.camera.addCameraAnimationsLifecycleListener(
             NavigationBasicGesturesHandler(navigationCamera),
         )
-        navigationCamera.registerNavigationCameraStateChangeObserver { state ->
-            cameraFollowingFlow.value =
-                state == NavigationCameraState.FOLLOWING ||
-                state == NavigationCameraState.TRANSITION_TO_FOLLOWING
-        }
+        // NOTE there is deliberately no camera-state observer here any more. It
+        // existed only to HIDE the re-centre button while the camera was already
+        // following — a control that came and went mid-drive, which is exactly the
+        // divergence from the map home this change removes. The control is now
+        // always on screen, and re-arming follow when follow is already on is a
+        // harmless no-op, so there is nothing left to observe.
 
         // Drop the SDK's built-in scale bar — the distance/km ruler it draws in
         // the UPPER LEFT. It is pure chrome during turn-by-turn (the bottom bar
@@ -1164,8 +1413,21 @@ private class TurnByTurnEngine(
             object : OnCameraChangeListener {
                 @Suppress("UNUSED_PARAMETER")
                 override fun onCameraChanged(eventData: CameraChangedEventData) {
-                    bearingFlow.value =
-                        mapView.mapboxMap.cameraState.bearing.toFloat().roundToInt().toFloat()
+                    val camera = mapView.mapboxMap.cameraState
+                    bearingFlow.value = camera.bearing.toFloat().roundToInt().toFloat()
+                    // Same de-duplication argument as the bearing, applied to the
+                    // whole camera: the live-member overlays re-project every
+                    // marker when this changes, so it is rounded to about a metre
+                    // / a hundredth of a zoom / a whole degree and StateFlow
+                    // collapses the settled frames. Mirrors MapboxMapSurface.
+                    cameraSnapshotFlow.value =
+                        MapCameraSnapshot.of(
+                            latitude = camera.center.latitude(),
+                            longitude = camera.center.longitude(),
+                            zoom = camera.zoom,
+                            bearing = camera.bearing,
+                            pitch = camera.pitch,
+                        )
                 }
             }
         cameraChangeListener = camListener
@@ -1190,9 +1452,11 @@ private class TurnByTurnEngine(
 
     /**
      * Loads the given navigation style (day or night, chosen by the caller from
-     * the app theme) and initialises the route-line layers.
+     * the app theme or the layers popup's override) and (re)builds everything
+     * that lives on a style: the route-line layers, the congestion overlay and
+     * the destination marker.
      */
-    fun loadStyleAndInit(styleUri: String) {
+    fun loadStyleAndInit(styleUri: String, mode: MapMode) {
         // Retire the previous marker manager BEFORE the new style is loaded,
         // while its own style is still the current one. A manager cannot be
         // carried across a style reload: in Maps SDK 11.26.0 the annotation
@@ -1209,13 +1473,61 @@ private class TurnByTurnEngine(
         // were being cleaned up before, so those map-level registrations and
         // list entries accumulated one set per day/night flip.
         releaseDestMarkerManager()
+        // Rebuild the route-line renderer when the day/night palette changes.
+        // Its colours are baked into the layer paint properties at creation, and
+        // the style load below is about to drop and recreate those layers, so
+        // this is the one moment at which a new palette can take effect without
+        // fighting layers that already exist. `routeLineMode == null` on the very
+        // first load, so the initial palette is always applied here rather than
+        // being whatever the field was seeded with.
+        if (routeLineMode != mode) {
+            runCatching { routeLineView.cancel() }
+            routeLineView = buildRouteLineView(mode)
+            routeLineMode = mode
+        }
+        trafficMode = mode
         // Claim this request. Anything still in flight from an earlier one is
         // now stale and must not be allowed to end the handoff.
         val token = ++styleLoadToken
         val loaded =
             runCatching {
                 mapView.mapboxMap.loadStyle(styleUri) { style ->
+                    // Traffic BEFORE the route line: both anchor below the same
+                    // label layer, and whatever is inserted last ends up nearest
+                    // it — so adding congestion first leaves the route drawn on
+                    // top of it, which is the ordering a driver needs.
+                    applyTrafficLayers(style)
                     runCatching { routeLineView.initializeLayers(style) }
+                    // Re-draw the ROUTE onto the fresh style.
+                    //
+                    // This is the fix for "I can see the maneuver arrow but the
+                    // road I should drive isn't coloured". The route line was
+                    // rendered from exactly one place — the routes observer — and
+                    // that render is dropped whenever `mapboxMap.style` is null.
+                    // On this screen it very often is: the route request is issued
+                    // from attach() on the FIRST composition, while the style load
+                    // does not even start until the handoff veil is opaque
+                    // (NavHandoff.FADE_MILLIS later). A route that arrives inside
+                    // that window was silently discarded and nothing ever asked
+                    // for it again, because routes only change on a reroute. The
+                    // maneuver ARROW kept working throughout because it is
+                    // re-rendered on every route-progress tick — which is exactly
+                    // the reported symptom. The same gap swallowed the route on
+                    // every day/night style reload.
+                    //
+                    // getRouteDrawData replays whatever the API is currently
+                    // holding, so a style that comes up after the route simply
+                    // gets it now. It is a no-op when there is no route yet.
+                    runCatching {
+                        routeLineApi.getRouteDrawData { value ->
+                            runCatching { routeLineView.renderRouteDrawData(style, value) }
+                        }
+                    }
+                    // Re-apply the camera overrides the layers popup owns; these
+                    // live on the viewport data source, not the style, but a
+                    // reload is the moment everything else is being restored so
+                    // they are restored with it.
+                    applyCameraOverrides()
                     // Create the destination-marker manager against the freshly
                     // loaded style and redraw the marker. A style reload (day/night
                     // flip) drops every annotation, so the marker has to be redrawn
@@ -1298,6 +1610,23 @@ private class TurnByTurnEngine(
                 viewportDataSource.onLocationChanged(enhanced)
                 viewportDataSource.evaluate()
 
+                // Move the travelled/remaining split with the car. Route progress
+                // alone updates it, but only at the SDK's progress cadence and
+                // only in whole steps; feeding the matched position keeps the
+                // boundary sitting on the puck instead of trailing behind it.
+                // Cheap: one call per ~1 Hz fix, and a no-op before there is a
+                // route or a style.
+                runCatching {
+                    val style = mapView.mapboxMap.style
+                    if (style != null) {
+                        val update =
+                            routeLineApi.updateTraveledRouteLine(
+                                Point.fromLngLat(enhanced.longitude, enhanced.latitude),
+                            )
+                        routeLineView.renderRouteLineUpdate(style, update)
+                    }
+                }
+
                 // Speed readout. The CURRENT speed is taken straight from the
                 // enhanced fix (m/s → km/h) rather than from the SDK's formatted
                 // value, so it is in the app's units unconditionally and does not
@@ -1359,6 +1688,15 @@ private class TurnByTurnEngine(
                 runCatching {
                     val arrowUpdate = routeArrowApi.addUpcomingManeuverArrow(routeProgress)
                     routeArrowView.renderManeuverUpdate(style, arrowUpdate)
+                }
+                // Advance the route line's vanishing point, which is what
+                // de-emphasises the part already driven and keeps the coloured
+                // remainder honest across leg changes and reroutes. Without this
+                // the line is drawn once and never updated again.
+                runCatching {
+                    routeLineApi.updateWithRouteProgress(routeProgress) { update ->
+                        runCatching { routeLineView.renderRouteLineUpdate(style, update) }
+                    }
                 }
             }
 
@@ -1460,20 +1798,96 @@ private class TurnByTurnEngine(
     }
 
     /**
-     * Ease the map back to north-up — the compass control's tap action, matching
-     * [com.kungsbackacarcommunity.app.shell.MapboxMapSurface.resetNorth] so the
-     * same button does the same thing on both screens.
+     * Apply the map home's compass toggle to the NAVIGATION camera.
      *
-     * Note the deliberate asymmetry with the map home: while the navigation
-     * camera is FOLLOWING it owns the bearing (the map is course-up), so it will
-     * swing back on the next location update. The tap is still the right
-     * behaviour — after the user has panned away, auto-follow is detached and
-     * north-up sticks, which is exactly when someone reaches for a compass.
+     * The map home eases its free camera to a bearing; this camera is a FOLLOW
+     * camera that recomputes its own bearing from the route on every fix, so
+     * easing it would be undone within the second. The equivalent — and the only
+     * thing that actually sticks — is an override on the viewport data source
+     * the follow camera reads from:
+     * - NORTH-UP pins the following bearing at 0, so true north stays up while
+     *   the camera goes on tracking the car along the route;
+     * - COURSE-UP clears the override, handing the bearing back to the SDK, which
+     *   is the course-up behaviour navigation opens in.
+     *
+     * Both then re-request following, because an orientation the camera is not
+     * driving is not an orientation at all — which also matches the map home,
+     * whose compass re-centres as well as rotating. Idempotent: re-applying the
+     * current mode moves nothing.
      */
-    fun resetNorth() {
+    fun setCompassMode(mode: MapCompassMode) {
+        compassMode = mode
+        applyCameraOverrides()
+        runCatching { navigationCamera.requestNavigationCameraToFollowing() }
+    }
+
+    /**
+     * The congestion overlay, toggled from the shared layers popup. Uses the
+     * SAME source, tileset and day/night ramp as the map home
+     * ([MapboxMapSurface.addTrafficLayer]) so the two maps cannot show different
+     * traffic. A no-op until the style is up; re-applied on every style load.
+     */
+    fun setTrafficEnabled(enabled: Boolean, mode: MapMode) {
+        trafficEnabled = enabled
+        trafficMode = mode
+        runCatching { mapView.mapboxMap.style?.let { applyTrafficLayers(it) } }
+    }
+
+    /**
+     * Tilted vs flat, toggled from the shared layers popup.
+     *
+     * On the map home this flips the camera pitch AND hides the Standard style's
+     * 3D buildings. The classic navigation styles draw no 3D objects at all, so
+     * here it is the pitch alone — expressed, like the compass, as an override on
+     * the follow camera rather than a one-off camera move that the next fix would
+     * discard.
+     */
+    fun set3dEnabled(enabled: Boolean) {
+        threeDEnabled = enabled
+        applyCameraOverrides()
+    }
+
+    /**
+     * Push the pitch/bearing overrides the layers popup and the compass own at
+     * the viewport data source. Called from the setters AND from every style
+     * load, so a day/night reload cannot quietly restore a tilt or a rotation the
+     * user turned off.
+     */
+    private fun applyCameraOverrides() {
         runCatching {
-            mapView.camera.easeTo(cameraOptions { bearing(0.0) })
+            // null hands the property back to the SDK's own computation; a value
+            // pins it. Overview shares the pitch so flattening is not silently
+            // undone the moment the camera zooms out to show the whole route.
+            viewportDataSource.followingPitchPropertyOverride(if (threeDEnabled) null else 0.0)
+            viewportDataSource.overviewPitchPropertyOverride(if (threeDEnabled) null else 0.0)
+            viewportDataSource.followingBearingPropertyOverride(
+                when (compassMode) {
+                    MapCompassMode.NorthUp -> 0.0
+                    MapCompassMode.CourseUp -> null
+                },
+            )
+            viewportDataSource.evaluate()
         }
+    }
+
+    /**
+     * (Re)add and (re)style the congestion layer on [style] from the remembered
+     * toggle state. Anchored below the same label layer the route line is
+     * anchored below, and added BEFORE the route line, so the route draws on top
+     * of the traffic rather than under it.
+     */
+    private fun applyTrafficLayers(style: Style) {
+        runCatching {
+            MapboxMapSurface.addTrafficLayer(
+                style = style,
+                mode = trafficMode,
+                // Classic navigation style: no slots to name.
+                slotName = null,
+                belowLayerId = ROUTE_LINE_BELOW_LAYER_ID,
+            )
+        }
+        runCatching { MapboxMapSurface.applyTrafficColors(style, trafficMode) }
+        runCatching { MapboxMapSurface.applyTrafficVisibility(style, trafficEnabled) }
     }
 
     private fun requestRoute(originPoint: Point) {

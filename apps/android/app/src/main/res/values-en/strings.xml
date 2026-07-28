@@ -1154,8 +1154,6 @@
     <string name="shell_mapPlaceholder">Map</string>
     <string name="shell_userMarkerLabel">You</string>
     <string name="shell_participantsSharing">%1$d sharing</string>
-    <string name="shell_liveShareOn">Live location, sharing</string>
-    <string name="shell_liveShareOff">Live location</string>
     <string name="shell_recenter">Recenter</string>
     <string name="shell_menu">Menu</string>
     <string name="shell_panelDragHandle">Drag down to close</string>
@@ -1214,7 +1212,6 @@
     <string name="shell_layersIncidents">Traffic alerts</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
-    <string name="shell_compass">Reset to north</string>
     <string name="shell_compassNorthUp">North up</string>
     <string name="shell_compassCourseUp">Follow your direction</string>
     <string name="shell_searchExpand">Search</string>

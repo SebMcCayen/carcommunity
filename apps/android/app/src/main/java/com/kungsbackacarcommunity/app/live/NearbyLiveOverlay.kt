@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
-import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlin.math.roundToInt
 
 /** Test tag on the whole nearby-live-sharer overlay. */
@@ -70,7 +70,7 @@ const val NEARBY_LIVE_CHIP_TAG = "nearby_live_chip_"
  */
 @Composable
 fun NearbyLiveOverlay(
-    mapSurface: MapSurface,
+    mapSurface: MapProjection,
     sharers: List<LiveMarker>,
     modifier: Modifier = Modifier,
 ) {

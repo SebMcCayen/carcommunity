@@ -259,6 +259,55 @@ data class MapPlaceRequest(
 )
 
 /**
+ * The narrow "where does this coordinate land on screen?" half of a map.
+ *
+ * Split out of [MapSurface] so the Compose marker overlays — the convoy
+ * awareness layer ([com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay])
+ * and the nearby-live-sharer layer
+ * ([com.kungsbackacarcommunity.app.live.NearbyLiveOverlay]) — can be drawn over
+ * ANY map, not just the shell's. They need exactly two things: the settled
+ * camera (to know when to reproject) and the renderer's own projection. They do
+ * not need traffic toggles, incident markers, place gestures or a day/night
+ * preset, and demanding the whole of [MapSurface] is precisely what confined
+ * them to the shell map.
+ *
+ * The turn-by-turn screen owns a SECOND, Navigation-SDK-backed `MapView` (see
+ * `navigation/turnbyturn/TurnByTurnNavScreen.kt`), which is why other members
+ * sharing their live location were invisible while navigating: every live
+ * marker was drawn against the shell surface, and the shell surface is stood
+ * down the moment navigation starts. The navigation engine implements THIS
+ * interface, so the same overlay composables — same markers, same identity
+ * (the member's main-car photo), same smoothing — draw on the navigation map
+ * too, rather than a second look-alike representation being invented for it.
+ */
+interface MapProjection {
+    /**
+     * Where the camera currently is, or null before the map has one.
+     *
+     * Rounded and de-duplicated by the implementation (see [MapCameraSnapshot]),
+     * so a settled camera does not re-run every consumer on every frame. A map
+     * with no real camera (the stub) leaves this null forever, and the overlays
+     * then draw nothing.
+     */
+    val cameraSnapshot: StateFlow<MapCameraSnapshot?>
+
+    /**
+     * Project a geographic coordinate into the map view's pixel space, or null
+     * when there is no map to project with (not composed, no style, or the stub).
+     *
+     * This is the renderer's OWN projection, deliberately, because it is the only
+     * thing that accounts exactly for zoom, rotation AND pitch. Reimplementing it
+     * would mean reimplementing the camera's projection matrix.
+     *
+     * Two caveats the caller must handle, both documented on
+     * `ConvoyEdgeGeometry.isProjectionTrustworthy`: the returned point may be far
+     * outside the viewport, and for a coordinate behind a TILTED camera it may be
+     * folded back into view rather than being honestly off-screen.
+     */
+    fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
+}
+
+/**
  * Seam between the map-first shell and the actual map renderer.
  *
  * The entire shell (search bar, "Loading roads…" state, floating controls,
@@ -285,7 +334,7 @@ data class MapPlaceRequest(
  *   the layers popup; the real surface flips the camera pitch and re-centres
  *   (stub exposes the flag only).
  */
-interface MapSurface {
+interface MapSurface : MapProjection {
     /** Current load state; the shell shows "Loading roads…" while [MapLoadState.Loading]. */
     val loadState: StateFlow<MapLoadState>
 
@@ -332,31 +381,10 @@ interface MapSurface {
      */
     val crownMarkers: StateFlow<List<MapCrownMarker>>
 
-    /**
-     * Where the camera currently is, or null before the map has one.
-     *
-     * Exists for the convoy awareness overlay, which needs the camera CENTRE and
-     * BEARING to work out which way an off-screen member lies (see
-     * `map/ConvoyEdgeGeometry.kt`). Rounded and de-duplicated, so a settled
-     * camera does not re-run the overlay every frame. A surface with no real
-     * camera (the stub) leaves this null forever.
-     */
-    val cameraSnapshot: StateFlow<MapCameraSnapshot?>
-
-    /**
-     * Project a geographic coordinate into the map view's pixel space, or null
-     * when there is no map to project with (not composed, no style, or the stub).
-     *
-     * This is the renderer's OWN projection, deliberately, because it is the only
-     * thing that accounts exactly for zoom, rotation AND pitch. Reimplementing it
-     * would mean reimplementing the camera's projection matrix.
-     *
-     * Two caveats the caller must handle, both documented on
-     * `ConvoyEdgeGeometry.isProjectionTrustworthy`: the returned point may be far
-     * outside the viewport, and for a coordinate behind a TILTED camera it may be
-     * folded back into view rather than being honestly off-screen.
-     */
-    fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
+    // [cameraSnapshot] and [screenPositionFor] are inherited from [MapProjection]
+    // — the two members the convoy / nearby-live marker overlays actually need.
+    // They live there, not here, so those overlays can also be drawn over the
+    // turn-by-turn screen's own Navigation-SDK map, which is not a MapSurface.
 
     /**
      * The radius in METRES that covers the currently-visible map, for the

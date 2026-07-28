@@ -366,4 +366,48 @@ class ShellNavTest {
             ),
         )
     }
+
+    // ---- chat hub gate ---------------------------------------------------
+
+    @Test
+    fun `chat hub shows over the map home`() {
+        assertEquals(
+            true,
+            ShellNavigation.chatHubAllowed(cover = MapCover.None, navigating = false),
+        )
+    }
+
+    @Test
+    fun `chat hub shows over turn-by-turn`() {
+        // Navigation carries the map home's chat control now, so the control has
+        // to be able to open the hub. This is the case that used to be excluded.
+        assertEquals(
+            true,
+            ShellNavigation.chatHubAllowed(cover = MapCover.Opaque, navigating = true),
+        )
+    }
+
+    @Test
+    fun `chat hub stays hidden over a full-screen route or a non-map tab`() {
+        // Both are MapCover.Opaque WITHOUT navigating: there is no map behind the
+        // popup, which is the whole reason the gate exists.
+        assertEquals(
+            false,
+            ShellNavigation.chatHubAllowed(cover = MapCover.Opaque, navigating = false),
+        )
+    }
+
+    @Test
+    fun `chat hub stays hidden over the address search and the translucent panels`() {
+        assertEquals(
+            false,
+            ShellNavigation.chatHubAllowed(cover = MapCover.Transparent, navigating = false),
+        )
+        // Belt and braces: a stale `navigating` flag must not admit the hub over a
+        // cover that is not turn-by-turn.
+        assertEquals(
+            false,
+            ShellNavigation.chatHubAllowed(cover = MapCover.Transparent, navigating = true),
+        )
+    }
 }
