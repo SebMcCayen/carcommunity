@@ -1841,9 +1841,17 @@ fun AuthenticatedApp(
                             throw cancellation
                         }
                     when (result) {
-                        LiveCommandResult.Success, LiveCommandResult.Busy ->
+                        LiveCommandResult.Success ->
+                            // Issued and accepted: hold the overlay for the short
+                            // echo window while the session finds its way down.
                             LiveShareStart.settled(nowMillis())
-                        LiveCommandResult.Failed ->
+                        LiveCommandResult.Failed, LiveCommandResult.Busy ->
+                            // Busy belongs HERE, not with Success: the coordinator
+                            // short-circuits on a command already in flight, so
+                            // startSession was never called and there is no session
+                            // coming. Holding the overlay for the echo window would
+                            // show a STOP sign for something that never started.
+                            //
                             // Only speak up if the attempt was still ours: a start
                             // that had already timed out has said this once.
                             if (LiveShareStart.failed()) {
