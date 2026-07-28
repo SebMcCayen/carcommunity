@@ -2,7 +2,7 @@
 
 This document defines the initial Firebase data architecture for carcommunity: Cloud Firestore collections, Realtime Database paths, and Cloud Storage paths.
 
-For PostgreSQL data model (current `services/api` implementation) see [data-model.md](data-model.md). This document covers the target Firebase-native backend described in [ADR-001](adr/001-firebase-platform.md).
+This document is the source of truth for the Firebase-native backend described in [ADR-001](adr/001-firebase-platform.md). The PostgreSQL schema of the removed `services/api` backend is kept as a historical reference in [data-model.md](data-model.md).
 
 > **⚠️ MEMBER GATING IS TEMPORARILY DISABLED (2026-07-17).** Everywhere this
 > document says "member-gated", "member-only", or "active members", that gate is
