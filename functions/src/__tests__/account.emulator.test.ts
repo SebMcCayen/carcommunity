@@ -316,6 +316,20 @@ describe('account purge (hard delete after retention)', () => {
     const mirrorBlockBRef = blockRef(blockerBUid, uid);
     await mirrorBlockARef.set(blockDoc(uid, 'Raderad'));
     await mirrorBlockBRef.set(blockDoc(uid, 'Raderad'));
+    // A mirror row whose DOCUMENT ID is not the deleted uid while its
+    // `blockedUserId` field is. The block callable always writes the two equal,
+    // so this is not a state the API can produce — it is here because it is the
+    // only fixture that tells the two possible RTDB key derivations apart end to
+    // end: blocking-onBlockWrite keys the mirror off the document PATH, so the
+    // node it writes is liveLocationBlocks/{blockerC}/{legacyDocId}, and only a
+    // purge that derives its key from the same path clears that node rather than
+    // a non-existent one named after the swept uid. (The deterministic pin on
+    // that derivation is the blockMirrorRtdbKey unit test in
+    // account/deletion-core.test.ts; this asserts the two stores agree in situ.)
+    const blockerCUid = 'blocker-c-uid';
+    const legacyBlockDocId = 'legacy-block-doc-id';
+    const mirrorBlockCRef = blockRef(blockerCUid, legacyBlockDocId);
+    await mirrorBlockCRef.set(blockDoc(uid, 'Raderad'));
     // An RTDB node with NO Firestore row behind it, under the deleted user's own
     // subtree: only the unconditional liveLocationBlocks/{uid} removal clears
     // this — a trigger-driven cleanup or a sweep derived from the (by then
@@ -328,7 +342,8 @@ describe('account purge (hard delete after retention)', () => {
       const tree = (snap.val() ?? {}) as Record<string, Record<string, boolean>>;
       return tree[uid]?.[blockedByUserUid] === true &&
         tree[blockerAUid]?.[uid] === true &&
-        tree[blockerBUid]?.[uid] === true
+        tree[blockerBUid]?.[uid] === true &&
+        tree[blockerCUid]?.[legacyBlockDocId] === true
         ? true
         : undefined;
     });
@@ -500,6 +515,13 @@ describe('account purge (hard delete after retention)', () => {
     ).toBe(false);
     expect(
       (await adminRtdb.ref(`liveLocationBlocks/${blockerBUid}/${uid}`).get()).exists(),
+    ).toBe(false);
+    // ...including the row whose document id is not the deleted uid: the sweep
+    // deletes it and clears the RTDB node keyed on that id — the one
+    // blocking-onBlockWrite actually wrote.
+    expect((await mirrorBlockCRef.get()).exists).toBe(false);
+    expect(
+      (await adminRtdb.ref(`liveLocationBlocks/${blockerCUid}/${legacyBlockDocId}`).get()).exists(),
     ).toBe(false);
 
     // Live-location state erased in BOTH stores. The RTDB subtree goes whole —

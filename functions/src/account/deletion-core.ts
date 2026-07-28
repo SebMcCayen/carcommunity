@@ -214,7 +214,7 @@ export const PURGE_CONVOY_MEMBERSHIP = {
  * with an unblock button that acts on nothing. Same shape, and same resolution,
  * as the friend mirror above.
  *
- * Keyed on the `blockedUserId` FIELD, not the document id: a collection-group
+ * QUERIED on the `blockedUserId` FIELD, not the document id: a collection-group
  * query cannot filter on a bare id (documentId() there matches full paths), and
  * the field is written on every block and preserved by the idempotent re-block
  * merge. As with the friend mirror, sweeping the mirror rows themselves rather
@@ -222,11 +222,17 @@ export const PURGE_CONVOY_MEMBERSHIP = {
  * order-independent and idempotent under a retried partial purge. One equality
  * filter, no orderBy → the automatic single-field index (collection-group
  * scoped) covers it; no composite index needed.
+ *
+ * The field selects the rows; it does NOT key the RTDB mirror. That key comes
+ * from each row's own path segments — see blockMirrorRtdbKey below.
  */
 export const PURGE_BLOCK_MIRROR = {
   collectionGroup: 'blocked',
   blockedField: 'blockedUserId',
-  /** Guard: the only parent collection whose `blocked` rows this may delete. */
+  /**
+   * Guard: the only parent collection whose `blocked` rows this may delete.
+   * Enforced by blockMirrorRtdbKey, which rejects any other path.
+   */
   root: 'userBlocks',
 } as const;
 
@@ -243,6 +249,38 @@ export const PURGE_BLOCK_MIRROR = {
  * value the purge writes, and no purge write can make it write `true`.
  */
 export const LIVE_LOCATION_BLOCKS_RTDB_ROOT = 'liveLocationBlocks';
+
+/**
+ * The `liveLocationBlocks` multi-path update key for ONE mirror row, derived
+ * from that row's Firestore path — or null when the path is not a
+ * `userBlocks/{blockerUid}/blocked/{blockedUid}` block at all, which also
+ * serves as the root guard the collection-group sweep needs (a `blocked`
+ * subcollection can hang off any parent).
+ *
+ * Derived ENTIRELY from the row's PATH SEGMENTS, because those are exactly the
+ * `{blockerUid}` / `{blockedUid}` wildcard params blocking/onBlockWrite.ts
+ * builds `liveLocationBlocks/{blockerUid}/{blockedUid}` from. Deriving the key
+ * the same way the trigger that WROTE the node did is what makes the purge
+ * unable to clear a different node than the one that exists — a mirror written
+ * under one key and purged under another is how a node survives erasure.
+ *
+ * Note what this deliberately does NOT use: the `blockedUserId` FIELD the sweep
+ * queries on (equal to the document id for every row the block callable writes,
+ * but the id is what the trigger keyed the node on), and any assumption about
+ * the Auth uid character set — blocking-core.ts states outright that the
+ * character set is intentionally unconstrained beyond a length bound. A
+ * Firestore document id is a single path segment and so cannot contain the '/'
+ * that would re-target a multi-path update; that is a structural property of
+ * the path, not a property of uids.
+ */
+export function blockMirrorRtdbKey(rowPath: string): string | null {
+  const segments = rowPath.split('/');
+  if (segments.length !== 4) return null;
+  const [root, blockerUid, subcollection, blockedUid] = segments;
+  if (root !== PURGE_BLOCK_MIRROR.root) return null;
+  if (subcollection !== PURGE_BLOCK_MIRROR.collectionGroup) return null;
+  return `${blockerUid}/${blockedUid}`;
+}
 
 /**
  * The Realtime Database subtrees holding the user's own LIVE-LOCATION state,

@@ -65,6 +65,7 @@ import {
   PURGE_FRIEND_REQUEST_USER_FIELDS,
   PURGE_OWNED_COLLECTIONS,
   PURGE_STORAGE_PREFIXES,
+  blockMirrorRtdbKey,
   deletionRetentionCutoff,
 } from './deletion-core';
 
@@ -141,9 +142,13 @@ async function deleteFriendGraphMirror(uid: string): Promise<void> {
  *    between the two leaves the row in place for the next run to find rather
  *    than orphaning the RTDB node; re-running just rewrites the same `null`.
  *
- * The PURGE_BLOCK_MIRROR.root guard keeps the collection-group query from ever
- * deleting a `blocked` subcollection that belongs to some other parent, the
- * same way CHANNEL_MESSAGE_ROOTS guards the message sweep.
+ * Each mirror key in (3) is derived from its OWN row's path segments by
+ * blockMirrorRtdbKey — the same `{blockerUid}`/`{blockedUid}` the trigger that
+ * wrote the node keyed it on — never from the queried uid, so the purge cannot
+ * clear a node other than the one that row put there. That helper also applies
+ * the PURGE_BLOCK_MIRROR.root guard, keeping the collection-group query from
+ * ever deleting a `blocked` subcollection that belongs to some other parent,
+ * the same way CHANNEL_MESSAGE_ROOTS guards the message sweep.
  */
 async function purgeBlockGraph(uid: string): Promise<void> {
   await adminRtdb.ref(`${LIVE_LOCATION_BLOCKS_RTDB_ROOT}/${uid}`).set(null);
@@ -154,24 +159,23 @@ async function purgeBlockGraph(uid: string): Promise<void> {
       .where(PURGE_BLOCK_MIRROR.blockedField, '==', uid)
       .limit(QUERY_BATCH_SIZE)
       .get();
-    const targets = snap.docs.filter(
-      (docSnap) => docSnap.ref.parent.parent?.parent.id === PURGE_BLOCK_MIRROR.root,
-    );
+    const targets = snap.docs.flatMap((docSnap) => {
+      const mirrorKey = blockMirrorRtdbKey(docSnap.ref.path);
+      return mirrorKey === null ? [] : [{ ref: docSnap.ref, mirrorKey }];
+    });
     // No mirror rows left to delete — stop (also prevents a re-fetch loop if
     // only non-userBlocks docs remain).
     if (targets.length === 0) break;
 
     const mirrorRemovals: Record<string, null> = {};
-    for (const docSnap of targets) {
-      // The blocker's uid is the PARENT document's id — a Firebase Auth uid, so
-      // it can never contain the '/' that would re-target the multi-path update.
-      mirrorRemovals[`${docSnap.ref.parent.parent!.id}/${uid}`] = null;
+    for (const target of targets) {
+      mirrorRemovals[target.mirrorKey] = null;
     }
     await adminRtdb.ref(LIVE_LOCATION_BLOCKS_RTDB_ROOT).update(mirrorRemovals);
 
     const batch = db.batch();
-    for (const docSnap of targets) {
-      batch.delete(docSnap.ref);
+    for (const target of targets) {
+      batch.delete(target.ref);
     }
     await batch.commit();
     if (snap.size < QUERY_BATCH_SIZE) break;
