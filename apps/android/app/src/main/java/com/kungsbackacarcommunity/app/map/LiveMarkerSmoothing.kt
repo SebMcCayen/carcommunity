@@ -205,11 +205,14 @@ object LiveMarkerSmoothing {
  * (the roster arrives through a collected flow, the frames through the Compose
  * frame clock).
  *
- * Cost is bounded by the roster: at most one entry per convoy member (so at most
- * `MAX_CONVOY_INVITEES`), each a single mutable object that is UPDATED IN PLACE
- * on every fix rather than replaced — a newer fix overwrites the running glide's
- * target instead of stacking a second animation on top of it, so nothing can
- * accumulate. Members who stop sharing are pruned on the next roster.
+ * Cost is bounded by the roster: at most one entry per convoy member, and the
+ * backend caps a convoy at `MAX_CONVOY_SIZE` (25 — functions/src/convoy/convoy-core.ts;
+ * `livePositionUids`, which is what the map subscribes to, is derived from the
+ * ACCEPTED members, so it cannot exceed it). Each entry is a single mutable
+ * object that is UPDATED IN PLACE on every fix rather than replaced — a newer
+ * fix overwrites the running glide's target instead of stacking a second
+ * animation on top of it, so nothing can accumulate. Members who stop sharing
+ * are pruned on the next roster.
  */
 class LiveMarkerSmoother {
 
@@ -317,7 +320,7 @@ class LiveMarkerSmoother {
         }
         // Drop anyone who is no longer on the roster. A linear scan per surviving
         // track rather than an intermediate set: this runs once per roster update
-        // (seconds apart), never per frame, over at most `MAX_CONVOY_INVITEES`
+        // (seconds apart), never per frame, over at most `MAX_CONVOY_SIZE` (25)
         // members either side — cheaper than the allocation it avoids.
         if (tracks.isNotEmpty()) {
             tracks.keys.retainAll { uid -> members.any { it.uid == uid } }

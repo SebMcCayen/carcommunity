@@ -512,6 +512,8 @@ private val EDGE_INSET = 36.dp
  * minute) and costs a wakeup and a full replan every minute for the whole time a
  * convoy is on screen. One minute keeps the guarantee honest — the arrow always
  * goes, and goes soon — at one replan a minute, each O(n log n) over at most
- * MAX_CONVOY_INVITEES members of cheap trigonometry.
+ * MAX_CONVOY_SIZE (25) members of cheap trigonometry. (Was written against
+ * MAX_CONVOY_INVITEES, which is the 50-invitee bound on the CREATE call, not the
+ * cap on how many people can end up in the convoy.)
  */
 internal val STALE_TICK_MS: Long = ConvoyArrowPlanner.STALE_AFTER_MS / 4
