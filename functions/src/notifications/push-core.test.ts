@@ -113,6 +113,33 @@ describe('pushPreviewsEnabled', () => {
   });
 });
 
+/**
+ * Every category whose branch in buildPushDeepLink hands relatedEntityId to
+ * `entityIdOrNull` — i.e. the id reaches the client and a navigator opens by it.
+ */
+const PASS_THROUGH_CATEGORIES = [
+  'convoy_chat',
+  'convoy_invite',
+  'friend_request',
+  'event_reminder',
+  'event_updated',
+  'event_cancelled',
+] as const satisfies readonly NotificationCategory[];
+
+/**
+ * Every category that returns a hard-coded null entityId: the target is a
+ * single screen with no per-entity anchor, or the id names nothing the client
+ * could open by.
+ */
+const DELIBERATE_NULL_CATEGORIES = [
+  'community_chat',
+  'subscription_status',
+  'admin_message',
+  'account_warning',
+  'account_suspension',
+  'system_notice',
+] as const satisfies readonly NotificationCategory[];
+
 describe('buildPushDeepLink', () => {
   it('resolves a DM to the OTHER member of the pairId', () => {
     expect(buildPushDeepLink('direct_message', 'aaa__bbb', 'aaa')).toEqual({
@@ -177,21 +204,36 @@ describe('buildPushDeepLink', () => {
     }
   });
 
+  it('passes a real id through on EVERY pass-through category', () => {
+    for (const category of PASS_THROUGH_CATEGORIES) {
+      expect(buildPushDeepLink(category, 'entity-1', 'me').entityId).toBe('entity-1');
+    }
+  });
+
   it('never emits a blank entityId on any pass-through category', () => {
-    const passThrough = ['convoy_chat', 'convoy_invite', 'friend_request', 'event_reminder'] as const;
-    for (const category of passThrough) {
-      expect(buildPushDeepLink(category, '   ', 'me').entityId).toBeNull();
+    for (const category of PASS_THROUGH_CATEGORIES) {
+      for (const blank of [null, undefined, '', '   ']) {
+        expect(buildPushDeepLink(category, blank, 'me').entityId).toBeNull();
+      }
     }
   });
 
   it('keeps null only where the target has no single per-entity anchor', () => {
     // community_chat: the two producers write DIFFERENT id kinds (a message id
     // from @mentions, the singleton channel id from the digest).
-    // subscription/admin notices have no navigable entity at all.
-    expect(buildPushDeepLink('community_chat', 'msg-9', 'me').entityId).toBeNull();
-    expect(buildPushDeepLink('subscription_status', 'sub-1', 'me').entityId).toBeNull();
-    expect(buildPushDeepLink('admin_message', 'ref-1', 'me').entityId).toBeNull();
-    expect(buildPushDeepLink('system_notice', 'ref-1', 'me').entityId).toBeNull();
+    // subscription/admin/account notices have no navigable entity at all — their
+    // relatedEntityId is operator-supplied free text with no client-side meaning.
+    for (const category of DELIBERATE_NULL_CATEGORIES) {
+      expect(buildPushDeepLink(category, 'ref-1', 'me').entityId).toBeNull();
+    }
+  });
+
+  it('sorts every category into exactly one bucket — a new one cannot slip through', () => {
+    // direct_message is in neither list: it does not pass relatedEntityId
+    // through, it PARSES the pairId (covered by its own tests above). If a new
+    // category is added without being classified here, this fails.
+    const classified = [...PASS_THROUGH_CATEGORIES, ...DELIBERATE_NULL_CATEGORIES, 'direct_message'];
+    expect([...classified].sort()).toEqual([...NOTIFICATION_CATEGORIES].sort());
   });
 
   it('gives every category a target', () => {
