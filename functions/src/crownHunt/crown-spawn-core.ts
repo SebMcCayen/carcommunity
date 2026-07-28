@@ -45,7 +45,10 @@
  *
  * Pure module — no Firebase Admin SDK imports, no I/O, no clock reads except
  * through explicitly passed `now` values. Everything below is unit-tested in
- * crown-spawn-core.test.ts.
+ * the COLOCATED sibling ./crown-spawn-core.test.ts — the single home for this
+ * module's unit tests. Do not start a second suite elsewhere: vitest collects
+ * every `.test.ts` anywhere under src/, so a same-named file in src/__tests__
+ * would also run and silently split the coverage.
  */
 
 import { createHash } from 'node:crypto';
