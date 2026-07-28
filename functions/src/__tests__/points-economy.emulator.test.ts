@@ -482,6 +482,53 @@ describe('events.checkIn — geofence + dwell', () => {
     expect(await entryCount(user.uid)).toBe(1);
   });
 
+  /**
+   * The verified-attendee tally is the gate on `event_host_success`, and it is
+   * a THRESHOLD, so a corrupt NEGATIVE holds it under the bar rather than
+   * granting headroom. Clamping the READ alone is not enough: with
+   * `FieldValue.increment(1)` the server applies the increment to whatever is
+   * really stored, so `-3` would persist as `-2` while the function returned
+   * 1 — and since `counted/{uid}` is a one-shot claim, every attendee spent
+   * climbing back to 0 is spent for good. This pins the STORED value.
+   */
+  it('repairs a corrupt attendee tally rather than incrementing it', async () => {
+    const startsAt = new Date(Date.now() - 20 * 60_000);
+    const eventId = await publishEvent(startsAt, new Date(Date.now() + 2 * 60 * 60_000));
+
+    const countsRef = adminDb.collection('eventAttendanceCounts').doc(eventId);
+    await countsRef.set({ eventId, verifiedCount: -3 });
+
+    const user = await createProvisionedUser('pe-tally');
+    await signInAs(user);
+
+    const sample = { eventId, latitude: LAT, longitude: LON, accuracyMeters: 8 };
+    await call('events-checkIn', { ...sample, capturedAt: new Date().toISOString() });
+
+    // Back-date the stored sample so the next one clears the spacing rule.
+    const attendanceRef = adminDb
+      .collection('eventAttendance')
+      .doc(attendanceDocId(eventId, user.uid));
+    const storedDoc = (await attendanceRef.get()).data()!;
+    await attendanceRef.update({
+      samples: (storedDoc.samples as Array<Record<string, unknown>>).map((entry) => ({
+        ...entry,
+        capturedAtMs: (entry.capturedAtMs as number) - 11 * 60_000,
+      })),
+    });
+
+    const verified = (
+      await call('events-checkIn', { ...sample, capturedAt: new Date().toISOString() })
+    ).data as { result: string };
+    expect(verified.result).toBe('verified');
+
+    // One verified attendee against a stored -3 must leave 1, not -2.
+    const tally = await pollUntil(async () => {
+      const value = (await countsRef.get()).data()?.verifiedCount;
+      return typeof value === 'number' && value !== -3 ? value : undefined;
+    });
+    expect(tally).toBe(1);
+  });
+
   it('refuses a sample outside the [start-30, end+30] window', async () => {
     const startsAt = new Date(Date.now() + 4 * 60 * 60_000);
     const eventId = await publishEvent(startsAt, new Date(startsAt.getTime() + 60 * 60_000));

@@ -39,6 +39,7 @@ import {
   dailyTotalDocId,
   economyIdempotencyKey,
   ledgerFoldDocId,
+  readCount,
   stockholmDayKey,
 } from './points-economy-core';
 
@@ -256,8 +257,12 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
   try {
     verifiedCount = await db.runTransaction(async (tx) => {
       const [countsSnap, countedSnap] = await Promise.all([tx.get(countsRef), tx.get(countedRef)]);
-      const current = countsSnap.data()?.verifiedCount;
-      const stored = typeof current === 'number' && Number.isSafeInteger(current) ? current : 0;
+      // Read through the shared `readCount`, like every other economy counter.
+      // A local `Number.isSafeInteger` check would accept a NEGATIVE tally,
+      // and this counter is the gate on the host award rather than a ceiling:
+      // a negative holds the tally under HOST_SUCCESS_MIN_VERIFIED_ATTENDEES
+      // instead of granting headroom. Non-negative or nothing.
+      const stored = readCount(countsSnap.data()?.verifiedCount);
       if (countedSnap.exists) {
         return stored;
       }
@@ -269,11 +274,26 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
       // and retries it — but the doc above promised `create`, so it is
       // `create`.)
       tx.create(countedRef, { userId: uid, createdAt: FieldValue.serverTimestamp() });
+      // The CLAMPED value, not `FieldValue.increment(1)`. Increment would be
+      // applied by the server to whatever is actually stored, so a corrupt
+      // `-3` would persist as `-2` while this function returned 1 — the
+      // clamp would exist only in memory, the document would stay negative,
+      // and because `counted/{uid}` is a one-shot claim each attendee spent
+      // climbing back to 0 is spent for good. The tally would need
+      // |negative| + HOST_SUCCESS_MIN_VERIFIED_ATTENDEES attendees instead of
+      // HOST_SUCCESS_MIN_VERIFIED_ATTENDEES, which for a meet that ends first
+      // means the host is simply never paid.
+      //
+      // Writing the absolute value is safe precisely BECAUSE countsRef is
+      // read in this transaction: a concurrent writer invalidates the read
+      // set and Firestore aborts and retries, so no increment can be lost.
+      // (`increment` earns its keep when a doc is written WITHOUT being read;
+      // here it only lets the stored value diverge from the returned one.)
       tx.set(
         countsRef,
         {
           eventId,
-          verifiedCount: FieldValue.increment(1),
+          verifiedCount: stored + 1,
           updatedAt: FieldValue.serverTimestamp(),
         },
         { merge: true },

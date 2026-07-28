@@ -667,6 +667,96 @@ export interface AttendanceSample {
   capturedAtMs: number;
 }
 
+/**
+ * Defensive read of the stored `eventAttendance.samples` array — DROPS every
+ * malformed entry instead of repairing it.
+ *
+ * Only `events.checkIn` ever writes this array, and only from a
+ * schema-validated payload, so in practice every entry is well-formed. The
+ * read side still refuses to trust that, and the reason it DROPS rather than
+ * coerces is that the array is READ-MODIFY-WRITTEN on every check-in: the
+ * transaction reads the stored samples, appends the new one and writes the
+ * whole (truncated) list back. Coercing a bad entry to `NaN` and keeping it
+ * would persist that `NaN` forever, one write at a time, and each junk entry
+ * would also consume one of the MAX_ATTENDANCE_SAMPLES slots that a real
+ * sample needs.
+ *
+ * NOTHING IS LOST BY DROPPING — an entry failing any of these checks could
+ * never have qualified. `evaluateAttendance` is the predicate that settles
+ * it, and it excludes them on two different grounds:
+ *  - the COORDINATE and ACCURACY checks here are the geo subset of
+ *    `isSampleInsideFence`, which `evaluateAttendance` requires;
+ *  - the CAPTURE INSTANT is not something `isSampleInsideFence` looks at at
+ *    all. `evaluateAttendance` is what requires `Number.isFinite`
+ *    (and membership of the attendance window) on it.
+ * So a timestamp-only corruption is excluded by `evaluateAttendance`, not by
+ * the fence — worth stating precisely, because "the fence rejects it" would
+ * be false for exactly that case.
+ *
+ * `accuracyMeters` is the one field where coercion would be UNSAFE rather
+ * than merely untidy — a stored `"500"` coerced to `null` reads as "no
+ * accuracy reported", which is treated as a perfect fix and skips the
+ * MAX_ATTENDANCE_ACCURACY_METERS bound. A missing or explicitly null
+ * accuracy is legitimate (it is what the client sends when the platform
+ * reports none); anything else present but not a finite number drops the
+ * whole entry.
+ *
+ * Accuracy is also held to the SEMANTIC bound, not just "is it a number":
+ * negative, or worse than MAX_ATTENDANCE_ACCURACY_METERS, drops the entry
+ * too. That is the same predicate `isSampleInsideFence` applies, so such an
+ * entry could never qualify — and `events.checkIn` runs the fence check
+ * BEFORE the transaction, so it can never have been written by the normal
+ * path either. Keeping it would be keeping dead weight in a bounded array.
+ *
+ * ONE CONSEQUENCE WORTH KNOWING: this couples the stored evidence to a
+ * POLICY constant. If MAX_ATTENDANCE_ACCURACY_METERS is ever TIGHTENED,
+ * samples that were legitimate when captured stop being re-written on the
+ * next check-in. No award moves — `verified` latches once true, and those
+ * samples stop counting toward dwell the moment the constant changes
+ * regardless — but the audit trail for them thins. Tighten the constant with
+ * that in mind rather than discovering it later.
+ */
+export function parseStoredAttendanceSamples(raw: unknown): AttendanceSample[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const samples: AttendanceSample[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue;
+    }
+    const record = entry as Record<string, unknown>;
+    const { latitude, longitude, capturedAtMs, accuracyMeters } = record;
+    if (
+      typeof latitude !== 'number' ||
+      typeof longitude !== 'number' ||
+      !isValidCoordinate(latitude, longitude)
+    ) {
+      continue;
+    }
+    if (typeof capturedAtMs !== 'number' || !Number.isFinite(capturedAtMs)) {
+      continue;
+    }
+    if (
+      accuracyMeters !== undefined &&
+      accuracyMeters !== null &&
+      (typeof accuracyMeters !== 'number' ||
+        !Number.isFinite(accuracyMeters) ||
+        accuracyMeters < 0 ||
+        accuracyMeters > MAX_ATTENDANCE_ACCURACY_METERS)
+    ) {
+      continue;
+    }
+    samples.push({
+      latitude,
+      longitude,
+      accuracyMeters: typeof accuracyMeters === 'number' ? accuracyMeters : null,
+      capturedAtMs,
+    });
+  }
+  return samples;
+}
+
 export interface AttendanceWindowInput {
   startsAtMs: number;
   /** null -> DEFAULT_EVENT_DURATION_MS after the start. */
@@ -1007,7 +1097,10 @@ export function isUnderEconomyRateLimit(currentCount: number): boolean {
  *    onward as an attempt count — `events.checkIn` feeds this number straight
  *    into the anti-fraud risk pipeline, where a fractional attempt rate is
  *    meaningless;
- *  - a negative value silently GRANTS extra headroom under every cap.
+ *  - a negative value silently GRANTS extra headroom under every cap — and in
+ *    the one place a counter is a THRESHOLD rather than a ceiling (the
+ *    verified-attendee tally behind `event_host_success`) it does the
+ *    opposite, holding the tally below the threshold forever.
  *
  * Treating a nonsense counter as 0 is the honest reading — "no attempts
  * recorded in this window" — and it fails in the direction that costs the
@@ -1016,8 +1109,9 @@ export function isUnderEconomyRateLimit(currentCount: number): boolean {
  *
  * This is the single implementation for the whole economy: `economy-award.ts`
  * (rule limit, daily total, weekly driving total), `events/checkIn.ts` and
- * `points/dailyOpen.ts` (rate-limit windows) all read through it, so the
- * three call sites cannot drift apart on what a corrupt counter means.
+ * `points/dailyOpen.ts` (rate-limit windows) and `economyTriggers.ts` (the
+ * verified-attendee tally) all read through it, so no call site can drift on
+ * what a corrupt counter means.
  */
 export function readCount(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;

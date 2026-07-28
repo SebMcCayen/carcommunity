@@ -80,6 +80,7 @@ import {
   isSampleInsideFence,
   isUnderEconomyRateLimit,
   parseCheckInInput,
+  parseStoredAttendanceSamples,
   readCount,
   type AttendanceSample,
 } from '../points/points-economy-core';
@@ -239,22 +240,6 @@ async function readLatestTrustedPosition(
   }
 }
 
-function storedSamples(data: FirebaseFirestore.DocumentData | undefined): AttendanceSample[] {
-  const raw = data?.samples;
-  if (!Array.isArray(raw)) {
-    return [];
-  }
-  return raw
-    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-    .map((entry) => ({
-      latitude: toNumber(entry.latitude) ?? Number.NaN,
-      longitude: toNumber(entry.longitude) ?? Number.NaN,
-      accuracyMeters: toNumber(entry.accuracyMeters),
-      capturedAtMs: toNumber(entry.capturedAtMs) ?? Number.NaN,
-    }))
-    .filter((sample) => Number.isFinite(sample.capturedAtMs));
-}
-
 export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInResponse> => {
   const actor = await requireMemberActor(request);
 
@@ -370,7 +355,9 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
     const snap = await tx.get(attendanceRef);
     const data = snap.data();
     const alreadyVerified = data?.verified === true;
-    const existing = storedSamples(data);
+    // The stored list is re-written below, so a malformed entry is DROPPED
+    // here rather than carried forward — see parseStoredAttendanceSamples.
+    const existing = parseStoredAttendanceSamples(data?.samples);
 
     // Drop an exact-timestamp duplicate: a double-tap must not become two
     // samples (it would still fail the 10-minute spacing rule, but keeping
