@@ -27,7 +27,7 @@ class FirebaseOnboardingRepository private constructor(
     override suspend fun completeOnboarding(displayName: String?) {
         val data =
             buildMap<String, Any> {
-                put("ageConfirmed", true)
+                put("licenceConfirmed", true)
                 put("termsAccepted", true)
                 put("privacyPolicyAccepted", true)
                 if (displayName != null) put("displayName", displayName)

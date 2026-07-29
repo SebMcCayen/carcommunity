@@ -33,7 +33,7 @@ class OnboardingScreenTest {
         val continueBtn = str(R.string.onboarding_continueButton)
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
-        composeTestRule.onNodeWithText(str(R.string.onboarding_ageConfirm)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performClick()
         composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performClick()
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 

@@ -73,7 +73,8 @@ Document ID: Firebase UID.
 | `email`                      | `string?`    | Contact channel, not identity key                                      |
 | `phone`                      | `string?`    | Optional                                                               |
 | `notificationPreferences`    | `map?`       | Per-category `{ inApp?, push? }`; essential categories enforced at delivery |
-| `ageConfirmedAt`             | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
+| `licenceConfirmedAt`         | `Timestamp?` | Consent audit record (holds a valid driving licence for the vehicle they drive) — written by `auth.completeOnboarding` only |
+| `ageConfirmedAt`             | `Timestamp?` | **Legacy** consent audit record (the retired 18+ confirmation). Present only on documents written before the driving-licence wording landed; kept untouched as the historical record of what those members agreed to, never rewritten into a licence confirmation, and not seeded on new documents |
 | `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `anonymousPartnerStatsOptIn` | `boolean`    | Privacy setting; defaults to `false` (explicit opt-in); owner-editable |

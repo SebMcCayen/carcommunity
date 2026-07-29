@@ -772,6 +772,11 @@ describe('Firestore – userPrivate', () => {
   it('owner cannot write consent timestamps (backend-managed audit records)', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
     await assertFails(
+      updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { licenceConfirmedAt: new Date() }),
+    );
+    // Legacy 18+ consent record: still unwritable by the owner, so nobody can
+    // forge or erase what a pre-change member actually attested to.
+    await assertFails(
       updateDoc(doc(ctx.firestore(), 'userPrivate', OWNER), { ageConfirmedAt: new Date() }),
     );
     await assertFails(

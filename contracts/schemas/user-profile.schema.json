@@ -87,9 +87,13 @@
           "type": "object",
           "description": "Push/email preferences map. Intentionally left open-ended until the notifications domain contracts land (PR 2b) — the key/value shape is not yet contracted and must not be relied on for native codegen."
         },
+        "licenceConfirmedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Consent audit record written by auth.completeOnboarding — the member confirmed they hold a valid driving licence for the vehicle they drive. Backend-managed only; clients cannot write it (Security Rules)."
+        },
         "ageConfirmedAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
-          "description": "Consent audit record written by auth.completeOnboarding — backend-managed only; clients cannot write it (Security Rules)."
+          "description": "LEGACY consent audit record — the earlier 18+ age confirmation, superseded by licenceConfirmedAt. Retained untouched on documents that already carry it, as the historical record of what those members actually attested to; never rewritten into a licence confirmation and not seeded on new documents."
         },
         "termsAcceptedAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",

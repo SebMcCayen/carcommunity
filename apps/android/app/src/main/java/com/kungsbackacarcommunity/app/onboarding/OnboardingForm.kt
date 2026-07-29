@@ -26,12 +26,12 @@ object OnboardingForm {
      * valid-length display name must be entered before submission is allowed.
      */
     fun canSubmit(
-        ageConfirmed: Boolean,
+        licenceConfirmed: Boolean,
         termsAccepted: Boolean,
         privacyAccepted: Boolean,
         displayName: String,
     ): Boolean =
-        ageConfirmed && termsAccepted && privacyAccepted && isDisplayNameValid(displayName)
+        licenceConfirmed && termsAccepted && privacyAccepted && isDisplayNameValid(displayName)
 
     /** True when the trimmed display name is non-blank and within the max length. */
     fun isDisplayNameValid(raw: String): Boolean {

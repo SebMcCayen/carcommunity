@@ -135,7 +135,7 @@
   "onboarding": {
     "title": "Välkommen",
     "subtitle": "Bekräfta innan du fortsätter.",
-    "ageConfirm": "Bekräfta att du är 18 år eller äldre.",
+    "licenceConfirm": "Jag bekräftar att jag har giltigt körkort för det fordon jag kör.",
     "termsAccept": "Jag accepterar villkoren.",
     "privacyAccept": "Jag har tagit del av integritetspolicyn.",
     "displayNameLabel": "Visningsnamn",
@@ -159,7 +159,7 @@
     "step2Title": "Kartan är din utgångspunkt",
     "step2Body": "Utgå från kartan för att se vad som händer runt omkring dig, dela din liveposition med vänner och köra tillsammans i konvojer.",
     "step3Title": "Lås upp mer med medlemskap",
-    "step3Body": "Ett medlemskap låser upp hela upplevelsen – inklusive att se andra medlemmars livepositioner, gå med i konvojer och medlemsexklusiva evenemang.",
+    "step3Body": "Ett medlemskap ger dig tillgång till fler funktioner i appen.",
     "seeMembership": "Se medlemskap",
     "step4Title": "Gör den till din",
     "step4Body": "Slutför din profil så att andra känner igen dig, och lägg till din första bil i garaget.",

@@ -124,7 +124,7 @@
     <string name="liveLocation_sessionBarSpeedUnknown">current speed unavailable</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
-    <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>
+    <string name="onboarding_licenceConfirm">I confirm that I hold a valid driving licence for the vehicle I drive.</string>
     <string name="onboarding_termsAccept">I accept the terms.</string>
     <string name="onboarding_privacyAccept">I have read the privacy policy.</string>
     <string name="onboarding_displayNameLabel">Display name</string>
@@ -146,7 +146,7 @@
     <string name="welcome_step2Title">The map is your home base</string>
     <string name="welcome_step2Body">Start from the map to see what\'s happening around you, share your live location with friends, and roll out together in convoys.</string>
     <string name="welcome_step3Title">Unlock more with membership</string>
-    <string name="welcome_step3Body">A membership unlocks the full experience — including seeing other members\' live locations, joining convoys and member-only events.</string>
+    <string name="welcome_step3Body">A membership gives you access to more features in the app.</string>
     <string name="welcome_seeMembership">See membership</string>
     <string name="welcome_step4Title">Make it yours</string>
     <string name="welcome_step4Body">Finish setting up your profile so others recognise you, and add your first car to your garage.</string>

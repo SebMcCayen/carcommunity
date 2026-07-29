@@ -79,7 +79,11 @@ export function buildUserPrivateDocument(
   const email = input.email?.trim();
   return {
     ...(email ? { email } : {}),
-    ageConfirmedAt: null,
+    // Driving-licence consent. Replaces the legacy `ageConfirmedAt` (18+),
+    // which is deliberately NOT seeded here: a new member makes no age
+    // attestation, so the legacy field only exists on documents whose owner
+    // really did confirm the old 18+ wording.
+    licenceConfirmedAt: null,
     termsAcceptedAt: null,
     privacyPolicyAcceptedAt: null,
     anonymousPartnerStatsOptIn: false,

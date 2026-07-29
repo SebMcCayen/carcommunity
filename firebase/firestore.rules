@@ -166,9 +166,10 @@ service cloud.firestore {
     }
 
     // ---- userPrivate/{uid} owner-write validation (Phase 9a) ----------------
-    // The whitelist excludes the consent timestamps (ageConfirmedAt,
-    // termsAcceptedAt, privacyPolicyAcceptedAt) — backend-written compliance
-    // records (auth.completeOnboarding) that clients can never set or modify.
+    // The whitelist excludes the consent timestamps (licenceConfirmedAt, the
+    // legacy ageConfirmedAt, termsAcceptedAt, privacyPolicyAcceptedAt) —
+    // backend-written compliance records (auth.completeOnboarding) that clients
+    // can never set or modify.
 
     function validUserPrivateFields(keys) {
       let data = request.resource.data;

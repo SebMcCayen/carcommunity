@@ -64,9 +64,14 @@ Complete the IARC questionnaire. Suggested answers grounded in the app:
 - **Rationale:** the app offers **precise real-time location sharing** between users and
   **open user-to-user chat**, both of which are inappropriate for children and would pull
   the app into Google's **"Families / Designed for Families"** obligations and stricter
-  data rules if child audiences were selected. The onboarding already records an
-  `ageConfirmedAt` consent. Selecting a 16+ (or 15+) audience keeps the app out of the
-  child-directed program, which matches the feature set.
+  data rules if child audiences were selected. Selecting a 16+ (or 15+) audience keeps the
+  app out of the child-directed program, which matches the feature set.
+- ⚠️ **The onboarding age gate is gone.** Onboarding used to record an `ageConfirmedAt`
+  self-declared 18+ consent; that checkbox was replaced by a driving-licence confirmation
+  (`licenceConfirmedAt`), so **no age question is asked anywhere in the app**. The
+  "age gate you enforce in onboarding" referred to below therefore does not currently
+  exist. Resolve this before answering the target-audience and content-rating questions —
+  see the open human decision in `privacy-policy.md` Section 3.
 - **"Do you want your app in the Designed for Families program?"** → **No.**
 - **Appeal to children:** answer **No** — the branding and features target car enthusiasts,
   not children.
