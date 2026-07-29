@@ -105,13 +105,34 @@ class LivePositionDiagnosticsTest {
         log.record(rejection(accuracyMeters = 1_437.0, distanceMeters = 1_812.0))
         val message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, log.summary())
 
-        assertTrue("says how many", message.contains("1 fixes not used"))
+        assertTrue("says how many", message.contains("1 fix not used"))
         assertTrue("bands the accuracy", message.contains("1000+ m"))
         assertFalse("never the exact figure", message.contains("1437"))
         assertFalse("nor the exact distance", message.contains("1812"))
         // Nothing that could be a latitude or longitude in Kungsbacka.
         assertFalse(message.contains("57."))
         assertFalse(message.contains("12."))
+    }
+
+    /**
+     * The line is the body of a public GitHub issue, so it has to read like
+     * English. The singular is reachable rather than theoretical — the
+     * escalation threshold is a tunable constant.
+     */
+    @Test
+    fun theSummaryAgreesInNumber() {
+        val one = LivePositionRejectionLog()
+        one.record(rejection())
+        val singular = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, one.summary())
+        assertTrue(singular.contains("1 fix not used"))
+        assertFalse("never \"1 fixes\"", singular.contains("1 fixes"))
+
+        val many = LivePositionRejectionLog()
+        repeat(3) { many.record(rejection()) }
+        assertTrue(
+            LivePositionRejectionReport.message(LiveFixSource.PUBLISH, many.summary())
+                .contains("3 fixes not used"),
+        )
     }
 
     /** Every band, including the "the platform did not say" one. */
@@ -170,7 +191,7 @@ class LivePositionDiagnosticsTest {
         val message = LivePositionRejectionReport.message(LiveFixSource.RENDER, log.summary())
 
         assertFalse("a held fix was not discarded", message.contains("discarded"))
-        assertTrue(message.contains("1 fixes not used"))
+        assertTrue(message.contains("1 fix not used"))
         assertTrue("and the reason is spelled out", message.contains("HOLD_UNCORROBORATED=1"))
     }
 

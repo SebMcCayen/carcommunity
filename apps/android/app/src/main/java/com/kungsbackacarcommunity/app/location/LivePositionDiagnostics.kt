@@ -231,7 +231,11 @@ object LivePositionRejectionReport {
                 .joinToString(", ") { "${it.key.name}=${it.value}" }
                 .ifEmpty { "none" }
         val mock = if (summary.mockProviderSeen) ", mock provider seen" else ""
-        return "Live position (${source.name.lowercase()}): ${summary.total} fixes not used; " +
+        // "1 fix", not "1 fixes": this line is the body of a public GitHub issue,
+        // and the escalation threshold is a tunable, so the singular is reachable
+        // rather than theoretical.
+        val fixes = if (summary.total == 1) "fix" else "fixes"
+        return "Live position (${source.name.lowercase()}): ${summary.total} $fixes not used; " +
             "worst reported accuracy ${bucketMeters(summary.worstAccuracyMeters)}, " +
             "largest filtered jump ${bucketMeters(summary.largestJumpMeters)}; " +
             "reasons $reasons$mock"
