@@ -35,14 +35,14 @@
 // Transaction types
 // ---------------------------------------------------------------------------
 
-export const POINTS_TRANSACTION_TYPES = [
+const POINTS_TRANSACTION_TYPES = [
   'earn',
   'spend',
   'adjustment_credit',
   'adjustment_debit',
   'reversal',
 ] as const;
-export type PointsTransactionType = (typeof POINTS_TRANSACTION_TYPES)[number];
+type PointsTransactionType = (typeof POINTS_TRANSACTION_TYPES)[number];
 
 // ---------------------------------------------------------------------------
 // Transaction sources
@@ -54,7 +54,7 @@ export type PointsTransactionType = (typeof POINTS_TRANSACTION_TYPES)[number];
  * `future_crown_hunt` is retained for backward-compatibility with existing ledger entries
  * and must not be used for new entries. Use `crown_hunt` for all Kronjakt awards.
  */
-export const POINTS_TRANSACTION_SOURCES = [
+const POINTS_TRANSACTION_SOURCES = [
   'badge',
   'event',
   'garage',
@@ -63,56 +63,7 @@ export const POINTS_TRANSACTION_SOURCES = [
   'crown_hunt',
   'future_crown_hunt',
 ] as const;
-export type PointsTransactionSource = (typeof POINTS_TRANSACTION_SOURCES)[number];
-
-/**
- * Sources that are permitted for general automated awards in the current MVP.
- * `crown_hunt` is the live Kronjakt award source.
- * `future_crown_hunt` must not be used for new entries.
- */
-export const ACTIVE_POINTS_TRANSACTION_SOURCES: ReadonlyArray<PointsTransactionSource> = [
-  'badge',
-  'event',
-  'garage',
-  'admin_adjustment',
-  'system',
-  'crown_hunt',
-];
-
-// ---------------------------------------------------------------------------
-// Route paths
-// ---------------------------------------------------------------------------
-
-export const POINTS_ROUTE_PATHS = {
-  balance: '/v1/points/balance',
-  ledger: '/v1/points/ledger',
-} as const;
-
-export function buildAdminPointsAdjustPath(userId: string): string {
-  return `/v1/admin/users/${userId}/points/adjust`;
-}
-
-export function buildAdminUserPointsBalancePath(userId: string): string {
-  return `/v1/admin/users/${userId}/points/balance`;
-}
-
-export function buildAdminUserPointsLedgerPath(userId: string): string {
-  return `/v1/admin/users/${userId}/points/ledger`;
-}
-
-// ---------------------------------------------------------------------------
-// Ledger default limits
-// ---------------------------------------------------------------------------
-
-/** Default page size for ledger listings. */
-export const DEFAULT_POINTS_PAGE_SIZE = 20;
-/** Maximum page size for ledger listings. */
-export const MAX_POINTS_PAGE_SIZE = 50;
-/**
- * Maximum KP that may be adjusted in a single admin action.
- * Keep configurable via constants — not via secrets or environment variables.
- */
-export const MAX_ADMIN_ADJUSTMENT_AMOUNT = 100_000;
+type PointsTransactionSource = (typeof POINTS_TRANSACTION_SOURCES)[number];
 
 // ---------------------------------------------------------------------------
 // Wallet: balance response
@@ -232,14 +183,3 @@ export interface AdminPointsAdjustmentResponse {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Access decision helper type
-// ---------------------------------------------------------------------------
-
-/**
- * Describes whether a user may earn or spend points.
- * Used by the backend service layer — not exposed directly as an API response.
- */
-export type PointsAccessDecision =
-  | { allowed: true }
-  | { allowed: false; reason: 'deleted' | 'suspended' };

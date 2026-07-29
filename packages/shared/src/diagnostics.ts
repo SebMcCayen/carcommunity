@@ -29,44 +29,6 @@ export const DIAGNOSTICS_FEATURE_AREAS = [
 export type DiagnosticsFeatureArea = (typeof DIAGNOSTICS_FEATURE_AREAS)[number];
 
 /**
- * All fields are optional except safeMessage, severity, platform, and featureArea.
- * The backend sanitizes and validates before storage.
- */
-export interface DiagnosticsReportRequest {
-  severity: DiagnosticsSeverity;
-  platform: DiagnosticsPlatform;
-  featureArea: DiagnosticsFeatureArea;
-  /** Human-readable, privacy-safe error message. No tokens or personal data. */
-  safeMessage: string;
-  /** App version string, e.g. "1.0.0". */
-  appVersion?: string;
-  /** App build number string, e.g. "42". */
-  buildNumber?: string;
-  /** Device OS version, e.g. "iOS 17.4". Must not include device identifiers. */
-  osVersion?: string;
-  /** Short machine-readable error code, e.g. "network_timeout". */
-  errorCode?: string;
-  /**
-   * Optional structured metadata.
-   * Must not include tokens, credentials, exact coordinates, routes, headers, or personal data.
-   * The backend enforces sanitization rules before storage.
-   */
-  metadata?: Record<string, unknown>;
-}
-
-/**
- * Response returned after successfully recording a diagnostics report.
- */
-export interface DiagnosticsReportResponse {
-  ok: true;
-  data: {
-    id: string;
-    /** Optional deduplication fingerprint for future grouping. */
-    fingerprint: string | null;
-  };
-}
-
-/**
  * A single diagnostics report entry returned in admin listings.
  * Sensitive metadata fields are excluded from this view.
  */
