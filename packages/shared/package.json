@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./auth": {
-      "types": "./dist/auth.d.ts",
-      "default": "./dist/auth.js"
-    },
     "./feature-flags": {
       "types": "./dist/feature-flags.d.ts",
       "default": "./dist/feature-flags.js"
@@ -32,29 +28,9 @@
       "types": "./dist/diagnostics.d.ts",
       "default": "./dist/diagnostics.js"
     },
-    "./onboarding": {
-      "types": "./dist/onboarding.d.ts",
-      "default": "./dist/onboarding.js"
-    },
-    "./blocking": {
-      "types": "./dist/blocking.d.ts",
-      "default": "./dist/blocking.js"
-    },
     "./event-chat": {
       "types": "./dist/event-chat.d.ts",
       "default": "./dist/event-chat.js"
-    },
-    "./group-drive": {
-      "types": "./dist/group-drive.d.ts",
-      "default": "./dist/group-drive.js"
-    },
-    "./saved-drives": {
-      "types": "./dist/saved-drives.d.ts",
-      "default": "./dist/saved-drives.js"
-    },
-    "./garage": {
-      "types": "./dist/garage.d.ts",
-      "default": "./dist/garage.js"
     },
     "./badges": {
       "types": "./dist/badges.d.ts",
