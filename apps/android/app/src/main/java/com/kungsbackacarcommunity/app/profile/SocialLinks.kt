@@ -197,6 +197,12 @@ object SocialLinks {
         // ever sees a bare hostname and cannot be talked past by either.
         if (authority.contains('@')) return Parsed.Rejected(Error.FOREIGN_HOST)
         if (authority.contains(':')) return Parsed.Rejected(Error.FOREIGN_HOST)
+        // Kotlin's lowercase() takes no locale BECAUSE it folds with
+        // Locale.ROOT (it compiles to String.toLowerCase(Locale.ROOT)); the
+        // locale-sensitive fold is the separate lowercase(Locale) overload.
+        // So a Turkish device cannot fold "INSTAGRAM" to "ınstagram" and miss
+        // the allowlist. SocialLinksTest pins this under an actual tr-TR
+        // default locale — do NOT "fix" this to lowercase(Locale.getDefault()).
         val host = authority.lowercase().removeSuffix(".")
         if (host !in spec.hosts) return Parsed.Rejected(Error.FOREIGN_HOST)
 
@@ -272,8 +278,13 @@ object SocialLinks {
 
     private fun finish(spec: Spec, candidate: String): Parsed {
         if (candidate.isEmpty()) return Parsed.Rejected(Error.MALFORMED)
-        // lowercase() with no locale is locale-INVARIANT in Kotlin, so a Turkish
-        // device cannot turn "I" into "ı" and produce a different stored value.
+        // lowercase() with no locale is locale-INVARIANT in Kotlin (Locale.ROOT),
+        // so a Turkish device cannot turn "I" into "ı" and produce a stored
+        // value the ASCII-only Security Rules pattern would then reject. The
+        // ROOT fold is also the SAFER one here: under tr-TR, "sebİ" folds to
+        // "sebi" — a different, real account — whereas ROOT folds it to
+        // "sebi̇", which fails [pattern] and is refused. Proved in
+        // SocialLinksTest under an actual tr-TR default locale.
         val normalised = if (spec.lowercase) candidate.lowercase() else candidate
         if (normalised.length > spec.maxLength) return Parsed.Rejected(Error.TOO_LONG)
         if (normalised.length < spec.minLength) return Parsed.Rejected(Error.MALFORMED)

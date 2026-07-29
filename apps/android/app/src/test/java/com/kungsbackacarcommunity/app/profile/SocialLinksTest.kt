@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.profile
 
+import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -30,6 +31,40 @@ class SocialLinksTest {
         expected: SocialLinks.Error,
     ) {
         assertEquals("input=$raw", expected, error(platform, raw))
+    }
+
+    /**
+     * Runs [block] with [locale] as the JVM default, restoring the previous
+     * default in a `finally` so a failing assertion cannot leak a Turkish
+     * locale into every test that runs after this one.
+     */
+    private fun <T> withLocale(locale: Locale, block: () -> T): T {
+        val previous = Locale.getDefault()
+        Locale.setDefault(locale)
+        return try {
+            block()
+        } finally {
+            Locale.setDefault(previous)
+        }
+    }
+
+    private companion object {
+        val TURKISH: Locale = Locale.forLanguageTag("tr-TR")
+        val SWEDISH: Locale = Locale.forLanguageTag("sv-SE")
+
+        /** The pattern firebase/firestore.rules applies to the stored handle. */
+        val RULES_INSTAGRAM = Regex("^[a-z0-9_][a-z0-9._]{0,29}$")
+
+        /** Pasted URLs whose HOST is upper-case, i.e. the ones at risk. */
+        val HOST_CASE_SHAPES =
+            listOf(
+                "INSTAGRAM.COM/sebmccayen",
+                "WWW.INSTAGRAM.COM/SebMcCayen",
+                "//M.INSTAGRAM.COM/sebmccayen",
+                "HTTPS://WWW.INSTAGRAM.COM/SebMcCayen/",
+                "HTTP://INSTAGR.AM/SEBMCCAYEN",
+                "https://INSTAGRAM.COM./sebmccayen",
+            )
     }
 
     // ---- normalisation: every shape a member might type --------------------
@@ -349,6 +384,83 @@ class SocialLinksTest {
         assertRejected(SocialPlatform.INSTAGRAM, "..", SocialLinks.Error.MALFORMED)
     }
 
+    // ---- device locale cannot change what is parsed or what is stored ------
+
+    @Test
+    fun `a turkish device locale still parses a valid pasted url`() {
+        // The Turkish dotless-i: java.lang.String.toLowerCase() with the DEFAULT
+        // locale maps 'I' to 'ı' (U+0131) under tr-TR, which would make an
+        // upper-case host miss the allowlist and be refused as FOREIGN_HOST.
+        // Kotlin's lowercase() folds with Locale.ROOT, so it does not — and this
+        // asserts that rather than trusting it.
+        withLocale(TURKISH) {
+            HOST_CASE_SHAPES.forEach { shape ->
+                assertEquals("input=$shape", "sebmccayen", handle(SocialPlatform.INSTAGRAM, shape))
+            }
+            assertEquals(
+                "instagram",
+                handle(SocialPlatform.INSTAGRAM, "https://WWW.INSTAGRAM.COM/INSTAGRAM"),
+            )
+            assertEquals(
+                "sebmccayen",
+                handle(SocialPlatform.FACEBOOK, "HTTPS://WWW.FACEBOOK.COM/SebMcCayen"),
+            )
+            // The reserved-segment and bare-domain checks fold too.
+            assertRejected(
+                SocialPlatform.YOUTUBE,
+                "https://WWW.YOUTUBE.COM/WATCH",
+                SocialLinks.Error.UNSUPPORTED_LINK,
+            )
+            assertRejected(SocialPlatform.INSTAGRAM, "INSTAGRAM.COM", SocialLinks.Error.MALFORMED)
+        }
+    }
+
+    @Test
+    fun `a turkish device locale stores the same handle a swedish one does`() {
+        // The WRITE path: the fold that produces the stored value must not be
+        // able to emit a dotless 'ı', because the Security Rules pattern
+        // (^[a-z0-9_][a-z0-9._]{0,29}$) is ASCII-only and would REJECT the save.
+        val inputs =
+            listOf(
+                "SebMcCayenI",
+                "@IIIIsebmccayen",
+                "https://www.instagram.com/INSTA_I",
+                "Ii.iI_1",
+            )
+        inputs.forEach { input ->
+            val swedish = withLocale(SWEDISH) { handle(SocialPlatform.INSTAGRAM, input) }
+            val turkish = withLocale(TURKISH) { handle(SocialPlatform.INSTAGRAM, input) }
+            assertEquals("input=$input", swedish, turkish)
+            assertTrue("input=$input", turkish!!.none { it == 'ı' || it == 'İ' })
+            // Exactly what firebase/firestore.rules will accept on the write.
+            assertTrue("input=$input", RULES_INSTAGRAM.matches(turkish))
+        }
+        // Facebook folds too; YouTube deliberately preserves case, so its stored
+        // value must be untouched by the locale either way.
+        assertEquals(
+            "iiisebmccayen",
+            withLocale(TURKISH) { handle(SocialPlatform.FACEBOOK, "IIIsebmccayen") },
+        )
+        assertEquals(
+            "SebMcCayenI",
+            withLocale(TURKISH) { handle(SocialPlatform.YOUTUBE, "SebMcCayenI") },
+        )
+    }
+
+    @Test
+    fun `a fold can never emit a character the security rules pattern would reject`() {
+        // The dotted capital I folds to "i" + COMBINING DOT ABOVE, which is NOT
+        // in the rules' character class — so it is refused here rather than
+        // saved and then bounced by Firestore.
+        listOf(SWEDISH, TURKISH).forEach { locale ->
+            withLocale(locale) {
+                assertRejected(SocialPlatform.INSTAGRAM, "sebİ", SocialLinks.Error.MALFORMED)
+                assertRejected(SocialPlatform.INSTAGRAM, "sebı", SocialLinks.Error.MALFORMED)
+                assertRejected(SocialPlatform.FACEBOOK, "sebİ", SocialLinks.Error.MALFORMED)
+            }
+        }
+    }
+
     // ---- canonical URL: the host is ours, always ---------------------------
 
     @Test
@@ -371,13 +483,20 @@ class SocialLinksTest {
     fun `a stored value that is not exactly canonical produces no url at all`() {
         // Defence in depth: a document written before the Security Rules landed,
         // or by any future Admin SDK path, must not be able to render a link.
+        //
+        // The NUL below is written as an ESCAPE (matching the rest of this file)
+        // so the source stays plain text. This pins that the escape really is a
+        // NUL and not the six literal characters, which is the only way the
+        // assertNull under it means what it says.
+        assertEquals(4, "seb\u0000".length)
+        assertEquals(0, "seb\u0000"[3].code)
         listOf(
             "evil.com/x",
             "../../evil",
             "seb@evil.com",
             "SebMcCayen",
             "seb mccayen",
-            "seb ",
+            "seb\u0000",
             "",
             "a".repeat(31),
             ".sebmccayen",

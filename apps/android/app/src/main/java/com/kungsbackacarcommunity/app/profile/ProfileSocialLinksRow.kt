@@ -112,13 +112,26 @@ fun socialPlatformLabel(platform: SocialPlatform): String =
  * Opens a canonical social URL in the browser (or the platform's app, if it
  * claims the link).
  *
- * The https guard is belt-and-braces — [SocialLinks.canonicalUrl] only ever
- * returns an https URL — so that this can never launch a non-web intent even
- * if a future caller passes something else. A device with no handler at all
- * says so rather than failing silently.
+ * TWO FAILURE MODES, AND ONLY ONE OF THEM IS REACHABLE.
+ *
+ * The https guard returns SILENTLY, deliberately. Its only caller passes
+ * [SocialLink.url], which [SocialLinks.canonicalUrl] builds as the literal
+ * prefix `https://` plus a handle that has already been matched against a
+ * pattern admitting neither ':' nor '/', so the scheme is `https` by
+ * construction and this branch is unreachable today. It exists so that a future
+ * caller passing something else cannot launch a non-web intent (`intent://`,
+ * `javascript:`) from a member-controlled value. There is no toast because
+ * there is no member-visible state to explain: reaching it would be a
+ * programming error, not something the member did or could fix.
+ *
+ * The reachable failure is the OTHER one — a device with no browser and no
+ * platform app to handle the link — and that one does toast rather than dying
+ * as a dead tap.
  */
 private fun openSocialLink(context: Context, url: String, failureMessage: String) {
     val uri = Uri.parse(url)
+    // lowercase() folds with Locale.ROOT, so a Turkish device cannot turn the
+    // 'I' of a scheme into a dotless 'ı' and fail this comparison.
     if (uri.scheme?.lowercase() != "https") return
     try {
         context.startActivity(
