@@ -16,27 +16,23 @@ import { toSearchKey } from '../friends/friends-core';
 
 export const DISPLAY_NAME_MAX_LENGTH = 120;
 
-/** Fallback shown until the user picks a display name during onboarding. */
+/**
+ * The public display name every account is provisioned with, and the name it
+ * keeps until the member picks their own during onboarding.
+ *
+ * It is a NEUTRAL PLACEHOLDER on purpose — see the privacy invariant on
+ * [buildUserProfileDocument]. It must never be derived from the identity
+ * provider.
+ */
 export const DEFAULT_DISPLAY_NAME = 'New member';
 
 export interface ProvisionUserInput {
   uid: string;
-  /** Display name from the identity provider, if any. */
-  displayName?: string | null;
-  /** Email from the identity provider — contact channel, never an identity key. */
+  /**
+   * Email from the identity provider — contact channel, never an identity key.
+   * Lands on `userPrivate/{uid}` (owner-only read), NEVER on the public profile.
+   */
   email?: string | null;
-}
-
-/**
- * Resolves the initial display name: the identity provider's name (trimmed,
- * clamped to the contract max length) or a neutral fallback.
- */
-export function resolveInitialDisplayName(providerDisplayName: string | null | undefined): string {
-  const trimmed = providerDisplayName?.trim() ?? '';
-  if (trimmed.length === 0) {
-    return DEFAULT_DISPLAY_NAME;
-  }
-  return trimmed.slice(0, DISPLAY_NAME_MAX_LENGTH);
 }
 
 /**
@@ -45,12 +41,39 @@ export function resolveInitialDisplayName(providerDisplayName: string | null | u
  * Protected fields (`role`, `activeMember`, `suspended`, `deleted`,
  * `onboardingCompletedAt`) are backend-managed only; Security Rules block
  * client writes to them.
+ *
+ * PRIVACY INVARIANT — THE PUBLIC NAME IS NEVER DERIVED FROM THE GOOGLE ACCOUNT.
+ * `displayName` is provisioned as the neutral [DEFAULT_DISPLAY_NAME] and is
+ * only ever replaced by a name the MEMBER typed (auth.completeOnboarding's
+ * `displayName`, or a later owner profile update). This function deliberately
+ * takes NO provider-name parameter, so there is nothing here to wire the Google
+ * name into.
+ *
+ * This is a user-facing PROMISE, not a nicety. The onboarding screen tells every
+ * new member verbatim (contracts/localization en/sv `onboarding
+ * .displayNameDescription`): "This is the public name other members see (in
+ * events, chat and more). Your real Google account name is never shown."
+ *
+ * It has to hold HERE, at provisioning, because `users/{uid}` is world-readable
+ * to any signed-in member (firebase/firestore.rules: `allow read: if
+ * isAuthenticated()`) from the instant onUserCreate commits — which is BEFORE
+ * onboarding runs. `displayNameLower` is derived from the same value and is the
+ * key that users.searchMembers and friend.sendRequest nickname resolution
+ * range-scan; neither filters on `onboardingCompletedAt`, so a name written
+ * here is immediately searchable by every other member. Every denormalized copy
+ * downstream (chat `senderDisplayName`, convoy members, event attendees, friend
+ * requests, DM, live markers, push previews) is snapshotted from this field, so
+ * seeding it from the provider would leak the member's real name into all of
+ * them at once, permanently for anyone who abandons onboarding.
+ *
+ * Regression coverage: functions/src/__tests__/auth-provisioning.test.ts
+ * ('never seeds the public profile from the identity provider').
  */
 export function buildUserProfileDocument(
   input: ProvisionUserInput,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  const displayName = resolveInitialDisplayName(input.displayName);
+  const displayName = DEFAULT_DISPLAY_NAME;
   return {
     displayName,
     // Denormalized case-folded search key — friend nickname resolution queries
