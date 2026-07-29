@@ -1,8 +1,10 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,8 +27,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
+import coil.network.HttpException
 import com.kungsbackacarcommunity.app.design.KccSpacing
-import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.media.rememberStorageImage
 
 /**
  * How a car photo is sized, shaped and aligned at a given call site.
@@ -63,9 +66,18 @@ internal sealed interface VehiclePhotoStyle {
  * [style]. `ContentScale.Crop` centre-crops whatever ratio the source was into
  * the target shape — no stretching, just a centred cut.
  *
- * Renders NOTHING when the car has no photo, or while/if the URL cannot be
- * resolved (config-less build) — the card simply starts at its title, exactly as
- * it did before photos existed.
+ * Renders NOTHING when the car has no photo — the card simply starts at its
+ * title, exactly as it did before photos existed. When the car DOES have one,
+ * the shaped box is laid out immediately, filled with a neutral surface tint,
+ * and the image fades into it. That is a deliberate change from "render nothing
+ * until the URL resolves": the photo is the tallest thing in the card, so
+ * appearing late shoved the whole list down under the reader. Reserving the
+ * space costs a grey circle for a moment and buys a layout that never jumps.
+ * (The same neutral-circle-then-image treatment the member avatars use.)
+ *
+ * The box is sized BEFORE the image is requested, so Coil's size resolver reads
+ * exact constraints and decodes a bitmap scaled to the target (180dp circle in
+ * My Garage) rather than the full-resolution upload.
  *
  * @param contentDescription accessibility label; null marks the photo decorative
  *   (the surrounding card already names the car).
@@ -77,27 +89,45 @@ private fun VehiclePhoto(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
 ) {
-    val context = LocalContext.current
-    val url = rememberStorageImageUrl(context, imagePath)
-    if (url != null) {
-        AsyncImage(
-            model = url,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Crop,
-            modifier =
+    if (imagePath.isNullOrBlank()) return
+    val image = rememberStorageImage(LocalContext.current, imagePath)
+    val url = image.url
+    Box(
+        modifier = modifier
+            .then(
                 when (style) {
                     is VehiclePhotoStyle.Circle ->
-                        modifier
+                        Modifier
                             .size(style.diameter)
                             .clip(CircleShape)
 
                     is VehiclePhotoStyle.FullWidth ->
-                        modifier
+                        Modifier
                             .fillMaxWidth()
                             .aspectRatio(style.aspectRatio)
                             .clip(RoundedCornerShape(style.cornerRadius))
                 },
-        )
+            )
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                // A remembered URL can only go bad by having its download token
+                // rotated, and that shows up as the SERVER answering with an
+                // error status ([HttpException]) — so only that re-resolves.
+                // A transport failure (no network) must NOT invalidate the
+                // mapping: offline is exactly when the remembered URL earns its
+                // keep, because it is what lets Coil serve the photo from disk
+                // with no round-trip at all.
+                onError = { state ->
+                    if (state.result.throwable is HttpException) image.onLoadFailed()
+                },
+                modifier = Modifier.matchParentSize(),
+            )
+        }
     }
 }
 

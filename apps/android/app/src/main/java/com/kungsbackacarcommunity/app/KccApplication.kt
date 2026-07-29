@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app
 
 import android.app.Application
 import android.os.Build
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
@@ -9,6 +11,7 @@ import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderF
 import com.kungsbackacarcommunity.app.appcheck.AppCheckDebugSecret
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
+import com.kungsbackacarcommunity.app.media.KccImageLoader
 import com.kungsbackacarcommunity.app.push.PushChannels
 
 /**
@@ -36,8 +39,16 @@ import com.kungsbackacarcommunity.app.push.PushChannels
  * Phase 12 slice 22: once Firebase is available, install the diagnostics
  * crash reporter so uncaught exceptions submit a PII-safe report via the
  * public `diagnostics-submitReport` callable before the default handler runs.
+ *
+ * Also the install point for the app's single Coil [ImageLoader]
+ * ([KccImageLoader]): implementing [ImageLoaderFactory] is how Coil's singleton
+ * picks up a configured loader, and it must be the Application that does it so
+ * the very first `AsyncImage` — wherever it renders — already has it.
  */
-class KccApplication : Application() {
+class KccApplication : Application(), ImageLoaderFactory {
+
+    override fun newImageLoader(): ImageLoader = KccImageLoader.create(this)
+
     override fun onCreate() {
         super.onCreate()
 
