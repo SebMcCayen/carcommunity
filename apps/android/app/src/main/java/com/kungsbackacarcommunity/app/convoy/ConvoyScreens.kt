@@ -919,7 +919,11 @@ private fun NoticeBanner(text: String, onDismiss: () -> Unit) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            // No arrangement: the text block takes the weight, which is what
+            // pushes the dismiss control to the trailing edge. Unlike
+            // [ErrorBanner] the text here is glyph + label, so it needs to be a
+            // measured child rather than one that can be squeezed out by a long
+            // string.
         ) {
             Row(
                 modifier = Modifier.weight(1f).padding(end = KccSpacing.s3),

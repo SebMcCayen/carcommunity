@@ -77,17 +77,33 @@ class ConvoyRouteAcceptHandoffTest {
     private inner class FakeConvoyRepository : ConvoyRepository {
         var respondCalls = 0
         var lastAccept: Boolean? = null
-        private var answered = false
 
         override suspend fun list(): ConvoyListResult =
-            if (answered) {
-                ConvoyListResult.Loaded(
-                    convoys = listOf(summary(ConvoyInviteStatus.Accepted)),
-                    pendingInvites = emptyList(),
-                )
-            } else {
-                val invite = summary(ConvoyInviteStatus.Invited)
-                ConvoyListResult.Loaded(convoys = listOf(invite), pendingInvites = listOf(invite))
+            when (lastAccept) {
+                null -> {
+                    val invite = summary(ConvoyInviteStatus.Invited)
+                    ConvoyListResult.Loaded(
+                        convoys = listOf(invite),
+                        pendingInvites = listOf(invite),
+                    )
+                }
+                // Answered either way, the convoy stays in `convoys` and leaves
+                // `pendingInvites` — which is the shape that used to be read as
+                // "already answered".
+                else ->
+                    ConvoyListResult.Loaded(
+                        convoys =
+                            listOf(
+                                summary(
+                                    if (lastAccept == true) {
+                                        ConvoyInviteStatus.Accepted
+                                    } else {
+                                        ConvoyInviteStatus.Declined
+                                    },
+                                ),
+                            ),
+                        pendingInvites = emptyList(),
+                    )
             }
 
         override fun observeConvoy(convoyId: String, callerUid: String?): Flow<ConvoySummary?> =
@@ -96,8 +112,11 @@ class ConvoyRouteAcceptHandoffTest {
         override suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult {
             respondCalls++
             lastAccept = accept
-            answered = true
-            return ConvoyMutationResult.Updated(summary(ConvoyInviteStatus.Accepted))
+            return ConvoyMutationResult.Updated(
+                summary(
+                    if (accept) ConvoyInviteStatus.Accepted else ConvoyInviteStatus.Declined,
+                ),
+            )
         }
 
         override suspend fun create(inviteeUids: List<String>, title: String?) = error("unused")
