@@ -5,7 +5,7 @@
  * All flag names use camelCase to match the API JSON response.
  */
 
-export type FeatureFlagKey =
+type FeatureFlagKey =
   | 'liveLocation'
   | 'chat'
   | 'crownHunt'
@@ -17,7 +17,7 @@ export type FeatureFlagKey =
   | 'digitalBillboards';
 
 /** Map of every feature flag to its enabled state. */
-export type FeatureFlags = Record<FeatureFlagKey, boolean>;
+type FeatureFlags = Record<FeatureFlagKey, boolean>;
 
 /**
  * Default feature flag values used as a fallback when the API is unavailable
@@ -35,15 +35,3 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   digitalBillboards: true,
 };
 
-/** Where the flag values were loaded from. */
-export type FeatureFlagSource = 'static' | 'remote';
-
-/** Shape of the `GET /v1/feature-flags` API response. */
-export interface FeatureFlagResponse {
-  ok: true;
-  data: {
-    flags: FeatureFlags;
-    updatedAt: string;
-    source: FeatureFlagSource;
-  };
-}

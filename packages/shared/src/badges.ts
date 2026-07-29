@@ -20,7 +20,7 @@
 // Badge keys
 // ---------------------------------------------------------------------------
 
-export const BADGE_KEYS = [
+const BADGE_KEYS = [
   'first_event',
   'five_events',
   'helpful_member',
@@ -30,19 +30,6 @@ export const BADGE_KEYS = [
 export type BadgeKey = (typeof BADGE_KEYS)[number];
 
 // ---------------------------------------------------------------------------
-// Route paths
-// ---------------------------------------------------------------------------
-
-export const BADGE_ROUTE_PATHS = {
-  myBadges: '/v1/users/me/badges',
-  adminBadgeSummary: '/v1/admin/badges/summary',
-} as const;
-
-export function buildAdminAwardHelpfulMemberPath(userId: string): string {
-  return `/v1/admin/users/${userId}/badges/helpful-member`;
-}
-
-// ---------------------------------------------------------------------------
 // Catalog summary (static, returned alongside awarded badges)
 // ---------------------------------------------------------------------------
 
@@ -50,7 +37,7 @@ export function buildAdminAwardHelpfulMemberPath(userId: string): string {
  * Static definition of a badge as seen by the client.
  * Does not expose internal eligibility rules or rule implementation details.
  */
-export interface BadgeSummary {
+interface BadgeSummary {
   key: BadgeKey;
   /** Swedish display name. */
   name: string;
@@ -85,7 +72,7 @@ export const HELPFUL_MEMBER_BADGE: BadgeSummary = {
  * A badge that has been awarded to the current user.
  * Excludes other users' data, session data, and internal eligibility logic.
  */
-export interface AwardedBadge {
+interface AwardedBadge {
   key: BadgeKey;
   /** Swedish display name. */
   name: string;
@@ -95,17 +82,6 @@ export interface AwardedBadge {
   iconIdentifier: string;
   /** ISO 8601 timestamp when the badge was awarded. */
   awardedAt: string;
-}
-
-// ---------------------------------------------------------------------------
-// Current user badges response
-// ---------------------------------------------------------------------------
-
-export interface CurrentUserBadgesResponse {
-  ok: true;
-  data: {
-    badges: AwardedBadge[];
-  };
 }
 
 // ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@
 // Partner application status
 // ---------------------------------------------------------------------------
 
-export const PARTNER_APPLICATION_STATUSES = [
+const PARTNER_APPLICATION_STATUSES = [
   'submitted',
   'under_review',
   'approved',
@@ -36,7 +36,7 @@ export type PartnerApplicationStatus = (typeof PARTNER_APPLICATION_STATUSES)[num
 // Partner company status
 // ---------------------------------------------------------------------------
 
-export const PARTNER_COMPANY_STATUSES = ['draft', 'active', 'paused', 'ended'] as const;
+const PARTNER_COMPANY_STATUSES = ['draft', 'active', 'paused', 'ended'] as const;
 export type PartnerCompanyStatus = (typeof PARTNER_COMPANY_STATUSES)[number];
 
 // ---------------------------------------------------------------------------
@@ -54,119 +54,6 @@ export const PARTNER_CATEGORIES = [
   'other',
 ] as const;
 export type PartnerCategory = (typeof PARTNER_CATEGORIES)[number];
-
-// ---------------------------------------------------------------------------
-// Limits
-// ---------------------------------------------------------------------------
-
-export const MAX_PARTNER_COMPANY_NAME_LENGTH = 150;
-export const MAX_PARTNER_CONTACT_NAME_LENGTH = 120;
-export const MAX_PARTNER_EMAIL_LENGTH = 254;
-export const MAX_PARTNER_DESCRIPTION_LENGTH = 1_000;
-export const MAX_PARTNER_MESSAGE_LENGTH = 2_000;
-export const MAX_PARTNER_ADDRESS_LENGTH = 300;
-export const MAX_PARTNER_PHONE_LENGTH = 30;
-export const MAX_PARTNER_WEBSITE_URL_LENGTH = 500;
-
-export const DEFAULT_PARTNER_PAGE_SIZE = 20;
-export const MAX_PARTNER_PAGE_SIZE = 100;
-
-// ---------------------------------------------------------------------------
-// Route paths
-// ---------------------------------------------------------------------------
-
-export const PARTNER_ROUTE_PATHS = {
-  /** POST — submit an application (authenticated user) */
-  submitApplication: '/v1/partner-applications',
-
-  /** GET — list active public partners */
-  partners: '/v1/partners',
-
-  /** GET — active public partner map markers */
-  partnerMapMarkers: '/v1/partners/map-markers',
-
-  /** GET — list partner applications (admin) */
-  adminApplications: '/v1/admin/partner-applications',
-
-  /** GET, POST — admin partner list + create */
-  adminPartners: '/v1/admin/partners',
-} as const;
-
-export function buildPartnerPath(partnerId: string): string {
-  return `/v1/partners/${partnerId}`;
-}
-
-export function buildAdminApplicationPath(applicationId: string): string {
-  return `/v1/admin/partner-applications/${applicationId}`;
-}
-
-export function buildAdminApplicationStartReviewPath(applicationId: string): string {
-  return `/v1/admin/partner-applications/${applicationId}/start-review`;
-}
-
-export function buildAdminApplicationApprovePath(applicationId: string): string {
-  return `/v1/admin/partner-applications/${applicationId}/approve`;
-}
-
-export function buildAdminApplicationRejectPath(applicationId: string): string {
-  return `/v1/admin/partner-applications/${applicationId}/reject`;
-}
-
-export function buildAdminPartnerPath(partnerId: string): string {
-  return `/v1/admin/partners/${partnerId}`;
-}
-
-export function buildAdminPartnerActivatePath(partnerId: string): string {
-  return `/v1/admin/partners/${partnerId}/activate`;
-}
-
-export function buildAdminPartnerPausePath(partnerId: string): string {
-  return `/v1/admin/partners/${partnerId}/pause`;
-}
-
-export function buildAdminPartnerEndPath(partnerId: string): string {
-  return `/v1/admin/partners/${partnerId}/end`;
-}
-
-// ---------------------------------------------------------------------------
-// Application request (submitted by authenticated user or future website form)
-// ---------------------------------------------------------------------------
-
-/**
- * Body sent when a user or the website submits a partner application.
- * Contact details are for the application process only — never returned publicly.
- */
-export interface SubmitPartnerApplicationRequest {
-  companyName: string;
-  organizationNumber?: string | null;
-  category: PartnerCategory;
-  contactName: string;
-  contactEmail: string;
-  contactPhone?: string | null;
-  websiteUrl?: string | null;
-  proposedDescription?: string | null;
-  proposedAddress?: string | null;
-  message?: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Application response
-// ---------------------------------------------------------------------------
-
-/**
- * Safe acknowledgement returned to the applicant.
- * Never includes admin notes, review reason, or reviewer identity.
- */
-export interface PartnerApplicationAck {
-  applicationId: string;
-  status: PartnerApplicationStatus;
-  submittedAt: string;
-}
-
-export interface PartnerApplicationAckResponse {
-  ok: true;
-  data: PartnerApplicationAck;
-}
 
 // ---------------------------------------------------------------------------
 // Admin — application summary (list)
@@ -226,86 +113,6 @@ export interface AdminPartnerApplicationDetail {
   partnerCompanyId: string | null;
 }
 
-export interface AdminPartnerApplicationDetailResponse {
-  ok: true;
-  data: AdminPartnerApplicationDetail;
-}
-
-// ---------------------------------------------------------------------------
-// Admin — reject application request
-// ---------------------------------------------------------------------------
-
-export interface RejectPartnerApplicationRequest {
-  /** Required reason for rejection — recorded in reviewReason. */
-  reason: string;
-}
-
-// ---------------------------------------------------------------------------
-// Public partner company summary (list)
-// ---------------------------------------------------------------------------
-
-/**
- * Safe public partner summary.
- * Never includes contact emails, internal notes, billing information,
- * rejection reasons, or audit data.
- */
-export interface PartnerCompanyPublicSummary {
-  partnerId: string;
-  companyName: string;
-  category: PartnerCategory;
-  publicDescription: string;
-  address: string;
-  latitude: number;
-  longitude: number;
-  publicPhone: string | null;
-  publicWebsiteUrl: string | null;
-  /** Always "Samarbetspartner" for UI labelling. */
-  statusLabel: string;
-  isPartner: true;
-}
-
-export interface PaginatedPartnerCompaniesResponse {
-  ok: true;
-  data: { partners: PartnerCompanyPublicSummary[] };
-  meta: { page: number; pageSize: number; total: number; hasNext: boolean };
-}
-
-// ---------------------------------------------------------------------------
-// Public partner company detail
-// ---------------------------------------------------------------------------
-
-/** Extended public partner detail. Same safe field set as the summary. */
-export type PartnerCompanyPublicDetail = PartnerCompanyPublicSummary;
-
-export interface PartnerCompanyPublicDetailResponse {
-  ok: true;
-  data: PartnerCompanyPublicDetail;
-}
-
-// ---------------------------------------------------------------------------
-// Partner map marker
-// ---------------------------------------------------------------------------
-
-/**
- * Minimal marker payload for the Mapbox map.
- * Contains only what is needed to render and identify the marker.
- * Never exposes internal IDs, contact details, or admin notes.
- */
-export interface PartnerMapMarker {
-  partnerId: string;
-  companyName: string;
-  category: PartnerCategory;
-  latitude: number;
-  longitude: number;
-  /** Always "Samarbetspartner" */
-  label: string;
-}
-
-export interface PartnerMapMarkersResponse {
-  ok: true;
-  data: { markers: PartnerMapMarker[] };
-}
-
 // ---------------------------------------------------------------------------
 // Admin — create partner company (manual draft)
 // ---------------------------------------------------------------------------
@@ -337,27 +144,6 @@ export interface AdminUpdatePartnerRequest {
   longitude?: number;
   publicPhone?: string | null;
   publicWebsiteUrl?: string | null;
-}
-
-// ---------------------------------------------------------------------------
-// Admin — activate partner request
-// ---------------------------------------------------------------------------
-
-export interface AdminActivatePartnerRequest {
-  /** Must be true — confirms that coordinates represent the actual business location. */
-  actualLocationConfirmed: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Admin — pause / end partner requests
-// ---------------------------------------------------------------------------
-
-export interface AdminPausePartnerRequest {
-  reason?: string | null;
-}
-
-export interface AdminEndPartnerRequest {
-  reason?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -406,9 +192,4 @@ export interface AdminPartnerCompanyDetail {
   updatedByUserId: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface AdminPartnerCompanyDetailResponse {
-  ok: true;
-  data: AdminPartnerCompanyDetail;
 }
