@@ -566,6 +566,56 @@ class LiveMarkerSmoothingTest {
     }
 
     /**
+     * The gap a reviewer caught: the FIRST fix seen for a member used to be
+     * waved through on drawability alone, so an older publisher could seed a
+     * brand-new marker at a 1200 m-accuracy position and the viewer would paint
+     * it — the very bug this PR is about, merely one frame earlier.
+     *
+     * Worse, the bad seed also became the anchor: from 1.6 km away, the next
+     * CORRECT fix looks like ~320 m/s and is rejected as impossible, so the
+     * wrong position would have STUCK for tens of seconds. The member must
+     * simply not be drawn until a fix arrives that can be trusted.
+     */
+    @Test
+    fun anUnusableFirstFixNeitherSeedsATrackNorGetsDrawn() {
+        val smoother = LiveMarkerSmoother()
+        val bad = listOf(member(latitude = kungsbackaLat + 0.0144, accuracyMeters = 1_200.0))
+        smoother.onPositions(bad, t0)
+
+        assertTrue("nothing is drawn from an untrustworthy seed", smoother.rendered(bad, t0).isEmpty())
+        assertEquals(
+            LiveFixVerdict.REJECT_ACCURACY,
+            smoother.rejections().single().verdict,
+        )
+
+        // The good fix that follows is adopted immediately — it is still a seed,
+        // because the bad one was never allowed to become an anchor.
+        val good = listOf(member(updatedAtMillis = t0 + 5_000L, accuracyMeters = 7.0))
+        smoother.onPositions(good, t0 + 5_000L)
+        assertEquals(
+            "and the true position is drawn at once, not 30 s later",
+            kungsbackaLat,
+            smoother.rendered(good, t0 + 5_000L).single().latitude,
+            1e-9,
+        )
+    }
+
+    /**
+     * The counterweight to the seed rule: a first fix with NO reported accuracy
+     * is unknown, not bad, and must still seed. Otherwise every member on an
+     * older publisher is invisible from the moment this ships.
+     */
+    @Test
+    fun aFirstFixWithNoAccuracyStillSeedsAndDraws() {
+        val smoother = LiveMarkerSmoother()
+        val members = listOf(member(accuracyMeters = null))
+        smoother.onPositions(members, t0)
+
+        assertEquals(kungsbackaLat, smoother.rendered(members, t0).single().latitude, 0.0)
+        assertTrue("nothing was rejected", smoother.rejections().isEmpty())
+    }
+
+    /**
      * The counterweight: a member who really did travel while out of contact
      * must still reappear. With a good fix behind it a large displacement is
      * accepted immediately — the corroboration rule only ever applies to fixes

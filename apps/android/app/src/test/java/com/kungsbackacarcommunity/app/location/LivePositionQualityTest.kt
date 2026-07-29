@@ -385,6 +385,58 @@ class LivePositionQualityTest {
         )
     }
 
+    /**
+     * A SEED — the first position seen for a member — has no predecessor, so the
+     * only question it can be asked is whether it vouches for itself. It must
+     * still be asked: an unusable seed is drawn immediately AND becomes the
+     * anchor every later fix is measured from.
+     */
+    @Test
+    fun aSeedIsJudgedOnItsOwnAccuracy() {
+        assertEquals(LiveFixVerdict.ACCEPT, LivePositionQuality.judgeSeed(lat, lng, 9.0))
+        assertEquals(
+            "unknown accuracy still seeds — nobody vanishes on rollout",
+            LiveFixVerdict.ACCEPT,
+            LivePositionQuality.judgeSeed(lat, lng, null),
+        )
+        assertEquals(
+            LiveFixVerdict.REJECT_ACCURACY,
+            LivePositionQuality.judgeSeed(lat, lng, 1_200.0),
+        )
+        assertEquals(
+            LiveFixVerdict.REJECT_UNDRAWABLE,
+            LivePositionQuality.judgeSeed(Double.NaN, lng, 9.0),
+        )
+    }
+
+    /**
+     * WHY the seed rule matters beyond the first frame, stated as the arithmetic
+     * that makes it bite: seeded 1.6 km wrong, the next CORRECT fix 5 s later
+     * implies ~320 m/s and is rejected as impossible. The bad anchor would
+     * therefore hold the marker in the wrong place until the interval grew past
+     * ~29 s — long after the device knew better.
+     */
+    @Test
+    fun aBadSeedWouldAlsoBlockRecoveryWhichIsWhyItIsRefused() {
+        assertTrue(
+            "the truth looks impossible from a bad anchor",
+            LivePositionQuality.isImplausibleSpeed(1_600.0, 5_000L),
+        )
+        assertTrue(
+            "and stays impossible for tens of seconds",
+            LivePositionQuality.isImplausibleSpeed(1_600.0, 20_000L),
+        )
+        assertFalse(
+            "only becoming believable around the half-minute mark",
+            LivePositionQuality.isImplausibleSpeed(1_600.0, 30_000L),
+        )
+        assertEquals(
+            "so the bad seed is never adopted in the first place",
+            LiveFixVerdict.REJECT_ACCURACY,
+            LivePositionQuality.judgeSeed(lat, lng, 1_200.0),
+        )
+    }
+
     /** ...unless it is itself a fix we would not draw. */
     @Test
     fun aFirstFixThatIsTooCoarseIsStillRejected() {

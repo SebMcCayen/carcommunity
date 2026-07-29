@@ -296,9 +296,30 @@ class LiveMarkerSmoother(
             val track = tracks[member.uid]
             if (track == null) {
                 // First sight of this member: nothing to glide from, so they
-                // simply appear where they are. An undrawable first fix is not
-                // tracked at all — they are drawn once a usable one arrives.
-                if (!LiveMarkerSmoothing.isDrawable(member.latitude, member.longitude)) continue
+                // simply appear where they are — but the fix still has to vouch
+                // for itself. A seed is judged, not waved through: it is drawn
+                // at once AND becomes the anchor every later fix is measured
+                // against, so a bad one would both misplace the member and make
+                // the next few CORRECT fixes look like impossible jumps away
+                // from it. An unusable first fix is not tracked at all; the
+                // member is drawn once a trustworthy one arrives.
+                val seedVerdict =
+                    LivePositionQuality.judgeSeed(
+                        member.latitude,
+                        member.longitude,
+                        member.accuracyMeters,
+                    )
+                if (seedVerdict != LiveFixVerdict.ACCEPT) {
+                    recordRejection(
+                        verdict = seedVerdict,
+                        previousLatitude = null,
+                        previousLongitude = null,
+                        previousRecordedAtMillis = null,
+                        member = member,
+                        nowMillis = nowMillis,
+                    )
+                    continue
+                }
                 tracks[member.uid] =
                     Track(
                         fromLatitude = member.latitude,
@@ -337,7 +358,14 @@ class LiveMarkerSmoother(
                     track.pendingLatitude = null
                     track.pendingLongitude = null
                 }
-                recordRejection(verdict, track, member, nowMillis)
+                recordRejection(
+                    verdict = verdict,
+                    previousLatitude = track.toLatitude,
+                    previousLongitude = track.toLongitude,
+                    previousRecordedAtMillis = track.acceptedRecordedAtMillis,
+                    member = member,
+                    nowMillis = nowMillis,
+                )
                 continue
             }
             track.pendingLatitude = null
@@ -401,18 +429,26 @@ class LiveMarkerSmoother(
      */
     private fun recordRejection(
         verdict: LiveFixVerdict,
-        track: Track,
+        previousLatitude: Double?,
+        previousLongitude: Double?,
+        previousRecordedAtMillis: Long?,
         member: ConvoyMemberPosition,
         nowMillis: Long,
     ) {
+        // Null previous coordinates mean a refused SEED — there is no
+        // displacement to describe, because there was nowhere to move from.
         val distance =
-            DriveSummary.haversineMetres(
-                track.toLatitude,
-                track.toLongitude,
-                member.latitude,
-                member.longitude,
-            ).takeIf { it.isFinite() }
-        val previousRecordedAt = track.acceptedRecordedAtMillis
+            if (previousLatitude != null && previousLongitude != null) {
+                DriveSummary.haversineMetres(
+                    previousLatitude,
+                    previousLongitude,
+                    member.latitude,
+                    member.longitude,
+                ).takeIf { it.isFinite() }
+            } else {
+                null
+            }
+        val previousRecordedAt = previousRecordedAtMillis
         val recordedAt = member.updatedAtMillis
         val delta =
             if (previousRecordedAt != null && recordedAt != null) recordedAt - previousRecordedAt else null
@@ -456,9 +492,10 @@ class LiveMarkerSmoother(
      * be DRAWN at [nowMillis] — identity fields (name, car photo, the reported
      * timestamp the staleness rule reads) are carried through untouched.
      *
-     * A member with no track yet is returned unchanged when their coordinate is
-     * drawable and dropped when it is not, so the very first frame after someone
-     * joins draws them immediately rather than blinking.
+     * A member with no track yet is returned unchanged when their fix passes
+     * [LivePositionQuality.judgeSeed] and dropped when it does not, so the very
+     * first frame after someone joins draws them immediately rather than
+     * blinking — but never at a position the seed rule refused.
      *
      * Pure: it reads the tracks, never advances them. A settled member is
      * returned as the SAME instance rather than a copy, so a parked convoy costs
@@ -468,7 +505,14 @@ class LiveMarkerSmoother(
         members.mapNotNull { member ->
             val track = tracks[member.uid]
             if (track == null) {
-                member.takeIf { LiveMarkerSmoothing.isDrawable(it.latitude, it.longitude) }
+                // Same seed rule as onPositions, and it has to be repeated here
+                // rather than relying on the track: a member with no track is
+                // drawn from their reported position directly, so gating only
+                // the track would still paint an untrustworthy first fix.
+                member.takeIf {
+                    LivePositionQuality.judgeSeed(it.latitude, it.longitude, it.accuracyMeters) ==
+                        LiveFixVerdict.ACCEPT
+                }
             } else {
                 val fraction =
                     LiveMarkerSmoothing.progress(

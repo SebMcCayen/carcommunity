@@ -173,14 +173,23 @@ object LivePositionRejectionReport {
     /** Stable feature key for the error report's dedup fingerprint. */
     const val FEATURE = "live.positionFilter"
 
-    /** Coarse magnitude band for a metre quantity; "unknown" when absent. */
+    /**
+     * Coarse magnitude band for a metre quantity; "unknown" when absent.
+     *
+     * The bands are half-open ([50, 200) and so on), and the LABELS say so
+     * without needing interval notation: quantities reach here through [round],
+     * i.e. already in whole metres, so "50-199 m" names exactly the same set as
+     * "[50, 200)" and cannot be misread at the boundary. A label like
+     * "50-200 m" next to a band that excludes 200 is the sort of thing that
+     * costs an hour when someone is reading these figures back off a bug report.
+     */
     fun bucketMeters(value: Double?): String =
         when {
             value == null || !value.isFinite() -> "unknown"
             value < 50.0 -> "<50 m"
-            value < 200.0 -> "50-200 m"
-            value < 1000.0 -> "200-1000 m"
-            else -> ">1000 m"
+            value < 200.0 -> "50-199 m"
+            value < 1000.0 -> "200-999 m"
+            else -> "1000+ m"
         }
 
     /**

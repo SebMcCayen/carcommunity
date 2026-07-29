@@ -105,7 +105,7 @@ class LivePositionDiagnosticsTest {
         val message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, log.summary())
 
         assertTrue("says how many", message.contains("1 fixes discarded"))
-        assertTrue("bands the accuracy", message.contains(">1000 m"))
+        assertTrue("bands the accuracy", message.contains("1000+ m"))
         assertFalse("never the exact figure", message.contains("1437"))
         assertFalse("nor the exact distance", message.contains("1812"))
         // Nothing that could be a latitude or longitude in Kungsbacka.
@@ -119,9 +119,24 @@ class LivePositionDiagnosticsTest {
         assertEquals("unknown", LivePositionRejectionReport.bucketMeters(null))
         assertEquals("unknown", LivePositionRejectionReport.bucketMeters(Double.NaN))
         assertEquals("<50 m", LivePositionRejectionReport.bucketMeters(12.0))
-        assertEquals("50-200 m", LivePositionRejectionReport.bucketMeters(50.0))
-        assertEquals("200-1000 m", LivePositionRejectionReport.bucketMeters(999.9))
-        assertEquals(">1000 m", LivePositionRejectionReport.bucketMeters(1_000.0))
+        assertEquals("50-199 m", LivePositionRejectionReport.bucketMeters(50.0))
+        assertEquals("200-999 m", LivePositionRejectionReport.bucketMeters(999.0))
+        assertEquals("1000+ m", LivePositionRejectionReport.bucketMeters(1_000.0))
+    }
+
+    /**
+     * The band LABELS must name the band's real contents. Values arrive already
+     * rounded to whole metres, so every boundary has to land in the band whose
+     * label includes it — a "50-200 m" label over a band that excludes 200 is
+     * how someone misreads a bug report an hour into debugging it.
+     */
+    @Test
+    fun bandLabelsAreHonestAtEveryBoundary() {
+        assertEquals("<50 m", LivePositionRejectionReport.bucketMeters(49.0))
+        assertEquals("50-199 m", LivePositionRejectionReport.bucketMeters(199.0))
+        assertEquals("200-999 m", LivePositionRejectionReport.bucketMeters(200.0))
+        assertEquals("1000+ m", LivePositionRejectionReport.bucketMeters(1_000.0))
+        assertEquals("<50 m", LivePositionRejectionReport.bucketMeters(0.0))
     }
 
     /**

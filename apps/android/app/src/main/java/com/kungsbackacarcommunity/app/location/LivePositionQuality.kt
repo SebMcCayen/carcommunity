@@ -199,6 +199,28 @@ object LivePositionQuality {
     }
 
     /**
+     * Verdict on a fix that has no predecessor to be judged against: the FIRST
+     * position seen for a member.
+     *
+     * Every other rule here is relative and needs a previous fix, so the only
+     * question a seed can be asked is whether it vouches for ITSELF — and it
+     * must be asked. A seed is not a free pass: it is drawn immediately and,
+     * worse, it becomes the anchor every later fix is measured from. Seeding a
+     * member at a cell-derived position 1.6 km from where they are would both
+     * draw them in the wrong place AND make the next few CORRECT fixes look
+     * like impossible ~300 m/s jumps away from it — so the wrong position would
+     * STICK for tens of seconds, until the growing interval finally made the
+     * truth look plausible. Refusing the seed leaves the member simply undrawn
+     * until a trustworthy fix arrives, which is the same "stale rather than
+     * wrong" trade the rest of this object makes.
+     */
+    fun judgeSeed(latitude: Double, longitude: Double, accuracyMeters: Double?): LiveFixVerdict {
+        if (!isDrawable(latitude, longitude)) return LiveFixVerdict.REJECT_UNDRAWABLE
+        if (!isUsableAccuracy(accuracyMeters)) return LiveFixVerdict.REJECT_ACCURACY
+        return LiveFixVerdict.ACCEPT
+    }
+
+    /**
      * Verdict on a fix the SHARING device is about to publish, given the last fix
      * it accepted from its own provider.
      *
