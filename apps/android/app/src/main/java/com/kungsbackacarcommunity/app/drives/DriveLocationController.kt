@@ -54,14 +54,30 @@ class DriveLocationController private constructor(
      * [SecurityException] from requestLocationUpdates; the caller requests the
      * permission before starting, and this returns false if it is still
      * absent so the screen can show its permission hint.
+     *
+     * `speedMps` is the platform's own ground speed for the fix, in metres per
+     * second, and is null when the fix does not carry one (`hasSpeed()` false —
+     * a first fix, or a provider that could not derive it). It is passed through
+     * rather than derived from successive positions on purpose: the platform
+     * value comes from the GNSS Doppler shift where available and is far steadier
+     * than a position delta. It feeds only the live-session bar's readout — it is
+     * never recorded into the drive (see [DriveRecorder], which stores positions
+     * and timestamps and nothing else).
      */
-    fun start(onFix: (latitude: Double, longitude: Double, timestampMs: Long) -> Unit): Boolean {
+    fun start(
+        onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+    ): Boolean {
         if (callback != null) return true
         val cb =
             object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
                     val fix = result.lastLocation ?: return
-                    onFix(fix.latitude, fix.longitude, fix.time)
+                    onFix(
+                        fix.latitude,
+                        fix.longitude,
+                        fix.time,
+                        if (fix.hasSpeed()) fix.speed.toDouble() else null,
+                    )
                 }
             }
         val request =

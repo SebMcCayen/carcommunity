@@ -218,6 +218,7 @@ import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
 import com.kungsbackacarcommunity.app.live.OptimisticLiveStart
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
+import com.kungsbackacarcommunity.app.location.CurrentSpeed
 import com.kungsbackacarcommunity.app.location.LocationAccess
 import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
@@ -1937,6 +1938,14 @@ fun AuthenticatedApp(
             // recordingState — so it adds no extra recomposition.
             val liveSessionDistanceMeters =
                 (recordingState as? RecordingState.Recording)?.distanceMeters ?: 0.0
+            // Current speed for the same bar: the platform's own Location.speed off
+            // the latest fix, published by the session's GPS source (null until a
+            // fix carries one). Process-scoped like the recording itself, so an
+            // Activity recreation mid-session does not blank the readout; the bar
+            // decides whether the reading is still fresh enough to show. It changes
+            // only on GPS fixes, exactly like the distance above, so it adds no
+            // recomposition cadence the shell did not already have.
+            val liveSessionSpeed by CurrentSpeed.sample.collectAsState()
             // Composed only while a session is actually sharing AND we have a start
             // to tick from; null otherwise composes nothing at all (no empty pill
             // in the search strip).
@@ -1947,6 +1956,7 @@ fun AuthenticatedApp(
                         LiveSessionBar(
                             sessionStartMillis = liveSessionStart,
                             distanceMeters = liveSessionDistanceMeters,
+                            speedSample = liveSessionSpeed,
                         )
                     }
                 } else {

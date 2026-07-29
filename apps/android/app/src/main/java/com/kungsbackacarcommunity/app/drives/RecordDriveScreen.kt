@@ -94,7 +94,10 @@ fun RecordDriveScreen(
             return
         }
         val started =
-            controller.start { latitude, longitude, timestampMs ->
+            controller.start { latitude, longitude, timestampMs, _ ->
+                // The fix's speed is dropped here: the MANUAL recorder has no
+                // live speed readout (that is the map's live-session bar), and
+                // speed is never recorded into a drive.
                 coordinator.addFix(latitude, longitude, timestampMs)
             }
         if (started) {

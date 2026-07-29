@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Speedometer glyph for the map's live-session bar (the member's own current
+  speed readout).
+
+  Drawn to sit beside Icons.Filled.Straighten — the distance glyph one step to
+  its right in the same bar — so it is a SOLID, filled shape of the same visual
+  weight rather than a hairline outline: the arc is a filled ring segment ~2.2
+  units thick, which is the stroke weight Material's filled set uses at this
+  24-unit viewport, and the needle is a filled taper.
+
+  Deliberately just an arc, a needle and a hub. The bar renders this at 18dp, so
+  a dial face with tick marks and numbers would turn to mush; the silhouette has
+  to carry the meaning on its own. It is also deliberately NEUTRAL — no redline,
+  no sweep highlight, nothing suggesting a "fast" end of the scale — because
+  this app never rewards, ranks or scores speed and its glyph must not imply
+  otherwise (see the same note on ic_incident_police.xml).
+
+  No android:tint here: the caller tints it (the bar uses the same
+  MaterialTheme.colorScheme.primary as its sibling glyph), which is what makes
+  it legible on both the light and the dark surface.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!--
+      The dial: a ring segment centred on (12,15), outer radius 9.5, inner 7.3,
+      sweeping 210° and open at the bottom. Both arcs are large-arc; the outer
+      runs clockwise on screen (sweep 1) and the inner back anticlockwise
+      (sweep 0), so the two together enclose the band.
+    -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2.824,17.459A9.5,9.5 0 1 1 21.176,17.459L19.051,16.889A7.3,7.3 0 1 0 4.949,16.889Z" />
+    <!-- The needle: a taper from the hub out to the upper right of the dial. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M16.243,9.944L12.881,15.739L11.119,14.261Z" />
+    <!-- The hub the needle turns on. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M10,15A2,2 0 1 0 14,15A2,2 0 1 0 10,15Z" />
+</vector>
