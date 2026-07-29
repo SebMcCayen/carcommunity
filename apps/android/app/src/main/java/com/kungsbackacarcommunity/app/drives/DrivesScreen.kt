@@ -332,12 +332,14 @@ private fun DriveFilterSection(
     onSortChange: (DriveSort) -> Unit,
     onClear: () -> Unit,
 ) {
-    // `spacedBy` costs nothing while collapsed: once the transition has SETTLED on
-    // `visible = false`, AnimatedVisibility composes nothing at all — it emits an
-    // empty group, not a zero-height layout node (verified against the
-    // androidx.compose.animation 1.11.4 artifact on the compile classpath). The
-    // Column therefore measures a single child, and arrangement spacing only ever
-    // goes BETWEEN children, so the collapsed header has no gap hanging under it.
+    // `spacedBy` costs nothing while collapsed. AnimatedVisibility gates its whole
+    // emission on `visible(currentState) || visible(targetState) || isSeeking ||
+    // hasInitialValueAnimations`, so once the transition has SETTLED on
+    // `visible = false` it composes nothing at all — no layout node, rather than a
+    // zero-height one. The Column therefore measures a single child, and
+    // arrangement spacing only ever goes BETWEEN children, so nothing is left
+    // hanging under the collapsed header. (Re-check that guard, not this comment,
+    // if a Compose upgrade ever makes the collapsed header look bottom-heavy.)
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
