@@ -19,7 +19,9 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapProjection
+import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 
 /**
  * Config-less / CI stub of the turn-by-turn navigation view.
@@ -48,6 +50,11 @@ import com.kungsbackacarcommunity.app.shell.MapProjection
  *   there is nowhere honest to put it.
  * @param liveMembersOverlay the other-members-sharing-live layer (unused here for
  *   the same reason: no map, so no projection to draw it against).
+ * @param incidentMarkers the incident badges the real screen draws on its own
+ *   map (unused here: no map, so no layer to draw them on).
+ * @param onQueryViewport where the real screen's map is looking, for the host's
+ *   incident poll. Never invoked here — this stub owns no camera, so the host's
+ *   existing shell-camera anchor simply stays in use.
  */
 @Composable
 fun TurnByTurnNavScreen(
@@ -63,6 +70,8 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") incidentReportingEnabled: Boolean = false,
     @Suppress("UNUSED_PARAMETER") incidentsLayerEnabled: Boolean = true,
     @Suppress("UNUSED_PARAMETER") onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    @Suppress("UNUSED_PARAMETER") onQueryViewport: ((MapQueryViewport?) -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") trafikverketDataShown: Boolean = false,
     @Suppress("UNUSED_PARAMETER") trafficEnabled: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onTrafficEnabledChange: (Boolean) -> Unit = {},

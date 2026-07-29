@@ -209,6 +209,28 @@ data class MapScreenPoint(
 )
 
 /**
+ * Where a map is looking, expressed the way the nearby-query callables want it:
+ * a centre plus the radius that covers what is on screen.
+ *
+ * It exists so a map that is NOT the shell surface can anchor the shared
+ * `incidents.listNearby` poll. While turn-by-turn navigation is running the
+ * shell map is stood down ([MapSurface.setActive]) and its camera stops moving,
+ * so the poll would go on asking about the point the trip started from for the
+ * whole drive — which is half of "while navigating I don't see Trafikverket's
+ * accidents". The navigation screen reports one of these instead, and the host
+ * prefers it while it is non-null.
+ *
+ * Deliberately NOT a second poll and NOT a second cadence: it only changes WHERE
+ * the existing poll looks. The radius is already clamped to the server's bounds
+ * by [com.kungsbackacarcommunity.app.incidents.ViewportRadius].
+ */
+data class MapQueryViewport(
+    val latitude: Double,
+    val longitude: Double,
+    val radiusMeters: Double,
+)
+
+/**
  * A settled snapshot of where the camera is.
  *
  * Deliberately ROUNDED (see [MapCameraSnapshot.of]) rather than raw. The map
