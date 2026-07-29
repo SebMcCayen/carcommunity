@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.memberprofile
 
 import com.kungsbackacarcommunity.app.badges.Badge
 import com.kungsbackacarcommunity.app.garage.Vehicle
+import com.kungsbackacarcommunity.app.profile.SocialHandles
 
 /**
  * Read-only view of ANOTHER member's public profile (users/{uid}). Only the
@@ -15,6 +16,14 @@ data class MemberProfile(
     val bio: String?,
     /** Cloud Storage path of the avatar; a URL is resolved lazily for rendering. */
     val avatarPath: String? = null,
+    /**
+     * The member's canonical social handles. Handles — not URLs — so the
+     * rendered link's host is a constant this app owns and can never be
+     * redirected by what another member typed (see
+     * [com.kungsbackacarcommunity.app.profile.SocialLinks]). An unset platform
+     * is null and renders nothing.
+     */
+    val social: SocialHandles = SocialHandles.EMPTY,
 )
 
 /**

@@ -45,17 +45,21 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 /**
  * Profile view/edit screen (Phase 12 slice 2).
  *
- * View mode shows the display name and bio; edit mode edits the two
- * whitelisted owner-writable fields (Phase 9a) with inline validation
- * ([ProfileValidation]) and saves via [onSave] (a direct users/{uid}
- * write). Avatar, contact details, and privacy toggles are deferred to a
- * later settings slice. Wrap in [KccTheme].
+ * View mode shows the display name, the bio and — directly under the profile
+ * picture — the member's social links; edit mode edits the whitelisted
+ * owner-writable fields (Phase 9a: displayName, bio, and the three social
+ * handles) with inline validation ([ProfileValidation]) and saves via [onSave]
+ * (a direct users/{uid} write). Contact details and privacy toggles are
+ * deferred to a later settings slice. Wrap in [KccTheme].
+ *
+ * [onSave] receives the CANONICAL handles from [ProfileValidation], never the
+ * raw text: what a member typed is normalised before it can be stored.
  */
 @Composable
 fun ProfileScreen(
     profile: UserProfile?,
     saveStatus: ProfileEditStatus,
-    onSave: (displayName: String, bio: String) -> Unit,
+    onSave: (displayName: String, bio: String, social: SocialHandles) -> Unit,
     onBack: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier,
@@ -82,6 +86,9 @@ fun ProfileScreen(
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
     var bioField by remember { mutableStateOf("") }
+    var facebookField by remember { mutableStateOf("") }
+    var instagramField by remember { mutableStateOf("") }
+    var youtubeField by remember { mutableStateOf("") }
 
     val saving = saveStatus == ProfileEditStatus.Saving
     // Leave edit mode only on a successful save; a failure keeps the drafts.
@@ -100,8 +107,26 @@ fun ProfileScreen(
                 onChangeAvatar = onChangeAvatar,
             )
 
+            // Directly under the profile picture, as asked, and ONLY when the
+            // member has filled something in — the row draws nothing at all
+            // otherwise (ProfileSocialLinksRow). Hidden while editing, where
+            // the fields themselves are the surface.
+            if (!editing) {
+                ProfileSocialLinksRow(
+                    handles = profile?.social ?: SocialHandles.EMPTY,
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                )
+            }
+
             if (editing) {
-                val validation = ProfileValidation.validate(nameField, bioField)
+                val validation =
+                    ProfileValidation.validate(
+                        displayName = nameField,
+                        bio = bioField,
+                        facebook = facebookField,
+                        instagram = instagramField,
+                        youtube = youtubeField,
+                    )
                 OutlinedTextField(
                     value = nameField,
                     onValueChange = { nameField = it },
@@ -120,6 +145,17 @@ fun ProfileScreen(
                 )
                 FieldError(validation.bioError)
 
+                ProfileSocialLinksEditor(
+                    facebook = facebookField,
+                    instagram = instagramField,
+                    youtube = youtubeField,
+                    validation = validation,
+                    onFacebookChange = { facebookField = it },
+                    onInstagramChange = { instagramField = it },
+                    onYoutubeChange = { youtubeField = it },
+                    enabled = !saving,
+                )
+
                 if (saveStatus == ProfileEditStatus.Failed) {
                     Text(
                         text = stringResource(R.string.profile_saveError),
@@ -130,7 +166,9 @@ fun ProfileScreen(
 
                 Spacer(modifier = Modifier.height(4.dp))
                 Button(
-                    onClick = { onSave(nameField.trim(), bioField.trim()) },
+                    // The canonical handles, not the raw fields — the same
+                    // validation pass that enabled this button produced them.
+                    onClick = { onSave(nameField.trim(), bioField.trim(), validation.social) },
                     enabled = validation.isValid && !saving,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
@@ -167,6 +205,11 @@ fun ProfileScreen(
                     onClick = {
                         nameField = profile?.displayName.orEmpty()
                         bioField = profile?.bio.orEmpty()
+                        // Seeded with the STORED handles, so re-saving an
+                        // untouched form is a no-op rather than a silent clear.
+                        facebookField = profile?.social?.facebook.orEmpty()
+                        instagramField = profile?.social?.instagram.orEmpty()
+                        youtubeField = profile?.social?.youtube.orEmpty()
                         editing = true
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -273,9 +316,20 @@ private fun FieldError(error: ProfileValidation.FieldError?) {
 private fun ProfileScreenPreview() {
     KccTheme {
         ProfileScreen(
-            profile = UserProfile(displayName = "Sebbe", bio = "Volvo-entusiast", onboardingComplete = true),
+            profile =
+                UserProfile(
+                    displayName = "Sebbe",
+                    bio = "Volvo-entusiast",
+                    onboardingComplete = true,
+                    social =
+                        SocialHandles(
+                            facebook = "sebmccayen",
+                            instagram = "sebmccayen",
+                            youtube = "SebMcCayen",
+                        ),
+                ),
             saveStatus = ProfileEditStatus.Idle,
-            onSave = { _, _ -> },
+            onSave = { _, _, _ -> },
             onBack = {},
             onSignOut = {},
             statsSummary =

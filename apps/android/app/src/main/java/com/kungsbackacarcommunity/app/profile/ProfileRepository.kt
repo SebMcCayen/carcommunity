@@ -12,11 +12,21 @@ interface ProfileRepository {
 
     /**
      * Direct owner write of the whitelisted profile fields (Phase 9a rules:
-     * displayName, bio, server-timestamp updatedAt).
+     * displayName, bio, the three social handles, server-timestamp updatedAt).
+     *
+     * [social] must already be CANONICAL — the handles ProfileValidation
+     * produced, never raw member input. A null entry CLEARS that platform
+     * (the field is removed from the document), so an unset platform has one
+     * representation and the public profile can decide on presence alone.
      *
      * @throws Exception when the write is rejected (rules, network).
      */
-    suspend fun updateProfile(uid: String, displayName: String, bio: String)
+    suspend fun updateProfile(
+        uid: String,
+        displayName: String,
+        bio: String,
+        social: SocialHandles = SocialHandles.EMPTY,
+    )
 
     /**
      * Direct owner write of the avatar path only (rules whitelist: avatarPath +

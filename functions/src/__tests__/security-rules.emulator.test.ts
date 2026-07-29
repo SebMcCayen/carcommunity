@@ -21,6 +21,7 @@ import {
   collection,
   collectionGroup,
   deleteDoc,
+  deleteField,
   doc,
   getDoc,
   getDocs,
@@ -1206,6 +1207,147 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
         displayName: 'Backdated',
         updatedAt: new Date('2020-01-01T00:00:00Z'),
       }),
+    );
+  });
+
+  // ---- Social handles ----------------------------------------------------
+  // THE POINT OF THESE TESTS: a profile edit is a DIRECT owner write — there is
+  // no callable in front of it — so firebase/firestore.rules is the only thing
+  // standing between a hostile client and a link on a public profile. The
+  // Android SocialLinks parser is UX; these tests are the enforcement. Every
+  // rejection below is one a client that simply skipped the parser could try.
+
+  it('owner can set, keep and clear each social handle', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        facebook: 'seb.mccayen',
+        instagram: 'sebmccayen',
+        youtube: 'SebMcCayen',
+      }),
+    );
+    // Clearing REMOVES the field (FieldValue.delete()), which is the single
+    // representation of "unset" the public profile keys off.
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), {
+        facebook: deleteField(),
+        instagram: deleteField(),
+        youtube: deleteField(),
+      }),
+    );
+  });
+
+  it('owner cannot store an empty string instead of clearing', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { facebook: '' }));
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: '' }));
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: '' }));
+  });
+
+  it('owner cannot store a URL in a social handle — a foreign host included', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    for (const value of [
+      'https://evil.com/x',
+      'http://evil.com/sebmccayen',
+      '//evil.com/x',
+      'evil.com/x',
+      'https://www.instagram.com/sebmccayen',
+      'https://user:pass@instagram.com/sebmccayen',
+      'https://instagram.com:8080/sebmccayen',
+    ]) {
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
+      );
+    }
+  });
+
+  it('owner cannot store a non-web scheme in a social handle', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    for (const value of [
+      'javascript:alert(1)',
+      'javascript://instagram.com/%0aalert(1)',
+      'data:text/html,<script>alert(1)</script>',
+      'intent://x#Intent;scheme=https;end',
+      'file:///etc/passwd',
+    ]) {
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
+      );
+    }
+  });
+
+  it('owner cannot store control characters, whitespace or look-alikes', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    for (const value of [
+      'seb mccayen',
+      'seb\tmccayen',
+      'seb\nmccayen',
+      'seb\u0000mccayen',
+      'seb\u007Fmccayen',
+      'seb\u00A0mccayen',
+      'seb\u200Bmccayen',
+      'seb\u202Emccayen',
+      's\u0435bmccayen',
+      'seb@evil.com',
+      '../../evil',
+      '.sebmccayen',
+    ]) {
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
+      );
+    }
+  });
+
+  it('owner cannot store an uncanonicalised (upper-case) facebook or instagram handle', async () => {
+    // Both platforms are case-insensitive and stored folded, so the rules admit
+    // lower case only — an upper-case value means the client skipped
+    // normalisation, and is rejected rather than silently repaired.
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { facebook: 'SebMcCayen' }));
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'SebMcCayen' }));
+    // YouTube handles ARE displayed with case, so theirs is preserved.
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'SebMcCayen' }),
+    );
+  });
+
+  it('owner cannot exceed the per-platform handle length', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { facebook: 'a'.repeat(50) }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { facebook: 'a'.repeat(51) }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'a'.repeat(30) }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'a'.repeat(31) }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'a'.repeat(30) }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'a'.repeat(31) }),
+    );
+    // Below YouTube's 3-character minimum.
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'ab' }));
+  });
+
+  it('owner cannot store a non-string social handle', async () => {
+    const ctx = testEnv.authenticatedContext(OWNER);
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 42 }));
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: ['sebmccayen'] }),
+    );
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: true }));
+  });
+
+  it('another member cannot write a social handle onto this profile', async () => {
+    const ctx = testEnv.authenticatedContext('validation-stranger');
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'sebmccayen' }),
     );
   });
 

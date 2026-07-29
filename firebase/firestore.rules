@@ -81,6 +81,58 @@ service cloud.firestore {
       return data.bio is string && data.bio.size() <= 500;
     }
 
+    // ---- Social handles (facebook / instagram / youtube) -------------------
+    // THE SERVER-SIDE AUTHORITY. There is no callable in front of a profile
+    // edit — the owner writes users/{uid} directly — so these rules, and not
+    // the Android SocialLinks check, are what actually stops a hostile client.
+    //
+    // A HANDLE is stored, never a URL. The clients build
+    // https://www.facebook.com/{h}, https://www.instagram.com/{h} and
+    // https://www.youtube.com/@{h} from a constant host, so a link on a public
+    // profile is STRUCTURALLY incapable of pointing at a foreign host: there is
+    // no field a scheme, an authority, userinfo or a port could be written
+    // into, and the patterns below admit none of those characters anyway.
+    // That is why there is no host allowlist here — the allowlist lives in the
+    // client-side parser, which only decides which pasted URLs it is willing to
+    // read a handle OUT of. What reaches Firestore is a bare handle or nothing.
+    //
+    // matches() is a FULL-string match, and the classes are ASCII-only, so
+    // control characters, whitespace, ':' '/' '@' '?' '#' and every non-ASCII
+    // look-alike are rejected by construction. An absent key is allowed: that
+    // is how a member CLEARS a platform (FieldValue.delete()), and it is the
+    // only representation of "unset" — an empty string is refused by minimum
+    // size, so the public profile can decide on presence alone.
+    //
+    // These patterns are mirrored verbatim in
+    // apps/android/.../profile/SocialLinks.kt and in
+    // contracts/schemas/user-profile.schema.json. Change one, change all three.
+
+    function validFacebookHandle(data) {
+      return !('facebook' in data)
+        || (data.facebook is string
+            && data.facebook.size() >= 1
+            && data.facebook.size() <= 50
+            && data.facebook.matches('^[a-z0-9][a-z0-9.-]{0,49}$'));
+    }
+
+    function validInstagramHandle(data) {
+      return !('instagram' in data)
+        || (data.instagram is string
+            && data.instagram.size() >= 1
+            && data.instagram.size() <= 30
+            && data.instagram.matches('^[a-z0-9_][a-z0-9._]{0,29}$'));
+    }
+
+    // YouTube handles are DISPLAYED with their case, so unlike the other two
+    // they are not folded — hence the only pattern here that admits upper case.
+    function validYoutubeHandle(data) {
+      return !('youtube' in data)
+        || (data.youtube is string
+            && data.youtube.size() >= 3
+            && data.youtube.size() <= 30
+            && data.youtube.matches('^[A-Za-z0-9][A-Za-z0-9._-]{2,29}$'));
+    }
+
     // Client-written timestamps must be the server timestamp sentinel
     // (FieldValue.serverTimestamp() resolves to request.time).
     function isServerTimestamp(value) {
@@ -92,6 +144,9 @@ service cloud.firestore {
       return (!keys.hasAny(['displayName']) || validDisplayName(data))
         && (!keys.hasAny(['avatarPath']) || validAvatarPath(data, uid))
         && (!keys.hasAny(['bio']) || validBio(data))
+        && (!keys.hasAny(['facebook']) || validFacebookHandle(data))
+        && (!keys.hasAny(['instagram']) || validInstagramHandle(data))
+        && (!keys.hasAny(['youtube']) || validYoutubeHandle(data))
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
@@ -102,7 +157,11 @@ service cloud.firestore {
     // permanent no-op and skip backend-managed defaults.
     function validUserProfileUpdate(uid) {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
-      return keys.hasOnly(['displayName', 'avatarPath', 'bio', 'updatedAt'])
+      return keys.hasOnly([
+          'displayName', 'avatarPath', 'bio',
+          'facebook', 'instagram', 'youtube',
+          'updatedAt'
+        ])
         && validUserProfileFields(keys, uid);
     }
 

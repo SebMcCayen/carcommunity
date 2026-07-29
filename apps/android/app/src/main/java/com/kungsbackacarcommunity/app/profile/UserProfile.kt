@@ -28,6 +28,14 @@ data class UserProfile(
      * "member since" line on the owner's own stats. Never edited by the client.
      */
     val createdAtMillis: Long? = null,
+    /**
+     * Canonical social handles (users/{uid}.facebook/.instagram/.youtube).
+     * PUBLIC by intent — users/{uid} is readable by any signed-in member, and
+     * the edit form says so in as many words. A platform the member has not
+     * filled in is ABSENT from the document, so [SocialHandles.EMPTY] is the
+     * normal state and renders nothing at all.
+     */
+    val social: SocialHandles = SocialHandles.EMPTY,
 )
 
 /** Observed state of the profile document. */

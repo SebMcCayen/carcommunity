@@ -12,6 +12,7 @@ import com.kungsbackacarcommunity.app.firebase.await
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehiclePowertrain
 import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
+import com.kungsbackacarcommunity.app.profile.SocialHandles
 
 /**
  * [MemberProfileRepository] backed by one-shot Firestore reads of another
@@ -108,6 +109,15 @@ private fun DocumentSnapshot.toMemberProfile(): MemberProfile? {
         displayName = getString("displayName"),
         bio = getString("bio"),
         avatarPath = getString("avatarPath"),
+        // Stored verbatim; SocialLinks re-validates every handle at RENDER time
+        // (SocialLinks.links), so a document written before the social rules
+        // were deployed still cannot produce a link this app did not build.
+        social =
+            SocialHandles(
+                facebook = getString("facebook"),
+                instagram = getString("instagram"),
+                youtube = getString("youtube"),
+            ),
     )
 }
 

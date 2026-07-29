@@ -10,14 +10,21 @@ class ProfileEditCoordinatorTest {
 
     private class FakeRepo : ProfileRepository {
         val updates = mutableListOf<Triple<String, String, String>>()
+        val socials = mutableListOf<SocialHandles>()
         var failWith: Exception? = null
 
         override fun observeProfile(uid: String): Flow<ProfileState> =
             flowOf(ProfileState.Loaded(null))
 
-        override suspend fun updateProfile(uid: String, displayName: String, bio: String) {
+        override suspend fun updateProfile(
+            uid: String,
+            displayName: String,
+            bio: String,
+            social: SocialHandles,
+        ) {
             failWith?.let { throw it }
             updates += Triple(uid, displayName, bio)
+            socials += social
         }
 
         override suspend fun updateAvatarPath(uid: String, avatarPath: String) {
@@ -32,6 +39,15 @@ class ProfileEditCoordinatorTest {
         coordinator.save("u1", "Sebbe", "bio")
         assertEquals(listOf(Triple("u1", "Sebbe", "bio")), repo.updates)
         assertEquals(ProfileEditStatus.Saved, coordinator.status.value)
+    }
+
+    @Test
+    fun `save forwards the canonical handles it was given`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = ProfileEditCoordinator(repo)
+        val handles = SocialHandles(instagram = "sebmccayen", youtube = "SebMcCayen")
+        coordinator.save("u1", "Sebbe", "bio", handles)
+        assertEquals(listOf(handles), repo.socials)
     }
 
     @Test
