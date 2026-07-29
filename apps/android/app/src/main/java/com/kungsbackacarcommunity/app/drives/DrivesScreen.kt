@@ -648,18 +648,47 @@ private fun DriveCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = driveTitle(drive),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text =
-                    DriveFormatters.formatDistance(drive.distanceMeters) +
-                        " · " + DriveFormatters.formatDuration(drive.durationSeconds),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                // Drawn from the polyline already on the drive document — no
+                // fetch, no map instance, no work per frame (RouteThumbnail).
+                RouteThumbnailImage(encodedPolyline = drive.routeThumbnail)
+                // weight(1f): the thumbnail is a fixed size, the text takes
+                // whatever is left and wraps inside it — on a narrow phone the
+                // stat line must reflow, never spill past the card edge.
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = driveTitle(drive),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    // Distance, duration and maximum speed in ONE line, one
+                    // style, one colour, in that order. Max speed is a fact
+                    // about the drive exactly like the other two and is
+                    // rendered exactly like them — no emphasis, no colour that
+                    // rewards a bigger number, nothing to compare it against.
+                    // See SavedDrive.maxSpeedMetersPerSecond.
+                    Text(
+                        text =
+                            DriveFormatters.formatDistance(drive.distanceMeters) +
+                                " · " + DriveFormatters.formatDuration(drive.durationSeconds) +
+                                " · " + stringResource(
+                                    R.string.savedDrives_maxSpeedShort,
+                                    // Null (no stored value) formats as the
+                                    // missing-value dash, never as "0 km/h".
+                                    DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond),
+                                ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -777,6 +806,14 @@ fun SavedDriveDetailScreen(
                     StatRow(
                         stringResource(R.string.savedDrives_averageSpeed),
                         DriveFormatters.formatSpeed(averageSpeed),
+                    )
+                    // The same neutral row as every other stat — deliberately
+                    // indistinguishable from average speed above it. Absent on
+                    // drives saved before the field existed, which formatSpeed
+                    // renders as the missing-value dash rather than "0 km/h".
+                    StatRow(
+                        stringResource(R.string.savedDrives_maxSpeed),
+                        DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond),
                     )
                 }
             }

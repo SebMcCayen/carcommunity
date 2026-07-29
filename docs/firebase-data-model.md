@@ -171,21 +171,31 @@ Composite index: `userId ASC, createdAt DESC` (user's garage list, paginated).
 
 Document ID: auto-generated.
 
+Every field below is written on every save by `buildRideDocument`
+(`functions/src/drives/drives-core.ts`), so `?` here means **`null`**, not
+absent — with the two documented exceptions in the last column.
+
 | Field              | Type        | Notes                                                                              |
 | ------------------ | ----------- | ---------------------------------------------------------------------------------- |
 | `userId`           | `string`    | Owner Firebase UID                                                                 |
-| `title`            | `string?`   | Optional user-given title                                                          |
-| `distanceMeters`   | `number`    | Total distance                                                                     |
-| `durationSeconds`  | `number`    | Total duration                                                                     |
+| `title`            | `string?`   | User-given title; `null` when the save omitted one                                 |
+| `distanceMeters`   | `number?`   | Server-computed total distance. **`null` for a summary-only save** (no route points, or fewer than two) — clients must render a missing-value placeholder, never `0` |
+| `durationSeconds`  | `number`    | Total duration, from `startedAt`/`endedAt`; always present                         |
+| `averageSpeedMetersPerSecond` | `number?` | Server-computed; `null` whenever `distanceMeters` is                    |
+| `maxSpeedMetersPerSecond` | `number?` | Highest plausible instantaneous speed, same >200 km/h GPS-glitch filter distance uses; `null` for a summary-only save. **ABSENT** (key missing, not `null`) on drives saved before 2026-07 — no backfill. Neutral stat, never a record or ranking |
+| `routeThumbnail`   | `string?`   | Route simplified to ≤64 points (Ramer–Douglas–Peucker) as a polyline encoded at 1e5 precision. `null` when there is no drawable shape (fewer than two points, or a stationary recording) and **ABSENT** on drives saved before 2026-07 — no backfill; all three cases render the History placeholder |
 | `startedAt`        | `Timestamp` | Ride start time                                                                    |
 | `endedAt`          | `Timestamp` | Ride end time                                                                      |
 | `routePath`        | `string`    | Cloud Storage path to compressed route, e.g. `rideRoutes/{uid}/{rideId}/route.bin` |
-| `previewImagePath` | `string?`   | Cloud Storage path to static map preview                                           |
+| `previewImagePath` | `string`    | Cloud Storage path to the static map preview, `rideRoutes/{uid}/{rideId}/preview.png`. Always written; the client uploads the file afterwards, so the path existing does not mean the object does |
+| `sourceSessionId`  | `string?`   | Client recording identifier for idempotent save retries; `null` when the save did not supply one |
 | `createdAt`        | `Timestamp` | Server timestamp                                                                   |
 
-**Route GPS points are never stored in Firestore.** They are encoded, compressed, and stored as a single file in Cloud Storage under `rideRoutes/{uid}/{rideId}/` (route.bin + preview.png — both member-gated; route visuals are withheld from non-members, matching the legacy member-only routeOverview).
+**The full route GPS track is never stored in Firestore.** It is encoded, compressed, and stored as a single file in Cloud Storage under `rideRoutes/{uid}/{rideId}/` (route.bin + preview.png — both member-gated; route visuals are withheld from non-members, matching the legacy member-only routeOverview). One bounded exception: `routeThumbnail`, the route simplified to at most 64 points (Ramer–Douglas–Peucker) as an encoded polyline — a few hundred bytes — so the History list can draw a drive's shape without a Storage fetch per card. It sits on an owner-only document like every other field here, and it is an overview, not a track.
 
-Security (Phase 9d): owner-only read — membership NOT required, so drives saved during a previous membership stay listable. All writes go through callables: `drives.save` computes the stats server-side (client writes could forge distance/duration) and `drives.delete` removes the Cloud Storage files together with the document. `averageSpeedMetersPerSecond` and a nullable `sourceSessionId` (idempotent save retries) complete the field list above. No top-speed field is ever stored.
+Security (Phase 9d): owner-only read — membership NOT required, so drives saved during a previous membership stay listable. All writes go through callables: `drives.save` computes the stats server-side (client writes could forge distance/duration) and `drives.delete` removes the Cloud Storage files together with the document. The table above is the complete document; the canonical machine-readable shape is `contracts/schemas/saved-drives.schema.json` (`$defs.ride`), and the builder that must agree with both is `buildRideDocument`.
+
+`maxSpeedMetersPerSecond` **reverses** the earlier "no top-speed field is ever stored" rule, by an explicit product decision (2026-07). It is derived at save time with the same >200 km/h GPS-glitch filter distance uses, and is displayed as a neutral fact beside distance and duration — never a record, ranking, personal best or comparison (docs/gamification-system.md). Drives saved before the decision have neither `maxSpeedMetersPerSecond` nor `routeThumbnail`; there is **no backfill**, and clients render a missing-value placeholder for both.
 
 Composite index: `userId ASC, createdAt DESC` (user's ride history, paginated).
 

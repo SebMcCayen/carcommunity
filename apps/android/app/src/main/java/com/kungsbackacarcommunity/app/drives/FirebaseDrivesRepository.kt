@@ -163,5 +163,10 @@ private fun DocumentSnapshot.toSavedDrive(): SavedDrive? {
         startedAtMillis = getTimestamp("startedAt")?.toDate()?.time,
         endedAtMillis = getTimestamp("endedAt")?.toDate()?.time,
         createdAtMillis = getTimestamp("createdAt")?.toDate()?.time,
+        // Both fields are ABSENT on every drive saved before 2026-07 — there is
+        // no backfill — which getDouble/getString answer as null. That is the
+        // UI's placeholder path (a dash, and the route glyph), not an error.
+        maxSpeedMetersPerSecond = getDouble("maxSpeedMetersPerSecond"),
+        routeThumbnail = getString("routeThumbnail"),
     )
 }

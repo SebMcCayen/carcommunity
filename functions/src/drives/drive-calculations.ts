@@ -8,7 +8,14 @@
  * All calculations are estimates, not authoritative measurements.
  *
  * Privacy:
- *  - No top-speed calculation or storage.
+ *  - Maximum speed IS calculated here and stored on the ride document. This
+ *    module previously stated "No top-speed calculation or storage"; that rule
+ *    was reversed by an explicit product decision (2026-07), and the reversal is
+ *    recorded rather than quietly dropped. What has NOT changed is the rule the
+ *    old wording actually protected: speed is never rewarded. The figure is
+ *    presented as one neutral fact beside distance and duration — no record, no
+ *    personal best, no ranking, no comparison between drives, no celebratory
+ *    styling (docs/gamification-system.md).
  *  - No driving-quality scores.
  *  - Coordinates are treated as raw numbers; never logged.
  */
@@ -104,6 +111,52 @@ export function totalDistanceMetres(points: readonly TimedPoint[]): number {
   }
 
   return total;
+}
+
+/**
+ * Highest plausible instantaneous speed in m/s implied by consecutive points,
+ * or null when none can be derived (fewer than 2 points, or every segment is
+ * filtered out).
+ *
+ * Applies the SAME filters as {@link totalDistanceMetres}: a non-positive time
+ * delta is skipped, and so is any segment implying more than
+ * MAX_PLAUSIBLE_SPEED_MPS (~200 km/h). That filter is load-bearing here, more
+ * so than for distance: distance averages a bad fix away over a whole drive,
+ * but a maximum takes the single worst sample — one GPS glitch, unfiltered,
+ * would put an absurd number on the drive's card. Non-finite results are
+ * dropped defensively for the same reason.
+ */
+export function maxSpeedMps(points: readonly TimedPoint[]): number | null {
+  if (points.length < 2) return null;
+
+  let max: number | null = null;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1] as TimedPoint;
+    const curr = points[i] as TimedPoint;
+
+    const deltaMs = curr.timestampMs - prev.timestampMs;
+    if (deltaMs <= 0) {
+      continue;
+    }
+
+    const distanceM = haversineDistanceMetres(
+      prev.latitude,
+      prev.longitude,
+      curr.latitude,
+      curr.longitude,
+    );
+    const impliedSpeed = distanceM / (deltaMs / 1000);
+    if (!Number.isFinite(impliedSpeed) || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) {
+      continue;
+    }
+
+    if (max === null || impliedSpeed > max) {
+      max = impliedSpeed;
+    }
+  }
+
+  return max;
 }
 
 /**

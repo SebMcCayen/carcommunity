@@ -7,25 +7,43 @@
  * (docs/migration/backend-domain-mapping.md "Saved drives → Firestore +
  * Cloud Storage"):
  *
- * - `rides/{rideId}` holds summary metadata only; route GPS data is a
- *   client-uploaded Cloud Storage file under `rideRoutes/{uid}/{rideId}/`
- *   and is never stored in Firestore.
+ * - `rides/{rideId}` holds summary metadata plus a ~64-point route THUMBNAIL
+ *   (routeThumbnail, an encoded polyline). The full route GPS track is still a
+ *   client-uploaded Cloud Storage file under `rideRoutes/{uid}/{rideId}/` and is
+ *   still never stored in Firestore — the thumbnail is a deliberate, bounded
+ *   exception so the History list can draw a drive's shape with no extra read
+ *   (route-thumbnail.ts explains the trade).
  * - The drives.save callable computes distanceMeters / durationSeconds /
- *   averageSpeedMetersPerSecond server-side from the submitted points
- *   (drive-calculations.ts) — clients never write stats.
+ *   averageSpeedMetersPerSecond / maxSpeedMetersPerSecond server-side from the
+ *   submitted points (drive-calculations.ts) — clients never write stats.
  * - Saving requires an active member; owners keep list/read/delete access to
  *   drives saved during a previous membership (route files stay
  *   member-gated in Storage rules).
  * - Repeat saves for the same recording are idempotent via an optional
  *   client-supplied sourceSessionId (legacy sourceLiveLocationSessionId
  *   dedupe parity).
- * - No top-speed field is ever stored or returned.
+ * - Maximum speed IS now stored and returned, as `maxSpeedMetersPerSecond`,
+ *   derived server-side at save time from the submitted points. This module
+ *   previously said "No top-speed field is ever stored or returned"; that was
+ *   reversed by an explicit product decision (2026-07) and the old wording is
+ *   replaced rather than removed silently, so the change is visible in the
+ *   history of this file. The no-speed-gamification rule is untouched: the
+ *   figure is a neutral stat shown beside distance and duration, never a
+ *   record, ranking or achievement (docs/gamification-system.md).
+ *   Drives saved BEFORE the decision have no such field and are not
+ *   backfilled — clients render their missing-value placeholder.
  *
  * Pure module — no Firebase Admin SDK imports.
  */
 
 import { z } from 'zod';
-import { averageSpeedMps, driveDurationSeconds, totalDistanceMetres } from './drive-calculations';
+import {
+  averageSpeedMps,
+  driveDurationSeconds,
+  maxSpeedMps,
+  totalDistanceMetres,
+} from './drive-calculations';
+import { buildRouteThumbnail } from './route-thumbnail';
 
 export const DRIVE_TITLE_MAX_LENGTH = 200;
 /** Bound the submitted track: ~5.5 h at 1 Hz. Clients downsample beyond it. */
@@ -169,29 +187,57 @@ export interface DriveStats {
   durationSeconds: number;
   distanceMeters: number | null;
   averageSpeedMetersPerSecond: number | null;
+  /**
+   * Highest plausible instantaneous speed over the submitted points, or null
+   * for a summary-only save. Neutral factual stat — see the module header on
+   * why this exists and what it must never become.
+   */
+  maxSpeedMetersPerSecond: number | null;
 }
 
 /**
- * Server-side stats from the submitted recording. Distance and average
- * speed are null for summary-only saves (no points) — legacy parity.
+ * Server-side stats from the submitted recording. Distance, average speed and
+ * maximum speed are null for summary-only saves (no points) — legacy parity,
+ * and null so clients show a missing-value dash rather than a false 0.
  */
 export function computeDriveStats(input: SaveDriveInput): DriveStats {
   const durationSeconds = driveDurationSeconds(new Date(input.startedAt), new Date(input.endedAt));
   if (!input.routePoints || input.routePoints.length < 2) {
-    return { durationSeconds, distanceMeters: null, averageSpeedMetersPerSecond: null };
+    return {
+      durationSeconds,
+      distanceMeters: null,
+      averageSpeedMetersPerSecond: null,
+      maxSpeedMetersPerSecond: null,
+    };
   }
   const distanceMeters = totalDistanceMetres(input.routePoints);
   return {
     durationSeconds,
     distanceMeters,
     averageSpeedMetersPerSecond: averageSpeedMps(distanceMeters, durationSeconds),
+    maxSpeedMetersPerSecond: maxSpeedMps(input.routePoints),
   };
+}
+
+/**
+ * The stored `routeThumbnail` for a save, or null when the recording has no
+ * drawable shape. Re-exported through this module so callables build a ride
+ * document from one place (see route-thumbnail.ts).
+ */
+export function computeRouteThumbnail(input: SaveDriveInput): string | null {
+  return buildRouteThumbnail(input.routePoints);
 }
 
 /** rides/{rideId} document (docs/firebase-data-model.md). */
 export function buildRideDocument(
   input: SaveDriveInput,
-  context: { userId: string; rideId: string; stats: DriveStats },
+  context: {
+    userId: string;
+    rideId: string;
+    stats: DriveStats;
+    /** Encoded ~64-point route overview, or null when there is none to draw. */
+    routeThumbnail: string | null;
+  },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
   return {
@@ -200,6 +246,8 @@ export function buildRideDocument(
     distanceMeters: context.stats.distanceMeters,
     durationSeconds: context.stats.durationSeconds,
     averageSpeedMetersPerSecond: context.stats.averageSpeedMetersPerSecond,
+    maxSpeedMetersPerSecond: context.stats.maxSpeedMetersPerSecond,
+    routeThumbnail: context.routeThumbnail,
     startedAt: new Date(input.startedAt),
     endedAt: new Date(input.endedAt),
     routePath: rideRoutePath(context.userId, context.rideId),
