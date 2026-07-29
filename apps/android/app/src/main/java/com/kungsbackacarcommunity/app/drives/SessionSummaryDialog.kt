@@ -158,7 +158,7 @@ private fun KeepOrDeletePrompt(
     // silently folded away under the user.
     var routeExpanded by rememberSaveable { mutableStateOf(false) }
     var routeFullscreen by rememberSaveable { mutableStateOf(false) }
-    val content = rememberSummaryContent(elapsedMillis, pointsProvider)
+    val content = rememberSummaryContent(elapsedMillis, pointsProvider, withRoute = true)
     AlertDialog(
         modifier = Modifier.testTag(SESSION_SUMMARY_DIALOG_TAG),
         // Force an explicit choice: back / outside-tap does not dismiss.
@@ -247,10 +247,16 @@ private fun SaveFailedPrompt(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
                 // No route map on the failure path: nothing was stored, so the
-                // question is "save it or not", not "look at where you drove".
+                // question is "save it or not", not "look at where you drove" —
+                // hence withRoute = false, which skips the conversion entirely.
                 DriveSummaryRows(
                     elapsedMillis = elapsedMillis,
-                    preview = rememberSummaryContent(elapsedMillis, pointsProvider)?.preview,
+                    preview =
+                        rememberSummaryContent(
+                            elapsedMillis = elapsedMillis,
+                            pointsProvider = pointsProvider,
+                            withRoute = false,
+                        )?.preview,
                 )
                 Text(
                     text =
@@ -321,8 +327,9 @@ private fun DeleteConfirmDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
  * ONE snapshot of them.
  *
  * @param preview the client-side distance / average-speed estimate.
- * @param route the just-driven route for the map, empty when it is too short to
- *   draw (see [SessionRoutePreview]).
+ * @param route the just-driven route for the map. EMPTY both when the drive is
+ *   too short to draw (see [SessionRoutePreview]) and when the caller asked for
+ *   no route at all — the prompts that pass `withRoute = false` never read it.
  */
 private data class SummaryContent(
     val preview: DriveSummaryPreview,
@@ -338,19 +345,24 @@ private data class SummaryContent(
  * for a given stop) computes this exactly once per prompt — and taking a single
  * [pointsProvider] snapshot for both means the up-to-20k-point copy happens once,
  * not once per consumer.
+ *
+ * @param withRoute false for a prompt that shows no map, which skips the O(n)
+ *   route conversion outright rather than allocating a list nothing will draw.
  */
 @Composable
 private fun rememberSummaryContent(
     elapsedMillis: Long,
     pointsProvider: () -> List<RecordedPoint>,
+    withRoute: Boolean,
 ): SummaryContent? {
     val content by
-        produceState<SummaryContent?>(initialValue = null, elapsedMillis) {
+        produceState<SummaryContent?>(initialValue = null, elapsedMillis, withRoute) {
             value = withContext(Dispatchers.Default) {
                 val points = pointsProvider()
                 SummaryContent(
                     preview = DriveSummary.preview(points, elapsedMillis),
-                    route = SessionRoutePreview.routePoints(points),
+                    route =
+                        if (withRoute) SessionRoutePreview.routePoints(points) else emptyList(),
                 )
             }
         }
@@ -376,7 +388,9 @@ private fun rememberSummaryContent(
  * markers ([DriveRouteFullscreenDialog]). Both are reused as-is, so the route the
  * user sees here is drawn by exactly the same code that will draw it in History.
  *
- * @param route the drawable route, or null while it is still being converted.
+ * @param route the just-driven route: null while the conversion is still running,
+ *   EMPTY when the drive has too few fixes to draw a line, otherwise the drawable
+ *   route. Each of the three renders a different thing (see the `when` below).
  */
 @Composable
 private fun SessionRouteSection(
