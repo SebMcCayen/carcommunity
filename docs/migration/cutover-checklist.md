@@ -570,7 +570,7 @@ below is still open.
 ## Part 18 — Legacy deletion approval
 
 - [x] Legacy deletion is approved in a dedicated pull request. **PR #605**, merged 2026-07-28 — 289
-      files, −78 117 lines. Recoverable at tag `legacy-final`.
+      files, −78,117 lines. Recoverable at tag `legacy-final`.
 - ~~Separate PR for `apps/mobile` deletion has explicit approval from repository owner.~~ **Obsolete
   — the process was consciously changed.** One combined PR was used instead of two; the earlier
   two-part attempt (PR #326) was closed unmerged. Recording the reality: #605 carried no _approving
