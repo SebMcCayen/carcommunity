@@ -24,6 +24,18 @@ data class ConvoyMemberPosition(
     val displayName: String? = null,
     val imagePath: String? = null,
     val updatedAtMillis: Long? = null,
+    /**
+     * The publishing fix's own reported accuracy in metres, or null when the
+     * publisher did not send one.
+     *
+     * Carried purely so [LiveMarkerSmoother] can tell a GPS fix from a
+     * cell-derived one BEFORE it moves a marker. An implied-speed test cannot:
+     * a parked publisher's samples are three minutes apart, and a 1-2 km error
+     * across three minutes looks exactly like ordinary town driving. Null means
+     * UNKNOWN, never "bad" — see
+     * [com.kungsbackacarcommunity.app.location.LivePositionQuality].
+     */
+    val accuracyMeters: Double? = null,
 )
 
 /**
@@ -47,6 +59,7 @@ fun LiveMarker.toConvoyMemberPosition(): ConvoyMemberPosition =
         imagePath = mainCar?.imagePath,
         updatedAtMillis =
             recordedAtIso?.let { iso -> runCatching { Instant.parse(iso).toEpochMilli() }.getOrNull() },
+        accuracyMeters = accuracyMeters,
     )
 
 /**

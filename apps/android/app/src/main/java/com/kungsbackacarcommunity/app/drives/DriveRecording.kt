@@ -328,13 +328,21 @@ object DriveSummary {
     /**
      * Backend MAX_PLAUSIBLE_SPEED_MPS: segments faster than this are GPS jumps.
      *
-     * Public because this is no longer only a drives concern: the map's
-     * live-marker smoother
-     * ([com.kungsbackacarcommunity.app.map.LiveMarkerSmoothing.acceptsFix])
-     * throws away an incoming convoy position implying more than this since the
-     * last accepted one, for exactly the reason this scan skips such a segment.
-     * Read from here rather than restated there, so the app has ONE answer to
-     * "too fast to be a car" and retuning it moves both.
+     * Public because this is no longer only a drives concern: the live-position
+     * quality rules
+     * ([com.kungsbackacarcommunity.app.location.LivePositionQuality.isImplausibleSpeed])
+     * throw away a fix implying more than this since the last accepted one — on
+     * BOTH sides of the wire, the sharing device before it publishes and the map
+     * before it moves a marker — for exactly the reason this scan skips such a
+     * segment. Read from here rather than restated there, so the app has ONE
+     * answer to "too fast to be a car" and retuning it moves all of them.
+     *
+     * Note what it does NOT catch, since that is easy to over-trust: implied
+     * speed is distance ÷ elapsed time, so the ceiling it enforces grows with
+     * the gap between samples. It is sharp at the publisher's ~5 s fix cadence
+     * and nearly useless across a parked phone's 3-minute heartbeat, which is
+     * why [com.kungsbackacarcommunity.app.location.LivePositionQuality] pairs it
+     * with accuracy and distance rules rather than relying on it alone.
      */
     const val MAX_PLAUSIBLE_SPEED_MPS = 55.6
 

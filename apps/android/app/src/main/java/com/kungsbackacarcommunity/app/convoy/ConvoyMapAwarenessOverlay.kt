@@ -47,6 +47,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
+import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 import com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
@@ -252,7 +254,25 @@ private fun rememberSmoothedMembers(
     members: List<ConvoyMemberPosition>,
     nowMillis: () -> Long,
 ): List<ConvoyMemberPosition> {
-    val smoother = remember { LiveMarkerSmoother() }
+    // A BURST of discarded fixes is worth exactly one report. The smoother fires
+    // this at most once per composition, with a bucketed, coordinate-free summary
+    // (see LivePositionRejectionReport), so "everyone's markers were jumping" is
+    // diagnosable after the fact instead of unreproducible. A null reporter
+    // (config-less build) simply leaves the evidence in the smoother's bounded,
+    // device-local ring buffer.
+    val errorReporter = rememberClientErrorReporter()
+    val smoother =
+        remember(errorReporter) {
+            LiveMarkerSmoother(
+                onRejectionBurst = { message, code ->
+                    errorReporter?.report(
+                        feature = LivePositionRejectionReport.FEATURE,
+                        message = message,
+                        code = code,
+                    )
+                },
+            )
+        }
     // The instant the markers are currently drawn AT. Every published change is
     // one recomposition of the overlay, which is why the loop below throttles.
     var renderAtMillis by remember { mutableLongStateOf(nowMillis()) }
