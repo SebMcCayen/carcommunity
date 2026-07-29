@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
+
 /**
  * Chat-channels domain (the COMMUNITY app-wide chat + per-CONVOY chats). The
  * backend (europe-west1 callables `communityChat-*` / `convoyChat-*`, plus
@@ -197,6 +200,42 @@ object ChannelThread {
         return byId.values.sortedWith(
             compareBy({ it.createdAtMillis ?: Long.MAX_VALUE }, { it.id }),
         )
+    }
+
+    /**
+     * Replaces each message's DENORMALIZED sender profile with that sender's
+     * current one, where a live profile was loaded.
+     *
+     * `senderDisplayName`/`senderAvatarPath` are stamped onto every message at
+     * post time and never rewritten, so without this a member who changes their
+     * avatar keeps the old one on every message they have ever posted. The
+     * product decision is that a channel shows a member as they are NOW, matching
+     * their profile screen and the friends list — the denormalization exists to
+     * spare the render a per-message profile lookup, not to pin identity to post
+     * time.
+     *
+     * De-duplication happens in the caller's [LiveProfiles.uidsOf] pass, so the
+     * cost is one profile read per distinct SENDER in the window, never one per
+     * message. Message ids, text and ordering keys are untouched, so hydration
+     * cannot reorder the thread or disturb [merge]/[mergeWithPending].
+     */
+    fun hydrate(
+        messages: List<ChannelMessage>,
+        live: Map<String, LiveProfile>,
+    ): List<ChannelMessage> {
+        if (live.isEmpty()) return messages
+        return messages.map { message ->
+            val resolved =
+                LiveProfiles.resolve(
+                    message.senderUid,
+                    LiveProfile(message.senderDisplayName, message.senderAvatarPath),
+                    live,
+                )
+            message.copy(
+                senderDisplayName = resolved.displayName,
+                senderAvatarPath = resolved.avatarPath,
+            )
+        }
     }
 
     /** The pagination cursor for the next older page: the earliest message's ISO createdAt. */

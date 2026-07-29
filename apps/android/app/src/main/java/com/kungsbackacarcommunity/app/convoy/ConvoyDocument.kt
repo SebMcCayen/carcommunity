@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
+
 /**
  * Pure mapping of a RAW `convoys/{convoyId}` Firestore document into the wire
  * [ConvoySummary], plus the merge that folds a live doc update back into a
@@ -204,4 +207,78 @@ fun mergeConvoyUpdate(
         pendingInvites =
             status.pendingInvites.map { if (it.convoyId == fresh.convoyId) fresh else it },
     )
+}
+
+/**
+ * Replaces each roster entry's DENORMALIZED profile with that member's current
+ * one, where a live profile was loaded.
+ *
+ * `convoys/{id}.memberProfiles` is captured at create/invite time and never
+ * refreshed — `convoy.respond` writes invite status only — so a member who
+ * changes their avatar after being invited keeps the old one on the roster for
+ * the convoy's whole life. [LiveProfiles.resolve] carries the fallback rules.
+ *
+ * Applied on BOTH convoy read paths (the `convoy-list` callable and the live
+ * document listener) before they meet in [mergeConvoyUpdate]. That is not
+ * belt-and-braces: hydrating only the callable would be undone the moment the
+ * listener delivered its next snapshot of the same convoy.
+ *
+ * Only [ConvoyMember.displayName] / [ConvoyMember.avatarPath] change. Membership
+ * and authorization are derived from `memberUids` / `members[uid].inviteStatus`,
+ * never from the profile map, so this cannot alter who is in a convoy or what
+ * they may do.
+ */
+fun hydrateConvoy(convoy: ConvoySummary, live: Map<String, LiveProfile>): ConvoySummary {
+    if (live.isEmpty()) return convoy
+    return convoy.copy(
+        members =
+            convoy.members.map { member ->
+                val resolved =
+                    LiveProfiles.resolve(
+                        member.uid,
+                        LiveProfile(member.displayName, member.avatarPath),
+                        live,
+                    )
+                member.copy(
+                    displayName = resolved.displayName,
+                    avatarPath = resolved.avatarPath,
+                )
+            },
+    )
+}
+
+/**
+ * Upper bound on how many member profiles one convoy snapshot will refresh.
+ *
+ * `convoy.list` is capped at MAX_CONVOYS_RETURNED (200) and does NOT filter by
+ * status — a long-standing member's list includes every convoy they have ever
+ * been in, ended ones included — at up to MAX_CONVOY_SIZE (25) members each. So
+ * the uid set is bounded by 5000, not by what is on screen, and hydrating it
+ * whole would turn opening the convoy screen into thousands of document reads
+ * for rosters nobody scrolls to.
+ *
+ * This cap keeps the refresh proportional to what a member actually looks at.
+ * [convoyProfileUids] fills it in the order it is given the convoys, so the
+ * caller decides who matters (active and pending convoys before ended ones), and
+ * anything past the cap simply keeps its stored copy — the same graceful
+ * degradation as a failed read.
+ */
+const val MAX_HYDRATED_CONVOY_PROFILES = 120
+
+/**
+ * The distinct member uids named by [convoys], for one batched profile read,
+ * capped at [limit] and filled in the order [convoys] is given.
+ */
+fun convoyProfileUids(
+    convoys: List<ConvoySummary>,
+    limit: Int = MAX_HYDRATED_CONVOY_PROFILES,
+): Set<String> {
+    val uids = LinkedHashSet<String>()
+    for (convoy in convoys) {
+        for (member in convoy.members) {
+            if (uids.size >= limit) return uids
+            if (member.uid.isNotBlank()) uids += member.uid
+        }
+    }
+    return uids
 }

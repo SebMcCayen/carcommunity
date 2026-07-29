@@ -9,6 +9,8 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.blocking.BlockVisibility
 import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -31,11 +33,19 @@ import kotlinx.coroutines.flow.combine
  * filtered SERVER-side by `communityChat-list`; the live window cannot be,
  * because a Firestore rule cannot filter a list query per document — see
  * [BlockVisibility] for the full enforcement map.
+ *
+ * LIVE PROFILES: a message carries the sender's name/avatar as they were at post
+ * time, stamped on by `communityChat-post` and never rewritten. Both the live
+ * window and older pages are overlaid with the sender's current `users/{uid}`
+ * profile ([LiveProfileRepository], [ChannelThread.hydrate]) so a member who
+ * changes their avatar changes it on their whole history — de-duplicated by
+ * sender, never a read per message.
  */
 class FirebaseCommunityChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
     private val blockVisibility: BlockVisibilityRepository,
+    private val liveProfiles: LiveProfileRepository,
 ) : CommunityChatRepository {
 
     private fun messagesQuery(limit: Long): Query =
@@ -58,6 +68,7 @@ class FirebaseCommunityChatRepository private constructor(
                 ChannelMessagesState.Loading -> state
             }
         }
+            .hydrateSenders(liveProfiles)
 
     private fun observeRawMessages(): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
@@ -182,7 +193,11 @@ class FirebaseCommunityChatRepository private constructor(
 
     override suspend fun loadOlder(before: String): ChannelOlderResult =
         functions.callChannel(LIST, mapOf("before" to before)).fold(
-            onSuccess = { ChannelOlderResult.Loaded(ChannelResponseParser.parseMessagesPage(it)) },
+            onSuccess = {
+                ChannelOlderResult.Loaded(
+                    ChannelResponseParser.parseMessagesPage(it).hydrateSenders(liveProfiles),
+                )
+            },
             onFailure = { ChannelOlderResult.Failed },
         )
 
@@ -211,6 +226,7 @@ class FirebaseCommunityChatRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

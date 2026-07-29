@@ -11,11 +11,19 @@ import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.blocking.BlockVisibility
 import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
 import kotlin.coroutines.resume
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 /**
  * [DmRepository] backed by member-readable Firestore listeners plus the
@@ -52,13 +60,23 @@ import kotlinx.coroutines.flow.combine
  *    trigger-maintained (so briefly behind a fresh block) and stops growing at
  *    MAX_HIDDEN_UIDS; the marker covers both gaps, and costs nothing because it
  *    rides on a document the listener already receives.
+ *
+ * LIVE PROFILES: the counterparty's name/avatar on an inbox row comes from
+ * `memberProfiles`, a denormalized copy that `dm.sendMessage` refreshes only for
+ * the SENDER — so the other party's card is frozen until they next message you.
+ * [LiveProfileRepository] overlays their current `users/{uid}` profile at read
+ * time ([DmMapper.hydrateConversations]). It is done HERE and not in
+ * `dm.listConversations` because this listener, not that callable, is what the
+ * inbox actually renders.
  */
 class FirebaseDmRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
     private val blockVisibility: BlockVisibilityRepository,
+    private val liveProfiles: LiveProfileRepository,
 ) : DmRepository {
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun observeConversations(uid: String): Flow<DmConversationsState> =
         combine(observeRawConversations(uid), blockVisibility.observeHiddenUids()) { state, hidden ->
             when (state) {
@@ -71,6 +89,36 @@ class FirebaseDmRepository private constructor(
                 else -> state
             }
         }
+            // Overlay each counterparty's CURRENT profile onto the denormalized
+            // copy the conversation document carries (DmMapper.hydrateConversations
+            // explains why that copy is stale for the other party).
+            //
+            // flatMapLatest rather than combine, because the uid set is DERIVED
+            // from the rows: a new conversation must trigger a read for its
+            // counterparty. Superseding the previous lookup is safe here only
+            // because the reads outlive it — FirebaseLiveProfileRepository issues
+            // them in its own scope, so a cancelled lookup still lands in the cache
+            // and the next emission is a hit (see readMissing). Hydration runs
+            // AFTER the block filter, so a hidden row is never paid for.
+            //
+            // Contained rather than trusted, like the chat overload and
+            // ConvoyCoordinator: observeProfiles documents itself as never
+            // failing, but a throw here would terminate the INBOX stream, freezing
+            // it on its last frame with no error state. Falling back to the
+            // un-hydrated rows is exactly the pre-hydration behaviour; `catch`
+            // rethrows the flow's own cancellation cause, so leaving the screen
+            // still detaches the listener.
+            .flatMapLatest { state ->
+                if (state !is DmConversationsState.Loaded) return@flatMapLatest flowOf(state)
+                val uids = LiveProfiles.uidsOf(state.conversations) { it.otherUser.uid }
+                liveProfiles.observeProfiles(uids)
+                    .map { live ->
+                        DmConversationsState.Loaded(
+                            DmMapper.hydrateConversations(state.conversations, live),
+                        )
+                    }
+                    .catch { emit(state) }
+            }
 
     private fun observeRawConversations(uid: String): Flow<DmConversationsState> = callbackFlow {
         val registration =
@@ -229,6 +277,7 @@ class FirebaseDmRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

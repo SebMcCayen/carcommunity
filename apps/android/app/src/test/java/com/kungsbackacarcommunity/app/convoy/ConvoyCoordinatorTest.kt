@@ -1,8 +1,11 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -131,6 +134,34 @@ class ConvoyCoordinatorTest {
         assertEquals(listOf("c1"), status.myConvoys.map { it.convoyId })
         assertEquals(listOf("p1"), status.pendingInvites.map { it.convoyId })
         assertEquals("c1", status.convoy("c1")?.convoyId)
+    }
+
+    @Test
+    fun `a failing profile overlay cannot turn a loaded list into an error`() = runTest {
+        // load() publishes the stored snapshot BEFORE hydrating, and the whole
+        // body sits inside a catch-all that maps any throw to
+        // ConvoyListStatus.Error — so an unguarded cosmetic overlay would replace
+        // a convoy list the member can already see with an error screen.
+        val throwing =
+            object : LiveProfileRepository {
+                override fun observeProfiles(uids: Set<String>): Flow<Map<String, LiveProfile>> =
+                    flow { throw IllegalStateException("profile read blew up") }
+
+                override suspend fun loadProfiles(uids: Set<String>): Map<String, LiveProfile> =
+                    throw IllegalStateException("profile read blew up")
+            }
+        val repo =
+            FakeRepo().apply {
+                listResult =
+                    ConvoyListResult.Loaded(convoys = listOf(convoy("c1")), pendingInvites = emptyList())
+            }
+
+        val coordinator = ConvoyCoordinator(repo, liveProfiles = throwing)
+        coordinator.load()
+
+        val status = coordinator.status.value
+        assertTrue(status is ConvoyListStatus.Loaded)
+        assertEquals(listOf("c1"), (status as ConvoyListStatus.Loaded).myConvoys.map { it.convoyId })
     }
 
     @Test

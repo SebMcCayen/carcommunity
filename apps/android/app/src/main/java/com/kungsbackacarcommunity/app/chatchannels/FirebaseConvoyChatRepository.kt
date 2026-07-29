@@ -9,6 +9,8 @@ import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.blocking.BlockVisibility
 import com.kungsbackacarcommunity.app.blocking.BlockVisibilityRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockVisibilityRepository
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -27,11 +29,17 @@ import kotlinx.coroutines.flow.combine
  * Older pages are filtered SERVER-side by `convoyChat-list`; the live window
  * cannot be, because a Firestore rule cannot filter a list query per document —
  * see [BlockVisibility].
+ *
+ * LIVE PROFILES: as in the community channel, the sender profile stamped on each
+ * message is overlaid with the sender's current `users/{uid}` profile
+ * ([LiveProfileRepository], [ChannelThread.hydrate]) on both the live window and
+ * older pages.
  */
 class FirebaseConvoyChatRepository private constructor(
     private val firestore: FirebaseFirestore,
     private val functions: FirebaseFunctions,
     private val blockVisibility: BlockVisibilityRepository,
+    private val liveProfiles: LiveProfileRepository,
 ) : ConvoyChatRepository {
 
     override suspend fun listConvoys(): ConvoyListState =
@@ -52,6 +60,7 @@ class FirebaseConvoyChatRepository private constructor(
                 ChannelMessagesState.Loading -> state
             }
         }
+            .hydrateSenders(liveProfiles)
 
     private fun observeRawMessages(convoyId: String): Flow<ChannelMessagesState> = callbackFlow {
         val registration =
@@ -114,7 +123,11 @@ class FirebaseConvoyChatRepository private constructor(
 
     override suspend fun loadOlder(convoyId: String, before: String): ChannelOlderResult =
         functions.callChannel(LIST, mapOf("convoyId" to convoyId, "before" to before)).fold(
-            onSuccess = { ChannelOlderResult.Loaded(ChannelResponseParser.parseMessagesPage(it)) },
+            onSuccess = {
+                ChannelOlderResult.Loaded(
+                    ChannelResponseParser.parseMessagesPage(it).hydrateSenders(liveProfiles),
+                )
+            },
             onFailure = { ChannelOlderResult.Failed },
         )
 
@@ -132,6 +145,7 @@ class FirebaseConvoyChatRepository private constructor(
                 FirebaseFirestore.getInstance(),
                 FirebaseFunctions.getInstance(CHANNEL_FUNCTIONS_REGION),
                 FirebaseBlockVisibilityRepository.createOrEmpty(context),
+                FirebaseLiveProfileRepository.sharedOrEmpty(context),
             )
         }
     }

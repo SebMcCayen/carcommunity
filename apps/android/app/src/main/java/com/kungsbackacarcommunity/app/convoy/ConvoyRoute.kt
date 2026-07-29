@@ -11,11 +11,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
 import com.kungsbackacarcommunity.app.live.LiveShareStart
+import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
 import kotlinx.coroutines.launch
 
 /** Which convoy sub-screen the route is currently showing. */
@@ -87,7 +89,15 @@ fun ConvoyRoute(
     onInviteDeepLinkConsumed: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
-    val coordinator = remember(repository) { ConvoyCoordinator(repository) }
+    // Refreshes the roster's denormalized member profiles from live users/{uid}
+    // (ConvoyCoordinator.liveProfiles). Not remembered: sharedOrEmpty returns the
+    // process-wide instance (or the EMPTY singleton), so it is already a stable
+    // reference and cannot churn the coordinator's remember key.
+    val liveProfiles = FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current)
+    val coordinator =
+        remember(repository, liveProfiles) {
+            ConvoyCoordinator(repository, liveProfiles = liveProfiles)
+        }
     val status by coordinator.status.collectAsState()
     val actionError by coordinator.actionError.collectAsState()
     val busyConvoys by coordinator.busyConvoys.collectAsState()

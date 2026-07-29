@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfiles
+
 /**
  * Direct-messaging domain (1:1 friend DMs). The backend (europe-west1 callables
  * `dm-sendMessage` / `dm-getMessages` / `dm-markRead`, plus member-readable
@@ -272,6 +275,41 @@ object DmMapper {
      * so the rule is unit-testable off-device.
      */
     fun isHiddenByBlock(doc: DmConversationDoc): Boolean = doc.blockedPair
+
+    /**
+     * Replaces each row's DENORMALIZED counterparty profile with that member's
+     * current one, where a live profile was loaded.
+     *
+     * `conversations/{pairId}.memberProfiles` refreshes only the SENDER's own
+     * entry on each `dm.sendMessage`, so the OTHER party's card in your inbox is
+     * frozen at whatever they looked like when they last messaged you — the very
+     * card that names them. [LiveProfiles.resolve] carries the fallback rules.
+     *
+     * The row's identity ([DmConversation.conversationId]) and its ordering key
+     * are untouched, so hydration cannot reorder or drop the inbox.
+     */
+    fun hydrateConversations(
+        conversations: List<DmConversation>,
+        live: Map<String, LiveProfile>,
+    ): List<DmConversation> {
+        if (live.isEmpty()) return conversations
+        return conversations.map { conversation ->
+            val other = conversation.otherUser
+            val resolved =
+                LiveProfiles.resolve(
+                    other.uid,
+                    LiveProfile(other.displayName, other.avatarPath),
+                    live,
+                )
+            conversation.copy(
+                otherUser =
+                    other.copy(
+                        displayName = resolved.displayName,
+                        avatarPath = resolved.avatarPath,
+                    ),
+            )
+        }
+    }
 
     /**
      * Defensively re-sorts inbox rows newest-first. The server query already
