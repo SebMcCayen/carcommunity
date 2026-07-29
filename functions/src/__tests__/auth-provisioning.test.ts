@@ -5,6 +5,11 @@ import {
   buildUserProfileDocument,
   type ProvisionUserInput,
 } from '../auth/provisioning';
+// The SAME derivation the implementation uses (trim + locale-invariant
+// lowercase). Imported rather than re-spelled as `.trim().toLowerCase()` here:
+// a hand-rolled copy of the rule in the test can silently drift from the rule in
+// the code, which is precisely the divergence these assertions exist to catch.
+import { toSearchKey } from '../friends/friends-core';
 
 const SERVER_TIMESTAMP = Symbol('serverTimestamp');
 const serverTimestamp = () => SERVER_TIMESTAMP;
@@ -17,7 +22,7 @@ describe('buildUserProfileDocument', () => {
     );
     expect(doc).toStrictEqual({
       displayName: DEFAULT_DISPLAY_NAME,
-      displayNameLower: DEFAULT_DISPLAY_NAME.toLowerCase(),
+      displayNameLower: toSearchKey(DEFAULT_DISPLAY_NAME),
       role: 'user',
       activeMember: false,
       suspended: false,
@@ -67,7 +72,7 @@ describe('buildUserProfileDocument', () => {
     expect(serialized).not.toContain('anna');
     expect(serialized).not.toContain('andersson');
     expect(doc.displayName).toBe(DEFAULT_DISPLAY_NAME);
-    expect(doc.displayNameLower).toBe(DEFAULT_DISPLAY_NAME.toLowerCase());
+    expect(doc.displayNameLower).toBe(toSearchKey(DEFAULT_DISPLAY_NAME));
   });
 
   // `buildUserProfileDocument` takes no provider-name parameter, so the leak
@@ -90,9 +95,20 @@ describe('buildUserProfileDocument', () => {
   // displayName. Friend nickname resolution reads ONLY the key, so a profile
   // provisioned without it is unfindable by nickname — pin the claim directly
   // rather than just the shape above.
+  //
+  // Asserted against `toSearchKey` (the function the implementation actually
+  // calls) and NOT against a re-spelled `.toLowerCase()`: the two agree only
+  // while DEFAULT_DISPLAY_NAME happens to need no trimming, so a re-spelled rule
+  // would keep passing if the implementation stopped folding the same way.
+  // The whitespace half of the rule is exercised where a name can actually carry
+  // whitespace — a MEMBER-TYPED one; see the padded-name case in
+  // auth-onboarding-core.test.ts. Provisioning takes no name parameter at all.
   it('always derives displayNameLower from the resolved displayName', () => {
     const doc = buildUserProfileDocument({ uid: 'uid-1' }, serverTimestamp);
-    expect(doc.displayNameLower).toBe(String(doc.displayName).toLowerCase());
+    expect(doc.displayNameLower).toBe(toSearchKey(String(doc.displayName)));
+    // ...and the stored key is already fully folded, so it is a valid search key
+    // whatever DEFAULT_DISPLAY_NAME later becomes — including a padded value.
+    expect(doc.displayNameLower).toBe(toSearchKey(String(doc.displayNameLower)));
   });
 
   it('never grants role, entitlement, or moderation flags', () => {
