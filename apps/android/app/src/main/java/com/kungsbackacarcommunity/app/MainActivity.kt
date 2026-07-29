@@ -84,6 +84,7 @@ import com.kungsbackacarcommunity.app.push.KccMessagingService
 import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
+import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
 import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -308,7 +309,15 @@ class MainActivity : ComponentActivity() {
                 // (null), never on a re-run with the same uid — an Activity
                 // recreation must LEAVE a start in flight alone, which is half the
                 // reason the overlay is process-scoped in the first place.
-                if (signedInUid == null) LiveShareStart.clear()
+                if (signedInUid == null) {
+                    LiveShareStart.clear()
+                    // The live-session bar's latched start is process-scoped for
+                    // the same reason, so it needs the same sign-out release: the
+                    // authed shell (which normally drops it when sharing ends) is
+                    // gone by then, and a stale anchor would otherwise open the
+                    // NEXT account's first session on someone else's elapsed time.
+                    LiveSessionAnchor.clear()
+                }
             }
 
             // Tint the OS bars from the CURRENTLY displayed theme, not once in

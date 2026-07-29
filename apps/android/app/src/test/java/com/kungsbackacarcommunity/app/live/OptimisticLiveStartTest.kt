@@ -133,39 +133,23 @@ class OptimisticLiveStartTest {
     }
 
     @Test
-    fun sessionBarTicksFromTheTap_untilTheRealStartIsKnown() {
+    fun sessionBarTicksFromTheTap_forAsLongAsTheAttemptIsPending() {
         val inFlight = LiveStartAttempt.InFlight(t0)
 
-        // No observed start yet: the bar must still be composable, or the STOP
-        // sign would show with the bar hidden.
-        assertEquals(
-            t0,
-            OptimisticLiveStart.sessionStartMillis(
-                observedStartMillis = null,
-                current = inFlight,
-                nowMillis = t0 + 300,
-            ),
-        )
+        // The bar must be composable from the tap, or the STOP sign would show
+        // with the bar hidden.
+        assertEquals(t0, OptimisticLiveStart.pendingTapMillis(inFlight, t0 + 300))
         // The elapsed time does NOT restart when the command returns.
         val settled = OptimisticLiveStart.settled(inFlight, t0 + 800)
-        assertEquals(
-            t0,
-            OptimisticLiveStart.sessionStartMillis(null, settled, t0 + 900),
-        )
-        // The real start always wins once it is known.
-        assertEquals(
-            t0 - 5_000L,
-            OptimisticLiveStart.sessionStartMillis(t0 - 5_000L, settled, t0 + 900),
-        )
+        assertEquals(t0, OptimisticLiveStart.pendingTapMillis(settled, t0 + 900))
     }
 
     @Test
     fun sessionBarHasNothingToTickFrom_whenNothingIsPending() {
-        assertNull(OptimisticLiveStart.sessionStartMillis(null, LiveStartAttempt.None, t0))
+        assertNull(OptimisticLiveStart.pendingTapMillis(LiveStartAttempt.None, t0))
         assertNull(
             "an expired attempt is not a start time",
-            OptimisticLiveStart.sessionStartMillis(
-                observedStartMillis = null,
+            OptimisticLiveStart.pendingTapMillis(
                 current = LiveStartAttempt.InFlight(t0),
                 nowMillis = t0 + OptimisticLiveStart.IN_FLIGHT_TIMEOUT_MS,
             ),
