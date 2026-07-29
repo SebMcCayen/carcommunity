@@ -4,11 +4,13 @@ import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.blocking.BlockVisibility
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import com.kungsbackacarcommunity.app.profile.LiveProfiles
 import kotlin.coroutines.resume
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -97,6 +99,16 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
  * De-duplicated by sender BEFORE the read, so a window of hundreds of messages
  * costs a read per distinct SENDER, never one per message. Apply it AFTER the
  * block filter so a hidden sender is never paid for with a profile read.
+ *
+ * ENFORCED, not assumed: [LiveProfileRepository.observeProfiles] documents itself
+ * as never failing, but this operator sits in the middle of the LIVE message
+ * stream. A throw from the overlay would terminate that flow for good — the chat
+ * would freeze on its last frame and stop receiving messages entirely, with no
+ * error state to show for it. Containing it here means the same failure merely
+ * leaves the stored copies on screen, exactly as
+ * [com.kungsbackacarcommunity.app.convoy.ConvoyCoordinator] contains its own
+ * overlay. `catch` rethrows the flow's own cancellation cause, so leaving the
+ * screen still tears the listener down.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 internal fun Flow<ChannelMessagesState>.hydrateSenders(
@@ -104,9 +116,9 @@ internal fun Flow<ChannelMessagesState>.hydrateSenders(
 ): Flow<ChannelMessagesState> = flatMapLatest { state ->
     if (state !is ChannelMessagesState.Loaded) return@flatMapLatest flowOf(state)
     val uids = LiveProfiles.uidsOf(state.messages) { it.senderUid }
-    liveProfiles.observeProfiles(uids).map { live ->
-        ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live))
-    }
+    liveProfiles.observeProfiles(uids)
+        .map { live -> ChannelMessagesState.Loaded(ChannelThread.hydrate(state.messages, live)) }
+        .catch { emit(state) }
 }
 
 /**
@@ -119,10 +131,20 @@ internal fun Flow<ChannelMessagesState>.hydrateSenders(
  * already cached. That is bounded by the distinct senders in one page, and
  * pagination already shows a spinner, so it is paid inline rather than by
  * publishing the page twice.
+ *
+ * Contained like the live-window overload: this runs inside the callable's
+ * `Result.fold`, whose value becomes a [ChannelOlderResult.Loaded], and
+ * [ChannelChatCoordinator.loadOlder] turns any throw into a retryable
+ * [ChannelPageStatus.Error]. Unguarded, a failed cosmetic overlay would therefore
+ * DISCARD a page that had already been fetched successfully and make the member
+ * retry it. Returning the un-hydrated page keeps the messages and their stored
+ * copies, which is precisely the pre-hydration behaviour.
  */
 internal suspend fun ChannelMessagesPage.hydrateSenders(
     liveProfiles: LiveProfileRepository,
-): ChannelMessagesPage {
-    val live = liveProfiles.loadProfiles(LiveProfiles.uidsOf(messages) { it.senderUid })
-    return copy(messages = ChannelThread.hydrate(messages, live))
-}
+): ChannelMessagesPage =
+    runCatchingCancellable {
+        val live = liveProfiles.loadProfiles(LiveProfiles.uidsOf(messages) { it.senderUid })
+        copy(messages = ChannelThread.hydrate(messages, live))
+    }
+        .getOrDefault(this)

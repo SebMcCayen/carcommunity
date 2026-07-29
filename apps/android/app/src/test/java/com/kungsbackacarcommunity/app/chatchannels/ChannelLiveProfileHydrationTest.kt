@@ -1,9 +1,18 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import com.kungsbackacarcommunity.app.profile.LiveProfile
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import com.kungsbackacarcommunity.app.profile.LiveProfiles
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -121,5 +130,65 @@ class ChannelLiveProfileHydrationTest {
     fun `no live profiles at all is a no-op`() {
         val messages = listOf(message("m1", "eva"))
         assertSame(messages, ChannelThread.hydrate(messages, emptyMap()))
+    }
+
+    /**
+     * A repository that violates [LiveProfileRepository]'s never-throws contract,
+     * to prove the overlay is CONTAINED at the call site rather than merely
+     * documented as safe somewhere else.
+     */
+    private object ThrowingProfiles : LiveProfileRepository {
+        override fun observeProfiles(uids: Set<String>): Flow<Map<String, LiveProfile>> = flow {
+            throw IllegalStateException("profile read blew up")
+        }
+
+        override suspend fun loadProfiles(uids: Set<String>): Map<String, LiveProfile> =
+            throw IllegalStateException("profile read blew up")
+    }
+
+    @Test
+    fun `a failing overlay leaves the live window on its stored copies`() = runTest {
+        // Without containment the throw would terminate the live message stream:
+        // the chat would freeze on its last frame and stop receiving messages,
+        // with no error state to show for it.
+        val loaded = ChannelMessagesState.Loaded(listOf(message("m1", "eva")))
+
+        val emitted = flowOf<ChannelMessagesState>(loaded).hydrateSenders(ThrowingProfiles).toList()
+
+        assertEquals(listOf(loaded), emitted)
+    }
+
+    @Test
+    fun `a failing overlay does not throw away an older page that was fetched`() = runTest {
+        // The page reached the client; only the cosmetic refresh failed. Without
+        // containment ChannelChatCoordinator.loadOlder would map the throw to a
+        // retryable Error and discard these messages.
+        val page =
+            ChannelMessagesPage(
+                messages = listOf(message("m1", "eva")),
+                nextBefore = "2026-07-28T09:00:00.000Z",
+                hasMore = true,
+            )
+
+        assertEquals(page, page.hydrateSenders(ThrowingProfiles))
+    }
+
+    @Test
+    fun `containment does not swallow cancellation of the older-page read`() = runTest {
+        // Cancellation must still unwind: swallowing it would turn a cancelled
+        // pagination into an apparently successful un-hydrated page.
+        val cancelling =
+            object : LiveProfileRepository {
+                override fun observeProfiles(uids: Set<String>): Flow<Map<String, LiveProfile>> =
+                    flowOf(emptyMap())
+
+                override suspend fun loadProfiles(uids: Set<String>): Map<String, LiveProfile> =
+                    throw CancellationException("collector went away")
+            }
+        val page = ChannelMessagesPage(listOf(message("m1", "eva")), nextBefore = null, hasMore = false)
+
+        assertThrows(CancellationException::class.java) {
+            runBlocking { page.hydrateSenders(cancelling) }
+        }
     }
 }

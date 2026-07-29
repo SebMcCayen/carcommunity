@@ -19,6 +19,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -99,14 +100,24 @@ class FirebaseDmRepository private constructor(
             // them in its own scope, so a cancelled lookup still lands in the cache
             // and the next emission is a hit (see readMissing). Hydration runs
             // AFTER the block filter, so a hidden row is never paid for.
+            //
+            // Contained rather than trusted, like the chat overload and
+            // ConvoyCoordinator: observeProfiles documents itself as never
+            // failing, but a throw here would terminate the INBOX stream, freezing
+            // it on its last frame with no error state. Falling back to the
+            // un-hydrated rows is exactly the pre-hydration behaviour; `catch`
+            // rethrows the flow's own cancellation cause, so leaving the screen
+            // still detaches the listener.
             .flatMapLatest { state ->
                 if (state !is DmConversationsState.Loaded) return@flatMapLatest flowOf(state)
                 val uids = LiveProfiles.uidsOf(state.conversations) { it.otherUser.uid }
-                liveProfiles.observeProfiles(uids).map { live ->
-                    DmConversationsState.Loaded(
-                        DmMapper.hydrateConversations(state.conversations, live),
-                    )
-                }
+                liveProfiles.observeProfiles(uids)
+                    .map { live ->
+                        DmConversationsState.Loaded(
+                            DmMapper.hydrateConversations(state.conversations, live),
+                        )
+                    }
+                    .catch { emit(state) }
             }
 
     private fun observeRawConversations(uid: String): Flow<DmConversationsState> = callbackFlow {
