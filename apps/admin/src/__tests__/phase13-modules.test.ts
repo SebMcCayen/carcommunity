@@ -30,6 +30,7 @@ import {
   loadFeatureFlagRows,
   setFeatureFlag,
 } from '../features/feature-flags';
+import { loadAppVersionConfig, setAppVersion } from '../features/app-version';
 import {
   applyAdminPointsAdjustment,
   getAdminUserPointsBalance,
@@ -114,6 +115,74 @@ describe('feature-flags module', () => {
       key: 'chat',
       enabled: false,
       reason: 'Incident',
+    });
+  });
+});
+
+describe('app-version module', () => {
+  it('reads the published config', async () => {
+    getDocMock.mockResolvedValue({
+      data: () => ({
+        latestVersionCode: 23,
+        latestVersionName: '0.8.12',
+        minimumSupportedVersionCode: 20,
+      }),
+    });
+    expect(await loadAppVersionConfig()).toEqual({
+      latestVersionCode: 23,
+      latestVersionName: '0.8.12',
+      minimumSupportedVersionCode: 20,
+    });
+  });
+
+  it('reports an absent or unusable document as nothing published', async () => {
+    getDocMock.mockResolvedValue({ data: () => undefined });
+    expect(await loadAppVersionConfig()).toBeNull();
+    getDocMock.mockResolvedValue({ data: () => ({ latestVersionName: '0.8.12' }) });
+    expect(await loadAppVersionConfig()).toBeNull();
+    getDocMock.mockResolvedValue({ data: () => ({ latestVersionCode: '23' }) });
+    expect(await loadAppVersionConfig()).toBeNull();
+  });
+
+  it('defaults a missing or blank optional field rather than guessing', async () => {
+    getDocMock.mockResolvedValue({
+      data: () => ({ latestVersionCode: 23, latestVersionName: '  ' }),
+    });
+    expect(await loadAppVersionConfig()).toEqual({
+      latestVersionCode: 23,
+      latestVersionName: null,
+      minimumSupportedVersionCode: 0,
+    });
+  });
+
+  it('publishes through the audited callable, omitting the inert minimum', async () => {
+    callAdminMock.mockResolvedValue({
+      latestVersionCode: 24,
+      latestVersionName: '0.8.13',
+      minimumSupportedVersionCode: 0,
+    });
+    await setAppVersion({
+      latestVersionCode: 24,
+      latestVersionName: '0.8.13',
+      reason: 'Release 0.8.13',
+    });
+    expect(callAdminMock).toHaveBeenCalledWith('admin-setAppVersion', {
+      latestVersionCode: 24,
+      latestVersionName: '0.8.13',
+      reason: 'Release 0.8.13',
+    });
+  });
+
+  it('sends a deliberately raised minimum through', async () => {
+    callAdminMock.mockResolvedValue({
+      latestVersionCode: 24,
+      latestVersionName: null,
+      minimumSupportedVersionCode: 20,
+    });
+    await setAppVersion({ latestVersionCode: 24, minimumSupportedVersionCode: 20 });
+    expect(callAdminMock).toHaveBeenCalledWith('admin-setAppVersion', {
+      latestVersionCode: 24,
+      minimumSupportedVersionCode: 20,
     });
   });
 });

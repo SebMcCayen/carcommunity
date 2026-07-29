@@ -255,6 +255,7 @@ import com.kungsbackacarcommunity.app.navigation.SavedPlaceEdit
 import com.kungsbackacarcommunity.app.navigation.SavedPlaces
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesScreen
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesStore
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -327,6 +328,13 @@ import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.update.AppUpdateDecision
+import com.kungsbackacarcommunity.app.update.AppUpdateDialog
+import com.kungsbackacarcommunity.app.update.AppUpdateDismissalStore
+import com.kungsbackacarcommunity.app.update.AppUpdatePolicy
+import com.kungsbackacarcommunity.app.update.AppVersionConfig
+import com.kungsbackacarcommunity.app.update.FirebaseAppVersionConfigRepository
+import com.kungsbackacarcommunity.app.update.PlayStoreLink
 import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import com.kungsbackacarcommunity.app.whatsnew.Changelog
@@ -3950,6 +3958,80 @@ fun AuthenticatedApp(
                         },
                         onDismiss = acknowledge,
                     )
+                }
+
+                // In-app update prompt: this build's versionCode against the
+                // server-held config/appVersion record. Checked once per app
+                // session (a cold start is the natural moment to update, and
+                // an update prompt that arrives mid-use is just noise), off
+                // the main thread, and entirely fail-safe — a missing or
+                // unreadable or malformed record yields NONE, so the prompt
+                // simply never appears and nothing else about the app changes.
+                val appUpdateDismissals = remember(context) { AppUpdateDismissalStore(context) }
+                var appUpdateDecision by remember { mutableStateOf(AppUpdateDecision.NONE) }
+                var appUpdateConfig by remember { mutableStateOf<AppVersionConfig?>(null) }
+                LaunchedEffect(appUpdateDismissals) {
+                    val repository =
+                        FirebaseAppVersionConfigRepository.createIfAvailable(context)
+                            ?: return@LaunchedEffect
+                    val config =
+                        runCatchingCancellable { repository.fetch() }.getOrNull()
+                            ?: return@LaunchedEffect
+                    val dismissal = withContext(Dispatchers.IO) { appUpdateDismissals.read() }
+                    appUpdateConfig = config
+                    appUpdateDecision =
+                        AppUpdatePolicy.decide(
+                            config = config,
+                            currentVersionCode = BuildConfig.VERSION_CODE,
+                            dismissal = dismissal,
+                            nowMillis = System.currentTimeMillis(),
+                        )
+                }
+                if (appUpdateDecision != AppUpdateDecision.NONE) {
+                    // Never in front of someone who is driving: while a live
+                    // session is running or the navigation overlay is open the
+                    // prompt is held back (the same pair the shell already
+                    // treats as "user is on the road" for KeepScreenOn), and it
+                    // never stacks on top of the what's-new popup. Held, not
+                    // cancelled — it reappears once the drive ends.
+                    val onTheRoad = isSharingUi || navSearchOpen
+                    if (!onTheRoad && whatsNewAnnouncement == null) {
+                        val storeUnavailable =
+                            stringResource(R.string.appUpdate_storeUnavailable)
+                        val decision = appUpdateDecision
+                        AppUpdateDialog(
+                            decision = decision,
+                            latestVersionName = appUpdateConfig?.latestVersionName,
+                            onUpdate = {
+                                PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
+                                    scope.launch { snackbarHostState.showSnackbar(storeUnavailable) }
+                                }
+                                // Sending the user to Play closes the OPTIONAL
+                                // prompt and starts the suppression window, so
+                                // they are not asked again the moment they come
+                                // back. An unsupported build stays walled until
+                                // it is actually updated.
+                                if (decision == AppUpdateDecision.OPTIONAL) {
+                                    appUpdateConfig?.let { config ->
+                                        appUpdateDismissals.record(
+                                            config.latestVersionCode,
+                                            System.currentTimeMillis(),
+                                        )
+                                    }
+                                    appUpdateDecision = AppUpdateDecision.NONE
+                                }
+                            },
+                            onDismiss = {
+                                appUpdateConfig?.let { config ->
+                                    appUpdateDismissals.record(
+                                        config.latestVersionCode,
+                                        System.currentTimeMillis(),
+                                    )
+                                }
+                                appUpdateDecision = AppUpdateDecision.NONE
+                            },
+                        )
+                    }
                 }
 
                 // Transparent chooser raised by the Create tab: "Single session"
