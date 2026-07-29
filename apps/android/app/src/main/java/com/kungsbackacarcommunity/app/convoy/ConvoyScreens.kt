@@ -124,12 +124,20 @@ fun ConvoyListScreen(
                 }
             }
 
-            // Why the invite you tapped isn't here. Deliberately an ErrorBanner
-            // rather than a silent omission: the member acted, and an action
-            // that produces no visible consequence is the bug being fixed.
+            // Why the invite you tapped isn't here. Shown rather than silently
+            // omitted: the member acted, and an action that produces no visible
+            // consequence is the bug this originally fixed.
+            //
+            // A NoticeBanner and not an ErrorBanner, though. Nothing on this
+            // path is a failure the member caused or can retry — the convoy
+            // ended, or the invite was answered on their other device — and
+            // error-red on a routine outcome reads as "something broke". The
+            // one case that genuinely WAS the member's own doing (answering
+            // right here) no longer reaches this at all; see
+            // ConvoyInviteDeepLink.outcome's `answeredHere`.
             inviteDeepLinkOutcome?.let { outcome ->
                 item(key = "invite-deep-link-notice") {
-                    ErrorBanner(
+                    NoticeBanner(
                         text = stringResource(outcome.messageRes()),
                         onDismiss = onDismissInviteDeepLinkNotice,
                     )
@@ -895,6 +903,42 @@ private fun InfoNoticeCard(text: String) {
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+/**
+ * [InfoNoticeCard]'s dismissible sibling: a NEUTRAL statement of fact the member
+ * can put away. Same visual register as the info card (info glyph, surface-variant
+ * ink) rather than [ErrorBanner]'s error-red, because the things it carries — a
+ * convoy that ended, an invite answered elsewhere — are not failures.
+ */
+@Composable
+private fun NoticeBanner(text: String, onDismiss: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Row(
+                modifier = Modifier.weight(1f).padding(end = KccSpacing.s3),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(KccSpacing.s6),
+                )
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.convoy_close)) }
         }
     }
 }

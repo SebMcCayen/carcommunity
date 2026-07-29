@@ -42,9 +42,33 @@ object ConvoyInviteDeepLink {
      * The outcome to show for [convoyId], or null when there is nothing to say —
      * no deep link at all, or the list has not loaded yet (a verdict on a list
      * we do not have would be a guess, and PENDING is the only safe silence).
+     *
+     * [answeredHere] is "the member answered this very invite, in this session,
+     * just now". It suppresses the verdict entirely, and it is the fix for the
+     * bug that made accepting an invite reported through a notification say
+     * "You've already answered that invite."
+     *
+     * WHY IT IS NEEDED. The outcome is re-derived from the LIVE list on every
+     * recomposition, and answering an invite is precisely what takes it out of
+     * `pendingInvites` while leaving the (now joined, still live) convoy in
+     * `convoys`. That is the exact shape of the [ANSWERED] branch below — so a
+     * successful accept turned the deep link's own silence into an accusation.
+     * The derivation cannot tell "somebody else's device answered this" from
+     * "you just answered this" by looking at the list, because the list looks
+     * identical in both cases; only the caller knows which happened, so the
+     * caller says so here.
+     *
+     * Deliberately NOT solved by clearing the deep-link id: that id also drives
+     * [inviteesFirst], and dropping it would reorder the pending-invite section
+     * under the member's finger the instant they tapped Accept.
      */
-    fun outcome(convoyId: String?, status: ConvoyListStatus): ConvoyInviteDeepLinkOutcome? {
+    fun outcome(
+        convoyId: String?,
+        status: ConvoyListStatus,
+        answeredHere: Boolean = false,
+    ): ConvoyInviteDeepLinkOutcome? {
         val id = convoyId?.takeIf { it.isNotBlank() } ?: return null
+        if (answeredHere) return null
         val loaded = status as? ConvoyListStatus.Loaded ?: return null
         val convoy = loaded.convoy(id)
         return when {

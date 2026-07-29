@@ -1,6 +1,9 @@
 package com.kungsbackacarcommunity.app.convoy
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -11,6 +14,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
@@ -18,6 +23,7 @@ import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.profile.FirebaseLiveProfileRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Which convoy sub-screen the route is currently showing. */
@@ -68,7 +74,20 @@ private enum class ConvoyView { List, Create, Detail }
  *
  * The id is consumed once ([onInviteDeepLinkConsumed]) so a later plain visit to
  * the convoy route cannot re-raise a notice about an invite the member has since
- * dealt with.
+ * dealt with. Answering the invite HERE also silences that re-check
+ * ([ConvoyInviteDeepLink.outcome]'s `answeredHere`) — otherwise the member's own
+ * successful Accept is the very thing that makes the list stop showing the
+ * invite as pending, and the notice fires "You've already answered that invite"
+ * at somebody in the act of answering it.
+ *
+ * ACCEPT HAND-OFF. [onConvoyJoined] is invoked, with the convoy's id, once an
+ * Accept has landed — the accept-side twin of [onConvoyCreated]. The host closes
+ * this surface and lands on the MAP, where the convoy bar shows the convoy just
+ * joined and the camera frames its members. The route dissolves out first (see
+ * [ConvoyAcceptHandoff]) so the trip reads as an arrival rather than a cut. A
+ * FAILED accept does not call it — the error stays on this list — and a null
+ * host (config-less/test surface with no map) keeps the pre-existing behaviour
+ * of simply staying on the refreshed list.
  *
  * [liveShareEnabled] mirrors the shell's "this caller may share live" gate and
  * exists only for the OPTIMISTIC live-start overlay below: creating a convoy,
@@ -84,6 +103,7 @@ fun ConvoyRoute(
     onViewMember: ((String) -> Unit)? = null,
     viewerUid: String? = null,
     onConvoyCreated: (() -> Unit)? = null,
+    onConvoyJoined: ((String) -> Unit)? = null,
     liveShareEnabled: Boolean = false,
     inviteDeepLinkConvoyId: String? = null,
     onInviteDeepLinkConsumed: () -> Unit = {},
@@ -185,18 +205,52 @@ fun ConvoyRoute(
     // by the member (or by the invite appearing, which needs no notice).
     var inviteLinkConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
     var inviteNoticeDismissed by rememberSaveable { mutableStateOf(false) }
+    // Set the moment the member answers the deep-linked invite from THIS screen.
+    // See the ACCEPT/ANSWER note in the KDoc: without it, a successful Accept is
+    // itself what flips the re-check to ANSWERED, so the reward for accepting an
+    // invite was being told you had already answered it.
+    var inviteAnsweredHere by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(inviteDeepLinkConvoyId) {
         val id = inviteDeepLinkConvoyId?.takeIf { it.isNotBlank() }
         if (id != null) {
             inviteLinkConvoyId = id
             inviteNoticeDismissed = false
+            inviteAnsweredHere = false
             // A deep link always lands on the list — a tap on an invite must not
             // be swallowed by whatever sub-screen the route was last left in.
             view = ConvoyView.List
             onInviteDeepLinkConsumed()
         }
     }
-    val inviteOutcome = ConvoyInviteDeepLink.outcome(inviteLinkConvoyId, status)
+    val inviteOutcome =
+        ConvoyInviteDeepLink.outcome(inviteLinkConvoyId, status, answeredHere = inviteAnsweredHere)
+    // Records that the deep-linked invite was answered here, whichever way. Also
+    // covers Decline: declining likewise removes the invite from the pending list
+    // and would raise the same notice about the member's own action.
+    fun noteAnsweredHere(convoyId: String) {
+        if (convoyId == inviteLinkConvoyId) inviteAnsweredHere = true
+    }
+
+    // --- Post-accept hand-off to the map --------------------------------
+    // Non-null while the surface is dissolving out towards the map; carries the
+    // convoy that was just joined, which the host needs to frame its members.
+    var joinedConvoyId by remember { mutableStateOf<String?>(null) }
+    val handingOffAfterAccept = joinedConvoyId != null
+    val handoffAlpha by animateFloatAsState(
+        targetValue = ConvoyAcceptHandoff.contentAlpha(handingOffAfterAccept),
+        animationSpec =
+            tween(durationMillis = ConvoyAcceptHandoff.FADE_MILLIS, easing = FastOutSlowInEasing),
+        label = "convoyAcceptHandoff",
+    )
+    // Hand over once the dissolve has run. Keyed on the id, so it fires exactly
+    // once per accept; the host tears this route down in response, which is what
+    // ends the effect. NOT rememberSaveable: a hand-off interrupted by process
+    // death should not resume into a navigation the member never sees start.
+    LaunchedEffect(joinedConvoyId) {
+        val convoyId = joinedConvoyId ?: return@LaunchedEffect
+        delay(ConvoyAcceptHandoff.FADE_MILLIS.toLong())
+        onConvoyJoined?.invoke(convoyId)
+    }
 
     // Load the friends snapshot whenever the invite-picker is shown. Declarative
     // (keyed on the sub-view) so it fires on EVERY entry into Create — the list
@@ -265,6 +319,11 @@ fun ConvoyRoute(
     when (view) {
         ConvoyView.List ->
             ConvoyListScreen(
+                // The post-accept dissolve. Only the LIST needs it: an accept can
+                // only be made from here, so this is the only sub-screen a
+                // hand-off can ever start from — and scoping it here keeps the
+                // other two on the plain, un-layered draw path they had before.
+                modifier = Modifier.alpha(handoffAlpha),
                 status = status,
                 actionError = actionError,
                 busyConvoys = busyConvoys,
@@ -286,22 +345,50 @@ fun ConvoyRoute(
                     view = ConvoyView.Detail
                 },
                 onAccept = { convoyId ->
-                    // Accepting only auto-starts a session when the convoy is
-                    // ALREADY active; accepting into a still-forming one starts
-                    // nothing yet (convoy-start does that later), so nothing is
-                    // claimed optimistically for it.
-                    val marked =
-                        (status as? ConvoyListStatus.Loaded)?.convoy(convoyId)?.status ==
-                            ConvoyStatus.Active &&
-                            markLiveStarting()
-                    scope.launch {
-                        coordinator.accept(convoyId)
-                        // runRowAction clears the row error before each attempt and
-                        // sets it on failure, so this reads THIS call's outcome.
-                        resolveLiveStarting(marked, coordinator.actionError.value == null)
+                    // Inert once the hand-off has started: the surface is fading
+                    // out and its rows are on their way off screen, so a tap
+                    // landing in that window must not start a second respond.
+                    // (The coordinator's in-flight guard already covers the
+                    // rapid double-tap DURING the call — see runRowAction — and
+                    // the row's own button is disabled while busy; this closes
+                    // the window AFTER it settles.)
+                    if (!handingOffAfterAccept) {
+                        noteAnsweredHere(convoyId)
+                        // Accepting only auto-starts a session when the convoy is
+                        // ALREADY active; accepting into a still-forming one starts
+                        // nothing yet (convoy-start does that later), so nothing is
+                        // claimed optimistically for it.
+                        val marked =
+                            (status as? ConvoyListStatus.Loaded)?.convoy(convoyId)?.status ==
+                                ConvoyStatus.Active &&
+                                markLiveStarting()
+                        scope.launch {
+                            coordinator.accept(convoyId)
+                            // runRowAction clears the row error before each attempt and
+                            // sets it on failure, so this reads THIS call's outcome.
+                            val succeeded = coordinator.actionError.value == null
+                            // Resolve the optimistic mark BEFORE the hand-off: the
+                            // dissolve ends with the host tearing this route down,
+                            // which cancels this coroutine, and an unresolved mark
+                            // would leave a STOP sign up for the full grace window.
+                            // The overlay stays RENDER-ONLY either way — nothing
+                            // here touches recording or the foreground service —
+                            // and it is marked exactly once, at the tap.
+                            resolveLiveStarting(marked, succeeded)
+                            if (ConvoyAcceptHandoff.navFor(
+                                    succeeded = succeeded,
+                                    hasMapHost = onConvoyJoined != null,
+                                ) == ConvoyAcceptNav.FadeToMap
+                            ) {
+                                joinedConvoyId = convoyId
+                            }
+                        }
                     }
                 },
-                onDecline = { convoyId -> scope.launch { coordinator.decline(convoyId) } },
+                onDecline = { convoyId ->
+                    noteAnsweredHere(convoyId)
+                    scope.launch { coordinator.decline(convoyId) }
+                },
                 onClearActionError = { coordinator.clearActionError() },
             )
 

@@ -164,6 +164,92 @@ class ConvoyFocusTest {
         assertEquals(ConvoyFocusMode.Convoy, store.mode.value)
     }
 
+    // ---- focus-on-join (the accept-an-invite hand-off) ----------------------
+
+    /**
+     * The ordering the request exists for. Accepting an invite lands the member
+     * on the map, but the convoy they joined is not the ACTIVE convoy until the
+     * bar's coordinator refreshes — and that refresh is what resets the mode.
+     * A plain `setMode` before it would therefore be undone by it.
+     */
+    @Test
+    fun `a requested join focus survives the reset the arriving convoy triggers`() {
+        val store = ConvoyFocusStore()
+        store.requestConvoyFocusOnJoin("convoy-1")
+        assertEquals("nothing to frame yet", ConvoyFocusMode.Me, store.mode.value)
+
+        store.onActiveConvoyChanged("convoy-1")
+        assertEquals(ConvoyFocusMode.Convoy, store.mode.value)
+    }
+
+    @Test
+    fun `a join focus requested after the bar already knows the convoy is honoured now`() {
+        // The other side of the same race: the refresh won.
+        val store = ConvoyFocusStore()
+        store.onActiveConvoyChanged("convoy-1")
+        store.requestConvoyFocusOnJoin("convoy-1")
+        assertEquals(ConvoyFocusMode.Convoy, store.mode.value)
+    }
+
+    @Test
+    fun `the join focus is one-shot and does not re-arm on a later rejoin`() {
+        val store = ConvoyFocusStore()
+        store.requestConvoyFocusOnJoin("convoy-1")
+        store.onActiveConvoyChanged("convoy-1")
+        store.setMode(ConvoyFocusMode.Me)
+        // Left and rejoined the same convoy later, with no new request.
+        store.onActiveConvoyChanged(null)
+        store.onActiveConvoyChanged("convoy-1")
+        assertEquals(ConvoyFocusMode.Me, store.mode.value)
+    }
+
+    @Test
+    fun `a join focus request never attaches itself to a different convoy`() {
+        // The accept did not put the caller in convoy-1 after all; whatever they
+        // join next is a different trip and keeps the plain default.
+        val store = ConvoyFocusStore()
+        store.requestConvoyFocusOnJoin("convoy-1")
+        store.onActiveConvoyChanged("convoy-2")
+        assertEquals(ConvoyFocusMode.Me, store.mode.value)
+        // And the stale request is dropped rather than lying in wait.
+        store.onActiveConvoyChanged("convoy-1")
+        assertEquals(ConvoyFocusMode.Me, store.mode.value)
+    }
+
+    @Test
+    fun `a blank join focus request is simply no request`() {
+        val store = ConvoyFocusStore()
+        store.requestConvoyFocusOnJoin("  ")
+        store.onActiveConvoyChanged("convoy-1")
+        assertEquals(ConvoyFocusMode.Me, store.mode.value)
+    }
+
+    /**
+     * The degenerate join: you accepted, you are on the map, and nobody else in
+     * the convoy is sharing a position yet. Focus is ON, but the camera must not
+     * be handed a one-point (or empty) bounding box to fit.
+     */
+    @Test
+    fun `focusing a convoy nobody has shared a position in yet still follows me`() {
+        val store = ConvoyFocusStore()
+        store.requestConvoyFocusOnJoin("convoy-1")
+        store.onActiveConvoyChanged("convoy-1")
+
+        assertEquals(
+            ConvoyCameraPlan.FollowSelf,
+            ConvoyFocusPlanner.plan(store.mode.value, me, emptyList()),
+        )
+        assertEquals(
+            ConvoyCameraPlan.FollowSelf,
+            ConvoyFocusPlanner.plan(store.mode.value, null, emptyList()),
+        )
+        // …and it becomes a real fit by itself the moment somebody does share.
+        assertTrue(
+            ConvoyFocusPlanner.plan(store.mode.value, me, listOf(other))
+                is ConvoyCameraPlan.FitConvoy,
+        )
+    }
+
     @Test
     fun `the camera plan goes back to follow-self the moment the convoy ends`() {
         // The end-to-end restore: mode reset plus plan reset, which is what
