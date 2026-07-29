@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Compact text appearances for the turn-by-turn maneuver banner.
+
+  The Mapbox `MapboxManeuverView` ships at 30sp primary / 24sp secondary /
+  18sp sub / 22sp step-distance text, which together with its 48dp turn icon
+  makes the "next turn" card about a sixth of a phone screen tall. These are
+  handed to the SDK's own view through `updateManeuverViewOptions`, so the SDK
+  keeps owning what the banner says and how it renders shields, exit numbers and
+  lane guidance — only the size changes.
+
+  Deliberately NOT parented to `@style/MapboxStylePrimaryManeuver` and friends,
+  and deliberately setting no colour: those resources live in
+  com.mapbox.navigationcore:ui-components, which is only on the classpath when a
+  MAPBOX_DOWNLOADS_TOKEN is configured (see app/build.gradle.kts `navSdkEnabled`).
+  Referencing them would break resource linking in the token-less build that CI
+  and the current Play release use. `TextViewCompat.setTextAppearance` applies
+  only the attributes a style declares, so declaring size alone leaves the SDK's
+  own day/night text colours exactly as they were.
+-->
+<resources>
+    <style name="KccNavManeuverPrimaryCompact">
+        <item name="android:textSize">20sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KccNavManeuverSecondaryCompact">
+        <item name="android:textSize">15sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KccNavManeuverSubCompact">
+        <item name="android:textSize">15sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="KccNavManeuverStepDistanceCompact">
+        <item name="android:textSize">14sp</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+</resources>

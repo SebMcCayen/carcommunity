@@ -309,6 +309,7 @@ import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapProjection
+import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
@@ -1209,6 +1210,28 @@ fun AuthenticatedApp(
             // the fresh poll (below), never a pulse from a detached camera.
             val incidentRequeryTicks =
                 remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
+            // Where the TURN-BY-TURN map is looking, while it exists.
+            //
+            // The poll below is anchored to the shell camera, and the shell map is
+            // stood down the instant navigation starts (see the setActive effect):
+            // its camera then stops moving, so a drive that starts in Kungsbacka
+            // goes on asking about Kungsbacka all the way to Göteborg and the
+            // incident layer ahead of the driver is never fetched. That is the
+            // other half of "while navigating I don't see Trafikverket's
+            // accidents" — the first half being that nothing DREW them there.
+            //
+            // A plain MutableStateFlow rather than Compose state on purpose: it is
+            // read only from the poll's provider lambdas, never during
+            // composition, so the navigation map reporting a new viewport must not
+            // (and does not) recompose anything.
+            //
+            // It changes WHERE the poll looks and nothing else. No extra pass, no
+            // shorter interval, no second caller: `incidents.listNearby` is
+            // rate-limited per user server-side, so the cadence stays exactly the
+            // 15 s keep-alive plus the camera-idle pulses below — and those pulses
+            // come from the SHELL camera, which is frozen while navigating, so
+            // driving adds no pulses at all.
+            val navQueryViewport = remember { MutableStateFlow<MapQueryViewport?>(null) }
             LaunchedEffect(selectedTab, incidentController, incidentsLayerEnabled, mapSurface) {
                 val controller = incidentController ?: return@LaunchedEffect
                 if (selectedTab != ShellTab.Map || !incidentsLayerEnabled) return@LaunchedEffect
@@ -1227,9 +1250,20 @@ fun AuthenticatedApp(
                 controller.pollNearby(
                     // Radius follows the visible viewport (clamped server-side to
                     // [100 m, 50 km]); the stub reports a fixed sane default.
-                    radiusProvider = { mapSurface.visibleRadiusMeters() },
+                    // The NAVIGATION map's viewport wins while there is one — it
+                    // is the map the user is actually looking at, and the shell
+                    // camera behind it is frozen.
+                    radiusProvider = {
+                        navQueryViewport.value?.radiusMeters
+                            ?: mapSurface.visibleRadiusMeters()
+                    },
                     centerProvider = {
-                        mapSurface.cameraSnapshot.value?.let { snapshot ->
+                        navQueryViewport.value?.let { viewport ->
+                            LatLng(
+                                longitude = viewport.longitude,
+                                latitude = viewport.latitude,
+                            )
+                        } ?: mapSurface.cameraSnapshot.value?.let { snapshot ->
                             LatLng(
                                 longitude = snapshot.longitude,
                                 latitude = snapshot.latitude,
@@ -2871,6 +2905,16 @@ fun AuthenticatedApp(
                         // whose effect is map-home-only.
                         incidentsLayerEnabled = incidentsLayerEnabled,
                         onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
+                        // The SAME badge list the map home draws, on the
+                        // navigation map's own layer. No second query and no
+                        // second renderer — the screen hands it to the shared
+                        // IncidentMarkerLayer the shell surface uses.
+                        incidentMarkers = incidentMarkers,
+                        // ...and the navigation camera becomes the anchor for the
+                        // one incident poll while it exists, so the layer keeps
+                        // up with the driver instead of with the stood-down shell
+                        // map. Cleared to null on exit.
+                        onQueryViewport = { navQueryViewport.value = it },
                         trafikverketDataShown = trafikverketDataShown,
                         trafficEnabled = mapTrafficOn,
                         onTrafficEnabledChange = { mapSurface.setTrafficEnabled(it) },

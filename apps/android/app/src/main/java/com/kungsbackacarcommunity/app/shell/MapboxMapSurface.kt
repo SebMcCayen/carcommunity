@@ -534,35 +534,8 @@ class MapboxMapSurface : MapSurface {
         }.getOrNull()
     }
 
-    override fun visibleRadiusMeters(): Double? {
-        val map = mapViewRef ?: return null
-        return runCatching {
-            // Read the camera's own visible bounds — the only honest account of
-            // what is on screen at this zoom/rotation/pitch — then hand the corners
-            // to the pure geometry that turns them into a clamped radius. Built
-            // from the live cameraState via the DSL so no toCameraOptions()
-            // extension is assumed across SDK versions.
-            val camera = map.mapboxMap.cameraState
-            val bounds =
-                map.mapboxMap.coordinateBoundsForCamera(
-                    cameraOptions {
-                        center(camera.center)
-                        zoom(camera.zoom)
-                        bearing(camera.bearing)
-                        pitch(camera.pitch)
-                        padding(camera.padding)
-                    },
-                )
-            ViewportRadius.radiusMetersForBounds(
-                centerLat = camera.center.latitude(),
-                centerLon = camera.center.longitude(),
-                swLat = bounds.southwest.latitude(),
-                swLon = bounds.southwest.longitude(),
-                neLat = bounds.northeast.latitude(),
-                neLon = bounds.northeast.longitude(),
-            )
-        }.getOrNull()
-    }
+    override fun visibleRadiusMeters(): Double? =
+        mapViewRef?.let { map -> visibleRadiusMeters(map.mapboxMap) }
 
     override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
         val previousFocusEnabled = convoyFocusEnabled
@@ -1463,14 +1436,12 @@ class MapboxMapSurface : MapSurface {
                         // loading are rendered (not lost).
                         runCatching {
                             val incidentManager = annotations.createPointAnnotationManager()
-                            // Never let the symbol layer's collision detection drop
-                            // an incident: in a Swedish town centre a dozen imported
-                            // roadwork markers overlap, and Mapbox's default is to
-                            // HIDE the ones that collide — which would silently lose
-                            // incidents from the map. Overlapping badges are the
-                            // lesser evil; a missing accident is not.
-                            incidentManager.iconAllowOverlap = true
-                            incidentManager.iconIgnorePlacement = true
+                            // The overlap rules EVERY incident layer must have,
+                            // shared with the navigation map's copy of this layer
+                            // so an accident can never be allowed to vanish behind
+                            // a roadwork on one map but not the other. See
+                            // IncidentMarkerLayer.configure for why.
+                            IncidentMarkerLayer.configure(incidentManager)
                             // Tap an incident badge → publish its id so the host can
                             // open the detail sheet.
                             //
@@ -1947,106 +1918,26 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
-     * Clears and redraws the incident markers — one CATEGORY ICON per marker —
-     * and rebuilds the annotation-id → incident-id lookup the click listener
-     * resolves taps through. A no-op until the manager exists (style loaded).
-     * Every native call is wrapped defensively so a partial/failed draw degrades
-     * rather than crashing.
+     * Clears and redraws the incident markers on THIS surface. A no-op until the
+     * manager exists (style loaded).
      *
-     * These were plain coloured circles, which made colour the only thing
-     * distinguishing an accident from roadworks — unreadable for a colour-blind
-     * user, and hard for anyone at a glance while driving. Each marker now
-     * carries its category's glyph (see
-     * `com.kungsbackacarcommunity.app.incidents.IncidentMarkerStyle`), so the
-     * shape carries the meaning and the colour reinforces it.
-     *
-     * Each distinct marker image is rasterised and registered on the style once
-     * (see [registeredIncidentImages]); the annotations themselves then only
-     * reference it by name, so redrawing the layer does not re-upload bitmaps.
-     *
-     * The lookup is cleared FIRST and repopulated as annotations are created, so
-     * it can never outlive the annotations it describes and hand the click
-     * listener a stale incident id after a redraw.
-     *
-     * ACCESSIBILITY, stated here so its absence is not read as an oversight:
-     * these markers carry no content description, because there is nowhere to
-     * put one. They are Mapbox `PointAnnotation`s — style images inside the GL
-     * surface — not Views and not composables, so no node exists in the
-     * semantics tree to label, and `PointAnnotationOptions` exposes no
-     * accessibility surface of its own (maps-annotation 11.26.0). A screen
-     * reader cannot reach an individual badge at all, which is a real gap but an
-     * ARCHITECTURAL one: closing it needs a different affordance (an accessible
-     * list of nearby incidents), not a string on the annotation. The incident
-     * content itself IS accessible once a sheet is open — `IncidentDetailsSheet`
-     * announces category, age and source as ordinary text.
-     *
-     * On-device verification note: annotation rendering and hit-testing run only
-     * on a token-provisioned device, so they are verified on device.
+     * The draw itself is [IncidentMarkerLayer.draw] — the one renderer shared
+     * with the turn-by-turn navigation map, so the two maps cannot end up
+     * drawing the same incident differently. Everything with a lifetime (the
+     * manager, the registered style images, the annotation → incident lookup) is
+     * this surface's own and is passed in; see that object's KDoc for the draw
+     * order, the incomplete-draw contract and the accessibility note.
      */
     private fun applyIncidentMarkers(markers: List<MapIncidentMarker>): Boolean {
         val manager = incidentMarkerManager ?: return false
-        val style = mapViewRef?.mapboxMap?.style
-        val context = appContext
-        // Every image this draw needs must be on the style, or the annotations
-        // below would reference a name the style does not know and render as
-        // nothing. Tracked so the CALLER can decline to cache an incomplete draw
-        // and simply try again on the next update.
-        var complete = true
-        runCatching { manager.deleteAll() }
-        incidentIdsByAnnotation.clear()
-        for (marker in markers) {
-            val imageId =
-                IncidentMarkerBitmaps.imageId(
-                    iconRes = marker.iconRes,
-                    discColorArgb = marker.colorArgb,
-                    glyphColorArgb = marker.glyphColorArgb,
-                    // Part of the KEY, not just the pixels: a normal marker and
-                    // its struck-through twin differ only by the slash, so
-                    // without this they would collide on one style-image name
-                    // and whichever was registered first would be drawn for both.
-                    reportedCleared = marker.reportedCleared,
-                )
-            // Register this category's image on first use against the current
-            // style. If the style handle or context is unavailable the image
-            // cannot be uploaded, so this draw is incomplete — never a crash.
-            if (imageId !in registeredIncidentImages) {
-                val bitmap =
-                    if (style != null && context != null) {
-                        IncidentMarkerBitmaps.create(
-                            context = context,
-                            iconRes = marker.iconRes,
-                            discColorArgb = marker.colorArgb,
-                            glyphColorArgb = marker.glyphColorArgb,
-                            reportedCleared = marker.reportedCleared,
-                        )
-                    } else {
-                        null
-                    }
-                // Only remember it as registered once the upload actually
-                // succeeded, so a transient failure retries on the next redraw
-                // rather than permanently marking the icon as present.
-                val added =
-                    bitmap != null &&
-                        style != null &&
-                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
-                if (added) registeredIncidentImages.add(imageId) else complete = false
-            }
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            // Anchored at the centre: this is a disc badge marking a
-                            // point, not a pin whose tip is the location.
-                            .withIconAnchor(IconAnchor.CENTER),
-                    )
-                // Record the drawn annotation so a tap on it resolves back to the
-                // incident it represents.
-                incidentIdsByAnnotation[annotation.id] = marker.id
-            }
-        }
-        return complete
+        return IncidentMarkerLayer.draw(
+            manager = manager,
+            style = mapViewRef?.mapboxMap?.style,
+            context = appContext,
+            markers = markers,
+            registeredImages = registeredIncidentImages,
+            idsByAnnotation = incidentIdsByAnnotation,
+        )
     }
 
     /**
@@ -2287,6 +2178,50 @@ class MapboxMapSurface : MapSurface {
      * on both maps, rather than a second implementation that can drift.
      */
     internal companion object {
+        /**
+         * The query radius covering what [map] can currently see, or null when
+         * the camera cannot be read.
+         *
+         * Shared rather than a method on this class because turn-by-turn
+         * navigation drives the SAME `incidents.listNearby` poll from ITS map
+         * (a second, Navigation-SDK `MapView`): while navigating the shell
+         * surface is stood down and its camera is frozen at wherever the trip
+         * started, so a poll anchored to it would go on asking about the origin
+         * for the whole drive. One implementation, so the two maps compute the
+         * radius the same way — the alternative is two subtly different notions
+         * of "what is on screen" feeding one rate-limited callable.
+         *
+         * Reads the camera's own visible bounds — the only honest account of
+         * what is on screen at this zoom/rotation/pitch — then hands the corners
+         * to the pure geometry that turns them into a clamped radius. Built from
+         * the live `cameraState` via the DSL so no `toCameraOptions()` extension
+         * is assumed across SDK versions. Every native call is wrapped, so an
+         * unreadable camera degrades to null (and the caller's fallback) rather
+         * than throwing.
+         */
+        fun visibleRadiusMeters(map: com.mapbox.maps.MapboxMap): Double? =
+            runCatching {
+                val camera = map.cameraState
+                val bounds =
+                    map.coordinateBoundsForCamera(
+                        cameraOptions {
+                            center(camera.center)
+                            zoom(camera.zoom)
+                            bearing(camera.bearing)
+                            pitch(camera.pitch)
+                            padding(camera.padding)
+                        },
+                    )
+                ViewportRadius.radiusMetersForBounds(
+                    centerLat = camera.center.latitude(),
+                    centerLon = camera.center.longitude(),
+                    swLat = bounds.southwest.latitude(),
+                    swLon = bounds.southwest.longitude(),
+                    neLat = bounds.northeast.latitude(),
+                    neLon = bounds.northeast.longitude(),
+                )
+            }.getOrNull()
+
         /**
          * How often the render watchdog samples its eligibility conditions.
          *

@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.view.View
 import android.view.ViewGroup
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -78,13 +79,16 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.ChatCircleControl
 import com.kungsbackacarcommunity.app.shell.CircleControl
 import com.kungsbackacarcommunity.app.shell.CompassCircleControl
+import com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapCircleControlKind
 import com.kungsbackacarcommunity.app.shell.MapCompassMode
 import com.kungsbackacarcommunity.app.shell.MapControlSet
+import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapLayersPopup
 import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.MapProjection
+import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import com.kungsbackacarcommunity.app.shell.MapboxMapSurface
 import com.mapbox.api.directions.v5.models.RouteOptions
@@ -100,7 +104,9 @@ import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.createCircleAnnotationManager
+import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
 import com.mapbox.maps.plugin.compass.compass
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.plugin.locationcomponent.location
@@ -126,9 +132,14 @@ import com.mapbox.navigation.core.trip.session.LocationObserver
 import com.mapbox.navigation.core.trip.session.RouteProgressObserver
 import com.mapbox.navigation.tripdata.maneuver.api.MapboxManeuverApi
 import com.mapbox.navigation.tripdata.speedlimit.api.MapboxSpeedInfoApi
+import com.mapbox.navigation.ui.components.maneuver.model.ManeuverPrimaryOptions
+import com.mapbox.navigation.ui.components.maneuver.model.ManeuverSecondaryOptions
+import com.mapbox.navigation.ui.components.maneuver.model.ManeuverSubOptions
+import com.mapbox.navigation.ui.components.maneuver.model.ManeuverViewOptions
 import com.mapbox.navigation.ui.components.maneuver.view.MapboxManeuverView
 import com.mapbox.navigation.ui.maps.NavigationStyles
 import com.mapbox.navigation.ui.maps.camera.NavigationCamera
+import com.mapbox.navigation.ui.maps.camera.data.FollowingFrameOptions
 import com.mapbox.navigation.ui.maps.camera.data.MapboxNavigationViewportDataSource
 import com.mapbox.navigation.ui.maps.camera.lifecycle.NavigationBasicGesturesHandler
 import com.mapbox.navigation.ui.maps.camera.transition.NavigationCameraTransitionOptions
@@ -205,12 +216,15 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  *   still shows it — and "no more, no fewer buttons" is the explicit
  *   instruction, so the button does not come back on its own.
  *
- * The layers popup is the SAME [MapLayersPopup]. Night mode, traffic and 3D are
- * all applied to THIS map (style URI, the shared congestion layer, and the
- * follow camera's pitch respectively). The "Traffic alerts" (incident markers)
- * row is the one toggle whose effect is not visible here: incident badges are
- * drawn by the shell surface's annotation layer, which this screen does not
- * have. Flipping it still records the choice, and the map home honours it.
+ * The layers popup is the SAME [MapLayersPopup], and every one of its four rows
+ * now takes effect HERE: night mode (style URI), traffic (the shared congestion
+ * layer), 3D (the follow camera's pitch) and, since this change, "Traffic
+ * alerts" — the incident badges. Those were the one toggle with no visible
+ * effect while driving, because the badges were drawn by the SHELL surface's
+ * annotation layer and the shell surface is stood down the moment navigation
+ * starts. This screen now draws them on its own map through the same shared
+ * renderer ([com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer]), which
+ * is what "I don't see Trafikverket's accidents while navigating" was.
  *
  * The Mapbox SDK's own scale bar (upper-left) and compass (upper-right) are
  * switched OFF here for the same reason
@@ -245,8 +259,28 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  *   closes up by one slot.
  * @param incidentsLayerEnabled / [onIncidentsLayerEnabledChange] the "Traffic
  *   alerts" row of the shared layers popup. The value and the callback are the
- *   map home's, so the switch shows and records ONE choice across both screens.
- *   See the parity note above for why its effect is not visible on this map.
+ *   map home's, so the switch shows and records ONE choice across both screens —
+ *   and, since [incidentMarkers] are now drawn here too, it takes effect on THIS
+ *   map exactly as it does on the map home (off ⇒ no badges).
+ * @param incidentMarkers the crowd-sourced + Trafikverket incident badges, drawn
+ *   on THIS map through the SAME renderer the shell surface uses
+ *   ([com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer]).
+ *
+ *   They were absent while navigating for the same structural reason the live
+ *   members were: the layer was drawn by the SHELL surface, which is stood down
+ *   the moment navigation starts. The host binds the same list the map home is
+ *   given, already gated on [incidentsLayerEnabled], so this opens no second
+ *   query and shows nothing the map home would not.
+ *
+ *   Display-only, deliberately: the badges here are not tappable. The incident
+ *   detail sheet is composed by the map home, which is not on screen while
+ *   navigating, so a tap would open nothing — and poking at map badges is not
+ *   something to invite at 90 km/h. Reporting stays available through the round
+ *   report control.
+ * @param onQueryViewport reports where THIS map is looking, so the host's single
+ *   `incidents.listNearby` poll follows the driver instead of the frozen shell
+ *   camera. Null when navigation ends, handing the anchor back. It changes only
+ *   WHERE the existing poll looks — never how often it runs.
  * @param trafikverketDataShown gates the "Källa: Trafikverket" credit inside the
  *   layers popup, same as on the map home.
  * @param trafficEnabled / [onTrafficEnabledChange] the congestion overlay. The
@@ -308,6 +342,8 @@ fun TurnByTurnNavScreen(
     // day/night following the app theme).
     incidentsLayerEnabled: Boolean = true,
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
+    incidentMarkers: List<MapIncidentMarker> = emptyList(),
+    onQueryViewport: ((MapQueryViewport?) -> Unit)? = null,
     trafikverketDataShown: Boolean = false,
     trafficEnabled: Boolean = false,
     onTrafficEnabledChange: (Boolean) -> Unit = {},
@@ -375,6 +411,7 @@ fun TurnByTurnNavScreen(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.WRAP_CONTENT,
                     )
+                applyCompactStyling()
             }
         }
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -554,6 +591,59 @@ fun TurnByTurnNavScreen(
     val bearing by engine.bearing.collectAsState()
     val speed by engine.speed.collectAsState()
 
+    // Whether the SDK is actually GUIDING. The first route-progress tick is what
+    // puts the maneuver banner and the ETA on screen, so it is also the moment
+    // the destination pill stops being the only thing naming the trip — see
+    // [NavTopChrome.destinationBarVisible] for why the pill goes away then and
+    // not sooner. `progress` is cleared again when the session detaches, so the
+    // pill comes back rather than being suppressed for good.
+    val guidanceActive = progress != null
+    val destinationBarVisible = NavTopChrome.destinationBarVisible(guidanceActive)
+
+    // Keep the follow camera's top padding matching the chrome that is actually
+    // drawn. Hiding the pill frees exactly its height, and a padding left behind
+    // would reserve screen for something no longer there — sliding the puck down
+    // by that much. Idempotent, so this never forces a camera move on its own.
+    LaunchedEffect(engine, destinationBarVisible) {
+        engine.setDestinationBarVisible(destinationBarVisible)
+    }
+
+    // The incident badges, on THIS map. Gated exactly as the map home gates them
+    // (`MapHome`'s LaunchedEffect(mapSurface, incidentMarkers, incidentsLayerEnabled)):
+    // the layer switched off pushes an EMPTY list rather than freezing the last
+    // one, so flipping it while driving takes the badges off immediately.
+    LaunchedEffect(engine, incidentMarkers, incidentsLayerEnabled) {
+        engine.setIncidentMarkers(if (incidentsLayerEnabled) incidentMarkers else emptyList())
+    }
+
+    // Tell the host where this map is looking, so its ONE incident poll follows
+    // the driver instead of the shell camera frozen at the trip's origin.
+    //
+    // A slow local sample rather than a subscription to the camera: this map's
+    // camera changes on essentially every frame while driving, and re-reading
+    // the visible bounds 60 times a second to answer a question that is asked
+    // once every 15 s would be pure waste. It issues no query of its own — the
+    // poll's cadence is entirely the host's, which is what keeps a rate-limited
+    // callable rate-limited.
+    //
+    // Read through rememberUpdatedState, not as an effect key: the host passes a
+    // fresh lambda on every recomposition, so keying on it would restart the
+    // sampler (and re-report immediately) for every unrelated state change up
+    // there. The loop is keyed on the ENGINE, which is the thing whose viewport
+    // is being reported.
+    val currentQueryViewportSink by rememberUpdatedState(onQueryViewport)
+    LaunchedEffect(engine) {
+        while (true) {
+            currentQueryViewportSink?.invoke(engine.queryViewport())
+            delay(NAV_QUERY_VIEWPORT_SAMPLE_MILLIS)
+        }
+    }
+    // Leaving navigation hands the anchor back to the shell map. Separate from
+    // the effect above because a cancelled coroutine cannot report anything.
+    DisposableEffect(engine) {
+        onDispose { currentQueryViewportSink?.invoke(null) }
+    }
+
     // Incident-report category picker open/close — local, transient UI state, the
     // same shape as the map home's `reportOpen` (a plain `remember`, deliberately
     // NOT saveable: a half-made report should not survive process death).
@@ -616,7 +706,7 @@ fun TurnByTurnNavScreen(
             liveMembersOverlay?.invoke(engine)
         }
 
-        // Top: exit bar + maneuver banner (current turn + upcoming).
+        // Top: destination pill (pre-guidance only) + maneuver banner.
         Column(
             modifier =
                 Modifier
@@ -625,37 +715,56 @@ fun TurnByTurnNavScreen(
                     .padding(KccSpacing.s3),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            Surface(
-                shape = RoundedCornerShape(KccRadius.full),
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 3.dp,
-                shadowElevation = 3.dp,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    // The exit bar is the top-of-screen back affordance: tapping it
-                    // (arrow or label) leaves navigation, same as the back gesture
-                    // and the bottom "Exit" button. Role.Button + the exit label
-                    // make it an announced, activatable control for a11y.
-                    modifier = Modifier
-                        .clickable(
-                            onClickLabel = stringResource(R.string.turnByTurn_exit),
-                            role = Role.Button,
-                            onClick = onExit,
-                        )
-                        .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+            // The destination pill: the searched-for place name and a back arrow,
+            // in the upper-left corner.
+            //
+            // Gone once guidance starts. It was reported as "you will still see
+            // the search result in the upper left corner… if you have started a
+            // navigation there is no need to see it", and that is exactly right:
+            // once the banner is naming the next turn and the bottom bar is
+            // naming the arrival time, a pill repeating the search result is
+            // covering road for nothing. It is suppressed for the ACTIVE state
+            // only — before the first route-progress tick there is no banner and
+            // no ETA, so this is the sole thing saying where the trip is going,
+            // and it returns if the session ever stops guiding.
+            //
+            // Leaving navigation does not depend on it: the ETA bar's Exit
+            // button, the system back gesture and the screen's own BackHandler
+            // all remain, which is why removing an affordance here is safe.
+            if (destinationBarVisible) {
+                Surface(
+                    shape = RoundedCornerShape(KccRadius.full),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 3.dp,
+                    shadowElevation = 3.dp,
+                    modifier = Modifier.testTag(TURN_BY_TURN_DESTINATION_BAR_TAG),
                 ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = stringResource(R.string.turnByTurn_exit),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(end = KccSpacing.s2),
-                    )
-                    Text(
-                        text = destinationLabel,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        // Tapping it (arrow or label) leaves navigation, same as
+                        // the back gesture and the bottom "Exit" button.
+                        // Role.Button + the exit label make it an announced,
+                        // activatable control for a11y.
+                        modifier = Modifier
+                            .clickable(
+                                onClickLabel = stringResource(R.string.turnByTurn_exit),
+                                role = Role.Button,
+                                onClick = onExit,
+                            )
+                            .padding(horizontal = KccSpacing.s3, vertical = KccSpacing.s2),
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.turnByTurn_exit),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(end = KccSpacing.s2),
+                        )
+                        Text(
+                            text = destinationLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
             AndroidView(factory = { maneuverView }, modifier = Modifier.fillMaxWidth())
@@ -939,6 +1048,93 @@ const val TURN_BY_TURN_COMPASS_TAG = "turn_by_turn_compass"
 
 /** Test tag on the navigation view's round re-centre / my-location control. */
 const val TURN_BY_TURN_RECENTER_TAG = "turn_by_turn_recenter"
+
+/**
+ * Test tag on the top-left destination ("search result") pill, which is composed
+ * only before guidance starts — see [NavTopChrome.destinationBarVisible].
+ */
+const val TURN_BY_TURN_DESTINATION_BAR_TAG = "turn_by_turn_destination_bar"
+
+/**
+ * How often the navigation map reports its viewport to the host's incident poll.
+ *
+ * A local camera read, NOT a query: at 5 s the anchor is at worst one sample
+ * stale when the 15 s `incidents.listNearby` keep-alive fires, which at Swedish
+ * motorway speed is a couple of hundred metres inside a query radius measured in
+ * kilometres. Deliberately far cheaper than subscribing to the camera, which on
+ * this screen changes on essentially every frame.
+ */
+private const val NAV_QUERY_VIEWPORT_SAMPLE_MILLIS = 5_000L
+
+/**
+ * Shrinks the SDK's maneuver banner in place.
+ *
+ * The complaint was "show the next turn, but make the next turn window much
+ * smaller as it takes up a lot of space". The banner is NOT replaced — every
+ * change here goes through [MapboxManeuverView]'s own public styling, so the SDK
+ * keeps owning what the banner says and how it renders shields, exit numbers,
+ * lane guidance and sub-maneuvers. Only the size changes.
+ *
+ * Three things make it big, and all three are addressed:
+ *
+ * 1. **The expandable list.** Tapping anywhere on the banner expands a 200 dp
+ *    list of the maneuvers AFTER the current one (`mapbox_maneuver_layout.xml`).
+ *    Disabling `upcomingManeuverRenderingEnabled` both removes it and disarms
+ *    the whole-view click that opens it — a stray touch while driving can no
+ *    longer double the banner's height. The CURRENT turn, which is what was
+ *    asked for, is unaffected.
+ * 2. **The type.** 30 sp primary / 24 sp secondary / 18 sp sub / 22 sp step
+ *    distance, replaced by the compact appearances in
+ *    `res/values/nav_maneuver_styles.xml`. Those styles set SIZE only, so the
+ *    SDK's own day/night text colours survive.
+ * 3. **The turn icon**, 48 dp with a 12 dp top margin, which sets the banner's
+ *    floor height regardless of the type — shrink the text alone and the card
+ *    barely moves. It is reached by id through the library's own public R class
+ *    (the same route [com.mapbox.navigation.ui.components.R] is already used for
+ *    the puck drawable), because the view exposes no styling hook for its size.
+ *    Null-safe and wrapped: an SDK version that renames the id leaves a
+ *    full-size icon, never a crash.
+ *
+ * Everything here is idempotent and done once, at construction.
+ */
+private fun MapboxManeuverView.applyCompactStyling() {
+    upcomingManeuverRenderingEnabled = false
+    runCatching {
+        updateManeuverViewOptions(
+            ManeuverViewOptions.Builder()
+                .primaryManeuverOptions(
+                    ManeuverPrimaryOptions.Builder()
+                        .textAppearance(R.style.KccNavManeuverPrimaryCompact)
+                        .build(),
+                )
+                .secondaryManeuverOptions(
+                    ManeuverSecondaryOptions.Builder()
+                        .textAppearance(R.style.KccNavManeuverSecondaryCompact)
+                        .build(),
+                )
+                .subManeuverOptions(
+                    ManeuverSubOptions.Builder()
+                        .textAppearance(R.style.KccNavManeuverSubCompact)
+                        .build(),
+                )
+                .stepDistanceTextAppearance(R.style.KccNavManeuverStepDistanceCompact)
+                .build(),
+        )
+    }
+    runCatching {
+        val density = resources.displayMetrics.density
+        fun px(dp: Int) = (dp * density).toInt()
+        val icon: View? = findViewById(com.mapbox.navigation.ui.components.R.id.maneuverIcon)
+        icon?.let { view ->
+            val params = view.layoutParams ?: return@let
+            params.width = px(NavManeuverCompact.TURN_ICON_DP)
+            params.height = px(NavManeuverCompact.TURN_ICON_DP)
+            (params as? ViewGroup.MarginLayoutParams)?.topMargin =
+                px(NavManeuverCompact.TURN_ICON_TOP_MARGIN_DP)
+            view.layoutParams = params
+        }
+    }
+}
 
 /**
  * The bottom-left speed readout: the driver's CURRENT speed always, and the
@@ -1366,6 +1562,20 @@ private class TurnByTurnEngine(
     private var threeDEnabled = true
     private var compassMode = MapCompassMode.CourseUp
 
+    /**
+     * Whether the destination pill is currently drawn above the maneuver banner.
+     * Part of the camera's top padding, so it lives with the other remembered
+     * choices rather than being read back off the composition.
+     */
+    private var destinationBarVisible = true
+
+    /** The incident badges drawn on this map, and the caches that draw them. */
+    private var incidentMarkerManager: PointAnnotationManager? = null
+    private val registeredIncidentImages = mutableSetOf<String>()
+    private val incidentIdsByAnnotation = mutableMapOf<String, String>()
+    private var incidentMarkers: List<MapIncidentMarker> = emptyList()
+    private var lastAppliedIncidents: List<MapIncidentMarker>? = null
+
     private var firstFixReceived = false
     private var routeRequested = false
 
@@ -1377,12 +1587,48 @@ private class TurnByTurnEngine(
     private val maxRouteRequestAttempts = 3
 
     init {
-        val density = mapView.resources.displayMetrics.density
-        // Extra bottom room for the progress bar; top room for the maneuver banner.
-        viewportDataSource.followingPadding =
-            EdgeInsets(180.0 * density, 40.0 * density, 160.0 * density, 40.0 * density)
-        viewportDataSource.overviewPadding =
-            EdgeInsets(140.0 * density, 40.0 * density, 160.0 * density, 40.0 * density)
+        // ── Keep the puck on the centre line ────────────────────────────────
+        //
+        // Reported as "the screen is not centering on my location — my location
+        // is a little bit to the right, even when pressing the GPS or north
+        // button". The padding below was already left/right symmetric, so it was
+        // not the cause; the SDK's framing rules were.
+        //
+        // `FollowingFrameOptions.maximizeViewableGeometryWhenPitchZero` defaults
+        // to TRUE, and its contract is explicit: when a following frame has
+        // pitch 0 and there are at least two points to frame, "the puck will not
+        // be tied to the bottom edge of the followingPadding and instead move
+        // around the CENTROID of the framed geometry". The same class documents
+        // that the focal point "has no effect when the camera is framing
+        // maneuver and maximizeViewableGeometryWhenPitchZero is enabled".
+        //
+        // That is not a rare state on this screen:
+        // - `FollowingFrameOptions.pitchNearManeuvers` also defaults to enabled,
+        //   with a 180 m trigger distance, so the frame flattens to pitch 0 on
+        //   the approach to every turn that is not a continue/merge/ramp/fork;
+        // - and with 3D switched OFF in the layers popup, `set3dEnabled` pins
+        //   the following pitch at 0 for the WHOLE trip.
+        //
+        // In both cases the puck slides off toward whichever side lets the road
+        // ahead fill more of the screen. Re-centring cannot fix it, which is
+        // exactly what was reported: `recenter()` and the compass's north/course
+        // toggle both just re-request the SAME following frame, so they
+        // recompute the same off-centre position.
+        //
+        // Switching the maximisation off keeps the puck pinned to the focal
+        // point at every pitch. The focal point is then stated rather than
+        // inherited: x = 0.5 is the horizontal centre of the padded box (which,
+        // with equal side padding, is the screen's centre line), y = 1.0 its
+        // bottom edge — the standard navigation position, showing the road ahead
+        // rather than the road behind. Both are the SDK's own defaults; naming
+        // them means a future default change cannot quietly move the puck.
+        runCatching {
+            viewportDataSource.options.followingFrameOptions.apply {
+                maximizeViewableGeometryWhenPitchZero = false
+                focalPoint = FollowingFrameOptions.FocalPoint(0.5, 1.0)
+            }
+        }
+        applyCameraPadding()
 
         // Detach auto-follow when the user pans/zooms; the state observer then
         // reveals the re-centre button.
@@ -1473,6 +1719,10 @@ private class TurnByTurnEngine(
         // were being cleaned up before, so those map-level registrations and
         // list entries accumulated one set per day/night flip.
         releaseDestMarkerManager()
+        // Same argument, same moment, for the incident layer: its manager and
+        // its uploaded style images both belong to the style about to be
+        // replaced. Retired here and rebuilt against the new style below.
+        releaseIncidentMarkerManager()
         // Rebuild the route-line renderer when the day/night palette changes.
         // Its colours are baked into the layer paint properties at creation, and
         // the style load below is about to drop and recreate those layers, so
@@ -1535,6 +1785,25 @@ private class TurnByTurnEngine(
                     runCatching {
                         destMarkerManager = mapView.annotations.createCircleAnnotationManager()
                         drawDestinationMarker()
+                    }
+                    // The incident layer, on ITS OWN annotation manager — the
+                    // same separation the shell surface keeps between incidents,
+                    // crowns and event pins, so the layers can be drawn, emptied
+                    // and torn down independently of one another and of the
+                    // destination dot. Drawn from the CURRENT list, so badges
+                    // that arrived while the style was still loading are
+                    // rendered rather than lost, and redrawn here after every
+                    // day/night reload (which drops every annotation).
+                    //
+                    // No click listener, deliberately: the incident detail sheet
+                    // is composed by the map home, which is not on screen while
+                    // navigating, so a tap would open nothing.
+                    runCatching {
+                        val manager = mapView.annotations.createPointAnnotationManager()
+                        IncidentMarkerLayer.configure(manager)
+                        incidentMarkerManager = manager
+                        lastAppliedIncidents = null
+                        applyIncidentMarkersIfChanged(incidentMarkers)
                     }
                     // The map now has a style and is painting real content, so the
                     // handoff veil covering it can be faded away. Set LAST, after
@@ -1784,6 +2053,11 @@ private class TurnByTurnEngine(
         // fixes arrive, so leaving the last value on screen would show a frozen
         // speed (and a limit for a road the user may no longer be on).
         speedFlow.value = null
+        // And the route progress, for the same reason plus one more: it is what
+        // "guidance is active" is derived from, so leaving a stale value here
+        // would keep the destination pill suppressed on a screen that is no
+        // longer guiding — the pill is hidden while navigating, not for good.
+        progressFlow.value = null
         // Mirror attach()'s startTripSession(): stop the live GPS trip session so
         // exiting the screen ends location updates instead of leaving them running
         // (battery/GPS drain). stopTripSession() is a safe no-op if not started, so
@@ -1868,6 +2142,143 @@ private class TurnByTurnEngine(
             )
             viewportDataSource.evaluate()
         }
+    }
+
+    /**
+     * Tell the camera whether the destination pill is on screen, so its top
+     * padding matches the chrome that is actually drawn.
+     *
+     * Idempotent — re-applying the current value recomputes the same padding, so
+     * this can be called from a Compose effect on every recomposition without
+     * ever nudging the camera.
+     */
+    fun setDestinationBarVisible(visible: Boolean) {
+        if (destinationBarVisible == visible) return
+        destinationBarVisible = visible
+        applyCameraPadding()
+        runCatching { viewportDataSource.evaluate() }
+    }
+
+    /**
+     * Push the follow/overview padding computed by [NavCameraPadding] at the
+     * viewport data source.
+     *
+     * The dp → device-pixel conversion happens here because `EdgeInsets` takes
+     * device pixels; the reasoning about which strips of screen are covered is
+     * in [NavCameraPadding], which is pure and unit-tested (this file cannot be:
+     * it only compiles with the Navigation SDK on the classpath).
+     */
+    private fun applyCameraPadding() {
+        runCatching {
+            val density = mapView.resources.displayMetrics.density
+            val following =
+                NavCameraPadding.following(
+                    maneuverBannerHeightDp = NavManeuverCompact.HEIGHT_DP,
+                    destinationBarVisible = destinationBarVisible,
+                )
+            val overview =
+                NavCameraPadding.overview(
+                    maneuverBannerHeightDp = NavManeuverCompact.HEIGHT_DP,
+                    destinationBarVisible = destinationBarVisible,
+                )
+            viewportDataSource.followingPadding =
+                EdgeInsets(
+                    following.top * density,
+                    following.left * density,
+                    following.bottom * density,
+                    following.right * density,
+                )
+            viewportDataSource.overviewPadding =
+                EdgeInsets(
+                    overview.top * density,
+                    overview.left * density,
+                    overview.bottom * density,
+                    overview.right * density,
+                )
+        }
+    }
+
+    /**
+     * Where this map is looking, for the host's `incidents.listNearby` poll, or
+     * null before the camera can be read.
+     *
+     * Sampled by the screen on a slow timer rather than derived from the camera
+     * flow: reading the visible bounds is a native call, and this camera changes
+     * on essentially every frame while driving. The radius comes from the SAME
+     * helper the shell surface uses ([MapboxMapSurface.visibleRadiusMeters]), so
+     * both maps agree on what "covering the viewport" means.
+     */
+    fun queryViewport(): MapQueryViewport? =
+        runCatching {
+            val center = mapView.mapboxMap.cameraState.center
+            val radius = MapboxMapSurface.visibleRadiusMeters(mapView.mapboxMap)
+            radius?.let {
+                MapQueryViewport(
+                    latitude = center.latitude(),
+                    longitude = center.longitude(),
+                    radiusMeters = it,
+                )
+            }
+        }.getOrNull()
+
+    /**
+     * The incident badges to draw on this map, pushed by the screen from the
+     * host's shared list (empty when the "Traffic alerts" layer is off).
+     */
+    fun setIncidentMarkers(markers: List<MapIncidentMarker>) {
+        incidentMarkers = markers
+        applyIncidentMarkersIfChanged(markers)
+    }
+
+    /**
+     * Redraws the badges only when the set actually differs, so the ~1 Hz
+     * location ticks and the layer toggles that share this engine do not clear
+     * and rebuild the whole layer for an unchanged list. Only a COMPLETE draw is
+     * cached — an incomplete one (style handle not ready, so an icon could not be
+     * uploaded) would otherwise be remembered as applied and leave those badges
+     * blank until the set happened to change. Mirrors the shell surface's own
+     * caching rule; the draw itself is the shared renderer.
+     */
+    private fun applyIncidentMarkersIfChanged(markers: List<MapIncidentMarker>) {
+        if (markers == lastAppliedIncidents) return
+        val manager = incidentMarkerManager ?: return
+        val complete =
+            IncidentMarkerLayer.draw(
+                manager = manager,
+                style = mapView.mapboxMap.style,
+                context = context,
+                markers = markers,
+                registeredImages = registeredIncidentImages,
+                idsByAnnotation = incidentIdsByAnnotation,
+            )
+        if (complete) lastAppliedIncidents = markers
+    }
+
+    /**
+     * Disposes the incident annotation manager, if any, and clears everything
+     * scoped to it.
+     *
+     * Same disposal contract as [releaseDestMarkerManager], and for the same
+     * reason: in Maps SDK 11.26.0 an annotation manager cannot survive a style
+     * reload — nothing re-adds its source and layer to the new style — so it is
+     * retired before each load and rebuilt against the fresh one.
+     * `removeAnnotationManager` (not just `deleteAll`) is what actually drops
+     * the manager from the plugin's list and removes its layers, sources and map
+     * interactions.
+     *
+     * The registered style-image names go with it: they were uploaded to the
+     * style that is being replaced, so forgetting them is what makes the icons
+     * come back after a day/night flip instead of referencing images the new
+     * style has never heard of.
+     */
+    private fun releaseIncidentMarkerManager() {
+        registeredIncidentImages.clear()
+        incidentIdsByAnnotation.clear()
+        lastAppliedIncidents = null
+        val manager = incidentMarkerManager ?: return
+        incidentMarkerManager = null
+        runCatching { manager.deleteAll() }
+        runCatching { mapView.annotations.removeAnnotationManager(manager) }
     }
 
     /**
@@ -1985,5 +2396,6 @@ private class TurnByTurnEngine(
         // the manager registered with the annotation plugin and its map
         // interactions live.
         releaseDestMarkerManager()
+        releaseIncidentMarkerManager()
     }
 }
