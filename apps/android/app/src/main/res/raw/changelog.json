@@ -2,6 +2,35 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 23,
+      "versionName": "0.8.12",
+      "releaseDate": "2026-07-29",
+      "highlights": [
+        "Samla poäng och lås upp märken på din profil",
+        "Vägbeskrivningen ligger nedfälld – dra upp den när du vill",
+        "Se andra som delar sin position även när du navigerar"
+      ],
+      "changes": [
+        "Din profil visar nu dina poäng, de senaste sakerna du fått poäng för och de märken du låst upp",
+        "På andra medlemmars profiler ser du deras märken",
+        "Sök efter en medlem genom att skriva en del av namnet och se matchande profiler direkt",
+        "Skicka en vänförfrågan direkt från en medlems profil, och ångra en förfrågan som ännu inte besvarats",
+        "Lägg till Facebook, Instagram och YouTube på din profil – de visas som ikoner under profilbilden",
+        "Den du blockerar syns inte längre för dig på kartan eller i chatten, och du syns inte för hen",
+        "Vägbeskrivningen ligger nedfälld längst ner så du ser hela rutten på kartan – dra upp den för att se stegen, Start-knappen syns hela tiden",
+        "I navigeringsläget finns samma runda knappar till höger som på kartan, vägen du ska köra är markerad med egen färg, och du ser andra som delar sin position",
+        "Rapportera att en händelse på kartan är borta – den bleknar och försvinner först när fler håller med",
+        "Notiser: svep en notis åt sidan för att radera den, eller radera alla på en gång",
+        "Tryck på en konvojinbjudan i notiserna för att komma direkt till konvojen; avslutade konvojer är markerade",
+        "Andra bilars markörer glider mjukt över kartan istället för att hoppa, och din egen prick visar vilket håll du kör åt",
+        "Sökfältet på kartan öppnas och stängs med en mjuk animation",
+        "Live-delning startar direkt när du trycker, och stopprutan gör bara en sak: stoppar delningen",
+        "Rätt och aktuell profilbild visas nu i vänlistan, i meddelanden, i chatten och i konvojlistor",
+        "Registreringsnumret visas på andra medlemmars bilar",
+        "Bilbilden i Mitt garage är mindre så att listan går att överblicka"
+      ]
+    },
+    {
       "versionCode": 22,
       "versionName": "0.8.11",
       "releaseDate": "2026-07-25",
