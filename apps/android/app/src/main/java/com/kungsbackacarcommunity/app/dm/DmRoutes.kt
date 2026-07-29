@@ -28,6 +28,10 @@ fun ConversationListRoute(
     uid: String,
     onOpenConversation: (DmConversation) -> Unit,
     errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
+    // False inside the chat hub, whose "Friends" TAB already names this section;
+    // true for the standalone route, where the header is the only thing that
+    // does. See [ConversationListScreen].
+    showTitle: Boolean = true,
 ) {
     // A retry bumps [retryKey], re-subscribing the inbox listener (a transient
     // failure — offline, or a not-yet-active composite index — can then recover
@@ -55,6 +59,7 @@ fun ConversationListRoute(
         state = state,
         onOpenConversation = onOpenConversation,
         onRetry = { retryKey++ },
+        showTitle = showTitle,
     )
 }
 

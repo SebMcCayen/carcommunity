@@ -45,6 +45,13 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
  * The DM inbox: one row per conversation (avatar, other member's name,
  * last-message preview, unread badge), newest-first. Tapping a row opens the
  * [ChatScreen] for that member. Rendered on the shared [AeroPage] chrome.
+ *
+ * [showTitle] is false when the inbox is a SECTION of something that has already
+ * named it — the chat hub, where the member arrived by tapping (or swiping to) a
+ * tab labelled "Friends". A "Messages" header directly under that tab says
+ * nothing the tab has not already said. It stays true for the standalone
+ * full-screen route (a DM push with no conversation id), where the header is the
+ * only thing naming the screen.
  */
 @Composable
 fun ConversationListScreen(
@@ -52,6 +59,7 @@ fun ConversationListScreen(
     onOpenConversation: (DmConversation) -> Unit,
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
+    showTitle: Boolean = true,
 ) {
     // Durable list: a LazyColumn so only visible rows compose. The title is the
     // first `item {}`; conversation rows are keyed by conversationId so
@@ -62,8 +70,10 @@ fun ConversationListScreen(
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s4),
         ) {
-            item(key = "title") {
-                AeroPageTitle(stringResource(R.string.dm_title))
+            if (showTitle) {
+                item(key = "title") {
+                    AeroPageTitle(stringResource(R.string.dm_title))
+                }
             }
 
             when (state) {

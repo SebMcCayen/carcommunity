@@ -115,6 +115,13 @@ import kotlinx.coroutines.launch
  * click did was mark it read — so an invite could be read about here but never
  * acted on, which is exactly the "tapping does nothing" report.
  *
+ * TITLE. [showTitle] is false when the inbox is a SECTION of something that has
+ * already named it — the chat hub, where the member arrived by tapping (or
+ * swiping to) a tab labelled "Notifications". A second "Notifications" header
+ * directly under that tab says nothing the tab has not already said. It stays
+ * true for the standalone full-screen route (a push tap), where the header is
+ * the only thing naming the screen.
+ *
  * A convoy row is also re-derived against live convoy state ([convoyLink]),
  * because the notification itself is a historical record that is never rewritten
  * — the same staleness [Notifications.pendingFriendRequestId] handles for friend
@@ -134,6 +141,7 @@ fun NotificationsScreen(
     onMarkAllRead: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    showTitle: Boolean = true,
     pendingFriendRequestIds: Map<String, String> = emptyMap(),
     busyFriendRequestIds: Set<String> = emptySet(),
     friendActionError: FriendActionError? = null,
@@ -169,8 +177,10 @@ fun NotificationsScreen(
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                AeroPageTitle(stringResource(R.string.notifications_title))
+            if (showTitle) {
+                item {
+                    AeroPageTitle(stringResource(R.string.notifications_title))
+                }
             }
 
             when (state) {

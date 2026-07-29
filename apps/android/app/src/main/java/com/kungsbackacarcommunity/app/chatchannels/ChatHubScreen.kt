@@ -610,6 +610,10 @@ private fun ChatHubContent(
                                 ConversationListRoute(
                                     repository = dmRepository,
                                     uid = uid,
+                                    // The Friends TAB above already says where the
+                                    // member is; a "Messages" header under it would
+                                    // only repeat it.
+                                    showTitle = false,
                                     onOpenConversation = { conversation ->
                                         // A malformed conversation can yield an empty
                                         // other uid; don't open a broken thread.
@@ -634,6 +638,10 @@ private fun ChatHubContent(
                                 // closing routes through the hub's close.
                                 onBack = onClose,
                                 convoyLink = convoyLink,
+                                // The Notifications TAB above already says where
+                                // the member is; a "Notifications" header under it
+                                // would only repeat it.
+                                showTitle = false,
                             )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
