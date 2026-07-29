@@ -54,11 +54,12 @@ data class DriveFilterCriteria(
      * short list can always tell that something is hiding drives without having
      * to expand the section first.
      *
-     * A blank / whitespace-only query does not count — [DriveFilters.matchesQuery]
-     * treats it as "match everything", so badging it would claim a filter that
-     * isn't filtering. Period and distance are single-select enums, so each
-     * contributes at most 1 (never one per chip), which keeps the badge equal to
-     * "how many controls you'd have to reset to see the whole list again".
+     * A blank / whitespace-only query does not count — [DriveFilters.filterDrives]
+     * trims the query and treats an empty one as "match everything", so badging it
+     * would claim a filter that isn't filtering. Period and distance are
+     * single-select enums, so each contributes at most 1 (never one per chip),
+     * which keeps the badge equal to "how many controls you'd have to reset to
+     * see the whole list again".
      */
     val activeFilterCount: Int
         get() {
@@ -103,7 +104,7 @@ object DriveFilters {
         // Normalize the query ONCE (trim only): matching uses `ignoreCase = true`,
         // whose case fold is locale-independent (unlike `lowercase()` with the
         // default locale, which mis-folds e.g. Turkish I/i). No per-drive lowercased
-        // copy is allocated — see [matchesQuery].
+        // copy is allocated — see the private `matchesQuery` predicate below.
         val query = criteria.query.trim()
         val matched =
             drives.filter { drive ->

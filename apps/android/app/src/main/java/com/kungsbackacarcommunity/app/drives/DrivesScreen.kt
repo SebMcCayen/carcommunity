@@ -57,6 +57,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
@@ -331,6 +332,12 @@ private fun DriveFilterSection(
     onSortChange: (DriveSort) -> Unit,
     onClear: () -> Unit,
 ) {
+    // `spacedBy` costs nothing while collapsed: once the transition has SETTLED on
+    // `visible = false`, AnimatedVisibility composes nothing at all — it emits an
+    // empty group, not a zero-height layout node (verified against the
+    // androidx.compose.animation 1.11.4 artifact on the compile classpath). The
+    // Column therefore measures a single child, and arrangement spacing only ever
+    // goes BETWEEN children, so the collapsed header has no gap hanging under it.
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -371,11 +378,15 @@ private fun DriveFilterSection(
  * The whole row is the tap target (min 48 dp tall, so it clears the Material
  * touch-target minimum even though the icon and text are shorter than that) and
  * it exposes ONE merged accessibility node describing both the action and the
- * badge — the icons deliberately carry no description of their own so TalkBack
- * doesn't read the control out three times.
+ * badge — the icons and the badge deliberately carry no semantics of their own so
+ * TalkBack reads the control out exactly once, count included.
+ *
+ * `internal` rather than private only so the instrumented `DriveFilterToggleTest`
+ * can drive that accessibility contract directly instead of asserting it through
+ * the whole History screen.
  */
 @Composable
-private fun DriveFilterToggle(
+internal fun DriveFilterToggle(
     expanded: Boolean,
     activeFilterCount: Int,
     onToggle: () -> Unit,
@@ -448,8 +459,13 @@ private fun DriveFilterToggle(
 /**
  * The count pill on the filter header. Theme colours only (primary /
  * onPrimary), so it stays legible in both light and dark without a hardcoded
- * pair. Carries no semantics of its own — the header merges descendants and
- * speaks the count itself.
+ * pair.
+ *
+ * Carries no semantics of its own, and the digit is CLEARED rather than merely
+ * left unlabelled: [DriveFilterToggle] merges its descendants and already speaks
+ * the count in its own `contentDescription`, so the pill is a purely visual echo
+ * of something the header states. Leaving the `Text` in the tree would put the
+ * number into the merged node twice over.
  */
 @Composable
 private fun ActiveFilterBadge(label: String) {
@@ -461,7 +477,10 @@ private fun ActiveFilterBadge(label: String) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            modifier = Modifier.padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s1),
+            modifier =
+                Modifier
+                    .padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s1)
+                    .clearAndSetSemantics {},
         )
     }
 }
