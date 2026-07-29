@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -352,11 +351,24 @@ fun ConvoyStatusBar(
                 // announcing unread messages it refuses to show.
                 //
                 // The badge is a NULL-or-label, never a "0": `unreadBadgeLabel`
-                // returns null at zero so the BadgedBox draws nothing at all, and
-                // caps the printed number ("9+") so a long-running convoy cannot
-                // widen this control and squeeze the rest of the row off the bar.
-                // The count in the accessibility label is capped the same way, so
-                // what TalkBack announces and what is drawn can't disagree.
+                // returns null at zero so nothing is drawn at all, and caps the
+                // printed number ("9+") so a long-running convoy cannot widen this
+                // control and squeeze the rest of the row off the bar. The count in
+                // the accessibility label is capped the same way, so what TalkBack
+                // announces and what is drawn can't disagree.
+                //
+                // Deliberately a Box with the badge aligned INSIDE the button's
+                // footprint, not the [BadgedBox] the map home's floating chat
+                // bubble uses. BadgedBox measures itself as its anchor and then
+                // places the badge at a NEGATIVE offset — outside its own bounds,
+                // above and past the anchor's end. That is fine for a control
+                // floating over the map, but this bar is a `Surface` clipped to a
+                // rounded shape whose non-compact vertical padding is `s0`, so the
+                // bar is exactly one icon-button tall: an overflowing badge would
+                // be shaved off at the top and would lean into the invite button
+                // beside it. The 48dp button has 12dp of slack around its 24dp
+                // glyph, which is room enough to sit the badge in the corner and
+                // stay inside the bar.
                 if (onOpenChat != null) {
                     val unreadLabel = ConvoyBar.unreadBadgeLabel(state.unreadChatCount)
                     val chatDescription =
@@ -373,12 +385,11 @@ fun ConvoyStatusBar(
                                     state.unreadChatCount,
                                 )
                         }
-                    BadgedBox(
-                        badge = { if (unreadLabel != null) Badge { Text(unreadLabel) } },
-                        // Merge the IconButton's click + label into this tagged
-                        // node, so the control reads as ONE thing (button, label,
-                        // action) instead of a button sitting beside a loose
-                        // number — matching the map home's chat bubble.
+                    Box(
+                        // Merged into ONE node so the control reads as a single
+                        // thing (button, label, action) instead of a button sitting
+                        // beside a loose number — the same treatment the member
+                        // count and the map home's chat bubble get.
                         modifier =
                             Modifier
                                 .testTag(CONVOY_BAR_CHAT_TAG)
@@ -390,6 +401,14 @@ fun ConvoyStatusBar(
                                 contentDescription = chatDescription,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        if (unreadLabel != null) {
+                            Badge(
+                                modifier =
+                                    Modifier.align(Alignment.TopEnd).padding(KccSpacing.s1),
+                            ) {
+                                Text(unreadLabel)
+                            }
                         }
                     }
                 }
