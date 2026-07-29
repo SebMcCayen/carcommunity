@@ -87,7 +87,18 @@ class ConvoyCoordinatorTest {
             return createResult
         }
 
-        override suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult = respondResult
+        var respondCalls = 0
+        val respondAccepts = mutableListOf<Boolean>()
+
+        /** Holds `convoy.respond` open so a second answer can race the first. */
+        var respondGate: CompletableDeferred<Unit>? = null
+
+        override suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult {
+            respondCalls++
+            respondAccepts += accept
+            respondGate?.await()
+            return respondResult
+        }
 
         var inviteResult: CreateConvoyResult = createResult
         var lastInviteConvoyId: String? = null
@@ -369,6 +380,55 @@ class ConvoyCoordinatorTest {
         assertEquals(1, repo.listCalls)
         assertNull(coordinator.actionError.value)
     }
+
+    /**
+     * The double-answer guard, in the shape [LiveLocationCoordinator]'s `Busy`
+     * test pins: a second respond raced against one already in flight must not
+     * REACH the repository at all.
+     *
+     * This is what makes a fumbled double-tap on Accept impossible to turn into
+     * two `convoy.respond` calls, the second of which the backend would reject
+     * as an invite that has already been answered.
+     */
+    @Test
+    fun `a second answer while one is in flight never reaches the repository`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val gate = CompletableDeferred<Unit>()
+            val repo = FakeRepo().apply { respondGate = gate }
+            val coordinator = ConvoyCoordinator(repo)
+
+            val inFlight = backgroundScope.launch { coordinator.accept("p1") }
+            advanceUntilIdle()
+            assertTrue("the first answer is in flight", "p1" in coordinator.busyConvoys.value)
+
+            // The double tap. It returns without calling through — one respond.
+            coordinator.accept("p1")
+            assertEquals(1, repo.respondCalls)
+
+            gate.complete(Unit)
+            inFlight.join()
+            assertEquals("exactly one convoy.respond", 1, repo.respondCalls)
+            assertEquals(listOf(true), repo.respondAccepts)
+            assertTrue("the guard is released", "p1" !in coordinator.busyConvoys.value)
+        }
+
+    /** The same guard covers Decline, and the two share one in-flight key. */
+    @Test
+    fun `a decline racing an in-flight accept for the same convoy is dropped`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val gate = CompletableDeferred<Unit>()
+            val repo = FakeRepo().apply { respondGate = gate }
+            val coordinator = ConvoyCoordinator(repo)
+
+            val inFlight = backgroundScope.launch { coordinator.accept("p1") }
+            advanceUntilIdle()
+            coordinator.decline("p1")
+            assertEquals(1, repo.respondCalls)
+
+            gate.complete(Unit)
+            inFlight.join()
+            assertEquals(listOf(true), repo.respondAccepts)
+        }
 
     @Test
     fun `start failure sets the action error and still reloads`() = runTest {

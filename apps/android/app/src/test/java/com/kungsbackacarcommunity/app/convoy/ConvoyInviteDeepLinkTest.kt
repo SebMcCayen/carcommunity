@@ -88,6 +88,64 @@ class ConvoyInviteDeepLinkTest {
         assertTrue(ConvoyInviteDeepLink.needsNotice(outcome))
     }
 
+    // --- answered HERE (the "you've already answered that invite" bug) ----
+
+    /**
+     * THE BUG. Accepting a deep-linked invite is precisely what removes it from
+     * `pendingInvites` while leaving the (now joined, still live) convoy in
+     * `convoys` — which is the exact shape the ANSWERED branch reads. Without
+     * the caller's own say-so, the reward for accepting an invite was being
+     * told, in an error banner, that you had already answered it.
+     */
+    @Test
+    fun `answering here says nothing, on the very list shape that used to accuse`() {
+        val accepted = loaded(listOf(convoy("c1", inviteStatus = ConvoyInviteStatus.Accepted)))
+
+        // The list alone is indistinguishable from "answered on another device"…
+        assertEquals(
+            ConvoyInviteDeepLinkOutcome.ANSWERED,
+            ConvoyInviteDeepLink.outcome("c1", accepted),
+        )
+        // …so the fact that it was answered HERE has to come from the caller.
+        assertNull(ConvoyInviteDeepLink.outcome("c1", accepted, answeredHere = true))
+    }
+
+    @Test
+    fun `answering here also silences a decline, which empties the invite the same way`() {
+        val declined = loaded(listOf(convoy("c1", inviteStatus = ConvoyInviteStatus.Declined)))
+        assertNull(ConvoyInviteDeepLink.outcome("c1", declined, answeredHere = true))
+    }
+
+    @Test
+    fun `answering here silences every outcome, including ended and gone`() {
+        // Once the member has answered, this route has nothing left to explain
+        // about the invite: whatever the refreshed list now says about the
+        // convoy is the CONSEQUENCE of their tap, not news about it.
+        assertNull(
+            ConvoyInviteDeepLink.outcome(
+                "c1",
+                loaded(listOf(convoy("c1", status = ConvoyStatus.Ended))),
+                answeredHere = true,
+            ),
+        )
+        assertNull(
+            ConvoyInviteDeepLink.outcome("c9", loaded(listOf(convoy("c1"))), answeredHere = true),
+        )
+    }
+
+    @Test
+    fun `answering here is scoped to the deep link and defaults to off`() {
+        // No deep link: still nothing to say, whatever the flag.
+        assertNull(ConvoyInviteDeepLink.outcome(null, loaded(emptyList()), answeredHere = true))
+        // Default is the pre-existing behaviour, so no caller is silenced by
+        // accident.
+        val c = convoy("c1")
+        assertEquals(
+            ConvoyInviteDeepLinkOutcome.PENDING,
+            ConvoyInviteDeepLink.outcome("c1", loaded(listOf(c), listOf(c))),
+        )
+    }
+
     @Test
     fun `a convoy that is not in the list at all is reported as gone`() {
         val outcome = ConvoyInviteDeepLink.outcome("c9", loaded(listOf(convoy("c1"))))

@@ -3200,6 +3200,30 @@ fun AuthenticatedApp(
                             clearRoutes()
                             selectedTab = ShellTab.Map
                         },
+                        // Accepting an invite lands the same way a create does —
+                        // no confirmation page, straight to the map — and
+                        // additionally asks the camera to frame the group, which
+                        // is the thing the member just joined and the only reason
+                        // they are being taken here.
+                        //
+                        // A REQUEST rather than setMode: the accepted convoy is
+                        // not the active convoy until the bar's coordinator
+                        // refreshes on return to the map, and that refresh resets
+                        // the mode (see ConvoyFocusStore). The store consumes the
+                        // request when the convoy arrives. Nothing degenerate can
+                        // come of it — with no other member's position known the
+                        // planner keeps plain follow-me (ConvoyFocusPlanner.plan),
+                        // and the camera reframes by itself the moment somebody
+                        // does start sharing.
+                        //
+                        // selectedTab is set unconditionally, so accepting while
+                        // another tab was underneath still lands on the map.
+                        onConvoyJoined = { convoyId ->
+                            convoyOpenCreate = false
+                            convoyFocusStore.requestConvoyFocusOnJoin(convoyId)
+                            clearRoutes()
+                            selectedTab = ShellTab.Map
+                        },
                         chatHubPushLink = pendingChatHubLink,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
@@ -4564,6 +4588,10 @@ private fun RouteHost(
     // confirmation page — it dismisses the convoy surface and lands on the Map
     // tab, where the convoy bar shows the new (active) convoy.
     onConvoyCreated: () -> Unit,
+    // Invoked with the convoy id once an INVITE is successfully accepted — the
+    // accept-side twin of [onConvoyCreated]. Same landing (close the surface,
+    // Map tab), plus a one-shot request to frame that convoy's members.
+    onConvoyJoined: (String) -> Unit,
     // Destination of the push tap that opened the chat hub, if that is why it is
     // open. Forwarded to ChatHubRoute, which owns tab/channel sub-navigation.
     chatHubPushLink: PushDeepLink?,
@@ -5093,6 +5121,7 @@ private fun RouteHost(
                     onViewMember = openProfileIfWired,
                     viewerUid = uid,
                     onConvoyCreated = onConvoyCreated,
+                    onConvoyJoined = onConvoyJoined,
                     // Lets the convoy taps that start a live session server-side
                     // (create / accept into an active convoy / start) flip the
                     // shell's live control immediately instead of waiting for the

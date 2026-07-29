@@ -53,6 +53,16 @@ sealed interface ConvoyCameraPlan {
  * ending, drops the mode back to [ConvoyFocusMode.Me] so the very next camera
  * plan is a normal follow. Joining a DIFFERENT convoy also resets — the choice
  * was about that group, not this one.
+ *
+ * [requestConvoyFocusOnJoin] is the one exception to that reset, and it exists
+ * for the accept-an-invite hand-off: the member is being put on the map
+ * *because* they just joined a group, so "show me the group" is the whole point
+ * of the trip. It has to be a REQUEST rather than a `setMode` because of
+ * ordering — the convoy the member accepted into does not become the active
+ * convoy until the bar's own coordinator refreshes, and that refresh is exactly
+ * what calls [onActiveConvoyChanged] and resets the mode. Setting the mode
+ * eagerly would therefore be undone a moment later by the very event the mode
+ * was set in anticipation of.
  */
 class ConvoyFocusStore {
     private val modeFlow = MutableStateFlow(ConvoyFocusMode.Me)
@@ -62,9 +72,32 @@ class ConvoyFocusStore {
 
     private var activeConvoyId: String? = null
 
+    /** A pending "frame this convoy once it arrives" request; see below. */
+    private var focusOnJoinConvoyId: String? = null
+
     /** The user picked a focus mode in the convoy bar. */
     fun setMode(mode: ConvoyFocusMode) {
         modeFlow.value = mode
+    }
+
+    /**
+     * Frame [convoyId]'s group as soon as it is the active convoy.
+     *
+     * One-shot, and matched by ID rather than by "the next convoy that shows
+     * up": a request that is never satisfied (the accept did not actually put
+     * the caller in that convoy) must not silently attach itself to some
+     * unrelated convoy joined an hour later. A blank id clears the request.
+     *
+     * Honoured immediately when the convoy is ALREADY active — the bar can
+     * refresh before the hand-off completes — so the request cannot be stranded
+     * by winning that race.
+     */
+    fun requestConvoyFocusOnJoin(convoyId: String) {
+        focusOnJoinConvoyId = convoyId.takeIf { it.isNotBlank() }
+        if (focusOnJoinConvoyId != null && focusOnJoinConvoyId == activeConvoyId) {
+            focusOnJoinConvoyId = null
+            modeFlow.value = ConvoyFocusMode.Convoy
+        }
     }
 
     /**
@@ -72,11 +105,23 @@ class ConvoyFocusStore {
      * convoy / the convoy ended". Resets the mode so the camera goes back to
      * normal. Idempotent: repeated calls with the same id (the coordinator
      * re-emits on every refresh) do not clobber a choice the user just made.
+     *
+     * A pending [requestConvoyFocusOnJoin] for the arriving convoy is consumed
+     * here, AFTER the reset, so the member's own join wins over it. Any other
+     * non-null convoy becoming active drops the request instead — it was about
+     * a join that evidently did not happen.
      */
     fun onActiveConvoyChanged(convoyId: String?) {
-        if (convoyId == activeConvoyId) return
+        val changed = convoyId != activeConvoyId
         activeConvoyId = convoyId
-        modeFlow.value = ConvoyFocusMode.Me
+        if (changed) modeFlow.value = ConvoyFocusMode.Me
+        if (convoyId == null) return
+        if (convoyId == focusOnJoinConvoyId) {
+            focusOnJoinConvoyId = null
+            modeFlow.value = ConvoyFocusMode.Convoy
+        } else {
+            focusOnJoinConvoyId = null
+        }
     }
 }
 
