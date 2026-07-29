@@ -314,6 +314,99 @@ class DriveFilterTest {
         assertTrue(DriveFilterCriteria(distanceBand = DriveDistanceBand.OVER_50_KM).hasActiveFilters)
     }
 
+    // --- Active-filter badge (collapsed filter section) ---------------------
+
+    @Test
+    fun `activeFilterCount is zero for the default criteria`() {
+        assertEquals(0, DriveFilterCriteria().activeFilterCount)
+    }
+
+    @Test
+    fun `activeFilterCount ignores sort`() {
+        // Sort reorders, it never hides a drive — badging it would claim drives
+        // are being withheld when none are.
+        assertEquals(0, DriveFilterCriteria(sort = DriveSort.LONGEST).activeFilterCount)
+        assertEquals(0, DriveFilterCriteria(sort = DriveSort.FASTEST_AVERAGE).activeFilterCount)
+    }
+
+    @Test
+    fun `activeFilterCount counts each active control once`() {
+        assertEquals(1, DriveFilterCriteria(query = "x").activeFilterCount)
+        assertEquals(1, DriveFilterCriteria(dateRange = DriveDateRange.THIS_WEEK).activeFilterCount)
+        assertEquals(
+            1,
+            DriveFilterCriteria(distanceBand = DriveDistanceBand.OVER_50_KM).activeFilterCount,
+        )
+    }
+
+    @Test
+    fun `activeFilterCount does not count a blank query`() {
+        // A whitespace-only query matches everything (see matchesQuery), so it is
+        // not filtering and must not be badged as if it were.
+        assertEquals(0, DriveFilterCriteria(query = "   ").activeFilterCount)
+        assertEquals(0, DriveFilterCriteria(query = "").activeFilterCount)
+    }
+
+    @Test
+    fun `activeFilterCount sums every active control`() {
+        val criteria =
+            DriveFilterCriteria(
+                query = "commute",
+                dateRange = DriveDateRange.THIS_MONTH,
+                distanceBand = DriveDistanceBand.UNDER_10_KM,
+                sort = DriveSort.LONGEST,
+            )
+        assertEquals(3, criteria.activeFilterCount)
+    }
+
+    @Test
+    fun `hasActiveFilters agrees with activeFilterCount`() {
+        val cases =
+            listOf(
+                DriveFilterCriteria(),
+                DriveFilterCriteria(sort = DriveSort.LONGEST),
+                DriveFilterCriteria(query = " "),
+                DriveFilterCriteria(query = "x"),
+                DriveFilterCriteria(dateRange = DriveDateRange.THIS_WEEK),
+                DriveFilterCriteria(distanceBand = DriveDistanceBand.FROM_10_TO_50_KM),
+                DriveFilterCriteria(
+                    query = "x",
+                    dateRange = DriveDateRange.THIS_WEEK,
+                    distanceBand = DriveDistanceBand.OVER_50_KM,
+                ),
+            )
+        cases.forEach { criteria ->
+            assertEquals(criteria.activeFilterCount > 0, criteria.hasActiveFilters)
+        }
+    }
+
+    @Test
+    fun `a badged filter always actually narrows the list`() {
+        // The badge's contract: if it shows a number, at least one control really
+        // is excluding drives. Guards the "short list with no visible reason" bug
+        // that collapsing the section would otherwise introduce.
+        val drives =
+            listOf(
+                drive(
+                    "a",
+                    title = "Commute",
+                    distanceMeters = 5_000.0,
+                    startedAtMillis = 5_000_000L,
+                ),
+                drive("b", title = "Roadtrip", distanceMeters = 90_000.0, startedAtMillis = 500L),
+            )
+        val badged =
+            listOf(
+                DriveFilterCriteria(query = "Commute"),
+                DriveFilterCriteria(dateRange = DriveDateRange.THIS_WEEK),
+                DriveFilterCriteria(distanceBand = DriveDistanceBand.OVER_50_KM),
+            )
+        badged.forEach { criteria ->
+            assertTrue(criteria.activeFilterCount > 0)
+            assertTrue(filter(drives, criteria).size < drives.size)
+        }
+    }
+
     @Test
     fun `filtering an empty list yields an empty list`() {
         assertEquals(

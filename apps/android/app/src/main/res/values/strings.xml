@@ -735,6 +735,10 @@
     <string name="savedDrives_statsLongest">Längsta körning</string>
     <string name="savedDrives_statsAverage">Snittlängd</string>
     <string name="savedDrives_statsFastest">Högsta snitthastighet</string>
+    <string name="savedDrives_filterToggle">Filter</string>
+    <string name="savedDrives_filterToggleExpand">Visa filter</string>
+    <string name="savedDrives_filterToggleCollapse">Dölj filter</string>
+    <string name="savedDrives_filterActiveCount">Aktiva filter: %1$d</string>
     <string name="savedDrives_filterSearchLabel">Sök körningar</string>
     <string name="savedDrives_filterPeriod">Period</string>
     <string name="savedDrives_filterThisWeek">Denna vecka</string>
