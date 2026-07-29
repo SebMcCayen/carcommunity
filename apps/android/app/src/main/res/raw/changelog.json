@@ -6,13 +6,13 @@
       "versionName": "0.8.13",
       "releaseDate": "2026-07-30",
       "highlights": [
-        "Varje körning i Historik visar en liten karta över rutten",
+        "Nya körningar i Historik visar en liten karta över rutten",
         "Konvojchatten öppnas från konvoj-fältet – med antal olästa",
         "Bättre navigering: din prick i mitten och trafikhändelser längs vägen"
       ],
       "changes": [
-        "Varje körning i Historik visar nu en liten karta över rutten du körde",
-        "Körningens högsta hastighet står bland uppgifterna, vid sidan av distans och körtid – ruttkartan och hastigheten finns på körningar du sparar från och med nu",
+        "Körningar du sparar från och med nu visar en liten karta över rutten i Historik – äldre körningar har ingen ruttöversikt",
+        "Körningens högsta hastighet står bland uppgifterna, vid sidan av distans och körtid – även den finns på körningar du sparar från och med nu",
         "Filtren i Historik ligger nedfällda bakom en rad som visar hur många filter du har på – tryck för att öppna dem",
         "När du avslutat en körning kan du fälla ut rutten du precis kört direkt i rutan där du väljer att behålla eller ta bort den, och trycka på kartan för helskärm",
         "Live-fältet visar din aktuella hastighet i km/h vid sidan av tiden och distansen",
