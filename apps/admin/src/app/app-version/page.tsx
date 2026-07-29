@@ -52,10 +52,24 @@ export default function AppVersionPage() {
   const submit = useCallback(
     async (event: FormEvent) => {
       event.preventDefault();
-      const latest = Number(latestVersionCode);
-      const minimum = minimumSupportedVersionCode ? Number(minimumSupportedVersionCode) : 0;
+      const latest = Number(latestVersionCode.trim());
+      const minimumRaw = minimumSupportedVersionCode.trim();
+      const minimum = minimumRaw === '' ? 0 : Number(minimumRaw);
+      // Checked here as well as server-side so a typo gets a specific message
+      // instead of a generic callable error.
       if (!Number.isInteger(latest) || latest < 1) {
         setError('latestVersionCode måste vara ett heltal ≥ 1.');
+        return;
+      }
+      if (!Number.isInteger(minimum) || minimum < 0) {
+        setError('minimumSupportedVersionCode måste vara ett heltal ≥ 0 (eller tomt).');
+        return;
+      }
+      if (minimum > latest) {
+        setError(
+          'minimumSupportedVersionCode får inte vara högre än latestVersionCode — ingen ' +
+            'publicerad build skulle kunna uppfylla det, så alla användare hade låsts ute.',
+        );
         return;
       }
       if (minimum > 0 && !window.confirm(BLOCK_CONFIRMATION)) return;

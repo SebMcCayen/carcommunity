@@ -22,11 +22,15 @@ export interface AppVersionConfig {
 }
 
 /**
- * The published config, or null when nothing has been published yet.
+ * The published config as CLIENTS WILL ACT ON IT, or null when nothing has
+ * been published yet.
  *
- * A document with an unusable `latestVersionCode` reads as null for the same
- * reason the app treats it as "no prompt": there is no sensible number to
- * show, and inventing one would misreport what devices are acting on.
+ * This mirrors the Android parser's rules rather than echoing the raw
+ * document, because the page's job is to tell an operator what devices are
+ * doing — showing a stored `minimumSupportedVersionCode` of 99 next to a
+ * `latestVersionCode` of 23 would be a lie: no build could satisfy it, so
+ * the app discards it and blocks nobody. An unusable `latestVersionCode`
+ * reads as null for the same reason the app shows no prompt.
  */
 export async function loadAppVersionConfig(): Promise<AppVersionConfig | null> {
   const snapshot = await getDoc(doc(getAdminFirestore(), 'config', 'appVersion'));
@@ -34,13 +38,19 @@ export async function loadAppVersionConfig(): Promise<AppVersionConfig | null> {
   if (!stored) return null;
   const latestVersionCode = stored.latestVersionCode;
   if (typeof latestVersionCode !== 'number' || !Number.isInteger(latestVersionCode)) return null;
+  if (latestVersionCode < 0) return null;
   const name = stored.latestVersionName;
+  const trimmedName = typeof name === 'string' ? name.trim() : '';
   const minimum = stored.minimumSupportedVersionCode;
+  const minimumIsEffective =
+    typeof minimum === 'number' &&
+    Number.isInteger(minimum) &&
+    minimum >= 0 &&
+    minimum <= latestVersionCode;
   return {
     latestVersionCode,
-    latestVersionName: typeof name === 'string' && name.trim() !== '' ? name : null,
-    minimumSupportedVersionCode:
-      typeof minimum === 'number' && Number.isInteger(minimum) ? minimum : 0,
+    latestVersionName: trimmedName === '' ? null : trimmedName,
+    minimumSupportedVersionCode: minimumIsEffective ? minimum : 0,
   };
 }
 

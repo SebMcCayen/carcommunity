@@ -155,6 +155,38 @@ describe('app-version module', () => {
     });
   });
 
+  it('trims the version name it reports', async () => {
+    getDocMock.mockResolvedValue({
+      data: () => ({ latestVersionCode: 23, latestVersionName: ' 0.8.12 ' }),
+    });
+    expect((await loadAppVersionConfig())?.latestVersionName).toBe('0.8.12');
+  });
+
+  it('reports the EFFECTIVE minimum, matching what the app acts on', async () => {
+    // A minimum above the latest version is unsatisfiable, so the app
+    // discards it; showing 99 here would tell the operator devices are
+    // blocked when in fact nobody is.
+    getDocMock.mockResolvedValue({
+      data: () => ({ latestVersionCode: 23, minimumSupportedVersionCode: 99 }),
+    });
+    expect((await loadAppVersionConfig())?.minimumSupportedVersionCode).toBe(0);
+
+    getDocMock.mockResolvedValue({
+      data: () => ({ latestVersionCode: 23, minimumSupportedVersionCode: -5 }),
+    });
+    expect((await loadAppVersionConfig())?.minimumSupportedVersionCode).toBe(0);
+
+    getDocMock.mockResolvedValue({
+      data: () => ({ latestVersionCode: 23, minimumSupportedVersionCode: 20.5 }),
+    });
+    expect((await loadAppVersionConfig())?.minimumSupportedVersionCode).toBe(0);
+  });
+
+  it('reports a negative latestVersionCode as nothing published', async () => {
+    getDocMock.mockResolvedValue({ data: () => ({ latestVersionCode: -1 }) });
+    expect(await loadAppVersionConfig()).toBeNull();
+  });
+
   it('publishes through the audited callable, omitting the inert minimum', async () => {
     callAdminMock.mockResolvedValue({
       latestVersionCode: 24,
