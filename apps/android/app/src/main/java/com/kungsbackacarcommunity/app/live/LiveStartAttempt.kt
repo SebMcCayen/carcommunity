@@ -171,18 +171,21 @@ object OptimisticLiveStart {
     ): Boolean = observedSharing || isPending(current, nowMillis)
 
     /**
-     * The session start to tick the top live-session bar from: the real one when
-     * known, otherwise the moment of the TAP. Without this fallback the STOP disc
-     * would appear while the bar stayed hidden — the same inconsistency in
-     * reverse. Null means neither is available, and no bar is composed.
+     * The moment start was TAPPED, while that attempt is still pending; null once
+     * it has been resolved or has expired.
+     *
+     * This is what the top live-session bar counts up from. It is the only
+     * instant that is both on the DEVICE clock and genuinely the session's start
+     * — the observed session's start has to be reconstructed from a SERVER-minted
+     * `expiresAt`, which leaves the device↔server clock skew in the readout. It
+     * also means the bar appears the moment the STOP disc does, rather than a
+     * round trip later (the same inconsistency #596 fixed, in reverse). See
+     * [com.kungsbackacarcommunity.app.shell.LiveSessionElapsed], which owns the
+     * choice between this and the observed start and LATCHES the result — this
+     * attempt is dropped as soon as the real session lands.
      */
-    fun sessionStartMillis(
-        observedStartMillis: Long?,
-        current: LiveStartAttempt,
-        nowMillis: Long,
-    ): Long? =
-        observedStartMillis
-            ?: if (isPending(current, nowMillis)) requestedAtMillis(current) else null
+    fun pendingTapMillis(current: LiveStartAttempt, nowMillis: Long): Long? =
+        if (isPending(current, nowMillis)) requestedAtMillis(current) else null
 
     /** The moment the user tapped, for a pending attempt; null for [LiveStartAttempt.None]. */
     private fun requestedAtMillis(current: LiveStartAttempt): Long? =

@@ -1,15 +1,18 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,22 +44,42 @@ const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
  * It reports two things and nothing else, because that is all that fits: how long
  * the session has run, and how far it has driven. It stretches to fill the whole
  * gap the search control and avatar frame (the same full-width treatment the
- * convoy bar got in #536), with the two readouts pushed to its two ends.
+ * convoy bar got in #536).
+ *
+ * ## One left-aligned group, not two opposite ends
+ * The two readouts used to be pushed to the bar's two ends
+ * (`Arrangement.SpaceBetween`), which put a wide empty gap between a `0:07` and a
+ * `1,2 km` — the bar read as two unrelated widgets rather than one status line.
+ * They are now a single left-aligned group: a live dot, the running time, a
+ * hairline separator, and the distance. Ragged space falls at the END of the bar,
+ * where the eye expects it, and the group stays put as the numbers grow instead of
+ * the gap breathing in and out once a second.
+ *
+ * The leading dot is the recording affordance — the same `error` red as the
+ * shell's STOP disc, so the two read as one state — and it replaces the clock
+ * glyph the time used to carry: `● 0:07` is already unmistakably a running timer,
+ * and dropping a glyph buys back width for long values. It is deliberately NOT
+ * pulsing: an infinite animation keeps the Compose test clock from ever going
+ * idle, which would hang every instrumented test that touches this screen.
  *
  * ## Icons + numbers, never labels
  * The bar sits between the search control and the avatar and never crowds
- * either, so it carries a clock glyph + a running `M:SS` / `Hh MMm` time and a
- * distance glyph + a `km`/`m` figure — no "elapsed" or "distance" words that
+ * either, so it carries numbers and glyphs — no "elapsed" or "distance" words that
  * would overflow the strip (the same reason the convoy bar shows a bare count).
- * The full sentence is kept as the bar's [contentDescription] for TalkBack.
+ * The full sentence is kept as the bar's [contentDescription] for TalkBack. At a
+ * narrow width (or a long value — a 3-digit `km`, an `Hh MMm` clock) the DISTANCE
+ * is the part that gives: it may shrink and ellipsize, so the running time — the
+ * one that changes every second — is never the thing that gets cut.
  *
  * ## Where the two numbers come from
- * - Elapsed is derived from [sessionStartMillis] (the drive recorder's start
- *   moment, or the session's expiry−duration). The per-second ticker lives HERE,
- *   inside the bar, on purpose: reading a once-a-second state up in the large host
- *   composable would recompose the whole shell every second, so only this small
- *   bar re-reads the clock. The timer advances even while the car (and the GPS
- *   stream) is stationary, because it re-reads [now] rather than the last fix.
+ * - Elapsed is `now − [sessionStartMillis]`, and which instant that start is
+ *   is [LiveSessionElapsed]'s job — the host hands down an already-latched,
+ *   device-clock anchor, so the first frame reads `0:00` and only ever counts up.
+ *   The per-second ticker lives HERE, inside the bar, on purpose: reading a
+ *   once-a-second state up in the large host composable would recompose the whole
+ *   shell every second, so only this small bar re-reads the clock. The timer
+ *   advances even while the car (and the GPS stream) is stationary, because it
+ *   re-reads [now] rather than the last fix.
  * - [distanceMeters] is the drive recorder's running total for THIS session —
  *   the same value History would save — formatted with [DriveFormatters]. It is
  *   hoisted (it changes only on GPS fixes, which the host already observes).
@@ -79,11 +102,11 @@ fun LiveSessionBar(
     // so a new session restarts the count from zero.
     val elapsedMillis by
         produceState(
-            initialValue = (now() - sessionStartMillis).coerceAtLeast(0L),
+            initialValue = LiveSessionElapsed.elapsedMillis(sessionStartMillis, now()),
             sessionStartMillis,
         ) {
             while (true) {
-                value = (now() - sessionStartMillis).coerceAtLeast(0L)
+                value = LiveSessionElapsed.elapsedMillis(sessionStartMillis, now())
                 delay(1000L)
             }
         }
@@ -113,54 +136,89 @@ fun LiveSessionBar(
                     .fillMaxHeight()
                     .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
             verticalAlignment = Alignment.CenterVertically,
-            // Elapsed at the start, distance at the end: the two readouts sit at the
-            // bar's two ends so it visibly spans the full strip instead of clustering
-            // the numbers at the left with dead space to the right.
-            horizontalArrangement = Arrangement.SpaceBetween,
+            // One left-aligned group. Any slack lands at the END of the bar rather
+            // than as a hole between the two numbers.
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
         ) {
-            LiveSessionMetric(
-                icon = { modifierIcon ->
-                    Icon(
-                        imageVector = Icons.Filled.Schedule,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = modifierIcon,
-                    )
-                },
-                value = elapsedText,
+            LiveDot()
+            Text(
+                text = elapsedText,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Clip,
             )
-            LiveSessionMetric(
-                icon = { modifierIcon ->
-                    Icon(
-                        imageVector = Icons.Filled.Straighten,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = modifierIcon,
-                    )
-                },
+            MetricSeparator()
+            DistanceMetric(
                 value = distanceText,
+                // Only the distance may shrink: at a narrow width the running clock
+                // stays whole and this ellipsizes instead.
+                modifier = Modifier.weight(1f, fill = false),
             )
         }
     }
 }
 
-/** One icon + number pair inside the live-session bar. */
+/**
+ * The "recording" dot. Decorative — the bar's merged [contentDescription] already
+ * says a live session is running, so a second announcement would only repeat it.
+ */
 @Composable
-private fun LiveSessionMetric(
-    icon: @Composable (Modifier) -> Unit,
+private fun LiveDot() {
+    Box(
+        modifier =
+            Modifier
+                // s2 (8dp) is the smallest token on the scale and is exactly the
+                // diameter this wants — a dot, not a control.
+                .size(KccSpacing.s2)
+                .background(MaterialTheme.colorScheme.error, CircleShape),
+    )
+}
+
+/** Hairline rule between the two readouts, so they group without crowding. */
+@Composable
+private fun MetricSeparator() {
+    Box(
+        modifier =
+            Modifier
+                // 1dp is a hairline rule: below the spacing scale's smallest step
+                // by design (KccSpacing.s1 = 4dp would be a bar, not a rule).
+                .width(1.dp)
+                .height(KccSpacing.s4)
+                // `outline`, NOT Material's usual divider role `outlineVariant`:
+                // this theme maps outlineVariant to darkCharcoal in the dark
+                // scheme, which is the very same colour as its `surface`
+                // (KccTheme.kt) — the rule would be invisible on this bar.
+                .background(MaterialTheme.colorScheme.outline),
+    )
+}
+
+/** The distance readout: glyph + number. */
+@Composable
+private fun DistanceMetric(
     value: String,
+    modifier: Modifier = Modifier,
 ) {
     Row(
+        modifier = modifier,
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s1),
     ) {
-        icon(Modifier.size(18.dp))
+        Icon(
+            imageVector = Icons.Filled.Straighten,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            // 18dp: the "dense" icon size Material uses inside compact bars —
+            // between the 24dp default (too heavy next to titleSmall) and the
+            // spacing scale, which has no icon step.
+            modifier = Modifier.size(18.dp),
+        )
         Text(
             text = value,
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
-            overflow = TextOverflow.Clip,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }

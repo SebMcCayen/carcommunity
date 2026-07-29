@@ -58,6 +58,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -281,7 +282,9 @@ import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
 import com.kungsbackacarcommunity.app.shell.SettingsScreen
+import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
 import com.kungsbackacarcommunity.app.shell.LiveSessionBar
+import com.kungsbackacarcommunity.app.shell.LiveSessionElapsed
 import com.kungsbackacarcommunity.app.shell.LiveShareAction
 import com.kungsbackacarcommunity.app.shell.LiveSharePopup
 import com.kungsbackacarcommunity.app.shell.LiveShareToggle
@@ -1817,33 +1820,56 @@ fun AuthenticatedApp(
             // with the session's elapsed time and the distance driven this session.
             // Both values are derived here and handed to a dumb [LiveSessionBar].
             //
-            // Elapsed is derived from the session's START. The drive recorder
-            // captures that moment (startedAtMillis) the instant sharing begins;
-            // when there is no recording (config-less build, or a caller who can't
-            // record) fall back to deriving it from the live session itself — its
-            // expiry minus the chosen duration. This value is STABLE (changes only
-            // when a session starts), NOT per-second: the once-a-second ticker
-            // lives inside [LiveSessionBar], so a running session recomposes only
-            // the small bar rather than this whole (very large) composable.
+            // Elapsed is counted from the session's START, and WHICH start is the
+            // whole subtlety — see [LiveSessionElapsed], which owns the rules.
+            // Short version: `now` is the device clock, so the start has to be a
+            // device instant too, and the only one that is both device-clocked and
+            // really the session's start is the moment start was TAPPED.
+            //
+            // The value below is the OBSERVED fallback, used when there is no tap
+            // to go on (a session that was already running when the app opened).
+            // It reconstructs the start from the session itself — its expiry minus
+            // the chosen duration — which is a SERVER instant, hence only a
+            // fallback. The drive recorder's startedAtMillis is a device instant
+            // but it is the moment RECORDING started, which is "now" for a session
+            // resumed in a fresh process; it is therefore the LAST resort, for the
+            // degraded case where the session carries no usable expiry/duration
+            // (better a bar counting from when we noticed than a STOP disc with no
+            // bar at all).
+            //
+            // Whatever is chosen is STABLE (it changes only when a session starts),
+            // NOT per-second: the once-a-second ticker lives inside
+            // [LiveSessionBar], so a running session recomposes only the small bar
+            // rather than this whole (very large) composable.
             val observedSessionStartMillis: Long? =
-                activeRecording?.startedAtMillis
-                    ?: liveSession?.let { session ->
-                        val expiry = session.expiresAtMillis
-                        val durationMs =
-                            session.duration?.let { it.hours.toLong() * 60L * 60L * 1000L }
-                        if (expiry != null && durationMs != null) expiry - durationMs else null
-                    }
-            // While a start is still optimistic there is no recording and no
-            // session to derive from, so tick from the moment of the TAP. Without
-            // it the STOP sign would show with the bar still hidden — the same
-            // inconsistency, in reverse. The real start replaces it the instant it
-            // is known, and the bar keeps its elapsed time (the tap is ~the start).
+                liveSession?.let { session ->
+                    val expiry = session.expiresAtMillis
+                    val durationMs =
+                        session.duration?.let { it.hours.toLong() * 60L * 60L * 1000L }
+                    if (expiry != null && durationMs != null) expiry - durationMs else null
+                }
+                    ?: activeRecording?.startedAtMillis
+            // One clock read for the whole derivation, so the anchor cannot be
+            // clamped against a `now` a millisecond older than the one it is
+            // compared with.
+            val liveBarNowMillis = nowMillis()
+            // The latched anchor: resolved during composition (NOT in an effect) so
+            // the bar renders on the very first frame the STOP disc does, and
+            // written back so an Activity recreation mid-session keeps it.
+            // Keyed by uid: an anchor left behind by a DIFFERENT account is not read
+            // at all, so switching between two sharing accounts can never open the
+            // second one's bar on the first one's elapsed time.
+            val latchedSessionAnchor by LiveSessionAnchor.anchor.collectAsState()
             val liveSessionStartMillis: Long? =
-                OptimisticLiveStart.sessionStartMillis(
+                LiveSessionElapsed.anchorMillis(
+                    latchedMillis = LiveSessionAnchor.startMillisFor(latchedSessionAnchor, uid),
+                    sharing = isSharingUi,
+                    tapStartMillis =
+                        OptimisticLiveStart.pendingTapMillis(startAttempt, liveBarNowMillis),
                     observedStartMillis = observedSessionStartMillis,
-                    current = startAttempt,
-                    nowMillis = nowMillis(),
+                    nowMillis = liveBarNowMillis,
                 )
+            SideEffect { LiveSessionAnchor.set(uid, liveSessionStartMillis) }
             // Distance driven this session, straight off the recorder's running
             // total (0 before the first fix / when nothing is recording). Only
             // changes on GPS fixes, which the shell already observes via

@@ -84,6 +84,7 @@ import com.kungsbackacarcommunity.app.push.KccMessagingService
 import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
+import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
 import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -302,6 +303,12 @@ class MainActivity : ComponentActivity() {
             val signedInUid = (authState as? AuthState.SignedIn)?.uid
             LaunchedEffect(signedInUid) {
                 SingleSessionRecording.clearIfNotOwnedBy(signedInUid)
+                // The live-session bar's latched start is process-scoped for the
+                // same reason and gets the same owner-uid teardown. The shell
+                // itself already refuses to READ another account's anchor, so this
+                // is the release for the case where no shell is left to overwrite
+                // it: sign-out.
+                LiveSessionAnchor.clearIfNotOwnedBy(signedInUid)
                 // Same reasoning for the optimistic live-start overlay: it is
                 // process-scoped, so signing out mid-start must not carry a "you
                 // are sharing" claim into the next session. Only on sign-out
