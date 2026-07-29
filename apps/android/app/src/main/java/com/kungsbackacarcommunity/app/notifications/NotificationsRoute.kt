@@ -58,6 +58,10 @@ fun NotificationsRoute(
     onBack: () -> Unit,
     friendsRepository: FriendsRepository? = null,
     convoyLink: ConvoyNotificationLink? = null,
+    // False inside the chat hub, whose "Notifications" TAB already names this
+    // section; true for the standalone route, where the header is the only
+    // thing that does. See [NotificationsScreen].
+    showTitle: Boolean = true,
 ) {
     val scope = rememberCoroutineScope()
     val serverState by
@@ -110,6 +114,7 @@ fun NotificationsRoute(
             onMarkRead = markReadHandler(coordinator, scope),
             onMarkAllRead = { coordinator?.let { c -> scope.launch { c.markAllRead() } } },
             onBack = onBack,
+            showTitle = showTitle,
             onDeleteNotification = actions.onDeleteNotification,
             onDeleteAll = actions.onDeleteAll,
             deleteError = actions.deleteError,
@@ -127,6 +132,7 @@ fun NotificationsRoute(
         onBack = onBack,
         deleteActions = actions,
         convoyLink = convoyLink,
+        showTitle = showTitle,
     )
 }
 
@@ -160,6 +166,7 @@ private fun FriendAwareNotificationsInbox(
     onBack: () -> Unit,
     deleteActions: InboxDeleteActions,
     convoyLink: ConvoyNotificationLink?,
+    showTitle: Boolean,
 ) {
     val context = LocalContext.current
     val friends =
@@ -191,6 +198,7 @@ private fun FriendAwareNotificationsInbox(
         onMarkRead = markReadHandler(coordinator, scope),
         onMarkAllRead = { coordinator?.let { c -> scope.launch { c.markAllRead() } } },
         onBack = onBack,
+        showTitle = showTitle,
         pendingFriendRequestIds = pendingByRequester,
         busyFriendRequestIds = busyRows,
         friendActionError = friendActionError,

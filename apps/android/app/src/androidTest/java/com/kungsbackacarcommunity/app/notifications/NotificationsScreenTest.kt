@@ -98,6 +98,50 @@ class NotificationsScreenTest {
         composeTestRule.onNodeWithText(str(R.string.notifications_unreadLabel)).assertDoesNotExist()
     }
 
+    // ── The screen's own title header ───────────────────────────────────────
+
+    @Test
+    fun standaloneInbox_keepsItsTitle() {
+        // The full-screen route (a NOTIFICATIONS push tap) has nothing else
+        // naming the screen, so the header must stay.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = true))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.notifications_title)).assertIsDisplayed()
+    }
+
+    @Test
+    fun insideTheChatHub_theTitleIsGoneButTheActionsAreNot() {
+        // The hub's Notifications TAB already says where the member is. What
+        // must NOT go with the header is anything that DOES something.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(item("n1", read = false))),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                    showTitle = false,
+                    onDeleteAll = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.notifications_title)).assertDoesNotExist()
+        composeTestRule.onNodeWithText(str(R.string.notifications_markAllRead)).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_deleteAll))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(NOTIFICATION_ROW_TEST_TAG).assertExists()
+    }
+
     // ── When a notification arrived ─────────────────────────────────────────
 
     @Test

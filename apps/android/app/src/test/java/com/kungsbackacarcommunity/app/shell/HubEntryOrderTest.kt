@@ -22,16 +22,20 @@ class HubEntryOrderTest {
     private fun order(labels: List<String>, locale: Locale): List<String> =
         sortedHubEntriesByLabel(labels.map(::entry), locale).map { it.label }
 
-    /** The Social hub's entries in declaration order — see AuthenticatedApp. */
+    /**
+     * The Social hub's entries in declaration order — see AuthenticatedApp.
+     * Notifications is deliberately absent: that menu entry was removed once the
+     * chat hub's Notifications tab became the way in.
+     */
     private val socialEn =
-        listOf("Friends", "Events", "Notifications", "Crown Hunt", "Partners", "Billboards")
+        listOf("Friends", "Events", "Crown Hunt", "Partners", "Billboards")
     private val socialSv =
-        listOf("Vänner", "Event", "Aviseringar", "Kronjakt", "Partners", "Anslagstavlor")
+        listOf("Vänner", "Event", "Kronjakt", "Partners", "Anslagstavlor")
 
     @Test
     fun socialEntriesAreAlphabeticalInEnglish() {
         assertEquals(
-            listOf("Billboards", "Crown Hunt", "Events", "Friends", "Notifications", "Partners"),
+            listOf("Billboards", "Crown Hunt", "Events", "Friends", "Partners"),
             order(socialEn, Locale.ENGLISH),
         )
     }
@@ -39,7 +43,7 @@ class HubEntryOrderTest {
     @Test
     fun socialEntriesAreAlphabeticalInSwedish() {
         assertEquals(
-            listOf("Anslagstavlor", "Aviseringar", "Event", "Kronjakt", "Partners", "Vänner"),
+            listOf("Anslagstavlor", "Event", "Kronjakt", "Partners", "Vänner"),
             order(socialSv, Locale.forLanguageTag("sv")),
         )
     }
@@ -52,12 +56,12 @@ class HubEntryOrderTest {
     fun englishAndSwedishOrderTheSameEntriesDifferently() {
         val en = order(socialEn, Locale.ENGLISH)
         val sv = order(socialSv, Locale.forLanguageTag("sv"))
-        // Friends/Vänner is 4th in English but last in Swedish; Notifications is 5th
-        // in English while its Swedish label Aviseringar is 2nd.
+        // Friends/Vänner is 4th in English but last in Swedish; Events is 3rd in
+        // English while its Swedish label Event is 2nd.
         assertEquals(3, en.indexOf("Friends"))
-        assertEquals(5, sv.indexOf("Vänner"))
-        assertEquals(4, en.indexOf("Notifications"))
-        assertEquals(1, sv.indexOf("Aviseringar"))
+        assertEquals(4, sv.indexOf("Vänner"))
+        assertEquals(2, en.indexOf("Events"))
+        assertEquals(1, sv.indexOf("Event"))
     }
 
     /**

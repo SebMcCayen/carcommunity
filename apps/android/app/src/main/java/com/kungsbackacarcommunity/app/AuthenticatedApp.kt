@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MilitaryTech
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
@@ -3945,15 +3944,16 @@ fun AuthenticatedApp(
                                                                     null
                                                                 },
                                                             ),
-                                                            HubEntry(
-                                                                stringResource(R.string.shell_socialNotifications),
-                                                                Icons.Filled.Notifications,
-                                                                if (notificationsRepository != null) {
-                                                                    { openRootRoute(ShellRoute.Notifications) }
-                                                                } else {
-                                                                    null
-                                                                },
-                                                            ),
+                                                            // Notifications intentionally removed
+                                                            // from the Social menu: the inbox is
+                                                            // the chat hub's own Notifications
+                                                            // TAB, so this row was a second door
+                                                            // onto a screen the chat area already
+                                                            // carries. Only the menu ENTRY is
+                                                            // gone — ShellRoute.Notifications is
+                                                            // still routed, and a NOTIFICATIONS
+                                                            // push tap still opens it (see the
+                                                            // PushTarget handling above).
                                                             HubEntry(
                                                                 stringResource(R.string.shell_socialCrownHunt),
                                                                 Icons.Filled.EmojiEvents,
