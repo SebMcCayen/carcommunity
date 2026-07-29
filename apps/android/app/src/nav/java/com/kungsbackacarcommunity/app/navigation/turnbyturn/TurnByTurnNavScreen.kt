@@ -180,8 +180,9 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  * Entered from the address-search route preview's "Start" button. It:
  * - follows the user with a tilted, auto-following [NavigationCamera] that
  *   continuously re-frames the route ahead as the location changes,
- * - shows a maneuver banner ([MapboxManeuverView]) with the CURRENT turn and the
- *   upcoming maneuver(s) after it,
+ * - shows a COMPACT maneuver banner ([MapboxManeuverView]) with the CURRENT turn
+ *   — the SDK's own view, styled down (see [applyCompactStyling]) rather than
+ *   replaced, and with its tap-to-expand list of subsequent maneuvers disabled,
  * - lets the user pinch-zoom/pan freely (a [NavigationBasicGesturesHandler]
  *   detaches auto-follow on interaction) and offers a "Re-centre" button that
  *   snaps the camera back to following,
@@ -1569,11 +1570,38 @@ private class TurnByTurnEngine(
      */
     private var destinationBarVisible = true
 
-    /** The incident badges drawn on this map, and the caches that draw them. */
+    // ── The incident layer's state ──────────────────────────────────────────
+    //
+    // All of it belongs to THIS map. The renderer itself
+    // ([com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer]) is shared with
+    // the shell surface and holds nothing, which is precisely what lets one
+    // implementation serve two live maps.
+
+    /** This map's own annotation manager; recreated on every style load. */
     private var incidentMarkerManager: PointAnnotationManager? = null
+
+    /**
+     * Marker images already uploaded to the CURRENT style. Cleared with the
+     * manager, because style images die with the style they were added to.
+     */
     private val registeredIncidentImages = mutableSetOf<String>()
+
+    /**
+     * Annotation id → incident id, rebuilt by every draw.
+     *
+     * Written but never read here, deliberately: this layer is display-only
+     * (no click listener — see the screen's [incidentMarkers] KDoc), and the
+     * shared renderer maintains the lookup for the caller that DOES hit-test.
+     * Kept rather than passed a throwaway map so the two callers hand the
+     * renderer the same shape of state and a future tappable navigation badge
+     * has the lookup it would need already correct.
+     */
     private val incidentIdsByAnnotation = mutableMapOf<String, String>()
+
+    /** The badges the screen last pushed, redrawn after each style (re)load. */
     private var incidentMarkers: List<MapIncidentMarker> = emptyList()
+
+    /** The last COMPLETE draw, so an unchanged set is not redrawn. */
     private var lastAppliedIncidents: List<MapIncidentMarker>? = null
 
     private var firstFixReceived = false

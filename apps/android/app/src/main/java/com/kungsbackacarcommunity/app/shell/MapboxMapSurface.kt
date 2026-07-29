@@ -41,6 +41,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.ClickInteraction
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
+import com.mapbox.maps.MapboxMap
 import com.mapbox.maps.RenderModeType
 import com.mapbox.maps.Style
 import com.mapbox.maps.interactions.standard.generated.standardPoi
@@ -2199,7 +2200,7 @@ class MapboxMapSurface : MapSurface {
          * unreadable camera degrades to null (and the caller's fallback) rather
          * than throwing.
          */
-        fun visibleRadiusMeters(map: com.mapbox.maps.MapboxMap): Double? =
+        fun visibleRadiusMeters(map: MapboxMap): Double? =
             runCatching {
                 val camera = map.cameraState
                 val bounds =

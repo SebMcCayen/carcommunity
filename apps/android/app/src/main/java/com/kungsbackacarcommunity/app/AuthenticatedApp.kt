@@ -2899,10 +2899,10 @@ fun AuthenticatedApp(
                         incidentReportingEnabled = incidentReportingEnabled,
                         // The layers popup's rows, wired to the SAME state the map
                         // home's are, so a toggle flipped while driving is the
-                        // same toggle when the user gets back to the map. The
-                        // navigation screen applies night/traffic/3D to its own
-                        // map; see its KDoc for the one row (incident markers)
-                        // whose effect is map-home-only.
+                        // same toggle when the user gets back to the map. All
+                        // four now take effect on the navigation map itself —
+                        // night, traffic and 3D always did, and "Traffic alerts"
+                        // does since the incident badges are drawn there too.
                         incidentsLayerEnabled = incidentsLayerEnabled,
                         onIncidentsLayerEnabledChange = { incidentsLayerEnabled = it },
                         // The SAME badge list the map home draws, on the
