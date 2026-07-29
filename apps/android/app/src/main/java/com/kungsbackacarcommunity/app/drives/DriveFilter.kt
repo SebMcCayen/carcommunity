@@ -34,9 +34,10 @@ enum class DriveSort { NEWEST, LONGEST, FASTEST_AVERAGE }
 /**
  * The full search/filter/sort state for the History list.
  *
- * [hasActiveFilters] deliberately EXCLUDES [sort]: a sort change only reorders
- * the list, it can never empty it, so a non-default sort must not trigger the
- * "no drives match — clear filters" empty state or the clear affordance.
+ * [activeFilterCount] / [hasActiveFilters] deliberately EXCLUDE [sort]: a sort
+ * change only reorders the list, it can never empty it, so a non-default sort
+ * must not trigger the "no drives match — clear filters" empty state, the clear
+ * affordance, or the collapsed filter bar's "filters are on" badge.
  */
 data class DriveFilterCriteria(
     val query: String = "",
@@ -44,11 +45,32 @@ data class DriveFilterCriteria(
     val distanceBand: DriveDistanceBand = DriveDistanceBand.ALL,
     val sort: DriveSort = DriveSort.NEWEST,
 ) {
+    /**
+     * How many filters are currently narrowing the list, counting each
+     * INDEPENDENT control once: the search query, the period preset and the
+     * distance band.
+     *
+     * This is what the collapsed filter bar badges, so a member looking at a
+     * short list can always tell that something is hiding drives without having
+     * to expand the section first.
+     *
+     * A blank / whitespace-only query does not count — [DriveFilters.matchesQuery]
+     * treats it as "match everything", so badging it would claim a filter that
+     * isn't filtering. Period and distance are single-select enums, so each
+     * contributes at most 1 (never one per chip), which keeps the badge equal to
+     * "how many controls you'd have to reset to see the whole list again".
+     */
+    val activeFilterCount: Int
+        get() {
+            var count = 0
+            if (query.isNotBlank()) count += 1
+            if (dateRange != DriveDateRange.ALL) count += 1
+            if (distanceBand != DriveDistanceBand.ALL) count += 1
+            return count
+        }
+
     val hasActiveFilters: Boolean
-        get() =
-            query.isNotBlank() ||
-                dateRange != DriveDateRange.ALL ||
-                distanceBand != DriveDistanceBand.ALL
+        get() = activeFilterCount > 0
 }
 
 object DriveFilters {

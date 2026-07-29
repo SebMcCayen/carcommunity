@@ -732,6 +732,10 @@
     <string name="savedDrives_statsLongest">Longest drive</string>
     <string name="savedDrives_statsAverage">Average length</string>
     <string name="savedDrives_statsFastest">Fastest average speed</string>
+    <string name="savedDrives_filterToggle">Filters</string>
+    <string name="savedDrives_filterToggleExpand">Show filters</string>
+    <string name="savedDrives_filterToggleCollapse">Hide filters</string>
+    <string name="savedDrives_filterActiveCount">Active filters: %1$d</string>
     <string name="savedDrives_filterSearchLabel">Search drives</string>
     <string name="savedDrives_filterPeriod">Period</string>
     <string name="savedDrives_filterThisWeek">This week</string>

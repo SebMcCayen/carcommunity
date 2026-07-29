@@ -5,6 +5,13 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -21,6 +29,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
@@ -44,6 +55,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -59,6 +71,18 @@ import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import java.text.DateFormat
 import java.util.Date
+
+/** Test tag on the show/hide control for the History filter section. */
+const val DRIVE_FILTER_TOGGLE_TAG = "drives_filter_toggle"
+
+/**
+ * Expand/collapse duration for the History filter section, matching the shell's
+ * search-bar transition so the two read as the same app.
+ */
+private const val FILTER_TRANSITION_MILLIS = 200
+
+/** Material's minimum touch-target edge; the filter header row is shorter without it. */
+private val MIN_TOUCH_TARGET = 48.dp
 
 /** Saved-drives list (Phase 12 slice 12). Tap a drive for detail; share or delete inline. */
 @Composable
@@ -85,6 +109,25 @@ fun DrivesListScreen(
     var distanceBand by rememberSaveable { mutableStateOf(DriveDistanceBand.ALL) }
     var sort by rememberSaveable { mutableStateOf(DriveSort.NEWEST) }
     val criteria = DriveFilterCriteria(query, dateRange, distanceBand, sort)
+
+    // The filter controls are COLLAPSED by default so the drives themselves are
+    // the first thing on the page; the header badge (see [DriveFilterSection])
+    // keeps any active filter visible while collapsed. rememberSaveable so a
+    // rotation mid-filtering doesn't slam the section shut under the user — and
+    // note the filter values above are saved independently of it, so collapsing
+    // never resets a filter.
+    var filtersExpanded by rememberSaveable { mutableStateOf(false) }
+
+    // One reset shared by the filter bar's "clear filters" button and the
+    // no-matches empty state, so the two can't drift apart. Resets sort too:
+    // "clear" means "put the list back the way it was", and a stale FASTEST sort
+    // left behind after clearing would be a surprise.
+    val clearFilters: () -> Unit = {
+        query = ""
+        dateRange = DriveDateRange.ALL
+        distanceBand = DriveDistanceBand.ALL
+        sort = DriveSort.NEWEST
+    }
 
     // Resolve the period presets to epoch-millis boundaries at the composable
     // edge (a Calendar/time-zone concern) so the fold in [DriveFilters] stays
@@ -168,33 +211,21 @@ fun DrivesListScreen(
                             item { StatsEntryCard(onShowStats) }
                         }
                         item {
-                            DriveFilterBar(
+                            DriveFilterSection(
                                 criteria = criteria,
+                                expanded = filtersExpanded,
+                                onToggleExpanded = { filtersExpanded = !filtersExpanded },
                                 onQueryChange = { query = it },
                                 onDateRangeChange = { dateRange = it },
                                 onDistanceBandChange = { distanceBand = it },
                                 onSortChange = { sort = it },
-                                onClear = {
-                                    query = ""
-                                    dateRange = DriveDateRange.ALL
-                                    distanceBand = DriveDistanceBand.ALL
-                                    sort = DriveSort.NEWEST
-                                },
+                                onClear = clearFilters,
                             )
                         }
                         if (filteredDrives.isEmpty()) {
                             // Distinct from the "no saved drives yet" empty state:
                             // drives exist, they just don't match the active filters.
-                            item {
-                                NoMatchingDrives(
-                                    onClear = {
-                                        query = ""
-                                        dateRange = DriveDateRange.ALL
-                                        distanceBand = DriveDistanceBand.ALL
-                                        sort = DriveSort.NEWEST
-                                    },
-                                )
-                            }
+                            item { NoMatchingDrives(onClear = clearFilters) }
                         } else {
                             items(filteredDrives, key = { it.rideId }) { drive ->
                                 DriveCard(
@@ -266,6 +297,172 @@ private fun NoMatchingDrives(onClear: () -> Unit) {
                 Text(text = stringResource(R.string.savedDrives_filterNoMatchesAction))
             }
         }
+    }
+}
+
+/**
+ * The History filter controls, collapsed behind a one-tap header.
+ *
+ * Expanded, the search field plus three chip rows are several hundred dp tall —
+ * on a phone that pushed the actual drives below the fold, which is the wrong
+ * default for a page whose job is to show your drives. So the body is collapsed
+ * by default and the header stands in for it.
+ *
+ * The header carries a COUNT BADGE rather than a summary chip row: the whole
+ * point of collapsing is to reclaim vertical space, and echoing the active
+ * filters as chips would give most of it straight back (and reflow the header to
+ * two lines once two filters are on, so the drives below would jump as you
+ * filter). A badge is a fixed one-line height whatever is selected, and the
+ * number answers the only question the collapsed state has to answer — "is
+ * something hiding drives from me, and how much do I have to undo?". The exact
+ * selections are one tap away, and the no-matches state still offers its own
+ * clear-filters escape hatch, so nothing is unreachable while collapsed.
+ *
+ * @param expanded whether the body is showing; hoisted so it survives rotation.
+ */
+@Composable
+private fun DriveFilterSection(
+    criteria: DriveFilterCriteria,
+    expanded: Boolean,
+    onToggleExpanded: () -> Unit,
+    onQueryChange: (String) -> Unit,
+    onDateRangeChange: (DriveDateRange) -> Unit,
+    onDistanceBandChange: (DriveDistanceBand) -> Unit,
+    onSortChange: (DriveSort) -> Unit,
+    onClear: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+    ) {
+        DriveFilterToggle(
+            expanded = expanded,
+            activeFilterCount = criteria.activeFilterCount,
+            onToggle = onToggleExpanded,
+        )
+        // Height + fade rather than a bare `if`, so the drives below slide out of
+        // the way instead of teleporting. Inside a LazyColumn item this is safe:
+        // the item simply re-measures each frame as the body grows/shrinks.
+        AnimatedVisibility(
+            visible = expanded,
+            enter =
+                expandVertically(animationSpec = tween(FILTER_TRANSITION_MILLIS, easing = FastOutSlowInEasing)) +
+                    fadeIn(animationSpec = tween(FILTER_TRANSITION_MILLIS, easing = FastOutSlowInEasing)),
+            exit =
+                shrinkVertically(animationSpec = tween(FILTER_TRANSITION_MILLIS, easing = FastOutSlowInEasing)) +
+                    fadeOut(animationSpec = tween(FILTER_TRANSITION_MILLIS, easing = FastOutSlowInEasing)),
+        ) {
+            DriveFilterBar(
+                criteria = criteria,
+                onQueryChange = onQueryChange,
+                onDateRangeChange = onDateRangeChange,
+                onDistanceBandChange = onDistanceBandChange,
+                onSortChange = onSortChange,
+                onClear = onClear,
+            )
+        }
+    }
+}
+
+/**
+ * The show/hide control for [DriveFilterSection]: a full-width row carrying a
+ * filter icon, the "Filters" label, the active-filter count badge and a chevron.
+ *
+ * The whole row is the tap target (min 48 dp tall, so it clears the Material
+ * touch-target minimum even though the icon and text are shorter than that) and
+ * it exposes ONE merged accessibility node describing both the action and the
+ * badge — the icons deliberately carry no description of their own so TalkBack
+ * doesn't read the control out three times.
+ */
+@Composable
+private fun DriveFilterToggle(
+    expanded: Boolean,
+    activeFilterCount: Int,
+    onToggle: () -> Unit,
+) {
+    val actionLabel =
+        stringResource(
+            if (expanded) {
+                R.string.savedDrives_filterToggleCollapse
+            } else {
+                R.string.savedDrives_filterToggleExpand
+            },
+        )
+    // Spoken form of the badge. Phrased "Active filters: 2" rather than
+    // "2 active filters" so it stays grammatical at every count — the generated
+    // string resources have no <plurals> support, and Swedish "1 aktiva filter"
+    // would be wrong.
+    val activeLabel =
+        if (activeFilterCount > 0) {
+            stringResource(R.string.savedDrives_filterActiveCount, activeFilterCount)
+        } else {
+            null
+        }
+    // "Show filters, Active filters: 2" — the count is part of the spoken label,
+    // because a badge that is only a visual cue would strand a TalkBack user with
+    // exactly the problem collapsing created: a short list and no stated reason.
+    val description = if (activeLabel != null) "$actionLabel, $activeLabel" else actionLabel
+
+    Surface(
+        onClick = onToggle,
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(min = MIN_TOUCH_TARGET)
+                .testTag(DRIVE_FILTER_TOGGLE_TAG)
+                .semantics(mergeDescendants = true) { contentDescription = description },
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.FilterList,
+                contentDescription = null,
+                modifier = Modifier.size(KccSpacing.s5),
+            )
+            Text(
+                text = stringResource(R.string.savedDrives_filterToggle),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f),
+            )
+            if (activeFilterCount > 0) {
+                // Bare digit: the surrounding "Filters" label already says what is
+                // being counted, and the merged contentDescription carries the
+                // spoken sentence, so the pill stays a fixed, narrow width.
+                ActiveFilterBadge(activeFilterCount.toString())
+            }
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = null,
+                modifier = Modifier.size(KccSpacing.s5),
+            )
+        }
+    }
+}
+
+/**
+ * The count pill on the filter header. Theme colours only (primary /
+ * onPrimary), so it stays legible in both light and dark without a hardcoded
+ * pair. Carries no semantics of its own — the header merges descendants and
+ * speaks the count itself.
+ */
+@Composable
+private fun ActiveFilterBadge(label: String) {
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s1),
+        )
     }
 }
 
