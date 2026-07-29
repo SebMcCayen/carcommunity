@@ -161,6 +161,9 @@ export function chatMessageExpiry(now: Date, retentionDays: number): Date {
  * The cap is far above any plausible number of convoys a member is in AT ONCE
  * (the bar shows one, and the hub's convoy list holds their live ones), so a
  * dropped marker is always for a convoy whose chat is long finished.
+ *
+ * Enforced PER CALL, not as a transactional invariant — see
+ * [pruneConvoyLastRead] for why, and for why the map still cannot grow.
  */
 export const CONVOY_LAST_READ_MAX_ENTRIES = 50;
 
@@ -168,6 +171,20 @@ export const CONVOY_LAST_READ_MAX_ENTRIES = 50;
  * The keys to DROP from a member's per-convoy last-read map once `convoyId` has
  * been stamped at `stampedAtMs`, so at most [CONVOY_LAST_READ_MAX_ENTRIES]
  * survive: the OLDEST markers go first, and the one just stamped never does.
+ *
+ * CONCURRENCY: this is read-compute-write, NOT a transaction, so two markRead
+ * calls for DIFFERENT convoys that overlap can each read the same map, each
+ * evict the same oldest key and each add a different one — leaving the map one
+ * over the cap per racing writer. That is deliberate, and it does not weaken what
+ * the cap is FOR. The function evicts down to the cap from whatever it is
+ * handed, over-cap input included, so the very next markRead pulls an overshoot
+ * straight back: the map self-heals and cannot ratchet upwards, which is the
+ * property that keeps the document and its automatic map-subfield indexes
+ * bounded. A transaction would make "never more than N, even momentarily" true
+ * as well, and it was rejected: markRead runs on the hot path (once per incoming
+ * message per watching member), an aborted transaction is a SILENTLY FAILED
+ * markRead, and a failed markRead is a badge left lit on a chat the member has
+ * read. That trades an invisible, self-correcting imprecision for a visible one.
  *
  * Pure so the eviction rule is unit-testable without Firestore. `existing` is
  * whatever is stored today — any shape, since a client can never write this field

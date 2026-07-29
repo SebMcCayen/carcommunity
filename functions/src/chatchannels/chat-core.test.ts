@@ -173,6 +173,28 @@ describe('pruneConvoyLastRead', () => {
     expect(pruneConvoyLastRead(null, 'c-1', 1000, 1)).toEqual([]);
   });
 
+  /**
+   * The property that makes the non-transactional read-compute-write safe: two
+   * overlapping markRead calls for different convoys can each read the same map,
+   * evict the same oldest key and add a different one, leaving it OVER the cap.
+   * Pruning from an over-cap map must pull it straight back down, so an
+   * overshoot is transient and can never ratchet upwards.
+   */
+  it('evicts an OVER-cap map back down to the cap in one pass (self-healing)', () => {
+    const overCap = {
+      a: stamp(10),
+      b: stamp(20),
+      c: stamp(30),
+      d: stamp(40),
+      e: stamp(50),
+    };
+    // 5 stored + 1 new = 6 against a cap of 2 → the 4 oldest go, in one call.
+    const evicted = pruneConvoyLastRead(overCap, 'fresh', 1000, 2);
+    expect(evicted.sort()).toEqual(['a', 'b', 'c', 'd']);
+    // What survives is the cap exactly: the newest stored one plus the stamp.
+    expect(Object.keys(overCap).length - evicted.length + 1).toBe(2);
+  });
+
   it('defaults to the shipped cap', () => {
     const existing = Object.fromEntries(
       Array.from({ length: CONVOY_LAST_READ_MAX_ENTRIES }, (_, i) => [`c${i}`, stamp(i)]),

@@ -390,6 +390,15 @@ export const markRead = onCall(
     // markRead for a different convoy cannot clobber this one — which writing the
     // whole recomputed map back would. Evictions ride along as nested deletes for
     // the same reason: a merge alone can add keys but never remove them.
+    //
+    // NOT a transaction, deliberately: two overlapping calls for different
+    // convoys can leave the map one over the cap, and the next call evicts it
+    // straight back down (pruneConvoyLastRead prunes from an over-cap map in one
+    // pass), so the map self-heals and cannot ratchet up. Wrapping this in a
+    // transaction to make the cap momentarily exact would put a retrying
+    // read-write on the hot path, and an aborted transaction is a silently
+    // failed markRead — a badge left lit on a chat the member has read. See
+    // pruneConvoyLastRead for the full reasoning.
     const update: Record<string, unknown> = { [convoyId]: FieldValue.serverTimestamp() };
     for (const key of evicted) {
       update[key] = FieldValue.delete();
