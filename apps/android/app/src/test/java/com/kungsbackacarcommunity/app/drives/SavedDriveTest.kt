@@ -56,6 +56,22 @@ class SavedDriveTest {
     }
 
     @Test
+    fun `a drive with no stored max speed renders the dash, never zero`() {
+        // Every drive saved before maxSpeedMetersPerSecond existed reads as
+        // null (there is no backfill). "0 km/h" would be a claim the car never
+        // moved, on a drive that covered kilometres.
+        val legacy = drive("legacy", createdAt = 1L)
+        assertEquals(null, legacy.maxSpeedMetersPerSecond)
+        assertEquals(null, legacy.routeThumbnail)
+        assertEquals("—", DriveFormatters.formatSpeed(legacy.maxSpeedMetersPerSecond))
+        // A genuinely stationary drive DID store 0, and 0 is a fact, so it
+        // renders as a number — the dash means "unknown", not "slow".
+        assertEquals("0 km/h", DriveFormatters.formatSpeed(0.0))
+        // Whole km/h, no decimals: 25 m/s = 90 km/h.
+        assertEquals("90 km/h", DriveFormatters.formatSpeed(25.0))
+    }
+
+    @Test
     fun `formatSpeed renders em dash for non-finite values`() {
         assertEquals("—", DriveFormatters.formatSpeed(Double.POSITIVE_INFINITY))
         assertEquals("—", DriveFormatters.formatSpeed(Double.NEGATIVE_INFINITY))

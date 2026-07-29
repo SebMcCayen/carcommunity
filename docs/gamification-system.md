@@ -26,14 +26,16 @@ These are not negotiable and every section below is written to respect them. If 
 
 ### C1 — No speed gamification, ever
 
-**Nothing in this system may reward, rank, display, or imply reward for speed.** No top-speed stat, no "fastest lap", no speed-based leaderboard, no acceleration badge, no "you beat your record" copy.
+**Nothing in this system may reward, rank, or imply reward for speed.** No "fastest lap", no speed-based leaderboard, no acceleration badge, no "you beat your record" copy, no personal best, no comparison between drives.
+
+**Amended 2026-07 by an explicit product decision:** a drive's maximum speed may now be *displayed* — `drives.save` stores `maxSpeedMetersPerSecond` on the ride document and the History card shows it. The clause above used to read "reward, rank, **display**, or imply reward" and to forbid a top-speed stat outright; "display" was dropped because showing a number is not the hazard, paying out for it is. What the amendment does not license: the figure sits at the same visual weight as distance and duration, carries no colour or styling that rewards a higher number, and is never compared against another drive or a previous best. If it ever starts to look like a trophy, this clause has been broken.
 
 Two reasons, both load-bearing:
 
 1. **Safety.** A points system that pays out for speed is a system that pays people to drive dangerously. There is no safe way to A/B test that.
 2. **Brand differentiation.** Competitor X gamifies driving behaviour. Our stance — that a car community is about the cars, the meets and the people, not about how fast you went — is a deliberate market position, not an oversight. It is also the reason we can market to owners' clubs, insurers and families without a reputational asterisk.
 
-This constraint is already encoded in the codebase: `functions/src/drives/drive-calculations.ts` has an explicit "No top-speed calculation or storage. No driving-quality scores." rule in its header, and `functions/src/badges/badge-core.ts` states that no badge — in wording or artwork — rewards speed. (That rule was originally worded "no speed/distance/racing badges"; it was corrected when Vägfarare shipped, since Vägfarare *is* a distance ladder. The binding constraint is speed, per Q3.)
+This constraint is encoded in the codebase: `functions/src/drives/drive-calculations.ts` states in its header that maximum speed is computed and stored but never rewarded — it used to say "No top-speed calculation or storage", and the header records the reversal rather than dropping it — that it computes no driving-quality scores, and `functions/src/badges/badge-core.ts` states that no badge — in wording or artwork — rewards speed. (That rule was originally worded "no speed/distance/racing badges"; it was corrected when Vägfarare shipped, since Vägfarare *is* a distance ladder. The binding constraint is speed, per Q3.)
 
 > **Note on the distance badges proposed in §7.** They are *lifetime milestone* badges, not per-kilometre payouts. The marginal KP for one more kilometre is zero once the (capped) daily distance award is taken. See §5.4 and §7.2 for why that keeps them inside the spirit of the rule, and open question **Q3** for Seb's call on whether they belong at all.
 
@@ -158,9 +160,9 @@ Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): c
 
 At the time this document was first written there was no progression, no tiering, no crown-related badge and no relationship at all between badges and Kronpoäng; §7 has since shipped all four. Event attendance uses a deliberately conservative proxy — a `going` RSVP on an event that reaches `completed` — counted on a backend-only `badgeProgress/{uid}` document. That proxy is **not** presence verification; §6 adds real verification and keeps the proxy as the fallback.
 
-### 1.4 Drives — distance exists, speed deliberately does not
+### 1.4 Drives — distance and speed exist as facts, never as rewards
 
-`functions/src/drives/drive-calculations.ts` computes total distance with Haversine and **excludes any segment implying > 55.6 m/s (200 km/h)** as a GPS teleport artifact. It computes an average speed but explicitly stores no top speed and no quality score. This 55.6 m/s per-segment filter is a *distance-integrity* filter and is distinct from the 130 m/s *anti-teleport* bound in `isPlausibleJump` — the two serve different purposes and both are kept (§8).
+`functions/src/drives/drive-calculations.ts` computes total distance with Haversine and **excludes any segment implying > 55.6 m/s (200 km/h)** as a GPS teleport artifact. It computes an average speed, and (since the 2026-07 amendment to C1) a maximum speed under the same 55.6 m/s filter — stored and displayed as a plain fact, never scored, ranked or paid out for. It computes no quality score. This 55.6 m/s per-segment filter is a *distance-integrity* filter and is distinct from the 130 m/s *anti-teleport* bound in `isPlausibleJump` — the two serve different purposes and both are kept (§8).
 
 ---
 

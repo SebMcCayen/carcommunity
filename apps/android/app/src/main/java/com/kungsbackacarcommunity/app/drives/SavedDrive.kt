@@ -21,6 +21,31 @@ data class SavedDrive(
     val startedAtMillis: Long?,
     val endedAtMillis: Long?,
     val createdAtMillis: Long?,
+    /**
+     * The drive's highest plausible speed (m/s), server-derived at save time
+     * with the same >200 km/h GPS-glitch filter distance uses.
+     *
+     * Null for drives saved before the field existed (there is no backfill) and
+     * for summary-only saves — i.e. "unknown", NOT "zero". Render
+     * [DriveFormatters.formatSpeed], which turns null into the missing-value
+     * dash; a 0 here would be a claim the car never moved.
+     *
+     * Presentation rule, and it is a rule rather than a preference: this is a
+     * neutral fact, shown at the same visual weight as distance and duration.
+     * No record, no personal best, no "new best!", no comparison with another
+     * drive, no colour or emphasis that rewards a bigger number. Storing the
+     * figure was authorised (2026-07); turning it into an achievement was not
+     * (docs/gamification-system.md C1).
+     */
+    val maxSpeedMetersPerSecond: Double? = null,
+    /**
+     * The route simplified to ~64 points as an encoded polyline, stored on the
+     * ride document so the History card can draw the drive's shape with no
+     * extra read. Null for drives saved before it existed and for recordings
+     * with no drawable route; [RouteThumbnail] turns both into the card's
+     * placeholder.
+     */
+    val routeThumbnail: String? = null,
 )
 
 object SavedDrives {

@@ -208,6 +208,7 @@ describe('drives-save', () => {
       durationSeconds: number;
       distanceMeters: number | null;
       averageSpeedMetersPerSecond: number | null;
+      maxSpeedMetersPerSecond: number | null;
       routePath: string;
       previewImagePath: string;
       alreadySaved: boolean;
@@ -227,6 +228,25 @@ describe('drives-save', () => {
     expect(docData.userId).toBe(member.uid);
     expect(docData.title).toBe('Kvällstur');
     expect(docData.distanceMeters).toBe(data.distanceMeters);
+    // REVERSED 2026-07 by an explicit product decision. This assertion used to
+    // read
+    //   expect(docData).not.toHaveProperty('topSpeed');
+    // and pinned the rule that the callable never persisted a top speed. It
+    // does now, as `maxSpeedMetersPerSecond`, so the assertion is rewritten to
+    // pin the NEW contract end to end rather than deleted: the callable RETURNS
+    // the figure, the stored document carries the SAME figure, and the value
+    // stays inside the >200 km/h GPS-glitch bound the derivation applies. The
+    // legacy `topSpeed` name is still never written, so a regression that
+    // resurrects the old shape is still caught.
+    expect(data.maxSpeedMetersPerSecond).not.toBeNull();
+    expect(data.maxSpeedMetersPerSecond as number).toBeGreaterThan(0);
+    expect(data.maxSpeedMetersPerSecond as number).toBeLessThanOrEqual(55.6);
+    expect(docData.maxSpeedMetersPerSecond).toBe(data.maxSpeedMetersPerSecond);
+    // The route thumbnail is stored (so the History list can draw the drive's
+    // shape with no extra read) but deliberately NOT echoed in the response.
+    expect(typeof docData.routeThumbnail).toBe('string');
+    expect((docData.routeThumbnail as string).length).toBeGreaterThan(0);
+    expect(data).not.toHaveProperty('routeThumbnail');
     expect(docData).not.toHaveProperty('topSpeed');
   });
 

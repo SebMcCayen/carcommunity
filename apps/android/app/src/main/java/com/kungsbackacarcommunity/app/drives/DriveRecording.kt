@@ -318,8 +318,11 @@ data class DriveSummaryPreview(
  * Pure, dependency-light preview calculator mirroring the backend Haversine
  * distance + average-speed logic (functions/src/drives/drive-calculations.ts)
  * so the in-app summary roughly matches what the server will store. Kept in
- * Kotlin (no Android/Firebase types) for JVM unit testing. Per the backend
- * privacy rule there is deliberately no top-speed estimate.
+ * Kotlin (no Android/Firebase types) for JVM unit testing. The end-of-session
+ * preview shows distance / duration / average speed only — it is a "save or
+ * discard?" prompt, not a stats page. Maximum speed IS computed here for the
+ * share text, and (since 2026-07) stored by the backend and shown in History;
+ * the preview simply has no room for a fourth number.
  */
 object DriveSummary {
     /** Mean spherical Earth radius in metres (backend EARTH_RADIUS_METRES). */
@@ -434,11 +437,16 @@ object DriveSummary {
      * speed in the share text. Non-positive time deltas are skipped exactly like
      * the distance scan.
      *
-     * Top speed is deliberately NOT persisted server-side (the drives privacy
-     * rule stores only average speed), so it is derived here purely client-side
-     * for the user-facing share text. Callers that have no loaded route points
-     * (e.g. the History read model, which never fetches them) get null and must
-     * omit the top-speed sentence rather than render 0.
+     * This is the SHARE-TEXT figure, derived client-side from points already in
+     * memory. Since 2026-07 the backend ALSO persists an equivalent figure on
+     * the ride document (`maxSpeedMetersPerSecond`, same 55.6 m/s filter) — the
+     * note that used to stand here, that top speed "is deliberately NOT
+     * persisted server-side", no longer holds and has been corrected rather
+     * than left to mislead. The two are not merged because they answer
+     * different questions: this one exists the moment a recording ends, before
+     * any save; the stored one is what the History list shows for a drive whose
+     * route points it never loads. Callers with no loaded points get null and
+     * must omit the top-speed sentence rather than render 0.
      */
     fun topSpeedMetersPerSecond(points: List<RecordedPoint>): Double? =
         topSpeedOverPoints(
