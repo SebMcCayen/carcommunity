@@ -4,10 +4,6 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./feature-flags": {
-      "types": "./dist/feature-flags.d.ts",
-      "default": "./dist/feature-flags.js"
-    },
     "./live-location": {
       "types": "./dist/live-location.d.ts",
       "default": "./dist/live-location.js"

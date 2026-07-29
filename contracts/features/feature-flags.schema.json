@@ -20,9 +20,22 @@
             "description": "camelCase flag key, matching the backend JSON response."
           },
           "default": { "type": "boolean" },
-          "description": { "type": "string", "minLength": 1 }
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Short human-readable name shown to the operator in the admin console."
+          },
+          "sensitivity": {
+            "enum": ["safety", "privacy", "standard"],
+            "description": "How much warning the admin UI gives before the flag is flipped. \"safety\" = flipping it changes what members are invited to physically drive to and stop at; \"privacy\" = it governs data collected about members; \"standard\" = ordinary product surface."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 21,
+            "description": "What the flag controls AND what turning it off stops — the operator reads this while deciding."
+          }
         },
-        "required": ["key", "default", "description"],
+        "required": ["key", "default", "label", "sensitivity", "description"],
         "additionalProperties": false
       }
     }
