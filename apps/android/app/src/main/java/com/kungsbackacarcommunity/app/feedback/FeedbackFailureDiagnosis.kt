@@ -73,11 +73,25 @@ enum class FeedbackFailureReason {
  */
 object FeedbackFailureDiagnosis {
 
-    /** Cloud Run service backing the `feedback.reportIssue` callable. */
-    const val RUN_SERVICE = "feedback-reportissue"
+    /**
+     * The callable as deployed — the grouped export `feedback.reportIssue`
+     * becomes the function name `feedback-reportIssue`. Single source of truth:
+     * [FirebaseFeedbackRepository] calls this name, and [remediation] quotes it,
+     * so the guidance cannot drift from the callable actually being invoked.
+     */
+    const val CALLABLE = "feedback-reportIssue"
 
-    /** Region the callable is deployed to. */
-    const val RUN_REGION = "europe-west1"
+    /** Region [CALLABLE] is deployed to. */
+    const val REGION = "europe-west1"
+
+    /**
+     * Cloud Run service backing [CALLABLE]. Cloud Functions v2 derives the
+     * service name by lower-casing the function name — hence `feedback-reportIssue`
+     * -> `feedback-reportissue`, which is the name `gcloud run services` expects.
+     * Kotlin's no-arg `lowercase()` is already locale-independent (`Locale.ROOT`),
+     * so this cannot be broken by a Turkish-locale device.
+     */
+    val RUN_SERVICE: String = CALLABLE.lowercase()
 
     /**
      * True when the 401 body carried a firebase-functions error envelope, i.e.
@@ -117,7 +131,7 @@ object FeedbackFailureDiagnosis {
                     "never on a later update, so re-deploying will NOT restore it. Fix once " +
                     "with:\n" +
                     "  gcloud run services add-iam-policy-binding $RUN_SERVICE \\\n" +
-                    "    --region=$RUN_REGION --member=allUsers --role=roles/run.invoker \\\n" +
+                    "    --region=$REGION --member=allUsers --role=roles/run.invoker \\\n" +
                     "    --project=<firebase-project-id>\n" +
                     "(Safe for an onCall callable: it only lets a request reach the service; " +
                     "Firebase Auth and enforceAppCheck still authorize it. See docs/app-check.md.)"

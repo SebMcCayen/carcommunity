@@ -198,8 +198,12 @@ class FirebaseFeedbackRepository private constructor(
 
     companion object {
         private const val TAG = "FeedbackRepository"
-        private const val REGION = "europe-west1"
-        private const val CALLABLE = "feedback-reportIssue"
+
+        // Aliases, not copies: FeedbackFailureDiagnosis owns these because its
+        // remediation text quotes the service name and region, and that guidance
+        // is only correct if it names the callable we actually invoke.
+        private const val REGION = FeedbackFailureDiagnosis.REGION
+        private const val CALLABLE = FeedbackFailureDiagnosis.CALLABLE
 
         fun createIfAvailable(context: Context): FeedbackRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

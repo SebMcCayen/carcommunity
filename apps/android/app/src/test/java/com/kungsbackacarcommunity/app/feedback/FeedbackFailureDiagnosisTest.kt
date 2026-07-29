@@ -100,12 +100,23 @@ class FeedbackFailureDiagnosisTest {
     fun `the invoker-binding remediation names the service, the role and the no-redeploy trap`() {
         val text = FeedbackFailureDiagnosis.remediation(FeedbackFailureReason.SERVICE_NOT_INVOCABLE)
         assertTrue(text.contains(FeedbackFailureDiagnosis.RUN_SERVICE))
-        assertTrue(text.contains(FeedbackFailureDiagnosis.RUN_REGION))
+        assertTrue(text.contains(FeedbackFailureDiagnosis.REGION))
         assertTrue(text.contains("roles/run.invoker"))
         assertTrue(text.contains("allUsers"))
         // The trap that made this outage persist for weeks: re-deploying does
         // not re-apply the binding, so the guidance must say so.
         assertTrue(text.contains("CREATED"))
+    }
+
+    @Test
+    fun `the Cloud Run service name is the callable name lower-cased`() {
+        // Cloud Functions v2 derives the Run service name this way, and the
+        // remediation command is only copy-pasteable if it matches.
+        assertEquals("feedback-reportissue", FeedbackFailureDiagnosis.RUN_SERVICE)
+        assertEquals(
+            FeedbackFailureDiagnosis.CALLABLE.lowercase(),
+            FeedbackFailureDiagnosis.RUN_SERVICE,
+        )
     }
 
     @Test
