@@ -185,7 +185,13 @@ object LivePositionRejectionReport {
      */
     fun bucketMeters(value: Double?): String =
         when {
-            value == null || !value.isFinite() -> "unknown"
+            // Negative is folded into "unknown" for the same reason
+            // [LivePositionQuality.normalizedAccuracy] folds it: a negative
+            // accuracy is not a measurement. Without this it would land in the
+            // "<50 m" band and report a nonsense fix as an EXCELLENT one — the
+            // single most misleading thing this string could say, since the
+            // whole point of quoting accuracy is to explain a bad fix.
+            value == null || !value.isFinite() || value < 0.0 -> "unknown"
             value < 50.0 -> "<50 m"
             value < 200.0 -> "50-199 m"
             value < 1000.0 -> "200-999 m"
@@ -206,9 +212,17 @@ object LivePositionRejectionReport {
         dominantVerdict(summary)?.name ?: "UNKNOWN"
 
     /**
-     * One line, no coordinates, no identity: how many fixes were discarded, how
-     * bad the worst one claimed to be, how far the largest discarded jump was,
+     * One line, no coordinates, no identity: how many fixes were not used, how
+     * bad the worst one claimed to be, how far the largest filtered jump was,
      * the per-rule breakdown, and whether a mock provider was involved.
+     *
+     * "Not used" rather than "discarded", deliberately. The log also counts
+     * [LiveFixVerdict.HOLD_UNCORROBORATED], which is a DELAYED ACCEPTANCE — that
+     * sample was not drawn, but the position it described may well have been
+     * adopted a second later once a following fix agreed. Calling that
+     * "discarded" would have someone reading the public issue conclude the app
+     * had thrown away a real position. The per-rule breakdown is included in the
+     * same line precisely so the mix is visible rather than implied.
      */
     fun message(source: LiveFixSource, summary: LiveFixRejectionSummary): String {
         val reasons =
@@ -217,9 +231,9 @@ object LivePositionRejectionReport {
                 .joinToString(", ") { "${it.key.name}=${it.value}" }
                 .ifEmpty { "none" }
         val mock = if (summary.mockProviderSeen) ", mock provider seen" else ""
-        return "Live position (${source.name.lowercase()}): ${summary.total} fixes discarded; " +
+        return "Live position (${source.name.lowercase()}): ${summary.total} fixes not used; " +
             "worst reported accuracy ${bucketMeters(summary.worstAccuracyMeters)}, " +
-            "largest discarded jump ${bucketMeters(summary.largestJumpMeters)}; " +
+            "largest filtered jump ${bucketMeters(summary.largestJumpMeters)}; " +
             "reasons $reasons$mock"
     }
 

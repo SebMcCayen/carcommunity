@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.location
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -104,7 +105,7 @@ class LivePositionDiagnosticsTest {
         log.record(rejection(accuracyMeters = 1_437.0, distanceMeters = 1_812.0))
         val message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, log.summary())
 
-        assertTrue("says how many", message.contains("1 fixes discarded"))
+        assertTrue("says how many", message.contains("1 fixes not used"))
         assertTrue("bands the accuracy", message.contains("1000+ m"))
         assertFalse("never the exact figure", message.contains("1437"))
         assertFalse("nor the exact distance", message.contains("1812"))
@@ -137,6 +138,40 @@ class LivePositionDiagnosticsTest {
         assertEquals("200-999 m", LivePositionRejectionReport.bucketMeters(200.0))
         assertEquals("1000+ m", LivePositionRejectionReport.bucketMeters(1_000.0))
         assertEquals("<50 m", LivePositionRejectionReport.bucketMeters(0.0))
+    }
+
+    /**
+     * A NEGATIVE accuracy is not a measurement, and must read as "unknown" — the
+     * same fold [LivePositionQuality.normalizedAccuracy] applies. Bucketing it
+     * as "<50 m" would report a nonsense fix as an excellent one, in the very
+     * line whose job is to explain why a fix was bad.
+     */
+    @Test
+    fun aNegativeMagnitudeIsUnknownNotExcellent() {
+        assertEquals("unknown", LivePositionRejectionReport.bucketMeters(-1.0))
+        assertEquals("unknown", LivePositionRejectionReport.bucketMeters(-9_999.0))
+        assertNull(
+            "and the quality rules agree it is unknown",
+            LivePositionQuality.normalizedAccuracy(-1.0),
+        )
+    }
+
+    /**
+     * The wording must not overclaim. HOLD_UNCORROBORATED is a DELAYED
+     * ACCEPTANCE — that sample was not drawn, but the position may have been
+     * adopted a second later — so the summary says "not used", never
+     * "discarded", and shows the per-rule mix so a reader can see what actually
+     * happened.
+     */
+    @Test
+    fun theSummaryDoesNotCallAHeldFixDiscarded() {
+        val log = LivePositionRejectionLog()
+        log.record(rejection(verdict = LiveFixVerdict.HOLD_UNCORROBORATED, distanceMeters = 1_800.0))
+        val message = LivePositionRejectionReport.message(LiveFixSource.RENDER, log.summary())
+
+        assertFalse("a held fix was not discarded", message.contains("discarded"))
+        assertTrue(message.contains("1 fixes not used"))
+        assertTrue("and the reason is spelled out", message.contains("HOLD_UNCORROBORATED=1"))
     }
 
     /**
