@@ -27,8 +27,11 @@ export interface OnboardingStatusResponse {
   /**
    * LEGACY consent record — the 18+ age confirmation this callable used to
    * collect. Surfaced read-only so support can still see what a pre-change
-   * member actually agreed to; always null for members onboarded after the
-   * driving-licence wording landed. Never written by this callable any more.
+   * member actually agreed to. Never written by this callable any more, and
+   * non-null ONLY when that member really did confirm the old 18+ wording:
+   * toIso maps both the seeded `null` (pre-change account that never completed
+   * the old onboarding) and an absent field (every post-change account) to null,
+   * so a null here proves nothing beyond "no 18+ confirmation on record".
    */
   ageConfirmedAt: string | null;
   termsAcceptedAt: string | null;

@@ -93,7 +93,7 @@
         },
         "ageConfirmedAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
-          "description": "LEGACY consent audit record — the earlier 18+ age confirmation, superseded by licenceConfirmedAt. Retained untouched on documents that already carry it, as the historical record of what those members actually attested to; never rewritten into a licence confirmation and not seeded on new documents."
+          "description": "LEGACY — the earlier 18+ age confirmation, superseded by licenceConfirmedAt. Not seeded on new documents, but it WAS seeded as null on every document provisioned before the licence wording landed, so a pre-change document may have it null (old onboarding never completed), set (the owner really did confirm the 18+ wording) or absent. Only a NON-NULL value is a consent record. Retained untouched; never rewritten into a licence confirmation."
         },
         "termsAcceptedAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",

@@ -8,10 +8,14 @@
  *
  * The driving-licence consent (`licenceConfirmed` → `licenceConfirmedAt`)
  * REPLACED an earlier 18+ age consent (`ageConfirmed` → `ageConfirmedAt`).
- * Those are different statements, so the legacy `ageConfirmedAt` timestamp is
- * NEVER read, copied or rewritten here: it stays on the document purely as the
- * historical record of what those members actually attested to, and members who
- * onboarded under the old wording have no `licenceConfirmedAt` at all.
+ * Those are different statements, so the legacy `ageConfirmedAt` field is NEVER
+ * read, copied or rewritten here — it is left exactly as found. Provisioning used
+ * to seed it as `null`, so on a pre-change document it may be present-and-null
+ * (old onboarding never completed), present-with-a-Timestamp (the owner really
+ * did confirm the 18+ wording) or absent; only a NON-NULL value is the historical
+ * record of an actual attestation. Members who onboarded under the old wording
+ * have no `licenceConfirmedAt` at all, so calling this again stamps one from the
+ * new wording without touching the old field. See buildUserPrivateDocument.
  *
  * No Firebase Admin SDK imports — the server-timestamp sentinel is injected
  * so this module stays unit-testable without emulators.

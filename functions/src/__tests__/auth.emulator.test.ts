@@ -122,8 +122,10 @@ describe('auth-onUserCreate trigger', () => {
     });
     expect(priv.email).toBe(email);
     expect(priv.licenceConfirmedAt).toBeNull();
-    // The legacy 18+ consent field is NOT seeded on new documents: a new
-    // member makes no age attestation, so it must never appear at all.
+    // The legacy 18+ consent field is NOT seeded on newly provisioned documents:
+    // a new member makes no age attestation, so it must be absent here. (It WAS
+    // seeded as null before the licence wording landed, which is why pre-change
+    // documents still carry it — see buildUserPrivateDocument.)
     expect(priv.ageConfirmedAt).toBeUndefined();
     expect(priv.termsAcceptedAt).toBeNull();
     expect(priv.privacyPolicyAcceptedAt).toBeNull();

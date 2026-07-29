@@ -60,9 +60,13 @@ that are **not suitable for young children**.
   precise real-time location sharing argues for a non-child audience.
 - During onboarding we record a **driving-licence confirmation** timestamp
   (`licenceConfirmedAt`) together with acceptance of the Terms and this Privacy Policy.
-  Onboarding **no longer collects a self-declared age confirmation**; accounts created
-  before that change still carry the historical `ageConfirmedAt` record of the 18+
-  confirmation those members gave, which we do not reinterpret.
+  Onboarding **no longer collects a self-declared age confirmation**.
+- Accounts created before that change kept the older `ageConfirmedAt` field. It holds a
+  timestamp **only for members who actually confirmed the old 18+ wording**; on accounts
+  that were created but never finished the old onboarding it is empty, and on a few it is
+  missing altogether. Where a timestamp exists we keep it, unchanged, as the record of
+  what that member confirmed at the time: we never reinterpret it, never treat it as a
+  driving-licence confirmation, and never write a new one.
 - We do not knowingly collect data from children below our stated minimum age. If you
   believe a child has provided us personal data, contact us and we will delete it.
 
@@ -93,8 +97,8 @@ actually stores.
 - **Display name, profile photo (avatar), short bio** — your public profile.
 - **Role / membership status** (member, active, suspended flags).
 - **Consent timestamps** — driving-licence confirmation, Terms acceptance, Privacy Policy
-  acceptance (plus a legacy age-confirmation timestamp on accounts created before the
-  licence confirmation replaced it).
+  acceptance (plus a legacy age-confirmation timestamp, but only on those older accounts
+  that actually gave one before the licence confirmation replaced it — see Section 3).
 
 ### 4.2 Vehicles (Garage)
 - Vehicle **make, model, year, powertrain, engine description, free-text description**, and
