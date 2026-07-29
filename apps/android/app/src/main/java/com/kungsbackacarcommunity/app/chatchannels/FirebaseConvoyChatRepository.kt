@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.chatchannels
 
 import android.content.Context
 import com.google.firebase.FirebaseApp
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
@@ -34,6 +35,14 @@ import kotlinx.coroutines.flow.combine
  * message is overlaid with the sender's current `users/{uid}` profile
  * ([LiveProfileRepository], [ChannelThread.hydrate]) on both the live window and
  * older pages.
+ *
+ * UNREAD: [observeUnread] combines its OWN bounded newest-message listener with
+ * the owner-readable `userPrivate/{uid}.convoyChatLastReadAt.{convoyId}` marker —
+ * community's design, generalized from a dot to a count. Both listeners are
+ * separate from [observeMessages] on purpose: the badge is shown by the map
+ * shell, where the channel itself is not open, so tying the count to the
+ * channel's window would mean either syncing a chat nobody has opened or no badge
+ * at all.
  */
 class FirebaseConvoyChatRepository private constructor(
     private val firestore: FirebaseFirestore,
@@ -104,6 +113,84 @@ class FirebaseConvoyChatRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeUnread(convoyId: String, uid: String): Flow<Int> {
+        // The window is [UNREAD_SCAN_LIMIT], and it is what makes the count both
+        // cheap and honest. It is ONE more than the badge's display cap
+        // (ConvoyBar.UNREAD_DISPLAY_MAX), so anything at or past the cap renders
+        // as "9+" whether the true backlog is 10 or 10 000 — the saturated count
+        // and the real one are indistinguishable on screen, and nothing pays for a
+        // count() aggregation or a wider sync to tell them apart. The documented
+        // bound is that this can never render an exact number above the cap.
+        val window: Flow<List<ChannelMessage>?> = callbackFlow {
+            val registration =
+                firestore
+                    .collection(CONVOY_CHATS)
+                    .document(convoyId)
+                    .collection(MESSAGES)
+                    .orderBy(CREATED_AT, Query.Direction.DESCENDING)
+                    .limit(UNREAD_SCAN_LIMIT)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            if ((error as? FirebaseFirestoreException)?.code ==
+                                FirebaseFirestoreException.Code.PERMISSION_DENIED
+                            ) {
+                                // Removed from the convoy / blocked: hard-clear the
+                                // badge even if a stale cached snapshot is present.
+                                // Never leave a count lit for a chat the caller can
+                                // no longer open.
+                                trySend(null)
+                                return@addSnapshotListener
+                            }
+                            // Other (transient) error with no cached data: keep the
+                            // last-known count rather than emitting a misleading
+                            // zero. With cached data, fall through and use it.
+                            if (snapshot == null) return@addSnapshotListener
+                        }
+                        trySend(snapshot?.documents?.mapNotNull { it.toChannelMessage() }.orEmpty())
+                    }
+            awaitClose { registration.remove() }
+        }
+        // Blocked authors are filtered out of the count for the same reason the
+        // channel filters them out of its live window: counting a message the
+        // caller will never be shown sends them into an apparently unchanged chat.
+        val visible: Flow<List<ChannelMessage>> =
+            combine(window, blockVisibility.observeHiddenUids()) { messages, hidden ->
+                if (messages == null) {
+                    emptyList()
+                } else {
+                    BlockVisibility.filterHiddenAuthors(messages, hidden) { it.senderUid }
+                }
+            }
+        val lastReadAt: Flow<Long?> = callbackFlow {
+            val registration =
+                firestore
+                    .collection(USER_PRIVATE)
+                    .document(uid)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null && snapshot == null) {
+                            // Transient failure with no cached marker: keep the
+                            // last-known marker rather than momentarily reading it
+                            // as missing, which would wrongly re-light the badge.
+                            return@addSnapshotListener
+                        }
+                        // A map keyed by convoy id (see convoyChat.markRead): an
+                        // absent entry means "never opened", which counts every
+                        // message from someone else.
+                        val markers = snapshot?.get(CONVOY_LAST_READ_AT) as? Map<*, *>
+                        trySend((markers?.get(convoyId) as? Timestamp)?.toDate()?.time)
+                    }
+            awaitClose { registration.remove() }
+        }
+        return combine(visible, lastReadAt) { messages, marker ->
+            ChannelThread.unreadCount(messages, uid, marker)
+        }
+    }
+
+    override suspend fun markRead(convoyId: String) {
+        // Best-effort idempotent bookkeeping; a transient failure is swallowed.
+        functions.callChannel(MARK_READ, mapOf("convoyId" to convoyId))
+    }
+
     override suspend fun post(convoyId: String, text: String, clientId: String?): ChannelSendResult =
         functions.callChannel(
             POST,
@@ -135,9 +222,19 @@ class FirebaseConvoyChatRepository private constructor(
         private const val CONVOY_CHATS = "convoyChats"
         private const val MESSAGES = "messages"
         private const val CREATED_AT = "createdAt"
+        private const val USER_PRIVATE = "userPrivate"
+        private const val CONVOY_LAST_READ_AT = "convoyChatLastReadAt"
         private const val CONVOY_LIST = "convoy-list"
         private const val POST = "convoyChat-post"
         private const val LIST = "convoyChat-list"
+        private const val MARK_READ = "convoyChat-markRead"
+
+        /**
+         * Newest-message window scanned for the unread count (see observeUnread).
+         * One more than ConvoyBar.UNREAD_DISPLAY_MAX, so the count saturates
+         * exactly where the badge starts showing "9+".
+         */
+        private const val UNREAD_SCAN_LIMIT = 10L
 
         fun createIfAvailable(context: Context): ConvoyChatRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null

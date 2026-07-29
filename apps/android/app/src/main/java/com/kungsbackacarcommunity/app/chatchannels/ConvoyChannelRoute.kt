@@ -19,8 +19,11 @@ import kotlinx.coroutines.launch
 /**
  * Convoy-channel integration route: subscribes the live newest-window listener
  * for [convoyId], drives [ChannelChatContent] through a [ChannelChatCoordinator]
- * (send + older-page; convoy channels carry no unread marker, so no mark-read).
- * Mirrors [CommunityChannelRoute].
+ * (send + older-page), and marks the channel read on open + whenever a new
+ * incoming message arrives while it is open. Mirrors [CommunityChannelRoute],
+ * whose mark-read rule this now shares — the marker is per convoy, so opening one
+ * convoy's channel clears only that convoy's unread badge on the map shell's
+ * convoy bar.
  *
  * Deliberately NO @mentions, unlike the community channel: convoyChat-post
  * accepts none (a convoy already notifies all of its <= 50 accepted members on
@@ -65,7 +68,7 @@ fun ConvoyChannelRoute(
                 sender = { text, _, clientId -> repository.post(convoyId, text, clientId) },
                 pager = { before -> repository.loadOlder(convoyId, before) },
                 selfUid = uid,
-                marker = null,
+                marker = { repository.markRead(convoyId) },
             )
         }
 
@@ -91,6 +94,18 @@ fun ConvoyChannelRoute(
     // null when it lacks createdAt. A null cursor makes older-paging a no-op, so
     // gate the "Load earlier" affordance on it and reuse the same cursor to page.
     val olderCursor = remember(displayed) { ChannelThread.oldestCursor(displayed) }
+
+    // Mark read on open, and again when a new INCOMING message lands while open —
+    // the same pair of effects the community channel uses. Keyed on [convoyId] so
+    // switching convoys inside the hub re-marks the one now on screen rather than
+    // leaving the second convoy's badge lit. Without the second effect, messages
+    // arriving while the reader is WATCHING them would still be counted the moment
+    // they closed the hub and looked back at the convoy bar.
+    LaunchedEffect(convoyId) { coordinator.markRead() }
+    LaunchedEffect(convoyId, liveMessages.lastOrNull()?.id) {
+        val newest = liveMessages.lastOrNull()
+        if (newest != null && newest.senderUid != uid) coordinator.markRead()
+    }
 
     ChannelChatContent(
         messages = displayed,

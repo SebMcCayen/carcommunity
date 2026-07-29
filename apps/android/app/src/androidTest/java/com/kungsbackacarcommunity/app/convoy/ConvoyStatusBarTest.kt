@@ -447,4 +447,128 @@ class ConvoyStatusBarTest {
             .onNodeWithContentDescription(string(R.string.convoy_barMembers, twoMembers.size))
             .assertIsDisplayed()
     }
+
+    // --- convoy chat control + unread badge ---------------------------------
+
+    /**
+     * Tapping the chat icon must open THIS convoy's chat — the id the bar is
+     * describing, not a bare "open the chat hub" — because the hub lands on the
+     * convoy the handler names.
+     */
+    @Test
+    fun tappingTheChatIcon_opensThisConvoysChat() {
+        var opened: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onOpenChat = { opened = it },
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_CHAT_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("c1", opened)
+    }
+
+    /**
+     * The chat control is OMITTED, not disabled, without a handler — a chat icon
+     * has no honest disabled meaning, and a greyed-out one carrying an unread
+     * badge would announce messages it refuses to open.
+     */
+    @Test
+    fun theChatIcon_isAbsentEntirelyWithoutAHandler() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1").copy(unreadChatCount = 3),
+                    onEndConvoy = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_CHAT_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * The one that matters visually: a caught-up member must see NO badge, not a
+     * "0". Asserted through the RENDERED text, so a badge that draws "0" fails —
+     * which reading the count back off the state would not catch. The label has
+     * to lose the number too, or TalkBack announces "0 unread messages" on a chat
+     * with nothing new in it.
+     */
+    @Test
+    fun theUnreadBadge_isAbsentAtZeroAndNeverPrintsAZero() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1").copy(unreadChatCount = 0),
+                    onEndConvoy = {},
+                    onOpenChat = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        // The control is there...
+        composeTestRule.onNodeWithTag(CONVOY_BAR_CHAT_TAG).assertExists()
+        // ...but nothing is badged on it.
+        composeTestRule.onNodeWithText("0").assertDoesNotExist()
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barChat))
+            .assertExists()
+    }
+
+    /** A real count is drawn as-is, and announced with the number in it. */
+    @Test
+    fun theUnreadBadge_showsTheCountAndAnnouncesIt() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1").copy(unreadChatCount = 3),
+                    onEndConvoy = {},
+                    onOpenChat = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("3").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithContentDescription(string(R.string.convoy_barChatUnread, 3))
+            .assertExists()
+    }
+
+    /**
+     * Past the cap the badge saturates instead of growing — the bar is one
+     * compact row shared with four other controls, and a widening badge would
+     * push them off it. The announcement saturates with it ("more than 9"), so a
+     * screen-reader user is never told an exact number the badge is not claiming.
+     */
+    @Test
+    fun theUnreadBadge_capsItsWidthAndItsAnnouncementOnABusyConvoy() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1").copy(unreadChatCount = 250),
+                    onEndConvoy = {},
+                    onOpenChat = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("250").assertDoesNotExist()
+        composeTestRule.onNodeWithText("${ConvoyBar.UNREAD_DISPLAY_MAX}+").assertIsDisplayed()
+        composeTestRule
+            .onNodeWithContentDescription(
+                string(R.string.convoy_barChatUnreadMany, ConvoyBar.UNREAD_DISPLAY_MAX),
+            )
+            .assertExists()
+    }
 }

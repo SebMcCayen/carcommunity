@@ -299,4 +299,52 @@ class ConvoyBarTest {
         assertEquals(true, ConvoyBar.stateFor(status, setOf("c1"))?.busy)
         assertEquals(false, ConvoyBar.stateFor(status, setOf("other"))?.busy)
     }
+
+    // --- convoy-chat unread badge -----------------------------------------
+
+    /**
+     * Zero must be ABSENCE, not a drawn "0". A badge is an invitation to open the
+     * chat; a "0" sitting on the icon is a permanent, meaningless decoration and
+     * the one thing a caught-up member must not see.
+     */
+    @Test
+    fun `the unread badge is nothing at all at zero`() {
+        assertNull(ConvoyBar.unreadBadgeLabel(0))
+        // Defensive: a negative count is no more badge-worthy than zero.
+        assertNull(ConvoyBar.unreadBadgeLabel(-1))
+    }
+
+    @Test
+    fun `the unread badge prints the count up to the cap`() {
+        assertEquals("1", ConvoyBar.unreadBadgeLabel(1))
+        assertEquals("5", ConvoyBar.unreadBadgeLabel(5))
+        assertEquals(
+            ConvoyBar.UNREAD_DISPLAY_MAX.toString(),
+            ConvoyBar.unreadBadgeLabel(ConvoyBar.UNREAD_DISPLAY_MAX),
+        )
+    }
+
+    /**
+     * The cap is what keeps the badge one character wide. The bar is a single
+     * compact row sharing the map shell with the member count and three other
+     * controls, so an uncapped number on a long-running convoy would widen this
+     * control until they were squeezed off.
+     */
+    @Test
+    fun `the unread badge saturates past the cap instead of growing`() {
+        val saturated = "${ConvoyBar.UNREAD_DISPLAY_MAX}+"
+        assertEquals(saturated, ConvoyBar.unreadBadgeLabel(ConvoyBar.UNREAD_DISPLAY_MAX + 1))
+        assertEquals(saturated, ConvoyBar.unreadBadgeLabel(1000))
+        assertEquals(saturated, ConvoyBar.unreadBadgeLabel(Int.MAX_VALUE))
+    }
+
+    @Test
+    fun `the unread count is carried onto the bar state, defaulting to none`() {
+        val status = loaded(convoy(convoyId = "c1"))
+        assertEquals(0, ConvoyBar.stateFor(status)?.unreadChatCount)
+        assertEquals(
+            4,
+            ConvoyBar.stateFor(status, emptySet(), "me", unreadChatCount = 4)?.unreadChatCount,
+        )
+    }
 }

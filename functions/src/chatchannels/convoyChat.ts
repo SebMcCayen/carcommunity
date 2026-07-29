@@ -1,9 +1,10 @@
 /**
- * convoyChat.post / convoyChat.list — member-gated per-CONVOY chat callables
- * (contracts/functions/functions.json).
+ * convoyChat.post / convoyChat.list / convoyChat.markRead — member-gated
+ * per-CONVOY chat callables (contracts/functions/functions.json).
  *
  * Deployed via the `convoyChat` export group (functions/src/index.ts) as
- * `convoyChat-post`, `convoyChat-list`. One of the THREE product chats
+ * `convoyChat-post`, `convoyChat-list`, `convoyChat-markRead`. One of the THREE
+ * product chats
  * (community / convoy / friends-DMs). Stacked on the convoy backend
  * (functions/src/convoy): a convoy chat is readable + postable ONLY by ACCEPTED
  * members of `convoys/{convoyId}` (memberUids + members[uid].inviteStatus ===
@@ -44,6 +45,15 @@
  *    mention slip past a member who silenced 'convoy_chat'. The only thing
  *    mentions would still buy here is client-side highlighting, a rendering
  *    concern the Android @-picker work can add later on its own.
+ *  - UNREAD is a per-user LAST-READ MARKER, exactly as on the community channel,
+ *    not a fan-out counter: `convoyChat.markRead` stamps
+ *    `userPrivate/{uid}.convoyChatLastReadAt.{convoyId}` (owner-only readable)
+ *    and the client counts unread messages itself against the bounded
+ *    newest-message window it already listens to. A counter would mean a write
+ *    per accepted member on every post — the very cost communityChat rejected.
+ *    The map is capped (chat-core CONVOY_LAST_READ_MAX_ENTRIES) because, unlike
+ *    community's single marker, it gains a key per convoy for a member's whole
+ *    lifetime.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -67,7 +77,9 @@ import {
   isAlreadyExistsError,
   messagePreview,
   parseListConvoyInput,
+  parseMarkReadConvoyInput,
   parsePostConvoyInput,
+  pruneConvoyLastRead,
   toChatMessageSummary,
   toProfileProjection,
   type ChatMessageSummary,
@@ -88,6 +100,17 @@ const CALLABLE_OPTS = {
 function convoyMessagesRef(convoyId: string) {
   return db.collection('convoyChats').doc(convoyId).collection('messages');
 }
+
+/**
+ * The caller's own private document, which holds the per-convoy last-read map
+ * alongside the community channel's single marker (owner-only readable).
+ */
+function userPrivateRef(uid: string) {
+  return db.collection('userPrivate').doc(uid);
+}
+
+/** Field holding `{ [convoyId]: Timestamp }` — see convoyChat.markRead. */
+const CONVOY_LAST_READ_FIELD = 'convoyChatLastReadAt';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -311,3 +334,68 @@ export const list = onCall(CALLABLE_OPTS, async (request): Promise<ListConvoyRes
 
   return { convoyId, messages, nextBefore, hasMore };
 });
+
+// ---------------------------------------------------------------------------
+// convoyChat.markRead
+// ---------------------------------------------------------------------------
+
+export interface MarkReadConvoyResponse {
+  convoyId: string;
+}
+
+/**
+ * Stamps the caller's last-read marker for ONE convoy at
+ * `userPrivate/{uid}.convoyChatLastReadAt.{convoyId}`, evicting the oldest
+ * markers past the cap. Idempotent; best-effort bookkeeping the client fires and
+ * forgets.
+ *
+ * NO convoy-membership read, deliberately — and this is the one place in the
+ * convoyChat domain that skips it. The write lands in the CALLER'S OWN private
+ * document; it grants no access to anything (the chat's read gate is
+ * firestore.rules' get() of the convoy doc, and post/list re-check membership
+ * themselves), returns nothing but the id it was handed, and cannot probe a
+ * convoy's existence — a marker for a convoy the caller is not in is inert. The
+ * only thing an outsider could do with it is churn keys in their own capped map.
+ * Community's markRead gates identically (active member, nothing more), and this
+ * runs on the hot path — once on open and again on each incoming message while
+ * the channel is open — so a membership read per call would be paid on every
+ * message every watching member sees, for no security this doesn't already have.
+ *
+ * No read-BACK of the stamped value either: the client learns its marker from the
+ * owner-readable `userPrivate/{uid}` listener that already drives the unread
+ * count, so returning it would buy a second read nobody consumes. The single read
+ * this does spend is the one the eviction needs.
+ */
+export const markRead = onCall(
+  CALLABLE_OPTS,
+  async (request): Promise<MarkReadConvoyResponse> => {
+    const actor = await requireMemberActor(request);
+
+    const parsed = parseMarkReadConvoyInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { convoyId } = parsed.input;
+
+    const ref = userPrivateRef(actor.uid);
+    const snap = await ref.get();
+    const evicted = pruneConvoyLastRead(
+      snap.data()?.[CONVOY_LAST_READ_FIELD],
+      convoyId,
+      Date.now(),
+    );
+
+    // A nested serverTimestamp sentinel under a merge: only the ONE convoy's key
+    // is written (Firestore merges the map by field path), so a concurrent
+    // markRead for a different convoy cannot clobber this one — which writing the
+    // whole recomputed map back would. Evictions ride along as nested deletes for
+    // the same reason: a merge alone can add keys but never remove them.
+    const update: Record<string, unknown> = { [convoyId]: FieldValue.serverTimestamp() };
+    for (const key of evicted) {
+      update[key] = FieldValue.delete();
+    }
+    await ref.set({ [CONVOY_LAST_READ_FIELD]: update }, { merge: true });
+
+    return { convoyId };
+  },
+);

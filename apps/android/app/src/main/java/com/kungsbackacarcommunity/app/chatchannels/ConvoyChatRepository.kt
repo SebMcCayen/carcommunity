@@ -37,9 +37,16 @@ sealed interface ConvoyListState {
  * `convoy-list` callable (filtered client-side to ACCEPTED-member convoys — the
  * only ones whose chat the caller may read/post). Messages read from a live
  * Firestore listener on `convoyChats/{convoyId}/messages` (rules grant reads only
- * to accepted members); sending + older-page pagination go through the
- * `convoyChat-*` callables (europe-west1). Firebase-free so it is testable with
- * fakes (mirrors DmRepository / CommunityChatRepository).
+ * to accepted members); sending, older-page pagination and mark-read go through
+ * the `convoyChat-*` callables (europe-west1). Firebase-free so it is testable
+ * with fakes (mirrors DmRepository / CommunityChatRepository).
+ *
+ * Unread is the SAME design as the community channel, one level deeper: a
+ * lightweight per-user, PER-CONVOY last-read marker
+ * (`userPrivate/{uid}.convoyChatLastReadAt.{convoyId}`, owner-only readable)
+ * rather than a fan-out counter, which here would mean a write per accepted
+ * member on every post. [observeUnread] combines a bounded newest-message
+ * listener with that marker; [markRead] stamps it.
  */
 interface ConvoyChatRepository {
     /** `convoy-list` — the caller's ACCEPTED-member convoys (chat-eligible), newest-first. */
@@ -47,6 +54,32 @@ interface ConvoyChatRepository {
 
     /** Live newest-window of a convoy's channel, chronological. */
     fun observeMessages(convoyId: String): Flow<ChannelMessagesState>
+
+    /**
+     * Live unread COUNT of [convoyId]'s channel for [uid]: the messages from
+     * someone else that post-date the caller's last-read marker. 0 while the
+     * caller is caught up (or the channel is empty), and 0 again once [markRead]
+     * runs.
+     *
+     * SATURATING, not exact: it counts within a bounded newest-message window
+     * (see the Firebase implementation), so a channel busier than that window
+     * reports the window size. The badge consuming it caps its display BELOW that
+     * bound, so the two never disagree on screen.
+     *
+     * COST: one bounded snapshot listener on the convoy's messages, plus the
+     * caller's own `userPrivate` document for the marker. Subscribe only while
+     * the count can actually be SEEN — this feeds the always-visible map shell,
+     * where a subscription that outlives the convoy is a listener burning the
+     * whole session for nothing.
+     */
+    fun observeUnread(convoyId: String, uid: String): Flow<Int>
+
+    /**
+     * `convoyChat-markRead` — stamps the caller's last-read marker for [convoyId],
+     * clearing the unread count. Idempotent, and best-effort: a transient failure
+     * leaves the badge lit rather than failing anything the reader is doing.
+     */
+    suspend fun markRead(convoyId: String)
 
     /**
      * `convoyChat-post` — posts [text] to [convoyId]'s channel. [clientId] is the

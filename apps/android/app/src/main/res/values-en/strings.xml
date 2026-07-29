@@ -548,6 +548,9 @@
     <string name="convoy_barConfirmCancel">Cancel</string>
     <string name="convoy_barFocusMe">Map follows you. Tap to keep the whole convoy in view</string>
     <string name="convoy_barFocusConvoy">Map keeps the whole convoy in view. Tap to follow you again</string>
+    <string name="convoy_barChat">Convoy chat</string>
+    <string name="convoy_barChatUnread">Convoy chat, %1$d unread messages</string>
+    <string name="convoy_barChatUnreadMany">Convoy chat, more than %1$d unread messages</string>
     <string name="convoy_inviteTitle">Invite to convoy</string>
     <string name="convoy_inviteSubmit">Send invites</string>
     <string name="convoy_inviteCancel">Cancel</string>

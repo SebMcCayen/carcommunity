@@ -34,7 +34,24 @@
  * dmUnreadTotal). communityChat.markRead stamps it; communityChat.list returns
  * it. The client's newest-message live listener shows an unread dot when the
  * newest message's createdAt is newer than the caller's lastReadAt — O(1) per
- * user, no fan-out. Convoy channels carry no unread state (small, session-scoped).
+ * user, no fan-out.
+ *
+ * UNREAD (convoy): the SAME shape, one level deeper. A convoy channel needs a
+ * marker PER convoy, so the marker is a map keyed by convoy id at
+ * `userPrivate/{uid}.convoyChatLastReadAt` (owner-only readable, same document as
+ * the community marker), stamped by convoyChat.markRead. A fan-out counter was
+ * rejected for the same reason as on the community channel: it would be a write
+ * per accepted member on every post. The client counts the unread messages itself
+ * from the bounded newest-message window it is already listening to.
+ *
+ * The map is CAPPED at CONVOY_LAST_READ_MAX_ENTRIES (see pruneConvoyLastRead):
+ * unlike the community channel there is one key per convoy the member has ever
+ * opened, so without a cap the document — and the automatic single-field indexes
+ * Firestore builds for each map subfield — would grow without bound over the
+ * member's whole lifetime. Dropping the OLDEST markers is safe: a convoy old
+ * enough to fall off the end has had its messages TTL-deleted
+ * (CONVOY_CHAT_RETENTION_DAYS), so a missing marker resolves to "nothing unread"
+ * against an empty channel.
  *
  * BLOCKING (community + convoy): messages authored by a uid the caller is in a
  * block relationship with — in EITHER direction — are filtered out of the
@@ -131,6 +148,75 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  */
 export function chatMessageExpiry(now: Date, retentionDays: number): Date {
   return new Date(now.getTime() + retentionDays * DAY_MS);
+}
+
+/**
+ * How many per-convoy last-read markers a member's `userPrivate` document keeps.
+ *
+ * The community channel has exactly ONE marker; a convoy marker exists per convoy
+ * the member has ever opened the chat of, which grows for the member's whole
+ * lifetime. Each map subfield also gets an automatic single-field index, so the
+ * uncapped version costs index entries as well as document size.
+ *
+ * The cap is far above any plausible number of convoys a member is in AT ONCE
+ * (the bar shows one, and the hub's convoy list holds their live ones), so a
+ * dropped marker is always for a convoy whose chat is long finished.
+ */
+export const CONVOY_LAST_READ_MAX_ENTRIES = 50;
+
+/**
+ * The keys to DROP from a member's per-convoy last-read map once `convoyId` has
+ * been stamped at `stampedAtMs`, so at most [CONVOY_LAST_READ_MAX_ENTRIES]
+ * survive: the OLDEST markers go first, and the one just stamped never does.
+ *
+ * Pure so the eviction rule is unit-testable without Firestore. `existing` is
+ * whatever is stored today — any shape, since a client can never write this field
+ * but a legacy/partial document can still hold junk: entries that are not
+ * millisecond-valued are treated as the oldest possible (they carry no usable
+ * ordering and re-stamping restores them), and a non-map value drops out entirely
+ * because there is then nothing to prune.
+ */
+export function pruneConvoyLastRead(
+  existing: unknown,
+  convoyId: string,
+  stampedAtMs: number,
+  maxEntries: number = CONVOY_LAST_READ_MAX_ENTRIES,
+): string[] {
+  const entries = new Map<string, number>();
+  if (existing !== null && typeof existing === 'object' && !Array.isArray(existing)) {
+    for (const [key, value] of Object.entries(existing as Record<string, unknown>)) {
+      entries.set(key, toLastReadMillis(value));
+    }
+  }
+  entries.set(convoyId, stampedAtMs);
+  if (entries.size <= maxEntries) {
+    return [];
+  }
+  // Newest first, so everything past the cap is the oldest tail. A stable
+  // tie-break on the key keeps the choice deterministic when two markers share a
+  // millisecond (and when several are the "oldest possible" junk value).
+  const ordered = [...entries.entries()].sort(
+    ([keyA, msA], [keyB, msB]) => msB - msA || keyA.localeCompare(keyB),
+  );
+  return ordered.slice(maxEntries).map(([key]) => key);
+}
+
+/**
+ * A stored last-read value as epoch millis, or `Number.NEGATIVE_INFINITY` when it
+ * carries no usable ordering (missing, malformed, or a Timestamp-shaped object
+ * from a raw read rather than an admin-SDK `Timestamp`).
+ */
+function toLastReadMillis(value: unknown): number {
+  if (value !== null && typeof value === 'object' && 'toMillis' in value) {
+    const millis = (value as { toMillis: unknown }).toMillis;
+    if (typeof millis === 'function') {
+      const result: unknown = millis.call(value);
+      if (typeof result === 'number' && Number.isFinite(result)) {
+        return result;
+      }
+    }
+  }
+  return Number.NEGATIVE_INFINITY;
 }
 
 /**
@@ -237,6 +323,10 @@ const listConvoySchema = z
 
 export type ListConvoyInput = z.infer<typeof listConvoySchema>;
 
+const markReadConvoySchema = z.object({ convoyId: idSchema }).strict();
+
+export type MarkReadConvoyInput = z.infer<typeof markReadConvoySchema>;
+
 function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseResult<T> {
   const result = schema.safeParse(data ?? {});
   if (!result.success) {
@@ -249,6 +339,7 @@ export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids?, clientI
 export const LIST_COMMUNITY_EXPECTED = 'Expected { before? } where before is an ISO-8601 timestamp.';
 export const POST_CONVOY_EXPECTED = `Expected { convoyId, text, clientId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const LIST_CONVOY_EXPECTED = 'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
+export const MARK_READ_CONVOY_EXPECTED = 'Expected { convoyId }.';
 
 export function parsePostCommunityInput(data: unknown): ParseResult<PostCommunityInput> {
   return parse(postCommunitySchema, data, POST_COMMUNITY_EXPECTED);
@@ -268,6 +359,10 @@ export function parsePostConvoyInput(data: unknown): ParseResult<PostConvoyInput
 
 export function parseListConvoyInput(data: unknown): ParseResult<ListConvoyInput> {
   return parse(listConvoySchema, data, LIST_CONVOY_EXPECTED);
+}
+
+export function parseMarkReadConvoyInput(data: unknown): ParseResult<MarkReadConvoyInput> {
+  return parse(markReadConvoySchema, data, MARK_READ_CONVOY_EXPECTED);
 }
 
 /** User-facing messages (clients branch on the HttpsError code, never text). */
