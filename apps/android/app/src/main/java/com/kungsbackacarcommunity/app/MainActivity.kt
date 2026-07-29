@@ -71,6 +71,7 @@ import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
 import com.kungsbackacarcommunity.app.partners.PartnerApplicationCoordinator
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.media.FirebaseMediaUploader
+import com.kungsbackacarcommunity.app.media.StorageDownloadUrlCache
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.onboarding.FirebaseOnboardingRepository
@@ -454,6 +455,10 @@ class MainActivity : ComponentActivity() {
         // pending deep link cannot navigate whoever signs in next.
         PushNavigator.clear()
         ActiveChatRegistry.clear()
+        // Same reasoning for the resolved-image-URL cache: a Firebase download
+        // URL is a bearer link — the token in it IS the authorisation — so the
+        // departing member's cached URLs must not outlive their session here.
+        StorageDownloadUrlCache.clear(this)
 
         if (pushRegistrationCoordinator == null) {
             authRepository?.signOut()
