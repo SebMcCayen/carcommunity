@@ -2,6 +2,16 @@
   "app": {
     "name": "Kungsbacka Car Community"
   },
+  "appUpdate": {
+    "title": "Ny version tillgänglig",
+    "message": "Det finns en nyare version av appen i Google Play. Uppdatera för att få de senaste funktionerna och rättningarna.",
+    "messageWithVersion": "Version %1$s finns nu i Google Play. Uppdatera för att få de senaste funktionerna och rättningarna.",
+    "update": "Uppdatera",
+    "dismiss": "Inte nu",
+    "requiredTitle": "Uppdatering krävs",
+    "requiredMessage": "Den här versionen av appen stöds inte längre. Uppdatera via Google Play för att fortsätta använda appen.",
+    "storeUnavailable": "Google Play kunde inte öppnas på den här enheten."
+  },
   "navigation": {
     "home": "Hem",
     "map": "Karta",

@@ -51,6 +51,7 @@ const navGroups: NavGroup[] = [
     title: 'System',
     items: [
       { label: 'Feature Flags', href: '/feature-flags', icon: '⚑' },
+      { label: 'App Version', href: '/app-version', icon: '⇧' },
       { label: 'Token renewals', href: '/credentials', icon: '⧗' },
       { label: 'Settings', href: '/settings', icon: '◎' },
     ],

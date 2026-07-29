@@ -37,6 +37,7 @@ const LiveLocationPage = lazy(() => import('@/app/live-location/page'));
 const SupportPage = lazy(() => import('@/app/support/page'));
 const AuditLogPage = lazy(() => import('@/app/audit-log/page'));
 const FeatureFlagsPage = lazy(() => import('@/app/feature-flags/page'));
+const AppVersionPage = lazy(() => import('@/app/app-version/page'));
 const CredentialsPage = lazy(() => import('@/app/credentials/page'));
 const SubscriptionPage = lazy(() => import('@/app/subscription/page'));
 const SettingsPage = lazy(() => import('@/app/settings/page'));
@@ -80,6 +81,7 @@ export function App() {
         <Route path="/support" element={<SupportPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />
         <Route path="/feature-flags" element={<FeatureFlagsPage />} />
+        <Route path="/app-version" element={<AppVersionPage />} />
         <Route path="/credentials" element={<CredentialsPage />} />
         <Route path="/subscription" element={<SubscriptionPage />} />
         <Route path="/settings" element={<SettingsPage />} />
