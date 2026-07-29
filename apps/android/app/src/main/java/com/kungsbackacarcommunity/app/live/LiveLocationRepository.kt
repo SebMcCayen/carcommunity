@@ -64,6 +64,25 @@ data class LiveMarker(
      * null means "unknown", which is deliberately NOT treated as stale.
      */
     val recordedAtIso: String? = null,
+    /**
+     * The publishing fix's own reported accuracy in metres, or null when the
+     * publisher did not send one (an older client, or a provider that omits it).
+     *
+     * Carried because a position is only as good as the fix behind it, and
+     * derived speed cannot tell the difference: a phone standing still in an
+     * urban canyon can report a cell-derived fix a KILOMETRE from where it
+     * actually is, and if the previous sample was the 3-minute stationary
+     * heartbeat, the implied speed of that jump is an entirely plausible
+     * ~30 km/h. Accuracy is the only signal that names such a fix for what it is
+     * — see [com.kungsbackacarcommunity.app.location.LivePositionQuality].
+     *
+     * The backend has been writing this onto `liveLocation/{uid}/latest` since
+     * the node existed (`buildLatestNode`, functions/src/live/live-core.ts);
+     * this reader simply used to drop it. Null means UNKNOWN, never "bad":
+     * blanket-rejecting a fix with no accuracy would make everyone on an older
+     * publisher vanish from the map.
+     */
+    val accuracyMeters: Double? = null,
 )
 
 /**

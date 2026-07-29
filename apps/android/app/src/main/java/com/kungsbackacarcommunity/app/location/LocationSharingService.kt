@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.location.Location
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -21,6 +22,8 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.kungsbackacarcommunity.app.MainActivity
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -118,6 +121,39 @@ class LocationSharingService : Service() {
     private var lastSubmittedLatitude: Double? = null
     private var lastSubmittedLongitude: Double? = null
 
+    /**
+     * Last fix the quality gate BELIEVED, as opposed to the last one published.
+     *
+     * The distinction is the whole point of filtering here: this callback sees a
+     * fix every [BackgroundLocation.UPDATE_INTERVAL_MS] (~5 s) whether or not the
+     * movement/heartbeat throttle publishes it, so the implausible-speed rule
+     * measured from HERE has a ~278 m ceiling. Measured from the last PUBLISHED
+     * sample it would be a 3-minute interval while parked, i.e. a ~10 km ceiling
+     * — which is exactly how a 1-2 km jump on a stationary phone got through.
+     *
+     * The timestamp is the fix's own [android.location.Location.time], not the
+     * wall clock: implied speed is a statement about the device's motion, so it
+     * must be measured between the moments the samples were taken.
+     */
+    private var lastObservedLatitude: Double? = null
+    private var lastObservedLongitude: Double? = null
+    private var lastObservedAtMillis: Long? = null
+
+    /**
+     * Bounded, device-local record of fixes this device refused to publish, plus
+     * the once-per-run escalation. See [LivePositionRejectionLog] — coordinate-free
+     * by construction.
+     */
+    private val rejectionLog = LivePositionRejectionLog()
+
+    /**
+     * Sink for the ONE aggregate report a burst of rejections files. Built lazily
+     * so a Firebase-less build simply gets null and reports nothing.
+     */
+    private val errorReporter: ClientErrorReporter? by lazy {
+        FirebaseClientErrorReporter.createIfAvailable(applicationContext)
+    }
+
     /** Minutes currently rendered in the notification; -1 = nothing posted yet. */
     private var shownRemainingMinutes: Long = -1L
 
@@ -154,11 +190,57 @@ class LocationSharingService : Service() {
                 val repo = repository ?: return
                 val fix = result.lastLocation ?: return
                 val now = System.currentTimeMillis()
-                // Feed EVERY raw fix to the stationary monitor (before the publish
-                // throttle): movement detection is about where the device actually
-                // is, not about which fixes we chose to publish. A fix beyond the
-                // movement threshold re-anchors it and cancels any pending
-                // stationary prompt/auto-stop.
+                val accuracy = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null
+
+                // QUALITY GATE — first, before anything else looks at this fix.
+                //
+                // This is the layer that fixes the reported bug ("my marker jumped
+                // 1-2 km while I was standing still"). Two things make it belong
+                // HERE rather than only on the viewer:
+                //
+                //  - This callback sees EVERY fix at UPDATE_INTERVAL_MS (~5 s),
+                //    whereas a viewer only sees the ones we publish — which, while
+                //    parked, is once per STATIONARY_HEARTBEAT_MS (3 min). Against a
+                //    5 s interval the shared implausible-speed rule has a ~278 m
+                //    ceiling; against 3 min it does not bite below ~10 km. The same
+                //    constant is simply far sharper on this side of the wire.
+                //  - Dropping the fix here fixes every consumer at once — map,
+                //    convoy overlay, off-screen arrows, focus fit — INCLUDING
+                //    viewers running an older build, and saves a callable round
+                //    trip.
+                //
+                // It also runs BEFORE the stationary monitor on purpose: a
+                // spurious kilometre-wide fix must not re-anchor "the driver is
+                // moving" and quietly cancel the parked auto-stop, which is a
+                // privacy control.
+                val verdict =
+                    LivePositionQuality.judgePublish(
+                        previousLatitude = lastObservedLatitude,
+                        previousLongitude = lastObservedLongitude,
+                        previousAtMillis = lastObservedAtMillis,
+                        latitude = fix.latitude,
+                        longitude = fix.longitude,
+                        atMillis = fix.time,
+                        accuracyMeters = accuracy,
+                    )
+                if (verdict != LiveFixVerdict.ACCEPT) {
+                    // Deliberately does NOT advance lastObserved*: the next fix is
+                    // judged against the last fix we BELIEVED, and the growing
+                    // interval is what lets a device that genuinely relocated
+                    // (GPS off, tunnel, process restart) recover on its own rather
+                    // than being rejected forever.
+                    recordPublishRejection(verdict, fix, accuracy, now)
+                    return
+                }
+                lastObservedLatitude = fix.latitude
+                lastObservedLongitude = fix.longitude
+                lastObservedAtMillis = fix.time
+
+                // Feed EVERY accepted raw fix to the stationary monitor (before the
+                // publish throttle): movement detection is about where the device
+                // actually is, not about which fixes we chose to publish. A fix
+                // beyond the movement threshold re-anchors it and cancels any
+                // pending stationary prompt/auto-stop.
                 synchronized(stationaryLock) {
                     stationaryMonitor.onFix(fix.latitude, fix.longitude, now)
                 }
@@ -186,7 +268,7 @@ class LocationSharingService : Service() {
                         latitude = fix.latitude,
                         longitude = fix.longitude,
                         timeMillis = fix.time,
-                        accuracyMeters = if (fix.hasAccuracy()) fix.accuracy.toDouble() else null,
+                        accuracyMeters = accuracy,
                         bearingDegrees = if (fix.hasBearing()) fix.bearing.toDouble() else null,
                         speedMps = if (fix.hasSpeed()) fix.speed.toDouble() else null,
                     )
@@ -204,6 +286,88 @@ class LocationSharingService : Service() {
                 }
             }
         }
+
+    /**
+     * Files one refused fix and, on the first burst, escalates a single
+     * aggregate report.
+     *
+     * ## What is captured, and where it goes
+     * - **Locally** (a bounded [LivePositionRejectionLog], 32 entries, never
+     *   uploaded): the verdict, the fix's reported accuracy, how far it was from
+     *   the last believed fix, the interval between the two, the implied speed,
+     *   and the platform's mock-provider flag. That is enough to answer "why did
+     *   my marker misbehave" after the fact.
+     * - **Remotely**, at most once per service run and only once discards pass
+     *   [LivePositionRejectionLog.ESCALATE_AFTER_REJECTIONS]: one
+     *   `errors-reportClientError` carrying a bucketed, coordinate-free summary
+     *   line. The backend deduplicates by fingerprint and rate-limits 30/hour, so
+     *   there is no client-side throttle on top of it.
+     *
+     * ## Privacy
+     * NO COORDINATE leaves this method, in either direction. Everything recorded
+     * is a delta (distance, interval, speed) or a property of the fix itself
+     * (accuracy, mock flag) — a rejection trail carrying positions would be a
+     * location trail, and the escalated report becomes a world-readable GitHub
+     * issue, so its numbers are additionally reduced to coarse bands.
+     *
+     * ## Mock provider: recorded, never rejected
+     * `isMock` is captured because a spoofed fix is exactly the kind of thing a
+     * future investigation wants to see, but it is deliberately NOT a rejection
+     * reason. Emulators and test harnesses legitimately report mock fixes, and
+     * making sharing silently stop working under them would cost more than the
+     * signal is worth. The backend already scores mock separately where it
+     * matters (crown-hunt-risk.ts).
+     */
+    private fun recordPublishRejection(
+        verdict: LiveFixVerdict,
+        fix: Location,
+        accuracyMeters: Double?,
+        nowMillis: Long,
+    ) {
+        val previousLatitude = lastObservedLatitude
+        val previousLongitude = lastObservedLongitude
+        val distance =
+            if (previousLatitude != null && previousLongitude != null) {
+                BackgroundLocation
+                    .distanceMeters(previousLatitude, previousLongitude, fix.latitude, fix.longitude)
+                    .takeIf { it.isFinite() }
+            } else {
+                null
+            }
+        val delta = lastObservedAtMillis?.let { fix.time - it }
+        val burst =
+            rejectionLog.record(
+                LiveFixRejection(
+                    atMillis = nowMillis,
+                    source = LiveFixSource.PUBLISH,
+                    verdict = verdict,
+                    accuracyMeters = LivePositionRejectionReport.round(accuracyMeters),
+                    distanceMeters = LivePositionRejectionReport.round(distance),
+                    deltaMillis = delta,
+                    impliedSpeedMps =
+                        LivePositionRejectionReport.round(
+                            distance?.let { LivePositionQuality.impliedSpeedMps(it, delta) },
+                        ),
+                    mockProvider = isMockFix(fix),
+                ),
+            )
+        if (!burst) return
+        val summary = rejectionLog.summary()
+        errorReporter?.report(
+            feature = LivePositionRejectionReport.FEATURE,
+            message = LivePositionRejectionReport.message(LiveFixSource.PUBLISH, summary),
+            code = LivePositionRejectionReport.code(summary),
+        )
+    }
+
+    /**
+     * `Location.isMock` across API levels — the same shape
+     * [com.kungsbackacarcommunity.app.crownhunt.CrownLocation] uses, kept local
+     * because that one is private and this is two lines.
+     */
+    @Suppress("DEPRECATION")
+    private fun isMockFix(location: Location): Boolean =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) location.isMock else location.isFromMockProvider
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -289,6 +453,13 @@ class LocationSharingService : Service() {
         lastSubmittedAtMillis = null
         lastSubmittedLatitude = null
         lastSubmittedLongitude = null
+        // The quality gate's anchor and its rejection log are per-RUN, for the
+        // same reason: a new session must not be judged against, or report on,
+        // the previous one's fixes.
+        lastObservedLatitude = null
+        lastObservedLongitude = null
+        lastObservedAtMillis = null
+        rejectionLog.reset()
         shownRemainingMinutes = -1L
         lastSession = null
         promptMode = SharingPromptMode.NORMAL

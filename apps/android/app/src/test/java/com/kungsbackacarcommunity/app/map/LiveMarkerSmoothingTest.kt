@@ -1,6 +1,8 @@
 package com.kungsbackacarcommunity.app.map
 
 import com.kungsbackacarcommunity.app.drives.DriveSummary
+import com.kungsbackacarcommunity.app.location.LiveFixSource
+import com.kungsbackacarcommunity.app.location.LiveFixVerdict
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -27,6 +29,7 @@ class LiveMarkerSmoothingTest {
         latitude: Double = kungsbackaLat,
         longitude: Double = kungsbackaLng,
         updatedAtMillis: Long? = t0,
+        accuracyMeters: Double? = null,
     ) = ConvoyMemberPosition(
         uid = uid,
         latitude = latitude,
@@ -34,6 +37,7 @@ class LiveMarkerSmoothingTest {
         displayName = uid,
         imagePath = null,
         updatedAtMillis = updatedAtMillis,
+        accuracyMeters = accuracyMeters,
     )
 
     // --- acceptsFix -------------------------------------------------------
@@ -105,6 +109,11 @@ class LiveMarkerSmoothingTest {
      * A first fix has nothing to be implausible RELATIVE TO, and an undated fix
      * gives no delta to divide by. Neither is evidence of a glitch, so neither
      * may freeze a member out.
+     *
+     * The displacement here is ORDINARY (about 11 m). An undated fix that ALSO
+     * moves half a kilometre is a different claim entirely, and is answered by
+     * the corroboration rule — see
+     * [anUndatedKilometreJumpIsHeldUntilASecondFixAgrees].
      */
     @Test
     fun aFixWithNoUsableDeltaIsAccepted() {
@@ -114,7 +123,7 @@ class LiveMarkerSmoothingTest {
                 previousLatitude = kungsbackaLat,
                 previousLongitude = kungsbackaLng,
                 previousRecordedAtMillis = null,
-                latitude = kungsbackaLat + 1.0,
+                latitude = kungsbackaLat + 0.0001,
                 longitude = kungsbackaLng,
                 recordedAtMillis = t0,
             ),
@@ -125,9 +134,48 @@ class LiveMarkerSmoothingTest {
                 previousLatitude = kungsbackaLat,
                 previousLongitude = kungsbackaLng,
                 previousRecordedAtMillis = t0,
-                latitude = kungsbackaLat + 1.0,
+                latitude = kungsbackaLat + 0.0001,
                 longitude = kungsbackaLng,
                 recordedAtMillis = null,
+            ),
+        )
+    }
+
+    /**
+     * The hole the speed-only rule left open, asserted at the smoother's own
+     * API: with no timestamps there is no delta, so there is no implied speed to
+     * be implausible — and an undated publisher could therefore move a marker
+     * any distance it liked on a single sample.
+     *
+     * The distance-and-corroboration rule closes it, and closes it WITHOUT
+     * freezing anyone out: the very next fix that agrees is accepted.
+     */
+    @Test
+    fun anUndatedKilometreJumpIsHeldUntilASecondFixAgrees() {
+        // ~1.1 km north, no timestamps, no reported accuracy — nothing supports it.
+        val jumpLat = kungsbackaLat + 0.01
+        assertFalse(
+            "one undated kilometre-scale sample cannot move a marker",
+            LiveMarkerSmoothing.acceptsFix(
+                previousLatitude = kungsbackaLat,
+                previousLongitude = kungsbackaLng,
+                previousRecordedAtMillis = null,
+                latitude = jumpLat,
+                longitude = kungsbackaLng,
+                recordedAtMillis = null,
+            ),
+        )
+        assertTrue(
+            "a second fix agreeing with the held candidate corroborates it",
+            LiveMarkerSmoothing.acceptsFix(
+                previousLatitude = kungsbackaLat,
+                previousLongitude = kungsbackaLng,
+                previousRecordedAtMillis = null,
+                latitude = jumpLat,
+                longitude = kungsbackaLng,
+                recordedAtMillis = null,
+                pendingLatitude = jumpLat,
+                pendingLongitude = kungsbackaLng,
             ),
         )
     }
@@ -446,5 +494,104 @@ class LiveMarkerSmoothingTest {
 
         val drawn = smoother.rendered(jump, heartbeatAt + 5_000L).single()
         assertEquals("the jump was still rejected", kungsbackaLat, drawn.latitude, 0.0)
+    }
+
+    /**
+     * THE REPORTED BUG, end to end through the smoother.
+     *
+     * A parked phone publishes on the 3-minute stationary heartbeat, so the NEXT
+     * sample after a heartbeat is three minutes newer. A cell-derived fix 1.6 km
+     * away therefore implies ~9 m/s (~32 km/h) — an entirely ordinary town speed
+     * that the implied-speed rule was never going to catch. The fix's own
+     * reported accuracy (1200 m) is what names it, and the marker must not move.
+     */
+    @Test
+    fun aStationaryPhonesLowAccuracyKilometreJumpNeverMovesTheMarker() {
+        val smoother = LiveMarkerSmoother()
+        smoother.onPositions(listOf(member(updatedAtMillis = t0, accuracyMeters = 8.0)), t0)
+
+        // Three minutes later: the heartbeat cadence, and a 1.6 km error.
+        val jumpAt = t0 + 180_000L
+        val jump =
+            listOf(
+                member(
+                    latitude = kungsbackaLat + 0.0144,
+                    updatedAtMillis = jumpAt,
+                    accuracyMeters = 1_200.0,
+                ),
+            )
+        smoother.onPositions(jump, jumpAt)
+
+        assertFalse("nothing was animated", smoother.isGliding(jumpAt))
+        val drawn = smoother.rendered(jump, jumpAt + 5_000L).single()
+        assertEquals("the marker stayed put", kungsbackaLat, drawn.latitude, 1e-9)
+
+        // And the reason was recorded, without a coordinate anywhere in it.
+        val rejection = smoother.rejections().single()
+        assertEquals(LiveFixVerdict.REJECT_ACCURACY, rejection.verdict)
+        assertEquals(LiveFixSource.RENDER, rejection.source)
+        assertEquals(1_200.0, rejection.accuracyMeters!!, 0.0)
+        assertEquals(180_000L, rejection.deltaMillis)
+    }
+
+    /**
+     * The same jump with NO reported accuracy — an older publisher, or a
+     * provider that omits it. Unknown must not be treated as bad (that would
+     * make such members invisible), so the accuracy rule cannot help here and
+     * the corroboration rule has to: the outlier is held, the next fix lands
+     * back at the true position, and the marker never moved.
+     */
+    @Test
+    fun anUnaccreditedJumpIsHeldAndThenDroppedWhenTheNextFixDisagrees() {
+        val smoother = LiveMarkerSmoother()
+        smoother.onPositions(listOf(member(updatedAtMillis = t0)), t0)
+
+        val jumpAt = t0 + 180_000L
+        val jump = listOf(member(latitude = kungsbackaLat + 0.0144, updatedAtMillis = jumpAt))
+        smoother.onPositions(jump, jumpAt)
+        assertFalse("the outlier was not drawn", smoother.isGliding(jumpAt))
+
+        // The next sample is back where the phone really is.
+        val backAt = jumpAt + 5_000L
+        val back = listOf(member(updatedAtMillis = backAt))
+        smoother.onPositions(back, backAt)
+
+        val drawn = smoother.rendered(back, backAt + 5_000L).single()
+        assertEquals("the marker never left", kungsbackaLat, drawn.latitude, 1e-9)
+        assertEquals(
+            "and the hold was recorded",
+            LiveFixVerdict.HOLD_UNCORROBORATED,
+            smoother.rejections().single().verdict,
+        )
+    }
+
+    /**
+     * The counterweight: a member who really did travel while out of contact
+     * must still reappear. With a good fix behind it a large displacement is
+     * accepted immediately — the corroboration rule only ever applies to fixes
+     * that cannot vouch for themselves.
+     */
+    @Test
+    fun aGenuineLongMoveWithAGoodFixIsAcceptedImmediately() {
+        val smoother = LiveMarkerSmoother()
+        smoother.onPositions(listOf(member(updatedAtMillis = t0, accuracyMeters = 6.0)), t0)
+
+        // Five minutes in a tunnel, then 4 km further on at 48 km/h — plausible,
+        // and the fix says it is accurate to 6 m.
+        val backAt = t0 + 300_000L
+        val moved =
+            listOf(
+                member(
+                    latitude = kungsbackaLat + 0.036,
+                    updatedAtMillis = backAt,
+                    accuracyMeters = 6.0,
+                ),
+            )
+        smoother.onPositions(moved, backAt)
+
+        assertTrue("the marker is on its way there", smoother.isGliding(backAt))
+        val settled = smoother.rendered(moved, backAt + 10_000L).single()
+        assertEquals(kungsbackaLat + 0.036, settled.latitude, 1e-9)
+        assertTrue("nothing was rejected", smoother.rejections().isEmpty())
     }
 }

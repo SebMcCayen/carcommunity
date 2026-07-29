@@ -1,7 +1,12 @@
 package com.kungsbackacarcommunity.app.map
 
 import com.kungsbackacarcommunity.app.drives.DriveSummary
-import kotlin.math.abs
+import com.kungsbackacarcommunity.app.location.LiveFixRejection
+import com.kungsbackacarcommunity.app.location.LiveFixSource
+import com.kungsbackacarcommunity.app.location.LiveFixVerdict
+import com.kungsbackacarcommunity.app.location.LivePositionQuality
+import com.kungsbackacarcommunity.app.location.LivePositionRejectionLog
+import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 
 /**
  * Stops other people's live markers TELEPORTING around the map.
@@ -18,14 +23,25 @@ import kotlin.math.abs
  * fixes. A bad fix (a reflected/urban-canyon GPS sample) makes it worse: the
  * marker leaps a kilometre sideways and back.
  *
- * ## The two rules
+ * ## The rules
  * 1. **Reject the impossible.** A fix implying more than
  *    [DriveSummary.MAX_PLAUSIBLE_SPEED_MPS] (~200 km/h) since the last accepted
  *    one is a GPS glitch, not a car — the SAME threshold the drive-distance and
  *    top-speed scans already apply, read from [DriveSummary] rather than copied,
  *    so the two can never drift apart. Non-finite / out-of-range coordinates and
  *    out-of-order samples go the same way.
- * 2. **Glide, don't snap.** An accepted fix becomes the TARGET of a short
+ * 2. **Reject the untrustworthy, and corroborate the merely surprising.** Rule 1
+ *    is NOT sufficient on its own, and this is the bug that got reported: implied
+ *    speed is distance ÷ elapsed time, and a PARKED publisher only writes on its
+ *    3-minute stationary heartbeat, so rule 1 does not bite until a jump exceeds
+ *    ~10 km. A stationary phone reporting a cell-derived fix 1-2 km away implies
+ *    a perfectly ordinary ~30 km/h and sails straight through. The fix's own
+ *    reported accuracy is the signal that names such a sample, and a large
+ *    displacement that nothing else supports is held for one fix rather than
+ *    drawn. Both rules live in
+ *    [com.kungsbackacarcommunity.app.location.LivePositionQuality], shared with
+ *    the publisher, which applies the same thresholds at source.
+ * 3. **Glide, don't snap.** An accepted fix becomes the TARGET of a short
  *    animation from wherever the marker currently is, so a member crosses the
  *    gap between two fixes continuously instead of teleporting.
  *
@@ -76,28 +92,34 @@ object LiveMarkerSmoothing {
      * that is simply not drawn.
      */
     fun isDrawable(latitude: Double, longitude: Double): Boolean =
-        latitude.isFinite() &&
-            longitude.isFinite() &&
-            abs(latitude) <= 90.0 &&
-            abs(longitude) <= 180.0
+        LivePositionQuality.isDrawable(latitude, longitude)
 
     /**
      * Whether a newly arrived fix should be accepted as the next target, given
-     * the last accepted one.
+     * the last accepted one — the boolean projection of [LivePositionQuality.judgeIncoming]
+     * for callers that do not need the reason.
      *
      * Rejected when:
      * - the coordinate is not drawable ([isDrawable]);
+     * - the fix's OWN reported accuracy is worse than
+     *   [LivePositionQuality.MAX_USABLE_ACCURACY_METERS];
      * - the sample is not NEWER than the last accepted one (a non-positive time
      *   delta) — Realtime Database re-delivers an unchanged `latest` node, and an
      *   out-of-order sample would drag the marker backwards;
      * - the implied speed since the last accepted fix exceeds
-     *   [DriveSummary.MAX_PLAUSIBLE_SPEED_MPS].
+     *   [DriveSummary.MAX_PLAUSIBLE_SPEED_MPS];
+     * - the displacement exceeds [LivePositionQuality.CORROBORATION_TRIGGER_METERS]
+     *   from a fix that is not trustworthy and that nothing corroborates. This is
+     *   a HOLD rather than a discard — [LiveMarkerSmoother] remembers the
+     *   candidate and accepts it the moment a second fix agrees — but from a
+     *   caller asking "do I move the marker now?", the answer is still no.
      *
      * A NULL timestamp on either side means the delta is unknown, and an unknown
-     * delta is not evidence of a glitch — the fix is accepted rather than
-     * silently freezing a member whose publisher does not date its samples. This
-     * matches how the convoy planner treats an undateable position (see
-     * [ConvoyArrowPlanner]).
+     * delta is not evidence of a glitch — the speed rule is simply skipped rather
+     * than silently freezing a member whose publisher does not date its samples.
+     * This matches how the convoy planner treats an undateable position (see
+     * [ConvoyArrowPlanner]). The distance-and-corroboration rule still applies,
+     * which is what keeps an undated publisher from teleporting.
      *
      * The timestamps are the PUBLISHER's `recordedAt`, not arrival times: implied
      * speed is a statement about the car, so it has to be measured between the
@@ -110,22 +132,21 @@ object LiveMarkerSmoothing {
         latitude: Double,
         longitude: Double,
         recordedAtMillis: Long?,
-    ): Boolean {
-        if (!isDrawable(latitude, longitude)) return false
-        if (previousRecordedAtMillis == null || recordedAtMillis == null) return true
-        val deltaMillis = recordedAtMillis - previousRecordedAtMillis
-        if (deltaMillis <= 0L) return false
-        val metres =
-            DriveSummary.haversineMetres(
-                previousLatitude,
-                previousLongitude,
-                latitude,
-                longitude,
-            )
-        val impliedSpeedMps = metres / (deltaMillis / 1000.0)
-        return impliedSpeedMps.isFinite() &&
-            impliedSpeedMps <= DriveSummary.MAX_PLAUSIBLE_SPEED_MPS
-    }
+        accuracyMeters: Double? = null,
+        pendingLatitude: Double? = null,
+        pendingLongitude: Double? = null,
+    ): Boolean =
+        LivePositionQuality.judgeIncoming(
+            previousLatitude = previousLatitude,
+            previousLongitude = previousLongitude,
+            previousRecordedAtMillis = previousRecordedAtMillis,
+            pendingLatitude = pendingLatitude,
+            pendingLongitude = pendingLongitude,
+            latitude = latitude,
+            longitude = longitude,
+            recordedAtMillis = recordedAtMillis,
+            accuracyMeters = accuracyMeters,
+        ) == LiveFixVerdict.ACCEPT
 
     /**
      * How long the glide to a new target should take, given how long it has been
@@ -213,13 +234,33 @@ object LiveMarkerSmoothing {
  * fix overwrites the running glide's target instead of stacking a second
  * animation on top of it, so nothing can accumulate. Members who stop sharing
  * are pruned on the next roster.
+ *
+ * @param rejectionLog where discarded fixes are recorded — bounded, device-local
+ *   and coordinate-free (see [LivePositionRejectionLog]). Defaults to a private
+ *   log, so the ordinary call site need not think about it.
+ * @param onRejectionBurst invoked at most ONCE per smoother, with a public-safe
+ *   summary line and a stable dedup code, the first time discards become
+ *   frequent enough to be a fault rather than weather. Null (the default) keeps
+ *   everything device-local; the convoy overlay supplies the client-error
+ *   reporter.
  */
-class LiveMarkerSmoother {
+class LiveMarkerSmoother(
+    private val rejectionLog: LivePositionRejectionLog = LivePositionRejectionLog(),
+    private val onRejectionBurst: ((message: String, code: String) -> Unit)? = null,
+) {
 
     /**
      * One member's glide: where the marker is coming FROM, where it is going TO,
      * when that started and how long it takes, plus the bookkeeping the accept
      * rule needs about the last fix that was allowed through.
+     *
+     * [pendingLatitude]/[pendingLongitude] hold the ONE unaccepted candidate a
+     * large, uncorroborated displacement produced. It is never drawn. The next
+     * fix either lands within
+     * [LivePositionQuality.CORROBORATION_RADIUS_METERS] of it — in which case the
+     * member really did move and is accepted — or it does not, in which case the
+     * candidate is simply replaced, having cost nothing but a few seconds of the
+     * marker staying where it was last believed to be.
      */
     private class Track(
         var fromLatitude: Double,
@@ -230,6 +271,8 @@ class LiveMarkerSmoother {
         var durationMillis: Long,
         var acceptedRecordedAtMillis: Long?,
         var acceptedAtMillis: Long,
+        var pendingLatitude: Double? = null,
+        var pendingLongitude: Double? = null,
     )
 
     private val tracks = HashMap<String, Track>()
@@ -270,16 +313,35 @@ class LiveMarkerSmoother {
                 continue
             }
 
-            val accepted =
-                LiveMarkerSmoothing.acceptsFix(
+            val verdict =
+                LivePositionQuality.judgeIncoming(
                     previousLatitude = track.toLatitude,
                     previousLongitude = track.toLongitude,
                     previousRecordedAtMillis = track.acceptedRecordedAtMillis,
+                    pendingLatitude = track.pendingLatitude,
+                    pendingLongitude = track.pendingLongitude,
                     latitude = member.latitude,
                     longitude = member.longitude,
                     recordedAtMillis = member.updatedAtMillis,
+                    accuracyMeters = member.accuracyMeters,
                 )
-            if (!accepted) continue
+            if (verdict != LiveFixVerdict.ACCEPT) {
+                // A held candidate is remembered so the NEXT fix can corroborate
+                // it; anything else clears it, because a rejection says nothing
+                // about where the member is and a stale candidate must not be
+                // able to confirm an unrelated later jump.
+                if (verdict == LiveFixVerdict.HOLD_UNCORROBORATED) {
+                    track.pendingLatitude = member.latitude
+                    track.pendingLongitude = member.longitude
+                } else {
+                    track.pendingLatitude = null
+                    track.pendingLongitude = null
+                }
+                recordRejection(verdict, track, member, nowMillis)
+                continue
+            }
+            track.pendingLatitude = null
+            track.pendingLongitude = null
 
             val arrivalGapMillis = nowMillis - track.acceptedAtMillis
             // Bookkeeping advances even for a stationary heartbeat (same
@@ -326,6 +388,59 @@ class LiveMarkerSmoother {
             tracks.keys.retainAll { uid -> members.any { it.uid == uid } }
         }
     }
+
+    /**
+     * Files one discarded fix in the bounded, device-local [rejectionLog] and, on
+     * the first burst, hands a public-safe summary to [onRejectionBurst].
+     *
+     * DELTAS ONLY — how far, how long, how accurate, how fast. No coordinate of
+     * the member, the previous position or the held candidate is recorded
+     * anywhere, because a trail of rejections carrying positions is still a
+     * location trail. The uid is not recorded either: the interesting question
+     * after the fact is "what kind of fix was thrown away", not "whose".
+     */
+    private fun recordRejection(
+        verdict: LiveFixVerdict,
+        track: Track,
+        member: ConvoyMemberPosition,
+        nowMillis: Long,
+    ) {
+        val distance =
+            DriveSummary.haversineMetres(
+                track.toLatitude,
+                track.toLongitude,
+                member.latitude,
+                member.longitude,
+            ).takeIf { it.isFinite() }
+        val previousRecordedAt = track.acceptedRecordedAtMillis
+        val recordedAt = member.updatedAtMillis
+        val delta =
+            if (previousRecordedAt != null && recordedAt != null) recordedAt - previousRecordedAt else null
+        val burst =
+            rejectionLog.record(
+                LiveFixRejection(
+                    atMillis = nowMillis,
+                    source = LiveFixSource.RENDER,
+                    verdict = verdict,
+                    accuracyMeters = LivePositionRejectionReport.round(member.accuracyMeters),
+                    distanceMeters = LivePositionRejectionReport.round(distance),
+                    deltaMillis = delta,
+                    impliedSpeedMps =
+                        LivePositionRejectionReport.round(
+                            distance?.let { LivePositionQuality.impliedSpeedMps(it, delta) },
+                        ),
+                ),
+            )
+        if (!burst) return
+        val summary = rejectionLog.summary()
+        onRejectionBurst?.invoke(
+            LivePositionRejectionReport.message(LiveFixSource.RENDER, summary),
+            LivePositionRejectionReport.code(summary),
+        )
+    }
+
+    /** The discarded fixes this smoother has seen, oldest first. Device-local. */
+    fun rejections(): List<LiveFixRejection> = rejectionLog.snapshot()
 
     /**
      * Whether any member is still mid-glide at [nowMillis] — i.e. whether the

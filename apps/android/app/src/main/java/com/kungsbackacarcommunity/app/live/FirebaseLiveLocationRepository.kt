@@ -149,7 +149,14 @@ class FirebaseLiveLocationRepository private constructor(
  * Maps the RTDB `latest` node to the Firebase-free [LiveMarker], or null when
  * absent (not sharing) or missing a coordinate. Reads only the marker-complete
  * fields written by live.updatePosition (latitude/longitude/displayName), plus
- * `recordedAt` so viewers can judge staleness.
+ * `recordedAt` so viewers can judge staleness and `accuracyMeters` so they can
+ * judge the fix itself.
+ *
+ * `accuracyMeters` is read as a [Double] rather than through a typed getter that
+ * would assume a shape: `buildLatestNode` writes it as `null` when the publisher
+ * sent none, and RTDB stores a whole number as a Long — `getValue(Double::class)`
+ * handles both numeric encodings and yields null for the absent case, which the
+ * quality rules treat as UNKNOWN rather than as poor.
  */
 private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
     if (!exists()) return null
@@ -163,6 +170,7 @@ private fun DataSnapshot.toLiveMarker(uid: String): LiveMarker? {
         displayName = displayName,
         mainCar = child("mainCar").toLiveMainCar(),
         recordedAtIso = child("recordedAt").getValue(String::class.java),
+        accuracyMeters = child("accuracyMeters").getValue(Double::class.java),
     )
 }
 
