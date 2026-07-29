@@ -128,7 +128,7 @@
     "stillSharingAction": "Ja, jag delar fortfarande",
     "memberRequiredToShare": "Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning.",
     "shareUnavailable": "Delning av live-position är inte tillgänglig just nu.",
-    "sessionBar": "Live-session: %1$s, %2$s kört, %3$s",
+    "sessionBar": "Live-session: %1$s, %2$s, %3$s kört",
     "sessionBarSpeed": "aktuell hastighet %1$d km/h",
     "sessionBarSpeedUnknown": "aktuell hastighet är okänd"
   },

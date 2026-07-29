@@ -184,12 +184,22 @@ fun LiveSessionBar(
         } else {
             stringResource(R.string.liveLocation_sessionBarSpeedUnknown)
         }
+    // The arguments are in the order the row renders them — elapsed, then speed,
+    // then distance — because a merged contentDescription is the ONLY thing a
+    // TalkBack user has to reconstruct the layout by. If it spoke the metrics in a
+    // different order than they are drawn, a sighted and a screen-reader user
+    // reading the same bar would be describing two different bars to each other.
+    // `sessionBar` uses positional placeholders, so this list and the localized
+    // strings have to move TOGETHER: reordering only one of them silently
+    // scrambles the sentence in both languages rather than failing to compile.
+    // LiveSessionBarSemanticsTest pins the spoken order against the measured
+    // on-screen order so it cannot drift apart again.
     val description =
         stringResource(
             R.string.liveLocation_sessionBar,
             elapsedText,
-            distanceText,
             speedDescription,
+            distanceText,
         )
     Surface(
         modifier =
