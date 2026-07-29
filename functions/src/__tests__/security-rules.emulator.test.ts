@@ -2095,6 +2095,99 @@ describe('Firestore – client-error reports + issue links', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: SERVER-error reporting + the global issue budget
+//
+// serverErrorReports holds the FULL error message/stack/context — the detail the
+// auto-filed PUBLIC GitHub issue deliberately omits, because server error text
+// embeds Firestore document paths (and therefore uids). It must be admin-read-only
+// and completely client-unwritable: a forged report would file a public issue on
+// our repo. githubIssueBudget is pure rate-limiter state and is backend-ONLY —
+// not even an admin reads it, so no client can learn how much budget is left.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – server-error reports, issue links + issue budget', () => {
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1'), {
+        source: 'account.purgeDeleted',
+        errorName: 'FirebaseFirestoreError',
+        errorCode: 'not-found',
+        message: 'no entity to update: document users/some-uid/vehicles/v1',
+        fingerprint: 'srv-fp-1',
+      });
+      await setDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1'), {
+        fingerprint: 'srv-fp-1',
+        source: 'account.purgeDeleted',
+        status: 'created',
+        count: 12,
+      });
+      await setDoc(doc(ctx.firestore(), 'githubIssueBudget', '2026073003'), {
+        bucketId: '2026073003',
+        count: 3,
+      });
+    });
+  });
+
+  it('admin can read server-error reports and issue links', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1')));
+    await assertSucceeds(getDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1')));
+  });
+
+  it('a regular user cannot read server-error reports or issue links', async () => {
+    const ctx = testEnv.authenticatedContext('member-uid');
+    await assertFails(getDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1')));
+  });
+
+  it('an unauthenticated client cannot read server-error reports or issue links', async () => {
+    const ctx = testEnv.unauthenticatedContext();
+    await assertFails(getDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1')));
+  });
+
+  it('no client (not even admin) can write server-error reports or issue links', async () => {
+    const ctx = testEnv.authenticatedContext('admin-uid', { admin: true });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'serverErrorReports', 'forged'), {
+        source: 'account.purgeDeleted',
+        errorName: 'TypeError',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1'), { message: 'tampered' }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'serverErrorReports', 'srv-1')));
+    // Pre-claiming a fingerprint from a client would silence a real failure.
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'forged'), { status: 'created' }),
+    );
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1'), { count: 0 }),
+    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'serverErrorIssueLinks', 'srv-fp-1')));
+  });
+
+  it('the global issue budget is fully backend-only — no client reads or writes, admin included', async () => {
+    const contexts = [
+      testEnv.authenticatedContext('admin-uid', { admin: true }),
+      testEnv.authenticatedContext('member-uid'),
+      testEnv.unauthenticatedContext(),
+    ];
+    for (const ctx of contexts) {
+      await assertFails(getDoc(doc(ctx.firestore(), 'githubIssueBudget', '2026073003')));
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'githubIssueBudget', '2026073003'), { count: 0 }),
+      );
+      await assertFails(
+        updateDoc(doc(ctx.firestore(), 'githubIssueBudget', '2026073003'), { count: 0 }),
+      );
+      await assertFails(deleteDoc(doc(ctx.firestore(), 'githubIssueBudget', '2026073003')));
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: moderationActions (backend-only writes, admin-only reads)
 // ---------------------------------------------------------------------------
 

@@ -24,6 +24,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
 import { isLatestStale, isSessionActive, type LiveSession } from './live-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Max discovery docs deleted per sweep (bounded; the 5-min cadence catches up). */
 const DISCOVERY_SWEEP_LIMIT = 400;
@@ -145,7 +146,7 @@ export const cleanupExpired = onSchedule(
     timeoutSeconds: 120,
     schedule: '*/5 * * * *',
   },
-  async () => {
+  withServerErrorReporting('live.cleanupExpired', async () => {
     await runLiveCleanup(new Date());
-  },
+  }),
 );

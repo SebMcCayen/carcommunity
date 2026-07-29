@@ -60,6 +60,7 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { evaluateAndAwardBadgeTiers, reconcileDerivedBadgeCounters } from './tierAwards';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Members evaluated per run. */
 export const SWEEP_PAGE_SIZE = 200;
@@ -146,7 +147,7 @@ export const evaluateBacklog = onSchedule(
     memory: '512MiB',
     timeoutSeconds: 540,
   },
-  async () => {
+  withServerErrorReporting('badges.evaluateBacklog', async () => {
     await runBadgeBacklogSweep();
-  },
+  }),
 );

@@ -70,6 +70,7 @@ import {
   hasNewSinceBaseline,
 } from './communityDigest-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** userPrivate docs scanned per query round-trip (the candidate "behind" set). */
 const CANDIDATE_PAGE_SIZE = 400;
@@ -437,7 +438,7 @@ export const digest = onSchedule(
     timeoutSeconds: 300,
     schedule: '0 18 * * *',
   },
-  async () => {
+  withServerErrorReporting('communityChat.digest', async () => {
     await runCommunityChatDigest(new Date());
-  },
+  }),
 );

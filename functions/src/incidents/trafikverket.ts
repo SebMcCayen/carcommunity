@@ -28,6 +28,7 @@ import {
   type TrafikverketResponse,
 } from './trafikverket-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 const TRAFIKVERKET_API_KEY = defineSecret('TRAFIKVERKET_API_KEY');
 
@@ -108,7 +109,7 @@ export const syncTrafikverket = onSchedule(
     schedule: '*/30 * * * *',
     secrets: [TRAFIKVERKET_API_KEY],
   },
-  async () => {
+  withServerErrorReporting('incidents.syncTrafikverket', async () => {
     await runTrafikverketSync(new Date(), TRAFIKVERKET_API_KEY.value() || undefined);
-  },
+  }),
 );
