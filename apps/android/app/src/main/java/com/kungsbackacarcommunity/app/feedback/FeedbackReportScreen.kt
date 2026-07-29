@@ -124,12 +124,17 @@ fun FeedbackReportScreen(
             }
             if (status is FeedbackStatus.Failed) {
                 Text(
+                    // Only SIGNED_OUT is something the user can act on. The
+                    // App Check / invoker-binding causes are ours to fix, so
+                    // they share the generic "contact us" copy rather than
+                    // leaking infrastructure detail — the actionable detail
+                    // goes to logcat via FeedbackFailureDiagnosis instead.
                     text =
                         stringResource(
-                            if (status.rateLimited) {
-                                R.string.feedback_rateLimited
-                            } else {
-                                R.string.feedback_error
+                            when (status.reason) {
+                                FeedbackFailureReason.RATE_LIMITED -> R.string.feedback_rateLimited
+                                FeedbackFailureReason.SIGNED_OUT -> R.string.feedback_errorSignedOut
+                                else -> R.string.feedback_error
                             },
                         ),
                     style = MaterialTheme.typography.bodySmall,

@@ -1104,6 +1104,7 @@
     <string name="feedback_successWithIssue">Tack! Din rapport har skickats och ett ärende har skapats.</string>
     <string name="feedback_viewIssue">Visa ärende</string>
     <string name="feedback_error">Kunde inte skicka rapporten. Kontakta oss på kontakt@kungsbackacarcommunity.se.</string>
+    <string name="feedback_errorSignedOut">Din session har gått ut. Logga in igen och skicka rapporten på nytt.</string>
     <string name="feedback_rateLimited">Du har skickat för många rapporter. Vänta en stund och försök igen.</string>
     <string name="dm_title">Meddelanden</string>
     <string name="dm_unreadCount">%1$d olästa meddelanden</string>

@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.feedback
 import android.content.Context
 import android.util.Log
 import com.google.firebase.FirebaseApp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import kotlin.coroutines.resume
@@ -24,18 +25,18 @@ data class FeedbackSubmitResult(
 class FeedbackRateLimitedException : Exception()
 
 /**
- * Thrown when the callable rejected the request as `unauthenticated`.
+ * Thrown when the callable came back `unauthenticated`.
  *
- * Two distinct causes share this code, and neither used to be distinguishable
- * from a generic failure: a missing/expired sign-in, or a rejected App Check
- * token. On debug builds the latter is the usual one — see docs/app-check.md
- * for the stable-debug-token setup that prevents it.
+ * THREE causes share that single code and they need completely different
+ * fixes: an expired sign-in (user-fixable), a rejected App Check token (client
+ * config), or a Cloud Run edge rejection because the callable's backing service
+ * has no public invoker binding (a server-side outage that no rebuild can fix).
+ * [reason] carries which one — see [FeedbackFailureDiagnosis].
  */
-class FeedbackUnauthenticatedException(cause: Throwable?) : Exception(
-    "feedback-reportIssue rejected the request as unauthenticated " +
-        "(sign-in expired, or App Check rejected the token)",
-    cause,
-)
+class FeedbackUnauthenticatedException(
+    val reason: FeedbackFailureReason,
+    cause: Throwable?,
+) : Exception("feedback-reportIssue rejected the request as unauthenticated ($reason)", cause)
 
 /** Files a "Report a problem" report via the callable (feedback.reportIssue). */
 interface FeedbackRepository {
@@ -51,8 +52,8 @@ sealed interface FeedbackStatus {
     /** Report captured; [issueUrl] is present only when the public issue was created. */
     data class Done(val issueUrl: String?) : FeedbackStatus
 
-    /** Submission failed; [rateLimited] distinguishes the friendly cool-down message. */
-    data class Failed(val rateLimited: Boolean) : FeedbackStatus
+    /** Submission failed; [reason] selects the message the user is shown. */
+    data class Failed(val reason: FeedbackFailureReason) : FeedbackStatus
 }
 
 /**
@@ -76,9 +77,11 @@ class FeedbackCoordinator(
             state.value = FeedbackStatus.Idle
             throw cancellation
         } catch (rateLimited: FeedbackRateLimitedException) {
-            state.value = FeedbackStatus.Failed(rateLimited = true)
+            state.value = FeedbackStatus.Failed(FeedbackFailureReason.RATE_LIMITED)
+        } catch (unauthenticated: FeedbackUnauthenticatedException) {
+            state.value = FeedbackStatus.Failed(unauthenticated.reason)
         } catch (failure: Exception) {
-            state.value = FeedbackStatus.Failed(rateLimited = false)
+            state.value = FeedbackStatus.Failed(FeedbackFailureReason.UNKNOWN)
         }
     }
 
@@ -96,12 +99,16 @@ class FeedbackCoordinator(
  * google-services.json is absent (CI / local validation builds), mirroring the
  * rest of the Firebase wiring. Translates two callable error codes into typed
  * exceptions — resource-exhausted into [FeedbackRateLimitedException] and
- * unauthenticated into [FeedbackUnauthenticatedException] (also logged, since
- * the coordinator renders it as a generic failure) — and propagates every other
- * failure as-is.
+ * unauthenticated into [FeedbackUnauthenticatedException], the latter first
+ * classified by [FeedbackFailureDiagnosis] and logged with its remediation —
+ * and propagates every other failure as-is.
+ *
+ * [signedIn] is injected so the classification is exercisable without a
+ * FirebaseAuth instance.
  */
 class FirebaseFeedbackRepository private constructor(
     private val functions: FirebaseFunctions,
+    private val signedIn: () -> Boolean,
 ) : FeedbackRepository {
 
     override suspend fun report(input: FeedbackReportInput): FeedbackSubmitResult {
@@ -149,19 +156,32 @@ class FirebaseFeedbackRepository private constructor(
                                 continuation.resumeWithException(FeedbackRateLimitedException())
 
                             FirebaseFunctionsException.Code.UNAUTHENTICATED -> {
-                                // The coordinator collapses every non-rate-limit
-                                // failure into the same generic UI state, so
-                                // without this the single most likely cause of a
-                                // "reporting an issue errors" report — App Check
-                                // rejecting the token — leaves no trace at all.
+                                // `unauthenticated` is the one code that hides a
+                                // server-side outage behind what looks like a
+                                // client problem, so pin down WHICH cause it is
+                                // and log the actual remediation. Otherwise the
+                                // next occurrence is another blind guess between
+                                // "register a debug token" and "the Cloud Run
+                                // invoker binding is missing".
+                                val envelope =
+                                    FeedbackFailureDiagnosis.carriedServerErrorEnvelope(
+                                        message = cause?.message,
+                                        codeName = code.name,
+                                    )
+                                val reason =
+                                    FeedbackFailureDiagnosis.classifyUnauthenticated(
+                                        carriedServerErrorEnvelope = envelope,
+                                        signedIn = signedIn(),
+                                    )
                                 Log.w(
                                     TAG,
-                                    "$CALLABLE rejected as unauthenticated; if this is a debug " +
-                                        "build, check the App Check debug token (docs/app-check.md)",
+                                    "$CALLABLE rejected as unauthenticated -> $reason " +
+                                        "(serverErrorEnvelope=$envelope). " +
+                                        FeedbackFailureDiagnosis.remediation(reason),
                                     cause,
                                 )
                                 continuation.resumeWithException(
-                                    FeedbackUnauthenticatedException(cause),
+                                    FeedbackUnauthenticatedException(reason, cause),
                                 )
                             }
 
@@ -178,12 +198,19 @@ class FirebaseFeedbackRepository private constructor(
 
     companion object {
         private const val TAG = "FeedbackRepository"
-        private const val REGION = "europe-west1"
-        private const val CALLABLE = "feedback-reportIssue"
+
+        // Aliases, not copies: FeedbackFailureDiagnosis owns these because its
+        // remediation text quotes the service name and region, and that guidance
+        // is only correct if it names the callable we actually invoke.
+        private const val REGION = FeedbackFailureDiagnosis.REGION
+        private const val CALLABLE = FeedbackFailureDiagnosis.CALLABLE
 
         fun createIfAvailable(context: Context): FeedbackRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseFeedbackRepository(FirebaseFunctions.getInstance(REGION))
+            return FirebaseFeedbackRepository(
+                functions = FirebaseFunctions.getInstance(REGION),
+                signedIn = { FirebaseAuth.getInstance().currentUser != null },
+            )
         }
     }
 }
