@@ -64,6 +64,7 @@ import {
   reminderWindowEnd,
   reminderWindowStart,
 } from './eventReminders-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** Candidate events fetched per query round-trip. */
 const PAGE_SIZE = 100;
@@ -386,6 +387,7 @@ export async function runEventReminders(
 export const remindUpcoming = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

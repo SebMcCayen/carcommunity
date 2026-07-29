@@ -41,9 +41,11 @@ import {
   parseReportUserInput,
 } from './moderation-core';
 import { fileUserReport, type ReportResponse } from './reportStore';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

@@ -32,6 +32,7 @@ import {
   isFeedbackRateLimited,
   parseReportIssueInput,
 } from './feedback-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
  * Fine-grained GitHub token with `issues: write` on SebMcCayen/carcommunity.
@@ -42,6 +43,7 @@ const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

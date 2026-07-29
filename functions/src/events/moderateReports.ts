@@ -23,9 +23,11 @@ import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { parseListChatReportsInput, parseResolveChatReportInput } from './chat-core';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_ADMIN,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

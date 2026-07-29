@@ -38,6 +38,7 @@ import type { Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminBadgeSummary, type AdminBadgeAggregateItem } from './badge-core';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 export interface AdminBadgeSummaryResult {
   summary: AdminBadgeAggregateItem[];
@@ -46,6 +47,7 @@ export interface AdminBadgeSummaryResult {
 export const adminSummary = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_ADMIN,
     memory: '256MiB',
     timeoutSeconds: 60,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

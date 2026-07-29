@@ -46,6 +46,7 @@ import {
   isEssentialCategory,
   type NotificationCategory,
 } from './notifications-core';
+import { MAX_INSTANCES_TRIGGER_FANOUT } from '../shared/instanceLimits';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -127,6 +128,10 @@ async function pruneDeadTokens(uid: string, tokenIds: readonly string[]): Promis
 export const onNotificationCreated = onDocumentCreated(
   {
     region: 'europe-west1',
+    // Above the ordinary trigger tier on purpose: one admin broadcast writes a
+    // notification document per member, so this is the highest-volume trigger
+    // here and a queued instance is a push that arrives late.
+    maxInstances: MAX_INSTANCES_TRIGGER_FANOUT,
     document: 'notifications/{uid}/items/{notificationId}',
     memory: '256MiB',
     timeoutSeconds: 60,

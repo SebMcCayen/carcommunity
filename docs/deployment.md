@@ -62,6 +62,68 @@ CI runs on every push and pull request targeting `main`. Path filters ensure tha
 
 Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
 
+## Functions Build Hook
+
+`firebase.json`'s `functions` block declares a `predeploy` hook:
+
+```json
+"predeploy": ["pnpm --dir \"$RESOURCE_DIR\" run build"]
+```
+
+This is a **safety** hook, not a convenience one. The Firebase CLI analyses the
+**compiled** `functions/lib/`, never `functions/src/`. Deploying on a stale
+`lib/` therefore makes the CLI believe the missing functions were deleted from
+source, and it offers to **delete them from production**.
+
+That happened on 2026-07-29: a deploy from freshly-pulled `main` offered to
+delete `incidents-reportCleared`, `notifications-delete` and
+`notifications-deleteAll` — all three present in `src/`, all three live. Only
+`--non-interactive` (which turns the prompt into an abort) prevented it.
+
+With the hook in place the build always runs first, so what the CLI analyses
+always matches `src/`. Keep `--non-interactive` on the deploy anyway: it is the
+second line of defence, and any deletion prompt now means a *real* deletion.
+
+## Cost Guardrails
+
+Cloud Functions v2 defaults `maxInstances` to **1000** per function. App Check is
+enforced on every callable, so anonymous external spam is hard — but attestation
+bounds _who_ may call, never _how much_. Every function therefore declares a
+ceiling from a tier in
+[`functions/src/shared/instanceLimits.ts`](../functions/src/shared/instanceLimits.ts):
+
+| Tier                           | Cap | Covers                                                               |
+| ------------------------------ | --- | -------------------------------------------------------------------- |
+| `MAX_INSTANCES_HOT`            | 50  | Live-location session + the map viewport queries                     |
+| `MAX_INSTANCES_MEMBER`         | 20  | Ordinary member callables (the default, and the answer when unsure)  |
+| `MAX_INSTANCES_ADMIN`          | 5   | Admin / operator callables — only a handful of operators exist       |
+| `MAX_INSTANCES_TRIGGER`        | 20  | Ordinary Firestore triggers                                          |
+| `MAX_INSTANCES_TRIGGER_FANOUT` | 50  | Push send + badge progress — one action fans out per affected member |
+| `MAX_INSTANCES_SCHEDULED`      | 2   | Scheduled sweeps (one invocation per tick; bounds a retry storm)     |
+
+`functions/src/__tests__/max-instances-guard.test.ts` fails the unit suite if a
+new function omits a cap.
+
+Caps bound throughput as well as cost: at the ceiling, Cloud Run queues and then
+sheds requests, and the client sees `resource-exhausted` or a timeout rather than
+a distinctive error. Raise a tier as soon as real traffic approaches it.
+
+### Remaining operator action: billing budget alert
+
+**No GCP billing budget or alert exists for this project.** Caps bound the blast
+radius; without an alert the invoice is still the first signal that something ran
+hot. This cannot be created from the repo (the Firebase CLI has no command for
+it), so it is a console step:
+
+> [Google Cloud console](https://console.cloud.google.com/billing/budgets?project=kungsbacka-car-community)
+> → **Billing** → select the billing account linked to `kungsbacka-car-community`
+> → **Budgets & alerts** → **Create budget** → scope **Projects =
+> kungsbacka-car-community** → set a monthly amount → **Set budget alerts** at
+> 50% / 90% / 100% of budget → tick **Email alerts to billing admins and users**
+> (and/or attach a Cloud Monitoring notification channel) → **Finish**.
+
+A budget alert only notifies; it does not cap spend.
+
 ## Firestore Index Drift
 
 Firestore composite indexes are the one part of the deploy that fails **silently in CI and loudly in production**:

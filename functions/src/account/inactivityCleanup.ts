@@ -75,6 +75,7 @@ import {
   resolveLastActivity,
   type InactivityAction,
 } from './inactivity-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /**
  * Upper bound of candidates examined per sweep — bounds the daily run's cost and
@@ -509,6 +510,7 @@ async function applyDecision(
 export const cleanupInactive = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '512MiB' as const,
     timeoutSeconds: 540,

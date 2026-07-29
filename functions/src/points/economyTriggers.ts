@@ -42,9 +42,11 @@ import {
   readCount,
   stockholmDayKey,
 } from './points-economy-core';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_TRIGGER,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
 };

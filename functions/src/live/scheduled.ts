@@ -23,6 +23,7 @@ import { logger } from 'firebase-functions';
 import { Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
 import { isLatestStale, isSessionActive, type LiveSession } from './live-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** Max discovery docs deleted per sweep (bounded; the 5-min cadence catches up). */
 const DISCOVERY_SWEEP_LIMIT = 400;
@@ -138,6 +139,7 @@ export async function runLiveCleanup(
 export const cleanupExpired = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 120,

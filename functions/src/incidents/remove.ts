@@ -15,9 +15,11 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { parseRemoveInput } from './incidents-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

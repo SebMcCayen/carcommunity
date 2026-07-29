@@ -57,6 +57,7 @@ import {
   type CrownHuntClaimResult,
   type CrownHuntRepeatRule,
 } from './crownhunt-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
  * Thrown inside the award transaction's read guard when a deterministic
@@ -199,6 +200,7 @@ async function recordAttempt(
 export const submitClaim = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

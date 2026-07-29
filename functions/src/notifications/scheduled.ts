@@ -19,6 +19,7 @@ import { Timestamp, type Query } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { readRetentionCutoff, unreadRetentionCutoff } from './notifications-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -67,6 +68,7 @@ export async function runNotificationsCleanup(
 export const cleanupExpired = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

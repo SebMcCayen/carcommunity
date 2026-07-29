@@ -44,6 +44,7 @@ import { adminRtdb, db } from '../firebase';
 import { shouldHidePair } from './block-visibility';
 import { applyPairVisibility } from './blockVisibilityStore';
 import { setConversationBlocked } from '../dm/blockedConversation';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 export const blockMirrorRef = (blockerUid: string, blockedUid: string) =>
   adminRtdb.ref(`liveLocationBlocks/${blockerUid}/${blockedUid}`);
@@ -62,6 +63,7 @@ async function blockEdgeExists(blockerUid: string, blockedUid: string): Promise<
 export const onBlockWrite = onDocumentWritten(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_TRIGGER,
     document: 'userBlocks/{blockerUid}/blocked/{blockedUid}',
     memory: '256MiB',
     timeoutSeconds: 60,

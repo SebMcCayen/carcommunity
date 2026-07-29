@@ -49,6 +49,7 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { autoCloseCandidateCutoff, isAutoCloseDue, type EventStatus } from './events-core';
 import { creditEventAttendance } from './eventLifecycle';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** Candidate documents fetched per query round-trip. */
 const PAGE_SIZE = 100;
@@ -223,6 +224,7 @@ export async function runEventAutoClose(
 export const autoClose = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 540,

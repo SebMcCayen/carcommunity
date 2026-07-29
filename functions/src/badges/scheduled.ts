@@ -59,6 +59,7 @@ import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { evaluateAndAwardBadgeTiers, reconcileDerivedBadgeCounters } from './tierAwards';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** Members evaluated per run. */
 export const SWEEP_PAGE_SIZE = 200;
@@ -139,6 +140,7 @@ export async function runBadgeBacklogSweep(
 export const evaluateBacklog = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     schedule: 'every 6 hours',
     timeZone: 'Europe/Stockholm',
     memory: '512MiB',

@@ -57,6 +57,7 @@ import {
   extractSignInFailureReport,
   type SignInIssueLink,
 } from './signInIssues-core';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 /**
  * Fine-grained GitHub token with `issues: write` on SebMcCayen/carcommunity —
@@ -69,6 +70,7 @@ const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 export const onSignInFailure = onDocumentCreated(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_TRIGGER,
     document: 'diagnosticsReports/{reportId}',
     memory: '256MiB',
     timeoutSeconds: 30,

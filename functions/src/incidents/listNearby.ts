@@ -39,9 +39,11 @@ import {
   type IncidentSource,
   type IncidentView,
 } from './incidents-core';
+import { MAX_INSTANCES_HOT } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_HOT,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

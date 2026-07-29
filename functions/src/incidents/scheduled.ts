@@ -26,6 +26,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** Expired documents fetched per query round-trip. */
 const CLEANUP_BATCH_SIZE = 400;
@@ -176,6 +177,7 @@ export async function runIncidentsCleanup(
 export const cleanupExpired = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 120,

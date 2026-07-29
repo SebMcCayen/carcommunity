@@ -42,6 +42,7 @@ import {
   type ClientErrorIssueLink,
   type ClientErrorReport,
 } from './clientErrors-core';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 /** Same secret bound to feedback.reportIssue + diagnostics-onSignInFailure. */
 const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
@@ -76,6 +77,7 @@ function extractReport(data: Record<string, unknown> | undefined): ClientErrorRe
 export const onClientErrorReport = onDocumentCreated(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_TRIGGER,
     document: 'clientErrorReports/{reportId}',
     memory: '256MiB',
     timeoutSeconds: 30,

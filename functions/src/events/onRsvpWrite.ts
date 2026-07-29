@@ -15,10 +15,12 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { computeRsvpCountDeltas, isZeroDeltas } from './events-core';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 export const onRsvpWrite = onDocumentWritten(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_TRIGGER,
     document: 'events/{eventId}/rsvps/{uid}',
     memory: '256MiB',
     timeoutSeconds: 30,
