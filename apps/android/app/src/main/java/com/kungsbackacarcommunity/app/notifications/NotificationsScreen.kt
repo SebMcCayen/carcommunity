@@ -30,6 +30,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,14 +45,19 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.chattime.ChatDateContext
+import com.kungsbackacarcommunity.app.chattime.ChatDateFormat
+import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -77,6 +83,13 @@ import kotlinx.coroutines.launch
  * "Delete all" is deliberately small, quiet text rather than a button — it is a
  * rarely-wanted, irreversible sweep, not something to invite — and it is behind
  * a confirmation dialog for the same reason.
+ *
+ * WHEN IT ARRIVED. Every row carries its own timestamp, on the same line as the
+ * category so it costs the card no extra height. The tiering — relative for the
+ * first hour, then a clock time, then a date — lives in [NotificationTimeFormat];
+ * the zone/locale/12-hour facts are the conversation screens' own
+ * [ChatDateContext], reused rather than reinvented so the inbox cannot drift
+ * into a third date/time style. A row with no timestamp shows none.
  *
  * The caller removes rows optimistically (see [NotificationsCoordinator]); this
  * screen just renders what it is given, so an empty [state] renders the normal
@@ -134,6 +147,11 @@ fun NotificationsScreen(
     convoyLink: ConvoyNotificationLink? = null,
 ) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
+    // Zone, locale and the device's 12/24-hour setting, resolved ONCE for the
+    // whole list rather than per row. Reused from the conversation screens
+    // wholesale so the inbox cannot drift into a third date/time style.
+    val dates = rememberChatDateContext()
+    val nowMillis = rememberTickingNow()
 
     if (confirmDeleteAll) {
         DeleteAllConfirmDialog(
@@ -238,6 +256,8 @@ fun NotificationsScreen(
                             SwipeToDeleteRow(onDelete = { onDeleteNotification(item.id) }) {
                                 NotificationCard(
                                     item = item,
+                                    dates = dates,
+                                    nowMillis = nowMillis,
                                     onMarkRead = { onMarkRead(item.id) },
                                     friendRequestId = requestId,
                                     friendRequestBusy = requestId != null &&
@@ -429,6 +449,8 @@ internal const val NOTIFICATION_ROW_TEST_TAG = "notificationRow"
 @Composable
 private fun NotificationCard(
     item: AppNotification,
+    dates: ChatDateContext,
+    nowMillis: Long,
     onMarkRead: () -> Unit,
     friendRequestId: String? = null,
     friendRequestBusy: Boolean = false,
@@ -480,11 +502,35 @@ private fun NotificationCard(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = stringResource(item.category.labelRes()),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            // Category on the left, arrival time on the right of the SAME line:
+            // the timestamp is metadata about the row, so it shares the row's
+            // metadata line instead of costing the card another one.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(item.category.labelRes()),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    // The timestamp is the unweighted child, so a Row measures
+                    // it FIRST at its full width and leaves the category
+                    // whatever is left. At a large font scale that remainder
+                    // can be a few dp, and an unconstrained label would then
+                    // wrap down the card a character at a time. One line,
+                    // ellipsised — the full string still reaches TalkBack, so
+                    // nothing is actually lost when it does have to truncate.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                NotificationTimeText(
+                    createdAtMillis = item.createdAtMillis,
+                    dates = dates,
+                    nowMillis = nowMillis,
+                )
+            }
             Text(
                 text = item.title,
                 style = MaterialTheme.typography.titleSmall,
@@ -555,6 +601,116 @@ private fun NotificationCard(
             }
         }
     }
+}
+
+/**
+ * When a notification arrived, as small quiet text on the row's metadata line.
+ *
+ * Renders NOTHING when there is no timestamp. `createdAt` is a server timestamp,
+ * so an item that was just written is momentarily readable with the field still
+ * unset; a placeholder there would be a flicker, and falling back to the epoch
+ * would have the row claim it arrived in 1970.
+ *
+ * Deliberately subordinate to the message: `labelSmall` on `onSurfaceVariant`,
+ * so it is the last thing the eye lands on and never competes with the
+ * notification's own title.
+ */
+@Composable
+private fun NotificationTimeText(
+    createdAtMillis: Long?,
+    dates: ChatDateContext,
+    nowMillis: Long,
+    modifier: Modifier = Modifier,
+) {
+    val label = NotificationTimeFormat.label(createdAtMillis, nowMillis, dates.zone) ?: return
+    val text =
+        when (label) {
+            // The relative tier prints no clock at all, so it must not pay for
+            // one — rememberClockTime is called only in the branches below that
+            // actually show a time.
+            is NotificationTimeLabel.JustNow -> stringResource(R.string.notifications_timeJustNow)
+            is NotificationTimeLabel.MinutesAgo ->
+                stringResource(R.string.notifications_timeMinutesAgo, label.minutes)
+            is NotificationTimeLabel.Today ->
+                stringResource(
+                    R.string.notifications_timeToday,
+                    rememberClockTime(label.millis, dates),
+                )
+            is NotificationTimeLabel.Yesterday ->
+                stringResource(
+                    R.string.notifications_timeYesterday,
+                    rememberClockTime(label.millis, dates),
+                )
+            is NotificationTimeLabel.Absolute -> {
+                // The month/day ORDER is locale copy, so it comes from the
+                // contract's pattern rather than being spelled out here; the
+                // month NAME then comes from CLDR via the matching locale.
+                val pattern =
+                    stringResource(
+                        if (label.includeYear) {
+                            R.string.notifications_timeDatePatternWithYear
+                        } else {
+                            R.string.notifications_timeDatePattern
+                        },
+                    )
+                val date = ChatDateFormat.format(label.date, pattern, dates.locale)
+                stringResource(
+                    R.string.notifications_timeDateAndTime,
+                    date,
+                    rememberClockTime(label.millis, dates),
+                )
+            }
+        }
+    // Read aloud, "22 jul 14:05" in a stream of row text does not say what it is.
+    val spoken = stringResource(R.string.notifications_timeReceivedAt, text)
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = modifier.semantics { contentDescription = spoken },
+    )
+}
+
+/**
+ * The clock time for one instant, computed once per row rather than on every
+ * recomposition.
+ *
+ * Keyed on exactly the fields [ChatDateFormat.time] reads, so the ticking `now`
+ * can re-run the (cheap) tier decision every minute without also rebuilding
+ * every visible row's `DateTimeFormatter`. The key deliberately does NOT include
+ * `dates.today`, which rolls over at midnight and would otherwise invalidate
+ * every row's clock string for no reason.
+ */
+@Composable
+private fun rememberClockTime(millis: Long, dates: ChatDateContext): String =
+    remember(millis, dates.zone, dates.locale, dates.use24Hour) {
+        ChatDateFormat.time(
+            millis = millis,
+            zone = dates.zone,
+            locale = dates.locale,
+            use24Hour = dates.use24Hour,
+        )
+    }
+
+/**
+ * `System.currentTimeMillis()`, refreshed once a minute.
+ *
+ * The relative tier is the reason this exists: without it a row that said
+ * "Nu" when the inbox opened would still say "Nu" ten minutes later, which is
+ * simply false. A minute is also the resolution the labels are printed at, so
+ * ticking faster could not change what any row says.
+ */
+@Composable
+private fun rememberTickingNow(): Long {
+    val now by produceState(initialValue = System.currentTimeMillis()) {
+        while (true) {
+            value = System.currentTimeMillis()
+            delay(NotificationTimeFormat.MINUTE_MILLIS)
+        }
+    }
+    return now
 }
 
 /**

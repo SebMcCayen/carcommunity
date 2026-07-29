@@ -1058,6 +1058,14 @@
     <string name="notifications_deleteAllError">Kunde inte ta bort dina notiser. Försök igen.</string>
     <string name="notifications_errorDismiss">Stäng</string>
     <string name="notifications_unreadLabel">Nytt</string>
+    <string name="notifications_timeJustNow">Nu</string>
+    <string name="notifications_timeMinutesAgo">%1$d min sedan</string>
+    <string name="notifications_timeToday">Idag %1$s</string>
+    <string name="notifications_timeYesterday">Igår %1$s</string>
+    <string name="notifications_timeDateAndTime">%1$s %2$s</string>
+    <string name="notifications_timeDatePattern">d MMM</string>
+    <string name="notifications_timeDatePatternWithYear">d MMM yyyy</string>
+    <string name="notifications_timeReceivedAt">Mottagen %1$s</string>
     <string name="notifications_categoryEvent">Event</string>
     <string name="notifications_categoryEventReminder">Påminnelse</string>
     <string name="notifications_categoryEventUpdated">Uppdatering</string>

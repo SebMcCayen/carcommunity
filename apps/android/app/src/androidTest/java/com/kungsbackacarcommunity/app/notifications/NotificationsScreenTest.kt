@@ -6,6 +6,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,7 +35,7 @@ class NotificationsScreenTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    private fun item(id: String, read: Boolean) =
+    private fun item(id: String, read: Boolean, createdAtMillis: Long? = 0L) =
         AppNotification(
             id = id,
             category = NotificationCategory.EVENT_REMINDER,
@@ -42,7 +43,7 @@ class NotificationsScreenTest {
             previewText = "Don't miss it",
             body = null,
             isRead = read,
-            createdAtMillis = 0L,
+            createdAtMillis = createdAtMillis,
         )
 
     @Test
@@ -95,6 +96,81 @@ class NotificationsScreenTest {
         }
         composeTestRule.onNodeWithText(str(R.string.notifications_markAllRead)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.notifications_unreadLabel)).assertDoesNotExist()
+    }
+
+    // ── When a notification arrived ─────────────────────────────────────────
+
+    @Test
+    fun aRowSaysWhenItArrived() {
+        // Pinned to "just now" rather than to a formatted date, because the exact
+        // wording of an absolute stamp depends on the device's locale, zone and
+        // 12/24-hour setting — all of which are the point of reusing
+        // ChatDateContext and none of which this test should be asserting.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state =
+                        NotificationsState.Loaded(
+                            listOf(
+                                item("n1", read = true, createdAtMillis = System.currentTimeMillis()),
+                            ),
+                        ),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.notifications_timeJustNow))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun theArrivalTimeSaysWhatItIsToAScreenReader() {
+        // "22 jul 14:05" read out mid-row does not announce itself as a time.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state =
+                        NotificationsState.Loaded(
+                            listOf(
+                                item("n1", read = true, createdAtMillis = System.currentTimeMillis()),
+                            ),
+                        ),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        val spoken =
+            String.format(str(R.string.notifications_timeReceivedAt), str(R.string.notifications_timeJustNow))
+        composeTestRule.onNodeWithContentDescription(spoken).assertExists()
+    }
+
+    @Test
+    fun aRowWithNoTimestampShowsNoTimeAtAll() {
+        // `createdAt` is a server timestamp, so a locally-echoed write is briefly
+        // readable with the field unset. The row must render normally with the
+        // stamp simply absent — never "null", never the epoch, never a crash.
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state =
+                        NotificationsState.Loaded(
+                            listOf(item("n1", read = true, createdAtMillis = null)),
+                        ),
+                    onMarkRead = {},
+                    onMarkAllRead = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("Event soon").assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.notifications_timeJustNow)).assertDoesNotExist()
+        composeTestRule.onNodeWithText("null", substring = true).assertDoesNotExist()
     }
 
     // ── Friend-request accept/decline in the inbox ──────────────────────────

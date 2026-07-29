@@ -1058,6 +1058,14 @@
     <string name="notifications_deleteAllError">Could not delete your notifications. Try again.</string>
     <string name="notifications_errorDismiss">Close</string>
     <string name="notifications_unreadLabel">New</string>
+    <string name="notifications_timeJustNow">Just now</string>
+    <string name="notifications_timeMinutesAgo">%1$d min ago</string>
+    <string name="notifications_timeToday">Today %1$s</string>
+    <string name="notifications_timeYesterday">Yesterday %1$s</string>
+    <string name="notifications_timeDateAndTime">%1$s %2$s</string>
+    <string name="notifications_timeDatePattern">d MMM</string>
+    <string name="notifications_timeDatePatternWithYear">d MMM yyyy</string>
+    <string name="notifications_timeReceivedAt">Received %1$s</string>
     <string name="notifications_categoryEvent">Event</string>
     <string name="notifications_categoryEventReminder">Reminder</string>
     <string name="notifications_categoryEventUpdated">Update</string>
