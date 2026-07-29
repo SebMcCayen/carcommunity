@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
@@ -513,6 +514,15 @@ private fun NotificationCard(
                     text = stringResource(item.category.labelRes()),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
+                    // The timestamp is the unweighted child, so a Row measures
+                    // it FIRST at its full width and leaves the category
+                    // whatever is left. At a large font scale that remainder
+                    // can be a few dp, and an unconstrained label would then
+                    // wrap down the card a character at a time. One line,
+                    // ellipsised — the full string still reaches TalkBack, so
+                    // nothing is actually lost when it does have to truncate.
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
                 NotificationTimeText(
@@ -613,27 +623,24 @@ private fun NotificationTimeText(
     modifier: Modifier = Modifier,
 ) {
     val label = NotificationTimeFormat.label(createdAtMillis, nowMillis, dates.zone) ?: return
-    // Keyed on the fields ChatDateFormat.time actually reads, so the ticking
-    // `now` re-runs the (cheap) tier decision without also re-formatting every
-    // visible row's clock string once a minute.
-    val clock =
-        remember(label.millis, dates.zone, dates.locale, dates.use24Hour) {
-            ChatDateFormat.time(
-                millis = label.millis,
-                zone = dates.zone,
-                locale = dates.locale,
-                use24Hour = dates.use24Hour,
-            )
-        }
     val text =
         when (label) {
+            // The relative tier prints no clock at all, so it must not pay for
+            // one — rememberClockTime is called only in the branches below that
+            // actually show a time.
             is NotificationTimeLabel.JustNow -> stringResource(R.string.notifications_timeJustNow)
             is NotificationTimeLabel.MinutesAgo ->
                 stringResource(R.string.notifications_timeMinutesAgo, label.minutes)
             is NotificationTimeLabel.Today ->
-                stringResource(R.string.notifications_timeToday, clock)
+                stringResource(
+                    R.string.notifications_timeToday,
+                    rememberClockTime(label.millis, dates),
+                )
             is NotificationTimeLabel.Yesterday ->
-                stringResource(R.string.notifications_timeYesterday, clock)
+                stringResource(
+                    R.string.notifications_timeYesterday,
+                    rememberClockTime(label.millis, dates),
+                )
             is NotificationTimeLabel.Absolute -> {
                 // The month/day ORDER is locale copy, so it comes from the
                 // contract's pattern rather than being spelled out here; the
@@ -647,7 +654,11 @@ private fun NotificationTimeText(
                         },
                     )
                 val date = ChatDateFormat.format(label.date, pattern, dates.locale)
-                stringResource(R.string.notifications_timeDateAndTime, date, clock)
+                stringResource(
+                    R.string.notifications_timeDateAndTime,
+                    date,
+                    rememberClockTime(label.millis, dates),
+                )
             }
         }
     // Read aloud, "22 jul 14:05" in a stream of row text does not say what it is.
@@ -657,9 +668,31 @@ private fun NotificationTimeText(
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
         modifier = modifier.semantics { contentDescription = spoken },
     )
 }
+
+/**
+ * The clock time for one instant, computed once per row rather than on every
+ * recomposition.
+ *
+ * Keyed on exactly the fields [ChatDateFormat.time] reads, so the ticking `now`
+ * can re-run the (cheap) tier decision every minute without also rebuilding
+ * every visible row's `DateTimeFormatter`. The key deliberately does NOT include
+ * `dates.today`, which rolls over at midnight and would otherwise invalidate
+ * every row's clock string for no reason.
+ */
+@Composable
+private fun rememberClockTime(millis: Long, dates: ChatDateContext): String =
+    remember(millis, dates.zone, dates.locale, dates.use24Hour) {
+        ChatDateFormat.time(
+            millis = millis,
+            zone = dates.zone,
+            locale = dates.locale,
+            use24Hour = dates.use24Hour,
+        )
+    }
 
 /**
  * `System.currentTimeMillis()`, refreshed once a minute.
