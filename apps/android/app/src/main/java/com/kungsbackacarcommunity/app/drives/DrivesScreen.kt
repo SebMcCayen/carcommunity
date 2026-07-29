@@ -701,11 +701,17 @@ fun SavedDriveDetailScreen(
 /** Fixed height for the embedded route replay map. */
 private val ROUTE_MAP_HEIGHT = 240.dp
 
-/** One-line muted explanation shown in place of the route map when it can't draw. */
+/**
+ * One-line muted explanation shown in place of the route map when it can't draw.
+ * Shared with the end-of-session summary's route section
+ * ([SessionSummaryDialog]), so "no token" / "nothing recorded" reads the same
+ * wherever a route fails to render.
+ */
 @Composable
-private fun RouteNote(text: String) {
+internal fun RouteNote(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
+        modifier = modifier,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

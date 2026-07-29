@@ -132,6 +132,70 @@ class SessionSummaryDialogTest {
     }
 
     @Test
+    fun routeMap_startsCollapsedAndTogglesOpenAndShutAgain() {
+        setDialog()
+
+        // Collapsed by default: only the "show" control is offered, so the
+        // Keep/Delete choice is never pushed down by an unasked-for map.
+        composeTestRule
+            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
+
+        // Expanded: the route area is up and the control now offers to hide it.
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.savedDrives_sessionRouteHide))
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
+            .assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
+
+        // Minimized again, back to the starting state.
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertDoesNotExist()
+        composeTestRule
+            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun routeMap_expandingDoesNotDismissTheDialogOrResolveTheChoice() {
+        var kept = 0
+        var deleted = 0
+        setDialog(onKeep = { kept += 1 }, onDelete = { deleted += 1 })
+
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
+
+        // The forced Keep/Delete choice still stands with the map open.
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.savedDrives_deleteSessionAction))
+            .assertIsDisplayed()
+        assertEquals(0, kept)
+        assertEquals(0, deleted)
+    }
+
+    @Test
+    fun routeMap_isNotOfferedOnTheSaveFailedPrompt() {
+        // Nothing was stored, so the question is save-or-not, not where you drove.
+        setDialog(
+            state =
+                RecordingState.Failed(
+                    pointCount = 2,
+                    elapsedMillis = 60_000L,
+                    code = "UNAVAILABLE",
+                ),
+        )
+
+        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun memberGateRefusal_namesTheMissingMembershipAndOffersCloseInsteadOfRetry() {
         var discarded = 0
         setDialog(

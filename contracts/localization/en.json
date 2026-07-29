@@ -717,6 +717,8 @@
     "routeZoomIn": "Zoom in",
     "routeZoomOut": "Zoom out",
     "routeKmMarkerLabel": "%1$d km",
+    "sessionRouteShow": "Show the route you drove",
+    "sessionRouteHide": "Hide the route map",
     "deleteAction": "Delete drive",
     "deleteConfirmTitle": "Delete drive?",
     "deleteConfirmBody": "The drive will be permanently deleted.",
