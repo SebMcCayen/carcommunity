@@ -44,16 +44,35 @@ class FeedbackCoordinatorTest {
     fun `a rate-limited failure is distinguished`() = runTest {
         val coordinator = FeedbackCoordinator(FakeRepo(failWith = FeedbackRateLimitedException()))
         coordinator.submit(input)
-        assertEquals(FeedbackStatus.Failed(rateLimited = true), coordinator.status.value)
+        assertEquals(FeedbackStatus.Failed(FeedbackFailureReason.RATE_LIMITED), coordinator.status.value)
     }
 
     @Test
     fun `a generic failure is Failed and can reset`() = runTest {
         val coordinator = FeedbackCoordinator(FakeRepo(failWith = IllegalStateException("boom")))
         coordinator.submit(input)
-        assertEquals(FeedbackStatus.Failed(rateLimited = false), coordinator.status.value)
+        assertEquals(FeedbackStatus.Failed(FeedbackFailureReason.UNKNOWN), coordinator.status.value)
         coordinator.reset()
         assertEquals(FeedbackStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `an unauthenticated failure keeps its diagnosed reason`() = runTest {
+        val coordinator =
+            FeedbackCoordinator(
+                FakeRepo(
+                    failWith =
+                        FeedbackUnauthenticatedException(
+                            FeedbackFailureReason.SERVICE_NOT_INVOCABLE,
+                            cause = null,
+                        ),
+                ),
+            )
+        coordinator.submit(input)
+        assertEquals(
+            FeedbackStatus.Failed(FeedbackFailureReason.SERVICE_NOT_INVOCABLE),
+            coordinator.status.value,
+        )
     }
 
     @Test

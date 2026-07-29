@@ -55,10 +55,49 @@ Release builds are untouched — they attest with Play Integrity, and the
 Treat the token like a credential: anyone holding it can pass App Check as this
 app. Rotate by registering a new UUID and deleting the old one in the console.
 
-**Not this bug:** if a *release* build also fails a callable, that is a separate
-IAM problem — the Cloud Run service backing that **v2 callable** (`onCall`) is
-missing the `allUsers → roles/run.invoker` binding. That is a gcloud/console
-action, not a client change.
+**Not this bug — and check it FIRST:** a missing `allUsers → roles/run.invoker`
+binding on the Cloud Run service backing a **v2 callable** (`onCall`) produces
+the *same* `UNAUTHENTICATED` the app sees for a rejected App Check token, on
+**debug builds too** — not only release builds, as this section previously
+claimed. That wording sent one investigation down the wrong path for weeks.
+
+Tell them apart from the server, not by guessing:
+
+```sh
+firebase functions:log --only <group>-<fn> --project <project-id>
+```
+
+* **No invocations at all**, only lines like `The request was not authorized to
+  invoke this service. The access token could not be verified.` → the request
+  died at the Cloud Run edge. The function never ran, so App Check is not even
+  reached. This is the IAM problem, and it is a gcloud/console action, not a
+  client change.
+* **Invocations appear** and are rejected → the function ran; now App Check (or
+  sign-in) is a live candidate.
+
+The trap that makes this persist: `firebase-tools` applies the invoker binding
+for a callable **only when the function is first CREATED**
+(`Fabricator.createV2Function` has an `isCallableTriggered` branch calling
+`setInvokerCreate`; `updateV2Function` has **no** such branch). So if the very
+first deploy of a callable failed at the set-invoker step — e.g. the deploy
+service account did not yet hold `roles/run.admin` — the Cloud Function object
+still exists, every later deploy takes the *update* path, and the binding is
+**never** applied. Re-deploying does not fix it and never will; the binding must
+be set once by hand:
+
+```sh
+gcloud run services add-iam-policy-binding <service> \
+  --region=europe-west1 --member=allUsers --role=roles/run.invoker \
+  --project=<project-id>
+```
+
+(The Cloud Run service name is the function name **lower-cased**, e.g.
+`feedback-reportIssue` → `feedback-reportissue`.)
+
+The Android client now names the cause for you: `FeedbackFailureDiagnosis`
+splits `UNAUTHENTICATED` into `SERVICE_NOT_INVOCABLE` (edge rejection),
+`APP_CHECK_REJECTED` and `SIGNED_OUT`, and logs the matching remediation to
+logcat under the `FeedbackRepository` tag.
 
 Granting `allUsers` invoker sounds alarming but is the intended setup for v2
 callables specifically: it only lets a request *reach* the service, where the

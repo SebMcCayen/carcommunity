@@ -1187,6 +1187,7 @@
     "successWithIssue": "Tack! Din rapport har skickats och ett ärende har skapats.",
     "viewIssue": "Visa ärende",
     "error": "Kunde inte skicka rapporten. Kontakta oss på kontakt@kungsbackacarcommunity.se.",
+    "errorSignedOut": "Din session har gått ut. Logga in igen och skicka rapporten på nytt.",
     "rateLimited": "Du har skickat för många rapporter. Vänta en stund och försök igen."
   },
   "dm": {
