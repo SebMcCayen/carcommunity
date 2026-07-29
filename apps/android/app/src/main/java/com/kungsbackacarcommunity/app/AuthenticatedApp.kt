@@ -670,6 +670,24 @@ fun AuthenticatedApp(
             // live-share popups) rather than navigating to a full opaque route.
             var chatHubOpen by rememberSaveable { mutableStateOf(false) }
 
+            // Where the hub should LAND when it is opened by something that names a
+            // destination — today only the convoy bar's chat icon, which opens the
+            // hub straight onto its convoy's channel instead of the default
+            // Community tab. Null for the plain chat bubble.
+            //
+            // Deliberately NOT rememberSaveable, unlike `chatHubOpen`: it is a
+            // one-shot intent for THIS open, not a preference worth restoring. If
+            // process death re-opens a saved hub, landing on Community is the right
+            // default — it is the one destination that is never wrong.
+            var chatHubLandingLink by remember { mutableStateOf<PushDeepLink?>(null) }
+            // Cleared on every CLOSE, keyed on the flag itself so no close path can
+            // forget: leaving it set would re-land the next plain chat-bubble tap on
+            // a convoy the member did not ask for. Setting the link and opening the
+            // hub happen in the same frame, so this never races the open.
+            LaunchedEffect(chatHubOpen) {
+                if (!chatHubOpen) chatHubLandingLink = null
+            }
+
             // Set true immediately before opening ShellRoute.Convoys from the
             // chooser's "Convoy" option so the convoy route deep-links straight
             // into its create-convoy sub-screen. Reset to false when the Social
@@ -712,8 +730,9 @@ fun AuthenticatedApp(
             // ONLY route into ShellRoute.ChatHub in the shell, and it always
             // writes a fresh link in the same frame. ChatHubRoute therefore
             // cannot be entered carrying a previous tap's destination. The map
-            // bubble is not a counter-example — it opens ChatHubPopup, which
-            // takes no pushDeepLink parameter at all. Back-out is likewise safe:
+            // bubble and the convoy bar's chat icon are not counter-examples —
+            // they open ChatHubPopup, whose landing link is the separate,
+            // cleared-on-close `chatHubLandingLink` above. Back-out is likewise safe:
             // ChatHub is opened via openRootRoute (a fresh, parent-less stack),
             // so a Back pop from it lands on the map, never back INTO ChatHub —
             // the only entry stays this fresh-link opener.
@@ -2354,7 +2373,46 @@ fun AuthenticatedApp(
                         ?: ConvoyListStatus.Loading
                 val convoyBarBusy =
                     convoyBarCoordinator?.busyConvoys?.collectAsState()?.value ?: emptySet()
-                val convoyBarState = ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid)
+
+                // Unread count for the convoy bar's chat badge.
+                //
+                // Hoisted here — beside the bar's own state and NOT inside the bar —
+                // for the same reason communityChatUnread is hoisted above: this is
+                // the always-visible map shell, so a listener started here runs for
+                // the whole session unless something narrows it. Two things do.
+                //
+                //  - The ACTIVE CONVOY, and only it. The id is the same one
+                //    `ConvoyBar.stateFor` picks below, so the count can never
+                //    describe a different convoy than the badge sits on. It goes
+                //    null the moment the convoy ends or the caller leaves, which
+                //    tears the listener down with it — no per-convoy fan-out, and
+                //    nothing left running for a convoy that is over.
+                //  - Whether the bar is actually ON SCREEN: the uncovered map home,
+                //    or turn-by-turn (the other full-screen map that hosts the bar).
+                //    Behind a translucent panel or an opaque route the badge cannot
+                //    be read, so the flow degrades to a constant 0 and both
+                //    listeners detach — the same "don't subscribe a chat nobody is
+                //    looking at" rule the off-screen chat tabs already follow.
+                //
+                // Guarded: no repository (config-less build) means no count, and the
+                // bar then renders no chat control at all (see onOpenChat below).
+                val convoyBarConvoyId = ConvoyBar.activeConvoy(convoyBarStatus)?.convoyId
+                val convoyBarOnScreen = mapCover == MapCover.None || navDestination != null
+                val convoyChatUnread by
+                    remember(convoyChatRepository, uid, convoyBarConvoyId, convoyBarOnScreen) {
+                        if (convoyChatRepository != null &&
+                            convoyBarConvoyId != null &&
+                            convoyBarOnScreen
+                        ) {
+                            convoyChatRepository.observeUnread(convoyBarConvoyId, uid)
+                        } else {
+                            flowOf(0)
+                        }
+                    }
+                        .collectAsState(initial = 0)
+
+                val convoyBarState =
+                    ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid, convoyChatUnread)
 
                 // The convoy facts the notification inbox re-derives its convoy
                 // rows against.
@@ -2874,6 +2932,25 @@ fun AuthenticatedApp(
                                 // Opens the friend picker and grows THIS convoy via
                                 // `convoy-invite`.
                                 onInvite = openConvoyInvite,
+                                // The convoy's CHAT: opens the same chat hub the
+                                // map's chat bubble opens — no second chat
+                                // presentation — but landed on this convoy's
+                                // channel via the hub's existing deep-link
+                                // parameter. Opening it is what marks the channel
+                                // read (ConvoyChannelRoute), so the badge clears
+                                // through the ordinary path rather than a second
+                                // one that could disagree with it. Null in a
+                                // config-less build, which omits the control.
+                                onOpenChat =
+                                    if (convoyChatRepository != null) {
+                                        { convoyId ->
+                                            chatHubLandingLink =
+                                                PushDeepLink(PushTarget.CONVOY_CHAT, convoyId)
+                                            chatHubOpen = true
+                                        }
+                                    } else {
+                                        null
+                                    },
                                 // A member's Leave via `convoy-leave` (confirmed in
                                 // the bar; routed on viewerIsOwner so it can never
                                 // reach the owner's End path).
@@ -4266,6 +4343,11 @@ fun AuthenticatedApp(
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
                         onClose = { chatHubOpen = false },
+                        // Null for a plain chat-bubble tap (lands on Community);
+                        // set by the convoy bar's chat icon so the hub opens on
+                        // that convoy's channel. Cleared on close by the effect
+                        // beside `chatHubOpen`.
+                        pushDeepLink = chatHubLandingLink,
                         convoyLink = convoyNotificationLink,
                         // Tapping a sender in a channel / the DM title opens their
                         // read-only profile — a shell ROUTE, which the hub popup's

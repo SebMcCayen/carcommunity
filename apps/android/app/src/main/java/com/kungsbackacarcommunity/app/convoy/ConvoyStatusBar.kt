@@ -16,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.AddLocationAlt
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -77,6 +79,9 @@ const val CONVOY_BAR_MEMBER_LIST_TAG = "convoy_bar_member_list"
 /** Test tag on the bar's map-focus toggle (me vs the whole convoy). */
 const val CONVOY_BAR_FOCUS_TAG = "convoy_bar_focus"
 
+/** Test tag on the bar's convoy-chat control (speech bubble + unread badge). */
+const val CONVOY_BAR_CHAT_TAG = "convoy_bar_chat"
+
 /** Test tag on the bar's invite ("person +") control. */
 const val CONVOY_BAR_INVITE_TAG = "convoy_bar_invite"
 
@@ -106,12 +111,14 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * whatsoever (no empty bar, no placeholder).
  *
  * ## Every control is inline and live
- * There is no expand/collapse and no popup: the member count, focus toggle,
- * invite and leave/End all sit in the one always-visible row. All three actions
+ * There is no expand/collapse and no popup: the member count, focus toggle, chat,
+ * invite and leave/End all sit in the one always-visible row. All of the actions
  * are backed by deployed callables (see [ConvoyBar]); each still gates on BOTH an
  * availability flag AND the presence of a handler, so a control never looks live
  * while doing nothing. Space is kept by using icon buttons (no text labels) for
- * the controls, with the member count carrying the only text.
+ * the controls, with the member count carrying the only text — and the chat
+ * icon's unread badge is capped ("9+") for the same reason, so no amount of
+ * chatter can widen the row.
  *
  * ## Owner vs member
  * The trailing control is deliberately NOT one action with two labels. The owner
@@ -140,6 +147,11 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * @param onInvite invites people into THIS convoy (by id) — the host opens the
  *   friend picker and calls `convoy-invite`. The invite control needs both this
  *   handler AND [ConvoyBarState.inviteAvailability] `== Wired` before it enables.
+ * @param onOpenChat opens THIS convoy's chat channel (by id). Null omits the chat
+ *   control entirely rather than rendering a dead one — the same "a control never
+ *   looks live while doing nothing" rule the other actions follow, expressed as
+ *   absence because a chat icon has no honest disabled meaning. The unread badge
+ *   on it comes from [ConvoyBarState.unreadChatCount] and is hidden at zero.
  * @param onLeaveConvoy removes the CALLER from this convoy — a member's action,
  *   never an owner's. Invoked only after the "Leave convoy?" confirmation. A
  *   member's tap is routed here on `viewerIsOwner`, so it can never reach the
@@ -161,6 +173,7 @@ fun ConvoyStatusBar(
     compact: Boolean = false,
     showDestination: Boolean = true,
     onInvite: ((String) -> Unit)? = null,
+    onOpenChat: ((String) -> Unit)? = null,
     onLeaveConvoy: ((String) -> Unit)? = null,
     focusMode: ConvoyFocusMode = ConvoyFocusMode.Me,
     onFocusModeChange: (ConvoyFocusMode) -> Unit = {},
@@ -325,6 +338,78 @@ fun ConvoyStatusBar(
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 },
                         )
+                    }
+                }
+
+                // Convoy CHAT: opens THIS convoy's channel, badged with how many
+                // messages the viewer has not read in it.
+                //
+                // Omitted rather than disabled when the host wires no handler —
+                // the other controls have an honest disabled story ("…unavailable"
+                // for a missing callable), a chat icon does not: it would either
+                // lie about there being a chat or sit greyed out next to a badge
+                // announcing unread messages it refuses to show.
+                //
+                // The badge is a NULL-or-label, never a "0": `unreadBadgeLabel`
+                // returns null at zero so nothing is drawn at all, and caps the
+                // printed number ("9+") so a long-running convoy cannot widen this
+                // control and squeeze the rest of the row off the bar. The count in
+                // the accessibility label is capped the same way, so what TalkBack
+                // announces and what is drawn can't disagree.
+                //
+                // Deliberately a Box with the badge aligned INSIDE the button's
+                // footprint, not the [BadgedBox] the map home's floating chat
+                // bubble uses. BadgedBox measures itself as its anchor and then
+                // places the badge at a NEGATIVE offset — outside its own bounds,
+                // above and past the anchor's end. That is fine for a control
+                // floating over the map, but this bar is a `Surface` clipped to a
+                // rounded shape whose non-compact vertical padding is `s0`, so the
+                // bar is exactly one icon-button tall: an overflowing badge would
+                // be shaved off at the top and would lean into the invite button
+                // beside it. The 48dp button has 12dp of slack around its 24dp
+                // glyph, which is room enough to sit the badge in the corner and
+                // stay inside the bar.
+                if (onOpenChat != null) {
+                    val unreadLabel = ConvoyBar.unreadBadgeLabel(state.unreadChatCount)
+                    val chatDescription =
+                        when {
+                            unreadLabel == null -> stringResource(R.string.convoy_barChat)
+                            state.unreadChatCount > ConvoyBar.UNREAD_DISPLAY_MAX ->
+                                stringResource(
+                                    R.string.convoy_barChatUnreadMany,
+                                    ConvoyBar.UNREAD_DISPLAY_MAX,
+                                )
+                            else ->
+                                stringResource(
+                                    R.string.convoy_barChatUnread,
+                                    state.unreadChatCount,
+                                )
+                        }
+                    Box(
+                        // Merged into ONE node so the control reads as a single
+                        // thing (button, label, action) instead of a button sitting
+                        // beside a loose number — the same treatment the member
+                        // count and the map home's chat bubble get.
+                        modifier =
+                            Modifier
+                                .testTag(CONVOY_BAR_CHAT_TAG)
+                                .semantics(mergeDescendants = true) {},
+                    ) {
+                        IconButton(onClick = { onOpenChat(state.convoyId) }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Chat,
+                                contentDescription = chatDescription,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (unreadLabel != null) {
+                            Badge(
+                                modifier =
+                                    Modifier.align(Alignment.TopEnd).padding(KccSpacing.s1),
+                            ) {
+                                Text(unreadLabel)
+                            }
+                        }
                     }
                 }
 

@@ -283,6 +283,36 @@ object ChannelThread {
         val createdAt = newest.createdAtMillis ?: return false
         return lastReadAtMillis == null || createdAt > lastReadAtMillis
     }
+
+    /**
+     * How many of [window] are unread for the caller — the COUNTING form of
+     * [hasUnread], for the surfaces that show a number rather than a dot (the
+     * convoy bar's chat badge). The per-message rule is identical: a message is
+     * unread when someone else sent it and it post-dates the caller's
+     * [lastReadAtMillis] marker (a null marker = never opened, so everything from
+     * someone else counts).
+     *
+     * The result is bounded by [window], deliberately: the window is the caller's
+     * ALREADY-subscribed newest-message listener, not a query of its own, so the
+     * count costs nothing beyond what the channel is syncing anyway. That makes it
+     * a FLOOR on a very busy channel — which is exactly what a capped badge ("9+")
+     * needs, since a window sized above the display cap renders a saturated count
+     * and the true count identically.
+     *
+     * A message with no parseable `createdAt` is not counted, matching [hasUnread]:
+     * with no instant to compare there is nothing saying it is newer than the
+     * marker, and guessing "unread" would light a badge that opening cannot clear.
+     */
+    fun unreadCount(
+        window: List<ChannelMessage>,
+        callerUid: String,
+        lastReadAtMillis: Long?,
+    ): Int = window.count { message ->
+        val createdAt = message.createdAtMillis
+        message.senderUid != callerUid &&
+            createdAt != null &&
+            (lastReadAtMillis == null || createdAt > lastReadAtMillis)
+    }
 }
 
 /**

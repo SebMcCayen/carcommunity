@@ -117,6 +117,16 @@ data class ConvoyBarState(
     val destinationState: ConvoyDestinationState = ConvoyDestinationState.None,
     /** Whether the viewer may clear the current destination (setter or owner). */
     val canClearDestination: Boolean = false,
+    /**
+     * Unread messages in THIS convoy's chat for the viewer, badging the bar's chat
+     * icon. Defaults to 0 (nothing to show), which is also what a config-less
+     * build and a host that hasn't wired the count supply.
+     *
+     * SATURATING: the source counts within a bounded newest-message window, so a
+     * very busy chat reports that window's size rather than the true backlog —
+     * which is why the badge caps its display below it ([ConvoyBar.unreadBadgeLabel]).
+     */
+    val unreadChatCount: Int = 0,
 ) {
     /**
      * ACCEPTED member count, DERIVED from [members] so the number on the bar and
@@ -147,6 +157,37 @@ data class ConvoyBarState(
 }
 
 object ConvoyBar {
+    /**
+     * The largest unread count the chat badge prints as a NUMBER; anything more
+     * renders as "9+".
+     *
+     * A cap is not cosmetic here. The bar is a single compact line that already
+     * shares the map shell's search row with the member count, focus, invite and
+     * leave/end controls, so a badge that grew to three or four digits would push
+     * those controls out — and on a long-running convoy an uncapped number is
+     * exactly what it would do. One digit is also all the information the badge
+     * owes: past a handful, "some" and "a lot" lead to the same action (open the
+     * chat).
+     *
+     * The count's own window is sized one ABOVE this (see
+     * FirebaseConvoyChatRepository), so the badge never has to distinguish a
+     * saturated count from a real one.
+     */
+    const val UNREAD_DISPLAY_MAX = 9
+
+    /**
+     * What the chat badge prints for [count], or null when there is NOTHING to
+     * badge — the zero case is a null, not a "0", so the caller omits the badge
+     * entirely rather than drawing an empty one.
+     */
+    fun unreadBadgeLabel(count: Int): String? = when {
+        // Defensive on negatives as well as zero: a badge is an invitation to
+        // open the chat, and there is nothing to open for either.
+        count <= 0 -> null
+        count > UNREAD_DISPLAY_MAX -> "$UNREAD_DISPLAY_MAX+"
+        else -> count.toString()
+    }
+
     /**
      * Inviting into an existing convoy is now backed by the deployed
      * `convoy-invite` callable (any accepted member may invite their friends), so
@@ -200,11 +241,16 @@ object ConvoyBar {
      *
      * [busyConvoys] is the coordinator's in-flight set, so the End action greys
      * out while its callable runs instead of being tappable twice.
+     *
+     * [unreadChatCount] is threaded in rather than derived, because it comes from
+     * a live listener the HOST owns: the host is what knows whether the bar can
+     * be seen at all, and the count must not be subscribed when it can't.
      */
     fun stateFor(
         status: ConvoyListStatus,
         busyConvoys: Set<String> = emptySet(),
         viewerUid: String? = null,
+        unreadChatCount: Int = 0,
     ): ConvoyBarState? {
         val convoy = activeConvoy(status) ?: return null
         val accepted = acceptedMembers(convoy)
@@ -222,6 +268,7 @@ object ConvoyBar {
                     viewerUid = viewerUid,
                     viewerIsOwner = convoy.viewerIsOwner,
                 ),
+            unreadChatCount = unreadChatCount,
         )
     }
 }

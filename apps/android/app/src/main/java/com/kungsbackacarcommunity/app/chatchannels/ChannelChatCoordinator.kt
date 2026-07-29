@@ -23,7 +23,8 @@ sealed interface ChannelPageStatus {
 /**
  * Orchestrates one open channel (community OR convoy): OPTIMISTIC send, older-page
  * pagination (accumulated off the live newest-window), and an optional mark-read
- * (community only). Pure Kotlin (no Firebase/Android types) so it is
+ * (both channels carry a last-read marker; convoy's is per convoy, so its
+ * [marker] closes over the convoy id). Pure Kotlin (no Firebase/Android types) so it is
  * unit-testable with fakes; the live message stream itself is collected in the
  * route. Mirrors dm/DmThreadCoordinator, generalized over the two channel kinds
  * via injected [sender]/[pager]/[marker] lambdas so community and convoy share
@@ -231,7 +232,7 @@ class ChannelChatCoordinator(
         dropped.value = 0
     }
 
-    /** Marks the channel read (community only — no-op when [marker] is null). Best-effort. */
+    /** Marks the channel read (no-op when [marker] is null). Best-effort. */
     suspend fun markRead() {
         val mark = marker ?: return
         try {

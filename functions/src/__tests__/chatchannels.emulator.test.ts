@@ -10,6 +10,7 @@
  * - `convoyChat-post` (accepted-member-only; non-member not-found, still-invited
  *   failed-precondition)
  * - `convoyChat-list` (accepted-member-only pagination)
+ * - `convoyChat-markRead` (per-convoy last-read marker map + its eviction cap)
  * - rules: any active member reads community messages; only accepted convoy
  *   members read convoy messages; outsiders denied; no client writes.
  *
@@ -46,9 +47,12 @@ import {
 } from 'firebase/firestore';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { CONVOY_CHAT_NOTIFY_WINDOW_MS } from '../chatchannels/chat-core';
+import {
+  CONVOY_CHAT_NOTIFY_WINDOW_MS,
+  CONVOY_LAST_READ_MAX_ENTRIES,
+} from '../chatchannels/chat-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -399,6 +403,102 @@ describe('convoyChat callables + rules', () => {
     await expect(
       addDoc(messagesPath(), { senderUid: accepted.uid, text: 'forged' }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+  });
+
+  it('markRead stamps a PER-CONVOY marker in the caller\'s userPrivate, and caps the map', async () => {
+    const member = await newMember('MarkReadOwnerChat');
+    await signInAs(member);
+    // Plain ids, not created convoys: markRead deliberately carries no convoy
+    // membership gate (see the callable's KDoc), and the marker's whole job is to
+    // be a key in the CALLER's own private document. Using bare ids is therefore
+    // the honest exercise of the contract — and the next test pins that skipping
+    // the gate grants nothing.
+    const convoyId = `markread-a-${Date.now()}`;
+    const otherConvoyId = `markread-b-${Date.now()}`;
+    const privateRef = adminDb.collection('userPrivate').doc(member.uid);
+
+    // Nothing stamped yet: the field is absent, which the client reads as "never
+    // opened" (every message from someone else then counts as unread).
+    const before = (await privateRef.get()).data();
+    expect((before?.convoyChatLastReadAt as Record<string, unknown> | undefined)?.[convoyId]).toBe(
+      undefined,
+    );
+
+    expect((await call('convoyChat-markRead', { convoyId })).data).toEqual({ convoyId });
+
+    const stamped = await pollUntil(async () => {
+      const map = (await privateRef.get()).data()?.convoyChatLastReadAt as
+        | Record<string, Timestamp>
+        | undefined;
+      return map?.[convoyId];
+    });
+    expect(stamped.toMillis()).toBeGreaterThan(0);
+
+    // Keyed by convoy: marking one convoy read leaves another's marker alone.
+    await call('convoyChat-markRead', { convoyId: otherConvoyId });
+    const both = (await privateRef.get()).data()!.convoyChatLastReadAt as Record<string, Timestamp>;
+    expect(both[convoyId]!.toMillis()).toBe(stamped.toMillis());
+    expect(both[otherConvoyId]).toBeTruthy();
+
+    // A convoy id is required (it is the map key) and must be a document id.
+    expect(await callableErrorCode(call('convoyChat-markRead', {}))).toBe(
+      'functions/invalid-argument',
+    );
+    expect(await callableErrorCode(call('convoyChat-markRead', { convoyId: 'bad/id' }))).toBe(
+      'functions/invalid-argument',
+    );
+
+    // The map is CAPPED: seed it exactly AT the cap with markers older than the
+    // real ones, then a fresh stamp must evict the oldest rather than grow.
+    const filler = Object.fromEntries(
+      Array.from({ length: CONVOY_LAST_READ_MAX_ENTRIES }, (_, i) => [
+        `filler-${String(i).padStart(3, '0')}`,
+        Timestamp.fromMillis(1_000 + i),
+      ]),
+    );
+    // Replaces the field outright (no merge), so the two markers above don't
+    // count against the cap and the expected eviction is exactly one filler.
+    await privateRef.set({ convoyChatLastReadAt: filler });
+    await call('convoyChat-markRead', { convoyId });
+
+    const capped = (await privateRef.get()).data()!.convoyChatLastReadAt as Record<
+      string,
+      Timestamp
+    >;
+    expect(Object.keys(capped).length).toBe(CONVOY_LAST_READ_MAX_ENTRIES);
+    // The just-stamped convoy survives; the OLDEST filler is the one evicted.
+    expect(capped[convoyId]).toBeTruthy();
+    expect(capped['filler-000']).toBe(undefined);
+    expect(capped['filler-001']).toBeTruthy();
+  });
+
+  it('markRead admits a NON-member (an inert marker in their own private doc)', async () => {
+    // Deliberate: the write lands in the caller's own userPrivate, grants nothing
+    // and returns only the id it was handed, so it cannot probe a convoy — and
+    // skipping the membership read keeps the hot path (one call per incoming
+    // message per watching member) at a single read.
+    const owner = await newMember('MarkReadGateOwner');
+    const friend = await newMember('MarkReadGateFriend');
+    await makeFriends(owner, friend);
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [friend.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    const outsider = await newMember('MarkReadOutsider');
+    await signInAs(outsider);
+    expect((await call('convoyChat-markRead', { convoyId })).data).toEqual({ convoyId });
+    // ...and it still buys them nothing: the chat itself stays not-found.
+    expect(await callableErrorCode(call('convoyChat-list', { convoyId }))).toBe(
+      'functions/not-found',
+    );
+
+    // Unauthenticated is still rejected.
+    await auth.signOut();
+    expect(await callableErrorCode(call('convoyChat-markRead', { convoyId }))).toBe(
+      'functions/unauthenticated',
+    );
   });
 });
 

@@ -148,6 +148,7 @@ fun ChatHubRoute(
     // Set when the hub was opened by tapping a push, so it lands on the tab (and
     // convoy channel) the notification was about instead of the default
     // Community tab. Consumed once — backing out must not re-apply it.
+    // (The popup form takes the same parameter; see [ChatHubPopup].)
     pushDeepLink: PushDeepLink? = null,
     // Lets the Notifications tab's convoy rows resolve their convoy's state and
     // open it. Forwarded untouched; see [NotificationsRoute].
@@ -228,6 +229,12 @@ fun ChatHubPopup(
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
     convoyLink: ConvoyNotificationLink? = null,
+    // Set when the hub was opened by an affordance that names WHERE it should
+    // land, rather than by the plain chat bubble: today the map shell's convoy bar
+    // chat icon, which passes a CONVOY_CHAT link for the convoy it badges so the
+    // hub opens on that convoy's channel instead of on Community. Same parameter
+    // (and same one-shot consumption) as the push taps [ChatHubRoute] forwards.
+    pushDeepLink: PushDeepLink? = null,
 ) {
     // The whole overlay — the bottom-anchored translucent card, the uncovered
     // tappable map strip above it, the drag handle + drag-to-dismiss, the
@@ -260,6 +267,7 @@ fun ChatHubPopup(
             applyStatusBarInset = false,
             onViewProfile = onViewProfile,
             blockingRepository = blockingRepository,
+            pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
         )
     }
@@ -362,8 +370,9 @@ private fun ChatHubContent(
     var openConvoyId by rememberSaveable { mutableStateOf<String?>(null) }
     var openConvoyTitle by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // A push tap picks the landing tab (already seeded into selectedTab above) and,
-    // for a convoy link, the channel to open inside the Convoys tab. Keyed on the
+    // A deep link — a push tap, or the map shell's convoy-bar chat icon — picks the
+    // landing tab (already seeded into selectedTab above) and, for a convoy link,
+    // the channel to open inside the Convoys tab. Keyed on the
     // link and applied once, so navigating away inside the hub (or backing out of a
     // channel) is not undone on the next recomposition. The convoy TITLE is
     // deliberately left null — it is display-only and the channel resolves it

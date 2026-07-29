@@ -556,6 +556,9 @@
     <string name="convoy_barConfirmCancel">Avbryt</string>
     <string name="convoy_barFocusMe">Kartan följer dig. Tryck för att hålla hela konvojen i bild</string>
     <string name="convoy_barFocusConvoy">Kartan håller hela konvojen i bild. Tryck för att följa dig igen</string>
+    <string name="convoy_barChat">Konvojchatt</string>
+    <string name="convoy_barChatUnread">Konvojchatt, %1$d olästa meddelanden</string>
+    <string name="convoy_barChatUnreadMany">Konvojchatt, fler än %1$d olästa meddelanden</string>
     <string name="convoy_inviteTitle">Bjud in till konvojen</string>
     <string name="convoy_inviteSubmit">Skicka inbjudningar</string>
     <string name="convoy_inviteCancel">Avbryt</string>

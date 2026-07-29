@@ -108,6 +108,39 @@ class ChannelChatTest {
     }
 
     @Test
+    fun `unreadCount counts only newer messages from someone else`() {
+        val window =
+            listOf(
+                msg("a", 1000, senderUid = "other"),
+                msg("b", 2000, senderUid = "me"),
+                msg("c", 3000, senderUid = "other"),
+                msg("d", 4000, senderUid = "other"),
+            )
+        // Never opened → everything from someone else counts (my own never does).
+        assertEquals(3, ChannelThread.unreadCount(window, "me", null))
+        // Marker between them → only what post-dates it.
+        assertEquals(2, ChannelThread.unreadCount(window, "me", 1000))
+        // Caught up: a marker at or past the newest leaves nothing.
+        assertEquals(0, ChannelThread.unreadCount(window, "me", 4000))
+        assertEquals(0, ChannelThread.unreadCount(window, "me", 9999))
+        // An empty window — or a channel of only my own messages — is zero.
+        assertEquals(0, ChannelThread.unreadCount(emptyList(), "me", null))
+        assertEquals(
+            0,
+            ChannelThread.unreadCount(listOf(msg("a", 1000, senderUid = "me")), "me", null),
+        )
+    }
+
+    @Test
+    fun `unreadCount ignores a message with no timestamp, matching hasUnread`() {
+        // With no instant there is nothing to compare against the marker, and
+        // counting it would badge a message that opening the chat cannot clear.
+        val window = listOf(msg("a", null, senderUid = "other"), msg("b", 3000, senderUid = "other"))
+        assertEquals(1, ChannelThread.unreadCount(window, "me", null))
+        assertEquals(0, ChannelThread.unreadCount(window, "me", 3000))
+    }
+
+    @Test
     fun `parsePostSuccess needs a non-blank messageId`() {
         assertEquals(
             ChannelSendResult.Sent("m1"),

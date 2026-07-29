@@ -757,8 +757,9 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // convoyChats – the per-CONVOY chat channel (convoyChat.post /
-    // convoyChat.list). One of the THREE product chats. convoyChats/{convoyId}/
-    // messages/{id} carries the same denormalized message shape as community.
+    // convoyChat.list / convoyChat.markRead). One of the THREE product chats.
+    // convoyChats/{convoyId}/messages/{id} carries the same denormalized message
+    // shape as community.
     //
     // Readable ONLY by an ACCEPTED member of the parent convoy: a get() of
     // convoys/{convoyId} must show the caller in memberUids AND
@@ -766,6 +767,12 @@ service cloud.firestore {
     // still-invited / declined member or a third party cannot read the channel,
     // so it never leaks. ALL writes go through the convoyChat.post callable
     // (which re-checks accepted membership) — no client writes.
+    //
+    // The per-user unread markers are NOT here either: like community's single
+    // marker they live in the userPrivate block, as the map
+    // userPrivate/{uid}.convoyChatLastReadAt (keyed by convoy id, owner-only
+    // readable, written only by convoyChat.markRead — the field is outside the
+    // owner-update whitelist, so a client cannot forge or clear one).
     // -------------------------------------------------------------------------
     match /convoyChats/{convoyId}/messages/{messageId} {
       allow read: if isAuthenticated()

@@ -6,6 +6,7 @@ import {
   COMMUNITY_MENTION_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_RETENTION_DAYS,
+  CONVOY_LAST_READ_MAX_ENTRIES,
   MAX_MESSAGE_MENTIONS,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
@@ -19,8 +20,10 @@ import {
   parseListCommunityInput,
   parseListConvoyInput,
   parseMarkReadCommunityInput,
+  parseMarkReadConvoyInput,
   parsePostCommunityInput,
   parsePostConvoyInput,
+  pruneConvoyLastRead,
   toChatMessageSummary,
   toProfileProjection,
 } from './chat-core';
@@ -113,6 +116,91 @@ describe('chat-core parsing', () => {
     );
     expect(parseListConvoyInput({ convoyId: 'c-1', before: 'nope' }).ok).toBe(false);
     expect(parseListConvoyInput({}).ok).toBe(false);
+  });
+
+  it('parses convoyChat.markRead strictly (the convoy id is required and is a doc id)', () => {
+    expect(parseMarkReadConvoyInput({ convoyId: 'c-1' })).toEqual({
+      ok: true,
+      input: { convoyId: 'c-1' },
+    });
+    // Unlike community's markRead, an EMPTY object is not enough — this marker is
+    // per convoy, so a missing id has no sensible default to fall back to.
+    expect(parseMarkReadConvoyInput({}).ok).toBe(false);
+    expect(parseMarkReadConvoyInput(undefined).ok).toBe(false);
+    // The id becomes a MAP KEY in the caller's userPrivate document, so the same
+    // document-id constraints as post/list apply.
+    expect(parseMarkReadConvoyInput({ convoyId: '' }).ok).toBe(false);
+    expect(parseMarkReadConvoyInput({ convoyId: 'bad/id' }).ok).toBe(false);
+    expect(parseMarkReadConvoyInput({ convoyId: '..' }).ok).toBe(false);
+    expect(parseMarkReadConvoyInput({ convoyId: 'c-1', extra: 1 }).ok).toBe(false);
+  });
+});
+
+describe('pruneConvoyLastRead', () => {
+  /** A stored marker as the admin SDK hands it back: a Timestamp-like object. */
+  const stamp = (ms: number) => ({ toMillis: () => ms });
+
+  it('evicts nothing while the map is at or under the cap', () => {
+    expect(pruneConvoyLastRead(undefined, 'c-1', 1000, 3)).toEqual([]);
+    expect(pruneConvoyLastRead({ 'c-1': stamp(1) }, 'c-1', 1000, 3)).toEqual([]);
+    expect(pruneConvoyLastRead({ 'c-1': stamp(1), 'c-2': stamp(2) }, 'c-3', 1000, 3)).toEqual([]);
+  });
+
+  it('evicts the OLDEST markers once the map would exceed the cap', () => {
+    const existing = {
+      old: stamp(100),
+      older: stamp(50),
+      oldest: stamp(10),
+      recent: stamp(900),
+    };
+    expect(pruneConvoyLastRead(existing, 'fresh', 1000, 3).sort()).toEqual(['older', 'oldest']);
+  });
+
+  it('never evicts the convoy just stamped, even when it was the oldest entry', () => {
+    const existing = { stale: stamp(1), a: stamp(500), b: stamp(600) };
+    // `stale` is re-stamped as the newest, so the eviction must fall on `a`.
+    expect(pruneConvoyLastRead(existing, 'stale', 1000, 2)).toEqual(['a']);
+  });
+
+  it('treats malformed entries as the oldest possible, so they are evicted first', () => {
+    const existing = { junk: 'not-a-timestamp', alsoJunk: null, good: stamp(5) };
+    expect(pruneConvoyLastRead(existing, 'fresh', 1000, 2)).toEqual(['alsoJunk', 'junk']);
+  });
+
+  it('prunes nothing when the stored field is not a map (nothing to evict)', () => {
+    expect(pruneConvoyLastRead('nonsense', 'c-1', 1000, 1)).toEqual([]);
+    expect(pruneConvoyLastRead([stamp(1), stamp(2)], 'c-1', 1000, 1)).toEqual([]);
+    expect(pruneConvoyLastRead(null, 'c-1', 1000, 1)).toEqual([]);
+  });
+
+  /**
+   * The property that makes the non-transactional read-compute-write safe: two
+   * overlapping markRead calls for different convoys can each read the same map,
+   * evict the same oldest key and add a different one, leaving it OVER the cap.
+   * Pruning from an over-cap map must pull it straight back down, so an
+   * overshoot is transient and can never ratchet upwards.
+   */
+  it('evicts an OVER-cap map back down to the cap in one pass (self-healing)', () => {
+    const overCap = {
+      a: stamp(10),
+      b: stamp(20),
+      c: stamp(30),
+      d: stamp(40),
+      e: stamp(50),
+    };
+    // 5 stored + 1 new = 6 against a cap of 2 → the 4 oldest go, in one call.
+    const evicted = pruneConvoyLastRead(overCap, 'fresh', 1000, 2);
+    expect(evicted.sort()).toEqual(['a', 'b', 'c', 'd']);
+    // What survives is the cap exactly: the newest stored one plus the stamp.
+    expect(Object.keys(overCap).length - evicted.length + 1).toBe(2);
+  });
+
+  it('defaults to the shipped cap', () => {
+    const existing = Object.fromEntries(
+      Array.from({ length: CONVOY_LAST_READ_MAX_ENTRIES }, (_, i) => [`c${i}`, stamp(i)]),
+    );
+    // One over the cap: exactly the single oldest marker goes.
+    expect(pruneConvoyLastRead(existing, 'fresh', 10_000)).toEqual(['c0']);
   });
 });
 

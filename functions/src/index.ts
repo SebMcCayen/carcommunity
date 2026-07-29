@@ -158,6 +158,7 @@ import {
 import { digest as communityChatDigest } from './chatchannels/communityDigest';
 import {
   list as convoyChatList,
+  markRead as convoyChatMarkRead,
   post as convoyChatPost,
 } from './chatchannels/convoyChat';
 import { reportMessage as chatChannelsReportMessage } from './chatchannels/reportMessage';
@@ -926,7 +927,7 @@ export const communityChat = {
 
 /**
  * Convoy chat domain (grouped export → deployed as `convoyChat-post`,
- * `convoyChat-list`).
+ * `convoyChat-list`, `convoyChat-markRead`).
  *
  * The per-CONVOY chat — one of the THREE product chats. Stacked on the convoy
  * backend: readable + postable ONLY by ACCEPTED members of `convoys/{convoyId}`
@@ -936,10 +937,19 @@ export const communityChat = {
  * (firebase/firestore.rules); writes are callable-only, and the callables
  * re-check accepted membership (missing convoy / outsider → not-found so a
  * convoy can't be probed). See functions/src/chatchannels/chat-core.ts.
+ *
+ * UNREAD follows community's shape, not a fan-out counter: `convoyChat-markRead`
+ * stamps a per-user, per-convoy last-read marker in the map at
+ * userPrivate/{uid}.convoyChatLastReadAt (owner-only readable, capped at
+ * chat-core CONVOY_LAST_READ_MAX_ENTRIES), and the client derives the unread
+ * COUNT from the bounded newest-message live listener it already holds — O(1)
+ * per user, no write per member per post. That count is what the map shell's
+ * convoy bar badges.
  */
 export const convoyChat = {
   post: convoyChatPost,
   list: convoyChatList,
+  markRead: convoyChatMarkRead,
 };
 
 /**
