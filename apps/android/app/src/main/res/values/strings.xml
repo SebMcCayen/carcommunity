@@ -664,6 +664,8 @@
     <string name="savedDrives_routeZoomIn">Zooma in</string>
     <string name="savedDrives_routeZoomOut">Zooma ut</string>
     <string name="savedDrives_routeKmMarkerLabel">%1$d km</string>
+    <string name="savedDrives_sessionRouteShow">Visa rutten du körde</string>
+    <string name="savedDrives_sessionRouteHide">Dölj ruttkartan</string>
     <string name="savedDrives_deleteAction">Radera körning</string>
     <string name="savedDrives_deleteConfirmTitle">Radera körning?</string>
     <string name="savedDrives_deleteConfirmBody">Körningen raderas permanent.</string>

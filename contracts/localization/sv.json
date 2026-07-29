@@ -717,6 +717,8 @@
     "routeZoomIn": "Zooma in",
     "routeZoomOut": "Zooma ut",
     "routeKmMarkerLabel": "%1$d km",
+    "sessionRouteShow": "Visa rutten du körde",
+    "sessionRouteHide": "Dölj ruttkartan",
     "deleteAction": "Radera körning",
     "deleteConfirmTitle": "Radera körning?",
     "deleteConfirmBody": "Körningen raderas permanent.",
