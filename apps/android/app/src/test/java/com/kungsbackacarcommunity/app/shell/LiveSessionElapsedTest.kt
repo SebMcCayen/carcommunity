@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -10,6 +11,12 @@ import org.junit.Test
  */
 class LiveSessionElapsedTest {
     private val tap = 1_700_000_000_000L
+
+    /** [LiveSessionAnchor] is a process singleton; don't leak state between tests. */
+    @After
+    fun releaseTheAnchor() {
+        LiveSessionAnchor.clearIfNotOwnedBy(null)
+    }
 
     /** What the bar would render for a given anchor at a given moment. */
     private fun label(anchorMillis: Long?, nowMillis: Long): String =
@@ -157,6 +164,41 @@ class LiveSessionElapsedTest {
                 nowMillis = tap,
             ),
         )
+    }
+
+    @Test
+    fun anAnchorIsOnlyEverReadBackByItsOwner() {
+        // Signing straight from one sharing account into another sharing one: the
+        // process-scoped anchor outlives the shell, so the second account must not
+        // be handed the first one's elapsed time.
+        val anchor = LiveSessionAnchorState(ownerUid = "user-a", startMillis = tap)
+
+        assertEquals(tap, LiveSessionAnchor.startMillisFor(anchor, "user-a"))
+        assertNull(LiveSessionAnchor.startMillisFor(anchor, "user-b"))
+        assertNull(LiveSessionAnchor.startMillisFor(null, "user-a"))
+    }
+
+    @Test
+    fun theHolderReleasesTheAnchorOnlyWhenItStopsBeingTheSignedInUsers() {
+        LiveSessionAnchor.set(uid = "user-a", anchorMillis = tap)
+
+        // A same-uid re-run (an Activity recreation) must leave it alone — that is
+        // half the reason it is process-scoped.
+        LiveSessionAnchor.clearIfNotOwnedBy("user-a")
+        assertEquals(LiveSessionAnchorState("user-a", tap), LiveSessionAnchor.anchor.value)
+
+        // A switch, and a sign-out, both release it.
+        LiveSessionAnchor.clearIfNotOwnedBy("user-b")
+        assertNull(LiveSessionAnchor.anchor.value)
+
+        LiveSessionAnchor.set(uid = "user-a", anchorMillis = tap)
+        LiveSessionAnchor.clearIfNotOwnedBy(null)
+        assertNull(LiveSessionAnchor.anchor.value)
+
+        // A null anchor is how the shell says "session over".
+        LiveSessionAnchor.set(uid = "user-a", anchorMillis = tap)
+        LiveSessionAnchor.set(uid = "user-a", anchorMillis = null)
+        assertNull(LiveSessionAnchor.anchor.value)
     }
 
     @Test

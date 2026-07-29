@@ -82,6 +82,12 @@ object LiveSessionElapsed {
 }
 
 /**
+ * A latched start together with the uid it belongs to. The uid is what stops one
+ * account's elapsed time being shown to another — see [LiveSessionAnchor].
+ */
+data class LiveSessionAnchorState(val ownerUid: String, val startMillis: Long)
+
+/**
  * Process-scoped holder for the live-session bar's latched start.
  *
  * Process-scoped for the same reason
@@ -91,20 +97,46 @@ object LiveSessionElapsed {
  * not lose the anchor and re-latch onto the server-clock fallback — which would
  * make the readout jump by the skew on a rotation. All the logic is in
  * [LiveSessionElapsed]; this only stores the value.
+ *
+ * Being process-scoped is also why it is keyed by uid. Outliving the composition
+ * means outliving a SIGNED-IN USER, and the anchor self-heals only when the next
+ * account is NOT sharing (the shell then resolves a null anchor and overwrites
+ * this). Switching straight from a sharing account to another sharing one would
+ * otherwise open the new account's bar on the old one's elapsed time — so
+ * [startMillisFor] refuses to hand the value to anyone but its owner, which
+ * settles it at READ time (a teardown hook alone would fire a frame too late, as
+ * the shell writes during the very composition that would show the stale value).
+ * [clearIfNotOwnedBy] then releases it on the real teardown — sign-out, where no
+ * shell is left to overwrite anything.
  */
 object LiveSessionAnchor {
-    private val state = MutableStateFlow<Long?>(null)
+    private val state = MutableStateFlow<LiveSessionAnchorState?>(null)
 
-    /** The latched start, or null when no session is being shown. */
-    val startMillis: StateFlow<Long?> = state.asStateFlow()
+    /** The latched anchor, or null when no session is being shown. */
+    val anchor: StateFlow<LiveSessionAnchorState?> = state.asStateFlow()
 
-    /** Stores the anchor [LiveSessionElapsed.anchorMillis] resolved (null clears it). */
-    fun set(anchorMillis: Long?) {
-        state.value = anchorMillis
+    /** The latched start for [uid], or null when the anchor is another user's. */
+    fun startMillisFor(current: LiveSessionAnchorState?, uid: String): Long? =
+        current?.takeIf { it.ownerUid == uid }?.startMillis
+
+    /**
+     * Stores what [LiveSessionElapsed.anchorMillis] resolved for [uid]; a null
+     * [anchorMillis] clears it (the session ended).
+     */
+    fun set(uid: String, anchorMillis: Long?) {
+        state.value = anchorMillis?.let { LiveSessionAnchorState(uid, it) }
     }
 
-    /** Drops the anchor unconditionally (sign-out / account switch). */
-    fun clear() {
+    /**
+     * Releases the anchor once it stops belonging to the signed-in user — sign-out
+     * ([signedInUid] null) or an account switch — and does nothing while it is
+     * still theirs, so an Activity recreation (which re-runs the caller with the
+     * SAME uid) leaves a running session's anchor alone. Mirrors
+     * `SingleSessionRecording.clearIfNotOwnedBy`.
+     */
+    fun clearIfNotOwnedBy(signedInUid: String?) {
+        val owner = state.value?.ownerUid ?: return
+        if (owner == signedInUid) return
         state.value = null
     }
 }

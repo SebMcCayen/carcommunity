@@ -1856,17 +1856,20 @@ fun AuthenticatedApp(
             // The latched anchor: resolved during composition (NOT in an effect) so
             // the bar renders on the very first frame the STOP disc does, and
             // written back so an Activity recreation mid-session keeps it.
-            val latchedSessionStartMillis by LiveSessionAnchor.startMillis.collectAsState()
+            // Keyed by uid: an anchor left behind by a DIFFERENT account is not read
+            // at all, so switching between two sharing accounts can never open the
+            // second one's bar on the first one's elapsed time.
+            val latchedSessionAnchor by LiveSessionAnchor.anchor.collectAsState()
             val liveSessionStartMillis: Long? =
                 LiveSessionElapsed.anchorMillis(
-                    latchedMillis = latchedSessionStartMillis,
+                    latchedMillis = LiveSessionAnchor.startMillisFor(latchedSessionAnchor, uid),
                     sharing = isSharingUi,
                     tapStartMillis =
                         OptimisticLiveStart.pendingTapMillis(startAttempt, liveBarNowMillis),
                     observedStartMillis = observedSessionStartMillis,
                     nowMillis = liveBarNowMillis,
                 )
-            SideEffect { LiveSessionAnchor.set(liveSessionStartMillis) }
+            SideEffect { LiveSessionAnchor.set(uid, liveSessionStartMillis) }
             // Distance driven this session, straight off the recorder's running
             // total (0 before the first fix / when nothing is recording). Only
             // changes on GPS fixes, which the shell already observes via

@@ -185,7 +185,11 @@ private fun MetricSeparator() {
                 // by design (KccSpacing.s1 = 4dp would be a bar, not a rule).
                 .width(1.dp)
                 .height(KccSpacing.s4)
-                .background(MaterialTheme.colorScheme.outlineVariant),
+                // `outline`, NOT Material's usual divider role `outlineVariant`:
+                // this theme maps outlineVariant to darkCharcoal in the dark
+                // scheme, which is the very same colour as its `surface`
+                // (KccTheme.kt) — the rule would be invisible on this bar.
+                .background(MaterialTheme.colorScheme.outline),
     )
 }
 
