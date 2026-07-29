@@ -119,7 +119,9 @@
     <string name="liveLocation_viewOthersMemberOnly">An active membership is required to view other members\' live locations.</string>
     <string name="liveLocation_memberRequiredToShare">An active membership is required to share your live location. You can always stop sharing.</string>
     <string name="liveLocation_shareUnavailable">Live location sharing isn\'t available right now.</string>
-    <string name="liveLocation_sessionBar">Live session: %1$s, %2$s driven</string>
+    <string name="liveLocation_sessionBar">Live session: %1$s, %2$s driven, %3$s</string>
+    <string name="liveLocation_sessionBarSpeed">current speed %1$d km/h</string>
+    <string name="liveLocation_sessionBarSpeedUnknown">current speed unavailable</string>
     <string name="onboarding_title">Welcome</string>
     <string name="onboarding_subtitle">Please confirm before continuing.</string>
     <string name="onboarding_ageConfirm">I confirm that I am 18 years of age or older.</string>

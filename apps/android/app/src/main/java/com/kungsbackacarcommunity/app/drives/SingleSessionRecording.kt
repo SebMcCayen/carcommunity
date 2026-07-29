@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
+import com.kungsbackacarcommunity.app.location.CurrentSpeed
 import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -138,10 +139,19 @@ object SingleSessionRecording {
         uploadOwnerUid = uid
         activeState.value = coordinator
         coordinator.start()
+        // A new session must never open on the PREVIOUS session's speed, so the
+        // readout starts blank and the first fix fills it.
+        CurrentSpeed.clear()
         val controller = controllerFactory()
         locationController = controller
-        controller?.start { latitude, longitude, timestampMs ->
+        controller?.start { latitude, longitude, timestampMs, speedMps ->
             coordinator.addFix(latitude, longitude, timestampMs)
+            // Speed goes to the live-session bar's readout ONLY. It is passed to
+            // the holder rather than the recorder deliberately: nothing about a
+            // saved drive derives from it, and the drive payload carries no speed.
+            // Stamped with the DEVICE clock, not the fix's own GPS `timestampMs`,
+            // because the reader ages it against System.currentTimeMillis.
+            CurrentSpeed.onFix(speedMps, System.currentTimeMillis())
         }
     }
 
@@ -156,6 +166,11 @@ object SingleSessionRecording {
      * already pending).
      */
     fun stop() {
+        // Unconditionally, and BEFORE the "nothing recording" bail-out: the
+        // readout must go blank when a session ends however it ended, including
+        // the case where no recording was ever started (no drives backend / the
+        // member gate) but a previous session left a number behind.
+        CurrentSpeed.clear()
         val coordinator = activeState.value ?: return
         locationController?.stop()
         locationController = null
@@ -172,6 +187,7 @@ object SingleSessionRecording {
     fun clear() {
         locationController?.stop()
         locationController = null
+        CurrentSpeed.clear()
         ownerUid = null
         activeState.value = null
         promptPendingState.value = false

@@ -128,7 +128,9 @@
     "viewOthersMemberOnly": "An active membership is required to view other members' live locations.",
     "memberRequiredToShare": "An active membership is required to share your live location. You can always stop sharing.",
     "shareUnavailable": "Live location sharing isn't available right now.",
-    "sessionBar": "Live session: %1$s, %2$s driven"
+    "sessionBar": "Live session: %1$s, %2$s driven, %3$s",
+    "sessionBarSpeed": "current speed %1$d km/h",
+    "sessionBarSpeedUnknown": "current speed unavailable"
   },
   "onboarding": {
     "title": "Welcome",

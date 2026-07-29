@@ -35,9 +35,17 @@ object SavedDrives {
  * rather than in string resources; the field LABELS come from savedDrives_*.
  */
 object DriveFormatters {
+    /**
+     * What every readout here renders when the value is genuinely absent, as
+     * opposed to zero. Public so other numeric readouts outside this file (the
+     * map's live-session speed) use the SAME glyph rather than picking their own
+     * dash, and so "no value" never gets confused with a real 0.
+     */
+    const val MISSING_VALUE: String = "—"
+
     /** Metres → "820 m" under 1 km, otherwise "12.3 km" (one decimal). */
     fun formatDistance(distanceMeters: Double?): String {
-        if (distanceMeters == null || distanceMeters < 0) return "—"
+        if (distanceMeters == null || distanceMeters < 0) return MISSING_VALUE
         if (distanceMeters < 1000) return "${distanceMeters.roundToInt()} m"
         val km = distanceMeters / 1000.0
         return String.format(Locale.ROOT, "%.1f km", km)
@@ -58,7 +66,9 @@ object DriveFormatters {
 
     /** m/s → "45 km/h" (whole km/h). */
     fun formatSpeed(metersPerSecond: Double?): String {
-        if (metersPerSecond == null || !metersPerSecond.isFinite() || metersPerSecond < 0) return "—"
+        if (metersPerSecond == null || !metersPerSecond.isFinite() || metersPerSecond < 0) {
+            return MISSING_VALUE
+        }
         val kmh = (metersPerSecond * 3.6).roundToInt()
         return "$kmh km/h"
     }

@@ -119,7 +119,9 @@
     <string name="liveLocation_stillSharingAction">Ja, jag delar fortfarande</string>
     <string name="liveLocation_memberRequiredToShare">Ett aktivt medlemskap krävs för att dela din live-position. Du kan alltid stoppa delning.</string>
     <string name="liveLocation_shareUnavailable">Delning av live-position är inte tillgänglig just nu.</string>
-    <string name="liveLocation_sessionBar">Live-session: %1$s, %2$s kört</string>
+    <string name="liveLocation_sessionBar">Live-session: %1$s, %2$s kört, %3$s</string>
+    <string name="liveLocation_sessionBarSpeed">aktuell hastighet %1$d km/h</string>
+    <string name="liveLocation_sessionBarSpeedUnknown">aktuell hastighet är okänd</string>
     <string name="onboarding_title">Välkommen</string>
     <string name="onboarding_subtitle">Bekräfta innan du fortsätter.</string>
     <string name="onboarding_ageConfirm">Bekräfta att du är 18 år eller äldre.</string>
