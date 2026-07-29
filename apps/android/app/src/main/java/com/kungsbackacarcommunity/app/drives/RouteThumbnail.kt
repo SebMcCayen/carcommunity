@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.drives
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.PolylineCodec
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
@@ -69,15 +70,59 @@ object RouteThumbnail {
     private const val METERS_PER_DEGREE = 111_320.0
 
     /**
-     * Decodes a stored thumbnail polyline, or an empty list when there is none.
+     * Coordinate bounds every real fix satisfies.
+     *
+     * A corrupt polyline that happens to decode cleanly still produces
+     * coordinates: `"not a polyline!!"` decodes to a latitude of ~3623°. Those
+     * are finite, so a finiteness check passes them, and the fit then scales
+     * them into the box and draws a confident line that is not a route. The
+     * backend only ever encodes points `drives.save` already validated to
+     * ±90 / ±180, so anything outside is corruption by definition and gets the
+     * placeholder — the same answer a stationary recording gets.
+     */
+    private const val MAX_ABS_LATITUDE = 90.0
+    private const val MAX_ABS_LONGITUDE = 180.0
+
+    /**
+     * Decodes a stored thumbnail polyline, or an empty list when there is none
+     * — including when the stored value is corrupt.
      *
      * Delegates to the app's existing [PolylineCodec] — the decoder already
      * shipped for Mapbox route geometry — rather than adding a second one that
      * could drift from the encoder. Only the precision differs (1e5 here, the
      * backend's; 1e6 for Mapbox), which the codec already takes as a parameter.
+     *
+     * ## Why the catch is here and not in the codec
+     * [PolylineCodec] is not a total function and is not documented as one. A
+     * polyline varint pair is latitude-then-longitude, so a string that ends
+     * BETWEEN the two makes the decoder read past its last character and throw
+     * `StringIndexOutOfBoundsException`. A single `"_"`, or one complete
+     * latitude with nothing after it, is enough. A long run of garbage does
+     * NOT do this — there is always another character left to consume, so it
+     * merely decodes to nonsense — which is exactly why testing only a garbled
+     * string never reached this path.
+     *
+     * The value arrives from Firestore and is decoded while composing a row in
+     * the History LIST, so an escaping throw would not blank one card: it would
+     * take down the whole History screen for anyone holding a single corrupt
+     * document. "Corruption degrades to the placeholder" is this object's
+     * stated contract, so this is the boundary that enforces it. Widening
+     * [PolylineCodec] itself would instead change what its other caller sees —
+     * Mapbox route geometry, where a malformed response is a real error worth
+     * surfacing rather than silently drawing nothing.
+     *
+     * Catching [RuntimeException] rather than the narrower index error is
+     * deliberate: the whole point of the boundary is that no decoder failure,
+     * present or future, can reach the list.
      */
-    fun decode(encoded: String?): List<LatLng> =
-        if (encoded.isNullOrBlank()) emptyList() else PolylineCodec.decode(encoded, POLYLINE_PRECISION)
+    fun decode(encoded: String?): List<LatLng> {
+        if (encoded.isNullOrBlank()) return emptyList()
+        return try {
+            PolylineCodec.decode(encoded, POLYLINE_PRECISION)
+        } catch (_: RuntimeException) {
+            emptyList()
+        }
+    }
 
     /**
      * Fits [points] into a [width] x [height] box, inset by [padding] on every
@@ -85,8 +130,8 @@ object RouteThumbnail {
      *
      * Returns null — meaning "draw the placeholder" — when there is no route to
      * show: fewer than [MIN_DRAWABLE_POINTS] points, a box too small to draw
-     * in, a non-finite coordinate, or a route whose whole extent is under
-     * [MIN_EXTENT_METERS].
+     * in, a non-finite or off-globe coordinate, or a route whose whole extent
+     * is under [MIN_EXTENT_METERS].
      */
     fun project(
         points: List<LatLng>,
@@ -107,6 +152,8 @@ object RouteThumbnail {
         var maxLon = -Double.MAX_VALUE
         for (point in points) {
             if (!point.latitude.isFinite() || !point.longitude.isFinite()) return null
+            if (abs(point.latitude) > MAX_ABS_LATITUDE) return null
+            if (abs(point.longitude) > MAX_ABS_LONGITUDE) return null
             minLat = min(minLat, point.latitude)
             maxLat = max(maxLat, point.latitude)
             minLon = min(minLon, point.longitude)

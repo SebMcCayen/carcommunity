@@ -282,6 +282,13 @@ class RouteThumbnailTest {
         out.append((v.toInt() + 63).toChar())
     }
 
+    /** Encodes a bare latitude with no longitude after it — a truncated pair. */
+    private fun encodeLatitudeOnly(latitude: Double): String {
+        val out = StringBuilder()
+        encodeValue(Math.round(latitude * RouteThumbnail.POLYLINE_PRECISION), out)
+        return out.toString()
+    }
+
     @Test
     fun `a garbled polyline never crashes the card`() {
         // The decoder is fed a Firestore string field; a corrupt or truncated
@@ -293,5 +300,68 @@ class RouteThumbnailTest {
         // to, projecting it stays finite and in-box (or refuses outright).
         val projected = RouteThumbnail.project(decoded, width, height, padding)
         projected?.forEach { assertTrue(it.x.isFinite() && it.y.isFinite()) }
+    }
+
+    // --- Truncation: the failure mode a long garbage string does NOT reach ---
+    //
+    // "not a polyline!!" is long enough that the varint decoder always finds
+    // another character to read, so it exercises "nonsense in, nonsense out"
+    // and never the read-past-the-end path. A value truncated MID-PAIR is a
+    // different code path: the decoder consumes a latitude, reaches the end of
+    // the string, and then unconditionally reads the first character of the
+    // longitude that is not there. Those are the cases below, and they are the
+    // realistic ones — a partially written or clipped Firestore string field.
+    //
+    // This is decoded while COMPOSING a row in the History LIST, so an escaping
+    // throw does not blank one card, it takes down the whole History screen for
+    // anyone with a single corrupt document.
+
+    @Test
+    fun `a one-character polyline degrades to the placeholder`() {
+        // Shortest possible truncation: enough to start a latitude, nothing
+        // left for the longitude.
+        assertTrue(RouteThumbnail.decode("_").isEmpty())
+        assertNull(RouteThumbnail.pathFor("_", width, height, padding))
+    }
+
+    @Test
+    fun `a polyline cut off after a complete latitude degrades to the placeholder`() {
+        val latitudeOnly = encodeLatitudeOnly(57.4874)
+        // Sanity: this really is a whole latitude and nothing else.
+        assertTrue(latitudeOnly.length > 1)
+        assertTrue(RouteThumbnail.decode(latitudeOnly).isEmpty())
+        assertNull(RouteThumbnail.pathFor(latitudeOnly, width, height, padding))
+    }
+
+    @Test
+    fun `a valid polyline truncated mid-pair degrades to the placeholder`() {
+        // A real, previously drawable thumbnail with its trailing longitude
+        // lost — the shape a clipped write leaves behind.
+        val full =
+            encodeForTest(
+                listOf(
+                    LatLng(longitude = 12.0700, latitude = 57.4874),
+                    LatLng(longitude = 12.0800, latitude = 57.4900),
+                ),
+            )
+        assertNotNull(RouteThumbnail.pathFor(full, width, height, padding))
+        val truncated = full.substring(0, encodeLatitudeOnly(57.4874).length)
+        assertTrue(RouteThumbnail.decode(truncated).isEmpty())
+        assertNull(RouteThumbnail.pathFor(truncated, width, height, padding))
+    }
+
+    @Test
+    fun `a decoded coordinate outside the globe is not drawn`() {
+        // Corruption that decodes cleanly still has to be refused: "not a
+        // polyline!!" yields a latitude of ~3623 degrees. Fitting it draws a
+        // confident line that is not a route. Only the placeholder is honest.
+        val offGlobe =
+            listOf(
+                LatLng(longitude = 12.070, latitude = 57.487),
+                LatLng(longitude = 12.080, latitude = 3623.470),
+            )
+        assertNull(project(offGlobe))
+        assertNull(project(listOf(LatLng(longitude = 4000.0, latitude = 57.487), LatLng(longitude = 12.08, latitude = 57.49))))
+        assertNull(RouteThumbnail.pathFor("not a polyline!!", width, height, padding))
     }
 }
