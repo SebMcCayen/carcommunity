@@ -73,8 +73,12 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 import java.text.DateFormat
 import java.util.Date
 
-/** Test tag on the show/hide control for the History filter section. */
-const val DRIVE_FILTER_TOGGLE_TAG = "drives_filter_toggle"
+/**
+ * Test tag on the show/hide control for the History filter section. `internal`,
+ * matching the other test-only tags in this module — the instrumented source set
+ * still sees it, and nothing outside the module has any business tagging on it.
+ */
+internal const val DRIVE_FILTER_TOGGLE_TAG = "drives_filter_toggle"
 
 /**
  * Expand/collapse duration for the History filter section, matching the shell's
