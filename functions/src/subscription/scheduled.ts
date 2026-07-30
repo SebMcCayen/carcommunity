@@ -353,12 +353,22 @@ export async function runSubscriptionExpirySweep(
         // the top of the block (so nothing has been written yet); also
         // covers the narrow race where the account is deleted between
         // that test and applyEntitlement's own getUser.
-        await expireOrphanedRecord(uid).catch((closeError) => {
-          logger.error('Failed to close orphaned subscription record', {
+        try {
+          await expireOrphanedRecord(uid);
+        } catch (closeError) {
+          // The close WRITE failed, so the record is still granting and
+          // still matches the query. Count it as failed rather than
+          // orphaned: `orphanedCount` means "closed", and a counter that
+          // reports a close that did not happen would make the sweep's own
+          // metrics the thing that hides the backlog. The next run retries
+          // — the Auth lookup fails the same way and lands back here.
+          failedCount += 1;
+          logger.error('Failed to close orphaned subscription record; will retry next run', {
             uid,
             error: String(closeError),
           });
-        });
+          continue;
+        }
         orphanedCount += 1;
         logger.info('Closed orphaned subscription record (Auth account gone)', { uid });
         continue;
