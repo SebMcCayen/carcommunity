@@ -39,6 +39,7 @@ import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
+import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 import { fileAutoIssue } from '../shared/autoIssueFiling';
 import {
   SERVER_ERROR_ISSUE_LINKS_COLLECTION,
@@ -71,6 +72,7 @@ export const onServerErrorReport = onDocumentCreated(
   {
     region: 'europe-west1',
     document: 'serverErrorReports/{reportId}',
+    maxInstances: MAX_INSTANCES_TRIGGER,
     memory: '256MiB',
     timeoutSeconds: 30,
     secrets: [GITHUB_ISSUE_TOKEN],

@@ -93,6 +93,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { adminAuth, db } from '../firebase';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { writeInAppNotification } from '../notifications/deliver';
 import { applyEntitlement } from './entitlement';
 import {
@@ -413,6 +414,7 @@ export async function runSubscriptionExpirySweep(
 export const expireLapsed = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 540,
