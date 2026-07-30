@@ -68,6 +68,7 @@ import {
   blockMirrorRtdbKey,
   deletionRetentionCutoff,
 } from './deletion-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 const QUERY_BATCH_SIZE = 500;
 /** Upper bound of accounts purged per sweep — keeps a backlog from
@@ -494,6 +495,7 @@ export async function runAccountPurge(
 export const purgeDeleted = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '512MiB' as const,
     timeoutSeconds: 540,

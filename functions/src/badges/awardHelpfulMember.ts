@@ -18,6 +18,7 @@ import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { buildBadgeDocument, parseAwardHelpfulMemberInput } from './badge-core';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 export interface AwardHelpfulMemberResponse {
   targetUid: string;
@@ -28,6 +29,7 @@ export interface AwardHelpfulMemberResponse {
 export const awardHelpfulMember = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_ADMIN,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

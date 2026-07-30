@@ -62,6 +62,92 @@ CI runs on every push and pull request targeting `main`. Path filters ensure tha
 
 Functions are **not deployed** from validation workflows. Deployments are intentional, require GitHub environment protection, and are triggered separately.
 
+## Functions Build Hook
+
+`firebase.json`'s `functions` block declares a `predeploy` hook:
+
+```json
+"predeploy": ["pnpm --dir \"$RESOURCE_DIR\" run build"]
+```
+
+This is a **safety** hook, not a convenience one. The Firebase CLI analyses the
+**compiled** `functions/lib/`, never `functions/src/`. Deploying on a stale
+`lib/` therefore makes the CLI believe the missing functions were deleted from
+source, and it offers to **delete them from production**.
+
+That happened on 2026-07-29: a deploy from freshly-pulled `main` offered to
+delete `incidents-reportCleared`, `notifications-delete` and
+`notifications-deleteAll` — all three present in `src/`, all three live. Only
+`--non-interactive` (which turns the prompt into an abort) prevented it.
+
+With the hook in place the build always runs first, so what the CLI analyses
+always matches `src/`. Keep `--non-interactive` on the deploy anyway: it is the
+second line of defence, and any deletion prompt now means a _real_ deletion.
+
+**Where the hook does and does not run.** `predeploy` is per-target: the Firebase
+CLI runs it for a bare `firebase deploy` and for `--only functions` /
+`--only functions:<group>`, and skips it for `--only hosting`,
+`--only firestore:*` and the other targets. That covers every path that can
+upload function code, and none of the paths that cannot. The command runs from
+the repo root with `RESOURCE_DIR` set to the absolute `functions/` directory, and
+a non-zero exit **aborts the deploy** — a build failure can no longer be walked
+past into an upload.
+
+The manual `pnpm --dir functions run build` before a hand-run deploy is now
+**redundant, not wrong**: the hook rebuilds regardless, so forgetting it is no
+longer the stale-`lib/` trap it was on 2026-07-29. Two requirements survive:
+`pnpm` must be on `PATH` with `functions/node_modules` installed (the hook fails
+loudly, and safely, if not), and `deploy-firebase-functions.yml` keeps its own
+explicit `Build` step so CI attributes a compile failure to that step rather than
+to the deploy.
+
+## Cost Guardrails
+
+Cloud Functions v2 defaults `maxInstances` to **1000** per function. App Check is
+enforced on every callable, so anonymous external spam is hard — but attestation
+bounds _who_ may call, never _how much_. Every function therefore declares a
+ceiling from a tier in
+[`functions/src/shared/instanceLimits.ts`](../functions/src/shared/instanceLimits.ts):
+
+| Tier                           | Cap | Covers                                                               |
+| ------------------------------ | --- | -------------------------------------------------------------------- |
+| `MAX_INSTANCES_HOT`            | 50  | Live-location session + the map viewport queries                     |
+| `MAX_INSTANCES_MEMBER`         | 20  | Ordinary member callables (the default, and the answer when unsure)  |
+| `MAX_INSTANCES_ADMIN`          | 5   | Admin / operator callables — only a handful of operators exist       |
+| `MAX_INSTANCES_TRIGGER`        | 20  | Ordinary Firestore triggers                                          |
+| `MAX_INSTANCES_TRIGGER_FANOUT` | 50  | Push send + badge progress — one action fans out per affected member |
+| `MAX_INSTANCES_SCHEDULED`      | 2   | Scheduled sweeps (one invocation per tick; bounds a retry storm)     |
+
+`functions/src/__tests__/max-instances-guard.test.ts` fails the unit suite if a
+new function omits a cap. The check is **structural, not textual**: it imports
+`functions/src/index.ts` and walks the exports the way `firebase deploy` does,
+reading the `__endpoint` deploy manifest `firebase-functions` attaches to every
+definition. Source formatting, import aliases, wrapper factories and trigger
+types the guard has never heard of are therefore all irrelevant — if the deploy
+would create the function, the guard sees it. What it still cannot see (console
+edits, a second functions codebase, `minInstances`/concurrency cost) is
+enumerated in the test's header comment.
+
+Caps bound throughput as well as cost: at the ceiling, Cloud Run queues and then
+sheds requests, and the client sees `resource-exhausted` or a timeout rather than
+a distinctive error. Raise a tier as soon as real traffic approaches it.
+
+### Remaining operator action: billing budget alert
+
+**No GCP billing budget or alert exists for this project.** Caps bound the blast
+radius; without an alert the invoice is still the first signal that something ran
+hot. This cannot be created from the repo (the Firebase CLI has no command for
+it), so it is a console step:
+
+> [Google Cloud console](https://console.cloud.google.com/billing/budgets?project=kungsbacka-car-community)
+> → **Billing** → select the billing account linked to `kungsbacka-car-community`
+> → **Budgets & alerts** → **Create budget** → scope **Projects =
+> kungsbacka-car-community** → set a monthly amount → **Set budget alerts** at
+> 50% / 90% / 100% of budget → tick **Email alerts to billing admins and users**
+> (and/or attach a Cloud Monitoring notification channel) → **Finish**.
+
+A budget alert only notifies; it does not cap spend.
+
 ## Firestore Index Drift
 
 Firestore composite indexes are the one part of the deploy that fails **silently in CI and loudly in production**:

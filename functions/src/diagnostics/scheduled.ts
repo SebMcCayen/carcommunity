@@ -12,6 +12,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { diagnosticsRetentionCutoff } from './diagnostics-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -47,6 +48,7 @@ export async function runDiagnosticsCleanup(now: Date): Promise<{ deletedCount: 
 export const cleanupExpired = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

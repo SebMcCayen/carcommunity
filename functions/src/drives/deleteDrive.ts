@@ -16,6 +16,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { adminStorage, db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
 import { parseDeleteDriveInput, rideStoragePrefix } from './drives-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 export interface DeleteDriveResponse {
   rideId: string;
@@ -25,6 +26,7 @@ export interface DeleteDriveResponse {
 export const deleteDrive = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 60,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

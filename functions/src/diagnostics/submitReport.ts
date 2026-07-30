@@ -55,9 +55,11 @@ import {
   isDiagnosticsRateLimited,
   parseSubmitDiagnosticsReportInput,
 } from './diagnostics-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   // Deliberately NON-enforcing — see the file header. This is the ONLY

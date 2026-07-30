@@ -58,9 +58,11 @@ import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 import { trackLiveSessionDistance } from '../points/liveDistance';
 import { recordCrownActivity } from '../crownHunt/spawnActivity';
+import { MAX_INSTANCES_HOT } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_HOT,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

@@ -25,6 +25,7 @@ import {
   parsePostChatMessageInput,
 } from './chat-core';
 import { requireChatParticipant } from './chatParticipant';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 export interface PostChatMessageResponse {
   eventId: string;
@@ -34,6 +35,7 @@ export interface PostChatMessageResponse {
 export const postChatMessage = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

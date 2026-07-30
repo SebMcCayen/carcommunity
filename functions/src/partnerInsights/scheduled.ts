@@ -32,6 +32,7 @@ import {
   type AggregationPeriod,
   type PartnerInteractionType,
 } from './insights-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -159,6 +160,7 @@ export async function runInsightsCleanup(now: Date): Promise<{ deletedCount: num
 
 const SCHEDULE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_SCHEDULED,
   timeZone: 'Europe/Stockholm',
   memory: '256MiB' as const,
   timeoutSeconds: 300,

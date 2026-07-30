@@ -69,6 +69,7 @@ import {
   digestBaseline,
   hasNewSinceBaseline,
 } from './communityDigest-core';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 
 /** userPrivate docs scanned per query round-trip (the candidate "behind" set). */
 const CANDIDATE_PAGE_SIZE = 400;
@@ -430,6 +431,7 @@ export async function runCommunityChatDigest(
 export const digest = onSchedule(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_SCHEDULED,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

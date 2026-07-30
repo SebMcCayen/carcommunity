@@ -49,6 +49,7 @@ import {
   selectEvictableTokenIds,
   type PushTokenPlatform,
 } from './notifications-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
  * lastSeenAt as epoch millis. Rows written before the field existed — and rows
@@ -61,6 +62,7 @@ function toMillisOrNull(value: unknown): number | null {
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

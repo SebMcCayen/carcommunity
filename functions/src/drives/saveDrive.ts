@@ -37,6 +37,7 @@ import {
   rideRoutePath,
   type DriveStats,
 } from './drives-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
  * The saved drive's server-computed stats and storage paths.
@@ -57,6 +58,7 @@ export interface SaveDriveResponse extends DriveStats {
 export const saveDrive = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

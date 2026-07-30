@@ -72,9 +72,14 @@ import {
   reconcileDerivedBadgeCounters,
   tryEvaluateBadgeTiers,
 } from './tierAwards';
+import { MAX_INSTANCES_TRIGGER_FANOUT } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
+  // Above the ordinary trigger tier on purpose: onUserLifecycleWritten fires on
+  // every sign-in (a morning spike across the whole member base) and each
+  // counter bump cascades into onBadgeProgressWritten.
+  maxInstances: MAX_INSTANCES_TRIGGER_FANOUT,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
 };

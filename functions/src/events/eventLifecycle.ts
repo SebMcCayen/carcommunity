@@ -45,6 +45,7 @@ import {
   type GuardResult,
 } from './events-core';
 import type { EventIdResponse } from './manageEvent';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
  * Max attendance-credit transactions in flight at once, per event. Each credit
@@ -56,6 +57,7 @@ const ATTENDANCE_CREDIT_CONCURRENCY = 25;
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
+  maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

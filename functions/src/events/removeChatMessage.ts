@@ -20,6 +20,7 @@ import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { buildChatMessageRemoval, parseRemoveChatMessageInput } from './chat-core';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 export interface RemoveChatMessageResponse {
   eventId: string;
@@ -30,6 +31,7 @@ export interface RemoveChatMessageResponse {
 export const removeChatMessage = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_ADMIN,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

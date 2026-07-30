@@ -28,6 +28,7 @@ import {
   parseSetAdminRoleInput,
 } from './claims-core';
 import { toUserAccessState } from '../shared/access';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 export interface SetAdminRoleResponse {
   targetUid: string;
@@ -38,6 +39,7 @@ export interface SetAdminRoleResponse {
 export const setAdminRole = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_ADMIN,
     memory: '256MiB',
     timeoutSeconds: 30,
     // App Check is enforced in production (contracts/functions/functions.json

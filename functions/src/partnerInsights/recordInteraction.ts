@@ -32,6 +32,7 @@ import {
   startOfUtcDay,
   type PartnerInteractionType,
 } from './insights-core';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 export interface RecordInteractionResponse {
   recorded: boolean;
@@ -45,6 +46,7 @@ async function isPassByEnabled(): Promise<boolean> {
 export const recordInteraction = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

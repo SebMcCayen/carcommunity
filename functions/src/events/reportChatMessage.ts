@@ -22,6 +22,7 @@ import {
   parseReportChatMessageInput,
 } from './chat-core';
 import { requireChatParticipant } from './chatParticipant';
+import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 export interface ReportChatMessageResponse {
   reported: true;
@@ -30,6 +31,7 @@ export interface ReportChatMessageResponse {
 export const reportChatMessage = onCall(
   {
     region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
