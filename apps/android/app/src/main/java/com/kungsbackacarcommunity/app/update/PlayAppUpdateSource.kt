@@ -15,6 +15,7 @@ import com.google.android.play.core.install.model.InstallStatus
 import com.google.android.play.core.install.model.UpdateAvailability
 import com.kungsbackacarcommunity.app.BuildConfig
 import java.util.concurrent.atomic.AtomicReference
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.coroutines.resume
 import kotlinx.coroutines.suspendCancellableCoroutine
 
@@ -122,13 +123,24 @@ class PlayAppUpdateSource private constructor(
 
     /**
      * Runs [block], turning any failure into null. Debug builds get a
-     * `Log.d` breadcrumb; release builds are silent. Coroutine cancellation is
-     * deliberately NOT caught — [block] never suspends, so the only
-     * CancellationException that could arrive is a real one.
+     * `Log.d` breadcrumb; release builds are silent.
+     *
+     * Cancellation is RETHROWN, not swallowed. `CancellationException` is an
+     * `Exception`, so a bare `catch (e: Exception)` would turn a cancelled
+     * fetch into "nothing to offer" and break structured concurrency. No
+     * [block] passed here suspends today, so nothing reaches that catch in
+     * practice — but this function is `inline` and is called from inside a
+     * suspend function, which means a suspend call added inside one of these
+     * blocks would compile and start silently eating cancellation. Enforced
+     * here rather than asserted in a comment, for the same reason
+     * [com.kungsbackacarcommunity.app.navigation.runCatchingCancellable]
+     * exists.
      */
     private inline fun <T> runQuietly(what: String, block: () -> T): T? =
         try {
             block()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             breadcrumb(what, e)
             null

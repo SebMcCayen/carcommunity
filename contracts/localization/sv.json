@@ -11,7 +11,7 @@
     "requiredMessage": "Den här uppdateringen måste installeras innan du kan fortsätta. Google Play tar över under installationen.",
     "downloaded": "Uppdateringen är nedladdad och installeras vid omstart.",
     "restart": "Starta om",
-    "storeUnavailable": "Uppdateringen kunde inte startas. Prova via Google Play i stället."
+    "storeUnavailable": "Uppdateringen kunde inte startas, och Google Play gick inte att öppna på den här enheten."
   },
   "navigation": {
     "home": "Hem",

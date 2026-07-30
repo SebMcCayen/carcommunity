@@ -4175,9 +4175,9 @@ fun AuthenticatedApp(
                 // all three hand off to the Play listing, which is the same
                 // update by a longer road, and only say something if even that
                 // has nowhere to go. Nothing is ever said while the listing is
-                // still openable: the message reads "try Google Play instead",
-                // so showing it *in place of* opening Play would be a dead end
-                // wearing the words of a fallback.
+                // still openable — which is exactly what the message says
+                // happened, so it never sends anyone to a Play Store this
+                // device has just proved it cannot open.
                 //
                 // A decline is not one of these and does not come through here:
                 // backing out of Play's consent sheet is an answer, not a
