@@ -700,38 +700,8 @@ and additionally requires the user's explicit opt-in.
 Security: any authenticated user can read; all writes via the audited
 `admin.setFeatureFlag` callable (closed key namespace — unknown keys are
 rejected, so typos can never create phantom flags). Every OTHER document
-under `config/` (except `config/appVersion` below — e.g.
-`config/partnerInsights`, the insights minimum-contributor threshold) is
-backend-only: no client read or write.
-
----
-
-### `config/appVersion` — published app version
-
-ONE flat document backing the in-app update prompt.
-
-| Field                         | Type             | Notes                                                             |
-| ----------------------------- | ---------------- | ----------------------------------------------------------------- |
-| `latestVersionCode`           | `number` (int)   | versionCode of the newest build on Play. The only value compared.  |
-| `latestVersionName`           | `string \| null` | Display text for the dialog. **Never compared.**                   |
-| `minimumSupportedVersionCode` | `number` (int)   | Oldest supported build; `0` (the default) blocks nobody.           |
-| `updatedAt`                   | `timestamp`      | Server timestamp of the last publish.                             |
-
-The app compares its own `BuildConfig.VERSION_CODE` — an integer, never a
-`versionName` string — against `latestVersionCode` and raises a dismissible
-"new version available" prompt when it is behind. An absent, unreadable or
-malformed document means NO prompt: the fail-safe direction is always "do
-nothing", so a bad value here can never wall users out of a working app.
-A `minimumSupportedVersionCode` above `latestVersionCode` is unsatisfiable
-and is rejected by the callable and discarded by the client.
-
-**Operator step at every Play release:** set `latestVersionCode` to the
-released build's versionCode (admin portal → System → App Version). Until
-that happens the prompt is silent.
-
-Security: any authenticated user can read (it carries no personal data and
-is identical for every install); all writes via the audited
-`admin.setAppVersion` callable.
+under `config/` (e.g. `config/partnerInsights`, the insights
+minimum-contributor threshold) is backend-only: no client read or write.
 
 ---
 

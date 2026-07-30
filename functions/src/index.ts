@@ -16,7 +16,6 @@ import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
 import { recordLogin } from './auth/recordLogin';
 import { restoreAccess } from './admin/restoreAccess';
-import { setAppVersion } from './admin/setAppVersion';
 import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
@@ -221,10 +220,6 @@ export const admin = {
   warnUser,
   // Phase 9m: audited, key-whitelisted writes to config/featureFlags.
   setFeatureFlag,
-  // Audited writes to config/appVersion — the "latest published build"
-  // record the in-app update prompt compares against. Run this at every
-  // Play release, after the rollout.
-  setAppVersion,
 };
 
 /**

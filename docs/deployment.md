@@ -297,6 +297,40 @@ GitHub environment.
 
 See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for background.
 
+## Android Releases and the In-App Update Prompt
+
+**There is no operator step.** The app asks Google Play directly, via the
+In-App Updates API (`AppUpdateManager`), whether a newer build is live on the
+track the install came from. Publish the release and the prompt starts
+appearing on its own — for exactly the users Play would actually serve, and
+never before. Nothing is recorded in Firestore, there is no admin page, and a
+release that has not finished review or rollout cannot be announced early.
+
+Behaviour, all of it in `apps/android/app/src/main/java/.../update/`:
+
+- **Flow: flexible.** The download runs in the background and the app stays
+  usable throughout. Deliberate — a member may be mid-drive with live location
+  sharing active, and a blocking update flow there would be user-hostile.
+- **When: once per app session**, on the authenticated shell's first
+  composition. Never per screen, never per recomposition.
+- **Throttle:** a "Not now" silences that offered `versionCode` for 7 days; a
+  newer release re-prompts immediately.
+- **Held while driving:** the prompt is withheld (not cancelled) while a live
+  session or the navigation overlay is up, and never stacks on top of the
+  what's-new popup.
+- **Non-Play installs** (debug/adb/sideloaded, or a device with no Play Store)
+  degrade silently to "no update available" — never a crash, and never an error
+  in front of the member.
+
+### Making an update non-dismissible
+
+Set the release's **`inAppUpdatePriority` to 5** when creating the release via
+the Google Play Developer Publishing API. It is not settable in the Play
+Console UI and cannot be changed after the release is created. The app then
+runs Play's blocking IMMEDIATE flow instead of the dismissible prompt. Play
+defaults every release to priority 0, so this path stays inert unless someone
+deliberately asks for it.
+
 ## Branch Protection
 
 The `main` branch must be protected with the following rules configured in **GitHub repository Settings → Branches**:

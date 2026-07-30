@@ -409,13 +409,6 @@ service cloud.firestore {
     // state on launch/resume and fall back to contract defaults when the
     // document or a field is absent. All writes go through the audited
     // admin.setFeatureFlag callable (closed key namespace).
-    // config/appVersion is the second client-readable config document: the
-    // versionCode of the newest build published to Play (plus a display-only
-    // versionName and an oldest-still-supported versionCode). The app compares
-    // its own BuildConfig.VERSION_CODE against it to raise the dismissible
-    // update prompt. It carries no personal data and is the same for every
-    // installation, so an authenticated read is the right grant. Writes go
-    // through the audited admin.setAppVersion callable.
     // Every OTHER document under config/ (e.g. config/partnerInsights, the
     // privacy threshold) is deliberately NOT matched here and stays
     // backend-only.
@@ -423,11 +416,6 @@ service cloud.firestore {
     match /config/featureFlags {
       allow read: if isAuthenticated();
       // No client writes: admin.setFeatureFlag only.
-    }
-
-    match /config/appVersion {
-      allow read: if isAuthenticated();
-      // No client writes: admin.setAppVersion only.
     }
 
     // -------------------------------------------------------------------------
