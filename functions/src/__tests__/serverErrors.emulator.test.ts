@@ -9,8 +9,11 @@
  *    and skips a deliberate HttpsError;
  *  - `reportServerError` writes the private `serverErrorReports` record with the
  *    FULL message/stack/context, and the deployed trigger reconciles it;
- *  - the dedup claim is EXCLUSIVE: two concurrent occurrences of one fingerprint
- *    produce exactly one claim and one incremented tally, never two issues;
+ *  - the dedup claim is EXCLUSIVE: concurrent occurrences of a fingerprint whose
+ *    claim is in flight (or already filed) only increment the tally, never open a
+ *    second issue — and a failed create leaves the fingerprint retriable without
+ *    losing occurrences (see the `per-fingerprint dedup` doc comment for why the
+ *    invariant is stated that way and not as "one of two racers wins");
  *  - the GLOBAL hourly budget blocks creation past the cap and does NOT keep
  *    incrementing once exhausted.
  *
@@ -197,9 +200,30 @@ describe('reportServerError → errors-onServerErrorReport', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Dedup: exactly ONE claim per fingerprint
+// Dedup: never more than ONE issue per fingerprint
 // ---------------------------------------------------------------------------
 
+/**
+ * The invariant under test is "an in-flight or already-filed claim is never
+ * granted a second time", NOT "of two racing occurrences exactly one claims".
+ * The second phrasing is untestable against the emulator and, worse, it is not
+ * what the design promises:
+ *
+ *  - the emulator ABORTS BOTH sides of a write-write conflict and the admin SDK
+ *    then retries them behind an exponential backoff (~2.7s, then ~0.8s), so two
+ *    `Promise.all` occurrences do not overlap at all — the first one finishes its
+ *    entire claim → budget → create → reconcile cycle before the second one even
+ *    re-reads the link;
+ *  - and by design a create that did NOT produce an issue leaves the fingerprint
+ *    RETRIABLE (a pristine claim is deleted, a bumped one goes back to `failed`),
+ *    precisely so a transient GitHub outage cannot silence an error forever. With
+ *    no GITHUB_ISSUE_TOKEN in the emulator every create "fails", so a second,
+ *    strictly-later occurrence is SUPPOSED to claim again.
+ *
+ * So the tests below pin the link into each state that matters and prove the
+ * decision taken from it, using real concurrent transactions where the state is
+ * terminal (`creating`, `created`) and therefore contention-independent.
+ */
 describe('per-fingerprint dedup', () => {
   const filing = (fingerprint: string, src: string) => {
     const report = { ...buildServerErrorReport(src, sensitiveError()), fingerprint };
@@ -215,25 +239,38 @@ describe('per-fingerprint dedup', () => {
     });
   };
 
-  it('gives exactly ONE of two concurrent occurrences the claim', async () => {
-    const src = source('race');
-    const fingerprint = `race${RUN}`;
-    const [a, b] = await Promise.all([filing(fingerprint, src), filing(fingerprint, src)]);
+  it('NEVER re-claims a fingerprint whose claim is still in flight', async () => {
+    const src = source('inflight');
+    const fingerprint = `inflight${RUN}`;
+    const linkRef = adminDb.collection(SERVER_ERROR_ISSUE_LINKS_COLLECTION).doc(fingerprint);
 
-    const claims = [a, b].filter((outcome) => outcome.status !== 'deduped');
-    const dedupes = [a, b].filter((outcome) => outcome.status === 'deduped');
-    expect(claims).toHaveLength(1);
-    expect(dedupes).toHaveLength(1);
+    // Exactly the placeholder the winning occurrence writes before calling
+    // GitHub: the claim is held, the issue does not exist yet.
+    await linkRef.set({
+      fingerprint,
+      source: src,
+      status: 'creating',
+      issueNumber: null,
+      issueUrl: null,
+      count: 1,
+      firstSeenAt: new Date(),
+      lastSeenAt: new Date(),
+    });
 
-    // Both occurrences are counted; the failed create left the link retriable
-    // rather than deleting a tally a concurrent occurrence had already bumped.
-    const link = await adminDb
-      .collection(SERVER_ERROR_ISSUE_LINKS_COLLECTION)
-      .doc(fingerprint)
-      .get();
-    expect(link.exists).toBe(true);
-    expect(link.data()?.count).toBe(2);
-    expect(link.data()?.status).toBe('failed');
+    // Three genuinely concurrent occurrences, contending on one document.
+    const outcomes = await Promise.all([
+      filing(fingerprint, src),
+      filing(fingerprint, src),
+      filing(fingerprint, src),
+    ]);
+    expect(outcomes.map((outcome) => outcome.status)).toEqual(['deduped', 'deduped', 'deduped']);
+
+    // Every occurrence was tallied, nobody touched the in-flight claim, and no
+    // second GitHub create was ever attempted.
+    const link = await linkRef.get();
+    expect(link.data()?.count).toBe(4);
+    expect(link.data()?.status).toBe('creating');
+    expect(link.data()?.issueNumber).toBeNull();
   });
 
   it('a repeat occurrence of an already-filed fingerprint increments instead of re-claiming', async () => {
@@ -253,8 +290,8 @@ describe('per-fingerprint dedup', () => {
       lastSeenAt: new Date(),
     });
 
-    const first = await filing(fingerprint, src);
-    const second = await filing(fingerprint, src);
+    // Concurrent, so the increment path is exercised under real contention.
+    const [first, second] = await Promise.all([filing(fingerprint, src), filing(fingerprint, src)]);
 
     expect(first.status).toBe('deduped');
     expect(second.status).toBe('deduped');
@@ -265,6 +302,51 @@ describe('per-fingerprint dedup', () => {
     expect(link.data()?.status).toBe('created');
     // The issue reference is untouched — no second issue was opened.
     expect(link.data()?.issueNumber).toBe(4242);
+  });
+
+  it('deletes a PRISTINE claim when the create fails, so a later occurrence retries', async () => {
+    const src = source('rollbackDelete');
+    const fingerprint = `rollbackDelete${RUN}`;
+    const linkRef = adminDb.collection(SERVER_ERROR_ISSUE_LINKS_COLLECTION).doc(fingerprint);
+
+    const outcome = await filing(fingerprint, src);
+    expect(outcome).toEqual({ status: 'failed', reason: 'github' });
+    // Nothing was published, so nothing is left claiming the fingerprint.
+    expect((await linkRef.get()).exists).toBe(false);
+
+    // Retriable: the error is not silenced just because GitHub was unavailable.
+    const retry = await filing(fingerprint, src);
+    expect(retry).toEqual({ status: 'failed', reason: 'github' });
+  });
+
+  it('a failed create PRESERVES a tally rather than deleting occurrences', async () => {
+    const src = source('rollbackKeep');
+    const fingerprint = `rollbackKeep${RUN}`;
+    const linkRef = adminDb.collection(SERVER_ERROR_ISSUE_LINKS_COLLECTION).doc(fingerprint);
+
+    // A previously-failed claim that already absorbed four occurrences.
+    const firstSeenAt = new Date('2026-07-30T03:30:00.000Z');
+    await linkRef.set({
+      fingerprint,
+      source: src,
+      status: 'failed',
+      issueNumber: null,
+      issueUrl: null,
+      count: 4,
+      firstSeenAt,
+      lastSeenAt: firstSeenAt,
+    });
+
+    // `failed` is retriable, so this occurrence RE-claims rather than dedupes.
+    const outcome = await filing(fingerprint, src);
+    expect(outcome).toEqual({ status: 'failed', reason: 'github' });
+
+    const link = await linkRef.get();
+    expect(link.exists).toBe(true);
+    expect(link.data()?.count).toBe(5);
+    expect(link.data()?.status).toBe('failed');
+    // The occurrence history is intact — first-seen is not reset by a retry.
+    expect(link.data()?.firstSeenAt?.toDate?.().toISOString()).toBe(firstSeenAt.toISOString());
   });
 });
 

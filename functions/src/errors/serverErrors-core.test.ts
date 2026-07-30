@@ -18,6 +18,7 @@ import {
   UNKNOWN_ERROR_NAME,
   UNKNOWN_SOURCE,
   boundServerErrorContext,
+  buildPublishableServerErrorReport,
   buildServerErrorIssueBody,
   buildServerErrorIssuePayload,
   buildServerErrorIssueTitle,
@@ -27,6 +28,9 @@ import {
   classifyServerError,
   computeServerErrorFingerprint,
   isDeliberateHttpsError,
+  normalizeServerErrorCode,
+  normalizeServerErrorFrames,
+  normalizeServerErrorName,
   normalizeServerErrorSource,
   reduceStackFrames,
 } from './serverErrors-core';
@@ -46,6 +50,43 @@ const TOKEN = 'ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789';
 const DISPLAY_NAME = 'Sebastian McCayen';
 
 const SENSITIVE = [UID, EMAIL, DOC_PATH, LATITUDE, LONGITUDE, PHONE, TOKEN, DISPLAY_NAME];
+
+// ---------------------------------------------------------------------------
+// URL-host extraction, used by the "no non-GitHub link in the public issue" check
+// ---------------------------------------------------------------------------
+
+/**
+ * Every http(s) URL in `text`, reduced to its PARSED host (lower-cased).
+ *
+ * Why not a regex: the obvious spelling of this assertion,
+ * `expect(rendered).not.toMatch(/https?:\/\/(?!github\.com)/)`, is unanchored
+ * against the host and therefore accepts every shape an attacker would actually
+ * use — `https://github.com.attacker.net/steal` (github.com is a PREFIX of the
+ * host), `https://evil-github.com/x` (a SUFFIX), `https://evil.example/github.com`
+ * (only in the path) and `https://github.com@evil.example/x` (userinfo, not a
+ * host at all). Parsing the URL and comparing the WHOLE host is anchored by
+ * construction, so there is nothing left to get wrong.
+ *
+ * An unparseable match is returned verbatim, so it fails `isGitHubHost` rather
+ * than silently disappearing from the assertion.
+ */
+function urlHostsIn(text: string): string[] {
+  const hosts: string[] = [];
+  for (const match of text.matchAll(/https?:\/\/[^\s`)<>\]]+/gi)) {
+    const candidate = match[0].replace(/[.,;:]+$/, '');
+    try {
+      hosts.push(new URL(candidate).hostname.toLowerCase());
+    } catch {
+      hosts.push(candidate.toLowerCase());
+    }
+  }
+  return hosts;
+}
+
+/** Exactly `github.com`, or a true subdomain of it. */
+function isGitHubHost(host: string): boolean {
+  return host === 'github.com' || host.endsWith('.github.com');
+}
 
 /**
  * A realistic Firestore failure: the message embeds the document path (and so
@@ -170,6 +211,156 @@ describe('normalizeServerErrorSource', () => {
   });
 });
 
+describe('normalizeServerErrorName / normalizeServerErrorCode / normalizeServerErrorFrames', () => {
+  it('accepts the shapes the ingest path produces', () => {
+    expect(normalizeServerErrorName('FirebaseFirestoreError')).toBe('FirebaseFirestoreError');
+    expect(normalizeServerErrorCode('failed-precondition')).toBe('failed-precondition');
+    expect(normalizeServerErrorCode('FAILED_PRECONDITION')).toBe('FAILED_PRECONDITION');
+    expect(normalizeServerErrorFrames(['scheduled.js:212', 'index.ts:9'])).toEqual([
+      'scheduled.js:212',
+      'index.ts:9',
+    ]);
+  });
+
+  it('rejects anything that could carry markup, a path or an identifier', () => {
+    expect(normalizeServerErrorName('Error: users/' + UID)).toBe(UNKNOWN_ERROR_NAME);
+    expect(normalizeServerErrorName('[x](http://evil.test)')).toBe(UNKNOWN_ERROR_NAME);
+    expect(normalizeServerErrorName(null)).toBe(UNKNOWN_ERROR_NAME);
+    expect(normalizeServerErrorCode(`ENOENT: open /home/${UID}/.env`)).toBeNull();
+    expect(normalizeServerErrorCode('mixed-Case')).toBeNull();
+    expect(normalizeServerErrorCode(42)).toBeNull();
+    // Frames must be exactly `basename:line` — no path, no URL, no doc path.
+    expect(
+      normalizeServerErrorFrames([
+        `/srv/lib/${UID}/scheduled.js:212`,
+        'https://evil.test/x:1',
+        `users/${UID}/vehicles/v1:2`,
+        'scheduled.js:212:18',
+        'scheduled.js',
+        { file: 'x.js' },
+      ]),
+    ).toEqual([]);
+    expect(normalizeServerErrorFrames('scheduled.js:1')).toEqual([]);
+  });
+
+  it('caps the frame list so a poisoned document cannot pad the public body', () => {
+    const many = Array.from({ length: MAX_SERVER_ERROR_FRAMES + 4 }, (_, i) => `f.js:${i + 1}`);
+    expect(normalizeServerErrorFrames(many)).toHaveLength(MAX_SERVER_ERROR_FRAMES);
+  });
+});
+
+describe('buildPublishableServerErrorReport (stored document → public issue)', () => {
+  const stored = (over: Record<string, unknown>): Record<string, unknown> => ({
+    source: 'account.purgeDeleted',
+    errorName: 'FirebaseFirestoreError',
+    errorCode: 'not-found',
+    frames: ['scheduled.js:212'],
+    message: `boom for users/${UID}`,
+    stack: `at /home/${UID}/x.js:1:1`,
+    context: { uid: UID },
+    fingerprint: 'f'.repeat(64),
+    ...over,
+  });
+
+  it('passes a well-formed document through unchanged, with no redactions', () => {
+    const result = buildPublishableServerErrorReport(stored({}));
+    expect(result?.redacted).toEqual([]);
+    expect(result?.report.source).toBe('account.purgeDeleted');
+    expect(result?.report.errorName).toBe('FirebaseFirestoreError');
+    expect(result?.report.errorCode).toBe('not-found');
+    expect(result?.report.frames).toEqual(['scheduled.js:212']);
+  });
+
+  it('never carries the private message/stack/context out of the document', () => {
+    const result = buildPublishableServerErrorReport(stored({}));
+    expect(result?.report.message).toBe('');
+    expect(result?.report.stack).toBeNull();
+    expect(result?.report.context).toBeNull();
+  });
+
+  it('recomputes the fingerprint instead of trusting the stored one', () => {
+    const result = buildPublishableServerErrorReport(stored({ fingerprint: 'not-a-hash' }));
+    expect(result?.report.fingerprint).toBe(
+      computeServerErrorFingerprint('account.purgeDeleted', 'FirebaseFirestoreError', 'not-found', [
+        'scheduled.js:212',
+      ]),
+    );
+  });
+
+  it('REDACTS a poisoned document field-by-field rather than publishing it', () => {
+    const poisoned = stored({
+      source: `# Pwned](http://evil.test) users/${UID}`,
+      errorName: `Error <img src=x> ${EMAIL}`,
+      errorCode: `ENOENT: /home/${UID}/.env`,
+      frames: [`/srv/${UID}/x.js:1`, 'https://evil.test/y:2'],
+    });
+    const result = buildPublishableServerErrorReport(poisoned);
+    expect(result?.redacted).toEqual(['source', 'errorName', 'errorCode', 'frames']);
+    expect(result?.report.source).toBe(UNKNOWN_SOURCE);
+    expect(result?.report.errorName).toBe(UNKNOWN_ERROR_NAME);
+    expect(result?.report.errorCode).toBeNull();
+    expect(result?.report.frames).toEqual([]);
+
+    // Nothing the attacker wrote survives into the title or the body.
+    const renderedPoison = [
+      buildServerErrorIssueTitle(result!.report),
+      buildServerErrorIssueBody(result!.report, {
+        firstSeenIso: '2026-07-30T03:30:00.000Z',
+        count: 1,
+      }),
+    ].join('\n');
+    for (const secret of [UID, EMAIL, 'evil.test', '<img', 'Pwned', '.env']) {
+      expect(renderedPoison).not.toContain(secret);
+    }
+  });
+
+  it('collapses every poisoned document onto ONE deduped fingerprint', () => {
+    const a = buildPublishableServerErrorReport(stored({ source: 'evil one', frames: [] }));
+    const b = buildPublishableServerErrorReport(stored({ source: 'evil two', frames: [] }));
+    // Same redacted values ⇒ same fingerprint ⇒ one issue, not one per attempt.
+    expect(a?.report.fingerprint).toBe(b?.report.fingerprint);
+  });
+
+  it('skips a document that is not a report at all', () => {
+    expect(buildPublishableServerErrorReport(undefined)).toBeNull();
+    expect(buildPublishableServerErrorReport({})).toBeNull();
+    expect(buildPublishableServerErrorReport(stored({ source: '' }))).toBeNull();
+    expect(buildPublishableServerErrorReport(stored({ errorName: 42 }))).toBeNull();
+  });
+});
+
+describe('the public issue builders re-validate at the point of use', () => {
+  // Defence in depth: even a caller that skipped buildPublishableServerErrorReport
+  // cannot get an un-allowlisted value into the world-readable issue.
+  const hostile = {
+    source: `[click](http://evil.test) ${UID}`,
+    errorName: `Error ${EMAIL}`,
+    errorCode: `/home/${UID}/.env`,
+    frames: [`/srv/${UID}/x.js:1`],
+    message: 'private',
+    stack: 'private',
+    context: null,
+    fingerprint: 'not-a-hash',
+  };
+
+  it('renders the fallbacks, not the hostile values', () => {
+    const rendered = [
+      buildServerErrorIssueTitle(hostile),
+      buildServerErrorIssueBody(hostile, { firstSeenIso: '2026-07-30T03:30:00.000Z', count: 1 }),
+    ].join('\n');
+    expect(rendered).toContain(UNKNOWN_SOURCE);
+    expect(rendered).toContain(UNKNOWN_ERROR_NAME);
+    expect(rendered).toContain('- Code: none');
+    expect(rendered).toContain('unavailable');
+    for (const secret of [UID, EMAIL, 'evil.test', '.env', 'not-a-hash']) {
+      expect(rendered).not.toContain(secret);
+    }
+    for (const host of urlHostsIn(rendered)) {
+      expect(isGitHubHost(host)).toBe(true);
+    }
+  });
+});
+
 describe('isDeliberateHttpsError', () => {
   it('recognises an HttpsError by name', () => {
     const error = new Error('not found');
@@ -272,11 +463,32 @@ describe('public issue body scrubbing (PUBLIC repo — permanent leak risk)', ()
     expect(rendered).not.toContain('500');
   });
 
-  it('contains no absolute path, no @-mention and no bare URL', () => {
+  it('contains no absolute path, no @-mention and no non-GitHub URL', () => {
     expect(rendered).not.toContain('/srv/');
     expect(rendered).not.toContain('/home/');
     expect(rendered).not.toMatch(/(^|[^\w​])@[A-Za-z0-9]/);
-    expect(rendered).not.toMatch(/https?:\/\/(?!github\.com)/);
+    for (const host of urlHostsIn(rendered)) {
+      expect(isGitHubHost(host)).toBe(true);
+    }
+  });
+
+  it('the URL-host check it relies on cannot be fooled by a lookalike host', () => {
+    // The point of the helper: an UNANCHORED /github\.com/ test on the raw URL
+    // accepts every one of these. Only the parsed host, compared whole, does not.
+    expect(urlHostsIn('see https://github.com/SebMcCayen/carcommunity/issues/1')).toEqual([
+      'github.com',
+    ]);
+    expect(urlHostsIn('https://api.github.com/x').every(isGitHubHost)).toBe(true);
+    // Suffix host — `github.com` is a PREFIX of the real host.
+    expect(urlHostsIn('https://github.com.attacker.net/steal').every(isGitHubHost)).toBe(false);
+    // Prefix host — `github.com` is a SUFFIX of the real host.
+    expect(urlHostsIn('https://evil-github.com/x').every(isGitHubHost)).toBe(false);
+    // `github.com` only in the path, on someone else's host.
+    expect(urlHostsIn('https://evil.example/github.com/x').every(isGitHubHost)).toBe(false);
+    // Subdomain lookalike: `github.com.` is a label prefix, not a suffix.
+    expect(urlHostsIn('http://github.com.evil.co/x').every(isGitHubHost)).toBe(false);
+    // Userinfo trick: the host is `evil.example`, not `github.com`.
+    expect(urlHostsIn('https://github.com@evil.example/x').every(isGitHubHost)).toBe(false);
   });
 
   it('DOES contain every allowlisted field', () => {

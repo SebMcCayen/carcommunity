@@ -20,6 +20,15 @@
  * never passed to the issue builder. The fingerprint is the correlation id an
  * admin uses to find the private record.
  *
+ * The allowlist is RE-APPLIED here, by `buildPublishableServerErrorReport`, even
+ * though `reportServerError` already applied it on the way in. This trigger does
+ * not publish a value it just validated; it publishes a value it read back out of
+ * a Firestore document, which may have been written by an older version of this
+ * module, by a code path that forgets to normalise, or by anything that ever
+ * gains write access to the collection. A field that fails is replaced by its
+ * documented fallback and the redaction is logged — see that function for why the
+ * report is redacted rather than dropped.
+ *
  * Resilience: this trigger never rethrows. A failure here must not retry-loop a
  * function whose only job is to report someone else's failure — and it certainly
  * must not report ITSELF, which would be an unbounded feedback loop. Every
@@ -34,50 +43,15 @@ import { fileAutoIssue } from '../shared/autoIssueFiling';
 import {
   SERVER_ERROR_ISSUE_LINKS_COLLECTION,
   buildNewServerErrorIssueLink,
+  buildPublishableServerErrorReport,
   buildServerErrorIssuePayload,
-  computeServerErrorFingerprint,
   type ServerErrorIssueStatus,
-  type ServerErrorReport,
 } from './serverErrors-core';
 
 /** Same secret bound to feedback.reportIssue + the other auto-issue triggers. */
 const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 
 const PIPELINE = 'errors.onServerErrorReport';
-
-function toStringOrNull(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
-}
-
-/**
- * Rebuilds the publishable view from the stored document. The fingerprint is
- * RECOMPUTED here rather than trusted from the document, so the dedup key always
- * matches the allowlisted fields actually being published.
- *
- * `message`/`stack`/`context` are intentionally set to empty/null: this view
- * feeds the PUBLIC issue builder, and the builder must never be handed values it
- * is not allowed to render.
- */
-function extractReport(data: Record<string, unknown> | undefined): ServerErrorReport | null {
-  if (!data) return null;
-  const source = toStringOrNull(data.source);
-  const errorName = toStringOrNull(data.errorName);
-  if (!source || !errorName) return null;
-  const errorCode = toStringOrNull(data.errorCode);
-  const frames = Array.isArray(data.frames)
-    ? data.frames.filter((frame): frame is string => typeof frame === 'string')
-    : [];
-  return {
-    source,
-    errorName,
-    errorCode,
-    frames,
-    message: '',
-    stack: null,
-    context: null,
-    fingerprint: computeServerErrorFingerprint(source, errorName, errorCode, frames),
-  };
-}
 
 async function patchReport(
   ref: { update: (data: Record<string, unknown>) => Promise<unknown> },
@@ -105,10 +79,20 @@ export const onServerErrorReport = onDocumentCreated(
     const snapshot = event.data;
     if (!snapshot) return;
 
-    const report = extractReport(snapshot.data());
-    if (!report) {
+    const publishable = buildPublishableServerErrorReport(snapshot.data());
+    if (!publishable) {
       logger.warn(`${PIPELINE}: report document missing source/errorName, skipping`);
       return;
+    }
+
+    const { report, redacted } = publishable;
+    if (redacted.length > 0) {
+      // Log WHICH fields were rejected, never their values: this is the private
+      // side, but the offending text is exactly the text we refuse to publish.
+      logger.warn(`${PIPELINE}: stored report failed the publish allowlist, fields redacted`, {
+        fingerprint: report.fingerprint,
+        redacted: redacted.join(','),
+      });
     }
 
     const outcome = await fileAutoIssue({

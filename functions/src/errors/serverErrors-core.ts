@@ -129,6 +129,19 @@ const ERROR_CODE_UPPER_PATTERN = /^[A-Z][A-Z0-9_]{0,39}$/;
  */
 const FRAME_FILE_PATTERN = /^[A-Za-z0-9._-]{1,80}$/;
 
+/**
+ * A REDUCED frame exactly as `reduceStackFrame` emits it: `basename:line` and
+ * nothing else. Anchored at both ends, and the basename class excludes `/`, `\`,
+ * `:`, whitespace and `@`, so a frame can carry neither an absolute deploy path,
+ * nor a URL, nor a Firestore document path (and therefore no uid) into the
+ * world-readable issue. Used to RE-validate frames read back out of a stored
+ * document — see `buildPublishableServerErrorReport`.
+ */
+const PUBLISHABLE_FRAME_PATTERN = /^[A-Za-z0-9._-]{1,80}:\d{1,7}$/;
+
+/** `fingerprint`: sha256 hex, as `computeServerErrorFingerprint` emits it. */
+const FINGERPRINT_PATTERN = /^[0-9a-f]{64}$/;
+
 // ---------------------------------------------------------------------------
 // Classification
 // ---------------------------------------------------------------------------
@@ -144,6 +157,38 @@ export interface ServerErrorClassification {
 /** Validated call-site label. Falls back to `unknown` rather than publishing junk. */
 export function normalizeServerErrorSource(source: unknown): string {
   return typeof source === 'string' && SOURCE_PATTERN.test(source) ? source : UNKNOWN_SOURCE;
+}
+
+/**
+ * Validated error kind. Falls back to `UnknownError` rather than publishing an
+ * arbitrary string. Same allowlist `classifyErrorName` applies to a live error,
+ * exposed so a value read back from storage can be held to it too.
+ */
+export function normalizeServerErrorName(errorName: unknown): string {
+  return typeof errorName === 'string' && ERROR_NAME_PATTERN.test(errorName)
+    ? errorName
+    : UNKNOWN_ERROR_NAME;
+}
+
+/** Validated status code, or null. `error.code` is not always an enum member. */
+export function normalizeServerErrorCode(errorCode: unknown): string | null {
+  if (typeof errorCode !== 'string') return null;
+  return ERROR_CODE_LOWER_PATTERN.test(errorCode) || ERROR_CODE_UPPER_PATTERN.test(errorCode)
+    ? errorCode
+    : null;
+}
+
+/**
+ * The publishable subset of a frame list: only `basename:line` entries survive,
+ * capped at MAX_SERVER_ERROR_FRAMES. Anything else — an absolute path, a URL, a
+ * doc path, an object — is DROPPED rather than rendered.
+ */
+export function normalizeServerErrorFrames(frames: unknown): string[] {
+  if (!Array.isArray(frames)) return [];
+  return frames
+    .filter((frame): frame is string => typeof frame === 'string')
+    .filter((frame) => PUBLISHABLE_FRAME_PATTERN.test(frame))
+    .slice(0, MAX_SERVER_ERROR_FRAMES);
 }
 
 /**
@@ -191,12 +236,7 @@ function classifyErrorName(error: unknown): string {
 /** `error.code`, but only when it is unmistakably a status enum member. */
 function classifyErrorCode(error: unknown): string | null {
   if (typeof error !== 'object' || error === null) return null;
-  const code = (error as { code?: unknown }).code;
-  if (typeof code !== 'string') return null;
-  if (ERROR_CODE_LOWER_PATTERN.test(code) || ERROR_CODE_UPPER_PATTERN.test(code)) {
-    return code;
-  }
-  return null;
+  return normalizeServerErrorCode((error as { code?: unknown }).code);
 }
 
 /**
@@ -414,6 +454,81 @@ export function buildServerErrorReport(
   };
 }
 
+/** Result of re-validating a STORED report against the publish allowlist. */
+export interface PublishableServerErrorReport {
+  /** The view handed to the public-issue builders. Every field is allowlisted. */
+  report: ServerErrorReport;
+  /**
+   * Allowlisted field names whose STORED value was rejected and replaced by the
+   * documented fallback. Non-empty means the document did not come from the
+   * current ingest path — log it, never publish it.
+   */
+  redacted: string[];
+}
+
+/**
+ * Rebuilds the PUBLISHABLE view from a stored `serverErrorReports` document.
+ *
+ * DEFENCE IN DEPTH, and not theoretical: `reportServerError` normalises on the
+ * way IN, but the trigger that publishes reads a document back OUT, and a stored
+ * document is not the same trust level as a value that just came off the wire —
+ * it may have been written by an older version of this module, by a future code
+ * path that forgets to normalise, or by anything that ever gains write access to
+ * the collection. `report.source` and `report.errorName` are rendered into a
+ * WORLD-READABLE, permanent GitHub issue title, so every allowlist is re-applied
+ * here, at the point of use.
+ *
+ * Policy on a value that fails: REDACT THE FIELD, do not drop the report. The
+ * fallbacks (`unknown` / `UnknownError` / no code / no frames) are exactly what
+ * the ingest path would have produced for the same input, so a poisoned document
+ * degrades to a signal-free but honest issue instead of silently disappearing —
+ * and because the fingerprint is recomputed from the REDACTED values, an attacker
+ * writing a thousand poisoned documents collapses them into ONE deduped issue
+ * that contains none of their text.
+ *
+ * Returns null only when the document is not a report at all (no `source` or no
+ * `errorName`); nothing is published in that case.
+ */
+export function buildPublishableServerErrorReport(
+  data: Record<string, unknown> | undefined | null,
+): PublishableServerErrorReport | null {
+  if (!data) return null;
+  const storedSource = typeof data.source === 'string' ? data.source : '';
+  const storedErrorName = typeof data.errorName === 'string' ? data.errorName : '';
+  if (storedSource.length === 0 || storedErrorName.length === 0) return null;
+
+  const source = normalizeServerErrorSource(storedSource);
+  const errorName = normalizeServerErrorName(storedErrorName);
+  const errorCode = normalizeServerErrorCode(data.errorCode);
+  const frames = normalizeServerErrorFrames(data.frames);
+
+  const storedFrameCount = Array.isArray(data.frames) ? data.frames.length : 0;
+  const storedCodeIsAbsent = data.errorCode === null || data.errorCode === undefined;
+  const redacted: string[] = [];
+  if (source !== storedSource) redacted.push('source');
+  if (errorName !== storedErrorName) redacted.push('errorName');
+  if (!storedCodeIsAbsent && errorCode === null) redacted.push('errorCode');
+  if (frames.length !== storedFrameCount) redacted.push('frames');
+
+  return {
+    report: {
+      source,
+      errorName,
+      errorCode,
+      frames,
+      // The public builders must never be handed these, so they are not read
+      // from the document at all — the full detail stays in the private record.
+      message: '',
+      stack: null,
+      context: null,
+      // RECOMPUTED, never trusted from the document, so the dedup key always
+      // matches the allowlisted fields actually being published.
+      fingerprint: computeServerErrorFingerprint(source, errorName, errorCode, frames),
+    },
+    redacted,
+  };
+}
+
 /**
  * `serverErrorReports/{reportId}` — the private record of record (admin-only
  * read). Written FIRST so the report is durable before any GitHub attempt, and
@@ -504,9 +619,15 @@ function inlineCodeScalar(value: string): string {
  * Public issue title: `[Auto-server-error] <source>: <errorName>`. Both halves
  * are allowlisted, server-controlled tokens — no error message, so the title
  * cannot leak a doc path even in a notification email preview.
+ *
+ * The allowlist is re-applied HERE rather than trusted from the caller: this is
+ * the last line of code before a permanent, world-readable string, and callers
+ * include a Firestore trigger reading a document it did not write.
  */
 export function buildServerErrorIssueTitle(report: ServerErrorReport): string {
-  return `${SERVER_ERROR_TITLE_TAG} ${neutralizeMentions(report.source)}: ${report.errorName}`;
+  const source = neutralizeMentions(normalizeServerErrorSource(report.source));
+  const errorName = normalizeServerErrorName(report.errorName);
+  return `${SERVER_ERROR_TITLE_TAG} ${source}: ${errorName}`;
 }
 
 /**
@@ -522,23 +643,28 @@ export function buildServerErrorIssueTitle(report: ServerErrorReport): string {
  * it's usually fine" line has to defeat serverErrors-core.test.ts, which seeds a
  * uid, an email, a Firestore doc path and coordinates into the message/stack and
  * asserts none of them appear here.
+ *
+ * Every rendered field is ALSO re-validated here (same reasoning as
+ * `buildServerErrorIssueTitle`): this function is the last code a value passes
+ * through before it is world-readable forever, and one of its callers builds the
+ * report from a Firestore document rather than from a live error.
  */
 export function buildServerErrorIssueBody(
   report: ServerErrorReport,
   meta: ServerErrorIssueMeta,
 ): string {
+  const frames = normalizeServerErrorFrames(report.frames);
+  const errorCode = normalizeServerErrorCode(report.errorCode);
   const framesRendered =
-    report.frames.length > 0
-      ? report.frames.map((frame) => inlineCodeScalar(frame)).join(' ← ')
-      : 'unavailable';
+    frames.length > 0 ? frames.map((frame) => inlineCodeScalar(frame)).join(' ← ') : 'unavailable';
   return [
     'Automatically filed from an UNHANDLED SERVER-SIDE error (scheduled job, trigger, or wrapped handler). Repeat occurrences increment the tally on the private issue link instead of filing new issues.',
     '',
-    `- Source: ${inlineCodeScalar(report.source)}`,
-    `- Error: ${inlineCodeScalar(report.errorName)}`,
-    `- Code: ${report.errorCode ? inlineCodeScalar(report.errorCode) : 'none'}`,
+    `- Source: ${inlineCodeScalar(normalizeServerErrorSource(report.source))}`,
+    `- Error: ${inlineCodeScalar(normalizeServerErrorName(report.errorName))}`,
+    `- Code: ${errorCode ? inlineCodeScalar(errorCode) : 'none'}`,
     `- Frames (top ${MAX_SERVER_ERROR_FRAMES}, innermost first): ${framesRendered}`,
-    `- Fingerprint: ${report.fingerprint}`,
+    `- Fingerprint: ${FINGERPRINT_PATTERN.test(report.fingerprint) ? report.fingerprint : 'unavailable'}`,
     `- First seen: ${meta.firstSeenIso}`,
     `- Occurrences: ${meta.count}`,
     '',
