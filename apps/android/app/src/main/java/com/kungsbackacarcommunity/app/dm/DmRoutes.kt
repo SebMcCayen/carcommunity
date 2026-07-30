@@ -14,7 +14,9 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -111,9 +113,16 @@ fun ChatRoute(
     val blockStatus by
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
+    val crashTelemetry = rememberCrashTelemetry()
     val coordinator =
-        remember(repository, uid, otherUid, conversationId) {
-            DmThreadCoordinator(repository, selfUid = uid, otherUid = otherUid, conversationId = conversationId)
+        remember(repository, uid, otherUid, conversationId, crashTelemetry) {
+            DmThreadCoordinator(
+                repository,
+                selfUid = uid,
+                otherUid = otherUid,
+                conversationId = conversationId,
+                crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
+            )
         }
 
     var threadKey by remember(conversationId) { mutableStateOf(0) }

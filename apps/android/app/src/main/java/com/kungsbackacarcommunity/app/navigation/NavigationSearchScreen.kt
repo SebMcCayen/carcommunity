@@ -81,6 +81,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapRouteOverlay
 import com.kungsbackacarcommunity.app.shell.MapSurface
@@ -218,14 +220,16 @@ fun NavigationSearchScreen(
     // otherwise a changed originProvider lambda would be ignored and the stale
     // one called.
     val currentOriginProvider by rememberUpdatedState(originProvider)
+    val crashTelemetry = rememberCrashTelemetry()
     val controller =
-        remember(searchClient, resolvedRecentStore, resolvedSavedStore) {
+        remember(searchClient, resolvedRecentStore, resolvedSavedStore, crashTelemetry) {
             NavigationController(
                 searchClient,
                 { currentOriginProvider() },
                 scope,
                 resolvedRecentStore,
                 resolvedSavedStore,
+                crashTelemetry ?: NoopCrashTelemetry,
             )
         }
     val state by controller.state.collectAsState()

@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.navigation
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.RecordingCrashTelemetry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
@@ -55,6 +57,49 @@ class NavigationControllerTest {
             lastReversePoint = point
             return reverse
         }
+    }
+
+    @Test
+    fun `an origin-provider throw during routing is recorded as a non-fatal`() = runTest {
+        // The user sees NavError.NoOrigin either way, which reads exactly like a
+        // denied permission — so a real location-provider fault would otherwise
+        // be indistinguishable from the app working correctly.
+        val boom = IllegalStateException("location provider died")
+        val telemetry = RecordingCrashTelemetry()
+        val controller =
+            NavigationController(
+                FakeClient(route = routeSummary),
+                originProvider = { throw boom },
+                scope = this,
+                crashTelemetry = telemetry,
+            )
+
+        controller.select(suggestion)
+        advanceUntilIdle()
+
+        assertEquals(NavError.NoOrigin, controller.state.value.error)
+        assertEquals(1, telemetry.nonFatals.size)
+        assertEquals(CrashFeatures.NAV_ORIGIN, telemetry.nonFatals.single().first)
+        assertEquals(boom, telemetry.nonFatals.single().second)
+    }
+
+    @Test
+    fun `a simply-absent origin is NOT recorded as a non-fatal`() = runTest {
+        // "No fix yet / permission denied" is the app working, not a fault.
+        val telemetry = RecordingCrashTelemetry()
+        val controller =
+            NavigationController(
+                FakeClient(route = routeSummary),
+                originProvider = { null },
+                scope = this,
+                crashTelemetry = telemetry,
+            )
+
+        controller.select(suggestion)
+        advanceUntilIdle()
+
+        assertEquals(NavError.NoOrigin, controller.state.value.error)
+        assertTrue(telemetry.nonFatals.isEmpty())
     }
 
     /**

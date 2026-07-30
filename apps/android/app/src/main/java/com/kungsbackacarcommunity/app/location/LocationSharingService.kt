@@ -23,7 +23,11 @@ import com.google.firebase.auth.FirebaseAuth
 import com.kungsbackacarcommunity.app.MainActivity
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.CrashEvents
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashKeys
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseCrashTelemetry
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
@@ -371,9 +375,27 @@ class LocationSharingService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    /**
+     * Crashlytics sink for this service. Null in a config-less build. Resolved
+     * lazily (not in a constructor) because a Service has no usable context
+     * until [onCreate]. Used for the two breadcrumbs below and for the
+     * session-listener non-fatal — the errors here are all swallowed on purpose,
+     * so nothing about them reaches a crash handler otherwise.
+     */
+    private val crashTelemetry by lazy {
+        FirebaseCrashTelemetry.createIfAvailable(applicationContext)
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        // Live-location sharing is the app's most crash-prone surface (a
+        // foreground service, GPS callbacks, RTDB listeners) and the most
+        // privacy-sensitive, so a crash report needs to say whether it was
+        // running. A key (not just a breadcrumb) so it shows even when the
+        // breadcrumb buffer has rolled over.
+        crashTelemetry?.setKey(CrashKeys.LIVE_SHARING, true.toString())
+        crashTelemetry?.log(CrashEvents.LIVE_SHARING_START)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -483,6 +505,8 @@ class LocationSharingService : Service() {
         fusedClient = null
         repository = null
         ownerUid = null
+        crashTelemetry?.setKey(CrashKeys.LIVE_SHARING, false.toString())
+        crashTelemetry?.log(CrashEvents.LIVE_SHARING_STOP)
         scope.cancel()
         super.onDestroy()
     }
@@ -561,10 +585,16 @@ class LocationSharingService : Service() {
                     }
                 } catch (c: CancellationException) {
                     throw c
-                } catch (_: Exception) {
+                } catch (failure: Exception) {
                     // The session listener died for good. Keeping a foreground
                     // service alive with no way to learn that sharing ended is
                     // the privacy-worst outcome, so stop.
+                    //
+                    // From the member's side this is indistinguishable from
+                    // "sharing just ended", so a systematic listener fault would
+                    // never be reported. Record it as a non-fatal with its stack
+                    // trace BEFORE tearing down.
+                    crashTelemetry?.recordNonFatal(CrashFeatures.LIVE_SESSION_LISTENER, failure)
                     stopSharingLocally()
                 }
             }

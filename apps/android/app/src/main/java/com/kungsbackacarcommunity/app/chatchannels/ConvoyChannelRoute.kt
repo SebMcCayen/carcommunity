@@ -12,6 +12,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -58,8 +60,9 @@ fun ConvoyChannelRoute(
     val blockStatus by
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
+    val crashTelemetry = rememberCrashTelemetry()
     val coordinator =
-        remember(repository, convoyId, uid) {
+        remember(repository, convoyId, uid, crashTelemetry) {
             ChannelChatCoordinator(
                 // convoyChat-post takes no mentions; the uid list is always empty
                 // here and is dropped rather than forwarded. The clientId makes the
@@ -69,6 +72,7 @@ fun ConvoyChannelRoute(
                 pager = { before -> repository.loadOlder(convoyId, before) },
                 selfUid = uid,
                 marker = { repository.markRead(convoyId) },
+                crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
 

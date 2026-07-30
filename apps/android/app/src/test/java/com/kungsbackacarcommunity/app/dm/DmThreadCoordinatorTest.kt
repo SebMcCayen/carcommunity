@@ -1,5 +1,9 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.RecordingCrashTelemetry
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
@@ -51,7 +55,11 @@ class DmThreadCoordinatorTest {
         }
     }
 
-    private fun coordinator(repo: DmRepository, ids: () -> String = { "cid-1" }) =
+    private fun coordinator(
+        repo: DmRepository,
+        ids: () -> String = { "cid-1" },
+        crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
+    ) =
         DmThreadCoordinator(
             repo,
             selfUid = "me",
@@ -59,7 +67,40 @@ class DmThreadCoordinatorTest {
             conversationId = "me__friend",
             clock = { 1000L },
             idGenerator = ids,
+            crashTelemetry = crashTelemetry,
         )
+
+    @Test
+    fun `an UNEXPECTED send throw is recorded as a non-fatal`() = runTest {
+        // A mapped DmSendResult.Failed is a modelled outcome; a raw throw is not,
+        // and the member only ever sees a generic retry — so the stack trace has
+        // to go somewhere.
+        val boom = IllegalStateException("callable blew up")
+        val repo =
+            object : DmRepository by FakeRepo() {
+                override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult =
+                    throw boom
+            }
+        val telemetry = RecordingCrashTelemetry()
+
+        coordinator(repo, crashTelemetry = telemetry).send("hello")
+
+        assertEquals(1, telemetry.nonFatals.size)
+        assertEquals(CrashFeatures.DM_SEND, telemetry.nonFatals.single().first)
+        assertEquals(boom, telemetry.nonFatals.single().second)
+    }
+
+    @Test
+    fun `a MAPPED send failure is not recorded as a non-fatal`() = runTest {
+        // The app already models this outcome and shows a specific reason; it is
+        // the app working, not a fault, so it must not spend the console budget.
+        val repo = FakeRepo().apply { sendResult = DmSendResult.Failed(DmSendError.Generic) }
+        val telemetry = RecordingCrashTelemetry()
+
+        coordinator(repo, crashTelemetry = telemetry).send("hello")
+
+        assertTrue(telemetry.nonFatals.isEmpty())
+    }
 
     @Test
     fun `send appends an optimistic bubble immediately with a generated client id`() = runTest {
