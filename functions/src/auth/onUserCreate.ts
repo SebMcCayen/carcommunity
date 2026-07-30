@@ -59,9 +59,12 @@ export const onUserCreate = functionsV1
   .runWith({ memory: '256MB', timeoutSeconds: 30 })
   .auth.user()
   .onCreate(async (user) => {
+    // `user.displayName` (the Google account name) is deliberately NOT passed:
+    // the public profile name is provisioned as a neutral placeholder and only
+    // the member may set it — see the privacy invariant on
+    // buildUserProfileDocument in ./provisioning.
     const created = await provisionUserDocuments(db, {
       uid: user.uid,
-      displayName: user.displayName,
       email: user.email,
     });
     // Never log emails, tokens, or other credentials — UID only.

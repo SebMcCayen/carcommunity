@@ -4,6 +4,10 @@ import {
   parseCompleteOnboardingInput,
   type ExistingOnboardingState,
 } from '../auth/onboarding-core';
+// The SAME derivation computeOnboardingWrites uses for `displayNameLower`, so
+// the expectation cannot drift from the implementation the way a re-spelled
+// `.trim().toLowerCase()` in the test would.
+import { toSearchKey } from '../friends/friends-core';
 
 const SERVER_TIMESTAMP = Symbol('serverTimestamp');
 const serverTimestamp = () => SERVER_TIMESTAMP;
@@ -123,6 +127,30 @@ describe('computeOnboardingWrites', () => {
       serverTimestamp,
     );
     expect(profileUpdate.displayName).toBe('Anna');
+    // The pair, not just the name: friend nickname resolution and
+    // users.searchMembers range-scan `displayNameLower` ONLY, so a displayName
+    // written without refreshing the key leaves the member findable under their
+    // OLD name (the bug fixed in #576). Asserting only `displayName` here would
+    // not notice the key going missing.
+    expect(profileUpdate.displayNameLower).toBe(toSearchKey('Anna'));
+  });
+
+  // The member-typed name is the one place a display name can actually carry
+  // surrounding whitespace, so it is where the TRIM half of the search-key rule
+  // has teeth: `computeOnboardingWrites` is exported and reachable with an
+  // untrimmed name (the callable's schema trims first, this does not depend on
+  // that). An untrimmed key would sort outside every prefix range the search
+  // derives from trimmed query text, making the member unfindable by nickname.
+  it('folds and trims the display name into the search key', () => {
+    const { profileUpdate } = computeOnboardingWrites(
+      { ...validInput, displayName: '  Anna Andersson  ' },
+      nothingSet,
+      serverTimestamp,
+    );
+    expect(profileUpdate.displayNameLower).toBe(toSearchKey('  Anna Andersson  '));
+    // Spelled out as well, so the case still fails if `toSearchKey` itself ever
+    // stops trimming or folding rather than both sides moving together.
+    expect(profileUpdate.displayNameLower).toBe('anna andersson');
   });
 
   it('leaves the display name untouched when omitted', () => {
