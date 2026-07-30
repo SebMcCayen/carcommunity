@@ -11,6 +11,17 @@
  * AUTHENTICATED client errors: the fingerprint is computed by the callable and
  * stored on the report, so this trigger just claims/increments it.
  *
+ * The claim → budget → create → reconcile flow now lives in
+ * shared/autoIssueFiling.ts, shared with errors-onServerErrorReport. Behaviour is
+ * unchanged apart from one deliberate addition: the create is now also charged
+ * against the GLOBAL hourly issue budget (shared/issueBudget-core.ts,
+ * 20 issues/hour across ALL auto-filing paths). Per-fingerprint dedup bounds
+ * issues per DISTINCT error, which does not bound a bad release that produces
+ * hundreds of distinct fingerprints at once — on a PUBLIC repo that burst is
+ * permanent. Over budget, the private report is still written and the occurrence
+ * still tallied; only the GitHub create is skipped, and the link is left
+ * retriable so the next occurrence in a fresh hourly bucket files it.
+ *
  * Dedup (transaction on the link doc):
  *  - first occurrence → write a `creating` placeholder + file the issue;
  *  - a previously-`failed` link → re-claim + retry the create;
@@ -25,27 +36,22 @@
 
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { defineSecret } from 'firebase-functions/params';
-import { logger } from 'firebase-functions';
-import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { createGitHubIssue } from '../shared/githubIssues';
+import { fileAutoIssue } from '../shared/autoIssueFiling';
 import {
   CLIENT_ERROR_ISSUE_LINKS_COLLECTION,
-  buildClientErrorIssueLinkCreated,
-  buildClientErrorIssueLinkFailed,
-  buildClientErrorIssueLinkIncrement,
-  buildClientErrorIssueLinkRetry,
   buildClientErrorIssuePayload,
   buildNewClientErrorIssueLink,
   computeClientErrorFingerprint,
-  decideClientErrorIssueAction,
-  type ClientErrorIssueLink,
   type ClientErrorReport,
+  type GitHubIssueStatus,
 } from './clientErrors-core';
 import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 /** Same secret bound to feedback.reportIssue + diagnostics-onSignInFailure. */
 const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
+
+const PIPELINE = 'errors.onClientErrorReport';
 
 function toStringOrNull(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -90,122 +96,37 @@ export const onClientErrorReport = onDocumentCreated(
     const report = extractReport(snapshot.data());
     if (!report) return;
 
-    const reportRef = snapshot.ref;
-    const linkRef = db.collection(CLIENT_ERROR_ISSUE_LINKS_COLLECTION).doc(report.fingerprint);
+    const outcome = await fileAutoIssue({
+      pipeline: PIPELINE,
+      linkRef: db.collection(CLIENT_ERROR_ISSUE_LINKS_COLLECTION).doc(report.fingerprint),
+      buildNewLink: (serverTimestamp) => buildNewClientErrorIssueLink(report, serverTimestamp),
+      buildPayload: (meta) => buildClientErrorIssuePayload(report, meta),
+      token: GITHUB_ISSUE_TOKEN.value(),
+      userAgent: 'carcommunity-error-bot',
+      logContext: { fingerprint: report.fingerprint },
+    });
 
-    // Atomically claim the fingerprint: only the first (or a retry of a failed)
-    // occurrence gets 'create'; every other occurrence increments the tally.
-    let action: 'create' | 'increment';
-    try {
-      action = await db.runTransaction(async (tx) => {
-        const existing = await tx.get(linkRef);
-        const link = existing.exists ? (existing.data() as ClientErrorIssueLink) : null;
-        const decision = decideClientErrorIssueAction(link);
-        if (decision === 'increment') {
-          tx.update(
-            linkRef,
-            buildClientErrorIssueLinkIncrement(FieldValue.increment(1), () =>
-              FieldValue.serverTimestamp(),
-            ),
-          );
-        } else if (link) {
-          tx.update(
-            linkRef,
-            buildClientErrorIssueLinkRetry(FieldValue.increment(1), () =>
-              FieldValue.serverTimestamp(),
-            ),
-          );
-        } else {
-          tx.set(
-            linkRef,
-            buildNewClientErrorIssueLink(report, () => FieldValue.serverTimestamp()),
-          );
-        }
-        return decision;
-      });
-    } catch (error) {
-      logger.error('errors.onClientErrorReport: link transaction failed', {
-        fingerprint: report.fingerprint,
-        error: String(error),
-      });
-      return;
-    }
+    // Patch the private report doc so admins can find the existing issue. The
+    // status vocabulary is unchanged (`pending` | `created` | `failed`): a
+    // budget-skipped create reports `failed`, which is accurate (no issue was
+    // filed) and retriable.
+    const issue =
+      outcome.status === 'created'
+        ? outcome.issue
+        : outcome.status === 'deduped'
+          ? outcome.issue
+          : null;
+    let status: GitHubIssueStatus;
+    if (issue) status = 'created';
+    else if (outcome.status === 'deduped') status = 'pending';
+    else status = 'failed';
 
-    // Dedup: the issue exists (or is being created concurrently) — the tally was
-    // bumped; patch the report doc so admins can find the existing issue.
-    if (action === 'increment') {
-      const claimed = (await linkRef.get()).data();
-      const number = typeof claimed?.issueNumber === 'number' ? claimed.issueNumber : null;
-      const url = typeof claimed?.issueUrl === 'string' ? claimed.issueUrl : null;
-      await reportRef
-        .update({
-          githubIssueStatus: number !== null ? 'created' : 'pending',
-          githubIssueNumber: number,
-          githubIssueUrl: url,
-        })
-        .catch(() => undefined);
-      return;
-    }
-
-    // We claimed the fingerprint → file the single public issue. Read the link
-    // back so the body's first-seen/occurrences reflect the actual doc.
-    const claimed = (await linkRef.get()).data();
-    const count = typeof claimed?.count === 'number' ? claimed.count : 1;
-    const firstSeenAt = claimed?.firstSeenAt;
-    const firstSeenIso =
-      firstSeenAt instanceof Timestamp
-        ? firstSeenAt.toDate().toISOString()
-        : new Date().toISOString();
-
-    const issue = await createGitHubIssue(
-      buildClientErrorIssuePayload(report, { firstSeenIso, count }),
-      GITHUB_ISSUE_TOKEN.value(),
-      'carcommunity-error-bot',
-      { fingerprint: report.fingerprint },
-    );
-
-    if (issue) {
-      await Promise.all([
-        linkRef.update(buildClientErrorIssueLinkCreated(issue)).catch((error) => {
-          logger.error('errors.onClientErrorReport: failed to record issue link', {
-            fingerprint: report.fingerprint,
-            issueNumber: issue.number,
-            error: String(error),
-          });
-        }),
-        reportRef
-          .update({
-            githubIssueStatus: 'created',
-            githubIssueNumber: issue.number,
-            githubIssueUrl: issue.url,
-          })
-          .catch(() => undefined),
-      ]);
-      return;
-    }
-
-    // GitHub failed (already logged, no throw). Concurrency-safe rollback: a
-    // pristine placeholder (count 1) is deleted so a future occurrence retries;
-    // a placeholder a concurrent occurrence already bumped (count > 1) is marked
-    // `failed` (retriable) so no occurrence is lost.
-    try {
-      await db.runTransaction(async (tx) => {
-        const current = await tx.get(linkRef);
-        if (!current.exists) return;
-        const link = current.data() as ClientErrorIssueLink;
-        if (link.status !== 'creating') return;
-        if (link.count === 1) {
-          tx.delete(linkRef);
-        } else {
-          tx.update(linkRef, buildClientErrorIssueLinkFailed());
-        }
-      });
-    } catch (error) {
-      logger.error('errors.onClientErrorReport: failed to roll back placeholder link', {
-        fingerprint: report.fingerprint,
-        error: String(error),
-      });
-    }
-    await reportRef.update({ githubIssueStatus: 'failed' }).catch(() => undefined);
+    await snapshot.ref
+      .update({
+        githubIssueStatus: status,
+        githubIssueNumber: issue?.number ?? null,
+        githubIssueUrl: issue?.url ?? null,
+      })
+      .catch(() => undefined);
   },
 );

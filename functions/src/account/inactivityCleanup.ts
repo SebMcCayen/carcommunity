@@ -76,6 +76,7 @@ import {
   type InactivityAction,
 } from './inactivity-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /**
  * Upper bound of candidates examined per sweep — bounds the daily run's cost and
@@ -516,7 +517,7 @@ export const cleanupInactive = onSchedule(
     timeoutSeconds: 540,
     schedule: '15 4 * * *',
   },
-  async () => {
+  withServerErrorReporting('account.cleanupInactive', async () => {
     await runInactivityCleanup(new Date());
-  },
+  }),
 );

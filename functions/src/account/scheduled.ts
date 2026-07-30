@@ -69,6 +69,7 @@ import {
   deletionRetentionCutoff,
 } from './deletion-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 const QUERY_BATCH_SIZE = 500;
 /** Upper bound of accounts purged per sweep — keeps a backlog from
@@ -501,7 +502,7 @@ export const purgeDeleted = onSchedule(
     timeoutSeconds: 540,
     schedule: '30 3 * * *',
   },
-  async () => {
+  withServerErrorReporting('account.purgeDeleted', async () => {
     await runAccountPurge(new Date());
-  },
+  }),
 );

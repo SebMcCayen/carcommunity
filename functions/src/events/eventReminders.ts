@@ -65,6 +65,7 @@ import {
   reminderWindowStart,
 } from './eventReminders-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Candidate events fetched per query round-trip. */
 const PAGE_SIZE = 100;
@@ -393,7 +394,7 @@ export const remindUpcoming = onSchedule(
     timeoutSeconds: 300,
     schedule: '*/15 * * * *',
   },
-  async () => {
+  withServerErrorReporting('events.remindUpcoming', async () => {
     await runEventReminders(new Date());
-  },
+  }),
 );

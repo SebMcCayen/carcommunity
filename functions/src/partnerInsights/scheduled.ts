@@ -33,6 +33,7 @@ import {
   type PartnerInteractionType,
 } from './insights-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -169,17 +170,17 @@ const SCHEDULE_OPTS = {
 /** Daily aggregation over yesterday (all periods containing it). */
 export const aggregateDaily = onSchedule(
   { ...SCHEDULE_OPTS, schedule: '0 3 * * *' },
-  async () => {
+  withServerErrorReporting('partnerInsights.aggregateDaily', async () => {
     await runInsightsAggregation(previousUtcDay(new Date()));
-  },
+  }),
 );
 
 /** Daily TTL cleanup of raw events. */
 export const cleanupExpired = onSchedule(
   { ...SCHEDULE_OPTS, schedule: '0 4 * * *' },
-  async () => {
+  withServerErrorReporting('partnerInsights.cleanupExpired', async () => {
     await runInsightsCleanup(new Date());
-  },
+  }),
 );
 
 // Referenced for the registry description; keeps the type imported.

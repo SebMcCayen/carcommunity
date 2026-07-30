@@ -50,6 +50,7 @@ import { db } from '../firebase';
 import { autoCloseCandidateCutoff, isAutoCloseDue, type EventStatus } from './events-core';
 import { creditEventAttendance } from './eventLifecycle';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Candidate documents fetched per query round-trip. */
 const PAGE_SIZE = 100;
@@ -230,7 +231,7 @@ export const autoClose = onSchedule(
     timeoutSeconds: 540,
     schedule: '0 * * * *',
   },
-  async () => {
+  withServerErrorReporting('events.autoClose', async () => {
     await runEventAutoClose(new Date());
-  },
+  }),
 );

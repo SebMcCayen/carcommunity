@@ -38,6 +38,16 @@ import {
 } from '../feedback/feedback-core';
 import { AUTO_GENERATED_LABEL } from '../diagnostics/signInIssues-core';
 import type { GitHubIssuePayload } from '../shared/githubIssues';
+import {
+  buildIssueLinkCreated,
+  buildIssueLinkFailed,
+  buildIssueLinkIncrement,
+  buildIssueLinkRetry,
+  buildNewIssueLink,
+  decideIssueAction,
+  type IssueLinkState,
+  type IssueLinkStatus,
+} from '../shared/issueLinks-core';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -267,10 +277,16 @@ export function buildClientErrorAuditDetails(report: ClientErrorReport): Record<
 // Dedup decision + link documents (clientErrorIssueLinks)
 // ---------------------------------------------------------------------------
 
-export type ClientErrorIssueLinkStatus = 'creating' | 'created' | 'failed';
+/**
+ * The link-doc state machine itself now lives in shared/issueLinks-core.ts (it
+ * is identical for client errors and server errors). The names below are kept as
+ * thin, domain-named delegations so this module's public API — and the callers
+ * and tests that depend on it — are unchanged.
+ */
+export type ClientErrorIssueLinkStatus = IssueLinkStatus;
 
 /** `clientErrorIssueLinks/{fingerprint}` — server-only issue link + tally. */
-export interface ClientErrorIssueLink {
+export interface ClientErrorIssueLink extends IssueLinkState {
   fingerprint: string;
   feature: string;
   status: ClientErrorIssueLinkStatus;
@@ -291,9 +307,7 @@ export interface ClientErrorIssueLink {
 export function decideClientErrorIssueAction(
   existing: ClientErrorIssueLink | null | undefined,
 ): 'create' | 'increment' {
-  if (!existing) return 'create';
-  if (existing.status === 'failed') return 'create';
-  return 'increment';
+  return decideIssueAction(existing);
 }
 
 /** Placeholder link written BEFORE the GitHub call (status `creating`). */
@@ -301,16 +315,10 @@ export function buildNewClientErrorIssueLink(
   report: ClientErrorReport,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  return {
-    fingerprint: report.fingerprint,
-    feature: report.feature,
-    status: 'creating' as ClientErrorIssueLinkStatus,
-    issueNumber: null,
-    issueUrl: null,
-    count: 1,
-    firstSeenAt: serverTimestamp(),
-    lastSeenAt: serverTimestamp(),
-  };
+  return buildNewIssueLink(
+    { fingerprint: report.fingerprint, feature: report.feature },
+    serverTimestamp,
+  );
 }
 
 /** Patch applied once the issue exists (status `created`). */
@@ -318,11 +326,7 @@ export function buildClientErrorIssueLinkCreated(issue: {
   number: number;
   url: string;
 }): Record<string, unknown> {
-  return {
-    status: 'created' as ClientErrorIssueLinkStatus,
-    issueNumber: issue.number,
-    issueUrl: issue.url,
-  };
+  return buildIssueLinkCreated(issue);
 }
 
 /** Patch on a repeat occurrence: bump the tally and touch lastSeenAt. */
@@ -330,10 +334,7 @@ export function buildClientErrorIssueLinkIncrement(
   increment: unknown,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  return {
-    count: increment,
-    lastSeenAt: serverTimestamp(),
-  };
+  return buildIssueLinkIncrement(increment, serverTimestamp);
 }
 
 /**
@@ -345,18 +346,12 @@ export function buildClientErrorIssueLinkRetry(
   increment: unknown,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
-  return {
-    status: 'creating' as ClientErrorIssueLinkStatus,
-    count: increment,
-    lastSeenAt: serverTimestamp(),
-  };
+  return buildIssueLinkRetry(increment, serverTimestamp);
 }
 
 /** Patch when a create attempt failed but concurrent occurrences bumped the tally. */
 export function buildClientErrorIssueLinkFailed(): Record<string, unknown> {
-  return {
-    status: 'failed' as ClientErrorIssueLinkStatus,
-  };
+  return buildIssueLinkFailed();
 }
 
 // ---------------------------------------------------------------------------

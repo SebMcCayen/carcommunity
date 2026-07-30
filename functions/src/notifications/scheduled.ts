@@ -20,6 +20,7 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { readRetentionCutoff, unreadRetentionCutoff } from './notifications-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -74,7 +75,7 @@ export const cleanupExpired = onSchedule(
     timeoutSeconds: 300,
     schedule: '0 5 * * *',
   },
-  async () => {
+  withServerErrorReporting('notifications.cleanupExpired', async () => {
     await runNotificationsCleanup(new Date());
-  },
+  }),
 );

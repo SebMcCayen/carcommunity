@@ -27,6 +27,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Expired documents fetched per query round-trip. */
 const CLEANUP_BATCH_SIZE = 400;
@@ -183,7 +184,7 @@ export const cleanupExpired = onSchedule(
     timeoutSeconds: 120,
     schedule: '*/15 * * * *',
   },
-  async () => {
+  withServerErrorReporting('incidents.cleanupExpired', async () => {
     await runIncidentsCleanup(new Date());
-  },
+  }),
 );

@@ -118,6 +118,7 @@ import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
 import { reportClientError } from './errors/reportClientError';
 import { onClientErrorReport } from './errors/onClientErrorReport';
+import { onServerErrorReport } from './errors/onServerErrorReport';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
@@ -599,10 +600,32 @@ export const feedback = {
  * clientErrorIssueLinks/{fingerprint} collection — reusing the shared GitHub
  * helper + GITHUB_ISSUE_TOKEN secret. No uid or secret ever reaches the public
  * issue (functions/src/errors/*).
+ *
+ * SERVER-side errors use the mirror-image pipeline, added because backend
+ * failures previously reached NOBODY — a scheduled sweep throwing at 03:30 only
+ * ever landed in Cloud Logging. `withServerErrorReporting(source, handler)`
+ * (functions/src/errors/serverErrors.ts) now wraps all 15 onSchedule handlers: an
+ * unexpected throw is written to the private serverErrorReports/{reportId} record
+ * (admin-only read; FULL message/stack/context) and then RETHROWN, so Cloud
+ * Scheduler retry and alerting semantics are unchanged. HttpsError is skipped —
+ * those are deliberate client-facing outcomes. The errors-onServerErrorReport
+ * trigger then files ONE deduplicated PUBLIC issue per fingerprint (labelled
+ * `server-error` + `auto-generated`) into serverErrorIssueLinks/{fingerprint}.
+ *
+ * PUBLIC-REPO SAFETY (server side is stricter than the client side): server error
+ * text routinely embeds Firestore document paths — which contain uids — plus
+ * user-supplied values and coordinates, so the public issue is a strict ALLOWLIST
+ * (source, errorName, errorCode, `file:line` frames, fingerprint, first-seen,
+ * count) and the message/stack are NEVER published. The fingerprint is the opaque
+ * correlation id an admin matches back to the private record. Both auto-filing
+ * paths additionally share ONE global hourly issue budget
+ * (shared/issueBudget-core.ts) so a bad release cannot dump hundreds of
+ * permanently public issues.
  */
 export const errors = {
   reportClientError,
   onClientErrorReport,
+  onServerErrorReport,
 };
 
 /**

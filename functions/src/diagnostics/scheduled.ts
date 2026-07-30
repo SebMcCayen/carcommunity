@@ -13,6 +13,7 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { diagnosticsRetentionCutoff } from './diagnostics-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 const CLEANUP_BATCH_SIZE = 500;
 
@@ -54,7 +55,7 @@ export const cleanupExpired = onSchedule(
     timeoutSeconds: 300,
     schedule: '0 6 1 * *',
   },
-  async () => {
+  withServerErrorReporting('diagnostics.cleanupExpired', async () => {
     await runDiagnosticsCleanup(new Date());
-  },
+  }),
 );

@@ -1433,6 +1433,45 @@ service cloud.firestore {
       // No client writes: errors-onClientErrorReport (Admin SDK) only.
     }
 
+    // serverErrorReports – BACKEND error record of record (never client-written)
+    // Admin-only read. The PRIVATE record for an unhandled SERVER-side failure
+    // (a scheduled sweep or trigger throwing): carries the FULL error message,
+    // the trimmed stack trace, the call-site context and the dedup fingerprint.
+    // This is deliberately the ONLY place that detail exists — the auto-filed
+    // PUBLIC GitHub issue carries an allowlist (source, errorName, errorCode,
+    // file:line frames, fingerprint) and never the message/stack, because server
+    // error text embeds Firestore document paths (which contain uids), user
+    // values and coordinates. Written EXCLUSIVELY by reportServerError via the
+    // Admin SDK; NO client writes — a forged report would file a public issue.
+    match /serverErrorReports/{reportId} {
+      allow read: if isAdmin();
+      // No client writes: errors/serverErrors.ts (Admin SDK) only.
+    }
+
+    // serverErrorIssueLinks – server-error → GitHub issue dedup index (server-only)
+    // Keyed by the server-error fingerprint. Written EXCLUSIVELY by the
+    // errors-onServerErrorReport Firestore trigger (Admin SDK): the filed public
+    // issue number/url plus the occurrence tally, so one unique backend failure
+    // maps to one issue however often it recurs. Admin-only read for triage; NO
+    // client writes — a client write could forge/spoof the dedup link or issue
+    // ref, or silence a real failure by pre-claiming its fingerprint.
+    match /serverErrorIssueLinks/{fingerprint} {
+      allow read: if isAdmin();
+      // No client writes: errors-onServerErrorReport (Admin SDK) only.
+    }
+
+    // githubIssueBudget – global hourly auto-issue budget (backend-only)
+    // One counter document per UTC hour (`YYYYMMDDHH`) shared by EVERY auto-issue
+    // path (client errors, server errors). Charged transactionally before any
+    // GitHub create; over the cap the create is skipped so a bad release cannot
+    // dump hundreds of permanently world-readable issues onto the public repo.
+    // FULLY backend-only — not even admins read it: it is pure rate-limiter
+    // state with no triage value, and a readable counter would tell a client
+    // exactly how much budget is left to exhaust.
+    match /githubIssueBudget/{bucketId} {
+      allow read, write: if false;
+    }
+
     // signInIssueLinks – sign-in-failure → GitHub issue dedup index (server-only)
     // Keyed by the diagnostics report fingerprint. Written EXCLUSIVELY by the
     // diagnostics-onSignInFailure Firestore trigger (Admin SDK): it stores the

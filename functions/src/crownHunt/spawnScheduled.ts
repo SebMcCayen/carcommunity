@@ -58,6 +58,7 @@ import {
   targetCrownCount,
   type CrownPosition,
 } from './crown-spawn-core';
+import { withServerErrorReporting } from '../errors/serverErrors';
 
 // ---------------------------------------------------------------------------
 // Bounds
@@ -472,15 +473,15 @@ const SPAWN_SCHEDULE_OPTS = {
  */
 export const spawnCrowns = onSchedule(
   { ...SPAWN_SCHEDULE_OPTS, schedule: '*/10 * * * *' },
-  async () => {
+  withServerErrorReporting('crownHunt.spawnCrowns', async () => {
     await runCrownSpawnPass(new Date());
-  },
+  }),
 );
 
 /** TTL sweep, every 15 minutes (mirrors `incidents-cleanupExpired`). */
 export const sweepSpawns = onSchedule(
   { ...SPAWN_SCHEDULE_OPTS, schedule: '*/15 * * * *' },
-  async () => {
+  withServerErrorReporting('crownHunt.sweepSpawns', async () => {
     await runCrownSpawnCleanup(new Date());
-  },
+  }),
 );
