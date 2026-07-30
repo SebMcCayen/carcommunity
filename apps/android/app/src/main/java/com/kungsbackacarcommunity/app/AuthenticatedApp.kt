@@ -4168,16 +4168,20 @@ fun AuthenticatedApp(
                 val appUpdateDownloaded = stringResource(R.string.appUpdate_downloaded)
                 val appUpdateRestart = stringResource(R.string.appUpdate_restart)
 
-                // THE ONE FAILURE PATH, shared by both ways Play can let the
-                // member down: a flow that never started, and a flow that
-                // started and came back failed. Both mean the same thing — the
-                // in-app route is out — so both hand off to the Play listing,
-                // which is the same update by a longer road, and only say
-                // something if even that has nowhere to go. Nothing is ever
-                // said while the listing is still openable: the message reads
-                // "try Google Play instead", so showing it *in place of*
-                // opening Play would be a dead end wearing the words of a
-                // fallback.
+                // THE ONE RECOVERY, shared by every way Play can let the member
+                // down: a flow that never started, a flow that started and came
+                // back failed, and a downloaded update Play could not install.
+                // All three mean the same thing — the in-app route is out — so
+                // all three hand off to the Play listing, which is the same
+                // update by a longer road, and only say something if even that
+                // has nowhere to go. Nothing is ever said while the listing is
+                // still openable: the message reads "try Google Play instead",
+                // so showing it *in place of* opening Play would be a dead end
+                // wearing the words of a fallback.
+                //
+                // A decline is not one of these and does not come through here:
+                // backing out of Play's consent sheet is an answer, not a
+                // failure.
                 val appUpdateStoreFallback = {
                     PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
                         scope.launch {
