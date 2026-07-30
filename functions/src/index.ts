@@ -102,6 +102,7 @@ import {
 import { listNearby as listNearbyLive } from './live/listNearby';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
+import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
 import {
   join as joinGroupDrive,
   leave as leaveGroupDrive,
@@ -708,8 +709,9 @@ export const live = {
 };
 
 /**
- * Subscription domain (grouped export → deployed as `subscription-verify`
- * and `subscription-grantEntitlement`) — Phase 11.
+ * Subscription domain (grouped export → deployed as `subscription-verify`,
+ * `subscription-grantEntitlement` and the scheduled
+ * `subscription-expireLapsed`) — Phase 11.
  *
  * subscription.verify FAILS CLOSED until store credentials are
  * configured (end-of-MVP console setup; the legacy endpoint was itself a
@@ -722,6 +724,17 @@ export const live = {
 export const subscription = {
   verify: verifySubscription,
   grantEntitlement,
+  // The EXIT from the paid tier: `subscriptions/{uid}.expiresAt` was
+  // written from day one and read by nothing, so an entitlement never
+  // lapsed. This 3-hourly sweep revokes entitlements whose subscription
+  // expired more than the 72h grace window ago, through the same
+  // applyEntitlement the grant path uses (so all three representations —
+  // record, users.activeMember, activeMember claim — are cleared together
+  // with fail-safe ordering). Records the revocation on
+  // userLifecycle/{uid}.subscriptionExpiry, notifies the member in-app
+  // under subscription_status, and never revokes on the ABSENCE of a
+  // record — a perpetual manual grant is untouched.
+  expireLapsed: expireLapsedSubscriptions,
 };
 
 /**
