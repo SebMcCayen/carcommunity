@@ -12,7 +12,7 @@
     <string name="appUpdate_requiredMessage">This update has to be installed before you can carry on. Google Play takes over while it installs.</string>
     <string name="appUpdate_downloaded">The update is downloaded and installs on restart.</string>
     <string name="appUpdate_restart">Restart</string>
-    <string name="appUpdate_storeUnavailable">The update could not be started, and Google Play could not be opened on this device.</string>
+    <string name="appUpdate_storeUnavailable">The update could not be completed, and Google Play could not be opened on this device.</string>
     <string name="navigation_home">Home</string>
     <string name="navigation_map">Map</string>
     <string name="navigation_events">Events</string>

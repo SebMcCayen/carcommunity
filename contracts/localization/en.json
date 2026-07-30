@@ -11,7 +11,7 @@
     "requiredMessage": "This update has to be installed before you can carry on. Google Play takes over while it installs.",
     "downloaded": "The update is downloaded and installs on restart.",
     "restart": "Restart",
-    "storeUnavailable": "The update could not be started, and Google Play could not be opened on this device."
+    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device."
   },
   "navigation": {
     "home": "Home",
