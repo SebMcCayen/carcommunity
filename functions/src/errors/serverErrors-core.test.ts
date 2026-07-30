@@ -22,10 +22,10 @@ import {
   buildServerErrorIssuePayload,
   buildServerErrorIssueTitle,
   buildServerErrorReport,
+  buildNewServerErrorIssueLink,
   buildServerErrorReportDocument,
   classifyServerError,
   computeServerErrorFingerprint,
-  decideServerErrorIssueAction,
   isDeliberateHttpsError,
   normalizeServerErrorSource,
   reduceStackFrames,
@@ -395,17 +395,28 @@ describe('boundServerErrorContext', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Dedup decision (delegated to the shared state machine)
+// Dedup link placeholder
+//
+// The claim/increment/retry state machine itself is shared and is covered by
+// shared/issueLinks-core.test.ts; only the domain-specific placeholder — which
+// decides what descriptor fields the link document carries — is tested here.
 // ---------------------------------------------------------------------------
 
-describe('decideServerErrorIssueAction', () => {
-  it('creates on first occurrence and retries a failed link', () => {
-    expect(decideServerErrorIssueAction(null)).toBe('create');
-    expect(decideServerErrorIssueAction({ status: 'failed', count: 4 })).toBe('create');
-  });
-
-  it('increments for an in-flight or already-created link', () => {
-    expect(decideServerErrorIssueAction({ status: 'creating', count: 1 })).toBe('increment');
-    expect(decideServerErrorIssueAction({ status: 'created', count: 9 })).toBe('increment');
+describe('buildNewServerErrorIssueLink', () => {
+  it('claims the fingerprint and records the source, nothing identifying', () => {
+    const report = buildServerErrorReport('account.purgeDeleted', sensitiveError(), { uid: UID });
+    const link = buildNewServerErrorIssueLink(report, () => 'SERVER_TS');
+    expect(link).toEqual({
+      fingerprint: report.fingerprint,
+      source: 'account.purgeDeleted',
+      status: 'creating',
+      issueNumber: null,
+      issueUrl: null,
+      count: 1,
+      firstSeenAt: 'SERVER_TS',
+      lastSeenAt: 'SERVER_TS',
+    });
+    // The link doc is world-hidden but still holds no message/stack/context.
+    expect(JSON.stringify(link)).not.toContain(UID);
   });
 });

@@ -57,12 +57,7 @@ import { boundText, neutralizeMentions } from '../feedback/feedback-core';
 import { AUTO_GENERATED_LABEL } from '../diagnostics/signInIssues-core';
 import type { GitHubIssuePayload } from '../shared/githubIssues';
 import {
-  buildIssueLinkCreated,
-  buildIssueLinkFailed,
-  buildIssueLinkIncrement,
-  buildIssueLinkRetry,
   buildNewIssueLink,
-  decideIssueAction,
   type IssueLinkState,
   type IssueLinkStatus,
 } from '../shared/issueLinks-core';
@@ -462,13 +457,15 @@ export interface ServerErrorIssueLink extends IssueLinkState {
   lastSeenAt?: unknown;
 }
 
-export {
-  buildIssueLinkCreated as buildServerErrorIssueLinkCreated,
-  buildIssueLinkFailed as buildServerErrorIssueLinkFailed,
-  buildIssueLinkIncrement as buildServerErrorIssueLinkIncrement,
-  buildIssueLinkRetry as buildServerErrorIssueLinkRetry,
-  decideIssueAction as decideServerErrorIssueAction,
-};
+/**
+ * There are deliberately no domain-named aliases for the claim/increment/retry
+ * builders here (unlike clientErrors-core.ts, which keeps them for backwards
+ * compatibility). The whole claim → budget → create → reconcile flow lives in
+ * shared/autoIssueFiling.ts and drives shared/issueLinks-core.ts directly, so a
+ * second set of pass-through names would be dead code. Only the placeholder
+ * builder below is domain-specific, because it decides which descriptor fields
+ * the link document carries.
+ */
 
 /** Placeholder link written BEFORE the GitHub call (status `creating`). */
 export function buildNewServerErrorIssueLink(
