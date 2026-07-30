@@ -92,7 +92,7 @@
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
-import { db } from '../firebase';
+import { adminAuth, db } from '../firebase';
 import { writeInAppNotification } from '../notifications/deliver';
 import { applyEntitlement } from './entitlement';
 import {
@@ -120,8 +120,9 @@ export interface SubscriptionExpirySweepResult {
   expiredCount: number;
   expiredUids: string[];
   /**
-   * Records whose account no longer exists, closed record-only (see
-   * expireOrphanedRecord).
+   * Records whose AUTH account no longer exists, closed record-only (see
+   * expireOrphanedRecord). Never incremented for an account we merely
+   * failed to look up — that counts as failed, not orphaned.
    */
   orphanedCount: number;
   /** Documents the re-derived decision rejected. */
@@ -170,19 +171,23 @@ async function recordRevocation(
 }
 
 /**
- * Closes a subscription record whose ACCOUNT is gone.
+ * Closes a subscription record whose AUTH ACCOUNT is gone.
  *
  * `subscriptions/{uid}` is purged by neither the account deletion doc-tree
- * sweep nor the owned-document sweep, so a deleted member can leave an
- * orphan record behind. Left alone it would be a poison pill: it matches
+ * sweep (PURGE_DOC_TREES) nor the owned-document sweep
+ * (PURGE_OWNED_COLLECTIONS) — verified against account/deletion-core.ts,
+ * where it appears in neither list nor on the deliberately-retained list.
+ * So an erased account CAN leave an orphan record behind; these are not
+ * merely theoretical. Left alone one would be a poison pill: it matches
  * the query forever, applyEntitlement's `adminAuth.getUser` throws
  * auth/user-not-found, and it would consume a slot in every future run.
  *
- * Closed with a MERGING set — there is no user document or claim to clear,
- * and merging preserves platform/purchaseTokenHash/expiresAt as the
- * historical record. No notification (there is no one to notify) and no
- * lifecycle stamp (that document has been purged too, and writing one
- * would resurrect it for an erased account).
+ * Closed with a MERGING set — there is no claim to clear and no user
+ * document to write, and merging preserves platform/purchaseTokenHash/
+ * expiresAt as the historical record. No notification (there is no one to
+ * notify) and no lifecycle stamp (that document HAS been purged, and
+ * writing one would resurrect it for an erased account) — which is why
+ * the orphan test happens before recordRevocation, not in place of it.
  */
 async function expireOrphanedRecord(uid: string): Promise<void> {
   await db
@@ -194,6 +199,20 @@ async function expireOrphanedRecord(uid: string): Promise<void> {
     );
 }
 
+/**
+ * The ONLY error that means "this account no longer exists".
+ *
+ * Deliberately an exact match on the Admin SDK's `auth/user-not-found`
+ * code and nothing else. Every other Auth failure — a quota error, a
+ * network blip, `auth/internal-error`, an `auth/invalid-uid` from a
+ * malformed document ID — is a failure to ANSWER the question, not a
+ * negative answer, and must fall through to the retry path. Widening this
+ * (to, say, any thrown Auth error) would let one transient blip downgrade
+ * a real revocation to a record-only close, which is the expensive
+ * direction: the record would then stop matching the query, so nothing
+ * would ever come back to clear the member's claim and they would keep
+ * paid access permanently.
+ */
 function isUserNotFound(error: unknown): boolean {
   return (error as { code?: string } | null)?.code === 'auth/user-not-found';
 }
@@ -266,15 +285,32 @@ export async function runSubscriptionExpirySweep(
     }
 
     try {
-      // An entitlement whose account is gone has no claim or user document
-      // to clear; close the record so it stops recirculating.
-      const userSnap = await db.collection('users').doc(uid).get();
-      if (!userSnap.exists) {
-        await expireOrphanedRecord(uid);
-        orphanedCount += 1;
-        logger.info('Closed orphaned subscription record (no user document)', { uid });
-        continue;
-      }
+      // ORPHAN TEST, and it asks AUTH — not Firestore.
+      //
+      // Entitlement lives in three places and the Auth custom claim is one
+      // of them, so "is there anything left to revoke?" is a question only
+      // Auth can answer. A missing `users/{uid}` document does NOT imply a
+      // missing account: account purgeUserData deletes the doc trees and
+      // the Auth user LAST (account/scheduled.ts), so between those two
+      // steps — and permanently, if that final delete fails — the account
+      // is alive and still carrying `activeMember: true`. Treating that as
+      // an orphan would close the record record-only, and because a closed
+      // record stops matching this query, NOTHING would ever come back to
+      // clear the claim: firestore.rules / storage.rules / database.rules
+      // would keep honouring it forever. That is the un-revoked-access
+      // failure, and it is the reason this is an Auth read.
+      //
+      // Cost is unchanged, not added: this replaces the Firestore read it
+      // used to do, so it is still one lookup per candidate, bounded by
+      // the query's MAX_EXPIRIES_PER_RUN page. It runs FIRST, before the
+      // lifecycle stamp, so an orphan is closed without resurrecting the
+      // userLifecycle document the purge already erased.
+      //
+      // Throwing is the ONLY signal: `auth/user-not-found` is caught below
+      // and closed record-only; every other Auth error falls through to
+      // the retry path (see isUserNotFound). Fail-safe by construction —
+      // if Auth cannot be reached, we revoke nothing and try again.
+      await adminAuth.getUser(uid);
 
       // Audit record FIRST — see the header: this is the recoverable order.
       await recordRevocation(uid, decision.expiresAt, decision.previousStatus, decision.platform);
@@ -313,7 +349,10 @@ export async function runSubscriptionExpirySweep(
       }
     } catch (error) {
       if (isUserNotFound(error)) {
-        // Auth account already deleted while its user document lingered.
+        // The Auth account is gone. Normally raised by the orphan test at
+        // the top of the block (so nothing has been written yet); also
+        // covers the narrow race where the account is deleted between
+        // that test and applyEntitlement's own getUser.
         await expireOrphanedRecord(uid).catch((closeError) => {
           logger.error('Failed to close orphaned subscription record', {
             uid,
@@ -321,10 +360,12 @@ export async function runSubscriptionExpirySweep(
           });
         });
         orphanedCount += 1;
+        logger.info('Closed orphaned subscription record (Auth account gone)', { uid });
         continue;
       }
-      // Leave the document granting; it still matches the query, so the
-      // next run retries. Every step above is idempotent.
+      // NOT an orphan — we simply failed to act. Leave the document
+      // granting; it still matches the query, so the next run retries.
+      // Every step above is idempotent.
       failedCount += 1;
       logger.error('Subscription expiry failed; will retry next run', {
         uid,

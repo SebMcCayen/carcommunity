@@ -14,7 +14,12 @@
  * - entitlement with NO subscriptions document → untouched (the perpetual
  *   manual grant / operator access case);
  * - entitlement whose subscription carries no expiresAt → untouched;
- * - an ORPHANED record whose user document is gone → closed record-only.
+ * - an ORPHANED record whose AUTH account is gone → closed record-only;
+ * - a record whose users/{uid} document is gone but whose Auth account is
+ *   LIVE → fully revoked, claim included (a missing user document is not
+ *   proof of an erased account);
+ * - an Auth error that is NOT user-not-found → counted as failed and left
+ *   granting for the next run, never mistaken for an orphan.
  *
  * Every emulator test file shares ONE Firestore instance, so display names
  * carry the `subexp` suffix to stay unique to this file.
@@ -397,17 +402,21 @@ describe('runSubscriptionExpirySweep — idempotency', () => {
     expect(items.size).toBe(1);
   });
 
-  it('closes an orphaned record whose user document is gone, record-only', async () => {
+  it('closes an orphaned record whose AUTH account is gone, record-only', async () => {
     // subscriptions/{uid} is purged by neither the deletion doc-tree sweep
     // nor the owned-document sweep, so an erased account can leave one
     // behind. Left granting it would match the query in every future run.
     const uid = await createEntitledMember('orphan', { expiresAt: LAPSED });
+    // Delete the ACCOUNT, the way account-purgeDeleted finishes: doc trees
+    // first, then the Auth user.
     await adminDb.collection('users').doc(uid).delete();
     await adminDb.collection('userLifecycle').doc(uid).delete();
+    await adminAuth.deleteUser(uid);
 
     const result = await runSubscriptionExpirySweep(NOW);
     expect(result.orphanedCount).toBeGreaterThan(0);
     expect(result.expiredUids).not.toContain(uid);
+    expect(result.failedCount).toBe(0);
 
     const sub = (await adminDb.collection('subscriptions').doc(uid).get()).data()!;
     expect(sub.status).toBe('expired');
@@ -420,5 +429,70 @@ describe('runSubscriptionExpirySweep — idempotency', () => {
     // And it is gone from the next run's candidate set.
     const second = await runSubscriptionExpirySweep(NOW);
     expect(second.orphanedCount).toBe(0);
+  });
+
+  it('fully revokes a LIVE account even when its user document is missing', async () => {
+    // The failure this pins: a missing users/{uid} is NOT proof the account
+    // is gone. account-purgeDeleted deletes the doc trees BEFORE the Auth
+    // user, so this state is reachable — and if the sweep read it as an
+    // orphan it would close the record record-only, the record would stop
+    // matching the query, and the still-live account would keep its
+    // `activeMember` claim (which firestore/storage/database rules honour)
+    // forever. The orphan signal must come from Auth.
+    const uid = await createEntitledMember('livenodoc', { expiresAt: LAPSED });
+    await adminDb.collection('users').doc(uid).delete();
+
+    const result = await runSubscriptionExpirySweep(NOW);
+    expect(result.expiredUids).toContain(uid);
+    expect(result.orphanedCount).toBe(0);
+
+    // The claim — the representation a record-only close would have left
+    // standing — is cleared.
+    const authUser = await adminAuth.getUser(uid);
+    expect(authUser.customClaims?.activeMember).toBeFalsy();
+    const sub = (await adminDb.collection('subscriptions').doc(uid).get()).data()!;
+    expect(sub.status).toBe('expired');
+    expect(sub.entitlement).toBe('none');
+  });
+
+  it('does NOT treat a non-user-not-found Auth error as an orphan', async () => {
+    // A document ID over the Admin SDK's 128-character uid limit makes
+    // adminAuth.getUser reject with `auth/invalid-uid` — a real Auth error
+    // that is emphatically not "this user was deleted". It stands in for
+    // any transient failure (quota, network, auth/internal-error): the
+    // sweep must count it as FAILED and leave the record granting so a
+    // later run retries, never silently downgrade it to a record-only
+    // close that would strand the entitlement un-revoked.
+    const poisonId = `subexp-invalid-uid-${Date.now()}-${'x'.repeat(140)}`;
+    const ref = adminDb.collection('subscriptions').doc(poisonId);
+    await ref.set({
+      userId: poisonId,
+      platform: 'manual',
+      status: 'active',
+      entitlement: 'member_monthly',
+      purchaseTokenHash: null,
+      expiresAt: Timestamp.fromDate(LAPSED),
+      updatedAt: Timestamp.fromDate(NOW),
+    });
+
+    try {
+      const result = await runSubscriptionExpirySweep(NOW);
+      expect(result.failedCount).toBeGreaterThan(0);
+      expect(result.expiredUids).not.toContain(poisonId);
+
+      // Left granting — untouched, so it is still a candidate next run.
+      const sub = (await ref.get()).data()!;
+      expect(sub.status).toBe('active');
+      expect(sub.entitlement).toBe('member_monthly');
+      // And emphatically not closed as an orphan.
+      expect(sub.status).not.toBe('expired');
+      // No audit stamp: the orphan test runs before recordRevocation, so a
+      // failure there writes nothing at all.
+      expect((await adminDb.collection('userLifecycle').doc(poisonId).get()).exists).toBe(false);
+    } finally {
+      // Do not leave a permanently-failing record in the shared emulator
+      // Firestore — every later run in every later file would re-fail it.
+      await ref.delete();
+    }
   });
 });
