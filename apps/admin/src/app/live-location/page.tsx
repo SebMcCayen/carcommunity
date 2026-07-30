@@ -1,5 +1,5 @@
-import { DEFAULT_FEATURE_FLAGS } from '@carcommunity/shared/feature-flags';
 import { LIVE_LOCATION_TTL_MINUTES_MAX } from '@carcommunity/shared/live-location';
+import { getFeatureFlagDefault } from '@/features/feature-flags';
 import { StatCard } from '@/components/ui/StatCard';
 import styles from '../page.module.css';
 
@@ -7,7 +7,9 @@ const placeholderSummary = {
   activeSessionCount: 0,
   expiredSessionCount: 0,
   operationalStatus: 'Safe default placeholder',
-  featureFlagStatus: DEFAULT_FEATURE_FLAGS.liveLocation ? 'Static default: enabled' : 'Static default: disabled',
+  featureFlagStatus: getFeatureFlagDefault('liveLocation')
+    ? 'Static default: enabled'
+    : 'Static default: disabled',
   supportActionStatus: 'Not enabled',
 };
 
