@@ -60,10 +60,19 @@ export function issueBudgetBucketId(now: Date): string {
  * Whether the bucket is already at/over the cap. `used` is the count of issues
  * ALREADY charged to this bucket, so the caller charging the (used + 1)-th issue
  * is allowed exactly while `used < cap`.
+ *
+ * A non-finite `used` counts as EXHAUSTED. This is the fail-closed half of the
+ * module contract, and a bare `used >= cap` gets it exactly backwards for `NaN`:
+ * `NaN >= cap` is `false`, so a bucket whose counter had somehow become `NaN`
+ * would read as "budget available", and `FieldValue.increment` keeps a non-finite
+ * value non-finite — so the limiter would be off for the rest of the hour, with
+ * unbounded creation against a PUBLIC repository. `Infinity` already reads as
+ * exhausted, but is handled by the same guard rather than by luck.
  */
 export function isIssueBudgetExhausted(
   used: number,
   cap: number = GITHUB_ISSUE_BUDGET_PER_HOUR,
 ): boolean {
+  if (!Number.isFinite(used)) return true;
   return used >= cap;
 }

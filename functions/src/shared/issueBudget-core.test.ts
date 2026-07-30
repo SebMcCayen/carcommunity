@@ -46,6 +46,18 @@ describe('isIssueBudgetExhausted', () => {
     expect(isIssueBudgetExhausted(2, 2)).toBe(true);
   });
 
+  it('FAILS CLOSED on a non-finite tally, which a bare `used >= cap` gets backwards', () => {
+    // `NaN >= cap` is false, so without the guard a bucket whose counter had
+    // become NaN would read as "budget available" — and FieldValue.increment
+    // keeps a non-finite value non-finite, so the limiter would stay off for the
+    // rest of the hour while issues are created against a PUBLIC repository.
+    expect(NaN >= GITHUB_ISSUE_BUDGET_PER_HOUR).toBe(false);
+    expect(isIssueBudgetExhausted(NaN)).toBe(true);
+    expect(isIssueBudgetExhausted(Number.POSITIVE_INFINITY)).toBe(true);
+    expect(isIssueBudgetExhausted(Number.NEGATIVE_INFINITY)).toBe(true);
+    expect(isIssueBudgetExhausted(NaN, 2)).toBe(true);
+  });
+
   it('exposes a stable collection name for the rules file', () => {
     expect(GITHUB_ISSUE_BUDGET_COLLECTION).toBe('githubIssueBudget');
   });

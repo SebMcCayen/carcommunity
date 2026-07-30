@@ -383,6 +383,30 @@ describe('global GitHub issue budget', () => {
     await expect(consumeGitHubIssueBudget('test.budget', nextHour)).resolves.toBe(true);
   });
 
+  it('REFUSES a bucket whose counter is not a usable number (fail closed)', async () => {
+    // The counter is backend-only (`allow read, write: if false`), so this is
+    // corruption rather than an attack path — but the limiter's whole contract is
+    // that it fails CLOSED, and `NaN >= cap` is false, so an unguarded read would
+    // treat a corrupt bucket as "budget available" for the rest of the hour and
+    // publish without a working limiter to a world-readable repository.
+    const pinned = new Date('2099-03-06T09:00:00.000Z');
+    const bucketRef = adminDb
+      .collection(GITHUB_ISSUE_BUDGET_COLLECTION)
+      .doc(issueBudgetBucketId(pinned));
+
+    await bucketRef.set({ bucketId: issueBudgetBucketId(pinned), count: Number.NaN });
+    await expect(consumeGitHubIssueBudget('test.corruptBucket', pinned)).resolves.toBe(false);
+
+    await bucketRef.set({ bucketId: issueBudgetBucketId(pinned), count: 'lots' });
+    await expect(consumeGitHubIssueBudget('test.corruptBucket', pinned)).resolves.toBe(false);
+
+    // A bucket document with no counter at all is NOT corrupt — it is a fresh
+    // bucket, and must still be chargeable.
+    await bucketRef.set({ bucketId: issueBudgetBucketId(pinned) });
+    await expect(consumeGitHubIssueBudget('test.corruptBucket', pinned)).resolves.toBe(true);
+    expect((await bucketRef.get()).data()?.count).toBe(1);
+  });
+
   it('blocks the GitHub create and leaves the claim retriable when exhausted', async () => {
     const pinned = new Date('2099-03-05T07:00:00.000Z');
     const bucketRef = adminDb

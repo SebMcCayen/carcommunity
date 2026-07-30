@@ -46,10 +46,21 @@ export async function consumeGitHubIssueBudget(
   try {
     return await db.runTransaction(async (tx) => {
       const snapshot = await tx.get(bucketRef);
-      const used =
-        snapshot.exists && typeof snapshot.data()?.count === 'number'
-          ? (snapshot.data()?.count as number)
-          : 0;
+      // Read the document ONCE, and accept only a FINITE number as a tally.
+      // `typeof x === 'number'` alone admits NaN/±Infinity, and a NaN tally reads
+      // as "budget available" forever (see isIssueBudgetExhausted) — which would
+      // turn a fail-closed limiter on a PUBLIC repo into no limiter at all.
+      // A present-but-unusable counter is REFUSED rather than reset to 0:
+      // resetting would make corrupting the counter a way to clear the limiter.
+      const stored = snapshot.exists ? snapshot.data()?.count : undefined;
+      if (stored !== undefined && (typeof stored !== 'number' || !Number.isFinite(stored))) {
+        logger.error('consumeGitHubIssueBudget: bucket counter is unusable, refusing', {
+          source,
+          bucketId,
+        });
+        return false;
+      }
+      const used = typeof stored === 'number' ? stored : 0;
 
       if (isIssueBudgetExhausted(used)) {
         return false;
