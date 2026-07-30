@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app
 
 import android.Manifest
-import android.app.Activity
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
@@ -338,6 +337,8 @@ import com.kungsbackacarcommunity.app.update.AppUpdateCheck
 import com.kungsbackacarcommunity.app.update.AppUpdateDecision
 import com.kungsbackacarcommunity.app.update.AppUpdateDialog
 import com.kungsbackacarcommunity.app.update.AppUpdateDismissalStore
+import com.kungsbackacarcommunity.app.update.AppUpdateFlowOutcome
+import com.kungsbackacarcommunity.app.update.AppUpdateFlowResult
 import com.kungsbackacarcommunity.app.update.PlayAppUpdateSource
 import com.kungsbackacarcommunity.app.update.PlayStoreLink
 import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
@@ -4167,21 +4168,36 @@ fun AuthenticatedApp(
                 val appUpdateDownloaded = stringResource(R.string.appUpdate_downloaded)
                 val appUpdateRestart = stringResource(R.string.appUpdate_restart)
 
-                // Play owns the consent UI once the flow starts; this only
-                // catches the FAILED result (neither OK nor CANCELED), where
-                // the member pressed Update and nothing happened — the one
-                // case that needs saying out loud. A cancel is silent: the
-                // suppression window was already recorded on the tap.
+                // THE ONE FAILURE PATH, shared by both ways Play can let the
+                // member down: a flow that never started, and a flow that
+                // started and came back failed. Both mean the same thing — the
+                // in-app route is out — so both hand off to the Play listing,
+                // which is the same update by a longer road, and only say
+                // something if even that has nowhere to go. Nothing is ever
+                // said while the listing is still openable: the message reads
+                // "try Google Play instead", so showing it *in place of*
+                // opening Play would be a dead end wearing the words of a
+                // fallback.
+                val appUpdateStoreFallback = {
+                    PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(appUpdateStoreUnavailable)
+                        }
+                    }
+                }
+
+                // Play owns the consent UI once the flow starts; this reads
+                // what it hands back. A decline is silent — it is an answer,
+                // not a failure, and the suppression window was already
+                // recorded on the tap — and only a genuine failure recovers.
                 val appUpdateFlowLauncher =
                     rememberLauncherForActivityResult(
                         ActivityResultContracts.StartIntentSenderForResult(),
                     ) { result ->
-                        if (result.resultCode != Activity.RESULT_OK &&
-                            result.resultCode != Activity.RESULT_CANCELED
+                        if (AppUpdateFlowResult.read(result.resultCode) ==
+                            AppUpdateFlowOutcome.FAILED
                         ) {
-                            scope.launch {
-                                snackbarHostState.showSnackbar(appUpdateStoreUnavailable)
-                            }
+                            appUpdateStoreFallback()
                         }
                     }
 
@@ -4241,7 +4257,9 @@ fun AuthenticatedApp(
                     if (snackbarResult == SnackbarResult.ActionPerformed &&
                         appUpdateSource?.completeUpdate() != true
                     ) {
-                        snackbarHostState.showSnackbar(appUpdateStoreUnavailable)
+                        // Same recovery again: Play could not install what it
+                        // downloaded, so the listing is the remaining route.
+                        appUpdateStoreFallback()
                     }
                 }
 
@@ -4259,16 +4277,10 @@ fun AuthenticatedApp(
                             val immediate = decision == AppUpdateDecision.IMMEDIATE
                             val started =
                                 appUpdateSource?.startFlow(appUpdateFlowLauncher, immediate) == true
-                            if (!started) {
-                                // Play could not take over. Rather than a dead
-                                // button, hand off to the store listing, which
-                                // is the same thing by a longer route.
-                                PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
-                                    scope.launch {
-                                        snackbarHostState.showSnackbar(appUpdateStoreUnavailable)
-                                    }
-                                }
-                            }
+                            // Play could not take over. Rather than a dead
+                            // button, the shared fallback hands off to the
+                            // store listing.
+                            if (!started) appUpdateStoreFallback()
                             // Handing over closes the dismissible prompt and
                             // starts the suppression window, so the member is
                             // not asked again the moment they come back. The
