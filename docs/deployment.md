@@ -82,7 +82,24 @@ delete `incidents-reportCleared`, `notifications-delete` and
 
 With the hook in place the build always runs first, so what the CLI analyses
 always matches `src/`. Keep `--non-interactive` on the deploy anyway: it is the
-second line of defence, and any deletion prompt now means a *real* deletion.
+second line of defence, and any deletion prompt now means a _real_ deletion.
+
+**Where the hook does and does not run.** `predeploy` is per-target: the Firebase
+CLI runs it for a bare `firebase deploy` and for `--only functions` /
+`--only functions:<group>`, and skips it for `--only hosting`,
+`--only firestore:*` and the other targets. That covers every path that can
+upload function code, and none of the paths that cannot. The command runs from
+the repo root with `RESOURCE_DIR` set to the absolute `functions/` directory, and
+a non-zero exit **aborts the deploy** — a build failure can no longer be walked
+past into an upload.
+
+The manual `pnpm --dir functions run build` before a hand-run deploy is now
+**redundant, not wrong**: the hook rebuilds regardless, so forgetting it is no
+longer the stale-`lib/` trap it was on 2026-07-29. Two requirements survive:
+`pnpm` must be on `PATH` with `functions/node_modules` installed (the hook fails
+loudly, and safely, if not), and `deploy-firebase-functions.yml` keeps its own
+explicit `Build` step so CI attributes a compile failure to that step rather than
+to the deploy.
 
 ## Cost Guardrails
 
@@ -102,7 +119,14 @@ ceiling from a tier in
 | `MAX_INSTANCES_SCHEDULED`      | 2   | Scheduled sweeps (one invocation per tick; bounds a retry storm)     |
 
 `functions/src/__tests__/max-instances-guard.test.ts` fails the unit suite if a
-new function omits a cap.
+new function omits a cap. The check is **structural, not textual**: it imports
+`functions/src/index.ts` and walks the exports the way `firebase deploy` does,
+reading the `__endpoint` deploy manifest `firebase-functions` attaches to every
+definition. Source formatting, import aliases, wrapper factories and trigger
+types the guard has never heard of are therefore all irrelevant — if the deploy
+would create the function, the guard sees it. What it still cannot see (console
+edits, a second functions codebase, `minInstances`/concurrency cost) is
+enumerated in the test's header comment.
 
 Caps bound throughput as well as cost: at the ceiling, Cloud Run queues and then
 sheds requests, and the client sees `resource-exhausted` or a timeout rather than
