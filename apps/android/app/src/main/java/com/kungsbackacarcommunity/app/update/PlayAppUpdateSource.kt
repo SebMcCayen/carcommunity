@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
+import androidx.annotation.VisibleForTesting
 import com.google.android.play.core.appupdate.AppUpdateInfo
 import com.google.android.play.core.appupdate.AppUpdateManager
 import com.google.android.play.core.appupdate.AppUpdateManagerFactory
@@ -160,7 +161,13 @@ class PlayAppUpdateSource private constructor(
                 null
             }
 
-        private fun updateState(availability: Int): PlayUpdateState =
+        /**
+         * Play's int codes → the model's enums. Internal rather than private
+         * so the fold can be tested against the REAL `UpdateAvailability` /
+         * `InstallStatus` constants instead of a restatement of them.
+         */
+        @VisibleForTesting
+        internal fun updateState(availability: Int): PlayUpdateState =
             when (availability) {
                 UpdateAvailability.UPDATE_AVAILABLE -> PlayUpdateState.AVAILABLE
                 UpdateAvailability.DEVELOPER_TRIGGERED_UPDATE_IN_PROGRESS ->
@@ -169,7 +176,8 @@ class PlayAppUpdateSource private constructor(
                 else -> PlayUpdateState.NOTHING
             }
 
-        private fun installState(status: Int): PlayInstallState =
+        @VisibleForTesting
+        internal fun installState(status: Int): PlayInstallState =
             when (status) {
                 InstallStatus.DOWNLOADED -> PlayInstallState.DOWNLOADED
                 InstallStatus.PENDING,

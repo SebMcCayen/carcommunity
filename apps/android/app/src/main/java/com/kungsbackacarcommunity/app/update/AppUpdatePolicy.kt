@@ -89,7 +89,9 @@ object AppUpdatePolicy {
 
         // A blocking flow that was interrupted must be finished; Play requires
         // it to be resumed, and a half-applied update is not a state to leave
-        // a user in. Not dismissible, so not throttled.
+        // a user in. Not dismissible, so not throttled. This holds while Play
+        // is still pending/downloading/installing the update — that is the
+        // normal shape of an interrupted blocking flow, not a reason to wait.
         if (availability.isImmediateInProgress) return AppUpdateDecision.IMMEDIATE
 
         // The deliberately-raised, default-inert escalation. Set on the Play
