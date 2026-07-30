@@ -58,14 +58,30 @@ that are **not suitable for young children**.
 - **Minimum age to use the App:** `[AGE FLOOR]` (recommended 15 or 16). See
   `app-content-checklist.md` for the rationale; the presence of user-to-user chat and
   precise real-time location sharing argues for a non-child audience.
-- During onboarding we record an **age confirmation** timestamp (`ageConfirmedAt`) together
-  with acceptance of the Terms and this Privacy Policy.
+- During onboarding we record a **driving-licence confirmation** timestamp
+  (`licenceConfirmedAt`) together with acceptance of the Terms and this Privacy Policy.
+  Onboarding **no longer collects a self-declared age confirmation**.
+- Accounts created before that change kept the older `ageConfirmedAt` field. It holds a
+  timestamp **only for members who actually confirmed the old 18+ wording**; on accounts
+  that were created but never finished the old onboarding it is empty, and on a few it is
+  missing altogether. Where a timestamp exists we keep it, unchanged, as the record of
+  what that member confirmed at the time: we never reinterpret it, never treat it as a
+  driving-licence confirmation, and never write a new one.
 - We do not knowingly collect data from children below our stated minimum age. If you
   believe a child has provided us personal data, contact us and we will delete it.
 
 > Human decision: set the minimum age. Note that under Swedish implementation of GDPR
 > Art. 8, the age of digital consent is **13**; however the product-risk profile
 > (location + open chat) supports a higher self-imposed floor.
+>
+> Human decision — **open**: the in-app self-declared age gate was replaced by a
+> driving-licence confirmation. There is now **no age question anywhere in onboarding**.
+> A Swedish category-B licence implies 18+, so the licence confirmation is an *indirect*
+> age signal at best, and it does not cover members who join without driving. Decide
+> whether to (a) rely on that indirect signal, (b) re-add an explicit age checkbox
+> alongside the licence one, or (c) state the floor in the Terms only — and make the
+> answer match `app-content-checklist.md` Section 4 and `docs/product-decisions.md`
+> ("Appen är 18+ i MVP").
 
 ---
 
@@ -80,7 +96,9 @@ actually stores.
 - **Optional phone number** — only if you provide it.
 - **Display name, profile photo (avatar), short bio** — your public profile.
 - **Role / membership status** (member, active, suspended flags).
-- **Consent timestamps** — age confirmation, Terms acceptance, Privacy Policy acceptance.
+- **Consent timestamps** — driving-licence confirmation, Terms acceptance, Privacy Policy
+  acceptance (plus a legacy age-confirmation timestamp, but only on those older accounts
+  that actually gave one before the licence confirmation replaced it — see Section 3).
 
 ### 4.2 Vehicles (Garage)
 - Vehicle **make, model, year, powertrain, engine description, free-text description**, and

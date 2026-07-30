@@ -60,23 +60,23 @@ See [ADR-001](../adr/001-firebase-platform.md) for the platform decision and [fi
 
 ## Prisma user data → Firestore user documents
 
-| Prisma field                       | Firestore path                                            | Notes                                 |
-| ---------------------------------- | --------------------------------------------------------- | ------------------------------------- |
-| `users.id` (UUID)                  | Firebase UID (replaces UUID)                              | Firebase UID is the new canonical key |
-| `users.displayName`                | `users/{uid}.displayName`                                 | Public                                |
-| `users.email`                      | `userPrivate/{uid}.email`                                 | Private; not identity key             |
-| `users.role`                       | `users/{uid}.role` + custom claim                         | Backend-managed only                  |
-| `users.status`                     | `users/{uid}.suspended` (boolean) + `users/{uid}.deleted` | Simplified from enum to boolean flags |
-| `users.subscriptionEntitlement`    | `users/{uid}.activeMember` (boolean) + custom claim       | Backend-managed only                  |
-| `users.onboardingCompletedAt`      | `users/{uid}.onboardingCompletedAt`                       | Timestamp                             |
-| `users.ageConfirmedAt`             | `userPrivate/{uid}.ageConfirmedAt`                        | Private                               |
-| `users.termsAcceptedAt`            | `userPrivate/{uid}.termsAcceptedAt`                       | Private                               |
-| `users.privacyPolicyAcceptedAt`    | `userPrivate/{uid}.privacyPolicyAcceptedAt`               | Private                               |
-| `users.anonymousPartnerStatsOptIn` | `userPrivate/{uid}.anonymousPartnerStatsOptIn`            | Private; default false                |
-| `users.lastActiveAt`               | `users/{uid}.lastActiveAt`                                | Semi-public                           |
-| `users.firebaseUid`                | Firebase UID directly                                     | No mapping needed                     |
-| `users.createdAt`                  | `users/{uid}.createdAt`                                   | Server timestamp                      |
-| `users.deletedAt`                  | `users/{uid}.deleted` (boolean)                           | Soft-delete becomes boolean flag      |
+| Prisma field                       | Firestore path                                            | Notes                                                                                                                                                    |
+| ---------------------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `users.id` (UUID)                  | Firebase UID (replaces UUID)                              | Firebase UID is the new canonical key                                                                                                                    |
+| `users.displayName`                | `users/{uid}.displayName`                                 | Public                                                                                                                                                   |
+| `users.email`                      | `userPrivate/{uid}.email`                                 | Private; not identity key                                                                                                                                |
+| `users.role`                       | `users/{uid}.role` + custom claim                         | Backend-managed only                                                                                                                                     |
+| `users.status`                     | `users/{uid}.suspended` (boolean) + `users/{uid}.deleted` | Simplified from enum to boolean flags                                                                                                                    |
+| `users.subscriptionEntitlement`    | `users/{uid}.activeMember` (boolean) + custom claim       | Backend-managed only                                                                                                                                     |
+| `users.onboardingCompletedAt`      | `users/{uid}.onboardingCompletedAt`                       | Timestamp                                                                                                                                                |
+| `users.ageConfirmedAt`             | `userPrivate/{uid}.ageConfirmedAt` (legacy)               | Private; retired — superseded by `userPrivate/{uid}.licenceConfirmedAt` (driving-licence consent), which is a different statement and is not back-filled |
+| `users.termsAcceptedAt`            | `userPrivate/{uid}.termsAcceptedAt`                       | Private                                                                                                                                                  |
+| `users.privacyPolicyAcceptedAt`    | `userPrivate/{uid}.privacyPolicyAcceptedAt`               | Private                                                                                                                                                  |
+| `users.anonymousPartnerStatsOptIn` | `userPrivate/{uid}.anonymousPartnerStatsOptIn`            | Private; default false                                                                                                                                   |
+| `users.lastActiveAt`               | `users/{uid}.lastActiveAt`                                | Semi-public                                                                                                                                              |
+| `users.firebaseUid`                | Firebase UID directly                                     | No mapping needed                                                                                                                                        |
+| `users.createdAt`                  | `users/{uid}.createdAt`                                   | Server timestamp                                                                                                                                         |
+| `users.deletedAt`                  | `users/{uid}.deleted` (boolean)                           | Soft-delete becomes boolean flag                                                                                                                         |
 
 **Read patterns:** User profile read by UID (point read, O(1), no index needed). User list for admin uses `users` collection with pagination (`startAfter`, `limit`).
 

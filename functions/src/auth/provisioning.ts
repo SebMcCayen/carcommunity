@@ -102,7 +102,26 @@ export function buildUserPrivateDocument(
   const email = input.email?.trim();
   return {
     ...(email ? { email } : {}),
-    ageConfirmedAt: null,
+    // Driving-licence consent. Replaces the legacy `ageConfirmedAt` (18+),
+    // which is deliberately NOT seeded here: a new member makes no age
+    // attestation, so a document provisioned from now on has no such field.
+    //
+    // Do NOT read the mere PRESENCE of `ageConfirmedAt` as evidence of an age
+    // attestation. This function DID seed `ageConfirmedAt: null` from the
+    // original Phase 7 shape until the licence wording landed, so a PRE-CHANGE
+    // document can be in any of three states:
+    //   - present and null        — provisioned, old onboarding never completed;
+    //   - present and a Timestamp — the owner really did confirm the 18+ wording
+    //                              (computeOnboardingWrites stamped it once);
+    //   - absent                  — rare: the document was created by some other
+    //                              backend merge-write before provisioning ran,
+    //                              and onUserCreate then only refreshed
+    //                              updatedAt rather than back-filling the shape.
+    // Only a NON-NULL value is a consent record. Nothing branches on this field:
+    // completeOnboarding echoes it back read-only (null for both the null and
+    // the absent case) and Security Rules exclude it via a write allowlist, so
+    // null-vs-absent has no behavioural consequence.
+    licenceConfirmedAt: null,
     termsAcceptedAt: null,
     privacyPolicyAcceptedAt: null,
     anonymousPartnerStatsOptIn: false,

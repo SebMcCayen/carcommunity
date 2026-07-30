@@ -23,6 +23,16 @@ import { logger } from 'firebase-functions';
 /** onboardingStatus per contracts/schemas/auth.schema.json. */
 export interface OnboardingStatusResponse {
   onboardingCompletedAt: string | null;
+  licenceConfirmedAt: string | null;
+  /**
+   * LEGACY consent record — the 18+ age confirmation this callable used to
+   * collect. Surfaced read-only so support can still see what a pre-change
+   * member actually agreed to. Never written by this callable any more, and
+   * non-null ONLY when that member really did confirm the old 18+ wording:
+   * toIso maps both the seeded `null` (pre-change account that never completed
+   * the old onboarding) and an absent field (every post-change account) to null,
+   * so a null here proves nothing beyond "no 18+ confirmation on record".
+   */
   ageConfirmedAt: string | null;
   termsAcceptedAt: string | null;
   privacyPolicyAcceptedAt: string | null;
@@ -90,7 +100,7 @@ export const completeOnboarding = onCall(
         input,
         {
           onboardingCompletedAt: profile?.onboardingCompletedAt ?? null,
-          ageConfirmedAt: priv?.ageConfirmedAt ?? null,
+          licenceConfirmedAt: priv?.licenceConfirmedAt ?? null,
           termsAcceptedAt: priv?.termsAcceptedAt ?? null,
           privacyPolicyAcceptedAt: priv?.privacyPolicyAcceptedAt ?? null,
         },
@@ -118,6 +128,7 @@ export const completeOnboarding = onCall(
 
     return {
       onboardingCompletedAt: toIso(profile?.onboardingCompletedAt),
+      licenceConfirmedAt: toIso(priv?.licenceConfirmedAt),
       ageConfirmedAt: toIso(priv?.ageConfirmedAt),
       termsAcceptedAt: toIso(priv?.termsAcceptedAt),
       privacyPolicyAcceptedAt: toIso(priv?.privacyPolicyAcceptedAt),

@@ -13,14 +13,14 @@ const SERVER_TIMESTAMP = Symbol('serverTimestamp');
 const serverTimestamp = () => SERVER_TIMESTAMP;
 
 const validInput = {
-  ageConfirmed: true,
+  licenceConfirmed: true,
   termsAccepted: true,
   privacyPolicyAccepted: true,
 } as const;
 
 const nothingSet: ExistingOnboardingState = {
   onboardingCompletedAt: null,
-  ageConfirmedAt: null,
+  licenceConfirmedAt: null,
   termsAcceptedAt: null,
   privacyPolicyAcceptedAt: null,
 };
@@ -36,7 +36,7 @@ describe('parseCompleteOnboardingInput', () => {
     expect(result).toStrictEqual({ ok: true, input: { ...validInput, displayName: 'Anna' } });
   });
 
-  it.each(['ageConfirmed', 'termsAccepted', 'privacyPolicyAccepted'])(
+  it.each(['licenceConfirmed', 'termsAccepted', 'privacyPolicyAccepted'])(
     'rejects when %s is missing',
     (field) => {
       const input: Record<string, unknown> = { ...validInput };
@@ -45,7 +45,7 @@ describe('parseCompleteOnboardingInput', () => {
     },
   );
 
-  it.each(['ageConfirmed', 'termsAccepted', 'privacyPolicyAccepted'])(
+  it.each(['licenceConfirmed', 'termsAccepted', 'privacyPolicyAccepted'])(
     'rejects when %s is false',
     (field) => {
       expect(parseCompleteOnboardingInput({ ...validInput, [field]: false }).ok).toBe(false);
@@ -85,7 +85,7 @@ describe('computeOnboardingWrites', () => {
     });
     expect(privateUpdate).toStrictEqual({
       updatedAt: SERVER_TIMESTAMP,
-      ageConfirmedAt: SERVER_TIMESTAMP,
+      licenceConfirmedAt: SERVER_TIMESTAMP,
       termsAcceptedAt: SERVER_TIMESTAMP,
       privacyPolicyAcceptedAt: SERVER_TIMESTAMP,
     });
@@ -94,7 +94,7 @@ describe('computeOnboardingWrites', () => {
   it('preserves already-recorded consent timestamps (idempotent repeat call)', () => {
     const existing: ExistingOnboardingState = {
       onboardingCompletedAt: 'existing-completed',
-      ageConfirmedAt: 'existing-age',
+      licenceConfirmedAt: 'existing-licence',
       termsAcceptedAt: 'existing-terms',
       privacyPolicyAcceptedAt: 'existing-privacy',
     };
@@ -110,7 +110,7 @@ describe('computeOnboardingWrites', () => {
   it('fills only the missing consent timestamps', () => {
     const existing: ExistingOnboardingState = {
       ...nothingSet,
-      ageConfirmedAt: 'existing-age',
+      licenceConfirmedAt: 'existing-licence',
     };
     const { privateUpdate } = computeOnboardingWrites(validInput, existing, serverTimestamp);
     expect(privateUpdate).toStrictEqual({

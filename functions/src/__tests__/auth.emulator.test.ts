@@ -90,7 +90,7 @@ async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
 }
 
 const validInput = {
-  ageConfirmed: true,
+  licenceConfirmed: true,
   termsAccepted: true,
   privacyPolicyAccepted: true,
 } as const;
@@ -121,7 +121,12 @@ describe('auth-onUserCreate trigger', () => {
       return snap.exists() ? snap.data() : undefined;
     });
     expect(priv.email).toBe(email);
-    expect(priv.ageConfirmedAt).toBeNull();
+    expect(priv.licenceConfirmedAt).toBeNull();
+    // The legacy 18+ consent field is NOT seeded on newly provisioned documents:
+    // a new member makes no age attestation, so it must be absent here. (It WAS
+    // seeded as null before the licence wording landed, which is why pre-change
+    // documents still carry it — see buildUserPrivateDocument.)
+    expect(priv.ageConfirmedAt).toBeUndefined();
     expect(priv.termsAcceptedAt).toBeNull();
     expect(priv.privacyPolicyAcceptedAt).toBeNull();
     expect(priv.anonymousPartnerStatsOptIn).toBe(false);
@@ -141,7 +146,7 @@ describe('auth-completeOnboarding callable', () => {
     const callable = httpsCallable(functions, CALLABLE_NAME);
 
     expect(await callableErrorCode(callable({}))).toBe('functions/invalid-argument');
-    expect(await callableErrorCode(callable({ ...validInput, ageConfirmed: false }))).toBe(
+    expect(await callableErrorCode(callable({ ...validInput, licenceConfirmed: false }))).toBe(
       'functions/invalid-argument',
     );
     expect(await callableErrorCode(callable({ ...validInput, role: 'admin' }))).toBe(
@@ -161,13 +166,16 @@ describe('auth-completeOnboarding callable', () => {
 
     for (const field of [
       'onboardingCompletedAt',
-      'ageConfirmedAt',
+      'licenceConfirmedAt',
       'termsAcceptedAt',
       'privacyPolicyAcceptedAt',
     ]) {
       expect(typeof status[field], `${field} should be an ISO string`).toBe('string');
       expect(Number.isNaN(Date.parse(status[field] as string))).toBe(false);
     }
+    // Legacy 18+ consent: surfaced read-only and always null for a member
+    // onboarded under the driving-licence wording.
+    expect(status.ageConfirmedAt).toBeNull();
 
     const profile = await pollUntil(async () => {
       const snap = await getDoc(doc(firestore, 'users', uid));
@@ -178,7 +186,9 @@ describe('auth-completeOnboarding callable', () => {
 
     const privSnap = await getDoc(doc(firestore, 'userPrivate', uid));
     expect(privSnap.exists()).toBe(true);
-    expect(privSnap.data()?.ageConfirmedAt).toBeTruthy();
+    expect(privSnap.data()?.licenceConfirmedAt).toBeTruthy();
+    // Never back-filled from the retired 18+ consent.
+    expect(privSnap.data()?.ageConfirmedAt).toBeUndefined();
   });
 
   it('is idempotent: repeat calls preserve the original consent timestamps', async () => {
@@ -192,7 +202,7 @@ describe('auth-completeOnboarding callable', () => {
     const second = (await callable(validInput)).data as Record<string, unknown>;
 
     expect(second.onboardingCompletedAt).toBe(first.onboardingCompletedAt);
-    expect(second.ageConfirmedAt).toBe(first.ageConfirmedAt);
+    expect(second.licenceConfirmedAt).toBe(first.licenceConfirmedAt);
     expect(second.termsAcceptedAt).toBe(first.termsAcceptedAt);
     expect(second.privacyPolicyAcceptedAt).toBe(first.privacyPolicyAcceptedAt);
   });

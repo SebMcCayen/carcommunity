@@ -6,6 +6,17 @@
  * original acceptance time for auditing/compliance), and onboarding is
  * complete when all three consents are recorded.
  *
+ * The driving-licence consent (`licenceConfirmed` → `licenceConfirmedAt`)
+ * REPLACED an earlier 18+ age consent (`ageConfirmed` → `ageConfirmedAt`).
+ * Those are different statements, so the legacy `ageConfirmedAt` field is NEVER
+ * read, copied or rewritten here — it is left exactly as found. Provisioning used
+ * to seed it as `null`, so on a pre-change document it may be present-and-null
+ * (old onboarding never completed), present-with-a-Timestamp (the owner really
+ * did confirm the 18+ wording) or absent; only a NON-NULL value is the historical
+ * record of an actual attestation. Members who onboarded under the old wording
+ * have no `licenceConfirmedAt` at all, so calling this again stamps one from the
+ * new wording without touching the old field. See buildUserPrivateDocument.
+ *
  * No Firebase Admin SDK imports — the server-timestamp sentinel is injected
  * so this module stays unit-testable without emulators.
  */
@@ -22,7 +33,7 @@ import { toSearchKey } from '../friends/friends-core';
 const completeOnboardingInputSchema = z
   .object({
     displayName: z.string().trim().min(1).max(DISPLAY_NAME_MAX_LENGTH).optional(),
-    ageConfirmed: z.literal(true),
+    licenceConfirmed: z.literal(true),
     termsAccepted: z.literal(true),
     privacyPolicyAccepted: z.literal(true),
   })
@@ -39,7 +50,7 @@ export function parseCompleteOnboardingInput(data: unknown): ParseResult {
     return {
       ok: false,
       message:
-        'Expected { ageConfirmed: true, termsAccepted: true, privacyPolicyAccepted: true, displayName?: string }.',
+        'Expected { licenceConfirmed: true, termsAccepted: true, privacyPolicyAccepted: true, displayName?: string }.',
     };
   }
   return { ok: true, input: result.data };
@@ -49,8 +60,8 @@ export function parseCompleteOnboardingInput(data: unknown): ParseResult {
 export interface ExistingOnboardingState {
   /** `users/{uid}.onboardingCompletedAt` — null/undefined when not complete. */
   onboardingCompletedAt: unknown;
-  /** `userPrivate/{uid}.ageConfirmedAt` */
-  ageConfirmedAt: unknown;
+  /** `userPrivate/{uid}.licenceConfirmedAt` */
+  licenceConfirmedAt: unknown;
   /** `userPrivate/{uid}.termsAcceptedAt` */
   termsAcceptedAt: unknown;
   /** `userPrivate/{uid}.privacyPolicyAcceptedAt` */
@@ -98,8 +109,8 @@ export function computeOnboardingWrites(
   const privateUpdate: Record<string, unknown> = {
     updatedAt: serverTimestamp(),
   };
-  if (!isSet(existing.ageConfirmedAt)) {
-    privateUpdate.ageConfirmedAt = serverTimestamp();
+  if (!isSet(existing.licenceConfirmedAt)) {
+    privateUpdate.licenceConfirmedAt = serverTimestamp();
   }
   if (!isSet(existing.termsAcceptedAt)) {
     privateUpdate.termsAcceptedAt = serverTimestamp();

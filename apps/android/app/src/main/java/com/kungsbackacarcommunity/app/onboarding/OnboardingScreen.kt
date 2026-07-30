@@ -44,7 +44,8 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 /**
  * Onboarding consent gate (Phase 12 slice 2).
  *
- * Collects the three mandatory consents (age 18+, terms, privacy policy) and a
+ * Collects the three mandatory consents (driving licence, terms, privacy
+ * policy) and a
  * REQUIRED public display name, then calls auth.completeOnboarding via
  * [onSubmit]. The display name is what other members see; the user's Google
  * account name is never prefilled or shown. Continue is enabled only when all
@@ -62,14 +63,14 @@ fun OnboardingScreen(
     onSubmit: (displayName: String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var age by remember { mutableStateOf(false) }
+    var licence by remember { mutableStateOf(false) }
     var terms by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf(false) }
     // Starts empty on purpose — never prefilled with the Google account name.
     var displayName by remember { mutableStateOf("") }
 
     val submitting = status == OnboardingStatus.Submitting
-    val canSubmit = OnboardingForm.canSubmit(age, terms, privacy, displayName) && !submitting
+    val canSubmit = OnboardingForm.canSubmit(licence, terms, privacy, displayName) && !submitting
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
@@ -92,7 +93,7 @@ fun OnboardingScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            ConsentRow(checked = age, onCheckedChange = { age = it }, label = stringResource(R.string.onboarding_ageConfirm))
+            ConsentRow(checked = licence, onCheckedChange = { licence = it }, label = stringResource(R.string.onboarding_licenceConfirm))
 
             ConsentRow(checked = terms, onCheckedChange = { terms = it }, label = stringResource(R.string.onboarding_termsAccept))
             ConsentLink(text = stringResource(R.string.onboarding_termsLink), url = stringResource(R.string.url_terms))

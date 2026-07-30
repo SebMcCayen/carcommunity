@@ -136,7 +136,7 @@ describe('buildUserPrivateDocument', () => {
     );
     expect(doc).toStrictEqual({
       email: 'anna@example.com',
-      ageConfirmedAt: null,
+      licenceConfirmedAt: null,
       termsAcceptedAt: null,
       privacyPolicyAcceptedAt: null,
       anonymousPartnerStatsOptIn: false,

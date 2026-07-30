@@ -135,7 +135,7 @@
   "onboarding": {
     "title": "Welcome",
     "subtitle": "Please confirm before continuing.",
-    "ageConfirm": "I confirm that I am 18 years of age or older.",
+    "licenceConfirm": "I confirm that I hold a valid driving licence for the vehicle I drive.",
     "termsAccept": "I accept the terms.",
     "privacyAccept": "I have read the privacy policy.",
     "displayNameLabel": "Display name",
@@ -159,7 +159,7 @@
     "step2Title": "The map is your home base",
     "step2Body": "Start from the map to see what's happening around you, share your live location with friends, and roll out together in convoys.",
     "step3Title": "Unlock more with membership",
-    "step3Body": "A membership unlocks the full experience — including seeing other members' live locations, joining convoys and member-only events.",
+    "step3Body": "A membership gives you access to more features in the app.",
     "seeMembership": "See membership",
     "step4Title": "Make it yours",
     "step4Body": "Finish setting up your profile so others recognise you, and add your first car to your garage.",

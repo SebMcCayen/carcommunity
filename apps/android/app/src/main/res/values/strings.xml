@@ -124,7 +124,7 @@
     <string name="liveLocation_sessionBarSpeedUnknown">aktuell hastighet är okänd</string>
     <string name="onboarding_title">Välkommen</string>
     <string name="onboarding_subtitle">Bekräfta innan du fortsätter.</string>
-    <string name="onboarding_ageConfirm">Bekräfta att du är 18 år eller äldre.</string>
+    <string name="onboarding_licenceConfirm">Jag bekräftar att jag har giltigt körkort för det fordon jag kör.</string>
     <string name="onboarding_termsAccept">Jag accepterar villkoren.</string>
     <string name="onboarding_privacyAccept">Jag har tagit del av integritetspolicyn.</string>
     <string name="onboarding_displayNameLabel">Visningsnamn</string>
@@ -146,7 +146,7 @@
     <string name="welcome_step2Title">Kartan är din utgångspunkt</string>
     <string name="welcome_step2Body">Utgå från kartan för att se vad som händer runt omkring dig, dela din liveposition med vänner och köra tillsammans i konvojer.</string>
     <string name="welcome_step3Title">Lås upp mer med medlemskap</string>
-    <string name="welcome_step3Body">Ett medlemskap låser upp hela upplevelsen – inklusive att se andra medlemmars livepositioner, gå med i konvojer och medlemsexklusiva evenemang.</string>
+    <string name="welcome_step3Body">Ett medlemskap ger dig tillgång till fler funktioner i appen.</string>
     <string name="welcome_seeMembership">Se medlemskap</string>
     <string name="welcome_step4Title">Gör den till din</string>
     <string name="welcome_step4Body">Slutför din profil så att andra känner igen dig, och lägg till din första bil i garaget.</string>

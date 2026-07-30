@@ -33,12 +33,20 @@
       "description": "Onboarding completion state. All timestamps are backend-written; null means the step has not been completed.",
       "properties": {
         "onboardingCompletedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "ageConfirmedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "licenceConfirmedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "When the member confirmed they hold a valid driving licence for the vehicle they drive."
+        },
+        "ageConfirmedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "LEGACY, read-only: when the member confirmed the earlier 18+ age wording. Superseded by licenceConfirmedAt — a different statement, so it is never migrated or rewritten. Non-null ONLY for a pre-change member who actually gave that confirmation; null for every member onboarded after the change AND for pre-change accounts that never completed the old onboarding (the stored field was seeded as null, and an absent field is also reported as null)."
+        },
         "termsAcceptedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "privacyPolicyAcceptedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
       },
       "required": [
         "onboardingCompletedAt",
+        "licenceConfirmedAt",
         "ageConfirmedAt",
         "termsAcceptedAt",
         "privacyPolicyAcceptedAt"

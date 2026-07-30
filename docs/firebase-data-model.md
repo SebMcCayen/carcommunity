@@ -73,7 +73,8 @@ Document ID: Firebase UID.
 | `email`                      | `string?`    | Contact channel, not identity key                                      |
 | `phone`                      | `string?`    | Optional                                                               |
 | `notificationPreferences`    | `map?`       | Per-category `{ inApp?, push? }`; essential categories enforced at delivery |
-| `ageConfirmedAt`             | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
+| `licenceConfirmedAt`         | `Timestamp?` | Consent audit record (holds a valid driving licence for the vehicle they drive) — written by `auth.completeOnboarding` only |
+| `ageConfirmedAt`             | `Timestamp?` | **Legacy** — the retired 18+ confirmation. Not seeded on new documents, but it WAS seeded as `null` on every document provisioned before the licence wording landed, so a pre-change document may have it null (old onboarding never completed), set (the owner did confirm the 18+ wording) or absent. **Only a non-null value is a consent record.** Kept untouched, never rewritten into a licence confirmation; nothing branches on it |
 | `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
 | `anonymousPartnerStatsOptIn` | `boolean`    | Privacy setting; defaults to `false` (explicit opt-in); owner-editable |
