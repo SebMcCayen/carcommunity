@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.friends
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
@@ -21,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -31,6 +34,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,10 +51,6 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
 import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
-import com.kungsbackacarcommunity.app.usersearch.MemberSearchField
-import com.kungsbackacarcommunity.app.usersearch.MemberSearchResultRow
-import com.kungsbackacarcommunity.app.usersearch.UserSearchState
-import com.kungsbackacarcommunity.app.usersearch.visibleResults
 
 /**
  * The Friends surface: add-by-nickname (with an ambiguity picker), incoming and
@@ -61,14 +61,9 @@ import com.kungsbackacarcommunity.app.usersearch.visibleResults
  * Each friend row's "Message" button opens the 1:1 DM thread with that friend
  * via [onMessageFriend] (the conversation is created on the first message).
  *
- * SEARCH: above the add-by-nickname form sits the live member typeahead
- * ([searchQuery] / [searchState], driven by
- * com.kungsbackacarcommunity.app.usersearch). It answers the question the
- * add-by-nickname field cannot — "who IS on here whose name starts like this?" —
- * because sending a request needs a nickname you already know, whereas the
- * search shows you the candidates as you type. Its rows carry no actions; they
- * open the member's profile via [onOpenMemberProfile], which is where adding,
- * messaging and blocking live.
+ * The established list is sorted client-side by [friendSort]; the control lives
+ * above the list ([FriendSortChips]) and never triggers a backend round-trip —
+ * every friend row already carries its `friendsSince` timestamp.
  */
 @Composable
 fun FriendsScreen(
@@ -76,10 +71,6 @@ fun FriendsScreen(
     addState: AddFriendState,
     actionError: FriendActionError?,
     busyRows: Set<String>,
-    searchQuery: String,
-    searchState: UserSearchState?,
-    onSearchQueryChange: (String) -> Unit,
-    onOpenMemberProfile: (String) -> Unit,
     onSend: (String) -> Unit,
     onChooseCandidate: (String) -> Unit,
     onDismissAdd: () -> Unit,
@@ -93,6 +84,11 @@ fun FriendsScreen(
 ) {
     var nickname by remember { mutableStateOf("") }
     var removeTarget by remember { mutableStateOf<FriendSummary?>(null) }
+    // Client-side ordering of the established list. rememberSaveable (matching the
+    // History list's sort in DrivesScreen) so the choice survives config changes
+    // and recomposition for the session. Defaults to EARLIEST_ADDED, which is the
+    // order friend-list already returns, so the list never reorders on first load.
+    var friendSort by rememberSaveable { mutableStateOf(FriendSort.EARLIEST_ADDED) }
 
     // Durable list: a LazyColumn so only visible rows compose. Static sections
     // (title, add-friend, headers, banners) are `item {}` blocks; the request and
@@ -105,42 +101,6 @@ fun FriendsScreen(
         ) {
             item(key = "title") {
                 AeroPageTitle(stringResource(R.string.shell_friendsTitle))
-            }
-
-            // A null state means no search backend is wired (a config-less
-            // build): the field is omitted entirely rather than rendered inert.
-            // A search box that accepts typing and can never answer is worse than
-            // no search box — it reads as "nobody matches" for every query.
-            if (searchState != null) {
-                item(key = "member-search") {
-                    MemberSearchField(
-                        query = searchQuery,
-                        onQueryChange = onSearchQueryChange,
-                        state = searchState,
-                    )
-                }
-            }
-
-            // Suggestion rows are LazyColumn items rather than a Column inside
-            // the search card, so a full page of matches composes lazily and each
-            // row keeps a stable key across keystrokes.
-            //
-            // Rendered for Searching TOO, from its carried `previous` list — that
-            // is the whole reason the coordinator carries one. Dropping the rows
-            // the moment the next keystroke lands would blank the list on every
-            // character and yank a row out from under a finger already moving to
-            // tap it; the field's own spinner is what signals the refresh.
-            val suggestions = searchState?.visibleResults().orEmpty()
-            if (suggestions.isNotEmpty()) {
-                item(key = "member-search-header") {
-                    SectionHeader(stringResource(R.string.userSearch_resultsTitle))
-                }
-                items(suggestions, key = { "member-search-${it.uid}" }) { member ->
-                    MemberSearchResultRow(
-                        member = member,
-                        onOpenProfile = { onOpenMemberProfile(member.uid) },
-                    )
-                }
             }
 
             item(key = "add-friend") {
@@ -220,7 +180,20 @@ fun FriendsScreen(
                             )
                         }
                     } else {
-                        items(status.friends, key = { "friend-${it.uid}" }) { friend ->
+                        // The sort control only earns its space once there is more
+                        // than one friend to order.
+                        if (status.friends.size > 1) {
+                            item(key = "friends-sort") {
+                                FriendSortChips(
+                                    selected = friendSort,
+                                    onSelect = { friendSort = it },
+                                )
+                            }
+                        }
+                        // Pure, client-side ordering over the already-loaded list —
+                        // no backend round-trip (every row carries `friendsSince`).
+                        val sortedFriends = sortFriends(status.friends, friendSort)
+                        items(sortedFriends, key = { "friend-${it.uid}" }) { friend ->
                             FriendRow(
                                 friend = friend,
                                 working = friend.uid in busyRows,
@@ -248,9 +221,13 @@ fun FriendsScreen(
 
     val target = removeTarget
     if (target != null) {
+        // Falls back to the neutral "Member" label when the friend has no
+        // display name, so the unfriend prompt never reads "Unfriend ?".
+        val targetName = target.displayName?.takeIf { it.isNotBlank() }
+            ?: stringResource(R.string.friends_unknownMember)
         AlertDialog(
             onDismissRequest = { removeTarget = null },
-            title = { Text(stringResource(R.string.friends_removeConfirmTitle)) },
+            title = { Text(stringResource(R.string.friends_removeConfirmTitle, targetName)) },
             text = { Text(stringResource(R.string.friends_removeConfirmBody)) },
             confirmButton = {
                 TextButton(
@@ -539,6 +516,41 @@ private fun InfoNoticeCard(text: String) {
         }
     }
 }
+
+/**
+ * The friends-list sort control: a label plus a single-select row of
+ * [FilterChip]s, one per [FriendSort]. Horizontally scrollable so the chips
+ * never wrap or clip on a narrow screen. Exactly one chip is always selected.
+ */
+@Composable
+private fun FriendSortChips(
+    selected: FriendSort,
+    onSelect: (FriendSort) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        SectionHeader(stringResource(R.string.friends_sortLabel))
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            FriendSort.entries.forEach { option ->
+                FilterChip(
+                    selected = option == selected,
+                    onClick = { onSelect(option) },
+                    label = { Text(stringResource(option.labelRes())) },
+                )
+            }
+        }
+    }
+}
+
+@StringRes
+private fun FriendSort.labelRes(): Int =
+    when (this) {
+        FriendSort.NAME -> R.string.friends_sortAlphabetical
+        FriendSort.RECENTLY_ADDED -> R.string.friends_sortRecentlyAdded
+        FriendSort.EARLIEST_ADDED -> R.string.friends_sortEarliestAdded
+    }
 
 @Composable
 private fun SectionHeader(text: String) {
