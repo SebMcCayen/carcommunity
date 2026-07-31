@@ -5487,12 +5487,6 @@ private fun RouteHost(
                         // Guarded: only navigate when the profile repo is wired.
                         if (memberProfileRepository != null) onOpenMemberProfile(friend.uid)
                     },
-                    onOpenMemberProfile = { uid ->
-                        // A member-search suggestion opens that member's profile,
-                        // which is where every action on a person lives. Guarded
-                        // identically to the friend-row path above.
-                        if (memberProfileRepository != null) onOpenMemberProfile(uid)
-                    },
                 )
             } else {
                 LoadingScreen()
