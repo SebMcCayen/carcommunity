@@ -236,7 +236,6 @@
   },
   "profile": {
     "title": "Profil",
-    "badges": "Utmärkelser",
     "openSettings": "Öppna inställningar",
     "openAbout": "Öppna om appen",
     "points": "Poäng",
@@ -902,12 +901,7 @@
   },
   "badges": {
     "screenTitle": "Utmärkelser",
-    "loading": "Laddar utmärkelser...",
-    "error": "Kunde inte hämta utmärkelser. Försök igen.",
     "retry": "Försök igen",
-    "empty": "Du har inga utmärkelser ännu.",
-    "emptyHint": "Fortsätt bidra positivt i communityn.",
-    "awardedOn": "Tilldelad",
     "noticeTitle": "Ny utmärkelse",
     "noticeBodyPrefix": "Du har fått utmärkelsen",
     "noticeDismiss": "OK",

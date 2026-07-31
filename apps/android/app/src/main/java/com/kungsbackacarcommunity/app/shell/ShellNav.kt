@@ -66,6 +66,17 @@ enum class ShellRoute {
     Chat,
     /** The chat hub (Community / Convoys / Friends + Notifications), opened from the map chat bubble. */
     ChatHub,
+    /**
+     * Retired: the flat "Awards" list. The profile screen's own badge wall shows
+     * strictly more (every rung of every ladder plus the standalone milestones,
+     * earned and unearned, with unlock dates), so the profile-menu entry that led
+     * here was removed and nothing in the UI navigates to this route any more.
+     * The constant is retained ONLY for backward-compatible state restore:
+     * `rememberSaveable` persists `ShellRoute` by name, so an older build could
+     * have saved `route = Badges`; dropping the constant would throw during
+     * restore. The route host in AuthenticatedApp handles it with a
+     * migration-safe branch that returns to the home hub. Do not reuse.
+     */
     Badges,
     Blocked,
     Points,

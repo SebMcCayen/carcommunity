@@ -32,9 +32,9 @@ data class HubEntry(
  * whatever language the user is actually seeing.
  *
  * The two locales therefore order DIFFERENTLY, which is correct: e.g. Social's
- * entries sort Billboards → Crown Hunt → Events → Friends → Notifications →
- * Partners in English, but Anslagstavlor → Aviseringar → Event → Kronjakt →
- * Partners → Vänner in Swedish.
+ * entries sort Billboards → Crown Hunt → Events → Partners in English, but
+ * Anslagstavlor → Event → Kronjakt → Partners in Swedish (Swedish "Event"
+ * collates before "Kronjakt", English "Crown Hunt" before "Events").
  *
  * Uses [Collator] rather than a plain string sort because Kotlin's natural
  * ordering is by UTF-16 code unit, which mis-sorts Swedish: å/ä/ö sort AFTER z

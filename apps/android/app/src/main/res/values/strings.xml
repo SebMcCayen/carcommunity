@@ -213,7 +213,6 @@
     <string name="subscription_errorPurchase">Köpet kunde inte slutföras.</string>
     <string name="subscription_errorVerification">Vi kunde inte verifiera ditt köp. Det har ännu inte debiterats för medlemskap.</string>
     <string name="profile_title">Profil</string>
-    <string name="profile_badges">Utmärkelser</string>
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
     <string name="profile_points">Poäng</string>
@@ -841,12 +840,7 @@
     <string name="garage_legacySavedValue">Sparat tidigare: %1$s</string>
     <string name="garage_legacyReselectHint">Välj i listan för att räkna med bilen i communityts statistik. Din sparade text behålls till dess.</string>
     <string name="badges_screenTitle">Utmärkelser</string>
-    <string name="badges_loading">Laddar utmärkelser...</string>
-    <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>
     <string name="badges_retry">Försök igen</string>
-    <string name="badges_empty">Du har inga utmärkelser ännu.</string>
-    <string name="badges_emptyHint">Fortsätt bidra positivt i communityn.</string>
-    <string name="badges_awardedOn">Tilldelad</string>
     <string name="badges_noticeTitle">Ny utmärkelse</string>
     <string name="badges_noticeBodyPrefix">Du har fått utmärkelsen</string>
     <string name="badges_noticeDismiss">OK</string>

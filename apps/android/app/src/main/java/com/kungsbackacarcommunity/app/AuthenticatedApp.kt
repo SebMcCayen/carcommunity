@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.Message
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.Campaign
@@ -34,7 +33,6 @@ import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
-import androidx.compose.material.icons.filled.MilitaryTech
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stars
@@ -94,7 +92,6 @@ import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgeCounters
 import com.kungsbackacarcommunity.app.badges.BadgeShowcase
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
-import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.badges.BadgesState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
@@ -3523,9 +3520,8 @@ fun AuthenticatedApp(
                                     moreMenuEntries =
                                         profileMenuEntries(
                                             profileEditCoordinator = profileEditCoordinator,
-                                            dmRepository = dmRepository,
+                                            friendsRepository = friendsRepository,
                                             pointsRepository = pointsRepository,
-                                            badgesRepository = badgesRepository,
                                             partnerApplicationCoordinator =
                                                 partnerApplicationCoordinator,
                                             // Top-level entries from the map-home
@@ -3962,15 +3958,14 @@ fun AuthenticatedApp(
                                                 entries =
                                                     sortedHubEntriesByLabel(
                                                         listOf(
-                                                            HubEntry(
-                                                                stringResource(R.string.shell_friendsTitle),
-                                                                Icons.Filled.Groups,
-                                                                if (friendsRepository != null) {
-                                                                    { openRootRoute(ShellRoute.Friends) }
-                                                                } else {
-                                                                    null
-                                                                },
-                                                            ),
+                                                            // Friends intentionally removed from
+                                                            // the Social menu: it MOVED to the
+                                                            // map-home profile menu (see
+                                                            // profileMenuEntries), which is now
+                                                            // its only menu entry point. The
+                                                            // route, the screen and the
+                                                            // PushTarget.FRIENDS tap are all
+                                                            // unchanged.
                                                             // Convoys intentionally removed from
                                                             // the Social menu (Issue 11): the
                                                             // convoy feature stays reachable via
@@ -5406,16 +5401,15 @@ private fun RouteHost(
                 convoyLink = convoyNotificationLink,
             )
 
-        ShellRoute.Badges ->
-            if (badgesRepository != null) {
-                BadgesRoute(
-                    repository = badgesRepository,
-                    uid = uid,
-                    onBack = onClose,
-                )
-            } else {
-                LoadingScreen()
-            }
+        // Migration-safe: `Badges` is the retired flat awards list. Its profile-menu
+        // entry is gone (the profile's own badge wall is a strict superset), so
+        // nothing in the UI navigates here; the constant is kept only so older
+        // persisted state (route = Badges) still restores to a valid constant —
+        // rememberSaveable persists ShellRoute BY NAME. Same treatment as `More`.
+        ShellRoute.Badges -> {
+            LaunchedEffect(Unit) { onClose() }
+            LoadingScreen()
+        }
 
         ShellRoute.Blocked ->
             if (blockingRepository != null) {
@@ -5617,9 +5611,8 @@ private fun LoadingScreen() {
 @Composable
 private fun profileMenuEntries(
     profileEditCoordinator: ProfileEditCoordinator?,
-    dmRepository: DmRepository?,
+    friendsRepository: FriendsRepository?,
     pointsRepository: PointsRepository?,
-    badgesRepository: BadgesRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     onOpenRoute: (ShellRoute) -> Unit,
     onSignOut: () -> Unit,
@@ -5634,11 +5627,26 @@ private fun profileMenuEntries(
                 null
             },
         ),
+        // "Messages" was removed from this menu: the map-home chat bubble is an
+        // UNCONDITIONAL right-side control (MapControlSet.rightSideStack) and the
+        // hub it opens renders the very same DM inbox (ConversationListRoute, on
+        // its "Friends" tab) behind the very same `dmRepository != null` gate
+        // this entry used — so the row was a second door onto a screen that is
+        // one tap away on the map. Every other way in survives untouched:
+        // ShellRoute.Conversations is still routed and is still where a
+        // PushTarget.DM tap with no counterpart lands; a DM push WITH a
+        // counterpart still opens the thread; and the Friends screen's "Message"
+        // button and a member profile still open a thread via openChat.
+        // Friends moved here from the Social menu: managing who you are
+        // connected to is an account concern, not a browse-the-community one.
+        // This is now the ONLY menu route to the friends list — the chat hub's
+        // "Friends" TAB is the DM inbox, a different screen — and a
+        // PushTarget.FRIENDS tap still opens it directly (see above).
         HubEntry(
-            stringResource(R.string.dm_title),
-            Icons.AutoMirrored.Filled.Message,
-            if (dmRepository != null) {
-                { onOpenRoute(ShellRoute.Conversations) }
+            stringResource(R.string.shell_friendsTitle),
+            Icons.Filled.Groups,
+            if (friendsRepository != null) {
+                { onOpenRoute(ShellRoute.Friends) }
             } else {
                 null
             },
@@ -5652,15 +5660,12 @@ private fun profileMenuEntries(
                 null
             },
         ),
-        HubEntry(
-            stringResource(R.string.profile_badges),
-            Icons.Filled.MilitaryTech,
-            if (badgesRepository != null) {
-                { onOpenRoute(ShellRoute.Badges) }
-            } else {
-                null
-            },
-        ),
+        // "Awards" (the flat BadgesScreen list) was removed from this menu: the
+        // profile screen's own ProfileBadgesSection is a strict superset of it —
+        // every rung of every ladder plus the standalone milestones, earned lit
+        // and unearned greyed, with the unlock date in each medallion's detail —
+        // so the entry was a second, poorer door onto the same trophies.
+        // ShellRoute.Badges is retired with it (see the route host).
         HubEntry(
             stringResource(R.string.shell_morePartnerApplication),
             Icons.Filled.BusinessCenter,
