@@ -415,6 +415,10 @@ input[type='checkbox']:disabled,
 input[type='radio']:disabled {
   background-color: transparent;
   border: none;
+  /* The checkbox/radio base rule sets cursor: pointer at equal specificity to
+     the generic input:disabled rule, so source order would win and a disabled
+     control would show a pointer. Restore the not-allowed affordance here. */
+  cursor: not-allowed;
 }
 
 /* File, range and colour controls likewise keep native chrome. */

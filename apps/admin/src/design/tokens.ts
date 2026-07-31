@@ -133,4 +133,5 @@ export const darkTheme = {
   statusSuccess: '#5fd08a', // 8.86:1 vs surface
   statusError: '#ff7b74', // 6.79:1 vs surface
   statusWarning: '#f5b93a', // 9.68:1 vs surface
+  statusInfo: '#6fd3e8', // 9.90:1 vs surface — mirrors --status-info (dark)
 } as const;
