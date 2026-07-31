@@ -45,6 +45,7 @@ import {
   ApiError,
   PARTNER_CATEGORIES,
 } from '@/features/partners';
+import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 import { translate } from '@/i18n';
 import { formatDateOnly } from '@/lib/format';
 
@@ -224,34 +225,20 @@ const CompanyForm = ({ initial, onSave, onCancel, isSaving, saveError }: Company
         </label>
       </div>
 
-      <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('partners.formLatitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-90"
-            max="90"
-            value={form.latitude}
-            onChange={(e) => set('latitude', e.target.value)}
-            required
-          />
-        </label>
-        <label className={styles.label}>
-          {t('partners.formLongitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-180"
-            max="180"
-            value={form.longitude}
-            onChange={(e) => set('longitude', e.target.value)}
-            required
-          />
-        </label>
-      </div>
+      <MapLocationPicker
+        latitude={form.latitude}
+        longitude={form.longitude}
+        onChange={(latitude, longitude) =>
+          setForm((prev) => ({ ...prev, latitude, longitude }))
+        }
+        labelLat={t('partners.formLatitudeLabel')}
+        labelLng={t('partners.formLongitudeLabel')}
+        helpText={t('map.dragHint')}
+        unavailableText={t('map.unavailable')}
+        required
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+      />
 
       <div className={styles.formRow}>
         <label className={styles.label}>

@@ -39,6 +39,7 @@ import {
   adminUpdateCrownHuntPoint,
 } from '@/features/crown-hunt';
 import { DateTimeField } from '@/components/ui/DateTimeField';
+import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 import { translate } from '@/i18n';
 import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
@@ -160,34 +161,21 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         </label>
       </div>
 
-      <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('crownHunt.formLatitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-90"
-            max="90"
-            value={form.latitude}
-            onChange={(e) => set('latitude', e.target.value)}
-            required
-          />
-        </label>
-        <label className={styles.label}>
-          {t('crownHunt.formLongitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-180"
-            max="180"
-            value={form.longitude}
-            onChange={(e) => set('longitude', e.target.value)}
-            required
-          />
-        </label>
-      </div>
+      <MapLocationPicker
+        latitude={form.latitude}
+        longitude={form.longitude}
+        onChange={(latitude, longitude) =>
+          setForm((prev) => ({ ...prev, latitude, longitude }))
+        }
+        labelLat={t('crownHunt.formLatitudeLabel')}
+        labelLng={t('crownHunt.formLongitudeLabel')}
+        helpText={t('map.dragHint')}
+        unavailableText={t('map.unavailable')}
+        radiusMeters={Number.parseInt(form.geofenceRadiusMeters, 10) || undefined}
+        required
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+      />
 
       <div className={styles.formRowGrid}>
         <label className={styles.label}>

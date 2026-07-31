@@ -5,6 +5,10 @@
     "settingsTodoNote": "TODO: Feature flags and settings must be backend-managed. This page is display-only until backend RBAC is implemented. Never toggle feature flags via client-side state alone.",
     "userDetailTodoNote": "TODO: Replace route param with real user lookup from the backend API. Backend must verify admin role before serving user data. Never expose personal data beyond what is necessary."
   },
+  "map": {
+    "dragHint": "Drag the pin or click the map to set the location. You can also type exact coordinates below.",
+    "unavailable": "Map unavailable — no map token is configured. Enter the coordinates manually below."
+  },
   "announcements": {
     "title": "Announcements",
     "subtitle": "Create and manage announcements shown to members in the app. Retracting (deactivating) is the primary way to hide an announcement.",

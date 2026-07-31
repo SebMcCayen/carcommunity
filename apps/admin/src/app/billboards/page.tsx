@@ -32,6 +32,7 @@ import {
   ApiError,
 } from '@/features/digital-billboards';
 import { DateTimeField } from '@/components/ui/DateTimeField';
+import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 import { translate } from '@/i18n';
 import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
@@ -218,34 +219,20 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
         </label>
       </div>
 
-      <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('billboards.formLatitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-90"
-            max="90"
-            value={form.latitude}
-            onChange={(event) => set('latitude', event.target.value)}
-            required
-          />
-        </label>
-        <label className={styles.label}>
-          {t('billboards.formLongitudeLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            step="any"
-            min="-180"
-            max="180"
-            value={form.longitude}
-            onChange={(event) => set('longitude', event.target.value)}
-            required
-          />
-        </label>
-      </div>
+      <MapLocationPicker
+        latitude={form.latitude}
+        longitude={form.longitude}
+        onChange={(latitude, longitude) =>
+          setForm((prev) => ({ ...prev, latitude, longitude }))
+        }
+        labelLat={t('billboards.formLatitudeLabel')}
+        labelLng={t('billboards.formLongitudeLabel')}
+        helpText={t('map.dragHint')}
+        unavailableText={t('map.unavailable')}
+        required
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+      />
 
       <div className={styles.formRowGrid}>
         <DateTimeField

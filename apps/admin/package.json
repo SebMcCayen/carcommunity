@@ -13,6 +13,7 @@
   "dependencies": {
     "@carcommunity/shared": "^0.1.0",
     "firebase": "^12.16.0",
+    "mapbox-gl": "^3.0.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.2"
