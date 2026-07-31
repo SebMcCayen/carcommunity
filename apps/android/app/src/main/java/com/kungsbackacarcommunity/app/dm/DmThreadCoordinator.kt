@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.dm
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -58,6 +61,11 @@ class DmThreadCoordinator(
     private val conversationId: String,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val idGenerator: () -> String = { UUID.randomUUID().toString() },
+    /**
+     * Crash telemetry for the UNEXPECTED-throw branch of [send]. Defaults to the
+     * no-op so unit tests need no Firebase.
+     */
+    private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
 ) {
     private val pending = MutableStateFlow<List<DmMessage>>(emptyList())
 
@@ -146,8 +154,16 @@ class DmThreadCoordinator(
             // Leaving the thread cancels the send; the bubble is dropped with the
             // coordinator. Don't mark it failed (it may well have been delivered).
             throw cancellation
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
             // An unexpected throw is transient/unknown — a retryable Generic.
+            // "Unexpected" is the point: every KNOWN failure arrives as a mapped
+            // DmSendResult.Failed and is handled above, so reaching here means a
+            // path nobody modelled threw. The member only sees a generic retry,
+            // so record the real throwable + stack trace as a non-fatal.
+            //
+            // PII: only the stable feature path leaves the device — never the
+            // message body, the conversation id, or either uid.
+            crashTelemetry.recordNonFatal(CrashFeatures.DM_SEND, failure)
             markFailed(clientId, DmSendError.Generic)
         }
     }

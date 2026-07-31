@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -55,6 +58,11 @@ class ChannelChatCoordinator(
     private val marker: (suspend () -> Unit)? = null,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val idGenerator: () -> String = { UUID.randomUUID().toString() },
+    /**
+     * Crash telemetry for the UNEXPECTED-throw branch of [send]. Defaults to the
+     * no-op so unit tests need no Firebase.
+     */
+    private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
 ) {
     private val pending = MutableStateFlow<List<ChannelMessage>>(emptyList())
 
@@ -185,8 +193,14 @@ class ChannelChatCoordinator(
             // Leaving the channel cancels the send; the bubble is dropped with the
             // coordinator. Don't mark it failed (it may well have been delivered).
             throw cancellation
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
             // An unexpected throw is transient/unknown — a retryable Generic.
+            // Same reasoning as DmThreadCoordinator.send: every KNOWN failure
+            // arrives as a mapped ChannelSendResult.Failed, so reaching here is
+            // an unmodelled path. Record the stack trace as a non-fatal; only
+            // the stable feature path leaves the device, never the message body,
+            // channel id, or any uid.
+            crashTelemetry.recordNonFatal(CrashFeatures.CHANNEL_SEND, failure)
             markFailed(clientId, ChannelSendError.Generic)
         }
     }

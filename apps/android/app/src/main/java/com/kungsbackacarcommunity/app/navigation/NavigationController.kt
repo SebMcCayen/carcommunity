@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.navigation
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -52,6 +55,8 @@ data class NavUiState(
  * @param savedStore persistence for the user's saved places (Home/Work/
  *   favourites); seeded into the initial state and re-read after every edit.
  *   Local and synchronous, so saving never blocks or needs the network.
+ * @param crashTelemetry sink for the swallowed origin-resolution failure below.
+ *   Defaults to the no-op so unit tests need no Firebase.
  */
 class NavigationController(
     private val client: MapboxSearchClient,
@@ -59,6 +64,7 @@ class NavigationController(
     private val scope: CoroutineScope,
     private val recentStore: RecentSearchesStore = InMemoryRecentSearchesStore(),
     private val savedStore: SavedPlacesStore = InMemorySavedPlacesStore(),
+    private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
 ) {
     private val stateFlow =
         MutableStateFlow(
@@ -169,8 +175,14 @@ class NavigationController(
                             originProvider()?.also { cachedOrigin = it }
                         } catch (e: CancellationException) {
                             throw e // never swallow cancellation while fetching the origin
-                        } catch (_: Exception) {
-                            null // real failure resolving the origin → NoOrigin below
+                        } catch (failure: Exception) {
+                            // Real failure resolving the origin → NoOrigin below.
+                            // The user just sees "we don't know where you are",
+                            // which reads identically to a denied permission, so
+                            // a genuine location-provider fault is otherwise
+                            // indistinguishable from normal. Record it.
+                            crashTelemetry.recordNonFatal(CrashFeatures.NAV_ORIGIN, failure)
+                            null
                         }
                 // The origin fetch may block non-cooperatively; bail if the job was
                 // cancelled (e.g. the user cleared the destination) before writing.

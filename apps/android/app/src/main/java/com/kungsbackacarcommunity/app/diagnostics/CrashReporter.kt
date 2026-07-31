@@ -9,6 +9,28 @@ package com.kungsbackacarcommunity.app.diagnostics
  * callable flushes — but the report is enqueued synchronously on the crashing
  * thread first. The handler never throws: any failure while building or
  * reporting is swallowed so the original crash surfaces unchanged.
+ *
+ * ## Coexistence with Crashlytics
+ *
+ * This is NOT the app's only crash handler, and is not meant to be. The
+ * Crashlytics SDK installs its OWN [Thread.UncaughtExceptionHandler] when
+ * `FirebaseApp` initializes; `KccApplication` deliberately touches Crashlytics
+ * first and calls [install] afterwards, so one uncaught exception runs:
+ *
+ *   this reporter (PII-safe report, no stack trace)
+ *     -> the Crashlytics handler (full stack trace + breadcrumbs + custom keys)
+ *       -> the platform's original handler (the process dies as usual)
+ *
+ * [delegate] is what makes that work, and the `finally` guarantees the chain
+ * continues even when the diagnostics report itself throws — so this reporter
+ * can never be the reason Crashlytics misses a crash.
+ *
+ * The idempotency guard in [install] is deliberately `previous is CrashReporter`
+ * and NOT "a handler is already installed": by the time [install] runs, the
+ * Crashlytics handler IS the default, and treating that as "already installed"
+ * would silently disable the diagnostics report.
+ *
+ * See [CrashTelemetry] for what each of the two pipelines is for.
  */
 class CrashReporter internal constructor(
     private val reporter: DiagnosticsReporter,

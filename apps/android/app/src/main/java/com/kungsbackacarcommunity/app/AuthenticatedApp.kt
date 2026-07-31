@@ -98,7 +98,12 @@ import com.kungsbackacarcommunity.app.badges.BadgesRoute
 import com.kungsbackacarcommunity.app.badges.BadgesState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
 import com.kungsbackacarcommunity.app.blocking.BlockingRoute
+import com.kungsbackacarcommunity.app.diagnostics.CrashEvents
+import com.kungsbackacarcommunity.app.diagnostics.CrashKeys
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetryText
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
+import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
 import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
 import com.kungsbackacarcommunity.app.drives.DriveStatsCalculator
@@ -659,6 +664,29 @@ fun AuthenticatedApp(
                 if (selectedTab == ShellTab.Create) selectedTab = ShellTab.Map
             }
 
+            // Crash-report context: THE single navigation hook for Crashlytics.
+            //
+            // `selectedTab` + `route` are the whole of "which screen is the user
+            // on" in this shell, and both live here, so one effect keyed on the
+            // pair covers every tab switch, sub-route open, push deep-link and
+            // Back press — including the ones that never touch a callback. That
+            // is deliberately the ONLY navigation breadcrumb: the log is bounded
+            // (~64 entries) and a per-interaction crumb would evict the entries
+            // that actually explain a crash.
+            //
+            // PII: both values are enum NAMES from the shell's fixed route
+            // vocabulary (ShellTab / ShellRoute). No uid, no target member, no
+            // conversation id — ShellRoute.Chat says "a DM thread was open", and
+            // that is all it is allowed to say.
+            val crashTelemetry = rememberCrashTelemetry()
+            LaunchedEffect(crashTelemetry, selectedTab, route) {
+                crashTelemetry?.run {
+                    setKey(CrashKeys.SHELL_TAB, selectedTab.name)
+                    setKey(CrashKeys.SHELL_ROUTE, route?.name ?: CrashKeys.NONE)
+                    log(CrashEvents.NAV, CrashTelemetryText.navDetail(selectedTab.name, route?.name))
+                }
+            }
+
             // Tapping the bottom-nav "Create" tab opens the Map and raises this
             // transparent chooser: "Single session" (start a solo live-share
             // drive) vs "Convoy" (deep-link into the create-convoy flow). Create
@@ -834,8 +862,10 @@ fun AuthenticatedApp(
             // (uid + last position); the live stream comes from each uid's
             // per-uid RTDB observeLatest below, exactly like the convoy layer.
             val nearbyLiveController =
-                remember(liveLocationRepository) {
-                    liveLocationRepository?.let { NearbyLiveController(it) }
+                remember(liveLocationRepository, crashTelemetry) {
+                    liveLocationRepository?.let {
+                        NearbyLiveController(it, crashTelemetry ?: NoopCrashTelemetry)
+                    }
                 }
             val incidentsFlow =
                 remember(incidentController) {

@@ -28,6 +28,17 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.KCC">
 
+        <!-- Crashlytics data collection. Substituted per build type from
+             app/build.gradle.kts: "true" for release, "false" for debug, so a
+             developer's own crashes never pollute the production crash-free-users
+             metric. Declaring it here — rather than only calling the runtime
+             setter — is what covers a crash that happens BEFORE
+             KccApplication#onCreate gets to run. KccApplication then sets the
+             same value explicitly, from CrashTelemetryPolicy. -->
+        <meta-data
+            android:name="firebase_crashlytics_collection_enabled"
+            android:value="${crashlyticsCollectionEnabled}" />
+
         <!-- FCM display defaults: branded white-crown small icon (Android tints
              it) + Crown Gold accent. Consulted by messages that omit an explicit
              icon; the in-app builder (KccMessagingService) sets the same

@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.RecordingCrashTelemetry
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -73,6 +75,49 @@ class NearbyLiveControllerTest {
             propagated = true
         }
         assertTrue(propagated)
+    }
+
+    @Test
+    fun `a failed fetch is recorded as a non-fatal`() = runTest {
+        // The list is deliberately kept, so the failure is otherwise invisible;
+        // the non-fatal is the only trace it leaves.
+        val boom = RuntimeException("network")
+        val repo = FakeRepo(failWith = boom)
+        val telemetry = RecordingCrashTelemetry()
+        val controller = NearbyLiveController(repo, telemetry)
+
+        controller.refresh(LatLng(longitude = 18.0, latitude = 59.0))
+
+        assertEquals(1, telemetry.nonFatals.size)
+        assertEquals(CrashFeatures.LIVE_NEARBY_REFRESH, telemetry.nonFatals.single().first)
+        assertEquals(boom, telemetry.nonFatals.single().second)
+    }
+
+    @Test
+    fun `a cancelled fetch is NOT recorded as a non-fatal`() = runTest {
+        // Cancellation is cooperative shutdown, not a fault; recording it would
+        // fill the console with noise every time a screen is left.
+        val telemetry = RecordingCrashTelemetry()
+        val controller = NearbyLiveController(FakeRepo(failWith = CancellationException("cancelled")), telemetry)
+
+        try {
+            controller.refresh(LatLng(longitude = 18.0, latitude = 59.0))
+        } catch (_: CancellationException) {
+            // expected
+        }
+
+        assertTrue(telemetry.nonFatals.isEmpty())
+    }
+
+    @Test
+    fun `a successful fetch records nothing`() = runTest {
+        val telemetry = RecordingCrashTelemetry()
+        val controller =
+            NearbyLiveController(FakeRepo(result = listOf(NearbyLiveSession("u1", 59.0, 18.0, "A"))), telemetry)
+
+        controller.refresh(LatLng(longitude = 18.0, latitude = 59.0))
+
+        assertTrue(telemetry.nonFatals.isEmpty())
     }
 
     @Test

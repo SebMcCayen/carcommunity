@@ -154,6 +154,28 @@ fun javaStringLiteral(value: String): String =
 // the file is present so that CI validation builds work without secrets.
 if (file("google-services.json").exists()) {
     apply(plugin = libs.plugins.google.services.get().pluginId)
+    // Firebase Crashlytics BUILD plugin. Applied AFTER google-services and under
+    // the same guard, deliberately:
+    //
+    //  - It resolves the Firebase App ID from the resources the google-services
+    //    plugin generates from google-services.json, so applying it without that
+    //    file (CI validation builds, fresh clones) has nothing to point at.
+    //  - Its only job is BUILD-time symbol work: uploading the R8/ProGuard
+    //    mapping file so release stack traces de-obfuscate, and stamping a build
+    //    id into the APK so Crashlytics can match a crash to that mapping.
+    //
+    // The RUNTIME `firebase-crashlytics` dependency below is NOT guarded — it is
+    // on every variant so KccApplication compiles everywhere; without Firebase
+    // configuration it simply never initializes (same shape as appcheck-debug).
+    //
+    // FORWARD-LOOKING: `isMinifyEnabled = false` on release today, so there is no
+    // mapping file to upload and this plugin is INERT beyond stamping the build
+    // id. It is wired now so that flipping minification on (a separate, riskier
+    // change) does not silently produce unreadable obfuscated stack traces. The
+    // plugin's defaults are relied on deliberately — mapping upload on, native
+    // symbol upload off (native symbols already ship via the release
+    // `ndk { debugSymbolLevel = "FULL" }` block, which Play symbolicates).
+    apply(plugin = libs.plugins.firebase.crashlytics.get().pluginId)
 }
 
 android {
@@ -199,6 +221,24 @@ android {
         // APK/AAB can never carry a debug token even on a machine that has one
         // configured. KccApplication reads it behind BuildConfig.DEBUG.
         buildConfigField("String", "APP_CHECK_DEBUG_TOKEN", "\"\"")
+
+        // Crashlytics data collection, as a MANIFEST default (the debug build
+        // type below flips it off). This is the value that applies from process
+        // start — before Application#onCreate has had a chance to run — so a
+        // crash during startup on a developer's debug build is not reported.
+        //
+        // KccApplication ALSO sets this explicitly at runtime, from the same
+        // unit-tested decision (CrashTelemetryPolicy.collectionEnabled). The two
+        // always agree; the manifest covers "before onCreate", the runtime call
+        // is the readable, testable statement of intent.
+        //
+        // A placeholder (not a literal) because the value differs per build type
+        // and manifest placeholders are substituted before aapt2 compiles the
+        // manifest, so `true`/`false` is still typed as a boolean — which is what
+        // Firebase's meta-data reader requires. A `@bool/...` resource reference
+        // would NOT work: the metadata Bundle would hold a resource id, and
+        // getBoolean() on it silently reads false.
+        manifestPlaceholders["crashlyticsCollectionEnabled"] = "true"
     }
 
     signingConfigs {
@@ -228,6 +268,19 @@ android {
                 "APP_CHECK_DEBUG_TOKEN",
                 javaStringLiteral(appCheckDebugToken),
             )
+
+            // Crashlytics OFF for debug builds. A developer's own crashes —
+            // deliberate ones included — would otherwise land in the same
+            // dashboard as members' crashes and drag the crash-free-users metric
+            // down, which is the one number that has to stay trustworthy.
+            // Mirrored at runtime by CrashTelemetryPolicy.collectionEnabled.
+            // To exercise the integration locally, flipping THIS to "true" is not
+            // enough on its own: KccApplication calls the runtime setter with
+            // BuildConfig.DEBUG afterwards, and the runtime override takes
+            // precedence over the manifest. Flip this AND pass
+            // isDebugBuild = false to FirebaseCrashTelemetry.install, for one
+            // build; commit neither. See docs/crashlytics.md.
+            manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
         }
         release {
             if (hasReleaseSigning) {
@@ -307,6 +360,12 @@ dependencies {
     // Available to all variants so KccApplication compiles for release; the
     // debug provider is only INSTALLED when BuildConfig.DEBUG is true.
     implementation(libs.firebase.appcheck.debug)
+    // Crashlytics. ADDITIVE to diagnostics/CrashReporter.kt — it is what carries
+    // the full stack trace (and breadcrumbs, custom keys, crash-free-users) that
+    // the home-grown, privacy-reviewed diagnostics report deliberately omits.
+    // Unguarded like the rest: collection is switched off for debug builds, and
+    // a build without google-services.json never initializes Firebase at all.
+    implementation(libs.firebase.crashlytics)
 
     // Mapbox Maps
     implementation(libs.mapbox.maps)

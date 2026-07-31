@@ -14,6 +14,8 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsResult
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
@@ -73,8 +75,9 @@ fun CommunityChannelRoute(
     val blockStatus by
         (blockingCoordinator?.actionStatus ?: flowOf(BlockActionStatus.Idle))
             .collectAsState(initial = BlockActionStatus.Idle)
+    val crashTelemetry = rememberCrashTelemetry()
     val coordinator =
-        remember(repository, uid) {
+        remember(repository, uid, crashTelemetry) {
             ChannelChatCoordinator(
                 // The clientId makes the optimistic send idempotent + reconcilable
                 // (backend uses it as the message doc id).
@@ -84,6 +87,7 @@ fun CommunityChannelRoute(
                 pager = { before -> repository.loadOlder(before) },
                 selfUid = uid,
                 marker = { repository.markRead() },
+                crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
 

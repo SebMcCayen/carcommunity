@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.live
 
+import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
+import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
+import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +27,11 @@ import kotlinx.coroutines.flow.asStateFlow
  */
 class NearbyLiveController(
     private val repository: LiveLocationRepository,
+    /**
+     * Crash telemetry for the swallowed fetch failure in [refresh]. Defaults to
+     * the no-op so unit tests (and any config-less build) need no Firebase.
+     */
+    private val crashTelemetry: CrashTelemetry = NoopCrashTelemetry,
 ) {
     private val nearbyFlow = MutableStateFlow<List<NearbyLiveSession>>(emptyList())
 
@@ -41,7 +49,14 @@ class NearbyLiveController(
                 repository.listNearby(center, radiusMeters)
             } catch (cancellation: CancellationException) {
                 throw cancellation
-            } catch (_: Throwable) {
+            } catch (failure: Throwable) {
+                // Keeping the previous list is the right UX, but it makes the
+                // failure INVISIBLE: the map quietly shows stale sharers forever
+                // and nothing throws, logs or reaches a crash handler. Record it
+                // as a non-fatal so a systematic `live.listNearby` breakage is
+                // visible with its stack trace instead of being inferred from
+                // "the nearby layer feels wrong".
+                crashTelemetry.recordNonFatal(CrashFeatures.LIVE_NEARBY_REFRESH, failure)
                 return
             }
         nearbyFlow.value = fetched

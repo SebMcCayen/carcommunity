@@ -161,8 +161,17 @@ Two account-wide answers (set once in the form):
   messages; email excluded by default. **Shared:** No. **Optional.** **Purpose:** App
   functionality; analytics/diagnostics. Encrypted: Yes. Deletion: short-lived.
 - **Source:** `functions/src/diagnostics/*`, `packages/shared/src/diagnostics.ts`.
-- **Firebase Crashlytics:** not detected in the Android dependency set — do **not** declare
-  it unless added. Verify before submission.
+- **Firebase Crashlytics:** **now IS in the Android dependency set** (`firebase-crashlytics`,
+  via the Firebase BoM — see `docs/crashlytics.md`). Collection is ON for release builds and
+  OFF for debug. It uploads full stack traces plus a fixed, app-generated set of custom keys
+  and breadcrumbs (build/version, feature flags, screen name, whether live sharing is on);
+  `setUserId` is never called, and no uid, email, display name, coordinates, message content
+  or registration number is attached by us. The SDK itself additionally collects a Crashlytics
+  Installation UUID, the Firebase installation ID and device state, retained by Google for
+  90 days.
+  **This supersedes the earlier "not detected — do not declare" note.** The declaration
+  wording is a human decision — see "Human decisions before submitting" item 2 — and touches
+  the Crash logs / Diagnostics rows above and the Device-or-other-IDs row below.
 
 ---
 
@@ -221,8 +230,10 @@ in by filling the field.
 ### Human decisions before submitting
 1. **Processor vs. sharing** characterization for Google/Firebase and **Mapbox** (drives
    the "Shared" column). Default here: processors → not shared, except Play Billing payment.
-2. Whether any analytics SDK (e.g. Crashlytics/GA) will be added before release — if so,
-   add the corresponding rows.
+2. **Crashlytics is now shipped** (Android, release builds only — `docs/crashlytics.md`).
+   Confirm that the Crash logs / Diagnostics and Device-or-other-IDs rows, and the
+   Google-as-processor characterization in item 1, are worded to cover it; and decide whether
+   any further analytics SDK (e.g. GA4) will be added before release.
 3. Confirm no in-app camera capture (Photos row assumes library upload; camera permission is
    not declared).
 4. Confirm the retention/deletion nuance for chat text authored under a display name.

@@ -10,6 +10,7 @@ import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.kungsbackacarcommunity.app.appcheck.AppCheckDebugSecret
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
+import com.kungsbackacarcommunity.app.diagnostics.FirebaseCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.media.KccImageLoader
 import com.kungsbackacarcommunity.app.push.PushChannels
@@ -39,6 +40,12 @@ import com.kungsbackacarcommunity.app.push.PushChannels
  * Phase 12 slice 22: once Firebase is available, install the diagnostics
  * crash reporter so uncaught exceptions submit a PII-safe report via the
  * public `diagnostics-submitReport` callable before the default handler runs.
+ *
+ * Alongside it — not instead of it — Firebase Crashlytics is installed, which
+ * carries the full stack trace, breadcrumbs and custom keys the diagnostics
+ * report deliberately omits. Both handlers run on one crash; see the ordering
+ * note in [onCreate] and the contrast in
+ * [com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry].
  *
  * Also the install point for the app's single Coil [ImageLoader]
  * ([KccImageLoader]): implementing [ImageLoaderFactory] is how Coil's singleton
@@ -85,6 +92,30 @@ class KccApplication : Application(), ImageLoaderFactory {
                 PlayIntegrityAppCheckProviderFactory.getInstance(),
             )
         }
+
+        // Crashlytics. ORDER IS LOAD-BEARING and must stay above
+        // CrashReporter.install below.
+        //
+        // The Crashlytics SDK installs its OWN Thread.UncaughtExceptionHandler,
+        // capturing whatever was default at that moment and delegating to it
+        // after it has recorded the crash. Touching it here (install() calls
+        // FirebaseCrashlytics.getInstance()) puts that handler in place first;
+        // CrashReporter.install() then chains itself IN FRONT of it and
+        // delegates onward. So one uncaught exception runs:
+        //
+        //   CrashReporter (PII-safe diagnostics report, no stack trace)
+        //     -> Crashlytics handler (full stack trace + breadcrumbs + keys)
+        //       -> the platform's original handler (the process dies as usual)
+        //
+        // Both paths fire, neither masks the other, and the crash still surfaces
+        // unchanged. Installing in the opposite order would also chain, but the
+        // diagnostics report — the one that must be ENQUEUED on the dying thread
+        // — would run after Crashlytics' several-second persist step.
+        //
+        // install() also applies the debug/release collection decision and
+        // attaches the static custom keys, so the first crash of the process
+        // already carries build + feature-flag context.
+        FirebaseCrashTelemetry.install(this)
 
         FirebaseDiagnosticsReporter.createIfAvailable(this)?.let { reporter ->
             CrashReporter.install(
