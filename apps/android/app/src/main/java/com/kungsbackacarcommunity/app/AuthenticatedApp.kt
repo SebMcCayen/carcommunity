@@ -5159,7 +5159,7 @@ private fun RouteHost(
             // the shared fold; the profile summary reads only its all-time fields,
             // but the value is kept correct rather than faked. Computed on each
             // composition (deliberately NOT cached in an unkeyed remember, matching
-            // the shared stats fold) so it re-evaluates on the next recomposition after a
+            // DriveStatsScreen) so it re-evaluates on the next recomposition after a
             // month rollover rather than staying pinned to the month the Profile
             // route first composed in. The value is deterministic within a month, so
             // the keyed statsSummary fold below still only recomputes when the drives,
