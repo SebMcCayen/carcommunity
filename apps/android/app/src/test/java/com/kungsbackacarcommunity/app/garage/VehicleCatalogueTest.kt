@@ -44,6 +44,17 @@ class VehicleCatalogueTest {
     }
 
     @Test
+    fun `Toyota GT86 and NIO ET5 Touring are selectable`() {
+        // Regression guard for the two models added in catalogue v1.1.0. GT86
+        // (first-gen, 2012-2020) is a distinct entry from the existing GR86.
+        assertEquals("GT86", VehicleCatalogue.modelName("toyota", "gt86"))
+        assertEquals("GR86", VehicleCatalogue.modelName("toyota", "gr86"))
+        // NIO already existed as a manufacturer; ET5 Touring is a new model on it.
+        assertNotNull(VehicleCatalogue.make("nio"))
+        assertEquals("ET5 Touring", VehicleCatalogue.modelName("nio", "et5-touring"))
+    }
+
+    @Test
     fun `lookups resolve display names`() {
         assertEquals("Volvo", VehicleCatalogue.makeName("volvo"))
         assertEquals("240", VehicleCatalogue.modelName("volvo", "240"))

@@ -1,6 +1,6 @@
 {
   "$schema": "./vehicle-catalogue.schema.json",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "otherId": "other",
   "minModelYear": 1900,
   "maxModelYearOffset": 1,
@@ -127,6 +127,7 @@
         { "id": "gr-supra", "name": "GR Supra" },
         { "id": "gr-yaris", "name": "GR Yaris" },
         { "id": "gr86", "name": "GR86" },
+        { "id": "gt86", "name": "GT86" },
         { "id": "highlander", "name": "Highlander" },
         { "id": "hilux", "name": "Hilux" },
         { "id": "iq", "name": "iQ" },
@@ -1695,6 +1696,7 @@
         { "id": "el8", "name": "EL8" },
         { "id": "es8", "name": "ES8" },
         { "id": "et5", "name": "ET5" },
+        { "id": "et5-touring", "name": "ET5 Touring" },
         { "id": "et7", "name": "ET7" }
       ]
     },

@@ -101,6 +101,16 @@ describe('vehicle catalogue mirrors the contract', () => {
     expect(isKnownModelId('saab', '9-3')).toBe(true);
   });
 
+  it('offers the Toyota GT86 and the NIO ET5 Touring as selectable models', () => {
+    // Regression guard for the two brand/model pairs added in catalogue v1.1.0.
+    // GT86 (first-gen, 2012–2020) is a distinct entry from the existing GR86.
+    expect(isKnownModelId('toyota', 'gt86')).toBe(true);
+    expect(isKnownModelId('toyota', 'gr86')).toBe(true);
+    // NIO already existed as a manufacturer; ET5 Touring is a new model on it.
+    expect(isKnownMakeId('nio')).toBe(true);
+    expect(isKnownModelId('nio', 'et5-touring')).toBe(true);
+  });
+
   it('never lists the other-bucket id as a real entry', () => {
     for (const make of catalogueManufacturers()) {
       expect(make.id).not.toBe(OTHER_ID);
