@@ -513,6 +513,23 @@ describe('events chat auto-moderation (onMessageReportCreate + allowChatMessage)
     expect(state.hiddenAt).not.toBeNull();
   });
 
+  it('a further report on an already auto_hidden message no-ops (no re-hide, count unchanged)', async () => {
+    // r1 already reported spam; a NEW reason is a new report doc but the message
+    // is already terminal, so the trigger's cheap state pre-check must early-out
+    // BEFORE the distinct-reporter aggregation — observable as an unchanged
+    // reportCount and no state change.
+    await signInAs(r1);
+    await call('events-reportChatMessage', {
+      eventId,
+      messageId: autoHideMessageId,
+      reason: 'harassment',
+    });
+    await sleep(3000);
+    const after = await messageState();
+    expect(after.moderationState).toBe('auto_hidden');
+    expect(after.reportCount).toBe(3);
+  });
+
   it('rejects a non-admin caller of allowChatMessage', async () => {
     await signInAs(memberGoing);
     expect(

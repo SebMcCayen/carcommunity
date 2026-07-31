@@ -39,8 +39,9 @@
           "description": "When the auto-hide trigger hid the message; null unless it was ever auto_hidden."
         },
         "reportCount": {
-          "type": "number",
-          "description": "Distinct-reporter tally recorded at auto-hide time; 0 until auto-hidden."
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct-reporter tally recorded at auto-hide time; 0 until auto-hidden. Always a non-negative integer (a Set size)."
         },
         "allowedAt": {
           "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",

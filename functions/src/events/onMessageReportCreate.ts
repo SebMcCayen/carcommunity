@@ -55,6 +55,19 @@ export const onMessageReportCreate = onDocumentCreated(
     }
 
     const eventRef = db.collection('events').doc(eventId);
+    const messageRef = eventRef.collection('messages').doc(messageId);
+
+    // Cheap pre-check (ONE document read) before the distinct-reporter
+    // aggregation: only a still-`visible` message can be auto-hidden. Once a
+    // message is terminal (auto_hidden/allowed/removed) or gone, every further
+    // report would otherwise pay for an ever-growing "all reports for this
+    // message" scan just to no-op — wasteful and report-spam-abusable. This is
+    // ONLY an optimization; correctness comes from the transactional re-check
+    // below (the state can still change between here and the transaction).
+    const preSnap = await messageRef.get();
+    if (!preSnap.exists || preSnap.data()?.moderationState !== 'visible') {
+      return;
+    }
 
     // Distinct-reporter count for this message. Single-equality query → auto
     // single-field index, no composite index required.
@@ -69,7 +82,6 @@ export const onMessageReportCreate = onDocumentCreated(
       return;
     }
 
-    const messageRef = eventRef.collection('messages').doc(messageId);
     try {
       await db.runTransaction(async (tx) => {
         const snap = await tx.get(messageRef);
