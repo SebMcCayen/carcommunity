@@ -31,7 +31,9 @@ import {
   adminUpdateBillboard,
   ApiError,
 } from '@/features/digital-billboards';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { translate } from '@/i18n';
+import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
 
 import styles from '../kronjakt/page.module.css';
@@ -106,8 +108,8 @@ function billboardToForm(billboard: AdminBillboardSummary): BillboardFormState {
     placementType: billboard.placementType,
     latitude: String(billboard.latitude),
     longitude: String(billboard.longitude),
-    availableFrom: billboard.availableFrom ? new Date(billboard.availableFrom).toISOString().slice(0, 16) : '',
-    availableUntil: billboard.availableUntil ? new Date(billboard.availableUntil).toISOString().slice(0, 16) : '',
+    availableFrom: toLocalDateTimeValue(billboard.availableFrom),
+    availableUntil: toLocalDateTimeValue(billboard.availableUntil),
     callToActionType: billboard.callToActionType ?? '',
     callToActionValue: billboard.callToActionValue ?? '',
     safetyNote: billboard.safetyNote ?? '',
@@ -246,24 +248,22 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
       </div>
 
       <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('billboards.formAvailableFromLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableFrom}
-            onChange={(event) => set('availableFrom', event.target.value)}
-          />
-        </label>
-        <label className={styles.label}>
-          {t('billboards.formAvailableUntilLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableUntil}
-            onChange={(event) => set('availableUntil', event.target.value)}
-          />
-        </label>
+        <DateTimeField
+          id="bb-available-from"
+          label={t('billboards.formAvailableFromLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableFrom}
+          onChange={(next) => set('availableFrom', next)}
+        />
+        <DateTimeField
+          id="bb-available-until"
+          label={t('billboards.formAvailableUntilLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableUntil}
+          onChange={(next) => set('availableUntil', next)}
+        />
       </div>
 
       <div className={styles.formRowGrid}>
@@ -539,8 +539,8 @@ export default function BillboardsPage() {
         placementType: form.placementType,
         latitude: parseFloat(form.latitude),
         longitude: parseFloat(form.longitude),
-        availableFrom: form.availableFrom ? new Date(form.availableFrom).toISOString() : null,
-        availableUntil: form.availableUntil ? new Date(form.availableUntil).toISOString() : null,
+        availableFrom: localToIso(form.availableFrom),
+        availableUntil: localToIso(form.availableUntil),
         callToActionType: (form.callToActionType as BillboardCtaType) || null,
         callToActionValue:
           (form.callToActionType === 'phone' || form.callToActionType === 'website') && form.callToActionValue.trim()
@@ -573,8 +573,8 @@ export default function BillboardsPage() {
         placementType: form.placementType,
         latitude: parseFloat(form.latitude),
         longitude: parseFloat(form.longitude),
-        availableFrom: form.availableFrom ? new Date(form.availableFrom).toISOString() : null,
-        availableUntil: form.availableUntil ? new Date(form.availableUntil).toISOString() : null,
+        availableFrom: localToIso(form.availableFrom),
+        availableUntil: localToIso(form.availableUntil),
         callToActionType: (form.callToActionType as BillboardCtaType) || null,
         callToActionValue:
           (form.callToActionType === 'phone' || form.callToActionType === 'website') && form.callToActionValue.trim()

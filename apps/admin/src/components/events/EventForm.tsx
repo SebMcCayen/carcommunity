@@ -1,59 +1,21 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import type { AdminEventDetail, CreateEventRequest, UpdateEventRequest } from '@/features/events';
 import { translate } from '@/i18n';
+import {
+  completeDateTime,
+  localToIso,
+  parseLocalDateTime,
+  toLocalDateTimeValue,
+} from '@/lib/datetime';
 import styles from './EventForm.module.css';
 
 const t = (key: string) => translate('sv', key);
 
-/** Length of 'YYYY-MM-DDTHH:mm' — the format required by HTML datetime-local inputs. */
-const DATETIME_LOCAL_LENGTH = 16;
-
 /** Maximum allowed event duration: an end may be at most 3 days after the start. */
 const MAX_EVENT_DURATION_MS = 3 * 24 * 60 * 60 * 1000;
-
-/** Default time used when a date is picked without an accompanying time. */
-const DEFAULT_TIME = '00:00';
-
-function toLocalDateTimeValue(value: string | null | undefined): string {
-  if (!value) {
-    return '';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return '';
-  }
-
-  const pad = (part: number) => String(part).padStart(2, '0');
-  return (
-    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
-    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
-  ).slice(0, DATETIME_LOCAL_LENGTH);
-}
-
-/** Split a 'YYYY-MM-DDTHH:mm' value into its date ('YYYY-MM-DD') part. */
-function datePartOf(value: string): string {
-  return value ? value.slice(0, 10) : '';
-}
-
-/** Split a 'YYYY-MM-DDTHH:mm' value into its time ('HH:mm') part. */
-function timePartOf(value: string): string {
-  return value.length >= DATETIME_LOCAL_LENGTH ? value.slice(11, 16) : '';
-}
-
-/**
- * Combine separate date and time inputs back into a 'YYYY-MM-DDTHH:mm' string.
- * A date without a time defaults the time to 00:00; without a date there is no
- * value at all.
- */
-function combineDateTime(date: string, time: string): string {
-  if (!date) {
-    return '';
-  }
-  return `${date}T${time || DEFAULT_TIME}`;
-}
 
 /**
  * Whether `endLocal` is more than 3 days (72h) after `startLocal`. Both are
@@ -61,25 +23,22 @@ function combineDateTime(date: string, time: string): string {
  * unparseable (other validations cover those cases).
  */
 export function exceedsMaxEventDuration(startLocal: string, endLocal: string): boolean {
-  if (!startLocal || !endLocal) {
+  const start = parseLocalDateTime(startLocal);
+  const end = parseLocalDateTime(endLocal);
+  if (!start || !end) {
     return false;
   }
-  const start = new Date(startLocal).getTime();
-  const end = new Date(endLocal).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end)) {
-    return false;
-  }
-  return end - start > MAX_EVENT_DURATION_MS;
+  return end.getTime() - start.getTime() > MAX_EVENT_DURATION_MS;
 }
 
 interface EventFormData {
   title: string;
   summary: string;
   description: string;
-  startDate: string;
-  startTime: string;
-  endDate: string;
-  endTime: string;
+  /** Local `YYYY-MM-DD[THH:mm]` field value — see `lib/datetime`. */
+  startsAt: string;
+  /** Local `YYYY-MM-DD[THH:mm]` field value; empty means "no end". */
+  endsAt: string;
   approximateArea: string;
   locationName: string;
   address: string;
@@ -103,10 +62,8 @@ function toFormData(event?: AdminEventDetail): EventFormData {
       title: '',
       summary: '',
       description: '',
-      startDate: '',
-      startTime: '',
-      endDate: '',
-      endTime: '',
+      startsAt: '',
+      endsAt: '',
       approximateArea: '',
       locationName: '',
       address: '',
@@ -116,17 +73,12 @@ function toFormData(event?: AdminEventDetail): EventFormData {
     };
   }
 
-  const startsAtLocal = toLocalDateTimeValue(event.startsAt);
-  const endsAtLocal = toLocalDateTimeValue(event.endsAt);
-
   return {
     title: event.title,
     summary: event.summary ?? '',
     description: event.description ?? '',
-    startDate: datePartOf(startsAtLocal),
-    startTime: timePartOf(startsAtLocal),
-    endDate: datePartOf(endsAtLocal),
-    endTime: timePartOf(endsAtLocal),
+    startsAt: toLocalDateTimeValue(event.startsAt),
+    endsAt: toLocalDateTimeValue(event.endsAt),
     approximateArea: event.approximateArea,
     locationName: event.locationName ?? '',
     address: event.address ?? '',
@@ -176,10 +128,10 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
     setClientErrors((prev) => {
       const next: Partial<Record<keyof EventFormData, string>> = { ...prev, [field]: undefined };
       // The cross-field end validation (end-after-start / max-duration) is keyed
-      // under `endDate`, but it depends on both the start and end date/time. Clear
-      // that stale error when editing any of the participating fields.
-      if (field === 'startDate' || field === 'startTime' || field === 'endDate' || field === 'endTime') {
-        next.endDate = undefined;
+      // under `endsAt`, but it depends on both the start and the end. Clear that
+      // stale error when editing either of the participating fields.
+      if (field === 'startsAt' || field === 'endsAt') {
+        next.endsAt = undefined;
       }
       return next;
     });
@@ -194,21 +146,25 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
       errors.title = t('events.form.validation.titleTooLong');
     }
 
-    const startsAt = combineDateTime(form.startDate, form.startTime);
-    const endsAt = combineDateTime(form.endDate, form.endTime);
+    const startsAt = completeDateTime(form.startsAt);
+    const endsAt = completeDateTime(form.endsAt);
+    const startsAtDate = parseLocalDateTime(startsAt);
+    const endsAtDate = parseLocalDateTime(endsAt);
 
-    if (!form.startDate) {
-      errors.startDate = t('events.form.validation.startsAtRequired');
+    // An unparseable start counts as missing: it can come from a malformed
+    // stored value loaded into edit mode, and it must not reach `toISOString`.
+    if (!startsAtDate) {
+      errors.startsAt = t('events.form.validation.startsAtRequired');
     }
 
     if (!form.approximateArea.trim()) {
       errors.approximateArea = t('events.form.validation.approximateAreaRequired');
     }
 
-    if (endsAt && startsAt && new Date(endsAt) <= new Date(startsAt)) {
-      errors.endDate = t('events.form.validation.endsAtAfterStartsAt');
+    if (endsAtDate && startsAtDate && endsAtDate.getTime() <= startsAtDate.getTime()) {
+      errors.endsAt = t('events.form.validation.endsAtAfterStartsAt');
     } else if (exceedsMaxEventDuration(startsAt, endsAt)) {
-      errors.endDate = t('events.form.validation.endsAtTooFarFromStart');
+      errors.endsAt = t('events.form.validation.endsAtTooFarFromStart');
     }
 
     const hasLat = form.latitude.trim() !== '';
@@ -242,16 +198,20 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
     const lat = form.latitude.trim() !== '' ? Number(form.latitude) : null;
     const lon = form.longitude.trim() !== '' ? Number(form.longitude) : null;
 
-    const startsAtLocal = combineDateTime(form.startDate, form.startTime);
-    const endsAtLocal = combineDateTime(form.endDate, form.endTime);
+    // `validate()` has already rejected an unparseable start, so a null here
+    // would mean a logic error rather than operator input; bail rather than
+    // send a request with a missing/shifted instant.
+    const startsAtIso = localToIso(completeDateTime(form.startsAt));
+    const endsAtIso = localToIso(completeDateTime(form.endsAt));
+    if (!startsAtIso) return;
 
     if (isEdit) {
       const data: UpdateEventRequest = {
         title: form.title.trim() || undefined,
         summary: form.summary.trim() || null,
         description: form.description.trim() || null,
-        startsAt: startsAtLocal ? new Date(startsAtLocal).toISOString() : undefined,
-        endsAt: endsAtLocal ? new Date(endsAtLocal).toISOString() : null,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
         approximateArea: form.approximateArea.trim() || undefined,
         locationName: form.locationName.trim() || null,
         address: form.address.trim() || null,
@@ -265,8 +225,8 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         title: form.title.trim(),
         summary: form.summary.trim() || null,
         description: form.description.trim() || null,
-        startsAt: new Date(startsAtLocal).toISOString(),
-        endsAt: endsAtLocal ? new Date(endsAtLocal).toISOString() : null,
+        startsAt: startsAtIso,
+        endsAt: endsAtIso,
         approximateArea: form.approximateArea.trim(),
         locationName: form.locationName.trim() || null,
         address: form.address.trim() || null,
@@ -339,92 +299,44 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         />
       </div>
 
-      <fieldset className={styles.dateTimeFieldset}>
-        <legend className={styles.label}>
-          {t('events.form.startsAtLabel')}
-          <span className={styles.required} aria-hidden="true">*</span>
-        </legend>
-        <div className={styles.dateTimeRow}>
-          <div className={styles.fieldGroup}>
-            <label className={styles.subLabel} htmlFor="ev-start-date">
-              {t('events.form.dateLabel')}
-            </label>
-            <input
-              id="ev-start-date"
-              className={styles.input}
-              type="date"
-              value={form.startDate}
-              onChange={(e) => handleChange('startDate', e.target.value)}
-              disabled={isSubmitting}
-              aria-required="true"
-              aria-describedby={clientErrors.startDate ? 'ev-start-error' : undefined}
-            />
-          </div>
-          <div className={styles.fieldGroup}>
-            <label className={styles.subLabel} htmlFor="ev-start-time">
-              {t('events.form.timeLabel')}
-            </label>
-            <input
-              id="ev-start-time"
-              className={styles.input}
-              type="time"
-              value={form.startTime}
-              onChange={(e) => handleChange('startTime', e.target.value)}
-              disabled={isSubmitting}
-              aria-describedby={clientErrors.startDate ? 'ev-start-error' : undefined}
-            />
-          </div>
-        </div>
-        {clientErrors.startDate && (
-          <span id="ev-start-error" className={styles.fieldError} role="alert">{clientErrors.startDate}</span>
-        )}
-      </fieldset>
+      <DateTimeField
+        id="ev-start"
+        label={
+          <>
+            {t('events.form.startsAtLabel')}
+            <span className={styles.required} aria-hidden="true">*</span>
+          </>
+        }
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+        value={form.startsAt}
+        onChange={(next) => handleChange('startsAt', next)}
+        required
+        disabled={isSubmitting}
+        describedBy={clientErrors.startsAt ? 'ev-start-error' : undefined}
+        hint={
+          clientErrors.startsAt ? (
+            <span id="ev-start-error" className={styles.fieldError} role="alert">{clientErrors.startsAt}</span>
+          ) : null
+        }
+      />
 
-      <fieldset className={styles.dateTimeFieldset}>
-        <legend className={styles.label}>
-          {t('events.form.endsAtLabel')}
-        </legend>
-        <div className={styles.dateTimeRow}>
-          <div className={styles.fieldGroup}>
-            <label className={styles.subLabel} htmlFor="ev-end-date">
-              {t('events.form.dateLabel')}
-            </label>
-            <input
-              id="ev-end-date"
-              className={styles.input}
-              type="date"
-              value={form.endDate}
-              onChange={(e) => {
-                handleChange('endDate', e.target.value);
-                // A time without a date is discarded on submit; clear the stale
-                // end time so the UI never shows a time that will be ignored.
-                if (!e.target.value) {
-                  handleChange('endTime', '');
-                }
-              }}
-              disabled={isSubmitting}
-              aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
-            />
-          </div>
-          <div className={styles.fieldGroup}>
-            <label className={styles.subLabel} htmlFor="ev-end-time">
-              {t('events.form.timeLabel')}
-            </label>
-            <input
-              id="ev-end-time"
-              className={styles.input}
-              type="time"
-              value={form.endTime}
-              onChange={(e) => handleChange('endTime', e.target.value)}
-              disabled={isSubmitting || !form.endDate}
-              aria-describedby={clientErrors.endDate ? 'ev-end-error' : undefined}
-            />
-          </div>
-        </div>
-        {clientErrors.endDate && (
-          <span id="ev-end-error" className={styles.fieldError} role="alert">{clientErrors.endDate}</span>
-        )}
-      </fieldset>
+      <DateTimeField
+        id="ev-end"
+        label={t('events.form.endsAtLabel')}
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+        value={form.endsAt}
+        onChange={(next) => handleChange('endsAt', next)}
+        disabled={isSubmitting}
+        describedBy={clientErrors.endsAt ? 'ev-end-error' : undefined}
+        hint={
+          clientErrors.endsAt ? (
+            <span id="ev-end-error" className={styles.fieldError} role="alert">{clientErrors.endsAt}</span>
+          ) : null
+        }
+      />
+
 
       <div className={styles.fieldGroup}>
         <label className={styles.label} htmlFor="ev-area">

@@ -38,7 +38,9 @@ import {
   adminPauseCrownHuntPoint,
   adminUpdateCrownHuntPoint,
 } from '@/features/crown-hunt';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { translate } from '@/i18n';
+import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
 
 import styles from './page.module.css';
@@ -105,12 +107,8 @@ function pointToForm(point: AdminCrownHuntPointSummary): PointFormState {
     geofenceRadiusMeters: String(point.geofenceRadiusMeters),
     rewardPoints: String(point.rewardPoints),
     repeatRule: point.repeatRule,
-    availableFrom: point.availableFrom
-      ? new Date(point.availableFrom).toISOString().slice(0, 16)
-      : '',
-    availableUntil: point.availableUntil
-      ? new Date(point.availableUntil).toISOString().slice(0, 16)
-      : '',
+    availableFrom: toLocalDateTimeValue(point.availableFrom),
+    availableUntil: toLocalDateTimeValue(point.availableUntil),
   };
 }
 
@@ -234,24 +232,22 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
       </div>
 
       <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('crownHunt.formAvailableFromLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableFrom}
-            onChange={(e) => set('availableFrom', e.target.value)}
-          />
-        </label>
-        <label className={styles.label}>
-          {t('crownHunt.formAvailableUntilLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableUntil}
-            onChange={(e) => set('availableUntil', e.target.value)}
-          />
-        </label>
+        <DateTimeField
+          id="ch-available-from"
+          label={t('crownHunt.formAvailableFromLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableFrom}
+          onChange={(next) => set('availableFrom', next)}
+        />
+        <DateTimeField
+          id="ch-available-until"
+          label={t('crownHunt.formAvailableUntilLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableUntil}
+          onChange={(next) => set('availableUntil', next)}
+        />
       </div>
 
       {saveError !== null && <p className={styles.errorText}>{saveError}</p>}
@@ -614,8 +610,8 @@ export default function KronjaktPage() {
           geofenceRadiusMeters: parseInt(form.geofenceRadiusMeters, 10),
           rewardPoints: parseInt(form.rewardPoints, 10),
           repeatRule: form.repeatRule,
-          availableFrom: form.availableFrom ? new Date(form.availableFrom).toISOString() : undefined,
-          availableUntil: form.availableUntil ? new Date(form.availableUntil).toISOString() : undefined,
+          availableFrom: localToIso(form.availableFrom) ?? undefined,
+          availableUntil: localToIso(form.availableUntil) ?? undefined,
         };
 
         if (editingPoint !== null) {
