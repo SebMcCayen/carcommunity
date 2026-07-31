@@ -1291,7 +1291,8 @@
     "statusFailedRetry": "Skickades inte. Tryck för att försöka igen.",
     "mentionPicker": "Nämn en medlem",
     "mentionLimit": "Du kan nämna högst %1$d medlemmar i ett meddelande.",
-    "mentionsNotDelivered": "Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras."
+    "mentionsNotDelivered": "Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.",
+    "locationLink": "📍 Visa på kartan"
   },
   "chatHub": {
     "title": "Chatt",
@@ -1392,7 +1393,19 @@
     "liveTitle": "Liveplats",
     "liveClose": "Stäng liveplats",
     "liveDetails": "Fler alternativ",
-    "liveControls": "Kontroller för liveplats"
+    "liveControls": "Kontroller för liveplats",
+    "placeMenuTitle": "Vald plats",
+    "placeMenuNavigate": "Navigera hit",
+    "placeMenuCopy": "Kopiera position",
+    "placeMenuSave": "Spara plats",
+    "placeMenuClose": "Stäng",
+    "placeCopied": "Position kopierad",
+    "placeSaved": "Plats sparad",
+    "savedPlacesButton": "Sparade platser",
+    "savedPlacesPickerTitle": "Sparade platser",
+    "savedPlacesPickerEmpty": "Inga sparade platser än",
+    "selectedLocationPin": "Vald plats",
+    "sharedLocationName": "Delad plats"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

@@ -1201,6 +1201,7 @@
     <string name="channel_mentionPicker">Mention a member</string>
     <string name="channel_mentionLimit">You can mention up to %1$d members in one message.</string>
     <string name="channel_mentionsNotDelivered">Your message was posted, but some members you mentioned couldn\'t be notified.</string>
+    <string name="channel_locationLink">📍 Show on map</string>
     <string name="chatHub_title">Chat</string>
     <string name="chatHub_back">Back</string>
     <string name="chatHub_tabCommunity">Community</string>
@@ -1296,6 +1297,18 @@
     <string name="shell_liveClose">Close live location</string>
     <string name="shell_liveDetails">More options</string>
     <string name="shell_liveControls">Live location controls</string>
+    <string name="shell_placeMenuTitle">Selected location</string>
+    <string name="shell_placeMenuNavigate">Navigate here</string>
+    <string name="shell_placeMenuCopy">Copy position</string>
+    <string name="shell_placeMenuSave">Save this location</string>
+    <string name="shell_placeMenuClose">Close</string>
+    <string name="shell_placeCopied">Position copied</string>
+    <string name="shell_placeSaved">Location saved</string>
+    <string name="shell_savedPlacesButton">Saved places</string>
+    <string name="shell_savedPlacesPickerTitle">Saved places</string>
+    <string name="shell_savedPlacesPickerEmpty">No saved places yet</string>
+    <string name="shell_selectedLocationPin">Selected location</string>
+    <string name="shell_sharedLocationName">Shared location</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>

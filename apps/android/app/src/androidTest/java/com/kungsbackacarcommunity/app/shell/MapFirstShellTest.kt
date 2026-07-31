@@ -230,13 +230,14 @@ class MapFirstShellTest {
     }
 
     /**
-     * Same bug, the other reported route in: holding a finger on the map flashed
-     * white before the "navigate here?" question appeared. A long-press opens the
-     * very same search overlay, so it was the same teardown — and it must stay
-     * fixed even though nothing about the gesture looks like navigation.
+     * Holding a finger on the map now raises the place-actions MENU (navigate /
+     * copy position / save) in front of the navigate-here flow — and "Navigate
+     * here" then opens the very same search overlay the gesture used to raise
+     * directly. The white-flash regression must stay fixed throughout: neither the
+     * menu nor the navigate step may rebuild the map (contentCompositions == 1).
      */
     @Test
-    fun longPressingTheMap_opensTheNavigatePreview_withoutRebuildingTheMap() {
+    fun longPressingTheMap_opensThePlaceMenu_thenNavigatePreview_withoutRebuildingTheMap() {
         val surface = StubMapSurface()
         setShell(mapSurface = surface)
         composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
@@ -245,17 +246,26 @@ class MapFirstShellTest {
         composeTestRule.runOnIdle { surface.emitLongPress(MapPoint(12.0757, 57.4874)) }
         composeTestRule.waitForIdle()
 
+        // Step 1: the place-actions menu, not the search overlay, and no rebuild.
+        composeTestRule.onNodeWithTag(PLACE_ACTIONS_SHEET_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertDoesNotExist()
+        composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
+
+        // Step 2: "Navigate here" reaches the existing navigate-here preview.
+        composeTestRule.onNodeWithTag(PLACE_ACTIONS_NAVIGATE_TEST_TAG).performClick()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
         composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
     }
 
     /**
-     * A single tap on a place the basemap draws must reach the SAME preview a
-     * long-press does — that is the whole point of the two gestures sharing one
-     * hook — and carry the place's name, not a generic dropped pin.
+     * A single tap on a place the basemap draws reaches the SAME menu a long-press
+     * does — that is the whole point of the two gestures sharing one hook — and
+     * carries the place's NAME (shown in the menu), not a generic dropped pin.
+     * "Navigate here" then opens the named preview.
      */
     @Test
-    fun tappingAPlace_opensTheSameNavigatePreview_named() {
+    fun tappingAPlace_opensTheSameMenu_named() {
         val surface = StubMapSurface()
         setShell(mapSurface = surface)
 
@@ -264,15 +274,15 @@ class MapFirstShellTest {
         }
         composeTestRule.waitForIdle()
 
-        // Same overlay as the long-press, showing the tapped place BY NAME — not
-        // as a generic dropped pin. The name lands in more than one node (the
-        // search field and the destination card both carry it), so assert on the
-        // set rather than a single match.
+        // Same menu as the long-press, showing the tapped place BY NAME.
+        composeTestRule.onNodeWithTag(PLACE_ACTIONS_SHEET_TEST_TAG).assertExists()
+        composeTestRule.onAllNodesWithText("Bilverkstan").onFirst().assertExists()
+
+        // "Navigate here" reaches the named preview, not a generic dropped pin.
+        composeTestRule.onNodeWithTag(PLACE_ACTIONS_NAVIGATE_TEST_TAG).performClick()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(NAV_SEARCH_TEST_TAG).assertExists()
         composeTestRule.onAllNodesWithText("Bilverkstan").onFirst().assertExists()
-        composeTestRule
-            .onNodeWithText(str(R.string.addressSearch_droppedPin))
-            .assertDoesNotExist()
         composeTestRule.runOnIdle { assertEquals(1, surface.contentCompositions) }
     }
 
@@ -382,7 +392,7 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_COMPASS_TAG).assertExists()
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersButton)).assertExists()
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_recenter)).assertExists()
+        composeTestRule.onNodeWithTag(MAP_HOME_SAVED_PLACES_TAG).assertExists()
     }
 
     @Test
@@ -443,7 +453,7 @@ class MapFirstShellTest {
                     participantCount = 0,
                     userLabel = "Test",
                     onSearch = {},
-                    onRecenter = {},
+                    onOpenSavedPlaces = {},
                     moreMenuEntries = emptyList(),
                     trafikverketDataShown = trafikverketDataShown,
                 )
@@ -495,14 +505,13 @@ class MapFirstShellTest {
 
     /**
      * The right-side stack's ORDER, top-to-bottom:
-     * report → live-location → layers → compass → recenter → chat.
+     * report → layers → compass → saved-places → chat.
      *
      * Pinned by measured position rather than by declaration order, because the
      * order is the whole user-visible point of the change and a reordering of
-     * the composables is exactly what would break it. Two facts carry weight
-     * here beyond "some order exists": the report control LEADS the stack, and
-     * the compass sits DIRECTLY above the my-location control (nothing between
-     * them) — they are a pair now that both re-centre.
+     * the composables is exactly what would break it. The report control LEADS
+     * the stack. (The dedicated recenter/my-location control was removed: the
+     * compass re-centres on the user and there is a ~10s idle auto-return.)
      */
     @Test
     fun rightSideControls_areOrderedReportFirst() {
@@ -510,18 +519,16 @@ class MapFirstShellTest {
         val report = topOf(MAP_HOME_REPORT_TAG)
         val layers = topOf(MAP_HOME_LAYERS_TAG)
         val compass = topOf(MAP_HOME_COMPASS_TAG)
-        val recenter = topOfDescribed(str(R.string.shell_recenter))
+        val savedPlaces = topOf(MAP_HOME_SAVED_PLACES_TAG)
         val chat = topOfDescribed(str(R.string.shell_chat))
 
-        // The right-side live-share control was removed, so the stack is now
-        // report → layers → compass → recenter → chat.
         assertTrue("report must be above layers", report < layers)
         assertTrue("layers must be above the compass", layers < compass)
-        assertTrue("the compass must be above recenter", compass < recenter)
-        assertTrue("recenter must be above chat", recenter < chat)
-        // Nothing sits between the compass and the my-location control.
+        assertTrue("the compass must be above saved-places", compass < savedPlaces)
+        assertTrue("saved-places must be above chat", savedPlaces < chat)
+        // Nothing sits between the compass and the saved-places control.
         listOf(report, layers, chat).forEach {
-            assertFalse("no control may sit between compass and recenter", it in compass..recenter)
+            assertFalse("no control may sit between compass and saved-places", it in compass..savedPlaces)
         }
     }
 

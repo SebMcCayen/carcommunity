@@ -1291,7 +1291,8 @@
     "statusFailedRetry": "Not delivered. Tap to retry.",
     "mentionPicker": "Mention a member",
     "mentionLimit": "You can mention up to %1$d members in one message.",
-    "mentionsNotDelivered": "Your message was posted, but some members you mentioned couldn't be notified."
+    "mentionsNotDelivered": "Your message was posted, but some members you mentioned couldn't be notified.",
+    "locationLink": "📍 Show on map"
   },
   "chatHub": {
     "title": "Chat",
@@ -1392,7 +1393,19 @@
     "liveTitle": "Live location",
     "liveClose": "Close live location",
     "liveDetails": "More options",
-    "liveControls": "Live location controls"
+    "liveControls": "Live location controls",
+    "placeMenuTitle": "Selected location",
+    "placeMenuNavigate": "Navigate here",
+    "placeMenuCopy": "Copy position",
+    "placeMenuSave": "Save this location",
+    "placeMenuClose": "Close",
+    "placeCopied": "Position copied",
+    "placeSaved": "Location saved",
+    "savedPlacesButton": "Saved places",
+    "savedPlacesPickerTitle": "Saved places",
+    "savedPlacesPickerEmpty": "No saved places yet",
+    "selectedLocationPin": "Selected location",
+    "sharedLocationName": "Shared location"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",

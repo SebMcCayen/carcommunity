@@ -388,4 +388,27 @@ class SavedPlacesTest {
         store.save(SavedPlaces.create(SavedPlaceKind.Favourite, place("new", lng = 20.0), "Mamma"))
         assertEquals(2, store.saved().count { it.kind == SavedPlaceKind.Favourite })
     }
+
+    @Test
+    fun `a long-pressed pin round-trips into the same store nav-search reads`() {
+        // Mirrors the map's "Save this location": a coordinate-only pin (no
+        // geocoder id) saved as a Favourite through the SAME store the address
+        // search reads/writes. It must land in saved() with a coordinate-derived
+        // id and its exact point, so it re-opens as a one-tap destination.
+        val store = InMemorySavedPlacesStore()
+        val pin =
+            PlaceSuggestion(
+                id = "",
+                name = "57.49102, 12.07660",
+                address = null,
+                point = LatLng(longitude = 12.0766, latitude = 57.49102),
+            )
+
+        store.save(SavedPlaces.create(SavedPlaceKind.Favourite, pin, label = "57.49102, 12.07660"))
+
+        val saved = store.saved().single()
+        assertEquals("fav:12.0766,57.49102", saved.id)
+        assertEquals(LatLng(longitude = 12.0766, latitude = 57.49102), saved.place.point)
+        assertEquals("57.49102, 12.07660", saved.label)
+    }
 }

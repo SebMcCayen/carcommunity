@@ -53,12 +53,16 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -73,6 +77,7 @@ import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
@@ -210,6 +215,11 @@ fun ChannelChatContent(
     onBlock: ((String) -> Unit)? = null,
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
     onBlockDismiss: () -> Unit = {},
+    // Tapping a shared `geo:` location link in a message moves the app's OWN map
+    // to that point, IN-APP — the recipient's map camera, never an external maps
+    // chooser. Null (the default, and in a config-less build with no map to move)
+    // renders a location link as plain, unclickable styled text.
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
 ) {
     var draft by rememberSaveable(stateSaver = TextFieldValue.Saver) {
         mutableStateOf(TextFieldValue(""))
@@ -278,6 +288,7 @@ fun ChannelChatContent(
                     onLoadOlder = onLoadOlder,
                     onRetry = onRetry,
                     onViewProfile = onViewProfile,
+                    onShowLocationOnMap = onShowLocationOnMap,
                     // Long-press opens the moderation sheet — never on your own
                     // message, never on one with no resolvable author, and never
                     // when the sheet would have no action to offer.
@@ -507,6 +518,7 @@ private fun ChannelMessageList(
     onLoadOlder: () -> Unit,
     onRetry: (ChannelMessage) -> Unit,
     onViewProfile: ((String) -> Unit)?,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onMessageLongPress: (ChannelMessage) -> Unit,
 ) {
     val dates = rememberChatDateContext()
@@ -578,6 +590,7 @@ private fun ChannelMessageList(
                         mentionDisplayNames = mentionDisplayNames,
                         dates = dates,
                         onViewProfile = onViewProfile,
+                        onShowLocationOnMap = onShowLocationOnMap,
                         onRetry = { onRetry(item.message) },
                         onLongPress = { onMessageLongPress(item.message) },
                     )
@@ -593,6 +606,7 @@ private fun ChannelMessageRow(
     mentionDisplayNames: Map<String, String>,
     dates: ChatDateContext,
     onViewProfile: ((String) -> Unit)?,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onRetry: () -> Unit,
     onLongPress: () -> Unit,
 ) {
@@ -612,6 +626,7 @@ private fun ChannelMessageRow(
                 message = message,
                 isOwn = true,
                 mentionDisplayNames = mentionDisplayNames,
+                onShowLocationOnMap = onShowLocationOnMap,
                 onLongPress = null,
             )
             // Delivery status sits under your OWN optimistic bubbles only. A
@@ -682,6 +697,7 @@ private fun ChannelMessageRow(
                 message = message,
                 isOwn = false,
                 mentionDisplayNames = mentionDisplayNames,
+                onShowLocationOnMap = onShowLocationOnMap,
                 onLongPress = onLongPress,
             )
         }
@@ -739,6 +755,7 @@ private fun ChannelBubble(
     message: ChannelMessage,
     isOwn: Boolean,
     mentionDisplayNames: Map<String, String>,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onLongPress: (() -> Unit)?,
 ) {
     val bubbleColor =
@@ -750,13 +767,37 @@ private fun ChannelBubble(
     // is exactly what it now is.
     val mentionColor =
         if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    // A shared `geo:` link renders as a single tappable chip. Coloured like a
+    // mention (so it reads as "special" against the bubble) but UNDERLINED, so it
+    // reads as tappable rather than merely emphasised.
+    val linkColor =
+        if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val linkLabel = stringResource(R.string.channel_locationLink)
+    // Detection depends only on WHETHER a map-move handler exists, so the body is
+    // keyed on that boolean rather than the lambda's (per-recomposition) identity —
+    // otherwise every message's AnnotatedString would rebuild on each recompose.
+    // The listener captures the handler that was current when the body was built;
+    // its behaviour (move the map to a fixed point) is stable, so a captured-but-
+    // slightly-stale handler is harmless.
+    val canShowLocation = onShowLocationOnMap != null
     val body =
-        remember(message.text, message.mentionedUids, mentionDisplayNames, mentionColor) {
-            annotateMentions(
+        remember(
+            message.text,
+            message.mentionedUids,
+            mentionDisplayNames,
+            mentionColor,
+            linkColor,
+            linkLabel,
+            canShowLocation,
+        ) {
+            annotateMessageBody(
                 text = message.text,
                 mentionedUids = message.mentionedUids,
                 displayNames = mentionDisplayNames,
                 mentionColor = mentionColor,
+                linkColor = linkColor,
+                linkLabel = linkLabel,
+                onShowLocationOnMap = onShowLocationOnMap,
             )
         }
     Surface(
@@ -789,29 +830,86 @@ private fun ChannelBubble(
 }
 
 /**
- * [text] with each accepted mention emphasised. The stored message carries uids
- * and no offsets, so [MentionRendering] maps them back onto spans by matching
- * "@displayName" — see its KDoc for what an unresolvable uid or a duplicated
- * display name does (both are cosmetic; neither affects who was notified).
+ * [text] with each accepted mention emphasised AND each shared `geo:` location
+ * link turned into a single tappable chip.
+ *
+ * Mentions: the stored message carries uids and no offsets, so [MentionRendering]
+ * maps them back onto spans by matching "@displayName" — see its KDoc for what an
+ * unresolvable uid or a duplicated display name does (both are cosmetic; neither
+ * affects who was notified).
+ *
+ * Location links: [GeoLinks.findAll] detects the `geo:lat,lng` tokens (the SAME
+ * parser the clipboard writer uses, so the two can never disagree) and each is
+ * replaced by a [linkLabel] chip carrying a [LinkAnnotation.Clickable]. Tapping
+ * it calls [onShowLocationOnMap] — an IN-APP camera move, never an external maps
+ * intent. When [onShowLocationOnMap] is null (no map to move) links are not
+ * detected at all, so the raw token renders as plain text. A malformed or
+ * out-of-range token is not returned by [GeoLinks.findAll], so it likewise stays
+ * plain text and can never move the map to a garbage coordinate.
+ *
+ * Mentions and location links cannot overlap (one begins with `@`, the other with
+ * `geo:`), so the two range sets are simply interleaved over the text in order.
  */
-private fun annotateMentions(
+private fun annotateMessageBody(
     text: String,
     mentionedUids: List<String>,
     displayNames: Map<String, String>,
     mentionColor: Color,
+    linkColor: Color,
+    linkLabel: String,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
 ): AnnotatedString {
-    val ranges = MentionRendering.highlightRanges(text, mentionedUids, displayNames)
-    if (ranges.isEmpty()) return AnnotatedString(text)
+    val mentionRanges = MentionRendering.highlightRanges(text, mentionedUids, displayNames)
+    val geoMatches = if (onShowLocationOnMap != null) GeoLinks.findAll(text) else emptyList()
+    if (mentionRanges.isEmpty() && geoMatches.isEmpty()) return AnnotatedString(text)
+
+    val linkStyles =
+        TextLinkStyles(
+            style =
+                SpanStyle(
+                    color = linkColor,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                ),
+        )
+
     return buildAnnotatedString {
         var index = 0
-        for (range in ranges) {
-            if (range.first > index) append(text.substring(index, range.first))
-            withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold)) {
-                append(text.substring(range.first, range.last + 1))
+        while (index < text.length) {
+            val geo = geoMatches.firstOrNull { it.range.first == index }
+            if (geo != null) {
+                val link = geo.link
+                withLink(
+                    LinkAnnotation.Clickable(
+                        tag = "geo",
+                        styles = linkStyles,
+                        linkInteractionListener = {
+                            onShowLocationOnMap?.invoke(link.latitude, link.longitude)
+                        },
+                    ),
+                ) {
+                    append(linkLabel)
+                }
+                index = geo.range.last + 1
+                continue
             }
-            index = range.last + 1
+            val mention = mentionRanges.firstOrNull { it.first == index }
+            if (mention != null) {
+                withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold)) {
+                    append(text.substring(mention.first, mention.last + 1))
+                }
+                index = mention.last + 1
+                continue
+            }
+            // Plain run up to the next mention/link boundary.
+            val nextBoundary =
+                (geoMatches.map { it.range.first } + mentionRanges.map { it.first })
+                    .filter { it > index }
+                    .minOrNull()
+                    ?: text.length
+            append(text.substring(index, nextBoundary))
+            index = nextBoundary
         }
-        if (index < text.length) append(text.substring(index))
     }
 }
 

@@ -50,6 +50,7 @@ fun ConvoyChannelRoute(
     convoyId: String,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -127,6 +128,7 @@ fun ConvoyChannelRoute(
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         modifier = modifier,
         onViewProfile = onViewProfile,
+        onShowLocationOnMap = onShowLocationOnMap,
         surface = ChatSurface.ConvoyChannel,
         onBlock =
             blockingCoordinator?.let { c ->

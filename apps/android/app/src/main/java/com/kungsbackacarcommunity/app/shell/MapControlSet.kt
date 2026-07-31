@@ -18,11 +18,11 @@ enum class MapCircleControlKind {
     /** Map layers — opens the shared layers popup (alerts / traffic / night / 3D). */
     Layers,
 
-    /** North-up ⇄ course-up orientation toggle. */
+    /** North-up ⇄ course-up orientation toggle. Also re-centres on the user. */
     Compass,
 
-    /** Re-centre the camera on the user. */
-    Recenter,
+    /** Saved places — opens the saved-locations picker; a tap jumps the map there. */
+    SavedPlaces,
 
     /** Chat hub, with the unread badge. */
     Chat,
@@ -60,7 +60,7 @@ object MapControlSet {
             if (incidentReportingEnabled) add(MapCircleControlKind.Report)
             add(MapCircleControlKind.Layers)
             add(MapCircleControlKind.Compass)
-            add(MapCircleControlKind.Recenter)
+            add(MapCircleControlKind.SavedPlaces)
             add(MapCircleControlKind.Chat)
         }
 }
