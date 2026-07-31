@@ -671,6 +671,54 @@ describe('Firestore – partner insights (Phase 9j)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: community growth metrics (admin-only, server-written)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – metrics snapshots', () => {
+  const DATE = '2026-07-31';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'metrics', DATE), {
+        date: DATE,
+        totalUsers: 42,
+        brandDistribution: { volvo: 3, other: 1 },
+      });
+    });
+  });
+
+  it('an admin can read a metrics snapshot', async () => {
+    const adminFs = testEnv.authenticatedContext('metrics-admin', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'metrics', DATE)));
+  });
+
+  it('a non-admin member cannot read metrics', async () => {
+    const memberFs = testEnv
+      .authenticatedContext('metrics-member', { activeMember: true })
+      .firestore();
+    await assertFails(getDoc(doc(memberFs, 'metrics', DATE)));
+  });
+
+  it('an unauthenticated client cannot read metrics', async () => {
+    const anonFs = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(anonFs, 'metrics', DATE)));
+  });
+
+  it('a suspended admin cannot read metrics (suspension overrides admin)', async () => {
+    const suspendedFs = testEnv
+      .authenticatedContext('metrics-suspended-admin', { admin: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedFs, 'metrics', DATE)));
+  });
+
+  it('no client may write metrics — not even an admin', async () => {
+    const adminFs = testEnv.authenticatedContext('metrics-admin-w', { admin: true }).firestore();
+    await assertFails(setDoc(doc(adminFs, 'metrics', '2026-08-01'), { totalUsers: 1 }));
+    await assertFails(updateDoc(doc(adminFs, 'metrics', DATE), { totalUsers: 999 }));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore + Storage: digital billboards (Phase 9k)
 // ---------------------------------------------------------------------------
 
