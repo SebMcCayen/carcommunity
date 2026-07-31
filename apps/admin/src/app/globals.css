@@ -338,7 +338,11 @@ textarea::placeholder {
   opacity: 1; /* Firefox dims placeholders by default, which breaks the measured ratio. */
 }
 
-input:hover:not(:disabled):not([readonly]),
+/* Text-like fields only. The native-chrome controls (checkbox, radio, file,
+   range, colour) keep their own appearance + accent-color; this hover rule
+   out-specifies their base rules, so they are excluded explicitly to avoid
+   painting the text-input hover fill behind a native control. */
+input:hover:not(:disabled):not([readonly]):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
 textarea:hover:not(:disabled):not([readonly]),
 select:hover:not(:disabled) {
   background-color: var(--bg-input-hover);
