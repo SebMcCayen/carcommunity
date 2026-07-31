@@ -105,9 +105,15 @@ object DriveFormatters {
      * unit through this overload — sharing the SAME "km/h" label [formatSpeed]
      * uses instead of duplicating the literal at the call site — without letting
      * [formatSpeed] re-round the number and undo the deadband.
+     *
+     * A negative km/h renders the dash, not "-5 km/h": [formatSpeed] already
+     * treats a negative speed as absent, and this shares that contract so a
+     * future direct caller cannot draw a nonsensical negative readout. (Today's
+     * one direct caller, the live bar, never passes one — `LiveSpeedReadout`
+     * blanks negative samples — but the public API should not depend on that.)
      */
     fun formatSpeedKmh(kmh: Int?): String {
-        if (kmh == null) return MISSING_VALUE
+        if (kmh == null || kmh < 0) return MISSING_VALUE
         return "$kmh km/h"
     }
 

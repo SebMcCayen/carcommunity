@@ -80,6 +80,9 @@ class SavedDriveTest {
         assertEquals("0 km/h", DriveFormatters.formatSpeedKmh(0))
         // No sample yet → the missing-value dash, never a bogus "0 km/h".
         assertEquals("—", DriveFormatters.formatSpeedKmh(null))
+        // A negative km/h is not a speed; render the dash, mirroring formatSpeed's
+        // negative handling, rather than drawing "-5 km/h".
+        assertEquals("—", DriveFormatters.formatSpeedKmh(-5))
     }
 
     @Test
