@@ -1,7 +1,7 @@
 /**
  * Unit tests for the pure coordinate helpers behind the admin MapLocationPicker.
  *
- * These are the parts that must stay correct independent of Mapbox GL (which
+ * These are the parts that must stay correct independent of MapLibre GL (which
  * cannot render under jsdom). They cover the repo's known traps:
  *   - a blank/unset pair must NOT be coerced to (0, 0) / Null Island; it is
  *     `null` (no pick) — but an explicit (0, 0) is a valid coordinate; and
@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clampCoordinate,
   formatLatLng,
-  getMapboxToken,
+  getMapStyleUrl,
   isMapAvailable,
   isValidCoordinate,
   parseLatLng,
@@ -105,18 +105,18 @@ describe('clampCoordinate', () => {
   });
 });
 
-describe('getMapboxToken / isMapAvailable', () => {
+describe('getMapStyleUrl / isMapAvailable', () => {
   afterEach(() => vi.unstubAllEnvs());
 
   it('returns empty and unavailable when unset (graceful fallback)', () => {
-    vi.stubEnv('VITE_MAPBOX_TOKEN', '');
-    expect(getMapboxToken()).toBe('');
+    vi.stubEnv('VITE_MAP_STYLE_URL', '');
+    expect(getMapStyleUrl()).toBe('');
     expect(isMapAvailable()).toBe(false);
   });
 
-  it('returns the trimmed token and available when set', () => {
-    vi.stubEnv('VITE_MAPBOX_TOKEN', '  pk.test-token  ');
-    expect(getMapboxToken()).toBe('pk.test-token');
+  it('returns the trimmed style URL and available when set', () => {
+    vi.stubEnv('VITE_MAP_STYLE_URL', '  https://example.com/style.json  ');
+    expect(getMapStyleUrl()).toBe('https://example.com/style.json');
     expect(isMapAvailable()).toBe(true);
   });
 });

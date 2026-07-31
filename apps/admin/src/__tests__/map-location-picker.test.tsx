@@ -1,8 +1,8 @@
 /**
  * Component tests for the shared MapLocationPicker.
  *
- * Mapbox GL JS cannot render under jsdom (no WebGL), so these tests exercise
- * the always-present, testable surface: the graceful no-token fallback (manual
+ * MapLibre GL JS cannot render under jsdom (no WebGL), so these tests exercise
+ * the always-present, testable surface: the graceful no-map fallback (manual
  * latitude/longitude inputs + an "unavailable" notice) and that editing the
  * inputs surfaces the chosen coordinate through onChange. The GL map render,
  * marker drag, and geofence circle can only be verified in a real browser.
@@ -21,8 +21,8 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  // Ensure the no-token fallback path (no Mapbox GL import under jsdom).
-  vi.stubEnv('VITE_MAPBOX_TOKEN', '');
+  // Ensure the no-map fallback path (no MapLibre GL import under jsdom).
+  vi.stubEnv('VITE_MAP_STYLE_URL', '');
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -44,7 +44,7 @@ const latInput = () =>
 const lngInput = () =>
   container.querySelector<HTMLInputElement>('input[min="-180"]')!;
 
-describe('MapLocationPicker (no token / fallback)', () => {
+describe('MapLocationPicker (no map / fallback)', () => {
   it('renders the manual inputs and an unavailable notice, not a map canvas', () => {
     render(
       <MapLocationPicker

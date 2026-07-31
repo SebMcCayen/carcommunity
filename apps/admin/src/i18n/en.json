@@ -7,7 +7,7 @@
   },
   "map": {
     "dragHint": "Drag the pin or click the map to set the location. You can also type exact coordinates below.",
-    "unavailable": "Map unavailable — no map token is configured. Enter the coordinates manually below."
+    "unavailable": "Map unavailable — no map is configured. Enter the coordinates manually below."
   },
   "announcements": {
     "title": "Announcements",

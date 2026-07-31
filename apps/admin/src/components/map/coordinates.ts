@@ -1,7 +1,7 @@
 /**
  * Pure coordinate helpers for the admin map location picker.
  *
- * These functions contain NO Mapbox GL / DOM / WebGL code so they are fully
+ * These functions contain NO MapLibre GL / DOM / WebGL code so they are fully
  * unit-testable under jsdom. The React component (MapLocationPicker) keeps all
  * GL-callback wiring thin and delegates the value transforms here.
  */
@@ -99,18 +99,22 @@ export function clampCoordinate(value: LatLng): LatLng {
 }
 
 /**
- * The public Mapbox GL JS access token, read from the Vite env at build time.
+ * The MapLibre GL JS style URL, read from the Vite env at build time.
  *
- * Returns an empty string when unset so callers can degrade gracefully to the
- * manual latitude/longitude inputs rather than rendering a broken map. Never
- * hardcode a token here.
+ * MapLibre (BSD-3-Clause, no access-token concept) is configured with a full
+ * style JSON URL rather than a Mapbox style id + token. The value is an
+ * operator/deploy choice (a free demo/OSM/MapTiler style, or a Mapbox style if
+ * desired) — never hardcoded here.
+ *
+ * Returns an empty string when unset so callers degrade gracefully to the
+ * manual latitude/longitude inputs rather than rendering a broken map.
  */
-export function getMapboxToken(): string {
-  const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
-  return typeof token === 'string' ? token.trim() : '';
+export function getMapStyleUrl(): string {
+  const url = import.meta.env.VITE_MAP_STYLE_URL as string | undefined;
+  return typeof url === 'string' ? url.trim() : '';
 }
 
-/** Whether a usable Mapbox token is configured for this build. */
+/** Whether a usable map style URL is configured for this build. */
 export function isMapAvailable(): boolean {
-  return getMapboxToken() !== '';
+  return getMapStyleUrl() !== '';
 }

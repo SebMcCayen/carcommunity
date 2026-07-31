@@ -4,17 +4,21 @@
  * One component used by every admin surface where an operator chooses a
  * position (Billboards, Crown Hunt / Kronjakt points, Partners, Events). It
  * renders:
- *   - a draggable Mapbox GL marker (click the map or drag the pin to place it),
- *     with an optional geofence-radius circle; and
+ *   - a draggable MapLibre GL marker (click the map or drag the pin to place
+ *     it), with an optional geofence-radius circle; and
  *   - the manual latitude/longitude number inputs, always visible and kept in
  *     sync with the pin, as the precise-entry path and the graceful fallback.
  *
+ * MapLibre GL JS (BSD-3-Clause) is used rather than mapbox-gl (proprietary
+ * licence); it has no access-token concept and is configured with a full style
+ * JSON URL (VITE_MAP_STYLE_URL).
+ *
  * Design constraints honoured here:
- *   - Degrades gracefully with NO Mapbox token: the map is never loaded, a
+ *   - Degrades gracefully with NO map style URL: the map is never loaded, a
  *     clear notice is shown, and the manual inputs remain fully usable.
  *   - No coordinate is emitted until the operator explicitly places the pin (or
  *     types a value); a fresh map never silently submits (0, 0) / Null Island.
- *   - All Mapbox GL JS is loaded via dynamic import inside an effect, so this
+ *   - All MapLibre GL JS is loaded via dynamic import inside an effect, so this
  *     component (and the pure helpers in ./coordinates) stay importable and
  *     testable under jsdom where WebGL is unavailable.
  *
@@ -29,7 +33,7 @@ import {
   DEFAULT_ZOOM,
   clampCoordinate,
   formatLatLng,
-  getMapboxToken,
+  getMapStyleUrl,
   parseLatLng,
   roundCoordinate,
   type LatLng,
@@ -37,9 +41,9 @@ import {
 
 import styles from './MapLocationPicker.module.css';
 
-// Minimal structural types for the slice of the Mapbox GL JS API we use. We
-// deliberately avoid a hard type dependency on `mapbox-gl` (it is loaded lazily
-// and may be absent from the type graph in some tooling paths).
+// Minimal structural types for the slice of the MapLibre GL JS API we use. We
+// deliberately avoid a hard type dependency on `maplibre-gl` (it is loaded
+// lazily and may be absent from the type graph in some tooling paths).
 interface GlLngLat {
   lng: number;
   lat: number;
@@ -75,7 +79,7 @@ export interface MapLocationPickerProps {
   labelLng: string;
   /** Localised helper text shown under the map ("drag the pin to place…"). */
   helpText?: string;
-  /** Localised notice shown when no Mapbox token is configured. */
+  /** Localised notice shown when no map style URL is configured. */
   unavailableText?: string;
   /** Optional geofence radius (metres) to visualise as a circle around the pin. */
   radiusMeters?: number;
@@ -133,8 +137,8 @@ export function MapLocationPicker({
   labelClassName,
   inputClassName,
 }: MapLocationPickerProps): React.ReactElement {
-  const token = getMapboxToken();
-  const mapReady = token !== '';
+  const styleUrl = getMapStyleUrl();
+  const mapReady = styleUrl !== '';
 
   const reactId = useId();
   const latId = `${reactId}-lat`;
@@ -151,7 +155,7 @@ export function MapLocationPicker({
 
   const value = parseLatLng(latitude, longitude);
 
-  // --- Mapbox GL lifecycle (only when a token is configured) --------------
+  // --- MapLibre GL lifecycle (only when a style URL is configured) --------
   useEffect(() => {
     if (!mapReady || !containerRef.current) return;
 
@@ -160,25 +164,25 @@ export function MapLocationPicker({
 
     void (async () => {
       try {
-        const mod = await import('mapbox-gl');
-        await import('mapbox-gl/dist/mapbox-gl.css');
+        const mod = await import('maplibre-gl');
+        await import('maplibre-gl/dist/maplibre-gl.css');
         if (cancelled || !containerRef.current) return;
 
-        const mapboxgl = (mod as { default?: unknown }).default ?? mod;
-        (mapboxgl as { accessToken: string }).accessToken = token;
+        const maplibregl = (mod as { default?: unknown }).default ?? mod;
 
         const center = value ?? initialCenter ?? DEFAULT_CENTER;
-        const MapCtor = (mapboxgl as { Map: new (opts: unknown) => GlMap }).Map;
+        const MapCtor = (maplibregl as { Map: new (opts: unknown) => GlMap })
+          .Map;
         map = new MapCtor({
           container: containerRef.current,
-          style: 'mapbox://styles/mapbox/streets-v12',
+          style: styleUrl,
           center: [center.lng, center.lat],
           zoom: value ? 14 : DEFAULT_ZOOM,
         });
         mapRef.current = map;
 
         const MarkerCtor = (
-          mapboxgl as { Marker: new (opts: unknown) => GlMarker }
+          maplibregl as { Marker: new (opts: unknown) => GlMarker }
         ).Marker;
         const marker = new MarkerCtor({ draggable: !disabled, color: '#2563eb' });
         markerRef.current = marker;
@@ -215,7 +219,7 @@ export function MapLocationPicker({
     // Intentionally run once for the map instance; external value changes are
     // reflected via the separate sync effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mapReady, token, disabled]);
+  }, [mapReady, styleUrl, disabled]);
 
   // --- Keep the pin in sync when the operator types into the inputs -------
   useEffect(() => {
