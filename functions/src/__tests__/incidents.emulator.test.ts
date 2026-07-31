@@ -1053,6 +1053,40 @@ describe('incidents Trafikverket importer', () => {
     const second = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
     expect(second.upserted).toBe(1);
   });
+
+  it('imports >500 classified incidents without tripping the 500-write WriteBatch limit', async () => {
+    // Regression guard for the batch-boundary bug: raising TRAFIKVERKET_QUERY_LIMIT
+    // to 3000 lets a single run import thousands of incidents, but Firestore's
+    // WriteBatch throws above 500 writes/commit. runTrafikverketSync must chunk
+    // its upserts (UPSERT_BATCH_SIZE=400). Seed 1,200 classifiable deviations —
+    // spanning three batch boundaries — and assert they ALL persist and the run
+    // does not throw. A single un-chunked batch would throw here.
+    const COUNT = 1_200;
+    const deviations = Array.from({ length: COUNT }, (_, i) => ({
+      Id: `DEV-bulk-${i}`,
+      MessageType: 'Vägarbete',
+      Message: `Vägarbete bulk ${i}`,
+      // Vary the point slightly per deviation; all within Sweden's WGS84 range.
+      Geometry: { WGS84: `POINT (${(12 + i * 0.0001).toFixed(4)} 57.4874)` },
+    }));
+    const mock: TrafikverketResponse = {
+      RESPONSE: { RESULT: [{ Situation: [{ Id: 'SIT-bulk', Deviation: deviations }] }] },
+    };
+    const fetcher = async () => mock;
+
+    const result = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
+    expect(result).toEqual({ skipped: false, upserted: COUNT });
+
+    // Spot-check that docs across every batch boundary actually persisted.
+    for (const i of [0, 399, 400, 799, 800, COUNT - 1]) {
+      const stored = await adminDb
+        .collection('incidents')
+        .doc(importedIncidentDocId(`DEV-bulk-${i}`))
+        .get();
+      expect(stored.exists).toBe(true);
+      expect(stored.data()?.source).toBe('trafikverket');
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
