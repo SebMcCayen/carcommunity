@@ -13,7 +13,7 @@ package com.kungsbackacarcommunity.app.garage
  * SELECTION rather than free text.
  */
 internal object VehicleCatalogueData {
-    const val VERSION = "1.0.0"
+    const val VERSION = "1.1.0"
     const val OTHER_ID = "other"
     const val MIN_MODEL_YEAR = 1900
     const val MAX_MODEL_YEAR_OFFSET = 1
@@ -23,7 +23,7 @@ internal object VehicleCatalogueData {
         listOf(
             "volvo|Volvo|1|140=140;164=164;240=240;260=260;262c=262C;340=340;360=360;440=440;460=460;480=480;66=66;740=740;760=760;780=780;850=850;940=940;960=960;amazon=Amazon;c30=C30;c40=C40;c70=C70;ec40=EC40;em90=EM90;es90=ES90;ex30=EX30;ex40=EX40;ex90=EX90;p1800=P1800;pv444=PV444;pv544=PV544;s40=S40;s60=S60;s70=S70;s80=S80;s90=S90;v40=V40;v50=V50;v60=V60;v70=V70;v90=V90;xc40=XC40;xc60=XC60;xc70=XC70;xc90=XC90",
             "volkswagen|Volkswagen|1|amarok=Amarok;arteon=Arteon;beetle=Beetle;bora=Bora;caddy=Caddy;california=California;caravelle=Caravelle;corrado=Corrado;crafter=Crafter;e-golf=e-Golf;e-up=e-up!;eos=Eos;fox=Fox;golf=Golf;golf-plus=Golf Plus;golf-sportsvan=Golf Sportsvan;id-buzz=ID. Buzz;id-3=ID.3;id-4=ID.4;id-5=ID.5;id-7=ID.7;jetta=Jetta;karmann-ghia=Karmann Ghia;lupo=Lupo;multivan=Multivan;passat=Passat;phaeton=Phaeton;polo=Polo;scirocco=Scirocco;sharan=Sharan;t-cross=T-Cross;t-roc=T-Roc;taigo=Taigo;tiguan=Tiguan;touareg=Touareg;touran=Touran;transporter=Transporter;type-1=Type 1;type-2=Type 2;type-3=Type 3;up=Up!;vento=Vento",
-            "toyota|Toyota|1|4runner=4Runner;auris=Auris;avensis=Avensis;aygo=Aygo;aygo-x=Aygo X;bz4x=bZ4X;c-hr=C-HR;camry=Camry;carina=Carina;celica=Celica;corolla=Corolla;corolla-cross=Corolla Cross;corolla-verso=Corolla Verso;crown=Crown;gr-supra=GR Supra;gr-yaris=GR Yaris;gr86=GR86;highlander=Highlander;hilux=Hilux;iq=iQ;land-cruiser=Land Cruiser;mr2=MR2;previa=Previa;prius=Prius;prius-plus=Prius+;proace=Proace;proace-city=Proace City;rav4=RAV4;starlet=Starlet;supra=Supra;tacoma=Tacoma;tercel=Tercel;tundra=Tundra;urban-cruiser=Urban Cruiser;verso=Verso;yaris=Yaris;yaris-cross=Yaris Cross",
+            "toyota|Toyota|1|4runner=4Runner;auris=Auris;avensis=Avensis;aygo=Aygo;aygo-x=Aygo X;bz4x=bZ4X;c-hr=C-HR;camry=Camry;carina=Carina;celica=Celica;corolla=Corolla;corolla-cross=Corolla Cross;corolla-verso=Corolla Verso;crown=Crown;gr-supra=GR Supra;gr-yaris=GR Yaris;gr86=GR86;gt86=GT86;highlander=Highlander;hilux=Hilux;iq=iQ;land-cruiser=Land Cruiser;mr2=MR2;previa=Previa;prius=Prius;prius-plus=Prius+;proace=Proace;proace-city=Proace City;rav4=RAV4;starlet=Starlet;supra=Supra;tacoma=Tacoma;tercel=Tercel;tundra=Tundra;urban-cruiser=Urban Cruiser;verso=Verso;yaris=Yaris;yaris-cross=Yaris Cross",
             "bmw|BMW|1|02-serie=02-serie;1-serie=1-serie;2-serie=2-serie;2002=2002;3-serie=3-serie;3-0-cs=3.0 CS;4-serie=4-serie;5-serie=5-serie;6-serie=6-serie;7-serie=7-serie;8-serie=8-serie;i3=i3;i4=i4;i5=i5;i7=i7;ix=iX;ix1=iX1;ix2=iX2;ix3=iX3;m2=M2;m3=M3;m4=M4;m5=M5;m6=M6;m8=M8;x1=X1;x2=X2;x3=X3;x4=X4;x5=X5;x6=X6;x7=X7;xm=XM;z1=Z1;z3=Z3;z4=Z4;z8=Z8",
             "audi|Audi|1|100=100;200=200;50=50;80=80;90=90;a1=A1;a2=A2;a3=A3;a4=A4;a5=A5;a6=A6;a7=A7;a8=A8;cabriolet=Cabriolet;coupe=Coupé;e-tron-gt=e-tron GT;q2=Q2;q3=Q3;q4-e-tron=Q4 e-tron;q5=Q5;q6-e-tron=Q6 e-tron;q7=Q7;q8=Q8;q8-e-tron=Q8 e-tron;quattro=Quattro;r8=R8;rs-q3=RS Q3;rs-q8=RS Q8;rs3=RS3;rs4=RS4;rs5=RS5;rs6=RS6;rs7=RS7;tt=TT;v8=V8",
             "mercedes-benz|Mercedes-Benz|1|190=190;300sl=300SL;a-klass=A-Klass;amg-gt=AMG GT;b-klass=B-Klass;c-klass=C-Klass;citan=Citan;cl=CL;cla=CLA;clk=CLK;cls=CLS;e-klass=E-Klass;eqa=EQA;eqb=EQB;eqc=EQC;eqe=EQE;eqs=EQS;eqv=EQV;g-klass=G-Klass;gl=GL;gla=GLA;glb=GLB;glc=GLC;gle=GLE;glk=GLK;gls=GLS;ml=ML;r-klass=R-Klass;s-klass=S-Klass;sl=SL;slc=SLC;slk=SLK;slr-mclaren=SLR McLaren;sprinter=Sprinter;unimog=Unimog;v-klass=V-Klass;viano=Viano;vito=Vito;w123=W123;w124=W124;w126=W126",
@@ -101,7 +101,7 @@ internal object VehicleCatalogueData {
             "microcar|Microcar|0|due=Due;m-go=M.Go;m8=M8",
             "morgan|Morgan|0|3-wheeler=3 Wheeler;4-4=4/4;plus-4=Plus 4;plus-8=Plus 8;plus-six=Plus Six;super-3=Super 3",
             "moskvitch|Moskvitch|0|2140=2140;407=407;408=408;412=412",
-            "nio|NIO|0|el6=EL6;el7=EL7;el8=EL8;es8=ES8;et5=ET5;et7=ET7",
+            "nio|NIO|0|el6=EL6;el7=EL7;el8=EL8;es8=ES8;et5=ET5;et5-touring=ET5 Touring;et7=ET7",
             "oldsmobile|Oldsmobile|0|442=442;cutlass=Cutlass;delta-88=Delta 88;toronado=Toronado",
             "omoda|Omoda|0|5=5;7=7;9=9",
             "plymouth|Plymouth|0|barracuda=Barracuda;fury=Fury;prowler=Prowler;road-runner=Road Runner;valiant=Valiant",
