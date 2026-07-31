@@ -136,7 +136,9 @@ export function CancelDialog({ event, onConfirm, onClose, isSubmitting, error }:
             aria-describedby={reasonError ? 'cancel-reason-error' : undefined}
           />
           {reasonError && (
-            <span id="cancel-reason-error" style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)' }} role="alert">
+            // `--color-error` (#d9534f) measures 4.32:1 on the dark card surface,
+            // just below AA. `--status-error` is theme-aware: 6.79:1 there.
+            <span id="cancel-reason-error" style={{ fontSize: 'var(--text-xs)', color: 'var(--status-error)' }} role="alert">
               {reasonError}
             </span>
           )}

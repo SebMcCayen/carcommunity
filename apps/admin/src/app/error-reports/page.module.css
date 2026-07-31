@@ -36,28 +36,35 @@
   color: var(--text-primary);
 }
 
+/* Fill, border, colour, focus and disabled come from the global
+ * `input, textarea, select` baseline in globals.css. Only layout here. */
 .select {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--text-sm);
 }
 
 .refreshButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .refreshButton:hover:not(:disabled) {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.refreshButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .refreshButton:disabled {
@@ -71,14 +78,20 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
+/* Sticky header. The surface fill was already the header band here, and
+ * it has to stay opaque for rows not to show through when it sticks. */
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  background: var(--bg-surface);
+  background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-color);
   font-weight: var(--fw-semibold);
   color: var(--text-primary);
@@ -89,6 +102,14 @@
   border-bottom: 1px solid var(--border-color);
   vertical-align: top;
   color: var(--text-primary);
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .messageCell {
@@ -114,35 +135,36 @@
 
 .severityInfo {
   composes: badge;
-  border: 1px solid var(--border-color);
-  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-inset);
   color: var(--text-secondary);
 }
 
 .severityWarning {
   composes: badge;
-  border: 1px solid var(--color-warning);
-  background: var(--bg-surface);
-  color: var(--color-warning);
+  border: 1px solid var(--status-warning);
+  background: var(--warning-bg);
+  color: var(--status-warning);
 }
 
 .severityError {
   composes: badge;
-  border: 1px solid var(--color-error);
-  background: var(--bg-surface);
-  color: var(--color-error);
+  border: 1px solid var(--status-error);
+  background: var(--error-bg);
+  color: var(--status-error);
 }
 
+/* Critical is the only inverted badge: solid error fill, surface ink. */
 .severityCritical {
   composes: badge;
-  border: 1px solid var(--color-error);
-  background: var(--color-error);
+  border: 1px solid var(--status-error);
+  background: var(--status-error);
   color: var(--bg-surface);
 }
 
 .actionButton {
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
@@ -150,14 +172,24 @@
   font-size: var(--text-xs);
   font-weight: var(--fw-medium);
   white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .actionButton:hover {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
+.actionButton:active {
+  transform: translateY(1px);
+}
+
+/* Inset well so the expanded detail panel below reads as a raised card
+ * rather than blending into the row it belongs to. */
 .detailRow td {
-  background: var(--bg-surface);
+  background: var(--bg-inset);
 }
 
 .detail {
@@ -168,6 +200,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
 }
 
 .detailMessage {
@@ -216,7 +249,7 @@
 
 .errorText {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
   padding: var(--space-4) 0;
 }

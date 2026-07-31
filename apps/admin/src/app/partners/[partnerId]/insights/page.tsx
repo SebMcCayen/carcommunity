@@ -115,9 +115,12 @@ export default function PartnerInsightsPage() {
               marginTop: 'var(--space-3)',
               padding: 'var(--space-2) var(--space-4)',
               borderRadius: 'var(--radius-sm)',
-              border: '1px solid var(--color-border)',
+              // Was `--color-border` / `--color-text`, neither of which was ever
+              // declared: the border collapsed to `none` and the retry button
+              // rendered as bare text.
+              border: '1px solid var(--border-strong)',
               background: 'transparent',
-              color: 'var(--color-text)',
+              color: 'var(--text-primary)',
               cursor: 'pointer',
             }}
           >
@@ -138,13 +141,16 @@ export default function PartnerInsightsPage() {
             <article
               key={metric.interactionType}
               style={{
-                border: '1px solid var(--color-border)',
+                // Was `--color-border` / `--color-surface`, neither declared, so
+                // these metric cards had no border and a transparent fill.
+                border: '1px solid var(--border-color)',
                 borderRadius: 'var(--radius-md)',
                 padding: 'var(--space-4)',
-                background: 'var(--color-surface)',
+                background: 'var(--bg-surface)',
+                boxShadow: 'var(--elevation-1)',
               }}
             >
-              <h2 style={{ margin: 0, marginBottom: 'var(--space-2)', fontSize: 'var(--text-base)' }}>
+              <h2 style={{ margin: 0, marginBottom: 'var(--space-2)', fontSize: 'var(--text-md)' }}>
                 {METRIC_LABELS[metric.interactionType]}
               </h2>
               <p style={{ margin: 0, fontSize: 'var(--text-2xl)', fontWeight: 'var(--fw-semibold)' }}>

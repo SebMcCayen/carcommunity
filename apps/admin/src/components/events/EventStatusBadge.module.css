@@ -2,7 +2,7 @@
   display: inline-flex;
   align-items: center;
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-full, 999px);
+  border-radius: var(--radius-full);
   font-size: var(--text-xs);
   font-weight: var(--fw-semibold);
   letter-spacing: 0.03em;
@@ -10,25 +10,25 @@
 }
 
 .draft {
-  background-color: rgba(180, 180, 180, 0.15);
+  background-color: var(--bg-inset);
   color: var(--text-secondary);
-  border: 1px solid rgba(180, 180, 180, 0.4);
+  border: 1px solid var(--border-color);
 }
 
 .published {
-  background-color: rgba(50, 200, 100, 0.12);
-  color: var(--color-success);
-  border: 1px solid rgba(50, 200, 100, 0.3);
+  background-color: var(--success-bg);
+  color: var(--status-success);
+  border: 1px solid var(--status-success);
 }
 
 .cancelled {
-  background-color: rgba(200, 50, 50, 0.1);
-  color: var(--color-error);
-  border: 1px solid rgba(200, 50, 50, 0.25);
+  background-color: var(--error-bg);
+  color: var(--status-error);
+  border: 1px solid var(--status-error);
 }
 
 .completed {
-  background-color: rgba(100, 100, 200, 0.1);
-  color: #6060c0;
-  border: 1px solid rgba(100, 100, 200, 0.25);
+  background-color: var(--info-bg);
+  color: var(--status-info);
+  border: 1px solid var(--status-info);
 }

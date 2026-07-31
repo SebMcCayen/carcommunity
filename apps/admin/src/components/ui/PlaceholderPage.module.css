@@ -23,11 +23,27 @@
   margin-bottom: var(--space-8);
 }
 
+/* Same short gold rail as the dashboard headings. The space it needs is taken
+   out of the existing margin, so the rhythm of the page is unchanged. */
 .sectionTitle {
+  position: relative;
   font-size: var(--text-lg);
   font-weight: var(--fw-semibold);
-  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-2);
+  border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
+}
+
+.sectionTitle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 32px;
+  height: 2px;
+  background-color: var(--accent);
+  border-radius: var(--radius-full);
 }
 
 .behaviorList {
@@ -46,7 +62,8 @@
 }
 
 .bullet {
-  color: var(--accent);
+  /* Readable accent: raw gold as text measures 1.87:1 on the light surface. */
+  color: var(--accent-text);
   flex-shrink: 0;
   font-weight: var(--fw-bold);
 }
@@ -56,15 +73,15 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  background-color: rgba(240, 165, 0, 0.08);
-  border: 1px solid rgba(240, 165, 0, 0.25);
+  background-color: var(--warning-bg);
+  border: 1px solid var(--status-warning);
   border-radius: var(--radius-md);
   margin-top: var(--space-8);
 }
 
 .todoIcon {
   font-size: var(--text-lg);
-  color: var(--color-warning);
+  color: var(--status-warning);
   flex-shrink: 0;
   line-height: 1.4;
 }

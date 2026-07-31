@@ -39,6 +39,14 @@
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
   color: var(--text-secondary);
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.tab:hover {
+  color: var(--text-primary);
+  border-bottom-color: var(--border-strong);
 }
 
 .tabActive {
@@ -47,26 +55,44 @@
   color: var(--text-primary);
 }
 
+.tabActive:hover {
+  border-bottom-color: var(--accent);
+}
+
 .tableWrap {
   overflow-x: auto;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bg-surface);
   text-align: left;
   padding: var(--space-2) var(--space-3);
   color: var(--text-secondary);
   font-weight: var(--fw-medium);
   border-bottom: 1px solid var(--border-color);
   white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .table td {
@@ -102,20 +128,20 @@
 }
 
 .badgePending {
-  border: 1px solid var(--color-warning);
-  color: var(--text-primary);
-  background: rgba(240, 165, 0, 0.08);
+  border: 1px solid var(--status-warning);
+  color: var(--status-warning);
+  background: var(--warning-bg);
 }
 
 .badgeProcessed {
-  border: 1px solid var(--color-success);
-  color: var(--color-success);
-  background: transparent;
+  border: 1px solid var(--status-success);
+  color: var(--status-success);
+  background: var(--success-bg);
 }
 
 .actionButton {
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
@@ -123,10 +149,18 @@
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
   white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .actionButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
   border-color: var(--accent);
+}
+
+.actionButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .actionButton:disabled {
@@ -142,12 +176,12 @@
 
 .error {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }
 
 .success {
   margin: 0;
-  color: var(--color-success);
+  color: var(--status-success);
   font-size: var(--text-sm);
 }

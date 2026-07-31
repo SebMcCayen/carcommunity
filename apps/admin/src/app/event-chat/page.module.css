@@ -1,49 +1,56 @@
 .page {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-  padding: 24px;
+  gap: var(--space-6);
+  padding: var(--space-6);
 }
 
 .header {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
 }
 
 .title {
-  font-size: 22px;
-  font-weight: 700;
+  font-size: var(--text-xl);
+  font-weight: var(--fw-bold);
   margin: 0;
 }
 
 .subtitle {
-  font-size: 14px;
-  color: #666;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .tabs {
   display: flex;
-  gap: 4px;
-  border-bottom: 1px solid #e5e7eb;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tab {
-  padding: 8px 16px;
+  padding: var(--space-2) var(--space-4);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  color: #6b7280;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-secondary);
   margin-bottom: -1px;
+  transition:
+    color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.tab:hover:not(:disabled) {
+  color: var(--text-primary);
 }
 
 .tabActive {
-  border-bottom-color: #2563eb;
-  color: #2563eb;
+  border-bottom-color: var(--accent);
+  color: var(--accent-text);
 }
 
 .content {
@@ -52,23 +59,35 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
-  padding: 8px 12px;
-  background: #f9fafb;
-  border-bottom: 1px solid #e5e7eb;
-  font-weight: 600;
-  color: #374151;
+  padding: var(--space-2) var(--space-3);
+  background-color: var(--bg-page);
+  border-bottom: 1px solid var(--border-color);
+  font-weight: var(--fw-semibold);
+  color: var(--text-secondary);
 }
 
 .table td {
-  padding: 8px 12px;
-  border-bottom: 1px solid #f3f4f6;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-color);
   vertical-align: top;
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .removedRow td {
@@ -76,9 +95,9 @@
 }
 
 .idCell {
-  font-family: monospace;
-  font-size: 12px;
-  color: #6b7280;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
 }
 
 .excerptCell {
@@ -89,49 +108,58 @@
 
 .badge {
   display: inline-block;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  font-size: 12px;
-  background: #f3f4f6;
-  color: #374151;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  background: var(--bg-inset);
+  color: var(--text-primary);
 }
 
 .badgeVisible {
   composes: badge;
-  background: #d1fae5;
-  color: #065f46;
+  background: var(--success-bg);
+  color: var(--status-success);
 }
 
 .badgeRemoved {
   composes: badge;
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--error-bg);
+  color: var(--status-error);
 }
 
 .actionButton {
-  padding: 4px 10px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  background: #fff;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
   cursor: pointer;
-  font-size: 12px;
-  color: #dc2626;
+  font-size: var(--text-xs);
+  color: var(--text-primary);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
-.actionButton:hover {
-  background: #fee2e2;
+.actionButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.actionButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .statusText {
-  color: #6b7280;
-  font-size: 14px;
-  padding: 16px 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  padding: var(--space-4) 0;
 }
 
 .errorText {
-  color: #dc2626;
-  font-size: 14px;
-  padding: 16px 0;
+  color: var(--status-error);
+  font-size: var(--text-sm);
+  padding: var(--space-4) 0;
 }
 
 /* Dialog */
@@ -139,7 +167,8 @@
 .dialogOverlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(4, 2, 17, 0.68);
+  backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -147,93 +176,134 @@
 }
 
 .dialog {
-  background: #fff;
-  border-radius: 8px;
-  padding: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-3);
+  padding: var(--space-6);
   max-width: 480px;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--space-3);
+  animation: kccFadeInUp var(--motion-base) var(--ease-out) both;
 }
 
 .dialogTitle {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-bold);
   margin: 0;
 }
 
 .dialogMeta {
-  font-size: 13px;
-  color: #6b7280;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
   margin: 0;
 }
 
 .dialogExcerpt {
-  font-size: 14px;
-  background: #f9fafb;
-  padding: 8px 12px;
-  border-radius: 4px;
-  border-left: 3px solid #e5e7eb;
+  font-size: var(--text-sm);
+  background: var(--bg-inset);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--border-strong);
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .label {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
 }
 
+/* Layout only — fill, border, focus ring and disabled state come from the
+ * global `textarea` baseline in globals.css. */
 .textarea {
   width: 100%;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-  padding: 8px;
-  font-size: 14px;
+  padding: var(--space-2);
+  font-size: var(--text-sm);
   resize: vertical;
   box-sizing: border-box;
 }
 
 .errorHint {
-  font-size: 12px;
-  color: #dc2626;
+  font-size: var(--text-xs);
+  color: var(--status-error);
   margin: 0;
 }
 
 .dialogActions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--space-2);
 }
 
 .rowActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--space-2);
 }
 
 .cancelButton {
-  padding: 8px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-  background: #fff;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
   cursor: pointer;
-  font-size: 14px;
+  font-size: var(--text-sm);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.cancelButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
 .removeButton {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  background: #dc2626;
-  color: #fff;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--status-error);
   cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.removeButton:hover:not(:disabled) {
+  background: var(--error-bg);
+}
+
+.removeButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .removeButton:disabled {
-  background: #fca5a5;
+  opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog {
+    animation: none;
+  }
+}
+
+/* Declared locally because CSS Modules rewrites animation names to a hashed
+ * local name — a keyframe in globals.css is unreachable from a module and
+ * the animation would silently not run. See the note in globals.css. */
+@keyframes kccFadeInUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
