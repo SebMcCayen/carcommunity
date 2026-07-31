@@ -15,7 +15,7 @@ package com.kungsbackacarcommunity.app.drives
  * caller-supplied period boundaries, so it is fully unit-testable. Time-zone /
  * calendar concerns (resolving "this week" / "this month" to epoch-millis) live
  * at the composable edge and are injected here as plain [Long]s, mirroring
- * [DriveStatsScreen].
+ * [DriveStatsCalculator].
  */
 
 /** Date-range presets offered by the History filter. */

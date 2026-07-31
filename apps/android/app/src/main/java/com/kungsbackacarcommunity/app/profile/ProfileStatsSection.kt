@@ -23,9 +23,8 @@ import java.util.Date
  *
  * Presentational only: it renders the pre-assembled [ProfileStatsSummary] and
  * reads no backend of its own. It matches the app's stat idiom (a titled
- * Material [Card] of label/value rows, the same shape "Your driving"
- * ([com.kungsbackacarcommunity.app.drives.DriveStatsScreen]) and the badges
- * screen use) and reuses [DriveFormatters] for every distance/time figure so the
+ * Material [Card] of label/value rows, the same shape the badges
+ * screen uses) and reuses [DriveFormatters] for every distance/time figure so the
  * numbers read identically to the History screens.
  *
  * A member with no drives and no awards gets a single encouraging empty card

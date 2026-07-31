@@ -99,10 +99,6 @@ fun DrivesListScreen(
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
-    // Opens the personal "your driving" stats page. The entry is rendered only
-    // when at least one drive is loaded — a zero-drive member sees the empty card
-    // instead, so the stats entry never leads to a page of zeroes.
-    onShowStats: (() -> Unit)? = null,
 ) {
     // Search/filter/sort state for the History list. Survives config changes
     // (rememberSaveable): the query is a String and the three enums are
@@ -138,7 +134,8 @@ fun DrivesListScreen(
     // edge (a Calendar/time-zone concern) so the fold in [DriveFilters] stays
     // pure and deterministic. Recomputed each composition — cheap, and it lets a
     // week/month rollover correct itself on the next recomposition rather than
-    // pinning to the boundary the screen opened in (mirrors [DriveStatsScreen]).
+    // pinning to the boundary the screen opened in (the same composable-edge
+    // pattern the profile stats fold uses).
     val weekStartMillis = DrivePeriodBoundaries.startOfCurrentWeekMillis()
     val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
 
@@ -208,13 +205,6 @@ fun DrivesListScreen(
                     if (state.drives.isEmpty()) {
                         item { EmptyDrives() }
                     } else {
-                        // The stats entry reflects ALL drives (all-time), never the
-                        // filtered set: "your driving" is a lifetime figure and would
-                        // be confusing if it changed as you typed a search. It is
-                        // shown whenever any drive exists, independent of the filter.
-                        if (onShowStats != null) {
-                            item { StatsEntryCard(onShowStats) }
-                        }
                         item {
                             DriveFilterSection(
                                 criteria = criteria,
@@ -243,27 +233,6 @@ fun DrivesListScreen(
                         }
                     }
             }
-        }
-    }
-}
-
-@Composable
-private fun StatsEntryCard(onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
-        ) {
-            Text(
-                text = stringResource(R.string.savedDrives_statsEntryTitle),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = stringResource(R.string.savedDrives_statsEntrySubtitle),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }

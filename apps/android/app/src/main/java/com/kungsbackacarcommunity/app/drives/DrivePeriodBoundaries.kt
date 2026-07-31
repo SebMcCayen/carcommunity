@@ -8,7 +8,7 @@ import java.util.Calendar
  * to a cut-off.
  *
  * This is the ONE place the `Calendar` truncation lives, so the History filter
- * ([DrivesScreen]) and the personal stats fold ([DriveStatsScreen]) can never
+ * ([DrivesScreen]) and the personal stats fold ([DriveStatsCalculator]) can never
  * silently diverge on DST / locale first-day-of-week edge cases. The Calendar /
  * time-zone concern deliberately stays here at the composable edge; the folds it
  * feeds ([DriveFilters], [DriveStatsCalculator]) take plain [Long]s and stay
