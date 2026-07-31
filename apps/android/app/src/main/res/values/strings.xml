@@ -1187,6 +1187,7 @@
     <string name="channel_mentionPicker">Nämn en medlem</string>
     <string name="channel_mentionLimit">Du kan nämna högst %1$d medlemmar i ett meddelande.</string>
     <string name="channel_mentionsNotDelivered">Ditt meddelande publicerades, men några av medlemmarna du nämnde kunde inte aviseras.</string>
+    <string name="channel_locationLink">📍 Visa på kartan</string>
     <string name="chatHub_title">Chatt</string>
     <string name="chatHub_back">Tillbaka</string>
     <string name="chatHub_tabCommunity">Gemenskap</string>
@@ -1282,6 +1283,18 @@
     <string name="shell_liveClose">Stäng liveplats</string>
     <string name="shell_liveDetails">Fler alternativ</string>
     <string name="shell_liveControls">Kontroller för liveplats</string>
+    <string name="shell_placeMenuTitle">Vald plats</string>
+    <string name="shell_placeMenuNavigate">Navigera hit</string>
+    <string name="shell_placeMenuCopy">Kopiera position</string>
+    <string name="shell_placeMenuSave">Spara plats</string>
+    <string name="shell_placeMenuClose">Stäng</string>
+    <string name="shell_placeCopied">Position kopierad</string>
+    <string name="shell_placeSaved">Plats sparad</string>
+    <string name="shell_savedPlacesButton">Sparade platser</string>
+    <string name="shell_savedPlacesPickerTitle">Sparade platser</string>
+    <string name="shell_savedPlacesPickerEmpty">Inga sparade platser än</string>
+    <string name="shell_selectedLocationPin">Vald plats</string>
+    <string name="shell_sharedLocationName">Delad plats</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

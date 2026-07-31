@@ -16,13 +16,13 @@ import org.junit.Test
  */
 class MapControlSetTest {
     @Test
-    fun `full stack is report, layers, compass, recenter, chat`() {
+    fun `full stack is report, layers, compass, saved places, chat`() {
         assertEquals(
             listOf(
                 MapCircleControlKind.Report,
                 MapCircleControlKind.Layers,
                 MapCircleControlKind.Compass,
-                MapCircleControlKind.Recenter,
+                MapCircleControlKind.SavedPlaces,
                 MapCircleControlKind.Chat,
             ),
             MapControlSet.rightSideStack(incidentReportingEnabled = true),
@@ -35,7 +35,7 @@ class MapControlSetTest {
             listOf(
                 MapCircleControlKind.Layers,
                 MapCircleControlKind.Compass,
-                MapCircleControlKind.Recenter,
+                MapCircleControlKind.SavedPlaces,
                 MapCircleControlKind.Chat,
             ),
             MapControlSet.rightSideStack(incidentReportingEnabled = false),

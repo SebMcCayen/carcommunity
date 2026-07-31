@@ -99,7 +99,7 @@ class MapNightModeNavigationTest {
                             participantCount = 0,
                             userLabel = "Tester",
                             onSearch = {},
-                            onRecenter = {},
+                            onOpenSavedPlaces = {},
                             moreMenuEntries = emptyList(),
                         )
                     }
@@ -193,7 +193,7 @@ class MapNightModeNavigationTest {
                     participantCount = 0,
                     userLabel = "Tester",
                     onSearch = {},
-                    onRecenter = {},
+                    onOpenSavedPlaces = {},
                     moreMenuEntries = emptyList(),
                 )
             }

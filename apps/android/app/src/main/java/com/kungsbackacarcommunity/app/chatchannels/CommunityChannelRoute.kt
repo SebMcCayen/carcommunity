@@ -65,6 +65,7 @@ fun CommunityChannelRoute(
     friendsRepository: FriendsRepository? = null,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
@@ -166,6 +167,7 @@ fun CommunityChannelRoute(
         droppedMentionCount = droppedMentions,
         onDismissDroppedMentions = { coordinator.dismissDroppedMentions() },
         onViewProfile = onViewProfile,
+        onShowLocationOnMap = onShowLocationOnMap,
         surface = ChatSurface.CommunityChannel,
         onBlock =
             blockingCoordinator?.let { c ->

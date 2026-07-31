@@ -32,7 +32,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Event
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
@@ -146,9 +146,17 @@ fun MapHome(
     userLabel: String,
     avatarUrl: String? = null,
     onSearch: () -> Unit,
-    onRecenter: () -> Unit,
+    // Opens the saved-locations picker (the map control's action). The picker and
+    // its "jump the map here" behaviour are the host's, so the map home only
+    // raises it. Recentring the camera is now the compass control's job (it
+    // re-centres on the user as it applies an orientation) plus the ~10s idle
+    // auto-return, so the map home no longer carries a dedicated recenter button.
+    onOpenSavedPlaces: () -> Unit,
     moreMenuEntries: List<HubEntry>,
     modifier: Modifier = Modifier,
+    // The point a long-press/POI tap picked, drawn as an animated pin so the user
+    // sees which spot the place menu refers to. Null when no menu is open.
+    droppedPin: com.kungsbackacarcommunity.app.navigation.LatLng? = null,
     /**
      * True while another bottom-nav tab is drawn over the map.
      *
@@ -474,6 +482,11 @@ fun MapHome(
         // floating chrome.
         nearbyOverlay?.invoke()
 
+        // The long-press place pin: an animated marker on the picked point while
+        // the place menu is open, so the menu and the pin reference the SAME spot.
+        // Drawn above the live overlays but still under the floating controls.
+        DroppedPinOverlay(mapSurface = mapSurface, target = droppedPin)
+
         // Transparent outside-tap catcher, shown only while the search bar is
         // expanded: a tap on the open map area collapses it back to the round
         // icon. It's composed here, above the map but below every later overlay
@@ -646,15 +659,15 @@ fun MapHome(
                             modifier = Modifier.testTag(MAP_HOME_COMPASS_TAG),
                         )
 
-                    // Recenter / my-location — calls MapSurface.recenter().
-                    // Re-centres WITHOUT touching bearing, which is what still
-                    // separates it from the compass above: it keeps the map rotated
-                    // the way the user left it.
-                    MapCircleControlKind.Recenter ->
+                    // Saved places — opens the saved-locations picker; tapping a
+                    // place jumps the map there (host-owned, same in-app "move map
+                    // to point" flow a chat geo-link tap uses).
+                    MapCircleControlKind.SavedPlaces ->
                         CircleControl(
-                            icon = Icons.Filled.MyLocation,
-                            contentDescription = stringResource(R.string.shell_recenter),
-                            onClick = onRecenter,
+                            icon = Icons.Filled.Place,
+                            contentDescription = stringResource(R.string.shell_savedPlacesButton),
+                            onClick = onOpenSavedPlaces,
+                            modifier = Modifier.testTag(MAP_HOME_SAVED_PLACES_TAG),
                         )
 
                     // Chat bubble — opens the chat hub; shows a badge with the
@@ -773,6 +786,9 @@ const val MAP_HOME_LAYERS_TAG = "map_home_layers"
 
 /** Test tag on the floating compass control (directly above the my-location control). */
 const val MAP_HOME_COMPASS_TAG = "map_home_compass"
+
+/** Test tag on the saved-places control in the map-home right-side stack. */
+const val MAP_HOME_SAVED_PLACES_TAG = "map_home_saved_places"
 
 /** Test tag on the collapsed round search button (upper-left). */
 const val MAP_HOME_SEARCH_TAG = "map_home_search"
@@ -1757,8 +1773,8 @@ private fun ParticipantChip(count: Int) {
 
 /**
  * One floating round map control — the shared shape/size/elevation/haptics of
- * the map's right-side stack (report, live-location, layers, compass, recenter,
- * chat, top-to-bottom).
+ * the map's right-side stack (report, layers, compass, saved-places, chat,
+ * top-to-bottom).
  *
  * `internal`, not private, because the turn-by-turn navigation screen draws the
  * SAME stack (see `navigation/turnbyturn/TurnByTurnNavScreen.kt`). Navigation is

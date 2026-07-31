@@ -30,7 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -354,6 +354,10 @@ fun TurnByTurnNavScreen(
     on3dEnabledChange: (Boolean) -> Unit = {},
     unreadChatCount: Int = 0,
     onOpenChat: () -> Unit = {},
+    // Opens the host's saved-locations picker — the map home's saved-places
+    // control, so the same button on the same right-side stack (see
+    // [MapControlSet.rightSideStack]).
+    onOpenSavedPlaces: () -> Unit = {},
     convoyBar: (@Composable () -> Unit)? = null,
     liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
@@ -901,20 +905,16 @@ fun TurnByTurnNavScreen(
                                         modifier = Modifier.testTag(TURN_BY_TURN_COMPASS_TAG),
                                     )
 
-                                // Re-centre / my-location. ALWAYS present, like
-                                // the map home's: it used to appear only after the
-                                // follow camera had detached, which left a stack
-                                // that changed length while driving and a control
-                                // the driver could not find when they wanted it.
-                                // Re-arming follow when follow is already on is a
-                                // harmless no-op.
-                                MapCircleControlKind.Recenter ->
+                                // Saved places — the map home's control, opening
+                                // the host's saved-locations picker. Same button,
+                                // same stack, so navigation is not a different app.
+                                MapCircleControlKind.SavedPlaces ->
                                     CircleControl(
-                                        icon = Icons.Filled.MyLocation,
+                                        icon = Icons.Filled.Place,
                                         contentDescription =
-                                            stringResource(R.string.shell_recenter),
-                                        onClick = { engine.recenter() },
-                                        modifier = Modifier.testTag(TURN_BY_TURN_RECENTER_TAG),
+                                            stringResource(R.string.shell_savedPlacesButton),
+                                        onClick = onOpenSavedPlaces,
+                                        modifier = Modifier.testTag(TURN_BY_TURN_SAVED_PLACES_TAG),
                                     )
 
                                 // Chat bubble + unread badge — the map home's
@@ -1047,8 +1047,8 @@ const val TURN_BY_TURN_LAYERS_TAG = "turn_by_turn_layers"
 /** Test tag on the navigation view's round compass control. */
 const val TURN_BY_TURN_COMPASS_TAG = "turn_by_turn_compass"
 
-/** Test tag on the navigation view's round re-centre / my-location control. */
-const val TURN_BY_TURN_RECENTER_TAG = "turn_by_turn_recenter"
+/** Test tag on the navigation view's round saved-places control. */
+const val TURN_BY_TURN_SAVED_PLACES_TAG = "turn_by_turn_saved_places"
 
 /**
  * Test tag on the top-left destination ("search result") pill, which is composed

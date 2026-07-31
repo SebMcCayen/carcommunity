@@ -81,6 +81,7 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") on3dEnabledChange: (Boolean) -> Unit = {},
     @Suppress("UNUSED_PARAMETER") unreadChatCount: Int = 0,
     @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") onOpenSavedPlaces: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {

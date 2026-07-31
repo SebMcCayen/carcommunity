@@ -146,6 +146,10 @@ fun ChatHubRoute(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    // Tapping a shared `geo:` location link in a channel message moves the app's
+    // OWN map to that point, in-app. Forwarded down to the channel routes; null
+    // leaves such links as plain text. Same as [ChatHubPopup].
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
     // Set when the hub was opened by tapping a push, so it lands on the tab (and
     // convoy channel) the notification was about instead of the default
@@ -172,6 +176,7 @@ fun ChatHubRoute(
             onClose = onClose,
             applyStatusBarInset = true,
             onViewProfile = onViewProfile,
+            onShowLocationOnMap = onShowLocationOnMap,
             blockingRepository = blockingRepository,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
@@ -229,6 +234,9 @@ fun ChatHubPopup(
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
+    // Tapping a shared `geo:` location link in a channel message moves the app's
+    // OWN map to that point, in-app. Same as [ChatHubRoute].
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
     convoyLink: ConvoyNotificationLink? = null,
     // Set when the hub was opened by an affordance that names WHERE it should
@@ -268,6 +276,7 @@ fun ChatHubPopup(
             // must NOT add the inset again.
             applyStatusBarInset = false,
             onViewProfile = onViewProfile,
+            onShowLocationOnMap = onShowLocationOnMap,
             blockingRepository = blockingRepository,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
@@ -328,6 +337,7 @@ private fun ChatHubContent(
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
     onViewProfile: ((String) -> Unit)?,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     blockingRepository: BlockingRepository?,
     pushDeepLink: PushDeepLink? = null,
     convoyLink: ConvoyNotificationLink? = null,
@@ -595,6 +605,7 @@ private fun ChatHubContent(
                                 uid = uid,
                                 friendsRepository = friendsRepository,
                                 onViewProfile = onViewProfile,
+                                onShowLocationOnMap = onShowLocationOnMap,
                                 blockingRepository = blockingRepository,
                             )
                         } else {
@@ -609,6 +620,7 @@ private fun ChatHubContent(
                                     uid = uid,
                                     convoyId = openConvoyId!!,
                                     onViewProfile = onViewProfile,
+                                    onShowLocationOnMap = onShowLocationOnMap,
                                     blockingRepository = blockingRepository,
                                 )
                             } else {

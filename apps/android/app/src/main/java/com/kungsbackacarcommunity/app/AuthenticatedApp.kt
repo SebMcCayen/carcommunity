@@ -76,10 +76,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -229,6 +231,7 @@ import com.kungsbackacarcommunity.app.live.NearbyLiveSession
 import com.kungsbackacarcommunity.app.live.OptimisticLiveStart
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
 import com.kungsbackacarcommunity.app.location.CurrentSpeed
+import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.location.LocationAccess
 import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
@@ -260,10 +263,12 @@ import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
+import com.kungsbackacarcommunity.app.navigation.PlaceSuggestion
 import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
 import com.kungsbackacarcommunity.app.navigation.PrefsSavedPlacesStore
 import com.kungsbackacarcommunity.app.navigation.SavedPlace
 import com.kungsbackacarcommunity.app.navigation.SavedPlaceEdit
+import com.kungsbackacarcommunity.app.navigation.SavedPlaceKind
 import com.kungsbackacarcommunity.app.navigation.SavedPlaces
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesScreen
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesStore
@@ -322,10 +327,13 @@ import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
+import com.kungsbackacarcommunity.app.shell.MapPlaceRequest
 import com.kungsbackacarcommunity.app.shell.MapPoint
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 import com.kungsbackacarcommunity.app.shell.MapSurface
+import com.kungsbackacarcommunity.app.shell.PlaceActionsSheet
+import com.kungsbackacarcommunity.app.shell.SavedPlacesPickerSheet
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
@@ -1706,13 +1714,106 @@ fun AuthenticatedApp(
             // Home saves back as Home, not a new Favourite) and sweeps the old row.
             // Cleared on every close of the overlay so no later open inherits it.
             var navSearchInitialEdit by remember { mutableStateOf<SavedPlaceEdit?>(null) }
+
+            // Move the app's OWN map to a coordinate, IN-APP: the existing
+            // navigate-here preview (the route + framed destination the long-press
+            // used to raise directly). This is the single "move map to point" path,
+            // shared by the place menu's "Navigate here", a chat geo-link tap, and a
+            // saved-places pick — it NEVER fires an external ACTION_VIEW / maps app.
+            val moveMapToPoint: (Double, Double, String?) -> Unit = { lat, lng, name ->
+                navSearchTarget = LatLng(longitude = lng, latitude = lat)
+                navSearchTargetName = name
+                navSearchOpen = true
+            }
+
+            // A long-press on open map, or a tap on a basemap place, now raises the
+            // place-actions MENU (navigate / copy position / save) with an animated
+            // pin on the point — instead of jumping straight into the navigate-here
+            // preview. "Navigate here" then feeds [moveMapToPoint], the same flow
+            // the gesture used to trigger directly. Null when no menu is open.
+            var placeMenuTarget by remember { mutableStateOf<MapPlaceRequest?>(null) }
+            // The saved-locations picker the map's saved-places control opens.
+            var savedPlacesPickerOpen by remember { mutableStateOf(false) }
             val pendingPlace by mapSurface.placeRequest.collectAsState()
             LaunchedEffect(pendingPlace) {
                 val requested = pendingPlace ?: return@LaunchedEffect
-                navSearchTarget = LatLng(requested.point.longitude, requested.point.latitude)
-                navSearchTargetName = requested.name
-                navSearchOpen = true
+                placeMenuTarget = requested
                 mapSurface.consumePlaceRequest()
+            }
+
+            val clipboard = LocalClipboardManager.current
+            val positionCopiedText = stringResource(R.string.shell_placeCopied)
+            val positionSavedText = stringResource(R.string.shell_placeSaved)
+            val sharedLocationName = stringResource(R.string.shell_sharedLocationName)
+
+            // The long-press place-actions menu (+ its animated map pin, drawn by
+            // MapHome from [placeMenuTarget]). Each action clears the menu.
+            placeMenuTarget?.let { target ->
+                PlaceActionsSheet(
+                    placeName = target.name,
+                    coordinateText =
+                        GeoLinks.coordinateLabel(
+                            latitude = target.point.latitude,
+                            longitude = target.point.longitude,
+                        ),
+                    onNavigate = {
+                        val point = target.point
+                        placeMenuTarget = null
+                        moveMapToPoint(point.latitude, point.longitude, target.name)
+                    },
+                    onCopy = {
+                        val point = target.point
+                        placeMenuTarget = null
+                        clipboard.setText(
+                            AnnotatedString(
+                                GeoLinks.formatForClipboard(point.latitude, point.longitude),
+                            ),
+                        )
+                        scope.launch { snackbarHostState.showSnackbar(positionCopiedText) }
+                    },
+                    onSave = {
+                        val point = target.point
+                        placeMenuTarget = null
+                        val label =
+                            target.name?.takeIf { it.isNotBlank() }
+                                ?: GeoLinks.coordinateLabel(point.latitude, point.longitude)
+                        // Reuses the EXISTING saved-places store (the same instance
+                        // the address search reads/writes) — no new store — so a
+                        // saved pin round-trips into the search bar's saved list.
+                        savedPlacesStore.save(
+                            SavedPlaces.create(
+                                kind = SavedPlaceKind.Favourite,
+                                place =
+                                    PlaceSuggestion(
+                                        id = "",
+                                        name = label,
+                                        address = null,
+                                        point = LatLng(longitude = point.longitude, latitude = point.latitude),
+                                    ),
+                                label = label,
+                            ),
+                        )
+                        scope.launch { snackbarHostState.showSnackbar(positionSavedText) }
+                    },
+                    onDismiss = { placeMenuTarget = null },
+                )
+            }
+
+            // The saved-locations picker: tapping a place moves the map to it via
+            // the SAME in-app [moveMapToPoint] flow a chat geo-link tap uses.
+            if (savedPlacesPickerOpen) {
+                SavedPlacesPickerSheet(
+                    places = savedPlacesStore.saved(),
+                    onSelect = { place ->
+                        savedPlacesPickerOpen = false
+                        moveMapToPoint(
+                            place.place.point.latitude,
+                            place.place.point.longitude,
+                            place.place.name,
+                        )
+                    },
+                    onDismiss = { savedPlacesPickerOpen = false },
+                )
             }
 
             // Flag-gated (not member-gated) reach to the live-location feature.
@@ -3193,6 +3294,9 @@ fun AuthenticatedApp(
                         // same hub popup.
                         unreadChatCount = if (communityChatUnread) 1 else 0,
                         onOpenChat = { chatHubOpen = true },
+                        // The map home's saved-places control, on the same shared
+                        // stack; opens the same saved-locations picker.
+                        onOpenSavedPlaces = { savedPlacesPickerOpen = true },
                         // Compact variant below the maneuver banner, WITH the
                         // shared-destination row (turn-by-turn has the vertical room
                         // for it — see the screen's KDoc).
@@ -3397,6 +3501,10 @@ fun AuthenticatedApp(
                             } else {
                                 null
                             },
+                        // Chat geo-link tap → show that point on the map, in-app.
+                        onShowLocationOnMap = { lat, lng ->
+                            moveMapToPoint(lat, lng, sharedLocationName)
+                        },
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
                         partnersRepository = partnersRepository,
@@ -3618,11 +3726,20 @@ fun AuthenticatedApp(
                                     // Tapping "Where to?" opens the address
                                     // search + directions overlay.
                                     onSearch = { navSearchOpen = true },
-                                    // The layers control opens the map-layers
-                                    // popup (traffic / day-night / 3D toggles),
-                                    // handled internally by MapHome against the
-                                    // MapSurface seam.
-                                    onRecenter = { mapSurface.recenter() },
+                                    // The saved-places control opens the saved-
+                                    // locations picker; a pick moves the map via
+                                    // the shared in-app move-to-point flow. (The
+                                    // dedicated recenter button was removed: the
+                                    // compass control re-centres on the user and
+                                    // there is a ~10s idle auto-return.)
+                                    onOpenSavedPlaces = { savedPlacesPickerOpen = true },
+                                    // The point the place menu is anchored on,
+                                    // drawn as an animated pin while the menu is
+                                    // open; null hides the pin.
+                                    droppedPin =
+                                        placeMenuTarget?.point?.let {
+                                            LatLng(longitude = it.longitude, latitude = it.latitude)
+                                        },
                                     // The top-right profile button opens the
                                     // account menu as a transparent Popup
                                     // *over* the map (map stays visible)
@@ -4656,6 +4773,14 @@ fun AuthenticatedApp(
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
                         onClose = { chatHubOpen = false },
+                        // Tapping a shared location link in a message closes the
+                        // hub and shows that point on the map IN-APP (the same
+                        // move-to-point flow the map's own gestures use) — never an
+                        // external maps app.
+                        onShowLocationOnMap = { lat, lng ->
+                            chatHubOpen = false
+                            moveMapToPoint(lat, lng, sharedLocationName)
+                        },
                         // Null for a plain chat-bubble tap (lands on Community);
                         // set by the convoy bar's chat icon so the hub opens on
                         // that convoy's channel. Cleared on close by the effect
@@ -4957,6 +5082,9 @@ private fun RouteHost(
     groupDriveCoordinator: GroupDriveCoordinator?,
     mapParticipantUids: List<String>,
     onShowOnMap: ((List<String>) -> Unit)?,
+    // Moves the app's OWN map to a shared location (from a chat geo-link tap),
+    // in-app. Forwarded to the chat hub route; the hub closes first.
+    onShowLocationOnMap: (latitude: Double, longitude: Double) -> Unit,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
     partnersRepository: PartnersRepository?,
@@ -5595,6 +5723,12 @@ private fun RouteHost(
                 communityUnread = communityChatUnread,
                 onClose = onClose,
                 onViewProfile = openProfileIfWired,
+                // Tapping a shared location link leaves the hub and shows that
+                // point on the map IN-APP (never an external maps app).
+                onShowLocationOnMap = { lat, lng ->
+                    onClose()
+                    onShowLocationOnMap(lat, lng)
+                },
                 // Backs the block action on the hub's long-press message sheet.
                 blockingRepository = blockingRepository,
                 pushDeepLink = chatHubPushLink,
