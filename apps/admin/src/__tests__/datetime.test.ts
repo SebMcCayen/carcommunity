@@ -17,6 +17,10 @@ import {
   completeDateTime,
   datePartOf,
   localToIso,
+  maskDateInput,
+  maskTimeInput,
+  normalizeDateInput,
+  normalizeTimeInput,
   parseLocalDateTime,
   timePartOf,
   toLocalDateTimeValue,
@@ -290,5 +294,82 @@ describe('DST in Europe/Stockholm', () => {
     // The helper renders local wall-clock instead, and round-trips exactly.
     expect(toLocalDateTimeValue(stored)).toBe('2026-07-08T23:12');
     expect(localToIso(toLocalDateTimeValue(stored))).toBe(stored);
+  });
+});
+
+describe('masking text into a YYYY-MM-DD field', () => {
+  it('inserts dashes purely from the digit count as it is typed', () => {
+    expect(maskDateInput('2')).toBe('2');
+    expect(maskDateInput('2026')).toBe('2026');
+    expect(maskDateInput('20260')).toBe('2026-0');
+    expect(maskDateInput('202607')).toBe('2026-07');
+    expect(maskDateInput('2026073')).toBe('2026-07-3');
+    expect(maskDateInput('20260731')).toBe('2026-07-31');
+  });
+
+  it('strips non-digits and drops overflow past the day', () => {
+    // Re-masking already-formatted text is stable (idempotent).
+    expect(maskDateInput('2026-07-31')).toBe('2026-07-31');
+    // Pasted noise and extra digits are discarded.
+    expect(maskDateInput('2026/07/31extra')).toBe('2026-07-31');
+    expect(maskDateInput('202607311234')).toBe('2026-07-31');
+  });
+
+  it('lets a dash be deleted with the digit it followed', () => {
+    // Backspacing '2026-' leaves '2026' (four digits, no trailing dash).
+    expect(maskDateInput('2026')).toBe('2026');
+    expect(maskDateInput('')).toBe('');
+  });
+});
+
+describe('masking text into an HH:mm field', () => {
+  it('inserts the colon from the digit count', () => {
+    expect(maskTimeInput('1')).toBe('1');
+    expect(maskTimeInput('14')).toBe('14');
+    expect(maskTimeInput('143')).toBe('14:3');
+    expect(maskTimeInput('1430')).toBe('14:30');
+    expect(maskTimeInput('14:30')).toBe('14:30');
+    expect(maskTimeInput('143099')).toBe('14:30');
+  });
+});
+
+describe('normalizing masked date text to a committed value', () => {
+  it('commits only a complete, real calendar date', () => {
+    expect(normalizeDateInput('2026-07-31')).toBe('2026-07-31');
+    // Partial input is not yet a value.
+    expect(normalizeDateInput('')).toBe('');
+    expect(normalizeDateInput('2026-07')).toBe('');
+    expect(normalizeDateInput('2026-07-3')).toBe('');
+  });
+
+  it('refuses an impossible date rather than rolling it over', () => {
+    // The trap the native input dodged and a naive `new Date` would not:
+    // 31 February must stay uncommitted, never become 3 March.
+    expect(normalizeDateInput('2026-02-31')).toBe('');
+    expect(normalizeDateInput('2026-13-01')).toBe('');
+    expect(normalizeDateInput('2026-00-10')).toBe('');
+  });
+
+  it('does not accept a stored UTC instant as a field value', () => {
+    // Guards the same anchoring trap `parseLocalDateTime` guards: a full ISO
+    // instant is not a bare date and must not slip through as local wall-clock.
+    expect(normalizeDateInput('2026-07-08T12:00Z')).toBe('');
+    expect(normalizeDateInput('2026-07-08T12:00')).toBe('');
+  });
+});
+
+describe('normalizing masked time text to a committed value', () => {
+  it('commits only a complete, in-range HH:mm', () => {
+    expect(normalizeTimeInput('14:30')).toBe('14:30');
+    expect(normalizeTimeInput('00:00')).toBe('00:00');
+    expect(normalizeTimeInput('23:59')).toBe('23:59');
+    expect(normalizeTimeInput('')).toBe('');
+    expect(normalizeTimeInput('14')).toBe('');
+    expect(normalizeTimeInput('14:3')).toBe('');
+  });
+
+  it('rejects out-of-range hours and minutes', () => {
+    expect(normalizeTimeInput('24:00')).toBe('');
+    expect(normalizeTimeInput('23:60')).toBe('');
   });
 });

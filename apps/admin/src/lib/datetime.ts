@@ -217,3 +217,75 @@ export function localToIso(value: string): string | null {
   const date = parseLocalDateTime(value);
   return date ? date.toISOString() : null;
 }
+
+/**
+ * ## Locale-independent text entry
+ *
+ * The native `<input type="date">` / `<input type="time">` controls render
+ * their visible format from the browser/OS locale — `dd/mm/yyyy`, `mm/dd/yyyy`,
+ * a 12-hour clock, whatever the operator's machine says — and no attribute,
+ * `lang` tag or CSS rule can force `YYYY-MM-DD` there (Chromium honours `lang`
+ * unreliably; Firefox and Safari ignore it outright). The only way to guarantee
+ * the admin always sees and types `YYYY-MM-DD` + 24h `HH:mm` is to drive plain
+ * `<input type="text">` controls ourselves. These helpers are that control's
+ * value plumbing: a mask that keeps the visible text well-formed as the operator
+ * types, and a normaliser that reports the canonical field value (or `''`) once
+ * the text is a complete, real calendar value.
+ */
+
+/** `HH:mm`, fully anchored. Numeric range is validated separately. */
+const TIME_ONLY_RE = /^(\d{2}):(\d{2})$/;
+
+/**
+ * Reformat free text into the visible `YYYY-MM-DD` shape as it is typed.
+ *
+ * Non-digits are dropped and dashes are re-inserted purely from the digit
+ * count, so the field is stable under insertion, deletion and paste: typing
+ * `20260731` shows `2026-07-31`, and backspacing a digit removes the dash with
+ * it rather than stranding one. At most eight digits are kept; anything past
+ * the day is ignored. This only shapes the *text* — it never asserts the value
+ * is a real date (see `normalizeDateInput`).
+ */
+export function maskDateInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  const year = digits.slice(0, 4);
+  const month = digits.slice(4, 6);
+  const day = digits.slice(6, 8);
+  let out = year;
+  if (digits.length > 4) out += `-${month}`;
+  if (digits.length > 6) out += `-${day}`;
+  return out;
+}
+
+/**
+ * Reformat free text into the visible `HH:mm` shape as it is typed. Same
+ * digit-count masking as `maskDateInput`, capped at four digits (`HHmm`).
+ */
+export function maskTimeInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 4);
+  const hours = digits.slice(0, 2);
+  const minutes = digits.slice(2, 4);
+  return digits.length > 2 ? `${hours}:${minutes}` : hours;
+}
+
+/**
+ * The canonical `YYYY-MM-DD` field value for masked date text, or `''` when the
+ * text is empty, still partial, or not a real calendar date. Rejects rollover
+ * (`2026-02-31`) by reusing `parseLocalDateTime`, so partial keystrokes and
+ * impossible dates alike stay uncommitted rather than reaching a `Date`
+ * constructor.
+ */
+export function normalizeDateInput(text: string): string {
+  if (!DATE_ONLY_RE.test(text)) return '';
+  return parseLocalDateTime(text) ? text : '';
+}
+
+/**
+ * The canonical `HH:mm` field value for masked time text, or `''` when the text
+ * is empty, still partial, or out of range (hours > 23, minutes > 59).
+ */
+export function normalizeTimeInput(text: string): string {
+  const match = TIME_ONLY_RE.exec(text);
+  if (!match) return '';
+  return Number(match[1]) <= 23 && Number(match[2]) <= 59 ? text : '';
+}

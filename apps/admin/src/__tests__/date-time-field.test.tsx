@@ -2,9 +2,12 @@
  * Component tests for the shared `DateTimeField`.
  *
  * These cover the parts that only exist once the pure helpers are wired to
- * real DOM controls: that the pair really is two ISO-valued native inputs
- * rather than one locale-formatted `datetime-local`, that the time control is
- * gated on a date, and that clearing propagates an empty value.
+ * real DOM controls: that the pair really is two locale-independent text
+ * inputs formatting `YYYY-MM-DD` / `HH:mm` themselves — never a native
+ * `type="date"`/`type="time"`/`datetime-local`, whose visible format the
+ * browser locale dictates and no API can override — that the visible text is
+ * masked into shape as it is typed and only committed once complete, that the
+ * time control is gated on a date, and that clearing propagates an empty value.
  *
  * Rendered with react-dom/client + React.act (no testing-library dependency,
  * matching the app's zero-extra-deps test setup).
@@ -51,19 +54,56 @@ function type(input: HTMLInputElement, value: string) {
 }
 
 describe('DateTimeField', () => {
-  it('renders a date + time pair, never a datetime-local control', () => {
+  it('renders locale-independent text inputs, never a native date/time control', () => {
     render(<DateTimeField id="f" label="Från" value="2026-07-08T23:12" onChange={vi.fn()} />);
 
+    // No native control whose visible format the browser locale would dictate.
     expect(container.querySelector('input[type="datetime-local"]')).toBeNull();
-    expect(dateInput().type).toBe('date');
-    expect(timeInput()?.type).toBe('time');
+    expect(container.querySelector('input[type="date"]')).toBeNull();
+    expect(container.querySelector('input[type="time"]')).toBeNull();
+
+    // Plain text inputs, so the format is ours to control on every browser.
+    expect(dateInput().type).toBe('text');
+    expect(timeInput()?.type).toBe('text');
+    // Numeric keypad on mobile, and a placeholder that shows the required shape.
+    expect(dateInput().inputMode).toBe('numeric');
+    expect(dateInput().getAttribute('placeholder')).toMatch(/-mm-dd$/);
   });
 
-  it('shows the value as ISO parts, whatever the browser paints around them', () => {
+  it('shows the value as YYYY-MM-DD / HH:mm text, independent of browser locale', () => {
     render(<DateTimeField id="f" label="Från" value="2026-07-08T23:12" onChange={vi.fn()} />);
 
+    // The literal text in the box is ISO — not dd/mm/yyyy, not a 12h clock —
+    // because it is a plain text input we format ourselves.
     expect(dateInput().value).toBe('2026-07-08');
     expect(timeInput()?.value).toBe('23:12');
+  });
+
+  it('masks typed digits into YYYY-MM-DD, committing only once complete', () => {
+    const onChange = vi.fn();
+    render(<DateTimeField id="f" label="Från" value="" onChange={onChange} />);
+
+    // Partial input: the box is shaped with a dash, but nothing is committed
+    // (an incomplete date denotes no instant).
+    type(dateInput(), '202607');
+    expect(dateInput().value).toBe('2026-07');
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Completing the date commits the canonical value.
+    type(dateInput(), '20260731');
+    expect(dateInput().value).toBe('2026-07-31');
+    expect(onChange).toHaveBeenCalledWith('2026-07-31');
+  });
+
+  it('holds an impossible calendar date without committing it', () => {
+    const onChange = vi.fn();
+    render(<DateTimeField id="f" label="Från" value="" onChange={onChange} />);
+
+    // 31 February is masked into shape but is not a real date, so it is never
+    // emitted (and never silently rolled over to 3 March).
+    type(dateInput(), '20260231');
+    expect(dateInput().value).toBe('2026-02-31');
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it('labels each control separately and associates the labels', () => {
@@ -108,6 +148,18 @@ describe('DateTimeField', () => {
 
     type(dateInput(), '');
     expect(onChange).toHaveBeenCalledWith('');
+  });
+
+  it('empties the time box too when the date is cleared', () => {
+    render(<DateTimeField id="f" label="Från" value="2026-07-08T14:30" onChange={vi.fn()} />);
+    expect(timeInput()?.value).toBe('14:30');
+
+    // Clearing the date clears the whole field; the (now disabled) time box must
+    // not keep showing a stale value the committed value no longer holds.
+    type(dateInput(), '');
+    expect(dateInput().value).toBe('');
+    expect(timeInput()?.value).toBe('');
+    expect(timeInput()?.disabled).toBe(true);
   });
 
   it('keeps the date when only the time is cleared', () => {
