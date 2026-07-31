@@ -181,6 +181,7 @@ private fun KeepOrDeletePrompt(
                 DriveSummaryRows(elapsedMillis = elapsedMillis, preview = content?.preview)
                 SessionRouteSection(
                     route = content?.route,
+                    topSpeedMarker = content?.topSpeedMarker,
                     expanded = routeExpanded,
                     onToggle = { routeExpanded = !routeExpanded },
                     onOpenFullscreen = { routeFullscreen = true },
@@ -227,7 +228,11 @@ private fun KeepOrDeletePrompt(
     // branch, and re-checking keeps an empty popup impossible.
     val route = content?.route
     if (routeFullscreen && route != null && route.size >= SessionRoutePreview.MIN_DRAWABLE_POINTS) {
-        DriveRouteFullscreenDialog(points = route, onDismiss = { routeFullscreen = false })
+        DriveRouteFullscreenDialog(
+            points = route,
+            topSpeedMarker = content.topSpeedMarker,
+            onDismiss = { routeFullscreen = false },
+        )
     }
 }
 
@@ -326,14 +331,19 @@ private fun DeleteConfirmDialog(onConfirm: () -> Unit, onCancel: () -> Unit) {
  * Everything the prompts derive from the recorded fixes, resolved together off
  * ONE snapshot of them.
  *
- * @param preview the client-side distance / average-speed estimate.
+ * @param preview the client-side distance / average-speed / top-speed estimate.
  * @param route the just-driven route for the map. EMPTY both when the drive is
  *   too short to draw (see [SessionRoutePreview]) and when the caller asked for
  *   no route at all — the prompts that pass `withRoute = false` never read it.
+ * @param topSpeedMarker the vertex of [route] where the top speed occurred, for
+ *   the map's top-speed marker; null when there is no route or no plausible top
+ *   speed. It is an actual point of [route], so the marker lands exactly on the
+ *   drawn polyline.
  */
 private data class SummaryContent(
     val preview: DriveSummaryPreview,
     val route: List<RoutePoint>,
+    val topSpeedMarker: RoutePoint?,
 )
 
 /**
@@ -359,10 +369,20 @@ private fun rememberSummaryContent(
         produceState<SummaryContent?>(initialValue = null, elapsedMillis, withRoute) {
             value = withContext(Dispatchers.Default) {
                 val points = pointsProvider()
+                val route =
+                    if (withRoute) SessionRoutePreview.routePoints(points) else emptyList()
+                // The marker only matters for a drawable map; over the SAME route
+                // the map draws, so its index addresses a real polyline vertex.
+                val topSpeedMarker =
+                    if (withRoute) {
+                        DriveSummary.topSpeedPoint(route)?.let { route.getOrNull(it.index) }
+                    } else {
+                        null
+                    }
                 SummaryContent(
                     preview = DriveSummary.preview(points, elapsedMillis),
-                    route =
-                        if (withRoute) SessionRoutePreview.routePoints(points) else emptyList(),
+                    route = route,
+                    topSpeedMarker = topSpeedMarker,
                 )
             }
         }
@@ -395,6 +415,7 @@ private fun rememberSummaryContent(
 @Composable
 private fun SessionRouteSection(
     route: List<RoutePoint>?,
+    topSpeedMarker: RoutePoint?,
     expanded: Boolean,
     onToggle: () -> Unit,
     onOpenFullscreen: () -> Unit,
@@ -434,8 +455,13 @@ private fun SessionRouteSection(
     val expandLabel = stringResource(R.string.savedDrives_routeExpand)
     // TalkBack label for the whole tap target: the child is an AndroidView-hosted
     // MapView (an a11y black box), so the clickable node needs its OWN
-    // contentDescription — the onClickLabel only names the action.
-    val thumbnailLabel = stringResource(R.string.savedDrives_routeMapThumbnailLabel)
+    // contentDescription — the onClickLabel only names the action. When a
+    // top-speed marker is drawn, the GL dot itself carries no a11y node, so its
+    // "top speed here" description is folded into this container label instead.
+    val topSpeedDesc = stringResource(R.string.savedDrives_routeTopSpeedMarkerDescription)
+    val baseThumbnailLabel = stringResource(R.string.savedDrives_routeMapThumbnailLabel)
+    val thumbnailLabel =
+        if (topSpeedMarker != null) "$baseThumbnailLabel. $topSpeedDesc" else baseThumbnailLabel
     when {
         // No token (config-less or CI build): the GL map cannot render, so
         // explain rather than show an empty rectangle.
@@ -471,7 +497,11 @@ private fun SessionRouteSection(
                             contentDescription = thumbnailLabel
                         },
             ) {
-                DriveRouteMap(points = route, modifier = Modifier.fillMaxSize())
+                DriveRouteMap(
+                    points = route,
+                    topSpeedMarker = topSpeedMarker,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 // Non-interactive affordance (the whole thumbnail is the tap
                 // target); translucent so it reads over any basemap tile.
                 Surface(
@@ -520,6 +550,14 @@ private fun DriveSummaryRows(elapsedMillis: Long, preview: DriveSummaryPreview?)
                     durationSeconds = preview?.durationSeconds ?: 0L,
                 ),
             ),
+    )
+    // Top speed sits next to average speed (both are speeds). Renders the
+    // em-dash placeholder while the scan is still running (preview == null) and
+    // when no plausible top speed could be derived (a stationary or
+    // all-filtered session) — formatSpeed maps null to the dash.
+    SummaryRow(
+        label = stringResource(R.string.savedDrives_topSpeed),
+        value = DriveFormatters.formatSpeed(preview?.topSpeedMetersPerSecond),
     )
     SummaryRow(
         label = stringResource(R.string.savedDrives_duration),

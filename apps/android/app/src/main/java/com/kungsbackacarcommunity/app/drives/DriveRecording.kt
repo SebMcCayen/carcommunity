@@ -303,15 +303,46 @@ class DriveRecorder(
 /**
  * A client-side estimate of a drive's headline stats, shown ONLY in the
  * end-of-session save/discard summary so the user sees distance / average speed
- * / duration before deciding. It is NEVER persisted: on save the backend
- * recomputes the authoritative figures from the submitted route points (see
- * functions/src/drives/drive-calculations.ts), and the History list shows those.
- * Fields are null when there is nothing to estimate (fewer than two fixes).
+ * / duration / top speed before deciding. It is NEVER persisted: on save the
+ * backend recomputes the authoritative figures from the submitted route points
+ * (see functions/src/drives/drive-calculations.ts), and the History list shows
+ * those. Fields are null when there is nothing to estimate (fewer than two
+ * fixes, or — for top speed — every segment filtered out as a GPS jump).
  */
 data class DriveSummaryPreview(
     val distanceMeters: Double?,
     val durationSeconds: Long,
     val averageSpeedMetersPerSecond: Double?,
+    /**
+     * Highest plausible instantaneous speed (m/s) implied by consecutive fixes,
+     * or null when it cannot be derived. Same figure as
+     * [DriveSummary.topSpeedMetersPerSecond] over the same points; the summary
+     * shows it as a fourth stat row (added 2026-07 at Seb's request).
+     */
+    val topSpeedMetersPerSecond: Double?,
+)
+
+/**
+ * The single fastest fix on a route: the top plausible instantaneous speed AND
+ * where on the route it occurred, so the end-of-session summary can both show
+ * the number and drop a marker at that spot on its route map. Pure data (no
+ * Android / Mapbox types) so [DriveSummary.topSpeedPoint] stays fully
+ * JVM-unit-testable — the map only renders the [latitude]/[longitude] it returns.
+ *
+ * @property metersPerSecond the top speed; equals
+ *   [DriveSummary.topSpeedMetersPerSecond] over the same points.
+ * @property latitude latitude of the fix that ENDS the fastest segment.
+ * @property longitude longitude of that fix.
+ * @property index its index in the source point list. Because the summary maps
+ *   its recorded fixes 1:1 in arrival order into the drawn route
+ *   ([SessionRoutePreview]), this index addresses the same vertex on the drawn
+ *   polyline.
+ */
+data class TopSpeedPoint(
+    val metersPerSecond: Double,
+    val latitude: Double,
+    val longitude: Double,
+    val index: Int,
 )
 
 /**
@@ -481,6 +512,51 @@ object DriveSummary {
         )
 
     /**
+     * The fastest fix on a route AND where it occurred — the top speed plus the
+     * point that ends the fastest segment — or null when it cannot be derived
+     * (fewer than two points, or every segment filtered out). Applies the EXACT
+     * same GPS-jump filter as [topSpeedMetersPerSecond]: a non-positive time
+     * delta or an implied speed above [MAX_PLAUSIBLE_SPEED_MPS] is skipped, so a
+     * spike can never be chosen as the top. A tie keeps the FIRST (earliest)
+     * fastest segment (strictly-greater comparison).
+     *
+     * Scans [RoutePoint]s — the very list the summary's route map draws — so the
+     * returned [TopSpeedPoint.index] and coordinate line up with the drawn
+     * polyline. The returned [TopSpeedPoint.metersPerSecond] equals
+     * [topSpeedMetersPerSecond] over the same points (same filter, same
+     * Haversine, same tie-break), verified in DriveSummaryTest — so the value the
+     * summary shows in its stat row and the point it marks on the map never
+     * disagree.
+     */
+    fun topSpeedPoint(points: List<RoutePoint>): TopSpeedPoint? {
+        if (points.size < 2) return null
+        var best: TopSpeedPoint? = null
+        for (i in 1 until points.size) {
+            val prev = points[i - 1]
+            val curr = points[i]
+            val deltaMs = curr.timestampMs - prev.timestampMs
+            if (deltaMs <= 0) continue
+            val distance =
+                haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
+            val impliedSpeed = distance / (deltaMs / 1000.0)
+            // Same >200 km/h GPS-glitch guard the distance/top-speed scans apply;
+            // also drop any non-finite result defensively.
+            if (!impliedSpeed.isFinite() || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
+            // Strictly greater → a tie keeps the earliest fastest segment.
+            if (best == null || impliedSpeed > best.metersPerSecond) {
+                best =
+                    TopSpeedPoint(
+                        metersPerSecond = impliedSpeed,
+                        latitude = curr.latitude,
+                        longitude = curr.longitude,
+                        index = i,
+                    )
+            }
+        }
+        return best
+    }
+
+    /**
      * Shared core for both [topSpeedMetersPerSecond] overloads: the highest
      * plausible instantaneous speed (m/s) over [size] ordered points addressed
      * by index. `inline`, so the accessors are inlined and no intermediate list
@@ -530,6 +606,7 @@ object DriveSummary {
                 distanceMeters = null,
                 durationSeconds = durationSeconds,
                 averageSpeedMetersPerSecond = null,
+                topSpeedMetersPerSecond = null,
             )
         }
         val distance = totalDistanceMetres(points)
@@ -538,6 +615,7 @@ object DriveSummary {
             distanceMeters = distance,
             durationSeconds = durationSeconds,
             averageSpeedMetersPerSecond = averageSpeed,
+            topSpeedMetersPerSecond = topSpeedMetersPerSecond(points),
         )
     }
 }

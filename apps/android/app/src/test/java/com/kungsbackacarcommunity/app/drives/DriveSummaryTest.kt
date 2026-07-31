@@ -214,4 +214,92 @@ class DriveSummaryTest {
         // The spike is dropped either way, so the plausible 20 m/s leg wins.
         assertEquals(20.0, viaRouteOverload!!, 0.2)
     }
+
+    // --- topSpeedPoint (top speed AND where it occurred, for the summary map) ---
+    // Returns both the figure the stat row shows and the vertex the map marks, so
+    // the two can never disagree. Same GPS-jump filter as topSpeedMetersPerSecond.
+
+    @Test
+    fun `top speed point is null for fewer than two points`() {
+        assertNull(DriveSummary.topSpeedPoint(emptyList()))
+        assertNull(DriveSummary.topSpeedPoint(listOf(routePoint(57.0, 12.0, 0L))))
+    }
+
+    @Test
+    fun `top speed point is the fix ending the fastest segment`() {
+        // Leg 1: 200 m over 10 s = 20 m/s. Leg 2: 300 m over 10 s = 30 m/s (top).
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(200.0)
+        val lat2 = lat1 + latOffsetForMetres(300.0)
+        val route =
+            listOf(
+                routePoint(lat0, 12.0, 0L),
+                routePoint(lat1, 12.0, 10_000L),
+                routePoint(lat2, 12.0, 20_000L),
+            )
+        val top = DriveSummary.topSpeedPoint(route)
+        assertNotNull(top)
+        assertEquals(30.0, top!!.metersPerSecond, 0.2)
+        // Fastest segment is 1→2, so the marker is at index 2 (its end point).
+        assertEquals(2, top.index)
+        assertEquals(lat2, top.latitude, 1e-9)
+        assertEquals(12.0, top.longitude, 1e-9)
+        // The marked point is exactly the drawn route's vertex at that index.
+        assertEquals(route[top.index].latitude, top.latitude, 0.0)
+        assertEquals(route[top.index].longitude, top.longitude, 0.0)
+        // The figure the stat row shows matches the scalar top-speed scan.
+        assertEquals(DriveSummary.topSpeedMetersPerSecond(route)!!, top.metersPerSecond, 0.0)
+    }
+
+    @Test
+    fun `top speed point excludes an implausible spike`() {
+        // Leg 1 is a plausible 20 m/s; leg 2 implies ~300 m/s (a GPS jump). The
+        // jump must NOT be chosen as the top-speed point.
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(200.0)
+        val lat2 = lat1 + latOffsetForMetres(300.0)
+        val route =
+            listOf(
+                routePoint(lat0, 12.0, 0L),
+                routePoint(lat1, 12.0, 10_000L),
+                routePoint(lat2, 12.0, 11_000L), // ~300 m/s glitch, must be dropped
+            )
+        val top = DriveSummary.topSpeedPoint(route)
+        assertNotNull(top)
+        // The plausible 20 m/s leg (1) wins, marked at its end point (index 1).
+        assertEquals(20.0, top!!.metersPerSecond, 0.2)
+        assertEquals(1, top.index)
+    }
+
+    @Test
+    fun `top speed point is null when every segment is filtered out`() {
+        // A single ~300 m/s leg between two points: filtered, nothing left.
+        val route =
+            listOf(
+                routePoint(57.0, 12.0, 0L),
+                routePoint(57.0 + latOffsetForMetres(300.0), 12.0, 1_000L),
+            )
+        assertNull(DriveSummary.topSpeedPoint(route))
+    }
+
+    @Test
+    fun `top speed point keeps the first of two equally fast segments`() {
+        // Two identical 20 m/s legs; a tie must resolve to the EARLIER segment,
+        // whose end point is index 1 (not the later index 3).
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(200.0)
+        val lat2 = lat1 + latOffsetForMetres(50.0) // slow filler leg (5 m/s)
+        val lat3 = lat2 + latOffsetForMetres(200.0)
+        val route =
+            listOf(
+                routePoint(lat0, 12.0, 0L),
+                routePoint(lat1, 12.0, 10_000L), // 20 m/s
+                routePoint(lat2, 12.0, 20_000L), // 5 m/s
+                routePoint(lat3, 12.0, 30_000L), // 20 m/s (tie)
+            )
+        val top = DriveSummary.topSpeedPoint(route)
+        assertNotNull(top)
+        assertEquals(20.0, top!!.metersPerSecond, 0.2)
+        assertEquals(1, top.index)
+    }
 }
