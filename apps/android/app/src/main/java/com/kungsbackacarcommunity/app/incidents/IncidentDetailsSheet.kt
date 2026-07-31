@@ -125,10 +125,16 @@ fun IncidentDetailsSheet(
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
-                Text(
-                    text = incidentAgeLabel(IncidentDetails.ageOf(incident, nowMillis)),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
+                // Trafikverket rows are timed off their upstream original post
+                // time, not our sync time; when that is missing the age line is
+                // hidden entirely (ageDisplay returns null) rather than showing a
+                // misleading "x min ago". Member reports are unchanged.
+                IncidentDetails.ageDisplay(incident, nowMillis)?.let { age ->
+                    Text(
+                        text = incidentAgeLabel(age),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
                 Text(
                     text =
                         stringResource(

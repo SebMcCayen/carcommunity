@@ -87,8 +87,20 @@ export async function runTrafikverketSync(
       // buildIncidentFields re-derives every field and there are no user-written
       // fields to preserve — so each pass rewrites the doc as a faithful mirror
       // of the current upstream situation. createdAt is deliberately re-stamped
-      // to now so the record reflects the latest confirmation from upstream.
-      batch.set(ref, { ...fields, createdAt, expiresAt });
+      // to now so the record reflects the latest confirmation from upstream, AND
+      // stays the load-bearing field for the TTL / lifetime-cap logic that reads
+      // it (extendedExpiryFor); DO NOT swap the display time onto it.
+      //
+      // postedAt is the SEPARATE, authoritative "when Trafikverket posted about
+      // it" the app shows as "x min ago". When upstream sent no usable original
+      // time we OMIT the field entirely (each pass is a full overwrite, so there
+      // is no stale value to clear) — listNearby then sends postedAt: null and
+      // the client hides the age line rather than showing our sync time.
+      const doc: Record<string, unknown> = { ...fields, createdAt, expiresAt };
+      if (item.postedAtMs !== null) {
+        doc.postedAt = Timestamp.fromMillis(item.postedAtMs);
+      }
+      batch.set(ref, doc);
       upserted += 1;
     }
     await batch.commit();

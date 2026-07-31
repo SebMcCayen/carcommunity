@@ -62,6 +62,14 @@ export function buildTrafikverketRequestBody(
     '<INCLUDE>Deviation.Message</INCLUDE>',
     '<INCLUDE>Deviation.IconId</INCLUDE>',
     '<INCLUDE>Deviation.Geometry.WGS84</INCLUDE>',
+    // When Trafikverket ORIGINALLY posted about the situation — the authoritative
+    // "posted at" the app shows as "x min ago". CreationTime is the original
+    // creation instant; PublicationTime is a fallback (it re-stamps on every
+    // republish of an updated situation, so it can drift forward from the real
+    // first-posted time). Without these the client can only fall back to our sync
+    // time, which is what this fix removes. See parseTrafikverketTime.
+    '<INCLUDE>Deviation.CreationTime</INCLUDE>',
+    '<INCLUDE>Deviation.PublicationTime</INCLUDE>',
     '</QUERY>',
     '</REQUEST>',
   ].join('');
@@ -88,6 +96,10 @@ export interface TrafikverketDeviation {
   Message?: string;
   IconId?: string;
   Geometry?: { WGS84?: string };
+  /** ISO-8601 instant the situation was first created upstream (original post). */
+  CreationTime?: string;
+  /** ISO-8601 instant the situation was published (fallback for CreationTime). */
+  PublicationTime?: string;
 }
 
 export interface TrafikverketSituation {
@@ -113,6 +125,43 @@ export function parseWgs84Point(value: string | undefined): { longitude: number;
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) return null;
   if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   return { longitude, latitude };
+}
+
+/**
+ * An ISO-8601 date-time that carries an EXPLICIT zone designator (`Z`, `+HH:MM`,
+ * `+HHMM`, or `-HH:MM`). Anchored end-to-end so a value with trailing junk is
+ * rejected rather than partially matched.
+ */
+const ISO_WITH_ZONE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/;
+
+/**
+ * Parses a Trafikverket ISO-8601 timestamp (e.g. `"2026-07-30T14:23:00.000+02:00"`)
+ * into epoch milliseconds, or `null` when it is missing, blank, or unparseable.
+ *
+ * Trafikverket stamps every time with an explicit Swedish offset (`+01:00` in
+ * winter, `+02:00` in summer) or `Z`. We REQUIRE that designator: a bare
+ * `"2026-07-30T14:23:00"` with no zone is interpreted by the JS engine as LOCAL
+ * wall-clock, which would silently shift the instant by the runtime's offset —
+ * the exact "ISO-offset-as-local" trap this repo has hit before. A value with no
+ * zone is therefore treated as unusable (returns `null`) so the caller falls back
+ * and the client can hide the age, rather than displaying a shifted time.
+ */
+export function parseTrafikverketTime(value: string | undefined): number | null {
+  if (!value) return null;
+  const text = value.trim();
+  if (!ISO_WITH_ZONE.test(text)) return null;
+  const ms = Date.parse(text);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/**
+ * The instant Trafikverket originally posted about a deviation, in epoch millis,
+ * or `null` when neither time is present/parseable. Prefers `CreationTime` (the
+ * original creation instant — Seb asked for "when Trafikverket ORIGINALLY posted
+ * about it") and falls back to `PublicationTime`, which re-stamps on republish.
+ */
+function deviationPostedAtMs(deviation: TrafikverketDeviation): number | null {
+  return parseTrafikverketTime(deviation.CreationTime) ?? parseTrafikverketTime(deviation.PublicationTime);
 }
 
 /**
@@ -227,6 +276,13 @@ export interface ImportedIncident {
   latitude: number;
   longitude: number;
   note: string | null;
+  /**
+   * Epoch millis of when Trafikverket originally posted about it, or `null` when
+   * upstream sent no usable time. Stored on the incident as the authoritative
+   * "posted at" so the app shows the real age, NOT our sync time. Null ⇒ the
+   * client hides the "x min ago" line rather than showing the sync time.
+   */
+  postedAtMs: number | null;
 }
 
 const NOTE_MAX = 200;
@@ -278,6 +334,7 @@ export function parseTrafikverketResponse(
         latitude: point.latitude,
         longitude: point.longitude,
         note: message && message.length > 0 ? message.slice(0, NOTE_MAX) : null,
+        postedAtMs: deviationPostedAtMs(deviation),
       });
     }
   }

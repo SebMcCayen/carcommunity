@@ -285,6 +285,31 @@ object IncidentDetails {
         ageOf(incident.createdAtIso, nowMillis)
 
     /**
+     * The age the sheet should DISPLAY for [incident], or null when it must show
+     * no age line at all.
+     *
+     * The two origins are timed off different fields, because they mean different
+     * things:
+     *  - A [IncidentOrigin.Member] report's `createdAt` IS its post time, so its
+     *    age is always shown — [IncidentAge.Unknown] included (a just-written
+     *    report whose server timestamp has not resolved yet), exactly as before.
+     *  - A [IncidentOrigin.Trafikverket] import's `createdAt` is our SYNC time
+     *    (when the importer wrote the doc), NOT when Trafikverket posted. Showing
+     *    it claimed a days-old roadwork was reported "2 min ago". So we time it
+     *    off `postedAt` (Trafikverket's original instant) instead, and when that
+     *    is absent/unparseable we return null so the sheet HIDES the age line
+     *    rather than showing the misleading sync time.
+     */
+    fun ageDisplay(incident: Incident, nowMillis: Long): IncidentAge? =
+        when (originOf(incident)) {
+            IncidentOrigin.Member -> ageOf(incident.createdAtIso, nowMillis)
+            // takeIf drops both a null postedAt and an unparseable one (ageOf
+            // returns Unknown for either) → null → the sheet hides the line.
+            IncidentOrigin.Trafikverket ->
+                ageOf(incident.postedAtIso, nowMillis).takeIf { it != IncidentAge.Unknown }
+        }
+
+    /**
      * Parses the backend's ISO-8601 instant, returning null for anything
      * missing, blank, or malformed. Never throws: a bad timestamp downgrades the
      * sheet to "time unknown", it does not take the sheet down with it.

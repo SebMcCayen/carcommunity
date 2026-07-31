@@ -160,7 +160,7 @@ object IncidentResponseParser {
     /**
      * Parses the `incidents-listNearby` payload
      * (`{ incidents: [ { id, type, latitude, longitude, note?, source?,
-     * reporterUid?, createdAt? }, ... ] }`).
+     * reporterUid?, createdAt?, postedAt? }, ... ] }`).
      */
     fun parseListNearby(data: Map<String, Any?>?): List<Incident> {
         val raw = data?.get("incidents") as? List<*> ?: return emptyList()
@@ -194,6 +194,10 @@ object IncidentResponseParser {
             // an unknown age is still worth drawing.
             reporterUid = map["reporterUid"] as? String,
             createdAtIso = map["createdAt"] as? String,
+            // Trafikverket imports carry the upstream original post time here; the
+            // sheet shows it (not the sync-time createdAt) as the age. Absent on
+            // member reports and on imports with no usable upstream time.
+            postedAtIso = map["postedAt"] as? String,
             // Present on every IncidentView; absent/malformed degrades to 0 so a
             // single odd row still draws rather than dropping.
             confirmationCount = (map["confirmationCount"] as? Number)?.toInt() ?: 0,

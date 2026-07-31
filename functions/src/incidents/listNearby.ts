@@ -131,6 +131,11 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         reporterUid: (data.reporterUid as string | null) ?? null,
         note: (data.note as string | null) ?? null,
         createdAt: tsToIso(data.createdAt),
+        // The Trafikverket importer's authoritative "posted at" (upstream's
+        // original time). Absent on member reports and on imports where upstream
+        // sent no usable time — null then, and the client hides the age line for
+        // Trafikverket rows rather than showing our sync time.
+        postedAt: tsToIso(data.postedAt),
         expiresAt: tsToIso(data.expiresAt),
         // Absent until the first confirmation writes it. Corrupt (NaN, negative,
         // fractional) degrades to 0 for this one marker rather than failing the
