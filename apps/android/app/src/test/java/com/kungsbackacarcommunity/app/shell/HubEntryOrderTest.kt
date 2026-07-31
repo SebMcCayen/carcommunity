@@ -26,24 +26,26 @@ class HubEntryOrderTest {
     /**
      * The Social hub's entries in declaration order — see AuthenticatedApp.
      *
-     * Two entries are deliberately absent, and the absences are asserted below
+     * Three entries are deliberately absent, and the absences are asserted below
      * so the menu cannot quietly drift back:
      *  - Notifications, removed once the chat hub's Notifications tab became the
      *    way in;
      *  - Friends, which MOVED to the map-home profile menu (see
-     *    `profileMenuEntries`) — it did not disappear.
-     * Billboards deliberately REMAINS: it is the only entry point to the
-     * billboards screen, which does not render on the map.
+     *    `profileMenuEntries`) — it did not disappear;
+     *  - Billboards, removed 2026-07-31 because billboards are meant to be MAP
+     *    PINS and the map renders none yet, so the row advertised a feature that
+     *    does not work as intended. The screen and route are kept, deliberately
+     *    unreferenced, pending map integration.
      */
     private val socialEn =
-        listOf("Events", "Crown Hunt", "Partners", "Billboards")
+        listOf("Events", "Crown Hunt", "Partners")
     private val socialSv =
-        listOf("Event", "Kronjakt", "Partners", "Anslagstavlor")
+        listOf("Event", "Kronjakt", "Partners")
 
     @Test
     fun socialEntriesAreAlphabeticalInEnglish() {
         assertEquals(
-            listOf("Billboards", "Crown Hunt", "Events", "Partners"),
+            listOf("Crown Hunt", "Events", "Partners"),
             order(socialEn, Locale.ENGLISH),
         )
     }
@@ -51,7 +53,7 @@ class HubEntryOrderTest {
     @Test
     fun socialEntriesAreAlphabeticalInSwedish() {
         assertEquals(
-            listOf("Anslagstavlor", "Event", "Kronjakt", "Partners"),
+            listOf("Event", "Kronjakt", "Partners"),
             order(socialSv, Locale.forLanguageTag("sv")),
         )
     }
@@ -69,6 +71,19 @@ class HubEntryOrderTest {
     }
 
     /**
+     * Billboards must stay OUT of the Social menu until they render on the map.
+     * Pinned explicitly because re-adding the row is the easy, wrong fix for
+     * "why can't I see billboards?" — the right one is map pins. The
+     * BillboardsScreen and ShellRoute.Billboards are intentionally kept and
+     * intentionally unreferenced in the meantime.
+     */
+    @Test
+    fun socialEntriesDoNotContainBillboards() {
+        assertFalse(socialEn.contains("Billboards"))
+        assertFalse(socialSv.contains("Anslagstavlor"))
+    }
+
+    /**
      * The two locales genuinely disagree — the guard against "sorted the key, not
      * the label". Sorting the resource keys would give one identical order for both.
      */
@@ -76,13 +91,13 @@ class HubEntryOrderTest {
     fun englishAndSwedishOrderTheSameEntriesDifferently() {
         val en = order(socialEn, Locale.ENGLISH)
         val sv = order(socialSv, Locale.forLanguageTag("sv"))
-        // Crown Hunt is 2nd in English while its Swedish label Kronjakt is 3rd;
-        // Events is 3rd in English while its Swedish label Event is 2nd — the two
+        // Crown Hunt is 1st in English while its Swedish label Kronjakt is 2nd;
+        // Events is 2nd in English while its Swedish label Event is 1st — the two
         // swap places, so one shared order cannot satisfy both.
-        assertEquals(1, en.indexOf("Crown Hunt"))
-        assertEquals(2, sv.indexOf("Kronjakt"))
-        assertEquals(2, en.indexOf("Events"))
-        assertEquals(1, sv.indexOf("Event"))
+        assertEquals(0, en.indexOf("Crown Hunt"))
+        assertEquals(1, sv.indexOf("Kronjakt"))
+        assertEquals(1, en.indexOf("Events"))
+        assertEquals(0, sv.indexOf("Event"))
     }
 
     /**

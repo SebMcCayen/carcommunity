@@ -82,6 +82,12 @@ fun ProfileScreen(
     // Kronpoäng balance and the newest few credits behind it (own profile only).
     pointsBalance: Long? = null,
     recentPointsEarnings: List<PointsEntry> = emptyList(),
+    // Opens the full Kronpoäng ledger (credits AND debits, each dated) that the
+    // points card above only summarises. Since the "Points" row was removed from
+    // the map-home profile menu (Seb, 2026-07-31 — points belong on the profile
+    // page), this tap-through is the app's ONLY way into that ledger. Null in a
+    // config-less build with no points repository wired.
+    onOpenPoints: (() -> Unit)? = null,
 ) {
     var editing by remember { mutableStateOf(false) }
     var nameField by remember { mutableStateOf("") }
@@ -220,6 +226,7 @@ fun ProfileScreen(
                 ProfilePointsSection(
                     balance = pointsBalance,
                     recentEarnings = recentPointsEarnings,
+                    onOpenLedger = onOpenPoints,
                 )
 
                 ProfileBadgesSection(showcase = badgeShowcase)

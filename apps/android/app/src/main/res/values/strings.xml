@@ -215,7 +215,6 @@
     <string name="profile_title">Profil</string>
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
-    <string name="profile_points">Poäng</string>
     <string name="profile_statsTitle">Min statistik</string>
     <string name="profile_statsMemberSince">Medlem sedan</string>
     <string name="profile_statsEmptyTitle">Kör för att bygga din statistik</string>
@@ -244,6 +243,7 @@
     <string name="profile_pointsRecentEmpty">Kör, samla kronor och delta i träffar – dina poäng dyker upp här.</string>
     <string name="profile_pointsAmount">+%1$d p</string>
     <string name="profile_pointsUnit">p</string>
+    <string name="profile_pointsViewAll">Visa hela poänghistoriken</string>
     <string name="profile_social_sectionTitle">Sociala medier</string>
     <string name="profile_social_publicNotice">Länkarna visas på din publika profil. Lämna fältet tomt för att ta bort det.</string>
     <string name="profile_social_hint">Användarnamn eller länk till din sida</string>
@@ -1231,7 +1231,6 @@
     <string name="shell_socialNotifications">Aviseringar</string>
     <string name="shell_socialCrownHunt">Kronjakt</string>
     <string name="shell_socialPartners">Partners</string>
-    <string name="shell_socialBillboards">Anslagstavlor</string>
     <string name="shell_garageFriends">Vänner</string>
     <string name="shell_garageBadges">Utmärkelser</string>
     <string name="shell_garagePoints">Poäng</string>

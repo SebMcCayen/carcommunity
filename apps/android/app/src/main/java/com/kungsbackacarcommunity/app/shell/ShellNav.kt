@@ -79,8 +79,38 @@ enum class ShellRoute {
      */
     Badges,
     Blocked,
+
+    /**
+     * The full Kronpoäng ledger — credits AND debits, each dated, up to a page
+     * of 100 entries.
+     *
+     * Reached from exactly ONE place: the points card on the member's own
+     * profile ([com.kungsbackacarcommunity.app.profile.ProfilePointsSection]),
+     * which only summarises (balance + 4 recent, undated credits) and therefore
+     * taps through to here. The map-home profile menu's "Points" row was removed
+     * (Seb, 2026-07-31) because points are a profile concern; the ledger itself
+     * was deliberately kept. Opened as a CHILD of the profile route, so Back
+     * returns to the profile.
+     */
     Points,
     PartnerApplication,
+
+    /**
+     * Digital billboards.
+     *
+     * INTENTIONALLY UNREFERENCED (Seb, 2026-07-31). Nothing in the UI navigates
+     * here: the Social menu's "Billboards" row was removed because billboards
+     * are meant to be MAP PINS — "something that should be within the map, if it
+     * isn't activated it shouldn't be shown for our users" — and no billboard
+     * rendering exists in the map yet, so a menu row into a flat list advertised
+     * a feature that does not work as intended. Billboards are therefore
+     * invisible to members for now, which is the accepted, intended outcome.
+     *
+     * Unlike [Badges] and [More] this is NOT retired: the constant, its
+     * [com.kungsbackacarcommunity.app.billboards.BillboardsRoute] host and the
+     * screen behind it are all kept wired and working so that pointing the map
+     * at them later is a small job, not a rebuild. Do not delete as dead code.
+     */
     Billboards,
     AccountDeletion,
     PartnerStats,

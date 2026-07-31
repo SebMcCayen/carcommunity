@@ -18,6 +18,21 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 /**
  * Digital billboards list (Phase 12 slice 20). Stateless: renders active
  * billboards; tapping one records an `open` interaction.
+ *
+ * **Intentionally not reachable by members right now (Seb, 2026-07-31).** The
+ * Social menu's "Billboards" row — the only door into this screen — was removed
+ * because billboards are meant to be MAP PINS: "something that should be within
+ * the map, if it isn't activated it shouldn't be shown for our users". No
+ * billboard rendering exists in the map yet, so the row advertised a feature
+ * that does not work as intended. Making billboards invisible to members until
+ * the map work lands is the accepted, intended outcome — NOT an oversight.
+ *
+ * This screen, [BillboardsRoute] and
+ * [com.kungsbackacarcommunity.app.shell.ShellRoute.Billboards] are all kept
+ * wired and working (and still covered by `BillboardsScreenTest`) precisely so
+ * that pointing the map at billboards later is a small job rather than a
+ * rebuild. **Do not delete any of them as dead code**, and do not re-add a menu
+ * entry — the next step here is map rendering.
  */
 @Composable
 fun BillboardsScreen(

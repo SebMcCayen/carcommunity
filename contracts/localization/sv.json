@@ -238,7 +238,6 @@
     "title": "Profil",
     "openSettings": "Öppna inställningar",
     "openAbout": "Öppna om appen",
-    "points": "Poäng",
     "statsTitle": "Min statistik",
     "statsMemberSince": "Medlem sedan",
     "statsEmptyTitle": "Kör för att bygga din statistik",
@@ -267,6 +266,7 @@
     "pointsRecentEmpty": "Kör, samla kronor och delta i träffar – dina poäng dyker upp här.",
     "pointsAmount": "+%1$d p",
     "pointsUnit": "p",
+    "pointsViewAll": "Visa hela poänghistoriken",
     "social": {
       "sectionTitle": "Sociala medier",
       "publicNotice": "Länkarna visas på din publika profil. Lämna fältet tomt för att ta bort det.",
@@ -1328,7 +1328,6 @@
     "socialNotifications": "Aviseringar",
     "socialCrownHunt": "Kronjakt",
     "socialPartners": "Partners",
-    "socialBillboards": "Anslagstavlor",
     "garageFriends": "Vänner",
     "garageBadges": "Utmärkelser",
     "garagePoints": "Poäng",

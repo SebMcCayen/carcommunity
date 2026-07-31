@@ -12,6 +12,12 @@ import kotlinx.coroutines.launch
  * Billboards integration route (Phase 12 slice 20): observe active billboards
  * and record an `open` interaction on tap (fire-and-forget — a failed
  * analytics write must never block the user).
+ *
+ * Still hosted by `RouteHost` under
+ * [com.kungsbackacarcommunity.app.shell.ShellRoute.Billboards], but nothing in
+ * the UI navigates to that route any more — see [BillboardsScreen] for why
+ * billboards are deliberately unreachable pending map integration. Kept intact
+ * on purpose; do not delete as dead code.
  */
 @Composable
 fun BillboardsRoute(
