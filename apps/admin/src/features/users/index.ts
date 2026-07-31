@@ -80,14 +80,18 @@ export const PROVISIONING_PLACEHOLDER_NAME = 'New member';
  * Whether the account has a MEMBER-SET nickname worth displaying, as opposed to
  * an account still sitting on the provisioning placeholder.
  *
- * Authoritative signal: onboarding stamps `onboardingCompletedAt`, and
- * onboarding cannot complete without a valid member-typed nickname
- * (auth.completeOnboarding), so a set marker ⟺ `displayName` is a real nickname.
- *
- * Belt-and-suspenders for old/partial/hand-edited documents where the marker may
- * be missing: a `displayName` that is empty or still exactly the provisioning
- * placeholder counts as "not set". The two are combined so a genuinely-onboarded
- * member is never mislabeled — a present marker alone is enough.
+ * The check is deliberately ordered:
+ *  1. An empty / whitespace-only `displayName` always yields the label — there
+ *     is literally nothing to render, so this wins even if `onboardingCompletedAt`
+ *     is somehow set (a hand-edited/partial doc). Showing the label beats
+ *     rendering an empty cell.
+ *  2. Among NON-empty names, `onboardingCompletedAt` is authoritative: onboarding
+ *     stamps it and cannot complete without a valid member-typed nickname
+ *     (auth.completeOnboarding), so a set marker ⟺ the name is a real nickname —
+ *     it is shown even if it happens to equal the placeholder string.
+ *  3. Belt-and-suspenders for old/partial/hand-edited docs missing the marker: a
+ *     non-empty name that still exactly equals the provisioning placeholder
+ *     counts as "not set"; any other non-empty name is shown.
  */
 export function hasMemberSetNickname(
   summary: Pick<AdminUserSummary, 'displayName' | 'onboardingCompletedAt'>,

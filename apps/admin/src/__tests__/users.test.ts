@@ -64,6 +64,14 @@ describe('hasMemberSetNickname', () => {
     expect(hasMemberSetNickname({ displayName: '   ', onboardingCompletedAt: null })).toBe(false);
   });
 
+  it('shows the label for an empty displayName even if the onboarding marker is set', () => {
+    // A hand-edited/partial doc could have the marker but a blank name; there is
+    // nothing to render, so the empty-name guard intentionally wins over the marker.
+    expect(
+      hasMemberSetNickname({ displayName: '', onboardingCompletedAt: '2026-07-30T10:00:00.000Z' }),
+    ).toBe(false);
+  });
+
   it('accepts a real nickname on a document lacking the onboarding marker (fallback)', () => {
     // Old/partial docs may miss the marker; a non-placeholder name still counts.
     expect(
