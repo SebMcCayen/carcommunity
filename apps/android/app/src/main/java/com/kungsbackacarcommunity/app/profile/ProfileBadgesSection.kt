@@ -33,6 +33,7 @@ import com.kungsbackacarcommunity.app.badges.BadgeMedallionTile
 import com.kungsbackacarcommunity.app.badges.BadgeRung
 import com.kungsbackacarcommunity.app.badges.BadgeShowcase
 import com.kungsbackacarcommunity.app.badges.BadgeTier
+import com.kungsbackacarcommunity.app.badges.EarnedAward
 import com.kungsbackacarcommunity.app.badges.LadderProgress
 import com.kungsbackacarcommunity.app.badges.MilestoneBadge
 import com.kungsbackacarcommunity.app.badges.badgeNameRes
@@ -40,6 +41,7 @@ import com.kungsbackacarcommunity.app.badges.formatLadderValue
 import com.kungsbackacarcommunity.app.badges.ladderNameRes
 import com.kungsbackacarcommunity.app.badges.ladderRequirementRes
 import com.kungsbackacarcommunity.app.badges.ladderTaglineRes
+import com.kungsbackacarcommunity.app.badges.rungForBadgeKey
 import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import java.text.DateFormat
@@ -57,9 +59,12 @@ import java.util.Date
  * composable is only ever handed the signed-in member's own [BadgeShowcase].
  *
  * Three bands, top to bottom:
- *  1. HIGHEST TIER PER LADDER — six medallions, so the ladders read as ladders
- *     at a glance. An unstarted ladder shows its first rung greyed, never a gap,
- *     which is what turns a brand-new member's empty wall into a menu of goals.
+ *  1. RECENTLY UNLOCKED — the member's most recently acquired awards, newest
+ *     first, up to [com.kungsbackacarcommunity.app.badges.BadgeShowcase.Companion.RECENT_AWARDS_LIMIT]
+ *     medallions: ladder tiers and standalone milestones alike, each its own
+ *     item. With six or fewer earned this shows every award, so the strip
+ *     matches the "x of y unlocked" count directly above it. A brand-new member
+ *     with nothing earned instead sees the locked ladder wall as a menu of goals.
  *  2. NEXT TIER — every unfinished ladder with its target and requirement, and a
  *     progress bar wherever the app can honestly observe the counter (see
  *     [com.kungsbackacarcommunity.app.badges.BadgeCounters]; the authoritative
@@ -106,9 +111,19 @@ fun ProfileBadgesSection(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (!showcase.hasAnyBadge) {
-                // Nothing earned yet: lead with the invitation, then the same
-                // locked wall below reads as a menu of what is on offer.
+            if (showcase.hasAnyBadge) {
+                // The summary is a flat recency strip: the most recently acquired
+                // awards, milestones and individual ladder tiers alike. With six
+                // or fewer earned it shows every one, so the count above and the
+                // medallions here agree.
+                RecentAwardsGrid(
+                    awards = showcase.recentAwards,
+                    onSelect = { selected = it },
+                )
+            } else {
+                // Nothing earned yet: lead with the invitation, then the locked
+                // ladder wall below reads as a menu of what is on offer. (The
+                // recency strip would be empty, so the goal menu takes its place.)
                 Text(
                     text = stringResource(R.string.badgeShowcase_emptyTitle),
                     style = MaterialTheme.typography.bodyMedium,
@@ -119,13 +134,12 @@ fun ProfileBadgesSection(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                LadderMedallionGrid(
+                    ladders = showcase.ladders,
+                    awardedAtByKey = showcase.awardedAtByKey,
+                    onSelect = { selected = it },
+                )
             }
-
-            LadderMedallionGrid(
-                ladders = showcase.ladders,
-                awardedAtByKey = showcase.awardedAtByKey,
-                onSelect = { selected = it },
-            )
 
             val unfinished = showcase.laddersInProgress
             if (unfinished.isNotEmpty()) {
@@ -214,6 +228,64 @@ private fun LadderMedallionGrid(
             medallionSize = BadgeMedallionSize,
             onClick = { onSelect(detail) },
         )
+    }
+}
+
+/**
+ * The summary strip: up to [BadgeShowcase.Companion.RECENT_AWARDS_LIMIT] awards,
+ * most-recently-acquired first, each its own lit medallion — ladder tiers and
+ * standalone milestones side by side.
+ *
+ * Only rendered when the member holds at least one award (an empty strip would
+ * say nothing), so every tile here is earned.
+ */
+@Composable
+private fun RecentAwardsGrid(
+    awards: List<EarnedAward>,
+    onSelect: (BadgeDetail) -> Unit,
+) {
+    BadgeGridRows(items = awards, perRow = 3) { award ->
+        if (award.isMilestone) {
+            val name = milestoneNameFor(award.badgeKey, award.fallbackName)
+            val detail =
+                BadgeDetail(
+                    glyph = BadgeGlyph.Milestone(award.badgeKey),
+                    tier = null,
+                    name = name,
+                    requirement = null,
+                    pointsReward = 0,
+                    earned = true,
+                    awardedAtMillis = award.awardedAtMillis,
+                )
+            BadgeMedallionTile(
+                glyph = BadgeGlyph.Milestone(award.badgeKey),
+                tier = null,
+                earned = true,
+                label = name,
+                contentDescription = stringResource(R.string.badgeShowcase_medallionEarned, name),
+                medallionSize = BadgeMedallionSize,
+                onClick = { onSelect(detail) },
+            )
+        } else {
+            // A tier award always resolves to its catalog ladder+rung; a key that
+            // somehow did not would not have become an EarnedAward in the first place.
+            val (ladder, rung) = rungForBadgeKey(award.badgeKey) ?: return@BadgeGridRows
+            val detail = rememberRungDetail(ladder, rung, earned = true, award.awardedAtMillis)
+            BadgeMedallionTile(
+                glyph = BadgeGlyph.Ladder(ladder.id),
+                tier = rung.tier,
+                earned = true,
+                label = stringResource(ladderNameRes(ladder.id)),
+                contentDescription =
+                    stringResource(
+                        R.string.badgeShowcase_medallionEarned,
+                        rungDisplayName(ladder, rung),
+                    ),
+                caption = stringResource(tierNameRes(rung.tier)),
+                medallionSize = BadgeMedallionSize,
+                onClick = { onSelect(detail) },
+            )
+        }
     }
 }
 
@@ -462,7 +534,12 @@ private fun rungDisplayName(ladder: BadgeLadder, rung: BadgeRung): String =
     stringResource(ladderNameRes(ladder.id)) + " " + stringResource(tierNameRes(rung.tier))
 
 @Composable
-private fun milestoneName(milestone: MilestoneBadge): String {
-    val res = badgeNameRes(milestone.key)
-    return if (res != null) stringResource(res) else (milestone.fallbackName ?: milestone.key)
+private fun milestoneName(milestone: MilestoneBadge): String =
+    milestoneNameFor(milestone.key, milestone.fallbackName)
+
+/** The localized milestone name, or the award doc's denormalized name, or the key. */
+@Composable
+private fun milestoneNameFor(key: String, fallbackName: String?): String {
+    val res = badgeNameRes(key)
+    return if (res != null) stringResource(res) else (fallbackName ?: key)
 }

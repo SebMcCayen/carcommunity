@@ -293,4 +293,108 @@ class BadgeShowcaseTest {
         // An undated award simply has no entry — never a fabricated date.
         assertNull(showcase.awardedAtByKey["first_event"])
     }
+
+    // -----------------------------------------------------------------------
+    // The summary strip: last acquired awards, count-consistent
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `the summary lists the most recently acquired awards, newest first, milestones included`() {
+        // Two tiers of ONE ladder plus a milestone plus another ladder's tier —
+        // the exact shape that used to show fewer medallions than the count.
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = 100L),
+                        badge("garage_created", awardedAtMillis = 200L),
+                        badge("kronjagare_silver", awardedAtMillis = 300L),
+                        badge("vagfarare_brons", awardedAtMillis = 400L),
+                    ),
+            )
+
+        // Four earned, fewer than the cap → the strip shows all four, so its size
+        // equals the "x of 27" numerator. This is the reported bug fixed.
+        assertEquals(4, showcase.earnedCount)
+        assertEquals(showcase.earnedCount, showcase.recentAwards.size)
+
+        // Newest acquired first.
+        assertEquals(
+            listOf("vagfarare_brons", "kronjagare_silver", "garage_created", "kronjagare_brons"),
+            showcase.recentAwards.map { it.badgeKey },
+        )
+        // The milestone is in the strip (it never appeared in the old per-ladder grid)…
+        assertTrue(showcase.recentAwards.any { it.badgeKey == "garage_created" && it.isMilestone })
+        // …and BOTH tiers of the same ladder are their own items (no collapse).
+        assertEquals(
+            2,
+            showcase.recentAwards.count { it.ladderId == BadgeLadderId.KRONJAGARE },
+        )
+    }
+
+    @Test
+    fun `the summary shows at most six, keeping the six most recently acquired`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = 10L),
+                        badge("kronjagare_silver", awardedAtMillis = 20L),
+                        badge("kronjagare_guld", awardedAtMillis = 30L),
+                        badge("traffrav_brons", awardedAtMillis = 40L),
+                        badge("traffrav_silver", awardedAtMillis = 50L),
+                        badge("traffrav_guld", awardedAtMillis = 60L),
+                        badge("garage_created", awardedAtMillis = 70L),
+                    ),
+            )
+
+        assertEquals(7, showcase.earnedCount)
+        assertEquals(BadgeShowcase.RECENT_AWARDS_LIMIT, showcase.recentAwards.size)
+        // The single oldest award (t=10) is the one dropped by the cap.
+        assertFalse(showcase.recentAwards.any { it.badgeKey == "kronjagare_brons" })
+        assertEquals("garage_created", showcase.recentAwards.first().badgeKey)
+    }
+
+    @Test
+    fun `an undated award sorts after every dated one`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = null),
+                        badge("vagfarare_brons", awardedAtMillis = 100L),
+                        badge("garage_created", awardedAtMillis = 200L),
+                    ),
+            )
+        // Dated awards lead, newest first; the undated one is last, never first.
+        assertEquals(
+            listOf("garage_created", "vagfarare_brons", "kronjagare_brons"),
+            showcase.recentAwards.map { it.badgeKey },
+        )
+    }
+
+    @Test
+    fun `unknown and duplicate keys never reach the summary and never break count parity`() {
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = 100L),
+                        badge("kronjagare_brons", awardedAtMillis = 100L),
+                        badge("a_badge_from_the_future", awardedAtMillis = 999L),
+                        badge("garage_created", awardedAtMillis = 200L),
+                    ),
+            )
+        // The future/unknown key is neither counted nor shown; the duplicate collapses.
+        assertEquals(2, showcase.earnedCount)
+        assertEquals(showcase.earnedCount, showcase.recentAwards.size)
+        assertFalse(showcase.recentAwards.any { it.badgeKey == "a_badge_from_the_future" })
+    }
+
+    @Test
+    fun `a member with no badges has an empty summary strip`() {
+        val showcase = BadgeShowcase.from(badges = emptyList())
+        assertTrue(showcase.recentAwards.isEmpty())
+        assertEquals(showcase.earnedCount, showcase.recentAwards.size)
+    }
 }
