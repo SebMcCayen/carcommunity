@@ -150,6 +150,33 @@ describe('invalid input', () => {
     expect(parseLocalDateTime('igår')).toBeNull();
     expect(localToIso('08/07/2026')).toBeNull();
   });
+
+  // A field value is *local* wall-clock with no offset; a stored value is an
+  // absolute UTC instant. The parser must never accept an offset-bearing
+  // instant and silently treat its `HH:mm` as local — that is a whole
+  // timezone-sized shift on a saved time. These cases fail (the string parses)
+  // if `DATE_TIME_RE` is anchored only at the start; they pass once it is
+  // anchored at both ends.
+  it('rejects a Z-suffixed instant instead of localising it', () => {
+    expect(parseLocalDateTime('2026-07-08T12:00Z')).toBeNull();
+    expect(localToIso('2026-07-08T12:00Z')).toBeNull();
+    expect(datePartOf('2026-07-08T12:00Z')).toBe('');
+    expect(timePartOf('2026-07-08T12:00Z')).toBe('');
+  });
+
+  it('rejects an explicit UTC offset instead of dropping it', () => {
+    expect(parseLocalDateTime('2026-07-08T12:00+02:00')).toBeNull();
+    expect(localToIso('2026-07-08T12:00+02:00')).toBeNull();
+    expect(parseLocalDateTime('2026-07-08T12:00-05:00')).toBeNull();
+  });
+
+  it('rejects a seconds-bearing string rather than truncating it', () => {
+    // The field is minute-granular by construction; anything finer is not a
+    // valid field value, so it is rejected, not silently trimmed to `12:00`.
+    expect(parseLocalDateTime('2026-07-08T12:00:30')).toBeNull();
+    expect(localToIso('2026-07-08T12:00:30')).toBeNull();
+    expect(timePartOf('2026-07-08T12:00:30')).toBe('');
+  });
 });
 
 describe('round-tripping a stored instant', () => {

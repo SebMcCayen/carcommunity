@@ -158,5 +158,19 @@ describe('DateTimeField', () => {
       type(dateInput(), '');
       expect(onChange).toHaveBeenCalledWith('');
     });
+
+    it('does not carry a hidden pre-existing time through a date edit', () => {
+      // A full datetime arrives (e.g. editing a legacy record). The time input
+      // is not rendered in date-only mode, so 14:30 is invisible and
+      // uneditable. Editing the date must NOT smuggle it back out: the emitted
+      // value is a plain date. Fails (emits `2026-07-09T14:30`) if the date
+      // input keeps the time via `withDatePart`.
+      const onChange = vi.fn();
+      render(<DateTimeField id="f" mode="date" label="Utgår" value="2026-07-08T14:30" onChange={onChange} />);
+
+      expect(timeInput()).toBeNull();
+      type(dateInput(), '2026-07-09');
+      expect(onChange).toHaveBeenCalledWith('2026-07-09');
+    });
   });
 });

@@ -86,6 +86,17 @@ export function DateTimeField({
   const date = datePartOf(value);
   const time = timePartOf(value);
 
+  // In date-only mode the time control is not rendered, so a time riding along
+  // in `value` (e.g. a full datetime handed in when editing an existing record)
+  // is invisible and uneditable. Emitting `withDatePart(value, …)` there would
+  // keep that hidden time alive and re-submit it on every date edit, so the
+  // caller — which persists a plain `YYYY-MM-DD` in this mode — would silently
+  // store a stale wall-clock time it never showed the operator. Emit the bare
+  // date instead, dropping any smuggled time. In datetime mode the time is a
+  // real, editable part of the value and is preserved as before.
+  const handleDateChange = (nextDate: string) =>
+    onChange(mode === 'date' ? nextDate : withDatePart(value, nextDate));
+
   const dateInput = (
     <input
       id={`${id}-date`}
@@ -93,7 +104,7 @@ export function DateTimeField({
       type="date"
       lang={INPUT_LANG}
       value={date}
-      onChange={(event) => onChange(withDatePart(value, event.target.value))}
+      onChange={(event) => handleDateChange(event.target.value)}
       disabled={disabled}
       aria-required={required || undefined}
       aria-describedby={describedBy}

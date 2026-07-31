@@ -59,8 +59,20 @@ const DEFAULT_TIME = '00:00';
 /** `YYYY-MM-DD`. */
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 
-/** `YYYY-MM-DDTHH:mm` (seconds, if any, are ignored by the capture). */
-const DATE_TIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/;
+/**
+ * `YYYY-MM-DDTHH:mm` — fully anchored, exactly minute granularity.
+ *
+ * The trailing `$` is load-bearing, not tidiness. A field value is *local*
+ * wall-clock with no offset; a stored value is an absolute UTC instant. If this
+ * pattern were anchored only at the start it would also match a stored instant
+ * (`2026-07-08T12:00Z`, `...T12:00+02:00`) or a seconds-bearing string, keep
+ * only the `HH:mm`, and throw the offset/seconds away — silently reinterpreting
+ * a UTC instant as local wall-clock (a timezone-sized shift, the exact bug this
+ * module exists to prevent). Anchoring both ends makes any such input *fail to
+ * match*, so `parseLocalDateTime`/`localToIso` return null and the caller sees
+ * "not a valid field value" instead of a mis-parse.
+ */
+const DATE_TIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 const pad = (part: number) => String(part).padStart(2, '0');
 
