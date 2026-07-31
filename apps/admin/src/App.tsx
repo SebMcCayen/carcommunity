@@ -41,6 +41,21 @@ const CredentialsPage = lazy(() => import('@/app/credentials/page'));
 const SubscriptionPage = lazy(() => import('@/app/subscription/page'));
 const SettingsPage = lazy(() => import('@/app/settings/page'));
 
+/*
+ * NOT LINKED FROM THE SIDEBAR — the routes below are kept so a nav entry can be
+ * restored with one line in components/layout/Sidebar.tsx once the page does
+ * something real. Each stays a lazy-loaded chunk, so an unlinked route adds
+ * only its route entry and lazy wrapper to the initial bundle — the page
+ * module itself is fetched only when the route is navigated to.
+ *
+ *   /live-location  placeholder — hardcoded zeros; live sessions are in
+ *                   Realtime Database with no admin read path yet.
+ *   /settings       placeholder — no backend, no actions; feature flags are
+ *                   already served by the working /feature-flags page.
+ *   /reports        placeholder — superseded by /moderation-reports.
+ *   /badges         functional, but listing it is a product decision.
+ */
+
 export function App() {
   return (
     <Routes>
