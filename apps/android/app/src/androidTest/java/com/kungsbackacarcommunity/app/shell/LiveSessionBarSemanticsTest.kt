@@ -21,8 +21,9 @@ import org.junit.runner.RunWith
 /**
  * TalkBack accessibility of the live-session bar's merged [contentDescription].
  *
- * The bar draws glyphs and bare numbers — there is no width for word labels (see
- * [LiveSessionBar]'s KDoc) — so `semantics(mergeDescendants = true)` replaces the
+ * The bar draws glyphs and terse numbers — there is no width for word labels like
+ * "elapsed" or "distance" (see [LiveSessionBar]'s KDoc) — so
+ * `semantics(mergeDescendants = true)` replaces the
  * whole row with ONE spoken sentence. That sentence is then the only thing a
  * screen-reader user has to reconstruct the bar by, which makes the order it
  * lists the metrics in load-bearing rather than cosmetic: if it spoke them in a
@@ -64,6 +65,9 @@ class LiveSessionBarSemanticsTest {
         /** Exactly 54 km/h, so the expected readout involves no rounding. */
         const val SPEED_MPS = 15.0
         const val SPEED_KMH = 54
+
+        /** What the bar draws for that speed: the number with its unit. */
+        val SPEED_DRAWN: String = DriveFormatters.formatSpeedKmh(SPEED_KMH)
     }
 
     /** Where a leaf text node's left edge sits, in the root's coordinates. */
@@ -93,7 +97,7 @@ class LiveSessionBarSemanticsTest {
         // screen at the end of the first composition.
         composeTestRule.waitUntil(timeoutMillis = 5_000L) {
             composeTestRule
-                .onAllNodesWithText(SPEED_KMH.toString(), useUnmergedTree = true)
+                .onAllNodesWithText(SPEED_DRAWN, useUnmergedTree = true)
                 .fetchSemanticsNodes()
                 .isNotEmpty()
         }
@@ -110,8 +114,8 @@ class LiveSessionBarSemanticsTest {
             )
         val distanceText = DriveFormatters.formatDistance(DISTANCE_METERS)
         // The speed is the one metric whose spoken form differs from its drawn
-        // form: the bar draws `54` and speaks "current speed 54 km/h", because
-        // the unit has no width on the strip.
+        // form: the bar draws `54 km/h` and speaks the fuller "current speed
+        // 54 km/h", which prefixes the quantity's name onto the same reading.
         val spokenSpeed = context.getString(R.string.liveLocation_sessionBarSpeed, SPEED_KMH)
 
         val description =
@@ -126,7 +130,7 @@ class LiveSessionBarSemanticsTest {
         val metrics =
             listOf(
                 Metric("elapsed", description.indexOf(elapsedText), drawnAt(elapsedText)),
-                Metric("speed", description.indexOf(spokenSpeed), drawnAt(SPEED_KMH.toString())),
+                Metric("speed", description.indexOf(spokenSpeed), drawnAt(SPEED_DRAWN)),
                 Metric("distance", description.indexOf(distanceText), drawnAt(distanceText)),
             )
 

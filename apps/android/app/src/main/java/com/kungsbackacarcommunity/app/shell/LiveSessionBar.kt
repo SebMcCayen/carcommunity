@@ -48,13 +48,14 @@ const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
 
 /**
  * The widest string the speed readout can ever render, used ONLY to reserve
- * width — never drawn visibly. Three digits covers every speed a road vehicle
- * reaches, and reserving them means the readout does not change width as the
- * number crosses 9 → 10 → 100, so the distance beside it never shuffles
- * sideways while driving. Zeros rather than any other digit because Roboto's
- * figures are tabular (equal advance), so any three digits measure the same.
+ * width — never drawn visibly. Three digits plus the fixed " km/h" unit covers
+ * every speed a road vehicle reaches, and reserving them means the readout does
+ * not change width as the number crosses 9 → 10 → 100, so the distance beside it
+ * never shuffles sideways while driving. Zeros rather than any other digit
+ * because Roboto's figures are tabular (equal advance), so any three digits
+ * measure the same; the unit is a constant so it adds a constant width.
  */
-private const val SPEED_WIDTH_RESERVATION = "000"
+private const val SPEED_WIDTH_RESERVATION = "000 km/h"
 
 /**
  * A frosted bar shown at the top of the map — filling the strip between the
@@ -93,17 +94,17 @@ private const val SPEED_WIDTH_RESERVATION = "000"
  * is the part that gives: it may shrink and ellipsize, so the running time — the
  * one that changes every second — is never the thing that gets cut.
  *
- * ### The speed readout carries no visible "km/h", and why
- * The strip's width is fully spoken for. The bar is handed
- * `screen − 2×16 (page padding) − 48+8 (search) − 48+8 (avatar)`, and spends
+ * ### The speed readout carries a visible "km/h"
+ * The number is drawn with its unit — `54 km/h` — beside the speedometer glyph,
+ * the same "km/h" label the History and drive-summary speeds render (via
+ * [DriveFormatters]). The strip's width is tight — the bar is handed
+ * `screen − 2×16 (page padding) − 48+8 (search) − 48+8 (avatar)` and spends
  * another 2×16 on its own padding: 184dp of content on a 360dp phone, 144dp on a
- * 320dp one. The existing dot + clock + rule + distance already come to ~128dp,
- * so a glyph (18) + gap (4) + three reserved digits (~24) + the row gap (8) is
- * the entire remaining budget. A visible "km/h" (~27dp at labelSmall) would push
- * the distance into ellipsizing on a mainstream 360dp device, which is too high a
- * price for a unit this app has exactly one of. The unit is therefore spoken, not
- * drawn: the speedometer glyph names the quantity, and the bar's TalkBack sentence
- * says "current speed 54 km/h" in full.
+ * 320dp one — so the unit is paid for by the one child allowed to give: at a
+ * narrow width the DISTANCE ellipsizes first (it carries `weight(fill = false)`
+ * and `TextOverflow.Ellipsis`), while the clock and this speed stay whole. The
+ * unit is a constant, so [SPEED_WIDTH_RESERVATION] reserves the readout at its
+ * widest and the distance beside it still never shuffles as the number grows.
  *
  * ### Neutral by construction
  * The speed is a plain readout of the member's own current speed. It is never
@@ -176,8 +177,11 @@ fun LiveSessionBar(
         shownSpeedKmh = LiveSpeedReadout.displayKmh(speedSample, tickMillis, shownSpeedKmh)
     }
     val speedKmh = shownSpeedKmh
-    val speedText = speedKmh?.toString() ?: DriveFormatters.MISSING_VALUE
-    // TalkBack gets the unit and the word the visible readout has no width for.
+    // Same "km/h" label the History/summary speeds render, appended to the
+    // already-deadbanded whole km/h rather than re-rounding a raw m/s.
+    val speedText = DriveFormatters.formatSpeedKmh(speedKmh)
+    // TalkBack gets the full "current speed" sentence the visible readout has no
+    // room to spell out; the unit itself is now on screen as well.
     val speedDescription =
         if (speedKmh != null) {
             stringResource(R.string.liveLocation_sessionBarSpeed, speedKmh)
@@ -285,15 +289,16 @@ private fun MetricSeparator() {
 }
 
 /**
- * The speed readout: speedometer glyph + a whole number of km/h (or the missing
- * value dash). The unit is spoken by the bar's [contentDescription], not drawn —
- * see the width budget in [LiveSessionBar]'s KDoc.
+ * The speed readout: speedometer glyph + a whole number of km/h WITH its unit,
+ * e.g. `54 km/h` (or the missing value dash). The unit is drawn here and also
+ * spoken in full by the bar's [contentDescription] — see [LiveSessionBar]'s KDoc.
  *
  * The number sits in a Box over an INVISIBLE [SPEED_WIDTH_RESERVATION], which is
  * the whole trick to a stable layout: laid out but never drawn, it fixes the
- * readout at its widest, so crossing 9 → 10 → 100 km/h (or dropping to the dash)
- * cannot nudge the distance beside it sideways. It is pulled out of the
- * accessibility tree so TalkBack can never read the phantom digits.
+ * readout at its widest — three digits and the unit — so crossing 9 → 10 → 100
+ * km/h (or dropping to the dash) cannot nudge the distance beside it sideways. It
+ * is pulled out of the accessibility tree so TalkBack can never read the phantom
+ * digits.
  *
  * Same 18dp glyph size and `primary` tint as [DistanceMetric], so the two read as
  * one pair of metrics rather than one shouting louder than the other. The number
