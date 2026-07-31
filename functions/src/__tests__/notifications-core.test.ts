@@ -93,13 +93,16 @@ describe('notifications-core delivery eligibility', () => {
 });
 
 describe('notifications-core social categories', () => {
-  it('exposes the five chat/social categories as active', () => {
+  it('exposes the six chat/social categories as active', () => {
     expect(SOCIAL_NOTIFICATION_CATEGORIES).toEqual([
       'direct_message',
       'community_chat',
       'convoy_chat',
       'friend_request',
       'convoy_invite',
+      // Convoy membership/lifecycle notices (someone left, leadership moved,
+      // the convoy ended) — social, and independently silenceable from invites.
+      'convoy_update',
     ]);
     for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
       expect(NOTIFICATION_CATEGORIES).toContain(category);

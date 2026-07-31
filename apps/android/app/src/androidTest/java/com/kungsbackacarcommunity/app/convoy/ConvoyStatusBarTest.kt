@@ -50,6 +50,15 @@ class ConvoyStatusBarTest {
             ConvoyBarMember(uid = "u2", displayName = "Bob", avatarPath = null),
         )
 
+    /**
+     * Three accepted members, so that ONE of them leaving still leaves two behind
+     * — which is what makes a plain leave (and, for a leader, a real choice
+     * between leaving and ending) reachable at all. With [twoMembers] every exit
+     * ends the convoy, which is a different branch on purpose.
+     */
+    private val threeMembers =
+        twoMembers + ConvoyBarMember(uid = "u3", displayName = "Cara", avatarPath = null)
+
     private fun ownerState(convoyId: String) =
         ConvoyBarState(
             convoyId = convoyId,
@@ -69,6 +78,14 @@ class ConvoyStatusBarTest {
             inviteAvailability = ConvoyBar.inviteAvailability,
             leaveAvailability = ConvoyBar.leaveAvailability,
         )
+
+    /** A non-leader whose exit leaves two others behind → a PLAIN leave. */
+    private fun memberOfThreeState(convoyId: String) =
+        memberState(convoyId).copy(members = threeMembers)
+
+    /** A leader with two others behind them → the leave-or-end CHOOSER. */
+    private fun leaderOfThreeState(convoyId: String) =
+        ownerState(convoyId).copy(members = threeMembers)
 
     /**
      * The one that matters: the bar's [ConvoyBarState] is hoisted and refreshes
@@ -131,19 +148,20 @@ class ConvoyStatusBarTest {
     }
 
     /**
-     * The one failure in this component that would actually hurt people: a
-     * member tapping "leave" and silently ending everyone's drive. The trailing
-     * control routes on `viewerIsOwner`, not on `leaveAvailability`, so a member's
-     * tap opens the LEAVE confirmation (never END's) and, once confirmed, reaches
-     * the leave handler alone — the case a click path keyed on availability would
-     * get wrong now that `convoy-leave` is wired and the member flag is Wired.
+     * The one failure in this component that would actually hurt people: a member
+     * tapping "leave" and silently ending everyone's drive. The trailing control
+     * routes on the EXIT CHOICE, not on `leaveAvailability`, so a non-leader's tap
+     * opens the LEAVE confirmation (never END's, and never the leader's chooser)
+     * and, once confirmed, reaches the leave handler alone — the case a click path
+     * keyed on availability would get wrong now that `convoy-leave` is wired and
+     * the member flag is Wired.
      */
     @Test
     fun aMembersLeaveNeverReachesTheEndConvoyPath() {
         var ended: String? = null
         var left: String? = null
-        // Member, leave wired (as it now is), handler supplied.
-        val state = memberState("c1")
+        // Non-leader with two others behind them → a plain leave, wired handler.
+        val state = memberOfThreeState("c1")
         composeTestRule.setContent {
             KccTheme {
                 ConvoyStatusBar(
@@ -158,9 +176,13 @@ class ConvoyStatusBarTest {
         composeTestRule.waitForIdle()
 
         // The confirmation shown is LEAVE's, never END's (which ends the convoy
-        // for everyone); nothing has left yet until the user confirms.
+        // for everyone) and never the leader's chooser; nothing has left yet until
+        // the user confirms.
         composeTestRule
             .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
+            .assertDoesNotExist()
+        composeTestRule
+            .onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_END_TAG)
             .assertDoesNotExist()
         assertNull("leaving must wait for the confirmation", left)
 
@@ -171,6 +193,176 @@ class ConvoyStatusBarTest {
 
         assertEquals("a member's leave must reach the leave handler", "c1", left)
         assertNull("a member's leave must never end the convoy for everyone", ended)
+    }
+
+    // --- the two exits ----------------------------------------------------
+
+    /**
+     * The feature: a LEADER with people behind them gets a real CHOICE, and the
+     * two options do genuinely different things.
+     *
+     * Asserted through the observables — which handler each option reaches — so it
+     * fails against a chooser that wires both branches to the same action, which
+     * is exactly the "one button with a hidden modifier" this replaces.
+     */
+    @Test
+    fun theLeaderIsOfferedBothExits_andEachReachesItsOwnAction() {
+        var ended: String? = null
+        var left: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = leaderOfThreeState("c1"),
+                    onEndConvoy = { ended = it },
+                    onLeaveConvoy = { left = it },
+                )
+            }
+        }
+
+        // The exit opens the CHOOSER, not either confirmation directly.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_END_TAG).assertIsDisplayed()
+        assertNull("the chooser itself must commit nothing", ended)
+        assertNull("the chooser itself must commit nothing", left)
+
+        // Leave → the leave confirmation → the LEAVE handler, and nothing ends.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barLeaveConfirmAction))
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("the leader's Leave must reach the leave handler", "c1", left)
+        assertNull("the leader's Leave must not end the convoy for everyone", ended)
+    }
+
+    /**
+     * The other half of the same choice: "End for everyone" really does reach the
+     * group-wide action — and only after its own confirmation, so the destructive
+     * option is never one stray tap away.
+     */
+    @Test
+    fun theLeadersEndForEveryoneReachesTheGroupWideAction_afterConfirming() {
+        var ended: String? = null
+        var left: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = leaderOfThreeState("c1"),
+                    onEndConvoy = { ended = it },
+                    onLeaveConvoy = { left = it },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_END_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // Picking the destructive option opens ITS confirmation; it has not fired.
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
+            .assertIsDisplayed()
+        assertNull("ending must wait for its own confirmation", ended)
+
+        composeTestRule.onNodeWithText(string(R.string.convoy_barEndConfirmAction)).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("End for everyone must reach the end handler", "c1", ended)
+        assertNull("ending is not also a leave", left)
+    }
+
+    /**
+     * A NON-leader must never be able to reach "end for everyone" — not through
+     * the chooser (which is the leader's alone) and not through any count. This is
+     * the abuse case: one annoyed member closing everyone else's convoy mid-drive.
+     */
+    @Test
+    fun aNonLeaderNeverSeesTheEndForEveryoneOption() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberOfThreeState("c1"),
+                    onEndConvoy = {},
+                    onLeaveConvoy = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_END_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG).assertDoesNotExist()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
+            .assertDoesNotExist()
+    }
+
+    /**
+     * The exactly-one-would-remain case for a NON-leader. Leave is still OFFERED —
+     * hiding it would trap them, because ending is leader-only and they would then
+     * have no exit at all — but the confirmation says out loud that the convoy
+     * ends, and the tap still reaches the LEAVE handler rather than the group-wide
+     * end (which the server would refuse them anyway).
+     */
+    @Test
+    fun aNonLeaderWhoseExitEndsTheConvoyIsToldSo_andStillOnlyLeaves() {
+        var ended: String? = null
+        var left: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    // Two accepted members: one leaving would leave a single
+                    // person alone in a live convoy, so the server ends it.
+                    state = memberState("c1"),
+                    onEndConvoy = { ended = it },
+                    onLeaveConvoy = { left = it },
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // The wording is the ends-the-convoy one, not "the others keep driving
+        // without you" — which would be simply false here.
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barLeaveEndsConfirmBody))
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barLeaveConfirmBody))
+            .assertDoesNotExist()
+
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barLeaveEndsConfirmAction))
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("it is still a LEAVE, whatever it does to the convoy", "c1", left)
+        assertNull("a non-leader must never reach convoy-end", ended)
+    }
+
+    /**
+     * A leader whose own exit would end the convoy anyway is not offered a choice
+     * between two identical outcomes — they get End, directly.
+     */
+    @Test
+    fun aLeaderWhoseExitEndsTheConvoyGetsEndDirectly_noChooser() {
+        var ended: String? = null
+        composeTestRule.setContent {
+            // ownerState carries two accepted members, so one leaving leaves one.
+            KccTheme { ConvoyStatusBar(state = ownerState("c1"), onEndConvoy = { ended = it }) }
+        }
+        composeTestRule.onNodeWithTag(CONVOY_BAR_LEAVE_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG).assertDoesNotExist()
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barEndConfirmBody))
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(string(R.string.convoy_barEndConfirmAction)).performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("c1", ended)
     }
 
     /**
@@ -250,8 +442,8 @@ class ConvoyStatusBarTest {
     }
 
     /**
-     * A member's leave control has no callable and is disabled — and must not
-     * still be painted in full-strength destructive red, which reads as tappable.
+     * An exit control with no handler wired is disabled — and must not still be
+     * painted in full-strength destructive red, which reads as tappable.
      *
      * Asserted on pixels rather than on the presence of a `tint` argument: the
      * icon is measured for pixels of EXACTLY the theme's error colour, which a
@@ -304,14 +496,16 @@ class ConvoyStatusBarTest {
             return count
         }
 
-        // Disabled (member: no `convoy.leave` callable) — no full-strength error pixels.
+        // Disabled (a member whose host wired no leave handler) — no
+        // full-strength error pixels.
         assertEquals(
             "a disabled leave icon must not render in undimmed destructive red",
             0,
             undimmedErrorPixels(),
         )
 
-        // Enabled (owner: `convoy-end` is wired) — the destructive colour IS used,
+        // Enabled (the leader's End is wired by signature) — the destructive
+        // colour IS used,
         // so the assertion above is about the disabled state and not about the
         // colour having been removed altogether.
         current = ownerState("c1")

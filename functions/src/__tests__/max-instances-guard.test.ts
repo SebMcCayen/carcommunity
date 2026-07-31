@@ -227,7 +227,14 @@ beforeAll(async () => {
       }),
       { functions: [], unclassified: [] },
     );
-});
+  // Vitest's default 10s hook timeout is not enough headroom for this one. It
+  // imports the ENTIRE deployed backend module graph (every entry point, so
+  // every domain), while the other ~57 test files are running in parallel
+  // workers — so how long it takes is a function of what else the suite happens
+  // to be doing, not of anything this guard is testing. At the default it starts
+  // failing purely because the suite grew, which is a flake that says nothing
+  // about instance caps. The generous ceiling still catches a genuine hang.
+}, 120_000);
 
 describe('instance ceilings (cost guardrail)', () => {
   it('every deployed function declares a bounding maxInstances', () => {

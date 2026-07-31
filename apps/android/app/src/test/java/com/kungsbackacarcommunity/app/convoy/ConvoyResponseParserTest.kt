@@ -161,4 +161,73 @@ class ConvoyResponseParserTest {
         val result = ConvoyResponseParser.parseMutation(emptyMap())
         assertTrue(result is ConvoyMutationResult.Failed)
     }
+
+    // --- convoy-leave: richer than a plain mutation -----------------------
+
+    @Test
+    fun `parseLeave carries what the exit DID and who inherited leadership`() {
+        val result =
+            ConvoyResponseParser.parseLeave(
+                mapOf(
+                    "convoy" to convoyMap(id = "c1"),
+                    "remainingMemberCount" to 2.0,
+                    "outcome" to "left",
+                    "newLeaderUid" to "successor",
+                ),
+            )
+        assertTrue(result is LeaveConvoyResult.Left)
+        val left = result as LeaveConvoyResult.Left
+        assertEquals(2, left.remainingMemberCount)
+        assertEquals(ConvoyLeaveOutcome.Left, left.outcome)
+        assertEquals("successor", left.newLeaderUid)
+    }
+
+    @Test
+    fun `parseLeave reads the convoy-ended outcome rather than inferring it`() {
+        // The threshold is a SERVER rule; the client takes the answer as given.
+        val result =
+            ConvoyResponseParser.parseLeave(
+                mapOf(
+                    "convoy" to convoyMap(id = "c1", status = "ended"),
+                    "remainingMemberCount" to 1.0,
+                    "outcome" to "left_and_ended",
+                    "newLeaderUid" to null,
+                ),
+            ) as LeaveConvoyResult.Left
+        assertEquals(ConvoyLeaveOutcome.LeftAndEnded, result.outcome)
+        assertNull(result.newLeaderUid)
+    }
+
+    @Test
+    fun `parseLeave degrades an unknown or missing outcome to the conservative one`() {
+        // Announcing "the convoy ended" when it did not is the worse error, so an
+        // unreadable outcome reads as a plain leave.
+        val result =
+            ConvoyResponseParser.parseLeave(mapOf("convoy" to convoyMap(id = "c1")))
+                as LeaveConvoyResult.Left
+        assertEquals(ConvoyLeaveOutcome.Left, result.outcome)
+        assertEquals(0, result.remainingMemberCount)
+        assertNull(result.newLeaderUid)
+
+        val garbled =
+            ConvoyResponseParser.parseLeave(
+                mapOf("convoy" to convoyMap(id = "c1"), "outcome" to "something-new"),
+            ) as LeaveConvoyResult.Left
+        assertEquals(ConvoyLeaveOutcome.Left, garbled.outcome)
+    }
+
+    @Test
+    fun `parseLeave treats a blank successor uid as nobody`() {
+        // A uid that names nobody must not render as "someone took over".
+        val result =
+            ConvoyResponseParser.parseLeave(
+                mapOf("convoy" to convoyMap(id = "c1"), "newLeaderUid" to "   "),
+            ) as LeaveConvoyResult.Left
+        assertNull(result.newLeaderUid)
+    }
+
+    @Test
+    fun `parseLeave without a convoy is a failure`() {
+        assertTrue(ConvoyResponseParser.parseLeave(emptyMap()) is LeaveConvoyResult.Failed)
+    }
 }

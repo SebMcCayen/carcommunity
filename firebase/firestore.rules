@@ -692,26 +692,48 @@ service cloud.firestore {
     // convoy.end / convoy.list). The FOUNDATION for the convoy + 3-channel-chat
     // epic; chat channels are a SEPARATE follow-up, not modelled here.
     //
-    // convoys/{convoyId} carries ownerUid, status (forming|active|ended), a
-    // memberUids:[owner, ...invitees] array, a members map keyed by uid
-    // ({role, inviteStatus, invitedAt, joinedAt}), denormalized memberProfiles,
-    // and a summary computed on end. Any member of the convoy (owner or invitee,
-    // via memberUids) reads it — so an invitee sees the roster + each member's
-    // inviteStatus (the green dot) and, once ended, the summary. It never leaks
-    // to a third party. ALL writes go through the convoy.* callables (friend +
-    // block checks at invite time, invite responses, lifecycle transitions,
-    // summary computation) — no client writes, so membership and status can
-    // never be forged. Live positions are NOT stored here: accepted members
-    // share GPS through the live-location domain (RTDB liveLocation/{uid}/latest).
+    // convoys/{convoyId} carries ownerUid (the CURRENT LEADER — mutable: it
+    // TRANSFERS when a leader leaves), createdByUid (immutable, and what the
+    // Konvojledare badge credits), leadershipTransfers (the record of those
+    // hand-overs), status (forming|active|ended), a memberUids:[owner,
+    // ...invitees] array, a members map keyed by uid ({role, inviteStatus,
+    // invitedAt, joinedAt}), denormalized memberProfiles, and a summary computed
+    // on end. Any member of the convoy (owner or invitee, via memberUids) reads
+    // it — so an invitee sees the roster + each member's inviteStatus (the green
+    // dot) and, once ended, the summary. It never leaks to a third party. ALL
+    // writes go through the convoy.* callables (friend + block checks at invite
+    // time, invite responses, lifecycle transitions, summary computation) — no
+    // client writes, so membership and status can never be forged. Live positions
+    // are NOT stored here: accepted members share GPS through the live-location
+    // domain (RTDB liveLocation/{uid}/latest).
+    //
+    // THE TWO EXITS (leave / end-for-everyone) are enforced ENTIRELY in the
+    // callables, and the reason this block needs no per-field condition for them
+    // is that there is no client write at all — strictly stronger than any
+    // field-level rule could be:
+    //  - only a member may leave THEMSELVES: convoy.leave removes request.auth.uid
+    //    and accepts no target uid, so there is no shape of the request in which
+    //    one member removes another;
+    //  - only the LEADER (ownerUid) may end the convoy for everyone: convoy.end is
+    //    leader-gated (a member who is not the leader gets permission-denied and
+    //    has Leave instead). There is no admin override on convoys today;
+    //  - a client cannot write memberUids, members, ownerUid, createdByUid or
+    //    status directly — no `allow write` rule exists here, so every such
+    //    attempt is denied whoever makes it (pinned by the convoy emulator tests).
     // -------------------------------------------------------------------------
     match /convoys/{convoyId} {
       // Active members only (isActiveMember carries the suspension override) AND
       // in the convoy's memberUids — a suspended / no-longer-entitled member
-      // loses read access even while still listed in memberUids.
+      // loses read access even while still listed in memberUids. A member who has
+      // LEFT is removed from memberUids by convoy.leave, so this one condition is
+      // also what revokes their convoy read AND (via the convoyChats rule below)
+      // their chat access the instant they leave — while the chat history itself
+      // is left untouched for the members still in it.
       allow read: if isActiveMember()
         && resource.data.memberUids is list
         && request.auth.uid in resource.data.memberUids;
-      // No client writes: convoy.create / respond / start / end callables only.
+      // No client writes: the convoy.* callables only (create / respond / start /
+      // end / leave / invite / setDestination / clearDestination).
     }
 
     // -------------------------------------------------------------------------

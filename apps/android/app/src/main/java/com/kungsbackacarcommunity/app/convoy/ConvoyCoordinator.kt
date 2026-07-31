@@ -114,6 +114,29 @@ sealed interface InviteConvoyState {
 }
 
 /**
+ * A one-shot confirmation of what the caller's own exit actually did, so the host
+ * can say it once and move on.
+ *
+ * It exists because the OUTCOME of leaving is not visible in the refreshed
+ * snapshot: after a successful leave the convoy simply disappears from the
+ * caller's list, which looks identical whether the others are still driving,
+ * whether the convoy ended behind them, or whether they handed leadership on. The
+ * server is the only thing that knows which, so its answer is carried here rather
+ * than guessed from the roster.
+ *
+ * @param outcome whether the convoy survived the exit or ended because of it.
+ * @param transferredLeadership true when the caller was the leader and another
+ *   member inherited it. The successor is deliberately NOT named: the client does
+ *   not re-implement the server's tie-broken "longest-joined" pick, and naming
+ *   the wrong person is worse than naming nobody. The successor is told directly,
+ *   by notification.
+ */
+data class ConvoyLeftNotice(
+    val outcome: ConvoyLeaveOutcome,
+    val transferredLeadership: Boolean,
+)
+
+/**
  * Orchestrates the convoy management surface (load + create + respond + invite +
  * leave + start + end). Pure Kotlin so it is unit-testable with a fake repository.
  * Every
@@ -162,6 +185,12 @@ class ConvoyCoordinator(
     // then cleared. Success is reflected by the reloaded snapshot, not a status.
     private val rowError = MutableStateFlow<ConvoyActionError?>(null)
     val actionError: StateFlow<ConvoyActionError?> = rowError.asStateFlow()
+
+    // What the caller's last successful leave did, for a single confirmation.
+    // Cleared by the host once shown (clearLeftNotice), so it never re-appears on
+    // a recomposition.
+    private val leftNoticeFlow = MutableStateFlow<ConvoyLeftNotice?>(null)
+    val leftNotice: StateFlow<ConvoyLeftNotice?> = leftNoticeFlow.asStateFlow()
 
     // Keys (convoyId) whose accept/decline/start/end callable is currently in
     // flight. Guards against overlapping invocations from rapid taps and lets the
@@ -358,20 +387,50 @@ class ConvoyCoordinator(
         runRowAction(convoyId) { repository.start(convoyId).errorOrNull() }
     }
 
+    /**
+     * Ends [convoyId] for EVERYONE — the LEADER's action, and the destructive half
+     * of the two exits. A member who is not the leader is refused server-side
+     * ([ConvoyErrorMapper.mapEnd] maps that to [ConvoyActionError.NotAllowed]);
+     * the UI never offers it to them ([ConvoyBar.exitChoice]).
+     */
     suspend fun end(convoyId: String) {
         runRowAction(convoyId) { repository.end(convoyId).errorOrNull() }
     }
 
     /**
-     * Removes the caller from [convoyId] (a non-owner member's action — the owner
-     * ends instead). Runs through [runRowAction], so it is guarded against double
-     * taps, surfaces a failure via [actionError], and re-fetches on completion: on
-     * success the caller drops out of the convoy and the bar hides itself (the
-     * refreshed snapshot no longer has an accepted membership for them).
+     * Removes the caller from [convoyId]. Available to ANY accepted member, the
+     * LEADER included — leaving is not the non-owner's consolation prize, it is
+     * one of the two exits, and the server transfers leadership rather than
+     * refusing a leader who wants out.
+     *
+     * Runs through [runRowAction], so it is guarded against double taps, surfaces
+     * a failure via [actionError], and re-fetches on completion: on success the
+     * caller drops out of the convoy and the bar hides itself (the refreshed
+     * snapshot no longer has an accepted membership for them). What the exit DID
+     * is published separately as [leftNotice], because the refreshed snapshot
+     * cannot express it — see [ConvoyLeftNotice].
      */
     suspend fun leave(convoyId: String) {
-        runRowAction(convoyId) { repository.leave(convoyId).errorOrNull() }
+        runRowAction(convoyId) {
+            when (val result = repository.leave(convoyId)) {
+                is LeaveConvoyResult.Left -> {
+                    leftNoticeFlow.value =
+                        ConvoyLeftNotice(
+                            outcome = result.outcome,
+                            transferredLeadership = result.newLeaderUid != null,
+                        )
+                    null
+                }
+                is LeaveConvoyResult.Failed -> result.error
+            }
+        }
     }
+
+    /** Acknowledges the last [leftNotice] so it is shown exactly once. */
+    fun clearLeftNotice() {
+        leftNoticeFlow.value = null
+    }
+
 
     /**
      * Invites [inviteeUids] into an existing [convoyId]. Mirrors [create] (working

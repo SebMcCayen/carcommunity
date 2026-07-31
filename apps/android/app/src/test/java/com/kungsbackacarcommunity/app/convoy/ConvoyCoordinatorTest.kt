@@ -117,10 +117,16 @@ class ConvoyCoordinatorTest {
             return inviteResult
         }
 
-        var leaveResult: ConvoyMutationResult = respondResult
+        var leaveResult: LeaveConvoyResult =
+            LeaveConvoyResult.Left(
+                convoy = LEFT_CONVOY,
+                remainingMemberCount = 2,
+                outcome = ConvoyLeaveOutcome.Left,
+                newLeaderUid = null,
+            )
         var lastLeaveConvoyId: String? = null
 
-        override suspend fun leave(convoyId: String): ConvoyMutationResult {
+        override suspend fun leave(convoyId: String): LeaveConvoyResult {
             lastLeaveConvoyId = convoyId
             return leaveResult
         }
@@ -128,6 +134,18 @@ class ConvoyCoordinatorTest {
         override suspend fun start(convoyId: String): ConvoyMutationResult = startResult
 
         override suspend fun end(convoyId: String): ConvoyMutationResult = endResult
+
+        companion object {
+            /**
+             * The convoy as it comes back from a successful leave: `viewer` is
+             * null, because the caller is no longer a member.
+             */
+            val LEFT_CONVOY =
+                ConvoySummary(
+                    "c1", "owner", null, ConvoyStatus.Active, emptyList(),
+                    emptyList(), null, emptyList(), null, null, null, null,
+                )
+        }
     }
 
     @Test
@@ -365,11 +383,59 @@ class ConvoyCoordinatorTest {
 
     @Test
     fun `leave failure sets the action error and still reloads`() = runTest {
-        val repo = FakeRepo().apply { leaveResult = ConvoyMutationResult.Failed(ConvoyActionError.AlreadyEnded) }
+        val repo = FakeRepo().apply {
+            leaveResult = LeaveConvoyResult.Failed(ConvoyActionError.AlreadyEnded)
+        }
         val coordinator = ConvoyCoordinator(repo)
         coordinator.leave("c1")
         assertEquals(ConvoyActionError.AlreadyEnded, coordinator.actionError.value)
         assertEquals(1, repo.listCalls)
+        // A failed leave has nothing to confirm — the user is still in the convoy.
+        assertNull(coordinator.leftNotice.value)
+    }
+
+    @Test
+    fun `leave publishes what the exit DID, straight from the backend`() = runTest {
+        // The outcome cannot be read off the refreshed snapshot (the convoy simply
+        // disappears from the caller's list either way), so it is carried through
+        // from the callable rather than re-derived from the roster.
+        val repo = FakeRepo().apply {
+            leaveResult =
+                LeaveConvoyResult.Left(
+                    convoy = FakeRepo.LEFT_CONVOY,
+                    remainingMemberCount = 1,
+                    outcome = ConvoyLeaveOutcome.LeftAndEnded,
+                    newLeaderUid = null,
+                )
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.leave("c1")
+        assertEquals(
+            ConvoyLeftNotice(ConvoyLeaveOutcome.LeftAndEnded, transferredLeadership = false),
+            coordinator.leftNotice.value,
+        )
+        // Shown once: the host clears it, and it does not come back.
+        coordinator.clearLeftNotice()
+        assertNull(coordinator.leftNotice.value)
+    }
+
+    @Test
+    fun `a LEADER leaving reports that leadership transferred`() = runTest {
+        val repo = FakeRepo().apply {
+            leaveResult =
+                LeaveConvoyResult.Left(
+                    convoy = FakeRepo.LEFT_CONVOY,
+                    remainingMemberCount = 2,
+                    outcome = ConvoyLeaveOutcome.Left,
+                    newLeaderUid = "successor",
+                )
+        }
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.leave("c1")
+        assertEquals(
+            ConvoyLeftNotice(ConvoyLeaveOutcome.Left, transferredLeadership = true),
+            coordinator.leftNotice.value,
+        )
     }
 
     @Test

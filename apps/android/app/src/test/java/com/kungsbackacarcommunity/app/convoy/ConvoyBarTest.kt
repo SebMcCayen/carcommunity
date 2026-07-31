@@ -198,12 +198,124 @@ class ConvoyBarTest {
     @Test
     fun `a member's leave is now wired to convoy-leave`() {
         val state = ConvoyBar.stateFor(loaded(convoy()))!!
-        // `convoy-leave` is deployed, so a non-owner member's Leave is Wired. The
-        // bar still routes the trailing control on viewerIsOwner (asserted in the
-        // ConvoyStatusBar UI test), so this being Wired can never turn a member's
-        // Leave into the owner-only, group-wide End.
+        // `convoy-leave` is deployed, so a non-leader member's Leave is Wired. The
+        // bar still routes the trailing control on the exit CHOICE (asserted in
+        // the ConvoyStatusBar UI test), so this being Wired can never turn a
+        // member's Leave into the leader-only, group-wide End.
         assertEquals(ConvoyBarActionAvailability.Wired, state.leaveAvailability)
         assertEquals(false, state.viewerIsOwner)
+    }
+
+    // --- the two exits ----------------------------------------------------
+
+    private fun accepted(count: Int): List<ConvoyMember> =
+        List(count) { index ->
+            if (index == 0) member("owner", ConvoyRole.Owner) else member("m$index")
+        }
+
+    @Test
+    fun `the LEADER gets a real choice only while the convoy would survive`() {
+        // 3 accepted → 2 remain → the convoy lives on without them, so leaving and
+        // ending are genuinely different outcomes and both are offered.
+        assertEquals(
+            ConvoyExitChoice.LeaveOrEnd,
+            ConvoyBar.exitChoice(viewerIsOwner = true, acceptedMemberCount = 3),
+        )
+        // 2 accepted → 1 would remain → leaving ENDS it anyway, so offering both
+        // would be two buttons for one outcome. End alone, honestly labelled.
+        assertEquals(
+            ConvoyExitChoice.EndOnly,
+            ConvoyBar.exitChoice(viewerIsOwner = true, acceptedMemberCount = 2),
+        )
+        // Alone in it: same reasoning.
+        assertEquals(
+            ConvoyExitChoice.EndOnly,
+            ConvoyBar.exitChoice(viewerIsOwner = true, acceptedMemberCount = 1),
+        )
+    }
+
+    @Test
+    fun `a NON-leader is never offered end-for-everyone, whatever the count`() {
+        // The whole point of the split: ending is leader-only, so no member count
+        // can ever produce an option that closes other people's convoy.
+        for (count in 0..6) {
+            val choice = ConvoyBar.exitChoice(viewerIsOwner = false, acceptedMemberCount = count)
+            assertTrue(
+                choice == ConvoyExitChoice.LeaveOnly || choice == ConvoyExitChoice.LeaveEndsConvoy,
+            )
+        }
+        assertEquals(
+            ConvoyExitChoice.LeaveOnly,
+            ConvoyBar.exitChoice(viewerIsOwner = false, acceptedMemberCount = 3),
+        )
+    }
+
+    @Test
+    fun `a NON-leader whose exit ends the convoy is still offered Leave`() {
+        // Seb's rule says "Leave" is only a real leave when 2+ remain — but HIDING
+        // it here would trap a member in a two-person convoy: they may not end it
+        // (leader-only) and would have no exit at all. So it is still offered, and
+        // the confirmation says the convoy will end.
+        val choice = ConvoyBar.exitChoice(viewerIsOwner = false, acceptedMemberCount = 2)
+        assertEquals(ConvoyExitChoice.LeaveEndsConvoy, choice)
+        assertTrue(choice.endsConvoy)
+    }
+
+    @Test
+    fun `an unloaded or impossible roster never reads as plenty-will-remain`() {
+        // A negative remaining count must not sneak through as "the convoy
+        // survives" — that would offer a plain Leave for an exit that ends it.
+        assertEquals(
+            ConvoyExitChoice.LeaveEndsConvoy,
+            ConvoyBar.exitChoice(viewerIsOwner = false, acceptedMemberCount = 0),
+        )
+        assertEquals(
+            ConvoyExitChoice.EndOnly,
+            ConvoyBar.exitChoice(viewerIsOwner = true, acceptedMemberCount = -3),
+        )
+    }
+
+    @Test
+    fun `the bar state derives its exit choice from the roster it renders`() {
+        // Derived, not stored: the count on the bar and the option behind it come
+        // from the same list, so they cannot disagree.
+        val leaderOfThree =
+            ConvoyBar.stateFor(
+                loaded(
+                    convoy(
+                        viewer = ConvoyViewer(ConvoyRole.Owner, ConvoyInviteStatus.Accepted),
+                        members = accepted(3),
+                    ),
+                ),
+            )!!
+        assertEquals(3, leaderOfThree.memberCount)
+        assertEquals(ConvoyExitChoice.LeaveOrEnd, leaderOfThree.exitChoice)
+
+        val memberOfTwo = ConvoyBar.stateFor(loaded(convoy(members = accepted(2))))!!
+        assertEquals(ConvoyExitChoice.LeaveEndsConvoy, memberOfTwo.exitChoice)
+    }
+
+    @Test
+    fun `still-invited members do not keep a convoy above the survival threshold`() {
+        // The threshold counts ACCEPTED members, matching the server: two people
+        // who were invited but never answered are not two people driving along.
+        val state =
+            ConvoyBar.stateFor(
+                loaded(
+                    convoy(
+                        viewer = ConvoyViewer(ConvoyRole.Owner, ConvoyInviteStatus.Accepted),
+                        members =
+                            listOf(
+                                member("owner", ConvoyRole.Owner),
+                                member("me"),
+                                member("pending1", inviteStatus = ConvoyInviteStatus.Invited),
+                                member("pending2", inviteStatus = ConvoyInviteStatus.Invited),
+                            ),
+                    ),
+                ),
+            )!!
+        assertEquals(2, state.memberCount)
+        assertEquals(ConvoyExitChoice.EndOnly, state.exitChoice)
     }
 
     @Test

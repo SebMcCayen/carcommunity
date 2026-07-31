@@ -321,8 +321,26 @@ describe('convoy auto-start live session (item 2)', () => {
     expect(stillManual!.id).toBe(manual.sessionId);
   }, 60_000);
 
-  it('convoy.leave stops the LEAVER’s auto session', async () => {
-    const { owner, member, convoyId } = await convoyWithAcceptedMember('LeaveOwnerCL', 'LeaveMemberCL');
+  it('convoy.leave stops the LEAVER’s auto session and only theirs', async () => {
+    // THREE accepted members on purpose: leaving must be a PLAIN exit here, so
+    // the assertion that the others keep broadcasting is about the leave path and
+    // not about a convoy that happened to end. (Leaving a two-person convoy ends
+    // it — and stops everyone's auto session — which is the next test.)
+    const owner = await newMember('LeaveOwnerCL');
+    const stayer = await newMember('LeaveStayerCL');
+    const member = await newMember('LeaveMemberCL');
+    await makeFriends(owner, stayer);
+    await makeFriends(owner, member);
+    await signInAs(owner);
+    const convoyId = (
+      (await call('convoy-create', { inviteeUids: [stayer.uid, member.uid] })).data as {
+        convoy: { convoyId: string };
+      }
+    ).convoy.convoyId;
+    for (const joiner of [stayer, member]) {
+      await signInAs(joiner);
+      await call('convoy-respond', { convoyId, action: 'accept' });
+    }
     // Member's auto session is active (started on accept into the active convoy)...
     await pollUntil(async () => {
       const s = await sessionOf(member.uid);
@@ -346,10 +364,33 @@ describe('convoy auto-start live session (item 2)', () => {
     expect(await latestExists(member.uid)).toBe(false);
     expect(await discoveryExists(member.uid)).toBe(false);
 
-    // The owner is still broadcasting (they did not leave).
-    const ownerSession = await sessionOf(owner.uid);
-    expect(ownerSession!.status).toBe('active');
-  }, 60_000);
+    // The members still in the convoy are still broadcasting (they did not leave),
+    // which is the other half of "only the leaver's marker disappears".
+    expect((await sessionOf(owner.uid))!.status).toBe('active');
+    expect((await sessionOf(stayer.uid))!.status).toBe('active');
+  }, 90_000);
+
+  it('a leave that ENDS the convoy stops EVERY member’s auto session', async () => {
+    // Two accepted members, so one leaving takes the convoy below the survival
+    // threshold: it ends, and the member left behind must stop broadcasting to a
+    // convoy that no longer exists — exactly as convoy.end would have done.
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('EndByLeaveOwnerCL', 'EndByLeaveMemberCL');
+    await pollUntil(async () => {
+      const s = await sessionOf(member.uid);
+      return s && s.status === 'active' && s.convoyAutoStarted ? true : undefined;
+    });
+    await signInAs(member);
+    await call('convoy-leave', { convoyId });
+
+    for (const uid of [member.uid, owner.uid]) {
+      const stopped = await pollUntil(async () => {
+        const s = await sessionOf(uid);
+        return s && s.status === 'stopped' ? s : undefined;
+      });
+      expect(stopped.status).toBe('stopped');
+      expect(await latestExists(uid)).toBe(false);
+    }
+  }, 90_000);
 
   it('accepting LEAVES a pre-existing manual session untouched (auto-start aborts)', async () => {
     // Accept-path counterpart to the convoy.end test above: proves the guarantee

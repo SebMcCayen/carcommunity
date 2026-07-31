@@ -9,7 +9,18 @@
  *
  * Data model (member-readable, backend-only writes — firebase/firestore.rules):
  *  - `convoys/{convoyId}` — one document per convoy:
- *      ownerUid: string
+ *      ownerUid: string                      (the CURRENT LEADER — mutable: it
+ *                                             transfers when a leader leaves,
+ *                                             see decideLeaveConvoy)
+ *      createdByUid: string                  (who CREATED the convoy —
+ *                                             IMMUTABLE, and what the
+ *                                             Konvojledare badge credits, so a
+ *                                             leadership transfer can neither
+ *                                             move nor mint a badge rung)
+ *      leadershipTransfers: Array<{ fromUid, toUid, at }>  (append-only record
+ *                                             of every automatic transfer, most
+ *                                             recent last, capped at
+ *                                             LEADERSHIP_TRANSFER_HISTORY_MAX)
  *      title: string | null
  *      status: 'forming' | 'active' | 'ended'
  *      memberUids: string[]                 (owner + every invited uid; drives
@@ -53,6 +64,31 @@
  */
 
 import { z } from 'zod';
+
+/**
+ * How many ACCEPTED members must REMAIN for a convoy to survive somebody
+ * leaving it. Below this the convoy is ended instead (see decideLeaveConvoy).
+ *
+ * Two, because a convoy of one is not a convoy: everything the surface exists
+ * for — the roster, the shared destination, the member markers on each other's
+ * maps, the group chat — describes a group. Leaving a single member behind would
+ * hand them a live convoy with nobody in it, a bar they cannot use and a stream
+ * of live-location writes that no longer has an audience. It is also the rule
+ * the UI offers "Leave" on, so client and server agree on one number.
+ */
+export const MIN_REMAINING_MEMBERS_TO_STAY_ALIVE = 2;
+
+/**
+ * Upper bound on the stored `leadershipTransfers` history.
+ *
+ * A convoy holds at most MAX_CONVOY_SIZE people, so an honest drive cannot
+ * produce more transfers than that — but membership can churn (leave, be
+ * re-invited, accept again), so the array is not structurally bounded by the
+ * roster and is trimmed to the most recent entries rather than left to grow for
+ * the life of the document. The history is a record for support/debugging, not a
+ * feature: the OLDEST entries are the ones that stop mattering first.
+ */
+export const LEADERSHIP_TRANSFER_HISTORY_MAX = 25;
 
 export const CONVOY_STATUSES = ['forming', 'active', 'ended'] as const;
 export type ConvoyStatus = (typeof CONVOY_STATUSES)[number];
@@ -326,8 +362,13 @@ export const CONVOY_ENDED_MESSAGE = 'This convoy has ended.';
 export const CONVOY_NOT_FORMING_MESSAGE = 'This convoy can no longer be started.';
 export const CONVOY_ALREADY_ENDED_MESSAGE = 'This convoy has already ended.';
 export const NO_VALID_INVITEES_MESSAGE = 'No one could be added to the convoy.';
-export const OWNER_CANNOT_LEAVE_MESSAGE =
-  'The convoy owner cannot leave — end the convoy instead.';
+/**
+ * convoy.end is LEADER-ONLY, so a member who is not the current leader is told
+ * to leave instead of ending everyone's drive. (They reach this only by calling
+ * the callable directly: the UI offers a non-leader Leave and nothing else.)
+ */
+export const ONLY_LEADER_CAN_END_MESSAGE =
+  'Only the convoy leader can end the convoy for everyone. You can leave it instead.';
 export const NOT_ACCEPTED_MEMBER_MESSAGE = 'You have not joined this convoy.';
 export const CONVOY_FULL_MESSAGE = `A convoy can hold at most ${MAX_CONVOY_SIZE} people.`;
 export const DESTINATION_CLEAR_FORBIDDEN_MESSAGE =
@@ -553,6 +594,12 @@ export function buildConvoyDocument(
 
   return {
     ownerUid: input.ownerUid,
+    // The creator, stored separately from `ownerUid` because ownerUid is the
+    // MUTABLE leader pointer once leadership can transfer (decideLeaveConvoy).
+    // This is what the Konvojledare badge credits, so handing leadership over
+    // cannot redirect a badge rung to whoever happens to be holding the convoy
+    // when it ends. Identical to ownerUid for every convoy that never transfers.
+    createdByUid: input.ownerUid,
     title: input.title,
     status: 'active' satisfies ConvoyStatus,
     memberUids,
@@ -631,6 +678,10 @@ export function isActiveConvoyParticipant(
  *
  * Returns the remaining ACCEPTED member count so the callable can report it
  * without re-deriving membership.
+ *
+ * This is the REMOVAL PRIMITIVE only — it does not decide whether the convoy
+ * survives the removal or who inherits leadership. That is decideLeaveConvoy,
+ * which builds on this.
  */
 export function buildLeaveConvoyUpdate(
   data: Record<string, unknown>,
@@ -654,6 +705,176 @@ export function buildLeaveConvoyUpdate(
   ).length;
 
   return { memberUids, members, memberProfiles, remainingAcceptedCount };
+}
+
+/**
+ * The uid the Konvojledare ladder credits for this convoy: whoever CREATED it,
+ * falling back to the current `ownerUid` for documents written before
+ * `createdByUid` existed (for which the two are the same person by definition,
+ * since leadership could not transfer then).
+ */
+export function convoyCreatorUid(data: Record<string, unknown> | undefined): string {
+  const createdBy = data?.createdByUid;
+  if (typeof createdBy === 'string' && createdBy.length > 0) return createdBy;
+  const owner = data?.ownerUid;
+  return typeof owner === 'string' ? owner : '';
+}
+
+/**
+ * The member who inherits leadership when the current leader leaves: the
+ * LONGEST-JOINED remaining accepted member, tie-broken by uid.
+ *
+ * Deterministic on purpose — the same roster must always produce the same
+ * successor, or a transaction RETRY (which re-runs this against a re-read
+ * roster) could pick a different person on the second attempt and the
+ * notification would name someone other than the member the document ends up
+ * recording.
+ *
+ * Longest-joined rather than "next in the list" or random: it is the only order
+ * with a meaning a member can predict and recognise. The person who has been in
+ * the convoy longest has the most context on where the group is going, and — for
+ * the common case of the leader dropping off first — is usually the first friend
+ * who accepted. `joinedAt` is missing for a member who never accepted, but those
+ * are filtered out here anyway (only ACCEPTED members are candidates); a
+ * malformed accepted entry with no joinedAt sorts LAST rather than winning by
+ * default, so a corrupt timestamp cannot promote someone ahead of the group.
+ *
+ * @param toMillis converts a stored timestamp value to epoch millis, or null.
+ *   Injected so this file stays Firebase-free (mirrors computeConvoySummary).
+ */
+export function pickSuccessorLeaderUid(
+  data: Record<string, unknown> | undefined,
+  leavingUid: string,
+  toMillis: (value: unknown) => number | null,
+): string | null {
+  const members = (data?.members ?? {}) as Record<string, Record<string, unknown> | undefined>;
+  const candidates = Object.values(members)
+    .filter(
+      (entry): entry is Record<string, unknown> =>
+        !!entry &&
+        typeof entry.uid === 'string' &&
+        entry.uid !== leavingUid &&
+        entry.inviteStatus === 'accepted',
+    )
+    .map((entry) => ({
+      uid: String(entry.uid),
+      joinedAt: toMillis(entry.joinedAt),
+    }))
+    .sort((a, b) => {
+      // Missing joinedAt sorts last (Number.MAX_SAFE_INTEGER), never first.
+      const left = a.joinedAt ?? Number.MAX_SAFE_INTEGER;
+      const right = b.joinedAt ?? Number.MAX_SAFE_INTEGER;
+      if (left !== right) return left - right;
+      return a.uid.localeCompare(b.uid);
+    });
+  return candidates[0]?.uid ?? null;
+}
+
+/** What happened to the convoy as a result of one member leaving it. */
+export type LeaveConvoyOutcome =
+  /** The caller is out; the convoy is still running for the others. */
+  | 'left'
+  /**
+   * The caller is out AND the convoy was ENDED, because fewer than
+   * MIN_REMAINING_MEMBERS_TO_STAY_ALIVE accepted members would have been left.
+   */
+  | 'left_and_ended';
+
+export interface LeaveConvoyDecision {
+  outcome: LeaveConvoyOutcome;
+  /**
+   * The member who inherits leadership, or null when nothing transferred —
+   * either the leaver was not the leader, or the convoy is ending anyway (an
+   * ended convoy has no leadership left to exercise, so promoting someone into
+   * it would be a notification about a privilege that does nothing).
+   */
+  newLeaderUid: string | null;
+  /** The three membership collections, rewritten WHOLE (see buildLeaveConvoyUpdate). */
+  memberUids: string[];
+  members: Record<string, unknown>;
+  memberProfiles: Record<string, unknown>;
+  /** Accepted members still in the convoy after the removal. */
+  remainingAcceptedUids: string[];
+  remainingAcceptedCount: number;
+}
+
+/**
+ * Decides — from the roster as it exists RIGHT NOW — what happens when `uid`
+ * leaves: a plain exit, an exit that hands leadership on, or an exit that ends
+ * the convoy because too few people would be left.
+ *
+ * ## Why this is one pure decision and not three client-selectable modes
+ * The caller supplies NO count and NO chosen mode. Two members tapping "Leave"
+ * at the same instant would otherwise both have been told "2 will remain", and
+ * both would leave, dropping the convoy to one — the exact bug the rule exists to
+ * prevent. Because the branch is computed here, from the document the enclosing
+ * transaction read, the loser of that race re-runs this function against the
+ * post-first-leave roster and takes the `left_and_ended` branch instead. The
+ * client's own count only decides what LABEL to show; it can never decide what
+ * the server does.
+ *
+ * ## Leadership transfers rather than blocking the leader
+ * The leader is NOT refused. Every leader-gated action in the domain reads
+ * exactly one field — `ownerUid` (convoy.end, convoy.start, the clear-someone-
+ * else's-destination override) — plus `members[uid].role` for the client's own
+ * "am I the leader" derivation, and BOTH are rewritten here, so the successor
+ * inherits precisely the privileges the leaver had and nothing is left
+ * unreachable. Refusing instead would force a leader who simply wants to go home
+ * to end everyone else's drive, and allowing a leaderless convoy would leave a
+ * document nobody can end, still consuming live-location writes, until it is
+ * swept.
+ *
+ * @param toMillis timestamp → epoch millis (see pickSuccessorLeaderUid).
+ */
+export function decideLeaveConvoy(
+  data: Record<string, unknown>,
+  uid: string,
+  toMillis: (value: unknown) => number | null,
+): LeaveConvoyDecision {
+  const update = buildLeaveConvoyUpdate(data, uid);
+  const remainingAcceptedUids = acceptedMemberUids(update);
+  const ends = remainingAcceptedUids.length < MIN_REMAINING_MEMBERS_TO_STAY_ALIVE;
+  const leaverWasLeader = data.ownerUid === uid;
+  // Deliberately null when the convoy is ending: see LeaveConvoyDecision.
+  const newLeaderUid =
+    leaverWasLeader && !ends ? pickSuccessorLeaderUid(data, uid, toMillis) : null;
+
+  const members = { ...update.members };
+  if (newLeaderUid) {
+    const successor = (members[newLeaderUid] ?? {}) as Record<string, unknown>;
+    members[newLeaderUid] = { ...successor, role: 'owner' satisfies ConvoyMemberRole };
+  }
+
+  return {
+    outcome: ends ? 'left_and_ended' : 'left',
+    newLeaderUid,
+    memberUids: update.memberUids,
+    members,
+    memberProfiles: update.memberProfiles,
+    remainingAcceptedUids,
+    remainingAcceptedCount: remainingAcceptedUids.length,
+  };
+}
+
+/**
+ * The `leadershipTransfers` array with one entry appended, trimmed to the most
+ * recent LEADERSHIP_TRANSFER_HISTORY_MAX. A non-array stored value (or none) is
+ * treated as empty rather than trusted, so a malformed field cannot make the
+ * append throw inside the leave transaction.
+ *
+ * `at` must be a CONCRETE timestamp value, never a server-timestamp sentinel:
+ * Firestore rejects a sentinel nested inside an array, so a caller that passed
+ * one would fail the whole leave. The array's own order carries the ordering
+ * (entries are appended), so nothing depends on the field being server-stamped.
+ */
+export function appendLeadershipTransfer(
+  data: Record<string, unknown> | undefined,
+  entry: { fromUid: string; toUid: string; at: unknown },
+): unknown[] {
+  const existing = Array.isArray(data?.leadershipTransfers)
+    ? (data!.leadershipTransfers as unknown[])
+    : [];
+  return [...existing, entry].slice(-LEADERSHIP_TRANSFER_HISTORY_MAX);
 }
 
 /** Uids of accepted members (owner included) — the live-position subscription set. */

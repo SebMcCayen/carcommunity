@@ -521,6 +521,55 @@ describe('convoy led credit', () => {
     expect(convoyLedOwnerUid(undefined, declined)).toBeNull();
   });
 
+  it('credits the CREATOR after leadership transferred away from them', () => {
+    // The leader left mid-drive, so `ownerUid` is now the successor while
+    // `createdByUid` still names whoever organised the convoy. Konvojledare is
+    // "led" = INITIATED, and crediting the current holder would let a pair of
+    // accounts aim the rung at whichever of them needs it.
+    const transferred = {
+      createdByUid: 'u1',
+      ownerUid: 'u2',
+      endedAt: 2,
+      members: {
+        u2: { inviteStatus: 'accepted', role: 'owner' },
+        u3: { inviteStatus: 'accepted' },
+      },
+    };
+    expect(convoyLedOwnerUid({ ...transferred, endedAt: null }, transferred)).toBe('u1');
+  });
+
+  it('credits the creator who LEFT, but still needs a real other participant', () => {
+    // The creator left a two-person convoy, which ends it (convoy.leave), so the
+    // creator is not even on the post-write roster. They still led a convoy that
+    // completed with somebody else in it, so the rung is earned — and the cost is
+    // identical to pressing End, so leaving is not a cheaper farm.
+    const creatorGone = {
+      createdByUid: 'u1',
+      ownerUid: 'u2',
+      endedAt: 2,
+      members: { u2: { inviteStatus: 'accepted', role: 'owner' } },
+    };
+    expect(convoyLedOwnerUid({ ...creatorGone, endedAt: null }, creatorGone)).toBe('u1');
+
+    // Nobody else EVER accepted: the anti-farming rule still bites, transfer or
+    // no transfer.
+    const noOneJoined = {
+      createdByUid: 'u1',
+      ownerUid: 'u2',
+      endedAt: 2,
+      members: { u2: { inviteStatus: 'invited' } },
+    };
+    expect(convoyLedOwnerUid({ ...noOneJoined, endedAt: null }, noOneJoined)).toBeNull();
+  });
+
+  it('falls back to ownerUid for a convoy written before createdByUid existed', () => {
+    // Behaviour for every pre-existing convoy is unchanged: there, the creator
+    // IS the owner, because leadership could not transfer.
+    const legacy = withMembers({ startedAt: 1, endedAt: 2 }, { u2: 'accepted' });
+    expect(legacy.createdByUid).toBeUndefined();
+    expect(convoyLedOwnerUid(undefined, legacy)).toBe('u1');
+  });
+
   it('credits nothing while the convoy is merely running, only when it ends', () => {
     const running = withMembers({ startedAt: 1, endedAt: null }, { u2: 'accepted' });
     expect(convoyLedOwnerUid(undefined, running)).toBeNull();

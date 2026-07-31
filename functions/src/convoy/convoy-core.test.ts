@@ -4,11 +4,17 @@ import {
   CONVOY_TITLE_MAX_LENGTH,
   MAX_CONVOY_INVITEES,
   MAX_CONVOY_INVITE_BATCH,
+  MIN_REMAINING_MEMBERS_TO_STAY_ALIVE,
+  LEADERSHIP_TRANSFER_HISTORY_MAX,
   acceptedMemberUids,
+  appendLeadershipTransfer,
   buildConvoyDocument,
   buildLeaveConvoyUpdate,
   buildMemberEntry,
   computeConvoySummary,
+  convoyCreatorUid,
+  decideLeaveConvoy,
+  pickSuccessorLeaderUid,
   isAcceptedConvoyMember,
   isActiveConvoyParticipant,
   isConvoyMember,
@@ -392,8 +398,227 @@ describe('convoy-core accepted membership + leave', () => {
     };
     const update = buildLeaveConvoyUpdate(twoPerson, 'i1');
     expect(update.memberUids).toEqual(['owner']);
-    // Not zero, and not a signal to auto-end: the owner is still in their convoy.
+    // The REMOVAL primitive says nothing about the convoy's fate — it just
+    // reports the count. Whether one remaining member ends the convoy is
+    // decideLeaveConvoy's decision (it does; see below).
     expect(update.remainingAcceptedCount).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two exits: leave (with leadership transfer) vs end-for-everyone
+// ---------------------------------------------------------------------------
+
+/** joinedAt in these fixtures is plain epoch millis, so toMillis is identity. */
+const millis = (value: unknown): number | null =>
+  typeof value === 'number' ? value : null;
+
+/** owner + `others` accepted members, each with an explicit joinedAt. */
+function convoyWith(
+  members: Array<{ uid: string; role?: 'owner' | 'member'; inviteStatus?: string; joinedAt?: number | null }>,
+  ownerUid = 'owner',
+): Record<string, unknown> {
+  const map: Record<string, unknown> = {};
+  const profiles: Record<string, unknown> = {};
+  for (const m of members) {
+    map[m.uid] = {
+      uid: m.uid,
+      role: m.role ?? (m.uid === ownerUid ? 'owner' : 'member'),
+      inviteStatus: m.inviteStatus ?? 'accepted',
+      joinedAt: m.joinedAt ?? null,
+    };
+    profiles[m.uid] = { displayName: m.uid, avatarPath: null };
+  }
+  return {
+    ownerUid,
+    createdByUid: ownerUid,
+    status: 'active',
+    memberUids: members.map((m) => m.uid),
+    members: map,
+    memberProfiles: profiles,
+  };
+}
+
+describe('convoy-core successor pick', () => {
+  it('promotes the LONGEST-JOINED remaining accepted member', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'late', joinedAt: 300 },
+      { uid: 'early', joinedAt: 100 },
+      { uid: 'mid', joinedAt: 200 },
+    ]);
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBe('early');
+  });
+
+  it('skips members who are not ACCEPTED — they never joined', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'pending', inviteStatus: 'invited', joinedAt: 2 },
+      { uid: 'nope', inviteStatus: 'declined', joinedAt: 3 },
+      { uid: 'real', joinedAt: 400 },
+    ]);
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBe('real');
+  });
+
+  it('is DETERMINISTIC on a joinedAt tie (uid order), so a retry picks the same person', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'zoe', joinedAt: 100 },
+      { uid: 'adam', joinedAt: 100 },
+    ]);
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBe('adam');
+    // Same input, same answer — the property the notification copy relies on.
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBe('adam');
+  });
+
+  it('sorts a MISSING joinedAt last rather than letting it win by default', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'broken', joinedAt: null },
+      { uid: 'fine', joinedAt: 9_999 },
+    ]);
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBe('fine');
+  });
+
+  it('has nobody to promote when the leaver is the only accepted member', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'pending', inviteStatus: 'invited' },
+    ]);
+    expect(pickSuccessorLeaderUid(doc, 'owner', millis)).toBeNull();
+  });
+});
+
+describe('convoy-core leave decision', () => {
+  it('a NON-leader leaving a convoy of three: plain exit, no transfer', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'a', joinedAt: 2 },
+      { uid: 'b', joinedAt: 3 },
+    ]);
+    const decision = decideLeaveConvoy(doc, 'b', millis);
+    expect(decision.outcome).toBe('left');
+    expect(decision.newLeaderUid).toBeNull();
+    expect(decision.remainingAcceptedUids.sort()).toEqual(['a', 'owner']);
+    expect(decision.remainingAcceptedCount).toBe(2);
+    // The leader keeps the owner role; nothing else moved.
+    expect((decision.members.owner as Record<string, unknown>).role).toBe('owner');
+  });
+
+  it('the LEADER leaving a convoy of three: transfers leadership, convoy survives', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'second', joinedAt: 2 },
+      { uid: 'third', joinedAt: 3 },
+    ]);
+    const decision = decideLeaveConvoy(doc, 'owner', millis);
+    expect(decision.outcome).toBe('left');
+    expect(decision.newLeaderUid).toBe('second');
+    // The role moves in the SAME members map that is written, so ownerUid and
+    // members[uid].role can never disagree.
+    expect((decision.members.second as Record<string, unknown>).role).toBe('owner');
+    expect((decision.members.third as Record<string, unknown>).role).toBe('member');
+    expect(decision.members.owner).toBeUndefined();
+    expect(decision.memberUids.sort()).toEqual(['second', 'third']);
+  });
+
+  it('ENDS the convoy when leaving would leave exactly ONE member', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'a', joinedAt: 2 },
+    ]);
+    // Either of them leaving reaches the same outcome — a convoy of one is not
+    // a convoy, whoever is left holding it.
+    for (const leaver of ['a', 'owner']) {
+      const decision = decideLeaveConvoy(doc, leaver, millis);
+      expect(decision.outcome).toBe('left_and_ended');
+      expect(decision.remainingAcceptedCount).toBe(1);
+      // Nothing to inherit: an ended convoy has no leadership left to hold, so
+      // promoting somebody would notify them about a privilege that does nothing.
+      expect(decision.newLeaderUid).toBeNull();
+    }
+  });
+
+  it('ENDS the convoy when the last accepted member leaves (pending invites do not count)', () => {
+    const doc = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'pending', inviteStatus: 'invited' },
+    ]);
+    const decision = decideLeaveConvoy(doc, 'owner', millis);
+    expect(decision.outcome).toBe('left_and_ended');
+    expect(decision.remainingAcceptedCount).toBe(0);
+    // The still-invited member stays on the (now ended) roster — their invite is
+    // dead because the convoy is, not because they were deleted.
+    expect(decision.memberUids).toEqual(['pending']);
+  });
+
+  it('is the SAME decision on a retry — the threshold is read off the passed roster', () => {
+    // The concurrency guarantee, expressed purely: the branch is a function of
+    // the roster handed in, never of anything the caller supplies. A retry that
+    // re-reads a roster with one fewer member gets `left_and_ended`, which is
+    // exactly how the second of two simultaneous leaves is stopped from dropping
+    // the convoy to one.
+    const three = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'a', joinedAt: 2 },
+      { uid: 'b', joinedAt: 3 },
+    ]);
+    expect(decideLeaveConvoy(three, 'b', millis).outcome).toBe('left');
+    const afterFirstLeave = convoyWith([
+      { uid: 'owner', joinedAt: 1 },
+      { uid: 'b', joinedAt: 3 },
+    ]);
+    expect(decideLeaveConvoy(afterFirstLeave, 'b', millis).outcome).toBe('left_and_ended');
+  });
+
+  it('pins the survival threshold at two', () => {
+    expect(MIN_REMAINING_MEMBERS_TO_STAY_ALIVE).toBe(2);
+  });
+});
+
+describe('convoy-core creator + leadership history', () => {
+  it('credits the CREATOR, not the current leader, and falls back for legacy docs', () => {
+    expect(convoyCreatorUid({ createdByUid: 'creator', ownerUid: 'successor' })).toBe('creator');
+    // Written before createdByUid existed — for those the two are the same
+    // person, because leadership could not transfer then.
+    expect(convoyCreatorUid({ ownerUid: 'legacy' })).toBe('legacy');
+    expect(convoyCreatorUid({ createdByUid: '', ownerUid: 'legacy' })).toBe('legacy');
+    expect(convoyCreatorUid(undefined)).toBe('');
+  });
+
+  it('stamps createdByUid at create, equal to the owner', () => {
+    const doc = buildConvoyDocument(
+      {
+        ownerUid: 'o',
+        title: null,
+        ownerProfile: { displayName: 'O', avatarPath: null },
+        invitees: [{ uid: 'i', profile: { displayName: 'I', avatarPath: null } }],
+      },
+      () => 'TS',
+      'START',
+    );
+    expect(doc.createdByUid).toBe('o');
+    expect(doc.ownerUid).toBe('o');
+  });
+
+  it('appends transfers and trims to the most recent, tolerating a malformed field', () => {
+    expect(appendLeadershipTransfer({}, { fromUid: 'a', toUid: 'b', at: 1 })).toEqual([
+      { fromUid: 'a', toUid: 'b', at: 1 },
+    ]);
+    // A non-array stored value must not make the append throw inside the leave
+    // transaction — it is treated as empty.
+    expect(
+      appendLeadershipTransfer({ leadershipTransfers: 'corrupt' }, { fromUid: 'a', toUid: 'b', at: 1 }),
+    ).toEqual([{ fromUid: 'a', toUid: 'b', at: 1 }]);
+    const long = Array.from({ length: LEADERSHIP_TRANSFER_HISTORY_MAX + 5 }, (_, i) => i);
+    const appended = appendLeadershipTransfer({ leadershipTransfers: long }, {
+      fromUid: 'x',
+      toUid: 'y',
+      at: 2,
+    });
+    expect(appended).toHaveLength(LEADERSHIP_TRANSFER_HISTORY_MAX);
+    // The NEWEST entry survives; the oldest are the ones dropped.
+    expect(appended[appended.length - 1]).toEqual({ fromUid: 'x', toUid: 'y', at: 2 });
   });
 });
 

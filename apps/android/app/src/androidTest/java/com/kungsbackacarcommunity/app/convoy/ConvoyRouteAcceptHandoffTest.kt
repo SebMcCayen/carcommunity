@@ -123,7 +123,7 @@ class ConvoyRouteAcceptHandoffTest {
 
         override suspend fun invite(convoyId: String, inviteeUids: List<String>) = error("unused")
 
-        override suspend fun leave(convoyId: String) = error("unused")
+        override suspend fun leave(convoyId: String): LeaveConvoyResult = error("unused")
 
         override suspend fun start(convoyId: String) = error("unused")
 

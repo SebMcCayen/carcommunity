@@ -8,7 +8,11 @@
  * - `convoy-respond` (invitee accept → green-dot accepted; decline; guards:
  *   non-member not-found, already-answered / ended failed-precondition)
  * - `convoy-start` (owner forming → active; non-owner not-found)
- * - `convoy-end` (owner → ended + computed/stored summary readable by members)
+ * - `convoy-end` (LEADER-only → ended + computed/stored summary readable by
+ *   members; a non-leader member is permission-denied)
+ * - `convoy-leave` (the two exits: a plain exit, a LEADER exit that transfers
+ *   leadership, and an exit that ENDS the convoy because too few would remain —
+ *   plus the concurrent-leave race)
  * - `convoy-list` (caller convoys + pending invites)
  * - rules: member-only read of convoys, outsiders denied, no client writes.
  *
@@ -160,6 +164,12 @@ interface ConvoyDestination {
   setByDisplayName: string | null;
   setAt: string | null;
 }
+interface LeaveResult {
+  convoy: ConvoySummary;
+  remainingMemberCount: number;
+  outcome: 'left' | 'left_and_ended';
+  newLeaderUid: string | null;
+}
 interface ConvoySummary {
   convoyId: string;
   ownerUid: string;
@@ -171,6 +181,7 @@ interface ConvoySummary {
   destination: ConvoyDestination | null;
   summary: { durationSeconds: number; participantUids: string[]; participantCount: number; distanceMeters: number | null } | null;
   startedAt: string | null;
+  endedAt: string | null;
 }
 
 beforeAll(async () => {
@@ -462,11 +473,31 @@ describe('convoys Firestore rules', () => {
       code: 'permission-denied',
     });
 
-    // No direct client writes (not even the owner).
+    // No direct client writes (not even the owner/leader). Every field the two
+    // exits turn on is checked explicitly: a client that could write any one of
+    // them could end a convoy it does not lead, remove somebody else, or promote
+    // itself to leader — so the rule that stops all four is worth pinning field
+    // by field rather than by a single representative write.
     await signInAs(owner);
     await expect(
       setDoc(doc(firestore, 'convoys', convoyId), { status: 'ended' }, { merge: true }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
+    // Removing ANOTHER member (the thing convoy.leave structurally cannot do).
+    await expect(
+      setDoc(doc(firestore, 'convoys', convoyId), { memberUids: [owner.uid] }, { merge: true }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(
+      setDoc(doc(firestore, 'convoys', convoyId), { members: {} }, { merge: true }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    // Self-promotion to leader, and rewriting who is credited for the convoy.
+    await signInAs(member);
+    await expect(
+      setDoc(doc(firestore, 'convoys', convoyId), { ownerUid: member.uid }, { merge: true }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    await expect(
+      setDoc(doc(firestore, 'convoys', convoyId), { createdByUid: member.uid }, { merge: true }),
+    ).rejects.toMatchObject({ code: 'permission-denied' });
+    await signInAs(owner);
     await expect(
       setDoc(doc(firestore, 'convoys', 'forged'), { ownerUid: owner.uid, memberUids: [owner.uid] }),
     ).rejects.toMatchObject({ code: 'permission-denied' });
@@ -523,28 +554,83 @@ async function convoyWithAcceptedMember(
   return { owner, member, convoyId };
 }
 
-describe('convoy-leave', () => {
-  it('removes an ACCEPTED member from every membership collection', async () => {
-    const { owner, member, convoyId } = await convoyWithAcceptedMember('LeaveOwnerC', 'LeaverC');
-
+/**
+ * Creates a LEADER plus `memberNames.length` accepted members, in the order
+ * given — so the FIRST name accepts first and is therefore the deterministic
+ * successor (longest-joined) if the leader leaves.
+ */
+async function convoyWithAcceptedMembers(
+  ownerName: string,
+  memberNames: string[],
+): Promise<{ owner: TestUser; members: TestUser[]; convoyId: string }> {
+  const owner = await newMember(ownerName);
+  const members: TestUser[] = [];
+  for (const name of memberNames) {
+    const member = await newMember(name);
+    await makeFriends(owner, member);
+    members.push(member);
+  }
+  await signInAs(owner);
+  const created = (await call('convoy-create', { inviteeUids: members.map((m) => m.uid) })).data as {
+    convoy: ConvoySummary;
+  };
+  const convoyId = created.convoy.convoyId;
+  // Sequentially, so joinedAt ordering matches the argument order (which is what
+  // the successor pick is asserted against).
+  for (const member of members) {
     await signInAs(member);
-    const left = (await call('convoy-leave', { convoyId })).data as {
-      convoy: ConvoySummary;
-      remainingMemberCount: number;
-    };
-    // Only the owner is left, and the convoy is NOT auto-ended.
-    expect(left.remainingMemberCount).toBe(1);
-    expect(left.convoy.status).not.toBe('ended');
-    expect(left.convoy.memberUids).not.toContain(member.uid);
-    expect(left.convoy.members.some((m) => m.uid === member.uid)).toBe(false);
-    expect(left.convoy.livePositionUids).toEqual([owner.uid]);
+    await call('convoy-respond', { convoyId, action: 'accept' });
+  }
+  return { owner, members, convoyId };
+}
+
+/**
+ * Whether `uid` has a 'convoy_update' in-app notification for `convoyId` — the
+ * SAME producer/category path invites use (notifications/{uid}/items), polled
+ * because the fan-out is best-effort and runs after the mutation commits.
+ */
+async function convoyUpdateNotified(uid: string, convoyId: string): Promise<boolean> {
+  return pollUntil(async () => {
+    const snap = await adminDb
+      .collection('notifications')
+      .doc(uid)
+      .collection('items')
+      .where('relatedEntityId', '==', convoyId)
+      .get();
+    return snap.docs.some((d) => d.data().category === 'convoy_update') ? true : undefined;
+  }, 20_000);
+}
+
+describe('convoy-leave: a plain exit', () => {
+  it('removes a NON-LEADER from every membership collection, convoy carries on', async () => {
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('LeaveOwnerC', [
+      'LeaverStayerC',
+      'LeaverC',
+    ]);
+    const [stayer, leaver] = [members[0]!, members[1]!];
+
+    await signInAs(leaver);
+    const left = (await call('convoy-leave', { convoyId })).data as LeaveResult;
+    // Two members remain, so the convoy is NOT ended and nothing transfers.
+    expect(left.outcome).toBe('left');
+    expect(left.remainingMemberCount).toBe(2);
+    expect(left.newLeaderUid).toBeNull();
+    expect(left.convoy.status).toBe('active');
+    expect(left.convoy.ownerUid).toBe(owner.uid);
+    expect(left.convoy.memberUids).not.toContain(leaver.uid);
+    expect(left.convoy.members.some((m) => m.uid === leaver.uid)).toBe(false);
+    // THE RENDER PATH: livePositionUids is what each remaining member's map
+    // subscribes to at RTDB liveLocation/{uid}/latest. The leaver dropping out of
+    // it is what stops them appearing on the others' maps.
+    expect(left.convoy.livePositionUids.sort()).toEqual([owner.uid, stayer.uid].sort());
     // The caller is no longer a member, so viewer is null rather than a lie.
     expect(left.convoy.viewer).toBeNull();
 
     // The stored doc agrees (memberUids is what the rules read gate uses).
     const stored = await adminDb.collection('convoys').doc(convoyId).get();
-    expect(stored.data()!.memberUids).not.toContain(member.uid);
-    expect(stored.data()!.memberProfiles[member.uid]).toBeUndefined();
+    expect(stored.data()!.memberUids).not.toContain(leaver.uid);
+    expect(stored.data()!.memberProfiles[leaver.uid]).toBeUndefined();
+    expect(stored.data()!.status).toBe('active');
 
     // The leaver has actually lost their read on the convoy doc...
     await expect(getDoc(doc(firestore, 'convoys', convoyId))).rejects.toMatchObject({
@@ -554,26 +640,177 @@ describe('convoy-leave', () => {
     const list = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
     expect(list.convoys.some((c) => c.convoyId === convoyId)).toBe(false);
 
-    // Leaving twice is not-found (they are no longer a member) — never a
-    // silent success that would imply they were still in it.
+    // IDEMPOTENCE of the retry: leaving twice is not-found (they are no longer a
+    // member), never a silent success implying they were still in it — and the
+    // convoy the others are still driving is untouched by the second attempt.
     expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe('functions/not-found');
-  });
+    const after = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(after.data()!.status).toBe('active');
+    expect((after.data()!.memberUids as string[]).sort()).toEqual([owner.uid, stayer.uid].sort());
 
-  it('refuses the OWNER (they must end the convoy for everyone instead)', async () => {
-    const { owner, convoyId } = await convoyWithAcceptedMember('OwnerStaysC', 'StayerC');
-    await signInAs(owner);
-    expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe(
-      'functions/failed-precondition',
+    // The members still in it are TOLD somebody left — via the same in-app
+    // producer/category the invite path uses, never email.
+    expect(await convoyUpdateNotified(owner.uid, convoyId)).toBe(true);
+    expect(await convoyUpdateNotified(stayer.uid, convoyId)).toBe(true);
+  }, 90_000);
+
+  it('CONVOY CHAT: the leaver loses access, the history survives for the others', async () => {
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('ChatLeaveOwnerC', [
+      'ChatStayerC',
+      'ChatLeaverC',
+    ]);
+    const [stayer, leaver] = [members[0]!, members[1]!];
+    await signInAs(leaver);
+    await call('convoyChat-post', { convoyId, text: 'see you later' });
+    await call('convoy-leave', { convoyId });
+
+    // No further access: both the callable and the rules gate on accepted
+    // membership of the parent convoy, which they no longer have.
+    expect(await callableErrorCode(call('convoyChat-list', { convoyId }))).toBe(
+      'functions/not-found',
     );
-    // The convoy is untouched — the owner is still in it.
+    expect(await callableErrorCode(call('convoyChat-post', { convoyId, text: 'still here?' }))).toBe(
+      'functions/not-found',
+    );
+
+    // ...and nothing was deleted: the members still in it read the whole history,
+    // the leaver's messages included. Erasing them would rewrite a conversation
+    // the remaining members had.
+    await signInAs(stayer);
+    const listed = (await call('convoyChat-list', { convoyId })).data as {
+      messages: Array<{ text: string; senderUid: string }>;
+    };
+    expect(listed.messages.some((m) => m.text === 'see you later')).toBe(true);
+    expect(listed.messages.some((m) => m.senderUid === leaver.uid)).toBe(true);
+    expect(owner.uid).not.toBe(leaver.uid);
+  }, 90_000);
+});
+
+describe('convoy-leave: the LEADER leaves', () => {
+  it('TRANSFERS leadership to the longest-joined member when the convoy survives', async () => {
+    // 'FirstJoiner' accepts first, so they are the deterministic successor.
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('TransferOwnerC', [
+      'TransferFirstJoinerC',
+      'TransferSecondJoinerC',
+    ]);
+    const [successor, other] = [members[0]!, members[1]!];
+
+    await signInAs(owner);
+    const left = (await call('convoy-leave', { convoyId })).data as LeaveResult;
+    expect(left.outcome).toBe('left');
+    expect(left.newLeaderUid).toBe(successor.uid);
+    expect(left.remainingMemberCount).toBe(2);
+
     const stored = await adminDb.collection('convoys').doc(convoyId).get();
-    expect(stored.data()!.memberUids).toContain(owner.uid);
-    expect(stored.data()!.status).not.toBe('ended');
-    // convoy-end is the owner's actual path, and it still works.
+    const data = stored.data()!;
+    // ownerUid AND members[uid].role move together — every leader gate in the
+    // domain reads one or the other, so a disagreement would be a real hole.
+    expect(data.ownerUid).toBe(successor.uid);
+    expect(data.members[successor.uid].role).toBe('owner');
+    expect(data.members[other.uid].role).toBe('member');
+    expect(data.members[owner.uid]).toBeUndefined();
+    expect(data.status).toBe('active');
+    // The hand-over is RECORDED, not just applied.
+    expect(data.leadershipTransfers).toHaveLength(1);
+    expect(data.leadershipTransfers[0].fromUid).toBe(owner.uid);
+    expect(data.leadershipTransfers[0].toUid).toBe(successor.uid);
+    expect(data.leadershipTransfers[0].at).toBeDefined();
+    // createdByUid does NOT move: it is what the Konvojledare badge credits.
+    expect(data.createdByUid).toBe(owner.uid);
+
+    // Both the successor and the other member are told (the successor gets their
+    // own "you are now the leader" notice rather than a buried "someone left").
+    expect(await convoyUpdateNotified(successor.uid, convoyId)).toBe(true);
+    expect(await convoyUpdateNotified(other.uid, convoyId)).toBe(true);
+
+    // The successor really did inherit the privileges: they can now end the
+    // convoy for everyone, which they could not before.
+    await signInAs(other);
+    expect(await callableErrorCode(call('convoy-end', { convoyId }))).toBe(
+      'functions/permission-denied',
+    );
+    await signInAs(successor);
     const ended = (await call('convoy-end', { convoyId })).data as { convoy: ConvoySummary };
     expect(ended.convoy.status).toBe('ended');
-  });
+  }, 90_000);
 
+  it('ENDS the convoy instead of transferring when only one member would be left', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('LeadEndOwnerC', 'LeadEndMemberC');
+    await signInAs(owner);
+    const left = (await call('convoy-leave', { convoyId })).data as LeaveResult;
+    // Nothing to hand over — an ended convoy has no leadership left to hold.
+    expect(left.outcome).toBe('left_and_ended');
+    expect(left.newLeaderUid).toBeNull();
+    expect(left.convoy.status).toBe('ended');
+
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.status).toBe('ended');
+    expect(stored.data()!.ownerUid).toBe(owner.uid); // no successor was promoted
+    // The remaining member is NOT stranded holding a live convoy of one.
+    await signInAs(member);
+    const list = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    expect(list.convoys.find((c) => c.convoyId === convoyId)!.status).toBe('ended');
+  }, 90_000);
+
+  it('ENDS a convoy the leader is alone in (pending invites do not keep it alive)', async () => {
+    const owner = await newMember('AloneOwnerC');
+    const invitee = await newMember('AloneInviteeC');
+    await makeFriends(owner, invitee);
+    await signInAs(owner);
+    const created = (await call('convoy-create', { inviteeUids: [invitee.uid] })).data as {
+      convoy: ConvoySummary;
+    };
+    const convoyId = created.convoy.convoyId;
+
+    // Nobody accepted, so the leader is the only accepted member.
+    const left = (await call('convoy-leave', { convoyId })).data as LeaveResult;
+    expect(left.outcome).toBe('left_and_ended');
+    expect(left.remainingMemberCount).toBe(0);
+    // The still-invited member stays on the (now ended) roster — their invite is
+    // dead because the convoy is, not because they were deleted — and responding
+    // to it is refused.
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.memberUids).toEqual([invitee.uid]);
+    await signInAs(invitee);
+    expect(await callableErrorCode(call('convoy-respond', { convoyId, action: 'accept' }))).toBe(
+      'functions/failed-precondition',
+    );
+  }, 90_000);
+});
+
+describe('convoy-leave: exactly one would remain', () => {
+  it('a NON-LEADER leaving a two-person convoy ENDS it, with the summary written', async () => {
+    const { owner, member, convoyId } = await convoyWithAcceptedMember('LastLeaveOwnerC', 'LastLeaverC');
+
+    await signInAs(member);
+    const left = (await call('convoy-leave', { convoyId })).data as LeaveResult;
+    expect(left.outcome).toBe('left_and_ended');
+    expect(left.remainingMemberCount).toBe(1);
+    expect(left.convoy.status).toBe('ended');
+    expect(left.convoy.endedAt).not.toBeNull();
+
+    // The SUMMARY is written exactly as convoy-end writes it, computed from the
+    // roster BEFORE the removal — so the leaver counts as a participant of the
+    // drive they were actually on.
+    expect(left.convoy.summary).not.toBeNull();
+    expect(left.convoy.summary!.participantUids.sort()).toEqual([member.uid, owner.uid].sort());
+    expect(left.convoy.summary!.participantCount).toBe(2);
+
+    // The lone remaining member is told, and reads the same ended convoy — never
+    // left holding a live convoy of one.
+    await signInAs(owner);
+    const list = (await call('convoy-list', {})).data as { convoys: ConvoySummary[] };
+    const seen = list.convoys.find((c) => c.convoyId === convoyId)!;
+    expect(seen.status).toBe('ended');
+    expect(seen.summary!.participantCount).toBe(2);
+    // ...and is TOLD, under the dedicated convoy_update category (never email),
+    // so a convoy that ends because the last other member walked away does not
+    // just silently vanish from their bar.
+    expect(await convoyUpdateNotified(owner.uid, convoyId)).toBe(true);
+  }, 90_000);
+});
+
+describe('convoy-leave: guards + concurrency', () => {
   it('refuses a still-INVITED member, an outsider, and an ended convoy', async () => {
     const owner = await newMember('InviteOnlyOwnerC');
     const invitee = await newMember('NeverAnsweredC');
@@ -604,7 +841,101 @@ describe('convoy-leave', () => {
     expect(await callableErrorCode(call('convoy-leave', { convoyId }))).toBe(
       'functions/failed-precondition',
     );
-  });
+  }, 90_000);
+
+  it('TWO SIMULTANEOUS LEAVES cannot drop the convoy to one', async () => {
+    // THE bug this design exists to prevent: with the count read outside the
+    // transaction, both leavers see "2 will remain", both leave, and the convoy
+    // is left with a single member in it. Because the count and the removal are
+    // one transaction, the loser retries against the post-first-leave roster and
+    // takes the end-the-convoy branch instead.
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('RaceLeaveOwnerC', [
+      'RaceLeaverAC',
+      'RaceLeaverBC',
+    ]);
+    const [a, b] = [members[0]!, members[1]!];
+
+    // Two SEPARATE authenticated clients, so the two calls really are concurrent
+    // rather than serialized behind one signed-in session.
+    const appA = initializeApp(
+      { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
+      `convoy-race-a-${Date.now()}`,
+    );
+    const appB = initializeApp(
+      { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
+      `convoy-race-b-${Date.now()}`,
+    );
+    try {
+      const authA = getAuth(appA);
+      const authB = getAuth(appB);
+      connectAuthEmulator(authA, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+      connectAuthEmulator(authB, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+      const fnA = getFunctions(appA, REGION);
+      const fnB = getFunctions(appB, REGION);
+      connectFunctionsEmulator(fnA, EMULATOR_HOST, 5001);
+      connectFunctionsEmulator(fnB, EMULATOR_HOST, 5001);
+      await signInWithEmailAndPassword(authA, a.email, a.password);
+      await signInWithEmailAndPassword(authB, b.email, b.password);
+
+      const results = await Promise.allSettled([
+        httpsCallable(fnA, 'convoy-leave')({ convoyId }),
+        httpsCallable(fnB, 'convoy-leave')({ convoyId }),
+      ]);
+      // Both leaves SUCCEED — nobody is ever refused their own exit. What the
+      // transaction changes is the OUTCOME of the second one.
+      expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(2);
+      const outcomes = results.map(
+        (r) => (r as PromiseFulfilledResult<{ data: LeaveResult }>).value.data.outcome,
+      );
+      // Exactly one plain exit and one that ended the convoy — never two plain
+      // exits, which is the state that would leave the owner alone in a live one.
+      expect(outcomes.filter((o) => o === 'left')).toHaveLength(1);
+      expect(outcomes.filter((o) => o === 'left_and_ended')).toHaveLength(1);
+
+      const stored = await adminDb.collection('convoys').doc(convoyId).get();
+      const data = stored.data()!;
+      expect(data.status).toBe('ended');
+      expect((data.memberUids as string[])).toEqual([owner.uid]);
+      // The badge trigger sees ONE transition into ended, so the creator is
+      // credited at most once however the convoy got there.
+      expect(data.endedAt).toBeDefined();
+      expect(data.createdByUid).toBe(owner.uid);
+    } finally {
+      await deleteApp(appA);
+      await deleteApp(appB);
+    }
+  }, 120_000);
+});
+
+describe('convoy-end is LEADER-only', () => {
+  it('a member who is not the leader is permission-denied and can leave instead', async () => {
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('EndGateOwnerC', [
+      'EndGateMemberAC',
+      'EndGateMemberBC',
+    ]);
+    const a = members[0]!;
+
+    await signInAs(a);
+    // Permission-denied, NOT not-found: they can already see the convoy, so
+    // not-found would merely mislead.
+    expect(await callableErrorCode(call('convoy-end', { convoyId }))).toBe(
+      'functions/permission-denied',
+    );
+    // Untouched — the group is still driving.
+    const stored = await adminDb.collection('convoys').doc(convoyId).get();
+    expect(stored.data()!.status).toBe('active');
+
+    // A total OUTSIDER still gets not-found, so a convoy cannot be probed.
+    const outsider = await newMember('EndGateOutsiderC');
+    await signInAs(outsider);
+    expect(await callableErrorCode(call('convoy-end', { convoyId }))).toBe('functions/not-found');
+
+    // The leader can, and every other accepted member is notified.
+    await signInAs(owner);
+    const ended = (await call('convoy-end', { convoyId })).data as { convoy: ConvoySummary };
+    expect(ended.convoy.status).toBe('ended');
+    expect(await convoyUpdateNotified(a.uid, convoyId)).toBe(true);
+  }, 90_000);
 });
 
 describe('convoy-invite', () => {
