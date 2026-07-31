@@ -1,8 +1,14 @@
 /* ============================================================
  * KCC Crown UI — Admin Portal Design Tokens
  *
- * Source of truth for values: contracts/design-tokens/tokens.json.
- * Mirror values are exported as TypeScript in src/design/tokens.ts.
+ * This file is the admin app's source of truth for token VALUES; the
+ * TypeScript in src/design/tokens.ts mirrors it for use in TS logic — keep the
+ * two in sync. contracts/design-tokens/tokens.json is the canonical
+ * cross-platform palette (also consumed by Android) and is a REFERENCE here,
+ * not a build input: the admin is not generated from it, so editing the
+ * contract does not update this file — and editing the contract triggers
+ * Android token regeneration. Wiring the admin to consume the contract
+ * directly is a separate, cross-platform change.
  *
  * Every colour pairing below was measured with a WCAG 2.1 relative
  * luminance calculator, not chosen by eye. The numbers quoted in the
