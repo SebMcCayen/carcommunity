@@ -1,13 +1,25 @@
+/* The sidebar itself no longer scrolls: it used to declare
+ * `overflow-y: auto` while `.nav` did too, which produced a second,
+ * half-height scrollbar track over the brand and footer. The rail is now
+ * a fixed three-row grid and only `.nav` scrolls. */
 .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   height: 100vh;
+  height: 100dvh;
   background-color: var(--bg-sidebar);
+  background-image: linear-gradient(
+    180deg,
+    rgba(234, 181, 75, 0.06) 0%,
+    rgba(234, 181, 75, 0) 26%
+  );
   color: var(--text-on-sidebar);
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+  z-index: 3;
 }
 
 .brand {
@@ -17,13 +29,16 @@
   padding: var(--space-5) var(--space-4);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   min-height: 64px;
-  flex-shrink: 0;
+  background-color: var(--bg-sidebar);
 }
 
+/* Placeholder crown mark. The real brand asset is not in the repo — see
+ * the PR description; this is deliberately left untouched. */
 .brandMark {
   font-size: var(--text-xl);
-  color: var(--color-gold);
+  color: var(--accent);
   line-height: 1;
+  filter: drop-shadow(0 0 8px rgba(234, 181, 75, 0.5));
 }
 
 .brandName {
@@ -34,9 +49,21 @@
 }
 
 .nav {
-  flex: 1;
   padding: var(--space-4) 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  /* Fade the list into the brand and footer edges instead of clipping it
+   * mid-row, which is what made the rail look unfinished. The fade is
+   * kept shorter than the nav's own padding so it can never eat into a
+   * focus ring on the first or last item. */
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--space-2),
+    #000 calc(100% - var(--space-2)),
+    transparent 100%
+  );
 }
 
 .group {
@@ -54,6 +81,7 @@
 }
 
 .navItem {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -62,8 +90,9 @@
   color: var(--text-on-sidebar-muted);
   border-right: 2px solid transparent;
   transition:
-    background-color 0.15s ease,
-    color 0.15s ease;
+    background-color var(--motion-fast) var(--ease-out),
+    color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .navItem:hover {
@@ -71,11 +100,18 @@
   color: var(--text-on-sidebar);
 }
 
+/* Active is signalled structurally (a solid right-edge rail and a weight
+ * change) as well as by colour and glow, so it survives greyscale. */
 .navItem.active {
-  background-color: rgba(234, 181, 75, 0.12);
-  color: var(--color-gold);
+  background-color: var(--bg-sidebar-accent);
+  color: var(--accent);
   font-weight: var(--fw-medium);
-  border-right-color: var(--color-gold);
+  border-right-color: var(--accent);
+  box-shadow: inset -14px 0 22px -18px rgba(234, 181, 75, 0.9);
+}
+
+.navItem.active .navIcon {
+  filter: drop-shadow(0 0 6px rgba(234, 181, 75, 0.45));
 }
 
 .navIcon {
@@ -94,7 +130,7 @@
 .footer {
   padding: var(--space-4);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
-  flex-shrink: 0;
+  background-color: var(--bg-sidebar);
 }
 
 .authPlaceholder {
@@ -124,6 +160,7 @@
   cursor: pointer;
   text-align: left;
   text-decoration: underline;
+  transition: color var(--motion-fast) var(--ease-out);
 }
 
 .signOutButton:hover {

@@ -1,6 +1,7 @@
 .shell {
   display: flex;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -9,10 +10,70 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
+  position: relative;
 }
 
+/* A hairline of accent light where the sidebar meets the content column.
+ * Purely a seam, so it stays far below any text-contrast threshold. */
+.content::before {
+  content: '';
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(234, 181, 75, 0.35),
+    rgba(234, 181, 75, 0.05) 30%,
+    transparent 70%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* The single vertical scroll container for page content.
+ * `overscroll-behavior` keeps a long table from scroll-chaining into the
+ * document, and `scroll-padding-block-start` stops sticky page headers
+ * from covering an element scrolled to via anchor or keyboard focus. */
 .main {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: var(--space-8);
+  scroll-behavior: smooth;
+  overscroll-behavior-y: contain;
+  scroll-padding-block-start: 96px;
+}
+
+/* Opacity only, deliberately: a `transform` here would establish a
+ * containing block and change how `position: sticky` inside a page
+ * resolves. Route changes should not cost pages their sticky headers. */
+.main > * {
+  animation: kccFadeIn var(--motion-base) var(--ease-out) both;
+}
+
+/* Declared here rather than in globals.css on purpose. CSS Modules rewrites
+ * animation names inside a module to a hashed local name, so a keyframe
+ * declared in a plain global stylesheet can never be referenced from a
+ * `.module.css` — the reference resolves to a name with no matching
+ * keyframes and the animation silently does nothing. Verified against the
+ * built CSS. Each module that animates therefore owns its keyframes. */
+@keyframes kccFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main {
+    scroll-behavior: auto;
+  }
+
+  .main > * {
+    animation: none;
+  }
 }

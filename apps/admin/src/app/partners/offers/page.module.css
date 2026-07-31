@@ -31,6 +31,10 @@
 .createInput {
   margin-top: 0;
   width: 320px;
+  /* .createRow wraps nothing, so the fixed width has to yield on a narrow
+     viewport rather than push the adjacent button off the row. */
+  max-width: 100%;
+  min-width: 0;
 }
 
 .successText {

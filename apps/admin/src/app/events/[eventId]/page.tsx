@@ -216,8 +216,12 @@ export default function EventDetailPage() {
               style={{
                 padding: 'var(--space-2) var(--space-5)',
                 backgroundColor: 'transparent',
-                color: 'var(--color-error)',
-                border: '1px solid rgba(200,50,50,0.4)',
+                // `--color-error` is 4.32:1 on the dark surface; `--status-error`
+                // is theme-aware and measures 6.79:1. The hardcoded rgba border
+                // was 1.66:1 against the page — below the 3:1 needed to identify
+                // a control boundary.
+                color: 'var(--status-error)',
+                border: '1px solid var(--status-error)',
                 borderRadius: 'var(--radius-sm)',
                 fontSize: 'var(--text-sm)',
                 fontWeight: 'var(--fw-medium)',

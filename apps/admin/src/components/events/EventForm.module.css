@@ -18,27 +18,20 @@
 }
 
 .required {
-  color: var(--color-error);
+  color: var(--status-error);
   margin-left: var(--space-1);
 }
 
+/* Layout only. Fill, border, text colour, placeholder, focus ring, disabled
+ * state and the native date/time picker chrome all come from the global
+ * `input, textarea, select` baseline in globals.css — overriding them here is
+ * what previously removed the focus indicator on these fields. */
 .input,
 .textarea {
   width: 100%;
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   font-family: var(--font-sans);
-  color: var(--text-primary);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color 0.15s ease;
-}
-
-.input:focus,
-.textarea:focus {
-  border-color: var(--accent);
 }
 
 .textarea {
@@ -69,13 +62,16 @@
   margin: var(--space-2) 0;
 }
 
+/* Gold informational wash. --text-secondary over --accent-bg measures
+ * 6.16:1 on light and 6.90:1 on dark, so the muted weight these notes were
+ * designed with is kept rather than promoted to full-strength text. */
 .locationNotice {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  background-color: rgba(234, 181, 75, 0.08);
-  border: 1px solid rgba(234, 181, 75, 0.3);
+  background-color: var(--accent-bg);
+  border: 1px solid var(--accent);
   border-radius: var(--radius-sm);
   font-size: var(--text-xs);
   color: var(--text-secondary);
@@ -124,13 +120,24 @@
 .buttonPrimary {
   padding: var(--space-2) var(--space-5);
   background-color: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   border: none;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
   cursor: pointer;
-  transition: opacity 0.15s ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.buttonPrimary:hover:not(:disabled) {
+  background-color: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.buttonPrimary:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .buttonPrimary:disabled {
@@ -142,28 +149,31 @@
   padding: var(--space-2) var(--space-5);
   background-color: transparent;
   color: var(--text-primary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
   cursor: pointer;
-  transition: background-color 0.15s ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
-.buttonSecondary:hover {
+.buttonSecondary:hover:not(:disabled) {
   background-color: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
 .errorBanner {
   padding: var(--space-3) var(--space-4);
-  background-color: rgba(200, 50, 50, 0.08);
-  border: 1px solid rgba(200, 50, 50, 0.3);
+  background-color: var(--error-bg);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
-  color: var(--color-error);
+  color: var(--status-error);
 }
 
 .fieldError {
   font-size: var(--text-xs);
-  color: var(--color-error);
+  color: var(--status-error);
 }

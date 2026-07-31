@@ -18,6 +18,11 @@
 
 .section {
   margin-bottom: var(--space-8);
+  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-2);
 }
 
 .sectionTitle {
@@ -33,14 +38,21 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
+/* The table sits on the section card, so the sticky header fill is the
+ * card surface. */
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   font-weight: var(--fw-semibold);
   padding: var(--space-2) var(--space-4);
+  background-color: var(--bg-surface);
   border-bottom: 2px solid var(--border-color);
   color: var(--text-secondary);
   white-space: nowrap;
@@ -55,6 +67,14 @@
 
 .table tr:last-child td {
   border-bottom: none;
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .badgeName {
@@ -91,47 +111,21 @@
   color: var(--text-primary);
 }
 
+/* Fill, border, colour, focus and disabled come from the global
+ * `input, textarea, select` baseline in globals.css. Only layout here. */
 .input {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  color: var(--text-primary);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color 0.1s ease;
-}
-
-.input:focus {
-  border-color: var(--accent);
-}
-
-.input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .textarea {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  color: var(--text-primary);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  outline: none;
-  transition: border-color 0.1s ease;
   resize: vertical;
   min-height: 80px;
   font-family: inherit;
-}
-
-.textarea:focus {
-  border-color: var(--accent);
-}
-
-.textarea:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 .hint {
@@ -142,18 +136,25 @@
 .submitButton {
   padding: var(--space-2) var(--space-5);
   background-color: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   border: none;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
   font-weight: var(--fw-semibold);
   cursor: pointer;
   align-self: flex-start;
-  transition: opacity 0.15s ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .submitButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background-color: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.submitButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .submitButton:disabled {
@@ -163,8 +164,8 @@
 
 .successState {
   padding: var(--space-4);
-  background-color: rgba(34, 150, 80, 0.08);
-  border: 1px solid rgba(34, 150, 80, 0.3);
+  background-color: var(--success-bg);
+  border: 1px solid var(--status-success);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: var(--text-sm);
@@ -172,10 +173,10 @@
 
 .errorState {
   padding: var(--space-4);
-  background-color: rgba(200, 50, 50, 0.08);
-  border: 1px solid rgba(200, 50, 50, 0.3);
+  background-color: var(--error-bg);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }
 
@@ -185,7 +186,7 @@
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  background-color: var(--bg-surface);
+  background-color: var(--bg-inset);
 }
 
 .loadingState {
@@ -198,7 +199,7 @@
 .retryButton {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font-size: var(--text-sm);
   padding: 0;

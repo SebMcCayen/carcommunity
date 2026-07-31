@@ -7,6 +7,20 @@
   flex-direction: column;
   gap: var(--space-2);
   min-width: 0;
+  box-shadow: var(--elevation-2);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+/* Hover marks which tile the operator is reading in a dense auto-fill grid.
+   It is a pointer state, so it gets the softest glow in the set and no lift
+   in elevation — the card is not clickable and must not pretend to be. */
+.card:hover {
+  border-color: var(--border-strong);
+  box-shadow:
+    var(--elevation-2),
+    var(--glow-accent-soft);
 }
 
 .label {
@@ -27,18 +41,33 @@
   color: var(--text-secondary);
 }
 
-/* Variants */
+/* Variants — theme-aware status tokens. The previous rgba() tints were mixed
+   from the light-theme hexes and washed out to nothing on the dark theme. */
 .warning {
-  border-color: rgba(240, 165, 0, 0.4);
-  background-color: rgba(240, 165, 0, 0.04);
+  border-color: var(--status-warning);
+  background-color: var(--warning-bg);
 }
 
 .error {
-  border-color: rgba(217, 83, 79, 0.4);
-  background-color: rgba(217, 83, 79, 0.04);
+  border-color: var(--status-error);
+  background-color: var(--error-bg);
 }
 
 .success {
-  border-color: rgba(58, 125, 68, 0.4);
-  background-color: rgba(58, 125, 68, 0.04);
+  border-color: var(--status-success);
+  background-color: var(--success-bg);
+}
+
+/* Hovering a status tile must not discard the status colour it is carrying;
+   these sit after `.card:hover` so equal specificity resolves in their favour. */
+.warning:hover {
+  border-color: var(--status-warning);
+}
+
+.error:hover {
+  border-color: var(--status-error);
+}
+
+.success:hover {
+  border-color: var(--status-success);
 }

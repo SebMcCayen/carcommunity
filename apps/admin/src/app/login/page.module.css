@@ -1,0 +1,63 @@
+/* Login was styled entirely with inline literals and shipped an unstyled
+ * native sign-in button. The error text was `#b91c1c`, which measures
+ * 3.09:1 on the dark page background — below AA. Same markup, same
+ * behaviour; the values now come from the token layer. */
+
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  text-align: center;
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: var(--fw-bold);
+  letter-spacing: 0.01em;
+}
+
+.error {
+  color: var(--status-error);
+  background: var(--error-bg);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  max-width: 24rem;
+  font-size: var(--text-sm);
+}
+
+.signInButton {
+  padding: var(--space-3) var(--space-8);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--accent-contrast);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out),
+    transform var(--motion-fast) var(--ease-out);
+}
+
+/* Glow marks the primary action, and only on hover. */
+.signInButton:hover:not(:disabled) {
+  background: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.signInButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.signInButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}

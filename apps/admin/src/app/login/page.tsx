@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { signInWithGoogle } from '@/lib/auth';
 import { brand } from '@/config/brand';
+import styles from './page.module.css';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -49,24 +50,11 @@ export default function LoginPage() {
   }
 
   return (
-    <main
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        gap: '1.5rem',
-        padding: '2rem',
-      }}
-    >
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>{brand.adminTitle}</h1>
+    <main className={styles.page}>
+      <h1 className={styles.title}>{brand.adminTitle}</h1>
 
       {error && (
-        <p
-          role="alert"
-          style={{ color: '#b91c1c', maxWidth: '24rem', textAlign: 'center' }}
-        >
+        <p role="alert" className={styles.error}>
           {error}
         </p>
       )}
@@ -76,13 +64,7 @@ export default function LoginPage() {
         onClick={() => void handleGoogleSignIn()}
         disabled={loading}
         aria-busy={loading}
-        style={{
-          padding: '0.75rem 2rem',
-          fontSize: '1rem',
-          fontWeight: 600,
-          cursor: loading ? 'not-allowed' : 'pointer',
-          opacity: loading ? 0.6 : 1,
-        }}
+        className={styles.signInButton}
       >
         {loading ? 'Loggar in…' : 'Logga in med Google'}
       </button>

@@ -1,3 +1,9 @@
+/* Suspense fallback for a lazy route chunk. There is deliberately no spinner
+   here: the component renders a single aria-live paragraph, so there is no
+   looping animation to guard. The <p> is a direct child of the shell's
+   `.main`, which already applies the shared opacity-only enter (and already
+   suppresses it under prefers-reduced-motion), so this module stays layout
+   and colour only. */
 .meta {
   margin: 0;
   color: var(--text-secondary);

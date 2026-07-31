@@ -25,7 +25,7 @@
 .buttonPrimary {
   padding: var(--space-2) var(--space-5);
   background-color: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   border: none;
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
@@ -35,11 +35,18 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
-  transition: opacity 0.15s ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
-.buttonPrimary:hover {
-  opacity: 0.9;
+.buttonPrimary:hover:not(:disabled) {
+  background-color: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.buttonPrimary:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .filterBar {
@@ -50,19 +57,12 @@
   align-items: center;
 }
 
+/* Layout only — fill, border, focus ring and disabled state come from the
+ * global `select` baseline in globals.css. */
 .filterSelect {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
-  color: var(--text-primary);
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
   cursor: pointer;
-  outline: none;
-}
-
-.filterSelect:focus {
-  border-color: var(--accent);
 }
 
 .section {
@@ -71,19 +71,28 @@
 
 .tableWrapper {
   overflow-x: auto;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--elevation-2);
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   font-weight: var(--fw-semibold);
   padding: var(--space-2) var(--space-4);
   border-bottom: 2px solid var(--border-color);
+  background-color: var(--bg-surface);
   color: var(--text-secondary);
   white-space: nowrap;
 }
@@ -93,6 +102,14 @@
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
   vertical-align: middle;
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .table tr:last-child td {
@@ -113,7 +130,7 @@
   display: inline-flex;
   align-items: center;
   font-size: var(--text-xs);
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: var(--fw-semibold);
 }
 
@@ -150,26 +167,34 @@
   font-size: var(--text-xs);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   background-color: transparent;
   color: var(--text-primary);
   text-decoration: none;
   display: inline-block;
-  transition: background-color 0.1s ease;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
-.actionButton:hover {
+.actionButton:hover:not(:disabled) {
   background-color: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
 .actionButtonPrimary {
   border-color: var(--accent);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 
 .actionButtonDanger {
-  border-color: rgba(200, 50, 50, 0.4);
-  color: var(--color-error);
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.actionButtonDanger:hover:not(:disabled) {
+  background-color: var(--error-bg);
+  border-color: var(--status-error);
 }
 
 .pagination {
@@ -182,21 +207,24 @@
 .paginationButton {
   padding: var(--space-1) var(--space-4);
   font-size: var(--text-sm);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background-color: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.paginationButton:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
 .paginationButton:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.paginationInfo {
-  font-size: var(--text-sm);
-  color: var(--text-secondary);
 }
 
 .emptyState {
@@ -215,10 +243,10 @@
 
 .errorState {
   padding: var(--space-5);
-  background-color: rgba(200, 50, 50, 0.08);
-  border: 1px solid rgba(200, 50, 50, 0.3);
+  background-color: var(--error-bg);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
   margin-bottom: var(--space-4);
 }
@@ -226,7 +254,7 @@
 .retryButton {
   background: none;
   border: none;
-  color: var(--accent);
+  color: var(--accent-text);
   cursor: pointer;
   font-size: var(--text-sm);
   padding: 0;

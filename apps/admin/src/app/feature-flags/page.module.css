@@ -22,8 +22,8 @@
   align-items: flex-start;
   gap: var(--space-3);
   padding: var(--space-4) var(--space-5);
-  background-color: rgba(255, 200, 0, 0.08);
-  border: 1px solid rgba(255, 200, 0, 0.35);
+  background-color: var(--warning-bg);
+  border: 1px solid var(--status-warning);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
   margin-bottom: var(--space-8);
@@ -35,23 +35,48 @@
   margin-bottom: var(--space-10);
 }
 
+/* Short gold rail under the heading; the padding it needs is taken back out
+   of the margin so the vertical rhythm is unchanged. */
 .sectionTitle {
+  position: relative;
   font-size: var(--text-xl);
   font-weight: var(--fw-semibold);
-  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sectionTitle::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -1px;
+  width: 40px;
+  height: 2px;
+  background-color: var(--accent);
+  border-radius: var(--radius-full);
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  /* `separate` is what lets the header cells stay sticky: collapsed borders
+     are painted by the table, not the cell, and detach on scroll. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   font-weight: var(--fw-semibold);
   padding: var(--space-2) var(--space-4);
   border-bottom: 2px solid var(--border-color);
+  /* Opaque: the rows scroll underneath this. The table sits on the page, not
+     on a card, so it matches the page fill. */
+  background-color: var(--bg-page);
   color: var(--text-secondary);
 }
 
@@ -59,6 +84,47 @@
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--border-color);
   color: var(--text-primary);
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+/* Row hover is a pointer-tracking aid on a table where every row owns a
+   switch — it keeps the eye on the row the cursor is about to act on. */
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
+}
+
+/* The toggle in the Edit column is an unclassed <button>; scope the secondary
+   treatment to the table so it reads as an action and not as raw UA chrome. */
+.table td button {
+  padding: var(--space-1) var(--space-3);
+  font-size: var(--text-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.table td button:hover:not(:disabled) {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.table td button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.table td button:disabled {
+  color: var(--text-disabled);
+  border-color: var(--border-input-disabled);
+  cursor: not-allowed;
 }
 
 .flagLabelRow {
@@ -85,7 +151,7 @@
    physically drive to and stop at. Left rule + tag so the row cannot be
    skimmed past when someone is looking for a switch under pressure. */
 .rowSafety td:first-child {
-  box-shadow: inset 3px 0 0 0 var(--color-warning);
+  box-shadow: inset 3px 0 0 0 var(--status-warning);
 }
 
 .tag {
@@ -96,25 +162,30 @@
   font-weight: var(--fw-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  /* Charcoal text on a tinted ground: the tint carries the meaning, the text
-     keeps its contrast (gold-on-ivory would not). */
-  color: var(--color-charcoal);
+  /* Colour comes from the variant below: the tint carries the meaning and the
+     matching status token carries the text, measured in both themes. The old
+     fixed charcoal was unreadable once the dark theme darkened the tint. */
+  color: var(--text-secondary);
 }
 
 .tagSafety {
-  background-color: rgba(240, 165, 0, 0.18);
-  border: 1px solid var(--color-warning);
+  background-color: var(--warning-bg);
+  border: 1px solid var(--status-warning);
+  color: var(--status-warning);
 }
 
 .tagPrivacy {
-  background-color: rgba(109, 108, 109, 0.12);
-  border: 1px solid var(--color-grey-border);
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
 }
 
 .flagKey {
-  font-family: monospace;
+  font-family: var(--font-mono);
   font-size: var(--text-xs);
-  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--text-secondary);
+  background-color: var(--bg-inset);
+  border: 1px solid var(--border-color);
   padding: var(--space-1) var(--space-2);
   border-radius: var(--radius-sm);
 }
@@ -129,15 +200,15 @@
 }
 
 .badgeEnabled {
-  background-color: rgba(50, 200, 100, 0.12);
-  color: var(--color-success);
-  border: 1px solid rgba(50, 200, 100, 0.3);
+  background-color: var(--success-bg);
+  color: var(--status-success);
+  border: 1px solid var(--status-success);
 }
 
 .badgeDisabled {
-  background-color: rgba(200, 50, 50, 0.1);
-  color: var(--color-error);
-  border: 1px solid rgba(200, 50, 50, 0.25);
+  background-color: var(--error-bg);
+  color: var(--status-error);
+  border: 1px solid var(--status-error);
 }
 
 .editNote {

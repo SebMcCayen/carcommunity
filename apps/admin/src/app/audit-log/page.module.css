@@ -47,24 +47,14 @@
   color: var(--text-primary);
 }
 
+/* Layout only — fill, border, colour, focus and disabled states come from the
+   global `input, textarea, select` baseline in globals.css. */
 .input {
   min-width: 260px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
 }
 
 .select {
   min-width: 220px;
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
 }
 
 .primaryButton {
@@ -72,14 +62,22 @@
   border: none;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .primaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .primaryButton:disabled {
@@ -89,17 +87,25 @@
 
 .secondaryButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.secondaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .secondaryButton:disabled {
@@ -112,21 +118,35 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
 }
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bg-surface);
   text-align: left;
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border-color);
   font-weight: var(--fw-semibold);
   color: var(--text-secondary);
   white-space: nowrap;
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .table td {
@@ -184,7 +204,7 @@
 
 .error {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }
 

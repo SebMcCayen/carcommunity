@@ -45,7 +45,7 @@
 
 .toggle {
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-secondary);
@@ -53,40 +53,56 @@
   font-size: var(--text-xs);
   font-weight: var(--fw-medium);
   white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .toggle:hover {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
 }
 
+/* Selected filter — accent fill with the measured ink foreground. */
 .toggle[aria-pressed='true'] {
-  border-color: var(--text-primary);
-  background: var(--text-primary);
-  color: var(--bg-surface);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--glow-accent-soft);
 }
 
+.toggle[aria-pressed='true']:hover {
+  background: var(--accent-strong);
+}
+
+/* Layout only — fill, border, colour, focus and disabled states come from the
+   global `input, textarea, select` baseline in globals.css. */
 .select {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--text-sm);
 }
 
 .refreshButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .refreshButton:hover:not(:disabled) {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.refreshButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .refreshButton:disabled {
@@ -100,17 +116,29 @@
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--text-sm);
 }
 
 .table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   text-align: left;
   padding: var(--space-2) var(--space-3);
-  background: var(--bg-surface);
+  background-color: var(--bg-surface);
   border-bottom: 1px solid var(--border-color);
   font-weight: var(--fw-semibold);
   color: var(--text-primary);
+}
+
+.table tbody tr {
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.table tbody tr:hover {
+  background-color: var(--bg-surface-hover);
 }
 
 .table td {
@@ -147,36 +175,40 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   background: var(--bg-surface);
-  color: var(--text-primary);
+  color: var(--accent-text);
   text-decoration: none;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .issueLink:hover {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
   text-decoration: underline;
 }
 
 /* Failed state — distinct from a live issue link. */
 .issueFailed {
   composes: badge;
-  border: 1px solid var(--color-error);
-  background: var(--bg-surface);
-  color: var(--color-error);
+  border: 1px solid var(--status-error);
+  background: var(--error-bg);
+  color: var(--status-error);
 }
 
 /* Pending (transient) — neutral. */
 .issuePending {
   composes: badge;
-  border: 1px solid var(--color-warning);
-  background: var(--bg-surface);
-  color: var(--color-warning);
+  border: 1px solid var(--status-warning);
+  background: var(--warning-bg);
+  color: var(--status-warning);
 }
 
 .actionButton {
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
@@ -184,14 +216,22 @@
   font-size: var(--text-xs);
   font-weight: var(--fw-medium);
   white-space: nowrap;
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .actionButton:hover {
   background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.actionButton:active {
+  transform: translateY(1px);
 }
 
 .detailRow td {
-  background: var(--bg-surface);
+  background: var(--bg-inset);
 }
 
 .detail {
@@ -202,6 +242,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-1);
 }
 
 .detailMessage {
@@ -243,7 +284,7 @@
 
 .errorText {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
   padding: var(--space-4) 0;
 }

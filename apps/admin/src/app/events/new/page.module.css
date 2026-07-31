@@ -12,6 +12,7 @@
   text-decoration: none;
   display: inline-block;
   margin-bottom: var(--space-3);
+  transition: color var(--motion-fast) var(--ease-out);
 }
 
 .backLink:hover {
@@ -35,6 +36,7 @@
   background-color: var(--bg-surface);
   border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
+  box-shadow: var(--elevation-2);
 }
 
 .metaRow {
@@ -79,6 +81,7 @@
   background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
+  box-shadow: var(--elevation-2);
   padding: var(--space-4) var(--space-5);
   min-width: 100px;
   text-align: center;
@@ -98,11 +101,11 @@
 
 .cancelledNotice {
   padding: var(--space-4) var(--space-5);
-  background-color: rgba(200, 50, 50, 0.08);
-  border: 1px solid rgba(200, 50, 50, 0.3);
+  background-color: var(--error-bg);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
-  color: var(--color-error);
+  color: var(--status-error);
   margin-bottom: var(--space-5);
 }
 
@@ -115,9 +118,9 @@
 
 .errorState {
   padding: var(--space-5);
-  background-color: rgba(200, 50, 50, 0.08);
-  border: 1px solid rgba(200, 50, 50, 0.3);
+  background-color: var(--error-bg);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }

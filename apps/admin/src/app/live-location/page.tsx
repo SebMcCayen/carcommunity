@@ -79,7 +79,9 @@ export default function LiveLocationPage() {
           here if genuinely useful for operational monitoring. Removing individual
           user blocks via the admin panel is not permitted in this step.
         */}
-        <p style={{ fontSize: 14, color: '#666' }}>
+        {/* `#666` measured 3.48:1 against the dark page background — below AA.
+            `--text-secondary` is theme-aware and measures 8.42:1 there. */}
+        <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
           Block relationship counts are not shown in this placeholder.
           Individual blocking decisions are user-private and must not be exposed to admin views.
         </p>

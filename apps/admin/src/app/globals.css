@@ -1,11 +1,25 @@
 /* ============================================================
  * KCC Crown UI — Admin Portal Design Tokens
- * Mirror values are exported as TypeScript in src/design/tokens.ts.
+ *
+ * This file is the admin app's source of truth for token VALUES; the
+ * TypeScript in src/design/tokens.ts mirrors it for use in TS logic — keep the
+ * two in sync. contracts/design-tokens/tokens.json is the canonical
+ * cross-platform palette (also consumed by Android) and is a REFERENCE here,
+ * not a build input: the admin is not generated from it, so editing the
+ * contract does not update this file — and editing the contract triggers
+ * Android token regeneration. Wiring the admin to consume the contract
+ * directly is a separate, cross-platform change.
+ *
+ * Every colour pairing below was measured with a WCAG 2.1 relative
+ * luminance calculator, not chosen by eye. The numbers quoted in the
+ * comments are the measured ratios for the dark theme (the default
+ * operator environment) unless stated otherwise.
  * ============================================================ */
 
 :root {
   /* --- Color palette --- */
   --color-gold: #eab54b;
+  --color-gold-deep: #8a6410;
   --color-charcoal: #3f3e3b;
   --color-ink: #040211;
   --color-ivory: #f8f6ef;
@@ -30,9 +44,12 @@
   --space-12: 48px;
 
   /* --- Border radius --- */
+  --radius-xs: 3px;
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
 
   /* --- Typography --- */
   --font-sans:
@@ -53,31 +70,155 @@
   --lh-tight: 1.25;
   --lh-normal: 1.5;
 
+  /* --- Motion ---
+   * Kept inside the 150-250ms band the brief asks for. Every token is
+   * neutralised under `prefers-reduced-motion: reduce` further down. */
+  --motion-fast: 150ms;
+  --motion-base: 200ms;
+  --motion-slow: 250ms;
+  --ease-out: cubic-bezier(0.22, 0.75, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
   /* --- Semantic tokens — Light theme (default) --- */
   --bg-page: var(--color-ivory);
   --bg-surface: #ffffff;
   --bg-surface-hover: var(--color-sand);
+  --bg-inset: #f2eee3;
   --bg-sidebar: var(--color-charcoal);
+  --bg-sidebar-accent: rgba(234, 181, 75, 0.14);
+
+  /* Input surfaces. The light theme leans on the border (3.90:1 against
+   * the page) rather than the fill for identification, per WCAG 1.4.11. */
+  --bg-input: #ffffff;
+  --bg-input-hover: #fffdf7;
+  --bg-input-disabled: #ece8dc;
+  --border-input: #807b6e; /* 4.22:1 vs input fill, 3.90:1 vs page */
+  --border-input-hover: #5f5b50;
+  --border-input-disabled: #b9b3a3;
+  --text-input: #2b2a27; /* 14.35:1 vs input fill */
+  --text-placeholder: #67635a; /* 5.98:1 vs input fill */
+  --text-disabled: #74705f; /* 4.06:1 vs disabled fill */
+
   --text-primary: var(--color-charcoal);
-  --text-secondary: var(--color-grey-mid);
+  --text-secondary: #5f5c53; /* 6.18:1 vs page */
   --text-on-sidebar: var(--color-ivory);
   --text-on-sidebar-muted: var(--color-grey-border);
-  --border-color: var(--color-grey-border);
-  --accent: var(--color-gold);
+  --border-color: #c9c3b4;
+  --border-strong: #a29c8c;
+
+  --accent: var(--color-gold); /* fills, borders, glow */
+  --accent-strong: #f2c468;
+  --accent-text: var(--color-gold-deep); /* 5.37:1 vs surface — readable accent */
+  --accent-contrast: var(--color-ink); /* 10.97:1 on gold */
+
+  --status-success: #2a6b33; /* 6.41:1 vs surface */
+  --status-error: #b3322e; /* 6.10:1 vs surface */
+  --status-warning: #8a5a00; /* 5.88:1 vs surface */
+  --status-info: #215d9c; /* 6.75:1 vs surface — neutral/informational state */
+  --success-bg: rgba(42, 107, 51, 0.1);
+  --error-bg: rgba(179, 50, 46, 0.1);
+  --warning-bg: rgba(138, 90, 0, 0.1);
+  --info-bg: rgba(33, 93, 156, 0.1);
+  /* Accent wash for informational callouts on brand. Text on it must be
+   * --accent-text (4.95:1) or --text-primary (9.85:1), never plain gold. */
+  --accent-bg: rgba(234, 181, 75, 0.14);
+
+  /* --- Glow + elevation ---
+   * Glow is reserved for state: focus, active navigation, primary action,
+   * and hover on interactive surfaces. It never decorates static content. */
+  --glow-accent-soft: 0 0 0 3px rgba(234, 181, 75, 0.18);
+  --glow-accent: 0 0 0 3px rgba(234, 181, 75, 0.3);
+  --glow-accent-strong: 0 0 0 3px rgba(234, 181, 75, 0.35), 0 0 18px -2px rgba(234, 181, 75, 0.45);
+  --glow-error: 0 0 0 3px rgba(179, 50, 46, 0.28);
+  --elevation-1: 0 1px 2px rgba(4, 2, 17, 0.08);
+  --elevation-2: 0 2px 8px -2px rgba(4, 2, 17, 0.12);
+  --elevation-3: 0 12px 32px -8px rgba(4, 2, 17, 0.2);
+
+  /* --- Scrollbar --- */
+  --scrollbar-track: transparent;
+  --scrollbar-thumb: #cdc7b7;
+  --scrollbar-thumb-hover: #a29c8c;
 
   /* --- Layout --- */
   --sidebar-width: 240px;
+
+  /* ----------------------------------------------------------
+   * Compatibility aliases.
+   *
+   * Historic page modules reference these names. Before this file
+   * declared them they resolved to nothing, which made the whole
+   * declaration invalid at computed-value time — `border: 1px solid
+   * var(--border-default)` fell back to `border-style: none` and
+   * `background: var(--page-background)` fell back to `transparent`.
+   * That is what made the Kronjakt form fields invisible. Keep these
+   * aliases until every module has been migrated to the names above.
+   * ---------------------------------------------------------- */
+  --border: var(--border-color);
+  --border-default: var(--border-color);
+  --brand-primary: var(--accent);
+  --page-background: var(--bg-page);
+  --surface-background: var(--bg-surface);
+  --surface-bg: var(--bg-surface);
+  --surface-alt: var(--bg-surface-hover);
+  --bg-muted: var(--bg-inset);
+  --input-bg: var(--bg-input);
+  --text-base: var(--text-md);
+
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-page: #0d0c14;
-    --bg-surface: #1a1918;
-    --bg-surface-hover: #252320;
-    --bg-sidebar: #16141a;
+    --bg-page: #08061a;
+    --bg-surface: #1a1836; /* 1.17:1 lift over page, plus border + shadow */
+    --bg-surface-hover: #252242;
+    --bg-inset: #131126;
+    --bg-sidebar: #0d0b22;
+    --bg-sidebar-accent: rgba(234, 181, 75, 0.13);
+
+    /* Input surfaces. Measured against both the page and the card the
+     * form usually sits in, so a field is identifiable either way. */
+    --bg-input: #2e2b48; /* 1.48:1 vs page, 1.27:1 vs card surface */
+    --bg-input-hover: #373454;
+    --bg-input-disabled: #131126;
+    --border-input: #85819c; /* 3.61:1 vs fill, 4.58:1 vs card, 5.34:1 vs page */
+    --border-input-hover: #a29eb8;
+    --border-input-disabled: #3a3752;
+    --text-input: var(--color-ivory); /* 12.49:1 vs input fill */
+    --text-placeholder: #a8a4bd; /* 5.60:1 vs input fill */
+    --text-disabled: #6d6a85; /* 3.57:1 vs disabled fill */
+
     --text-primary: var(--color-ivory);
-    --text-secondary: var(--color-grey-border);
-    --border-color: #3a3835;
+    --text-secondary: var(--color-grey-border); /* 8.42:1 vs surface */
+    --border-color: #33304d;
+    --border-strong: #4c4870;
+
+    --accent-strong: #f4cd80;
+    --accent-text: var(--color-gold); /* 9.60:1 vs surface */
+
+    --status-success: #5fd08a; /* 8.86:1 vs surface */
+    --status-error: #ff7b74; /* 6.79:1 vs surface */
+    --status-warning: #f5b93a; /* 9.68:1 vs surface */
+    --status-info: #6fd3e8; /* 9.90:1 vs surface */
+    --success-bg: rgba(95, 208, 138, 0.12);
+    --error-bg: rgba(255, 123, 116, 0.12);
+    --warning-bg: rgba(245, 185, 58, 0.12);
+    --info-bg: rgba(111, 211, 232, 0.12);
+    --accent-bg: rgba(234, 181, 75, 0.08);
+
+    --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+    --elevation-2: 0 4px 14px -4px rgba(0, 0, 0, 0.6);
+    --elevation-3: 0 18px 42px -12px rgba(0, 0, 0, 0.75);
+
+    --scrollbar-thumb: #3d3a5c;
+    --scrollbar-thumb-hover: #565182;
+
+    /* `color-scheme: dark` is what makes native browser chrome follow the
+     * theme: the datetime-local / date / time picker panels and their
+     * calendar indicator glyphs, the select dropdown list, checkbox and
+     * radio glyphs, and the default scrollbars. Without it those render
+     * as light-on-light widgets over a dark form. */
+    color-scheme: dark;
   }
 }
 
@@ -127,4 +268,337 @@ h5,
 h6 {
   line-height: var(--lh-tight);
   font-weight: var(--fw-semibold);
+}
+
+/* ============================================================
+ * Ambient page backdrop
+ *
+ * A single, very low-contrast bloom anchored behind the shell. It gives
+ * the dark base some depth without sitting on top of any text: it is
+ * painted on a fixed layer beneath the app root.
+ * ============================================================ */
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(1100px 620px at 12% -8%, rgba(234, 181, 75, 0.07), transparent 62%),
+    radial-gradient(900px 560px at 88% 108%, rgba(120, 110, 255, 0.06), transparent 60%);
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
+/* ============================================================
+ * Form controls — global baseline
+ *
+ * Declared at element level so that every control in the app gets a
+ * visible surface, border, focus state and disabled state even when its
+ * page module forgets to style it. Page modules that set their own
+ * padding or width still win; the identification-critical properties
+ * below are the floor.
+ * ============================================================ */
+
+input,
+textarea,
+select {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  line-height: var(--lh-normal);
+  color: var(--text-input);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-input);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  transition:
+    border-color var(--motion-fast) var(--ease-out),
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+select {
+  /* Keep the native dropdown arrow; `color-scheme` above themes it. */
+  cursor: pointer;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-placeholder);
+  opacity: 1; /* Firefox dims placeholders by default, which breaks the measured ratio. */
+}
+
+/* Text-like fields only. The native-chrome controls (checkbox, radio, file,
+   range, colour) keep their own appearance + accent-color; this hover rule
+   out-specifies their base rules, so they are excluded explicitly to avoid
+   painting the text-input hover fill behind a native control. */
+input:hover:not(:disabled):not([readonly]):not([type='checkbox']):not([type='radio']):not([type='file']):not([type='range']):not([type='color']),
+textarea:hover:not(:disabled):not([readonly]),
+select:hover:not(:disabled) {
+  background-color: var(--bg-input-hover);
+  border-color: var(--border-input-hover);
+}
+
+/* Focus is signalled three ways at once so it never depends on colour
+ * alone: an outline stroke that did not exist before (structural), a
+ * recoloured border, and an accent glow ring. */
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[contenteditable]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+/* Safari and older engines still fire :focus for keyboard traversal on
+ * text inputs, so mirror the treatment there. */
+input:focus,
+textarea:focus,
+select:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+
+input:disabled,
+textarea:disabled,
+select:disabled {
+  background-color: var(--bg-input-disabled);
+  border-color: var(--border-input-disabled);
+  border-style: dashed; /* structural, not colour-only */
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+input[readonly],
+textarea[readonly] {
+  background-color: var(--bg-input-disabled);
+  border-style: dashed;
+  cursor: default;
+}
+
+input[aria-invalid='true'],
+textarea[aria-invalid='true'],
+select[aria-invalid='true'] {
+  border-color: var(--status-error);
+}
+
+input[aria-invalid='true']:focus,
+textarea[aria-invalid='true']:focus,
+select[aria-invalid='true']:focus {
+  outline-color: var(--status-error);
+  border-color: var(--status-error);
+  box-shadow: var(--glow-error);
+}
+
+/* Checkboxes and radios are glyph controls: the fill/border rules above
+ * would flatten them, so reset to native and tint via accent-color. */
+input[type='checkbox'],
+input[type='radio'] {
+  appearance: auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background-color: transparent;
+  accent-color: var(--accent);
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+input[type='checkbox']:disabled,
+input[type='radio']:disabled {
+  background-color: transparent;
+  border: none;
+  /* The checkbox/radio base rule sets cursor: pointer at equal specificity to
+     the generic input:disabled rule, so source order would win and a disabled
+     control would show a pointer. Restore the not-allowed affordance here. */
+  cursor: not-allowed;
+}
+
+/* File, range and colour controls likewise keep native chrome. */
+input[type='file'],
+input[type='range'],
+input[type='color'] {
+  background-color: transparent;
+  border: none;
+  padding: 0;
+  accent-color: var(--accent);
+}
+
+/* Chromium renders the calendar / clock launcher for date, time and
+ * datetime-local as a dark glyph. `color-scheme: dark` inverts it, but
+ * make the affordance explicit so it reads as a button. */
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator,
+input[type='datetime-local']::-webkit-calendar-picker-indicator,
+input[type='month']::-webkit-calendar-picker-indicator,
+input[type='week']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  padding: 2px;
+  opacity: 0.85;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='time']::-webkit-calendar-picker-indicator:hover,
+input[type='datetime-local']::-webkit-calendar-picker-indicator:hover,
+input[type='month']::-webkit-calendar-picker-indicator:hover,
+input[type='week']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  background-color: var(--bg-surface-hover);
+}
+
+/* The individual date/time spinner fields inherit the input colour, but
+ * Chromium paints the empty-field placeholder segments separately. */
+input[type='date']::-webkit-datetime-edit,
+input[type='time']::-webkit-datetime-edit,
+input[type='datetime-local']::-webkit-datetime-edit {
+  color: var(--text-input);
+}
+
+input[type='date']::-webkit-datetime-edit-text,
+input[type='time']::-webkit-datetime-edit-text,
+input[type='datetime-local']::-webkit-datetime-edit-text {
+  color: var(--text-placeholder);
+}
+
+/* Chromium's autofill paints its own background over ours; the large
+ * inset shadow is the standard way to reclaim it. */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill,
+select:-webkit-autofill {
+  -webkit-text-fill-color: var(--text-input);
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-input) inset;
+  caret-color: var(--text-input);
+}
+
+/* Non-form interactive elements share the same focus language. */
+a:focus-visible,
+button:focus-visible,
+[tabindex]:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* ============================================================
+ * Scrollbars
+ *
+ * The sidebar's default scrollbar was the unfinished-looking one. These
+ * rules give every scroll container the same thin, themed treatment.
+ * ============================================================ */
+
+html,
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ============================================================
+ * Shared animation — deliberately NOT declared here.
+ *
+ * CSS Modules rewrites animation names inside a `.module.css` to a hashed
+ * local name. A keyframe declared in this global stylesheet can therefore
+ * never be referenced from a module: the reference compiles to
+ * `_kccFadeInUp_11ecs_1` while the keyframe stays `kccFadeInUp`, so the
+ * animation silently does nothing. (Confirmed by grepping the built CSS,
+ * not assumed.)
+ *
+ * Each module that animates declares its own keyframes. The house pair is:
+ *
+ *   kccFadeIn   — opacity only. Use for page/route enters; it has no
+ *                 `transform`, so it cannot create a containing block over
+ *                 a `position: sticky` descendant.
+ *   kccFadeInUp — opacity + a 6px rise. Use for overlays and dialogs.
+ *
+ * Anything you add must be paired with a `prefers-reduced-motion: reduce`
+ * block in the same file.
+ * ============================================================ */
+
+/* ============================================================
+ * Reduced motion
+ *
+ * Not optional. Everything transitional collapses to effectively zero
+ * while the *static* focus, hover and active styling above is untouched,
+ * so no state indicator is lost.
+ * ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 1ms;
+    --motion-base: 1ms;
+    --motion-slow: 1ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================
+ * Forced colours (Windows high contrast)
+ * ============================================================ */
+
+@media (forced-colors: active) {
+  input,
+  textarea,
+  select {
+    border: 1px solid ButtonBorder;
+  }
+
+  input:focus-visible,
+  textarea:focus-visible,
+  select:focus-visible {
+    outline: 2px solid Highlight;
+  }
 }

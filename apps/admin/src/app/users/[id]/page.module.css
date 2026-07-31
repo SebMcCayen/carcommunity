@@ -12,7 +12,7 @@
 }
 
 .backLink {
-  color: var(--accent);
+  color: var(--accent-text);
   font-size: var(--text-sm);
   text-decoration: none;
 }
@@ -41,7 +41,7 @@
 }
 
 .link {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: none;
 }
 
@@ -51,13 +51,13 @@
 
 .error {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }
 
 .success {
   margin: 0;
-  color: var(--color-success);
+  color: var(--status-success);
   font-size: var(--text-sm);
 }
 
@@ -69,6 +69,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
 }
 
 .cardTitle {
@@ -103,12 +104,11 @@
   color: var(--text-primary);
 }
 
+/* Fill, border, colour, focus and disabled come from the global
+ * `input, textarea, select` baseline in globals.css. Only layout here. */
 .input {
   padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
   font-size: var(--text-sm);
 }
 
@@ -123,14 +123,22 @@
   border: none;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .primaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .primaryButton:disabled {
@@ -140,17 +148,25 @@
 
 .secondaryButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.secondaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .secondaryButton:disabled {
@@ -160,17 +176,22 @@
 
 .dangerButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
-  color: var(--color-error);
+  color: var(--status-error);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition: background-color var(--motion-fast) var(--ease-out);
 }
 
 .dangerButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--error-bg);
+}
+
+.dangerButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .dangerButton:disabled {
@@ -181,9 +202,9 @@
 .warning {
   margin: 0;
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-warning);
+  border: 1px solid var(--status-warning);
   border-radius: var(--radius-sm);
-  background: rgba(240, 165, 0, 0.08);
+  background: var(--warning-bg);
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
@@ -194,9 +215,9 @@
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-warning);
+  border: 1px solid var(--status-warning);
   border-radius: var(--radius-sm);
-  background: rgba(240, 165, 0, 0.08);
+  background: var(--warning-bg);
 }
 
 .confirmText {

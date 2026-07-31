@@ -32,6 +32,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
 }
 
 .cardTitle {
@@ -67,14 +68,11 @@
   color: var(--text-primary);
 }
 
+/* Layout only — fill, border, colour, focus and disabled states come from the
+   global `input, textarea, select` baseline in globals.css. */
 .input,
 .textarea {
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
+  width: 100%;
 }
 
 .textarea {
@@ -140,15 +138,15 @@
 }
 
 .badgeActive {
-  background-color: rgba(50, 200, 100, 0.12);
-  color: var(--color-success);
-  border: 1px solid rgba(50, 200, 100, 0.3);
+  background-color: var(--success-bg);
+  color: var(--status-success);
+  border: 1px solid var(--status-success);
 }
 
 .badgeInactive {
-  background-color: rgba(200, 50, 50, 0.1);
-  color: var(--color-error);
-  border: 1px solid rgba(200, 50, 50, 0.25);
+  background-color: var(--error-bg);
+  color: var(--status-error);
+  border: 1px solid var(--status-error);
 }
 
 .actions {
@@ -162,14 +160,22 @@
   border: none;
   border-radius: var(--radius-sm);
   background: var(--accent);
-  color: var(--color-ink);
+  color: var(--accent-contrast);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
 }
 
 .primaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .primaryButton:disabled {
@@ -179,17 +185,25 @@
 
 .secondaryButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
   color: var(--text-primary);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .secondaryButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.secondaryButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .secondaryButton:disabled {
@@ -199,17 +213,24 @@
 
 .dangerButton {
   padding: var(--space-2) var(--space-4);
-  border: 1px solid var(--color-error);
+  border: 1px solid var(--status-error);
   border-radius: var(--radius-sm);
   background: var(--bg-surface);
-  color: var(--color-error);
+  color: var(--status-error);
   cursor: pointer;
   font-size: var(--text-sm);
   font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
 }
 
 .dangerButton:hover:not(:disabled) {
-  opacity: 0.9;
+  background: var(--error-bg);
+}
+
+.dangerButton:active:not(:disabled) {
+  transform: translateY(1px);
 }
 
 .dangerButton:disabled {
@@ -219,7 +240,7 @@
 
 .error {
   margin: 0;
-  color: var(--color-error);
+  color: var(--status-error);
   font-size: var(--text-sm);
 }
 
