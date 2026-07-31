@@ -97,6 +97,13 @@ jobs:
           # client identifier (baked into the bundle), so it lives as a `vars.*`
           # production ENVIRONMENT VARIABLE like the Firebase config above.
           VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
+          # MapLibre style-JSON URL for the admin map location picker (Crown Hunt
+          # points, billboards, partners, events). OPTIONAL — when unset the
+          # picker degrades gracefully to manual latitude/longitude entry, so a
+          # missing value must NEVER block a deploy and is deliberately absent
+          # from the required-vars check below. Set it under Settings →
+          # Environments → production → Variables to enable the interactive map.
+          VITE_MAP_STYLE_URL: ${{ vars.VITE_MAP_STYLE_URL }}
         run: |
           # Fail loudly if any value is missing — better than deploying a
           # bundle that throws "Missing required environment variable" on load,
