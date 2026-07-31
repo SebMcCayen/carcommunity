@@ -125,12 +125,48 @@ data class MilestoneBadge(
     val awardedAtMillis: Long?,
 )
 
+/**
+ * One earned award as the always-visible SUMMARY strip renders it: a single held
+ * ladder tier OR a standalone milestone, each its own item.
+ *
+ * This is the granularity the summary was changed to — a flat recency list, not
+ * the old per-ladder medallion. Two tiers of the same ladder are TWO entries
+ * here, and a milestone ([isMilestone]) is an entry too, so the strip shows
+ * exactly what the member has unlocked. For a member holding [RECENT_AWARDS_LIMIT]
+ * or fewer awards the summary therefore shows all of them, and its item count
+ * equals [BadgeShowcase.earnedCount] — which is what makes the headline
+ * "x of y unlocked" agree with the strip below it.
+ */
+data class EarnedAward(
+    val badgeKey: String,
+    /** The ladder this tier belongs to, or null for a standalone milestone. */
+    val ladderId: BadgeLadderId?,
+    /** The tier's rank, or null for a milestone (which has none). */
+    val tier: BadgeTier?,
+    /** The award doc's denormalized name — the fallback for a milestone with no catalog string. */
+    val fallbackName: String?,
+    /** When it was acquired; null-dated awards sort last, never first. */
+    val awardedAtMillis: Long?,
+) {
+    /** True for a standalone milestone, false for a ladder tier. */
+    val isMilestone: Boolean get() = ladderId == null
+}
+
 /** The whole own-profile badge wall. */
 data class BadgeShowcase(
     /** All six ladders, always — an unstarted ladder renders locked, not hidden. */
     val ladders: List<LadderProgress>,
     /** Standalone milestones the member holds; empty until one is awarded. */
     val milestones: List<MilestoneBadge>,
+    /**
+     * The member's earned awards, newest-acquired first, capped at
+     * [RECENT_AWARDS_LIMIT] — the source of the always-visible summary strip.
+     * Each held ladder tier and each milestone is its own entry (unknown/retired
+     * keys excluded, duplicates collapsed), so when the member holds
+     * [RECENT_AWARDS_LIMIT] or fewer awards this holds all of them and
+     * `recentAwards.size == earnedCount`.
+     */
+    val recentAwards: List<EarnedAward>,
     /** Distinct catalog badges held (unknown keys excluded). */
     val earnedCount: Int,
     /** Every badge in the catalog — the denominator of "x of y unlocked". */
@@ -154,6 +190,9 @@ data class BadgeShowcase(
                 )
 
     companion object {
+        /** The always-visible summary strip shows at most this many awards, newest first. */
+        const val RECENT_AWARDS_LIMIT = 6
+
         /**
          * Folds the owner's award documents into the wall.
          *
@@ -164,8 +203,14 @@ data class BadgeShowcase(
          */
         fun from(badges: List<Badge>, counters: BadgeCounters = BadgeCounters.NONE): BadgeShowcase {
             val heldKeys = badges.map { it.key }.toSet()
+            // Newest timestamp per key: were the same key ever to arrive on more
+            // than one doc, the detail sheet shows its most recent award, and that
+            // matches how the recency strip collapses duplicates below.
             val awardedAt =
-                badges.mapNotNull { badge -> badge.awardedAtMillis?.let { badge.key to it } }.toMap()
+                badges
+                    .mapNotNull { badge -> badge.awardedAtMillis?.let { badge.key to it } }
+                    .groupingBy { it.first }
+                    .fold(Long.MIN_VALUE) { acc, (_, millis) -> maxOf(acc, millis) }
 
             val ladders =
                 BADGE_LADDERS.map { ladder ->
@@ -188,10 +233,55 @@ data class BadgeShowcase(
                     }
                 }
 
-            val catalogKeys = BADGE_MILESTONE_KEYS.toSet() + BADGE_LADDERS.flatMap { it.badgeKeys }
+            val milestoneKeys = BADGE_MILESTONE_KEYS.toSet()
+            val catalogKeys = milestoneKeys + BADGE_LADDERS.flatMap { it.badgeKeys }
+
+            // The summary strip source: one flat entry per HELD catalog badge —
+            // every ladder tier and every milestone — newest acquired first.
+            // Unknown/retired keys are dropped and duplicate award docs collapse,
+            // so the uncapped list has exactly `earnedCount` entries and the cap
+            // is the only reason it can ever hold fewer than the count.
+            val recentAwards =
+                badges
+                    .mapNotNull { badge ->
+                        val rung = rungForBadgeKey(badge.key)
+                        when {
+                            rung != null ->
+                                EarnedAward(
+                                    badgeKey = badge.key,
+                                    ladderId = rung.first.id,
+                                    tier = rung.second.tier,
+                                    fallbackName = null,
+                                    awardedAtMillis = badge.awardedAtMillis,
+                                )
+                            badge.key in milestoneKeys ->
+                                EarnedAward(
+                                    badgeKey = badge.key,
+                                    ladderId = null,
+                                    tier = null,
+                                    fallbackName = badge.fallbackName,
+                                    awardedAtMillis = badge.awardedAtMillis,
+                                )
+                            else -> null
+                        }
+                    }
+                    // Newest first; an undated award sorts last, and ties break on
+                    // the (frozen) key so the order is fully deterministic.
+                    .sortedWith(
+                        compareByDescending<EarnedAward> { it.awardedAtMillis ?: Long.MIN_VALUE }
+                            .thenBy { it.badgeKey },
+                    )
+                    // Collapse duplicate docs for the same key AFTER sorting, so the
+                    // survivor is the NEWEST one — never an older/undated doc. This
+                    // keeps recency consistent with `awardedAtByKey`, which likewise
+                    // carries the newest timestamp per key.
+                    .distinctBy { it.badgeKey }
+                    .take(RECENT_AWARDS_LIMIT)
+
             return BadgeShowcase(
                 ladders = ladders,
                 milestones = milestones,
+                recentAwards = recentAwards,
                 earnedCount = heldKeys.count { it in catalogKeys },
                 awardedAtByKey = awardedAt,
             )
