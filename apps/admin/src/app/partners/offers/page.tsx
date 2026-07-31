@@ -42,7 +42,9 @@ import {
   PARTNER_OFFER_TYPES,
   ApiError,
 } from '@/features/partners';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { translate } from '@/i18n';
+import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
 
 import styles from '../../kronjakt/page.module.css';
@@ -122,12 +124,8 @@ function offerDetailToForm(offer: AdminPartnerOfferDetail): OfferFormState {
     fixedDiscountMinorUnits:
       offer.fixedDiscountMinorUnits != null ? String(offer.fixedDiscountMinorUnits) : '',
     currencyCode: offer.currencyCode ?? '',
-    availableFrom: offer.availableFrom
-      ? new Date(offer.availableFrom).toISOString().slice(0, 16)
-      : '',
-    availableUntil: offer.availableUntil
-      ? new Date(offer.availableUntil).toISOString().slice(0, 16)
-      : '',
+    availableFrom: toLocalDateTimeValue(offer.availableFrom),
+    availableUntil: toLocalDateTimeValue(offer.availableUntil),
   };
 }
 
@@ -145,8 +143,8 @@ function formToRequest(form: OfferFormState): CreatePartnerOfferRequest {
       ? parseInt(form.fixedDiscountMinorUnits, 10)
       : null,
     currencyCode: form.currencyCode.trim().toUpperCase() || null,
-    availableFrom: form.availableFrom ? new Date(form.availableFrom).toISOString() : null,
-    availableUntil: form.availableUntil ? new Date(form.availableUntil).toISOString() : null,
+    availableFrom: localToIso(form.availableFrom),
+    availableUntil: localToIso(form.availableUntil),
   };
 }
 
@@ -313,24 +311,22 @@ const OfferForm = ({ initial, onSave, onCancel, isSaving, saveError, isEdit = fa
       </div>
 
       <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('partnerOffers.formAvailableFromLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableFrom}
-            onChange={(e) => set('availableFrom', e.target.value)}
-          />
-        </label>
-        <label className={styles.label}>
-          {t('partnerOffers.formAvailableUntilLabel')}
-          <input
-            className={styles.input}
-            type="datetime-local"
-            value={form.availableUntil}
-            onChange={(e) => set('availableUntil', e.target.value)}
-          />
-        </label>
+        <DateTimeField
+          id="po-available-from"
+          label={t('partnerOffers.formAvailableFromLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableFrom}
+          onChange={(next) => set('availableFrom', next)}
+        />
+        <DateTimeField
+          id="po-available-until"
+          label={t('partnerOffers.formAvailableUntilLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          value={form.availableUntil}
+          onChange={(next) => set('availableUntil', next)}
+        />
       </div>
 
       {saveError !== null && <p className={styles.errorText}>{saveError}</p>}

@@ -1,4 +1,8 @@
 {
+  "common": {
+    "dateLabel": "Datum",
+    "timeLabel": "Tid"
+  },
   "placeholder": {
     "plannedFunctionality": "Planerad funktionalitet",
     "defaultTodoNote": "Platshållarsida. Riktig data och åtgärder kräver backend-API-integration och autentisering via Firebase Authentication.",

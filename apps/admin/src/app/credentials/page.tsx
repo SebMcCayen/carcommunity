@@ -30,7 +30,9 @@ import {
   type CredentialStatus,
   type ManagedCredentialInput,
 } from '@/features/credentials';
+import { DateTimeField } from '@/components/ui/DateTimeField';
 import { translate } from '@/i18n';
+import { toLocalDateValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
 
 import styles from './page.module.css';
@@ -78,15 +80,6 @@ function categoryLabel(category: CredentialCategory): string {
   return t(`credentials.category.${category}`);
 }
 
-/** Converts a stored ISO string to the `YYYY-MM-DD` value an <input type=date> expects. */
-function isoToDateInput(iso: string | null): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 interface FormState {
   name: string;
   description: string;
@@ -121,8 +114,10 @@ function credentialToFormState(item: AdminManagedCredential): FormState {
     name: item.name,
     description: item.description,
     category: item.category,
-    expiresAt: isoToDateInput(item.expiresAt),
-    lastRotatedAt: isoToDateInput(item.lastRotatedAt),
+    // A malformed stored value yields '' — an empty field the operator can fix
+    // — rather than propagating an Invalid Date into the form.
+    expiresAt: toLocalDateValue(item.expiresAt),
+    lastRotatedAt: toLocalDateValue(item.lastRotatedAt),
     notes: item.notes,
   };
 }
@@ -182,31 +177,27 @@ function CredentialFields({
       />
 
       <div className={styles.dateRow}>
-        <div className={styles.dateField}>
-          <label className={styles.label} htmlFor={`${idPrefix}-expires`}>
-            {t('credentials.form.expiresLabel')}
-          </label>
-          <input
-            id={`${idPrefix}-expires`}
-            className={styles.input}
-            type="date"
-            value={form.expiresAt}
-            onChange={(e) => onChange({ expiresAt: e.target.value })}
-          />
-          <p className={styles.hint}>{t('credentials.form.expiresHint')}</p>
-        </div>
-        <div className={styles.dateField}>
-          <label className={styles.label} htmlFor={`${idPrefix}-rotated`}>
-            {t('credentials.form.rotatedLabel')}
-          </label>
-          <input
-            id={`${idPrefix}-rotated`}
-            className={styles.input}
-            type="date"
-            value={form.lastRotatedAt}
-            onChange={(e) => onChange({ lastRotatedAt: e.target.value })}
-          />
-        </div>
+        <DateTimeField
+          id={`${idPrefix}-expires`}
+          mode="date"
+          label={t('credentials.form.expiresLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          className={styles.dateField}
+          value={form.expiresAt}
+          onChange={(next) => onChange({ expiresAt: next })}
+          hint={<p className={styles.hint}>{t('credentials.form.expiresHint')}</p>}
+        />
+        <DateTimeField
+          id={`${idPrefix}-rotated`}
+          mode="date"
+          label={t('credentials.form.rotatedLabel')}
+          labelClassName={styles.label}
+          inputClassName={styles.input}
+          className={styles.dateField}
+          value={form.lastRotatedAt}
+          onChange={(next) => onChange({ lastRotatedAt: next })}
+        />
       </div>
 
       <label className={styles.label} htmlFor={`${idPrefix}-notes`}>
