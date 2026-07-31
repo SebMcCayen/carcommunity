@@ -18,8 +18,24 @@ import type { IncidentType } from './incidents-core';
 
 export const TRAFIKVERKET_ENDPOINT = 'https://api.trafikinfo.trafikverket.se/v2/data.json';
 
-/** Max situations pulled per sync (bounded write volume). */
-export const TRAFIKVERKET_QUERY_LIMIT = 500;
+/**
+ * Max situations pulled per sync.
+ *
+ * Set to 3000 to capture the FULL national active set. When measured on
+ * 2026-08-01 there were ~2,775 active Situations nationally; the previous cap
+ * of 500 truncated ~82% of them, and because the response is roadwork-heavy the
+ * short-lived incidents that matter most for a live map — accidents, closures —
+ * were almost always dropped behind the roadwork flood before they could be
+ * imported. 3000 clears that headroom (upstream count sits well under it), so
+ * accidents and other short-lived incidents are no longer truncated out.
+ *
+ * Deliberate cost tradeoff, accepted: a full national fetch raises Firestore
+ * write volume to ~206k writes/day (~70–120 SEK/month). The 30-minute schedule
+ * is unchanged. The upsert path already chunks commits at ≤400 writes/batch
+ * (see runTrafikverketSync), so the higher volume stays under the 500-write
+ * WriteBatch limit.
+ */
+export const TRAFIKVERKET_QUERY_LIMIT = 3000;
 
 /**
  * Builds the XML request body. Queries active road `Situation`s and includes
