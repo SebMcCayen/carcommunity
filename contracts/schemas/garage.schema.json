@@ -4,6 +4,13 @@
   "title": "Garage contract",
   "description": "Language-neutral garage/vehicle shapes shared by iOS, Android, backend, and admin. vehicle mirrors the Firestore `vehicles/{vehicleId}` document (docs/firebase-data-model.md), which is authenticated-readable by design. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered field (Seb product decision 2026-07): the owner opts in by filling the field, and it is then readable by ANY signed-in user — the `vehicles` read rule is `isAuthenticated()`, so it is gated on neither membership nor a suspension check. Represented here on purpose. It is the one exception — VIN, insurance data, and vehicle location remain unrepresentable and must never be added, as those were never intended to be public. Garage write callables use `requireActiveActor` (signed-in, not suspended, not deleted) — managing your own garage is deliberately NOT member-gated, and member gating is currently DISABLED repo-wide (`MEMBER_GATING_ENABLED = false` in functions/src/shared/memberGating.ts). Each user may have at most 5 vehicles. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
   "$defs": {
+    "catalogueId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "A stable machine id from contracts/vehicles/vehicle-catalogue.json, or the reserved `other` (\"not listed\") bucket. Shape only — MEMBERSHIP is validated server-side against the catalogue (functions/src/garage/vehicle-catalogue.ts), which no JSON-Schema pattern can express. Model ids are unique only WITHIN a manufacturer (`3` exists under both Mazda and MG), so a modelId is meaningful only together with its makeId, and the pair is validated together."
+    },
     "vehiclePowertrain": {
       "type": "string",
       "enum": ["petrol", "diesel", "hybrid", "electric", "plug_in_hybrid", "other"],
@@ -14,12 +21,35 @@
       "description": "Firestore `vehicles/{vehicleId}`. Any authenticated user can read; all writes go through the member-only garage.* callables.",
       "properties": {
         "userId": { "$ref": "common.schema.json#/$defs/uid" },
-        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "make": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Human-readable manufacturer, and the field every reader renders (garage list, public car profile, live main-car mirror, map marker subtitle, admin web). For a structured vehicle it is DERIVED server-side from `makeId`'s catalogue display name, so it can never contradict the id; for a pre-catalogue vehicle it is the owner's original free text, left exactly as they typed it. Never aggregate on this — aggregate on `makeId`."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Human-readable model; same derivation rules as `make`. When the owner selects the `other` model bucket on a pre-catalogue vehicle, the existing text is KEPT rather than replaced by a placeholder, so no member's only description of their car is destroyed."
+        },
+        "makeId": {
+          "oneOf": [{ "$ref": "#/$defs/catalogueId" }, { "type": "null" }],
+          "description": "Catalogue manufacturer id — THE aggregation key (\"how many Volvos does the community own?\"). `other` means the owner selected \"Other / not listed\" because their brand is not in the catalogue: an explicit, countable bucket rather than unparseable prose. null means the vehicle was written on the legacy free-text path (created before this field, or by a shipped client), so it is simply outside the aggregate — `makeId == null` queries exactly the unmapped set. NOT in `required`: pre-catalogue documents omit the field entirely, and none of them are backfilled or fuzzy-matched, because a wrong mapping is worse than an unmapped car."
+        },
+        "modelId": {
+          "oneOf": [{ "$ref": "#/$defs/catalogueId" }, { "type": "null" }],
+          "description": "Catalogue model id within `makeId`. `other` with a REAL makeId is the actionable catalogue-growth signal (\"someone owns a Volvo whose model we do not list\"); `other` with `makeId: 'other'` is a count-only signal. null on the legacy path. Written together with `makeId` and never independently. NOT in `required` (see makeId)."
+        },
+        "catalogueVersion": {
+          "type": ["string", "null"],
+          "maxLength": 32,
+          "description": "The catalogue release (contracts/vehicles/vehicle-catalogue.json `version`) the ids were selected from, taken from the SERVER's own catalogue and never from the client's claim. Gives every aggregate provenance and makes a later catalogue expansion auditable. null whenever makeId/modelId are null. NOT in `required` (see makeId)."
+        },
         "modelYear": {
           "type": "integer",
           "minimum": 1886,
-          "description": "Upper bound is currentYear + 2, validated server-side."
+          "description": "Model year. A STRUCTURED write (makeId present) is held to the window the selector offers — `minModelYear … currentYear + maxModelYearOffset` from contracts/vehicles/vehicle-catalogue.json, i.e. 1900…currentYear+1 — evaluated against the server clock. The legacy free-text path keeps its wider 1886…currentYear+2 bound so no shipped client and no existing vehicle becomes unsaveable."
         },
         "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
@@ -66,10 +96,28 @@
     },
     "addVehicleRequest": {
       "type": "object",
-      "description": "Input for garage.addVehicle (member-only; max 5 vehicles per user).",
+      "description": "Input for garage.addVehicle (max 5 vehicles per user). Exactly ONE identity form must be used, and mixing them is rejected outright (a request carrying both is always a client bug, and silently preferring one would store a document whose text and ids disagree):\n\n1. STRUCTURED — `makeId` + `modelId`, what every current client sends. The member SELECTS both from the catalogue; the server validates the pair against contracts/vehicles/vehicle-catalogue.json and DERIVES the stored `make`/`model` display text itself, so a client cannot label a `volvo` id \"Ferrari\".\n2. LEGACY — `make` + `model` free text, what shipped clients send. Still accepted verbatim so those builds keep working; leaves makeId/modelId null, i.e. the vehicle stays outside the aggregate.\n\nNeither identity form appears in `required`, because \"exactly one of two groups\" is not expressible here without a oneOf that code generators mangle. The server enforces it (functions/src/garage/garage-core.ts refineVehicleIdentity) and rejects a request that names neither.",
       "properties": {
-        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "makeId": {
+          "$ref": "#/$defs/catalogueId",
+          "description": "Catalogue manufacturer id, or `other` for \"not listed\". Sent together with modelId. Mutually exclusive with make/model."
+        },
+        "modelId": {
+          "$ref": "#/$defs/catalogueId",
+          "description": "Catalogue model id within makeId, or `other`. `makeId: 'other'` accepts only `modelId: 'other'` — once the brand is unknown there is no model list, and a real model id under an unknown brand would produce nonsense pairs in the aggregate."
+        },
+        "make": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "LEGACY free-text manufacturer (shipped clients only). Mutually exclusive with makeId/modelId; must be sent together with `model` on add."
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "LEGACY free-text model (shipped clients only). See `make`."
+        },
         "modelYear": { "type": "integer", "minimum": 1886 },
         "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },
@@ -81,12 +129,12 @@
           "description": "Optional user-entered registration plate (raw). Server trims / collapses internal whitespace / uppercases before storing and enforces the 12-char cap against the NORMALISED value, so a raw string with padding/whitespace is accepted; null / empty clears it. Stored as ≤12 chars (see vehicle.registrationPlate). Format-agnostic (no country regex)."
         }
       },
-      "required": ["make", "model", "modelYear", "powertrain"],
+      "required": ["modelYear", "powertrain"],
       "additionalProperties": false
     },
     "updateVehicleRequest": {
       "type": "object",
-      "description": "Input for garage.updateVehicle. imagePath sets the COVER photo and must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (or null to clear all photos); the callable reconciles photoPaths so imagePath === photoPaths[0]. Multi-photo add/remove/reorder go through the dedicated garage.addVehiclePhoto/removeVehiclePhoto/reorderVehiclePhotos callables.",
+      "description": "Input for garage.updateVehicle. Identity follows the same two mutually exclusive forms as addVehicleRequest (structured makeId+modelId, or legacy make+model), except that neither is required — a partial edit that touches only a photo or a plate must stay legal. A LEGACY free-text edit CLEARS makeId/modelId/catalogueVersion: text that no longer matches the stored ids would silently corrupt the per-manufacturer counts, so the vehicle drops out of the aggregate rather than lying inside it. On this path a single field (make OR model) may be sent alone, which shipped clients are entitled to do. imagePath sets the COVER photo and must lie under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix (or null to clear all photos); the callable reconciles photoPaths so imagePath === photoPaths[0]. Multi-photo add/remove/reorder go through the dedicated garage.addVehiclePhoto/removeVehiclePhoto/reorderVehiclePhotos callables.",
       "properties": {
         "vehicleId": {
           "type": "string",
@@ -94,8 +142,16 @@
           "maxLength": 300,
           "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$"
         },
-        "make": { "type": "string", "minLength": 1, "maxLength": 80 },
-        "model": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "makeId": {
+          "$ref": "#/$defs/catalogueId",
+          "description": "Catalogue manufacturer id, or `other`. Sent together with modelId; re-derives make/model and re-stamps catalogueVersion. Mutually exclusive with make/model."
+        },
+        "modelId": {
+          "$ref": "#/$defs/catalogueId",
+          "description": "Catalogue model id within makeId, or `other`. Selecting `other` on a pre-catalogue vehicle KEEPS the existing display text instead of replacing it with a placeholder."
+        },
+        "make": { "type": "string", "minLength": 1, "maxLength": 80, "description": "LEGACY free-text manufacturer (shipped clients). Clears makeId/modelId/catalogueVersion." },
+        "model": { "type": "string", "minLength": 1, "maxLength": 80, "description": "LEGACY free-text model (shipped clients). Clears makeId/modelId/catalogueVersion." },
         "modelYear": { "type": "integer", "minimum": 1886 },
         "powertrain": { "$ref": "#/$defs/vehiclePowertrain" },
         "engineDescription": { "type": ["string", "null"], "maxLength": 120 },

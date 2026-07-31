@@ -192,9 +192,16 @@ fun GarageRoute(
         val initial =
             vehicle?.let {
                 VehicleForm(
-                    make = it.make,
-                    model = it.model,
-                    modelYear = it.modelYear.toString(),
+                    // Only real catalogue ids pre-select anything. A vehicle from
+                    // before the catalogue opens with EMPTY selectors and its saved
+                    // text carried alongside (legacyMake/legacyModel) — we refuse
+                    // to guess which catalogue entry the old free text meant, and
+                    // the owner sees exactly what is being replaced.
+                    makeId = it.makeId,
+                    modelId = it.modelId,
+                    legacyMake = it.make,
+                    legacyModel = it.model,
+                    modelYear = it.modelYear,
                     powertrain = it.powertrain,
                     engineDescription = it.engineDescription ?: "",
                     modifications = it.modifications ?: "",

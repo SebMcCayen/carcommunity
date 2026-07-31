@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/SebMcCayen/carcommunity/contracts/vehicles/vehicle-catalogue.schema.json",
+  "title": "Vehicle catalogue registry",
+  "description": "Shape of contracts/vehicles/vehicle-catalogue.json — the ONE static manufacturer/model catalogue behind the garage's make/model/year selectors. Android, the Cloud Functions backend and the admin web all derive from this single file (Android and the backend via generated mirrors produced by scripts/generate-vehicle-catalogue.mjs, guarded against drift by CI and a unit test), because aggregation (\"how many Volvos does the community own?\") is only trustworthy if every writer and reader agrees on the same ids. Members SELECT from these values; they never type make/model (Seb product decision 2026-07). The `other` bucket (see otherId) is an implicit extra option that is NOT listed here — it is synthesised at both ends so an unlisted brand/model can still be recorded honestly instead of locking the owner out.",
+  "type": "object",
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$",
+      "description": "Catalogue release. Stamped onto every vehicle written with structured ids (vehicles/{id}.catalogueVersion) so aggregation can tell which release a selection came from, and so a later catalogue expansion is auditable. Bump the MINOR part when manufacturers/models are added, the PATCH part for display-name-only fixes, and the MAJOR part only if an id is ever retired (which should not happen — ids are permanent)."
+    },
+    "otherId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The reserved id for the \"Other / not listed\" bucket, offered as an extra option at BOTH levels: as a manufacturer, and as a model inside every manufacturer. It must never appear as a real manufacturer or model id in `manufacturers`. Selecting it is a SELECTION, not free text, so the no-typing rule holds and aggregation keeps an explicit, honest bucket instead of unparseable prose. A vehicle with modelId === otherId but a real makeId is the actionable signal for growing the catalogue (\"someone owns a Volvo whose model we do not list\")."
+    },
+    "minModelYear": {
+      "type": "integer",
+      "minimum": 1886,
+      "description": "First year OFFERED by the year selector. Deliberately later than the backend's absolute floor (garage-core MIN_MODEL_YEAR = 1886, first automobile): a bounded, scrollable list is the product requirement, and no Kungsbacka member owns a 19th-century car. Widen this rather than adding a text field if one ever turns up."
+    },
+    "maxModelYearOffset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5,
+      "description": "How many years past the CURRENT year the selector offers and the backend accepts for a structured write (1 = next model year, so a 2027 car is addable during 2026). Evaluated against the server clock on the backend and the device clock in the client, so a device with a skewed clock can offer a year the backend rejects — that is the safe direction."
+    },
+    "manufacturers": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Every manufacturer offered. Render order is meaningful and is the order stored here: `common` (plausible on Swedish roads) first in rough prevalence order, then the remainder alphabetically by display name.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+            "description": "PERMANENT machine id, stored in vehicles/{id}.makeId. Derived from the display name once, at authoring time, and frozen from then on: renaming `name` must NEVER change this, or every historical aggregate for that brand silently splits in two."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Display name. A proper noun — NOT localized, and deliberately absent from contracts/localization/*.json (only the labels AROUND the selectors are translated)."
+          },
+          "common": {
+            "type": "boolean",
+            "description": "True for brands commonly seen on Swedish roads. Clients surface these above the alphabetical remainder so the first screenful is useful without searching. Absent means false."
+          },
+          "models": {
+            "type": "array",
+            "minItems": 1,
+            "description": "The manufacturer's models, alphabetical by display name. Trim levels are deliberately NOT separate entries (no `GTI`, no `T5`) — that would multiply the data without helping aggregation; a few culturally distinct performance models (M3, Lancer Evolution, Civic Type R) are the intentional exceptions.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                  "description": "PERMANENT machine id, stored in vehicles/{id}.modelId. Unique WITHIN the manufacturer only — `3` exists under both Mazda and MG — so a model id is only ever meaningful together with its makeId."
+                },
+                "name": { "type": "string", "minLength": 1, "description": "Display name (proper noun, not localized)." }
+              },
+              "required": ["id", "name"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["id", "name", "models"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["version", "otherId", "minModelYear", "maxModelYearOffset", "manufacturers"],
+  "additionalProperties": false
+}

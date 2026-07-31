@@ -144,8 +144,13 @@ export const updateVehicle = onCall(CALLABLE_OPTS, async (request): Promise<Vehi
     if (!snap.exists || snap.data()?.userId !== actor.uid) {
       throw new HttpsError('not-found', 'Vehicle not found.');
     }
-    const { update, changedFields } = buildVehicleUpdate(input, () =>
-      FieldValue.serverTimestamp(),
+    // The stored data is handed in so an "Other / not listed" selection KEEPS
+    // the label this vehicle already carries (a pre-catalogue car's original
+    // free text) instead of flattening it to a placeholder.
+    const { update, changedFields } = buildVehicleUpdate(
+      input,
+      () => FieldValue.serverTimestamp(),
+      snap.data() ?? {},
     );
     if (changedFields.length === 0) {
       throw new HttpsError('invalid-argument', 'No vehicle fields to update.');

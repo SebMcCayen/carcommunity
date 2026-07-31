@@ -2,10 +2,10 @@ package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -27,7 +27,20 @@ class GarageScreensTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
     private fun vehicle() =
-        Vehicle("v1", "Volvo", "240", 1988, VehiclePowertrain.PETROL, "B230")
+        Vehicle(
+            id = "v1",
+            make = "Volvo",
+            model = "240",
+            makeId = "volvo",
+            modelId = "240",
+            modelYear = 1988,
+            powertrain = VehiclePowertrain.PETROL,
+            engineDescription = "B230",
+        )
+
+    /** The accessibility label [CatalogueSelectorField] exposes for an EMPTY selector. */
+    private fun emptySelector(labelRes: Int, placeholderRes: Int) =
+        "${str(labelRes)}, ${str(placeholderRes)}"
 
     @Test
     fun emptyGarage_showsEmptyMessageAndInvokesOnAdd() {
@@ -71,7 +84,19 @@ class GarageScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 VehicleFormScreen(
-                    initial = VehicleForm(),
+                    // Make/model/year are SELECTED, never typed: they are seeded
+                    // here as the pickers would set them. Driving the picker
+                    // sheets themselves is not exercised on the emulator — the
+                    // selection LOGIC (cascade, catalogue membership, year window,
+                    // the Other bucket) is covered off-Compose by
+                    // VehicleCatalogueTest / VehicleValidationTest, which run in
+                    // the blocking gate rather than this informational job.
+                    initial =
+                        VehicleForm(
+                            makeId = "saab",
+                            modelId = "900",
+                            modelYear = 1990,
+                        ),
                     isEdit = false,
                     saveStatus = VehicleSaveStatus.Idle,
                     currentYear = 2026,
@@ -80,12 +105,11 @@ class GarageScreensTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.garage_make)).performTextInput("Saab")
-        composeTestRule.onNodeWithText(str(R.string.garage_model)).performTextInput("900")
-        composeTestRule.onNodeWithText(str(R.string.garage_modelYear)).performTextInput("1990")
         composeTestRule.onNodeWithText(str(R.string.garage_powertrain_petrol)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_saveVehicle)).performScrollTo().performClick()
-        assertEquals("Saab", saved?.make)
+        // The payload carries catalogue IDS; the backend derives the display text.
+        assertEquals("saab", saved?.makeId)
+        assertEquals("900", saved?.modelId)
         assertEquals(1990, saved?.modelYear)
         assertEquals(VehiclePowertrain.PETROL, saved?.powertrain)
     }
@@ -176,5 +200,96 @@ class GarageScreensTest {
         }
         composeTestRule.onNodeWithText(str(R.string.garage_saveVehicle)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_validationMakeRequired)).assertIsDisplayed()
+    }
+
+    @Test
+    fun form_modelSelector_isDisabledUntilAManufacturerIsChosen() {
+        // The cascade, visible: model ids repeat across brands, so there is nothing
+        // to offer (and no honest list to show) before a manufacturer is picked.
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial = VehicleForm(),
+                    isEdit = false,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithContentDescription(
+                emptySelector(R.string.garage_model, R.string.garage_selectMakeFirst),
+            )
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun form_legacyVehicle_showsItsSavedTextAndAsksForASelection() {
+        // Editing a car created before the catalogue: nothing is pre-selected (we
+        // never guess which entry the old free text meant) and the saved text is
+        // shown so the owner sees what they are replacing.
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial = VehicleForm(legacyMake = "Wolwo", legacyModel = "245", modelYear = 1985),
+                    isEdit = true,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = {},
+                    onCancel = {},
+                )
+            }
+        }
+        // Asserted through the selector's accessibility description, not the raw
+        // text: CatalogueSelectorField clears its text field's semantics subtree
+        // (which contains the supporting text), so the description is BOTH what a
+        // screen reader announces and the only handle a test has on that text.
+        composeTestRule
+            .onNodeWithContentDescription(
+                str(R.string.garage_legacySavedValue).format("Wolwo"),
+                substring = true,
+            )
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.garage_legacyReselectHint))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun form_otherSelection_rendersItsLabelAndReportsTheOtherIds() {
+        // The escape hatch: an unlisted brand is a SELECTION, so a member with a
+        // rare import or a kit car is not locked out — and the form explains that
+        // the choice is recorded rather than being a dead end.
+        var saved: VehicleInput? = null
+        composeTestRule.setContent {
+            KccTheme {
+                VehicleFormScreen(
+                    initial =
+                        VehicleForm(
+                            makeId = VehicleCatalogue.OTHER_ID,
+                            modelId = VehicleCatalogue.OTHER_ID,
+                            modelYear = 1998,
+                        ),
+                    isEdit = false,
+                    saveStatus = VehicleSaveStatus.Idle,
+                    currentYear = 2026,
+                    onSave = { saved = it },
+                    onCancel = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.garage_catalogueOtherHint))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.garage_powertrain_petrol)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.garage_saveVehicle)).performScrollTo().performClick()
+        assertEquals(VehicleCatalogue.OTHER_ID, saved?.makeId)
+        assertEquals(VehicleCatalogue.OTHER_ID, saved?.modelId)
     }
 }

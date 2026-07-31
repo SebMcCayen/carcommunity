@@ -28,6 +28,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import coil.compose.AsyncImage
 import coil.network.HttpException
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImage
 
@@ -224,7 +225,10 @@ private fun ColumnScope.VehicleCardSummary(
         modifier = Modifier.align(photoStyle.alignment),
     )
     Text(
-        text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
+        // Resolved through VehicleDisplay, not read raw: a catalogue vehicle shows
+        // the catalogue's current name, an "Other / not listed" one shows the
+        // localized label, and a pre-catalogue one shows the owner's own text.
+        text = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther)),
         style = MaterialTheme.typography.titleMedium,
         color = MaterialTheme.colorScheme.onSurface,
     )

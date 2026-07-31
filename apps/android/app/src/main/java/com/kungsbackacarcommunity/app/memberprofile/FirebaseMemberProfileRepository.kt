@@ -137,6 +137,13 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         id = id,
         make = make,
         model = model,
+        // Carry the catalogue ids here TOO. Another member's car is rendered by
+        // the same VehicleCard, which resolves its headline through
+        // VehicleDisplay — dropping the ids would show the stored English
+        // placeholder for an "Other / not listed" car instead of the viewer's own
+        // localized label. (The plate had exactly this bug once; same shape.)
+        makeId = getString("makeId"),
+        modelId = getString("modelId"),
         modelYear = modelYear,
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),

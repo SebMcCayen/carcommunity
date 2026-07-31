@@ -6,10 +6,17 @@ import java.util.Locale
  * Garage / vehicles domain + validation (Phase 12 slice 13).
  *
  * Mirrors the backend garage-core contract: the powertrain vocabulary, the
- * field bounds (make/model 1..N, modelYear 1886..currentYear+2), and the plate
- * normalisation. `registrationPlate` is a DELIBERATELY PUBLIC, user-entered
- * field (Seb product decision) shown on the car profile; VIN and other private
- * data are still never represented. Pure Kotlin — JVM-testable.
+ * field bounds, and the plate normalisation. `registrationPlate` is a
+ * DELIBERATELY PUBLIC, user-entered field (Seb product decision) shown on the
+ * car profile; VIN and other private data are still never represented. Pure
+ * Kotlin — JVM-testable.
+ *
+ * Make, model and year are SELECTED from [VehicleCatalogue], never typed
+ * (2026-07), so the community can count cars per manufacturer. The form
+ * therefore carries catalogue ids ([VehicleForm.makeId] / [VehicleForm.modelId])
+ * and sends only those; the backend derives the display text. Vehicles created
+ * before the catalogue hold free text and no ids — see [VehicleForm.legacyMake]
+ * for how editing one of those works without losing anything.
  */
 
 /**
@@ -55,8 +62,25 @@ enum class VehiclePowertrain(val wire: String, val isSelectable: Boolean) {
 /** A garage vehicle / car profile (vehicles/{id}). */
 data class Vehicle(
     val id: String,
+    /**
+     * Human-readable make. For a catalogue vehicle the backend DERIVED this from
+     * [makeId]; for a vehicle created before the catalogue existed it is the
+     * owner's original free text, untouched. Render it through
+     * [VehicleDisplay.makeLabel] rather than raw so the "Other / not listed"
+     * bucket shows a localized label — but it is always safe to fall back to,
+     * which is what keeps pre-catalogue cars rendering exactly as they did.
+     */
     val make: String,
     val model: String,
+    /**
+     * Catalogue manufacturer id (`volvo`, or [VehicleCatalogue.OTHER_ID]), or
+     * null for a vehicle written on the legacy free-text path. This — not
+     * [make] — is what community aggregation counts, which is the whole reason
+     * the form uses dropdowns.
+     */
+    val makeId: String? = null,
+    /** Catalogue model id within [makeId] (or [VehicleCatalogue.OTHER_ID]); null on the legacy path. */
+    val modelId: String? = null,
     val modelYear: Int,
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
@@ -111,21 +135,40 @@ data class Vehicle(
     val isMainCar: Boolean = false,
 )
 
-/** Editable form state (modelYear is text while typing). */
+/**
+ * Editable form state.
+ *
+ * Make/model/year are SELECTIONS: [makeId], [modelId] and [modelYear] hold
+ * catalogue ids / a picked year, and there is deliberately no free-text field
+ * for any of them.
+ *
+ * [legacyMake] / [legacyModel] are read-only carriers for a vehicle created
+ * before the catalogue: the form opens with nothing selected (we refuse to guess
+ * which catalogue entry "Wolwo 245" meant) and shows the saved text so the owner
+ * can see what they are replacing. They are never sent anywhere.
+ */
 data class VehicleForm(
-    val make: String = "",
-    val model: String = "",
-    val modelYear: String = "",
+    val makeId: String? = null,
+    val modelId: String? = null,
+    val modelYear: Int? = null,
     val powertrain: VehiclePowertrain? = null,
     val engineDescription: String = "",
     val modifications: String = "",
     val registrationPlate: String = "",
+    val legacyMake: String = "",
+    val legacyModel: String = "",
 )
 
-/** The validated add/update payload. */
+/**
+ * The validated add/update payload.
+ *
+ * Carries the catalogue IDS only — the display strings are derived server-side
+ * from the same catalogue, so a client can never store a `volvo` id labelled
+ * "Ferrari".
+ */
 data class VehicleInput(
-    val make: String,
-    val model: String,
+    val makeId: String,
+    val modelId: String,
     val modelYear: Int,
     val powertrain: VehiclePowertrain,
     val engineDescription: String?,
@@ -137,9 +180,7 @@ data class VehicleInput(
 /** First validation problem, or null when valid. */
 enum class VehicleFieldError {
     MAKE_REQUIRED,
-    MAKE_TOO_LONG,
     MODEL_REQUIRED,
-    MODEL_TOO_LONG,
     MODEL_YEAR_REQUIRED,
     MODEL_YEAR_INVALID,
     POWERTRAIN_REQUIRED,
@@ -149,15 +190,23 @@ enum class VehicleFieldError {
 }
 
 object VehicleValidation {
-    const val MIN_MODEL_YEAR = 1886
+    /**
+     * First model year the selector OFFERS (catalogue `minModelYear`).
+     *
+     * Deliberately later than the backend's absolute floor of 1886, which the
+     * backend still honours on its legacy free-text path so no pre-existing
+     * vehicle became unsaveable. Nothing this form produces can be older than
+     * this, because the year is picked from a list.
+     */
+    const val MIN_MODEL_YEAR = VehicleCatalogue.MIN_MODEL_YEAR
 
     /** Backend cap (garage-core MAX_VEHICLE_PHOTOS): photos per vehicle. */
     const val MAX_VEHICLE_PHOTOS = 10
 
-    fun maxModelYear(currentYear: Int): Int = currentYear + 2
+    /** Last offered year: the next model year (catalogue `maxModelYearOffset`). */
+    fun maxModelYear(currentYear: Int): Int = VehicleCatalogue.maxModelYear(currentYear)
 
-    /** Backend bounds (garage-core): make/model ≤80, engineDescription ≤120. */
-    const val MAKE_MODEL_MAX_LENGTH = 80
+    /** Backend bound (garage-core): engineDescription ≤120. */
     const val ENGINE_DESCRIPTION_MAX_LENGTH = 120
 
     /** Backend bound (garage-core VEHICLE_DESCRIPTION_MAX_LENGTH) for modifications. */
@@ -182,18 +231,26 @@ object VehicleValidation {
         return collapsed.ifEmpty { null }
     }
 
-    /** Returns the first validation error, or null when the form is valid. */
+    /**
+     * Returns the first validation error, or null when the form is valid.
+     *
+     * Make and model are checked as SELECTIONS against [VehicleCatalogue]: the
+     * "Other / not listed" bucket is accepted at both levels, and a model is only
+     * valid under the manufacturer that offers it (model ids repeat across
+     * brands, so a stale selection left over from switching manufacturer must be
+     * caught here rather than sent).
+     */
     fun validate(form: VehicleForm, currentYear: Int): VehicleFieldError? {
-        val make = form.make.trim()
-        if (make.isEmpty()) return VehicleFieldError.MAKE_REQUIRED
-        if (make.length > MAKE_MODEL_MAX_LENGTH) return VehicleFieldError.MAKE_TOO_LONG
-        val model = form.model.trim()
-        if (model.isEmpty()) return VehicleFieldError.MODEL_REQUIRED
-        if (model.length > MAKE_MODEL_MAX_LENGTH) return VehicleFieldError.MODEL_TOO_LONG
-        val yearText = form.modelYear.trim()
-        if (yearText.isEmpty()) return VehicleFieldError.MODEL_YEAR_REQUIRED
-        val year = yearText.toIntOrNull() ?: return VehicleFieldError.MODEL_YEAR_INVALID
-        if (year < MIN_MODEL_YEAR || year > maxModelYear(currentYear)) {
+        val makeId = form.makeId
+        if (makeId == null) return VehicleFieldError.MAKE_REQUIRED
+        if (makeId != VehicleCatalogue.OTHER_ID && !VehicleCatalogue.isKnownMake(makeId)) {
+            return VehicleFieldError.MAKE_REQUIRED
+        }
+        if (!VehicleCatalogue.isSelectableModel(makeId, form.modelId)) {
+            return VehicleFieldError.MODEL_REQUIRED
+        }
+        val year = form.modelYear ?: return VehicleFieldError.MODEL_YEAR_REQUIRED
+        if (!VehicleCatalogue.isOfferedYear(year, currentYear)) {
             return VehicleFieldError.MODEL_YEAR_INVALID
         }
         if (form.powertrain == null) return VehicleFieldError.POWERTRAIN_REQUIRED
@@ -216,9 +273,9 @@ object VehicleValidation {
     fun toInput(form: VehicleForm, currentYear: Int): VehicleInput? {
         if (validate(form, currentYear) != null) return null
         return VehicleInput(
-            make = form.make.trim(),
-            model = form.model.trim(),
-            modelYear = form.modelYear.trim().toInt(),
+            makeId = form.makeId!!,
+            modelId = form.modelId!!,
+            modelYear = form.modelYear!!,
             powertrain = form.powertrain!!,
             engineDescription = form.engineDescription.trim().takeIf { it.isNotEmpty() },
             modifications = form.modifications.trim().takeIf { it.isNotEmpty() },

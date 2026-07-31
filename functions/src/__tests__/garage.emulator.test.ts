@@ -176,6 +176,84 @@ describe('garage-addVehicle', () => {
     ).toBe('functions/invalid-argument');
   });
 
+  it('stores a CATALOGUE selection and derives the display text server-side', async () => {
+    // The point of the whole feature, end-to-end: the client sends only ids and
+    // the DEPLOYED callable resolves the text. A client that could send the text
+    // too could label a `volvo` id "Ferrari" and the per-manufacturer counts
+    // would stop meaning anything.
+    await signInAs(member);
+    const { vehicleId } = (
+      await call('garage-addVehicle', {
+        makeId: 'volvo',
+        modelId: '740',
+        modelYear: 1988,
+        powertrain: 'petrol',
+      })
+    ).data as { vehicleId: string };
+    const docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(docData.makeId).toBe('volvo');
+    expect(docData.modelId).toBe('740');
+    expect(docData.make).toBe('Volvo');
+    expect(docData.model).toBe('740');
+    expect(typeof docData.catalogueVersion).toBe('string');
+    await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+  });
+
+  it('rejects ids the catalogue does not know, and a mixed request', async () => {
+    // The dropdown is UX; THIS is the enforcement. A hand-rolled request must not
+    // be able to invent a manufacturer, borrow another brand's model, or send
+    // both identity forms at once.
+    await signInAs(member);
+    const base = { modelYear: 1988, powertrain: 'petrol' };
+    expect(
+      await callableErrorCode(
+        call('garage-addVehicle', { ...base, makeId: 'ferrarri', modelId: 'other' }),
+      ),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(call('garage-addVehicle', { ...base, makeId: 'mazda', modelId: 'mgb' })),
+    ).toBe('functions/invalid-argument');
+    expect(
+      await callableErrorCode(
+        call('garage-addVehicle', { ...base, makeId: 'volvo', modelId: '740', make: 'Ferrari' }),
+      ),
+    ).toBe('functions/invalid-argument');
+    // A structured write is also held to the OFFERED year window, which is
+    // tighter than the legacy path's.
+    expect(
+      await callableErrorCode(
+        call('garage-addVehicle', {
+          makeId: 'volvo',
+          modelId: '740',
+          modelYear: new Date().getFullYear() + 2,
+          powertrain: 'petrol',
+        }),
+      ),
+    ).toBe('functions/invalid-argument');
+  });
+
+  it('keeps a pre-catalogue label when its owner selects "Other"', async () => {
+    // The migration promise, end-to-end: a car added before the catalogue keeps
+    // its free text and gains no ids; when its owner later edits it and their
+    // model genuinely is not listed, the text they originally typed SURVIVES
+    // rather than being flattened to a placeholder.
+    await signInAs(member);
+    const { vehicleId } = (
+      await call('garage-addVehicle', { ...validAdd, make: 'Volvo', model: 'Duett' })
+    ).data as { vehicleId: string };
+    let docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(docData.makeId).toBeNull();
+    expect(docData.model).toBe('Duett');
+
+    await call('garage-updateVehicle', { vehicleId, makeId: 'volvo', modelId: 'other' });
+    docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
+    expect(docData.makeId).toBe('volvo');
+    expect(docData.modelId).toBe('other');
+    expect(docData.make).toBe('Volvo');
+    expect(docData.model).toBe('Duett');
+    await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+  });
+
   it('stores the intentionally-public registration plate, normalised', async () => {
     await signInAs(member);
     const { vehicleId } = (

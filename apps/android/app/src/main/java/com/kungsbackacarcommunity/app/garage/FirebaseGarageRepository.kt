@@ -114,8 +114,12 @@ class FirebaseGarageRepository private constructor(
 
 private fun VehicleInput.toData(): Map<String, Any?> =
     mapOf(
-        "make" to make,
-        "model" to model,
+        // Catalogue IDS only. The backend derives the stored `make`/`model`
+        // display text from the same catalogue, and REJECTS a request carrying
+        // both forms (garage-core refineVehicleIdentity) — rightly so: a client
+        // that could send both could label a `volvo` id "Ferrari".
+        "makeId" to makeId,
+        "modelId" to modelId,
         "modelYear" to modelYear,
         "powertrain" to powertrain.wire,
         // Always sent (possibly null) so an edit can CLEAR the description —
@@ -139,6 +143,13 @@ private fun DocumentSnapshot.toVehicle(): Vehicle? {
         id = id,
         make = make,
         model = model,
+        // Catalogue ids: absent on every vehicle created before the catalogue, and
+        // that is a supported state, NOT a broken document — the display text
+        // above is then the owner's original free text and is rendered as-is
+        // (VehicleDisplay). Never make these required here: doing so would make
+        // every pre-catalogue car vanish from its owner's garage.
+        makeId = getString("makeId"),
+        modelId = getString("modelId"),
         modelYear = modelYear,
         powertrain = powertrain,
         engineDescription = getString("engineDescription"),
