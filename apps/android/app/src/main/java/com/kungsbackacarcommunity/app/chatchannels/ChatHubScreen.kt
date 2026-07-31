@@ -41,6 +41,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.paneTitle
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.sp
@@ -274,11 +276,18 @@ fun ChatHubPopup(
 }
 
 /**
- * Shared hub body: a top bar (title, plus a Back arrow inside a sub-screen) and a
- * tab row switching between the
+ * Shared hub body: a tab row switching between the
  * COMMUNITY channel, the caller's CONVOY channels, FRIENDS (the existing 1:1 DMs),
- * and the in-app NOTIFICATIONS inbox. Rendered inside either the full-screen
- * [ChatHubRoute] surface or the translucent [ChatHubPopup].
+ * and the in-app NOTIFICATIONS inbox — plus, inside a sub-screen only, a top bar
+ * carrying Back and the conversation's name. Rendered inside either the
+ * full-screen [ChatHubRoute] surface or the translucent [ChatHubPopup].
+ *
+ * TITLE. At hub level there is deliberately no title bar. The four tabs sit at
+ * the top of the card and already name the section the member is looking at, so
+ * a "Chat" heading above them was pure chrome eating vertical space — the same
+ * reasoning (and the same hub) as PR #627, which removed the "Notifications" and
+ * "Messages" headings from two of these tabs. The hub keeps an ACCESSIBLE name
+ * via a pane title, so a screen reader still hears what opened.
  *
  * Friends and Convoys have a second level (a list → a thread/channel); that
  * nested navigation is local state here, and system Back pops it before closing
@@ -434,35 +443,55 @@ private fun ChatHubContent(
         if (inSubScreen) popSubScreen() else onClose()
     }
 
-    val title =
+    // The SUB-SCREEN title only. At hub level the bar used to read "Chat", which
+    // said nothing the four tabs directly beneath it did not already say — the
+    // same redundancy PR #627 removed from the Notifications and Messages
+    // sections inside this very hub. Inside a thread or a convoy channel the tab
+    // row is hidden, so the bar is then the ONLY thing naming the conversation
+    // and it stays. Null therefore means "hub level, no bar".
+    val subScreenTitle: String? =
         when {
             inConvoyChannel ->
                 openConvoyTitle ?: stringResource(R.string.chatHub_convoyUntitled)
             inFriendThread -> dmOtherName ?: stringResource(R.string.dm_unknownMember)
-            else -> stringResource(R.string.chatHub_title)
+            else -> null
         }
+
+    // The hub's accessible name, with no pixels spent on it. Dropping the visible
+    // title must not leave the panel silent: it appears OVER the map, and a
+    // TalkBack user who opened it would otherwise get no announcement of what
+    // just arrived (the shell panel itself only labels its drag handle). A pane
+    // title is announced when the pane appears and is reachable afterwards, which
+    // is exactly what the removed heading was doing for screen readers — so
+    // `chatHub.title` is still used, just no longer drawn.
+    val hubPaneTitle = stringResource(R.string.chatHub_title)
 
     Column(
         modifier =
             Modifier
                 .fillMaxSize()
+                .semantics { paneTitle = hubPaneTitle }
                 .then(if (applyStatusBarInset) Modifier.statusBarsPadding() else Modifier),
     ) {
         // Everything below is identical for the route and popup forms; only the
         // surrounding container (opaque route surface vs translucent popup card)
         // differs.
         run {
-            // Top bar: back (only when in a sub-screen) and the title. There is no
-            // close (X) button — the hub is dismissed by dragging the panel's
-            // handle down, tapping the map strip above the card, or system Back
-            // (see [ChatHubPopup] / [TranslucentShellPanel]). The legacy full-screen
+            // Top bar: back + the conversation's name, composed ONLY inside a
+            // sub-screen. At hub level it carried nothing but the redundant "Chat"
+            // label — the Back arrow is already conditional on [inSubScreen] — so
+            // there the whole bar is gone and the tabs start at the top of the
+            // card. No control is lost: there is no close (X) button in either
+            // form; the hub is dismissed by dragging the panel's handle down,
+            // tapping the map strip above the card, or system Back (see
+            // [ChatHubPopup] / [TranslucentShellPanel]). The legacy full-screen
             // [ChatHubRoute] form is likewise dismissed by system Back, consistent
             // with every other full-screen route.
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                if (inSubScreen) {
+            if (subScreenTitle != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     IconButton(onClick = popSubScreen) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -470,15 +499,15 @@ private fun ChatHubContent(
                             tint = MaterialTheme.colorScheme.onSurface,
                         )
                     }
+                    Text(
+                        text = subScreenTitle,
+                        modifier = Modifier.weight(1f).padding(horizontal = KccSpacing.s2),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
-                Text(
-                    text = title,
-                    modifier = Modifier.weight(1f).padding(horizontal = KccSpacing.s2),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
             }
 
             // Hide the tab row while a sub-screen (thread/channel) is open, so the
