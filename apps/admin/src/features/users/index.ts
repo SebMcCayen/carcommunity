@@ -31,7 +31,7 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore';
-import { USER_ROLES, type UserRole } from '@carcommunity/shared/users';
+import { DEFAULT_DISPLAY_NAME, USER_ROLES, type UserRole } from '@carcommunity/shared/users';
 
 import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
@@ -67,14 +67,14 @@ export interface AdminUserSummary {
 }
 
 /**
- * The neutral placeholder `displayName` every account is provisioned with and
- * keeps until the member picks their own nickname during onboarding. Mirrors
- * `DEFAULT_DISPLAY_NAME` in functions/src/auth/provisioning.ts — a value that is
- * deliberately NEVER derived from the identity provider (privacy invariant). It
- * is duplicated here (rather than imported) because the admin app does not
- * depend on the functions package; it is only ever compared, never written.
+ * The neutral placeholder `displayName` un-onboarded accounts still carry.
+ *
+ * Re-exported from `@carcommunity/shared/users` (the single read-side source of
+ * truth) under a name local to this feature. The admin only ever COMPARES
+ * against it, never writes it — the Cloud Function in
+ * functions/src/auth/provisioning.ts is what writes the value.
  */
-export const PROVISIONING_PLACEHOLDER_NAME = 'New member';
+export const PROVISIONING_PLACEHOLDER_NAME = DEFAULT_DISPLAY_NAME;
 
 /**
  * Whether the account has a MEMBER-SET nickname worth displaying, as opposed to
