@@ -366,6 +366,8 @@
     <string name="chat_reportReason_privacy">Privacy violation</string>
     <string name="chat_reportReason_other">Other</string>
     <string name="chat_removedMessage">This message has been removed.</string>
+    <string name="chat_reportedHidden">This message was hidden after multiple reports.</string>
+    <string name="chat_showReportedMessage">Show reported message</string>
     <string name="chat_memberRequired">Active membership required for event chat.</string>
     <string name="chat_rsvpRequired">You need to respond Going or Maybe to join the chat.</string>
     <string name="chat_accessLost">You no longer have access to this chat.</string>

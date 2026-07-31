@@ -78,7 +78,17 @@ export function formatReportReason(reason: ChatMessageReportReason): string {
 }
 
 export function formatModerationState(state: ChatMessageModerationState): string {
-  return state === 'removed' ? 'Borttaget' : 'Synligt';
+  switch (state) {
+    case 'auto_hidden':
+      return 'Dolt (anmält)';
+    case 'removed':
+      return 'Borttaget';
+    case 'allowed':
+      return 'Tillåtet';
+    case 'visible':
+    default:
+      return 'Synligt';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -192,5 +202,22 @@ export async function removeAdminChatMessageFromReport(
   return callAdmin<{ eventId: string; messageId: string; moderationState: 'removed' }>(
     'events-removeChatMessage',
     { eventId, messageId, reason },
+  );
+}
+
+/**
+ * Allows (un-hides) the reported message via `events-allowChatMessage`: flips
+ * moderationState to `allowed` (terminal — the auto-hide trigger never re-hides
+ * it), makes it visible to everyone again with the body intact, and dismisses
+ * its open reports. Acts on a report's eventId + messageId. Use when a moderator
+ * judges an auto-hidden (or reported) message to be fine.
+ */
+export async function allowAdminChatMessageFromReport(
+  eventId: string,
+  messageId: string,
+): Promise<{ eventId: string; messageId: string; moderationState: 'allowed' }> {
+  return callAdmin<{ eventId: string; messageId: string; moderationState: 'allowed' }>(
+    'events-allowChatMessage',
+    { eventId, messageId },
   );
 }

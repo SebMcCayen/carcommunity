@@ -399,6 +399,8 @@
       "other": "Övrigt"
     },
     "removedMessage": "Meddelandet har tagits bort.",
+    "reportedHidden": "Meddelandet har dolts efter flera anmälningar.",
+    "showReportedMessage": "Visa anmält meddelande",
     "memberRequired": "Aktivt medlemskap krävs för eventchatten.",
     "rsvpRequired": "Du behöver svara Kommer eller Kanske för att delta i chatten.",
     "accessLost": "Du har inte längre tillgång till chatten.",

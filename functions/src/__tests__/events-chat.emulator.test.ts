@@ -424,3 +424,153 @@ describe('events-listChatReports / events-resolveChatReport (moderation queue)',
     ).toBe('functions/not-found');
   });
 });
+
+describe('events chat auto-moderation (onMessageReportCreate + allowChatMessage)', () => {
+  // Distinct reporters (each active + going RSVP) so their reports count toward
+  // the auto-hide threshold; the author is a synthetic uid nobody reports as.
+  let r1: TestUser;
+  let r2: TestUser;
+  let r3: TestUser;
+  let r4: TestUser;
+  let autoHideMessageId: string;
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function makeReporter(prefix: string): Promise<TestUser> {
+    const user = await createProvisionedUser(prefix);
+    await adminDb.collection('users').doc(user.uid).set({ activeMember: true }, { merge: true });
+    await adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('rsvps')
+      .doc(user.uid)
+      .set({ status: 'going', updatedAt: new Date() });
+    return user;
+  }
+
+  async function messageState(): Promise<Record<string, unknown>> {
+    const snap = await adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('messages')
+      .doc(autoHideMessageId)
+      .get();
+    return snap.data() ?? {};
+  }
+
+  beforeAll(async () => {
+    r1 = await makeReporter('autohide-r1');
+    r2 = await makeReporter('autohide-r2');
+    r3 = await makeReporter('autohide-r3');
+    r4 = await makeReporter('autohide-r4');
+
+    const ref = adminDb.collection('events').doc(eventId).collection('messages').doc();
+    await ref.set({
+      authorUserId: `autohide-author-${Date.now()}`,
+      authorDisplayName: 'Auto Hide Author',
+      message: 'body that several people will report',
+      moderationState: 'visible',
+      hiddenAt: null,
+      reportCount: 0,
+      allowedAt: null,
+      allowedByUserId: null,
+      removedAt: null,
+      removedByUserId: null,
+      createdAt: new Date(),
+    });
+    autoHideMessageId = ref.id;
+  }, 120_000);
+
+  it('stays visible below the threshold, counting DISTINCT reporters not reports', async () => {
+    await signInAs(r1);
+    await call('events-reportChatMessage', { eventId, messageId: autoHideMessageId, reason: 'spam' });
+    await signInAs(r2);
+    await call('events-reportChatMessage', { eventId, messageId: autoHideMessageId, reason: 'spam' });
+    // Same reporter, a SECOND reason — a new report doc, but still one distinct
+    // reporter, so the distinct count is 2 (r1, r2) and must NOT auto-hide.
+    await call('events-reportChatMessage', {
+      eventId,
+      messageId: autoHideMessageId,
+      reason: 'harassment',
+    });
+
+    // Give the async trigger time to (not) fire, then assert still visible.
+    await sleep(3000);
+    expect((await messageState()).moderationState).toBe('visible');
+  });
+
+  it('auto-hides for everyone once a THIRD distinct user reports', async () => {
+    await signInAs(r3);
+    await call('events-reportChatMessage', { eventId, messageId: autoHideMessageId, reason: 'spam' });
+
+    const state = await pollUntil(async () => {
+      const data = await messageState();
+      return data.moderationState === 'auto_hidden' ? data : undefined;
+    });
+    expect(state.reportCount).toBe(3);
+    // Auto-hide PRESERVES the body (reversible) — only removal blanks it.
+    expect(state.message).toBe('body that several people will report');
+    expect(state.hiddenAt).not.toBeNull();
+  });
+
+  it('rejects a non-admin caller of allowChatMessage', async () => {
+    await signInAs(memberGoing);
+    expect(
+      await callableErrorCode(
+        call('events-allowChatMessage', { eventId, messageId: autoHideMessageId }),
+      ),
+    ).toBe('functions/permission-denied');
+  });
+
+  it('admin allow un-hides, dismisses open reports, and is STICKY against later reports', async () => {
+    await signInAs(adminUser);
+    const res = (
+      await call('events-allowChatMessage', { eventId, messageId: autoHideMessageId })
+    ).data as { moderationState: string };
+    expect(res.moderationState).toBe('allowed');
+
+    const allowed = await messageState();
+    expect(allowed.moderationState).toBe('allowed');
+    expect(allowed.allowedByUserId).toBe(adminUser.uid);
+    // Body still intact — allow restores visibility, never blanks.
+    expect(allowed.message).toBe('body that several people will report');
+
+    // Its open reports were dismissed by the allow.
+    const reports = await adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('messageReports')
+      .where('messageId', '==', autoHideMessageId)
+      .get();
+    expect(reports.size).toBeGreaterThan(0);
+    for (const doc of reports.docs) {
+      expect(doc.data().status).toBe('dismissed');
+    }
+
+    // A brand-new distinct reporter files after the allow — the trigger must
+    // NOT re-hide an allowed message (allow is terminal / sticky).
+    await signInAs(r4);
+    await call('events-reportChatMessage', { eventId, messageId: autoHideMessageId, reason: 'spam' });
+    await sleep(3000);
+    expect((await messageState()).moderationState).toBe('allowed');
+  });
+
+  it('admin remove tombstones the allowed message and blocks a subsequent allow', async () => {
+    await signInAs(adminUser);
+    await call('events-removeChatMessage', {
+      eventId,
+      messageId: autoHideMessageId,
+      reason: 'Removed after review',
+    });
+    const removed = await messageState();
+    expect(removed.moderationState).toBe('removed');
+    expect(removed.message).toBe('');
+
+    // A removed message has no body to reveal, so it can never be allowed.
+    expect(
+      await callableErrorCode(
+        call('events-allowChatMessage', { eventId, messageId: autoHideMessageId }),
+      ),
+    ).toBe('functions/failed-precondition');
+  });
+});

@@ -255,7 +255,16 @@
     {
       "name": "events.removeChatMessage",
       "domain": "events",
-      "description": "Soft-removes a chat message (moderation): blanks the member-visible body, sets moderationState removed, resolves open reports, and preserves the original text in an adminAuditEvents record. Never hard-deletes. Deployed via grouped export as events-removeChatMessage (functions/src/events/removeChatMessage.ts).",
+      "description": "Soft-removes (tombstones) a chat message (moderation): blanks the member-visible body, sets moderationState removed (a TERMINAL state), resolves open reports, and preserves the original text in an adminAuditEvents record. Never hard-deletes. Works from any non-removed state (visible / auto_hidden / allowed); re-removal is failed-precondition. Removed messages show a permanent moderator-removed placeholder with NO reveal control. Deployed via grouped export as events-removeChatMessage (functions/src/events/removeChatMessage.ts). TRIGGER SIBLING - events-onMessageReportCreate (onDocumentCreated on events/{eventId}/messageReports/{reportId}; functions/src/events/onMessageReportCreate.ts): chat AUTO-MODERATION. On every report write it recomputes the DISTINCT reporterUserId count for that message (report ids embed the reason, so one user filing several reasons is still one reporter) with a single-equality query (no new index) and, when the count reaches CHAT_AUTO_HIDE_REPORTER_THRESHOLD (default 3, tunable server-side in chat-core.ts), transactionally transitions a still-visible message to moderationState auto_hidden (body PRESERVED - auto-hide is reversible). It ONLY performs visible -> auto_hidden; allowed and removed are terminal and never re-hidden, and an already auto_hidden message is a no-op, so the trigger is idempotent and cannot race the report callable or a concurrent admin override. Clients render auto_hidden as a collapsed 'Show reported message' placeholder whose reveal is per-user ephemeral (never persisted, never un-hidden for others).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Chat -> Firestore with bounded queries)"
+    },
+    {
+      "name": "events.allowChatMessage",
+      "domain": "events",
+      "description": "Admin override that CLEARS an auto-hide: transitions an auto_hidden (or still-visible) chat message to moderationState allowed - a TERMINAL state the events-onMessageReportCreate trigger never re-hides, so an allowed message can never be auto-hidden again however many further reports arrive (allow is STICKY). The body is untouched (the message becomes visible to everyone again), the message's open reports are dismissed (reviewedByUserId + reviewedAt stamped), and the action is written to adminAuditEvents. A removed message cannot be allowed (its body is gone) -> failed-precondition; re-allowing an already-allowed message is also failed-precondition. Input { eventId, messageId }. Deployed via grouped export as events-allowChatMessage (functions/src/events/allowChatMessage.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",

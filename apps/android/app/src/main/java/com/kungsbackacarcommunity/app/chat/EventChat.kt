@@ -22,10 +22,20 @@ enum class ChatReportReason(val wire: String) {
     OTHER("other"),
 }
 
-/** Message moderation state (events/{id}/messages/{id}.moderationState). */
+/**
+ * Message moderation state (events/{id}/messages/{id}.moderationState).
+ *
+ * Mirrors the backend state machine: VISIBLE / ALLOWED render the body
+ * normally (ALLOWED = an admin cleared a hide, so it is visible again);
+ * AUTO_HIDDEN renders a collapsed "Show reported message" placeholder that the
+ * reader can reveal locally; REMOVED renders a permanent moderator-removed
+ * placeholder with no reveal.
+ */
 enum class ChatModerationState(val wire: String) {
     VISIBLE("visible"),
+    AUTO_HIDDEN("auto_hidden"),
     REMOVED("removed"),
+    ALLOWED("allowed"),
     ;
 
     companion object {
@@ -34,13 +44,21 @@ enum class ChatModerationState(val wire: String) {
     }
 }
 
-/** A rendered chat message. [isRemoved] → show a neutral placeholder, not body. */
+/**
+ * A rendered chat message.
+ * - [isRemoved] → permanent moderator-removed placeholder (no body, no reveal).
+ * - [isAutoHidden] → collapsed "Show reported message" placeholder; the reader
+ *   can reveal the [message] locally (per-user, ephemeral — never persisted and
+ *   never un-hidden for anyone else).
+ * A message is never both removed and auto-hidden.
+ */
 data class ChatMessage(
     val id: String,
     val authorUserId: String,
     val authorDisplayName: String?,
     val message: String,
     val isRemoved: Boolean,
+    val isAutoHidden: Boolean = false,
     val createdAtMillis: Long?,
 )
 

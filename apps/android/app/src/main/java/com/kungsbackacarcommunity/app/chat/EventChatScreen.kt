@@ -212,9 +212,11 @@ fun EventChatScreen(
                                     // your own message, nor on one with no
                                     // resolvable author. A REMOVED message carries
                                     // no body to report and already shows a neutral
-                                    // placeholder, so it stays inert too.
+                                    // placeholder, so it stays inert too — as does an
+                                    // AUTO_HIDDEN one (collapsed, already reported).
                                     onLongPress =
                                         if (!message.isRemoved &&
+                                            !message.isAutoHidden &&
                                             MessageModeration.canActOn(message.authorUserId, currentUid) &&
                                             MessageModeration.hasActions(
                                                 canBlock = canBlock,
@@ -360,6 +362,10 @@ private fun MessageRow(
     onViewProfile: (() -> Unit)?,
     onLongPress: (() -> Unit)?,
 ) {
+    // Per-user, ephemeral reveal for an auto-hidden message. Keyed on the message
+    // id so a reveal never leaks onto a different message reusing this row, and
+    // rememberSaveable so it survives rotation without being persisted anywhere.
+    var revealed by rememberSaveable(message.id) { mutableStateOf(false) }
     Card(
         modifier =
             Modifier
@@ -395,19 +401,40 @@ private fun MessageRow(
                         Modifier
                     },
             )
-            if (message.isRemoved) {
-                Text(
-                    text = stringResource(R.string.chat_removedMessage),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontStyle = FontStyle.Italic,
-                )
-            } else {
-                Text(
-                    text = message.message,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+            when {
+                message.isRemoved ->
+                    Text(
+                        text = stringResource(R.string.chat_removedMessage),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                    )
+
+                message.isAutoHidden && !revealed -> {
+                    // Auto-hidden after several reports: collapsed placeholder + a
+                    // reveal control. Revealing is LOCAL and ephemeral — it only
+                    // expands this row in this reader's UI; nothing is written and
+                    // the message stays hidden for everyone else.
+                    Text(
+                        text = stringResource(R.string.chat_reportedHidden),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontStyle = FontStyle.Italic,
+                    )
+                    TextButton(
+                        onClick = { revealed = true },
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp),
+                    ) {
+                        Text(text = stringResource(R.string.chat_showReportedMessage))
+                    }
+                }
+
+                else ->
+                    Text(
+                        text = message.message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
             }
         }
     }

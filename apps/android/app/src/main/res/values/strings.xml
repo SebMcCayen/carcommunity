@@ -366,6 +366,8 @@
     <string name="chat_reportReason_privacy">Integritetsintrång</string>
     <string name="chat_reportReason_other">Övrigt</string>
     <string name="chat_removedMessage">Meddelandet har tagits bort.</string>
+    <string name="chat_reportedHidden">Meddelandet har dolts efter flera anmälningar.</string>
+    <string name="chat_showReportedMessage">Visa anmält meddelande</string>
     <string name="chat_memberRequired">Aktivt medlemskap krävs för eventchatten.</string>
     <string name="chat_rsvpRequired">Du behöver svara Kommer eller Kanske för att delta i chatten.</string>
     <string name="chat_accessLost">Du har inte längre tillgång till chatten.</string>

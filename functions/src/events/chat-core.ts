@@ -44,8 +44,58 @@ export const CHAT_MESSAGE_REPORT_REASONS = [
 ] as const;
 export type ChatMessageReportReason = (typeof CHAT_MESSAGE_REPORT_REASONS)[number];
 
-export const CHAT_MESSAGE_MODERATION_STATES = ['visible', 'removed'] as const;
+/**
+ * Message moderation state machine.
+ *
+ *   visible ── trigger (>= threshold distinct reporters) ──▶ auto_hidden
+ *   visible / auto_hidden ── admin allow ──▶ allowed   (TERMINAL)
+ *   visible / auto_hidden / allowed ── admin remove ──▶ removed (TERMINAL)
+ *
+ * The onMessageReportCreate trigger ONLY performs the visible → auto_hidden
+ * transition; it treats `allowed` and `removed` (and an already `auto_hidden`
+ * message) as terminal and never re-hides them. That is what makes an admin
+ * "Allow" STICKY: once allowed, no volume of further reports can auto-hide the
+ * message again. "Remove" tombstones the body and is likewise never reversed by
+ * the trigger.
+ */
+export const CHAT_MESSAGE_MODERATION_STATES = [
+  'visible',
+  'auto_hidden',
+  'removed',
+  'allowed',
+] as const;
 export type ChatMessageModerationState = (typeof CHAT_MESSAGE_MODERATION_STATES)[number];
+
+/**
+ * Distinct-reporter threshold at which a still-`visible` message is auto-hidden
+ * for everyone. Seb's brief said "several" — TUNABLE: change this single
+ * constant (server-side source of truth) to make auto-hide more or less
+ * sensitive. NOTE: this counts DISTINCT reporterUserId values, not report
+ * documents — one user filing under several reasons mints several report docs
+ * (the id embeds the reason) but is still one reporter.
+ */
+export const CHAT_AUTO_HIDE_REPORTER_THRESHOLD = 3;
+
+/**
+ * Counts DISTINCT reporters across a message's report documents. Pure helper so
+ * the distinct-user rule (not report-count) is unit-testable without emulators.
+ */
+export function countDistinctReporters(
+  reports: ReadonlyArray<{ reporterUserId?: unknown }>,
+): number {
+  const reporters = new Set<string>();
+  for (const report of reports) {
+    if (typeof report.reporterUserId === 'string' && report.reporterUserId.length > 0) {
+      reporters.add(report.reporterUserId);
+    }
+  }
+  return reporters.size;
+}
+
+/** Whether `count` distinct reporters is enough to auto-hide a message. */
+export function shouldAutoHide(distinctReporterCount: number): boolean {
+  return distinctReporterCount >= CHAT_AUTO_HIDE_REPORTER_THRESHOLD;
+}
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -75,9 +125,19 @@ const removeChatMessageInputSchema = z
   })
   .strict();
 
+// Allow needs no reason — un-hiding a wrongly-reported message is a benign
+// action; the audit record captures who allowed it and when.
+const allowChatMessageInputSchema = z
+  .object({
+    eventId: z.string().trim().min(1),
+    messageId: z.string().trim().min(1),
+  })
+  .strict();
+
 export type PostChatMessageInput = z.infer<typeof postChatMessageInputSchema>;
 export type ReportChatMessageInput = z.infer<typeof reportChatMessageInputSchema>;
 export type RemoveChatMessageInput = z.infer<typeof removeChatMessageInputSchema>;
+export type AllowChatMessageInput = z.infer<typeof allowChatMessageInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -111,6 +171,10 @@ export function parseRemoveChatMessageInput(data: unknown): ParseResult<RemoveCh
     data,
     'Expected { eventId, messageId, reason }.',
   );
+}
+
+export function parseAllowChatMessageInput(data: unknown): ParseResult<AllowChatMessageInput> {
+  return parse(allowChatMessageInputSchema, data, 'Expected { eventId, messageId }.');
 }
 
 // ---------------------------------------------------------------------------
@@ -176,9 +240,51 @@ export function buildChatMessageDocument(
     authorDisplayName: input.authorDisplayName,
     message: input.message.trim(),
     moderationState: 'visible',
+    // Auto-hide bookkeeping (onMessageReportCreate trigger) — null/0 until the
+    // distinct-reporter threshold is crossed.
+    hiddenAt: null,
+    reportCount: 0,
+    // Admin-allow bookkeeping (events.allowChatMessage) — null until allowed.
+    allowedAt: null,
+    allowedByUserId: null,
     removedAt: null,
     removedByUserId: null,
     createdAt: serverTimestamp(),
+  };
+}
+
+/**
+ * Auto-hide update written by the onMessageReportCreate trigger when a still
+ * `visible` message reaches the distinct-reporter threshold. The body is
+ * PRESERVED (auto-hide is reversible — an admin can Allow it back) and the
+ * client renders a collapsed "Show reported message" placeholder from
+ * moderationState. `reportCount` is the distinct-reporter tally at hide time.
+ */
+export function buildChatMessageAutoHide(
+  reportCount: number,
+  serverTimestamp: () => unknown,
+): Record<string, unknown> {
+  return {
+    moderationState: 'auto_hidden',
+    hiddenAt: serverTimestamp(),
+    reportCount,
+  };
+}
+
+/**
+ * Admin "Allow" update — un-hides an auto-hidden (or still-visible) message and
+ * marks it `allowed`, a TERMINAL state the auto-hide trigger never re-hides
+ * even if more reports arrive. The body is untouched (allow keeps the original
+ * text); hiddenAt is left as a historical record.
+ */
+export function buildChatMessageAllow(
+  allowedByUserId: string,
+  serverTimestamp: () => unknown,
+): Record<string, unknown> {
+  return {
+    moderationState: 'allowed',
+    allowedAt: serverTimestamp(),
+    allowedByUserId,
   };
 }
 

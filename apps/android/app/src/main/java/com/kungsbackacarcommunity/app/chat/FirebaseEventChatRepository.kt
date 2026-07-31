@@ -122,13 +122,16 @@ class FirebaseEventChatRepository private constructor(
 private fun DocumentSnapshot.toChatMessage(): ChatMessage? {
     if (!exists()) return null
     val authorUserId = getString("authorUserId") ?: return null
-    val isRemoved = ChatModerationState.fromWire(getString("moderationState")) == ChatModerationState.REMOVED
+    val state = ChatModerationState.fromWire(getString("moderationState"))
     return ChatMessage(
         id = id,
         authorUserId = authorUserId,
         authorDisplayName = getString("authorDisplayName"),
         message = getString("message") ?: "",
-        isRemoved = isRemoved,
+        isRemoved = state == ChatModerationState.REMOVED,
+        // auto_hidden keeps its body server-side (reveal is client-local); visible
+        // and allowed both render normally.
+        isAutoHidden = state == ChatModerationState.AUTO_HIDDEN,
         createdAtMillis = getTimestamp("createdAt")?.toDate()?.time,
     )
 }

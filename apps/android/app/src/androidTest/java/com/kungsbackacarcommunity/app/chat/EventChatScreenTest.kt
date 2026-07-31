@@ -39,13 +39,21 @@ class EventChatScreenTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    private fun message(id: String, author: String, uid: String, removed: Boolean = false) =
+    private fun message(
+        id: String,
+        author: String,
+        uid: String,
+        removed: Boolean = false,
+        autoHidden: Boolean = false,
+    ) =
         ChatMessage(
             id = id,
             authorUserId = uid,
             authorDisplayName = author,
+            // Auto-hide PRESERVES the body (reveal is client-local); only removal blanks it.
             message = if (removed) "" else "Body of $id",
             isRemoved = removed,
+            isAutoHidden = autoHidden,
             createdAtMillis = 0L,
         )
 
@@ -283,6 +291,56 @@ class EventChatScreenTest {
         longPress("Body of m1")
         // You can neither block nor report yourself.
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
+    }
+
+    @Test
+    fun autoHiddenMessage_showsRevealControl_andTappingRevealsBody() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(
+                    state = ChatMessagesState.Loaded(listOf(message("m1", "Ada", "other", autoHidden = true))),
+                    currentUid = "me",
+                    canParticipate = true,
+                    sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle,
+                    onSend = {},
+                    onReport = { _, _ -> },
+                    onReportDismiss = {},
+                    onBack = {},
+                )
+            }
+        }
+        // Collapsed: placeholder + reveal control shown, the body hidden.
+        composeTestRule.onNodeWithText(str(R.string.chat_reportedHidden)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chat_showReportedMessage)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Body of m1").assertDoesNotExist()
+
+        // Tapping the reveal expands the original content locally.
+        composeTestRule.onNodeWithText(str(R.string.chat_showReportedMessage)).performClick()
+        composeTestRule.onNodeWithText("Body of m1").assertIsDisplayed()
+    }
+
+    @Test
+    fun removedMessage_showsPlaceholder_andOffersNoRevealControl() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventChatScreen(
+                    state = ChatMessagesState.Loaded(listOf(message("m1", "Ada", "other", removed = true))),
+                    currentUid = "me",
+                    canParticipate = true,
+                    sendStatus = ChatSendStatus.Idle,
+                    reportStatus = ChatReportStatus.Idle,
+                    onSend = {},
+                    onReport = { _, _ -> },
+                    onReportDismiss = {},
+                    onBack = {},
+                )
+            }
+        }
+        // A removed message is a permanent tombstone: placeholder, and NEVER a
+        // reveal control (its body is gone server-side).
+        composeTestRule.onNodeWithText(str(R.string.chat_removedMessage)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chat_showReportedMessage)).assertDoesNotExist()
     }
 
     @Test

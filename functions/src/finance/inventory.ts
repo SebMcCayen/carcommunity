@@ -332,6 +332,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'events.postChatMessage': 'variable-member',
   'events.reportChatMessage': 'variable-member',
   'events.removeChatMessage': 'admin-rare',
+  'events.allowChatMessage': 'admin-rare',
   'events.listChatReports': 'admin-rare',
   'events.resolveChatReport': 'admin-rare',
   'events.listAttendees': 'variable-member',
