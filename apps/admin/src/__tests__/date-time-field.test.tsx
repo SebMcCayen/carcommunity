@@ -150,6 +150,18 @@ describe('DateTimeField', () => {
     expect(onChange).toHaveBeenCalledWith('');
   });
 
+  it('empties the time box too when the date is cleared', () => {
+    render(<DateTimeField id="f" label="Från" value="2026-07-08T14:30" onChange={vi.fn()} />);
+    expect(timeInput()?.value).toBe('14:30');
+
+    // Clearing the date clears the whole field; the (now disabled) time box must
+    // not keep showing a stale value the committed value no longer holds.
+    type(dateInput(), '');
+    expect(dateInput().value).toBe('');
+    expect(timeInput()?.value).toBe('');
+    expect(timeInput()?.disabled).toBe(true);
+  });
+
   it('keeps the date when only the time is cleared', () => {
     const onChange = vi.fn();
     render(<DateTimeField id="f" label="Från" value="2026-07-08T14:30" onChange={onChange} />);

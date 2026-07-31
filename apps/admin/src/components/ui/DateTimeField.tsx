@@ -130,6 +130,10 @@ export function DateTimeField({
     // existing time via `withDatePart`. A partial/invalid date is held in the
     // buffer only, leaving the last committed value (and its time) untouched.
     if (masked === '') {
+      // Clearing the date clears the whole field. Drop any buffered time too,
+      // so a stale value can't linger in the (now disabled) time box — the
+      // committed value is empty, and the two must agree.
+      setTimeText('');
       emit(mode === 'date' ? '' : withDatePart(value, ''));
       return;
     }
