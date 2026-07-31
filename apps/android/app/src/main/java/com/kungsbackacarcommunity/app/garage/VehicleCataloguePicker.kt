@@ -66,6 +66,13 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
  * of inventing a second look for "a field you tap". Accessibility is put on the
  * overlay — the text field's own semantics are cleared, or TalkBack would
  * announce an editable text box that cannot be edited.
+ *
+ * `clearAndSetSemantics` wipes the field's WHOLE subtree, [supportingText]
+ * included, so that text must be folded into the overlay's description or a
+ * screen-reader user would never hear it — and the supporting text is exactly
+ * where a pre-catalogue vehicle shows the value its owner originally saved.
+ * Announcing it is the difference between "Manufacturer, Select manufacturer"
+ * and "Manufacturer, Select manufacturer, Saved earlier: Wolwo".
  */
 @Composable
 fun CatalogueSelectorField(
@@ -91,15 +98,17 @@ fun CatalogueSelectorField(
             modifier = Modifier.fillMaxWidth().clearAndSetSemantics {},
         )
         // The overlay carries the whole control's accessibility: one focusable
-        // button announcing "<label>, <value>". It is sized to the field (56dp
-        // tall), comfortably above the 48dp touch-target minimum.
+        // button announcing "<label>, <value>[, <supporting text>]". It is sized
+        // to the field (56dp tall), comfortably above the 48dp touch target.
+        val description =
+            listOfNotNull(label, value ?: placeholder, supportingText).joinToString(", ")
         Box(
             modifier =
                 Modifier
                     .matchParentSize()
                     .semantics {
                         role = Role.Button
-                        contentDescription = "$label, ${value ?: placeholder}"
+                        contentDescription = description
                     }
                     .clickable(enabled = enabled, onClick = onClick),
         )

@@ -243,8 +243,15 @@ class GarageScreensTest {
                 )
             }
         }
+        // Asserted through the selector's accessibility description, not the raw
+        // text: CatalogueSelectorField clears its text field's semantics subtree
+        // (which contains the supporting text), so the description is BOTH what a
+        // screen reader announces and the only handle a test has on that text.
         composeTestRule
-            .onNodeWithText(str(R.string.garage_legacySavedValue).format("Wolwo"))
+            .onNodeWithContentDescription(
+                str(R.string.garage_legacySavedValue).format("Wolwo"),
+                substring = true,
+            )
             .performScrollTo()
             .assertIsDisplayed()
         composeTestRule
