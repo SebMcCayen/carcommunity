@@ -27,6 +27,7 @@ class IncidentDetailsTest {
         source: String = "user",
         reporterUid: String? = "reporter",
         createdAtIso: String? = null,
+        postedAtIso: String? = null,
     ) = Incident(
         id = id,
         type = type,
@@ -35,6 +36,7 @@ class IncidentDetailsTest {
         source = source,
         reporterUid = reporterUid,
         createdAtIso = createdAtIso,
+        postedAtIso = postedAtIso,
     )
 
     // ---- ownership ---------------------------------------------------------
@@ -193,6 +195,62 @@ class IncidentDetailsTest {
     fun `the incident overload reads the timestamp off the model`() {
         val reported = incident(createdAtIso = now.minus(Duration.ofMinutes(20)).toString())
         assertEquals(IncidentAge.Minutes(20), IncidentDetails.ageOf(reported, nowMillis))
+    }
+
+    // ---- ageDisplay: which timestamp the sheet shows, and when it hides -------
+
+    @Test
+    fun `a member report is timed off createdAt, always shown`() {
+        val reported =
+            incident(
+                source = "user",
+                createdAtIso = now.minus(Duration.ofMinutes(20)).toString(),
+            )
+        assertEquals(IncidentAge.Minutes(20), IncidentDetails.ageDisplay(reported, nowMillis))
+    }
+
+    @Test
+    fun `a member report with an unresolved createdAt still shows unknown, not hidden`() {
+        val reported = incident(source = "user", createdAtIso = null)
+        assertEquals(IncidentAge.Unknown, IncidentDetails.ageDisplay(reported, nowMillis))
+    }
+
+    @Test
+    fun `a Trafikverket row is timed off its postedAt, NOT its sync-time createdAt`() {
+        // createdAt is the sync instant (just now); postedAt is the real post time
+        // hours earlier. The sheet must show the older, honest age.
+        val imported =
+            incident(
+                source = INCIDENT_SOURCE_TRAFIKVERKET,
+                reporterUid = null,
+                createdAtIso = now.toString(),
+                postedAtIso = now.minus(Duration.ofHours(5)).toString(),
+            )
+        assertEquals(IncidentAge.Hours(5), IncidentDetails.ageDisplay(imported, nowMillis))
+    }
+
+    @Test
+    fun `a Trafikverket row with no postedAt hides the age line rather than showing the sync time`() {
+        val imported =
+            incident(
+                source = INCIDENT_SOURCE_TRAFIKVERKET,
+                reporterUid = null,
+                createdAtIso = now.toString(), // sync time present…
+                postedAtIso = null, // …but no upstream time → hide, not "just now".
+            )
+        assertEquals(null, IncidentDetails.ageDisplay(imported, nowMillis))
+    }
+
+    @Test
+    fun `a Trafikverket row with an unparseable postedAt also hides the age line`() {
+        val imported =
+            incident(
+                source = INCIDENT_SOURCE_TRAFIKVERKET,
+                reporterUid = null,
+                createdAtIso = now.toString(),
+                postedAtIso = "not-a-timestamp",
+            )
+        assertEquals(null, IncidentDetails.ageDisplay(imported, nowMillis))
     }
 
     // ---- clear-vote eligibility -------------------------------------------

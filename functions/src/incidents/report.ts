@@ -72,6 +72,9 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<IncidentVie
     // may not equal `now`; returning `now` here would be misleading. Clients
     // read the authoritative value via listNearby / Firestore reads.
     createdAt: null,
+    // A member report's createdAt IS its post time, so there is no separate
+    // upstream "posted at" — the field exists only for Trafikverket imports.
+    postedAt: null,
     expiresAt: expiresAt.toISOString(),
     // A brand-new report has no confirmations yet; the field is not written to
     // the document until the first incidents.confirm bumps it.

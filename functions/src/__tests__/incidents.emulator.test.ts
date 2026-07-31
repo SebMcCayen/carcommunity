@@ -1048,10 +1048,86 @@ describe('incidents Trafikverket importer', () => {
     expect(stored.data()?.source).toBe('trafikverket');
     expect(stored.data()?.reporterUid).toBeNull();
     expect(stored.data()?.type).toBe('roadwork');
+    // No upstream time in this payload → postedAt is OMITTED (client hides age).
+    expect(stored.data()?.postedAt).toBeUndefined();
 
     // Re-run overwrites the same doc (no duplicate).
     const second = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
     expect(second.upserted).toBe(1);
+  });
+
+  it('stores the upstream original post time as postedAt (not the sync time)', async () => {
+    const mock: TrafikverketResponse = {
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-posted',
+                Deviation: [
+                  {
+                    Id: 'DEV-posted-1',
+                    MessageType: 'Vägarbete',
+                    Message: 'Vägarbete med känd starttid',
+                    Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+                    // 14:23+02:00 == 12:23:00Z — the offset must NOT be dropped.
+                    CreationTime: '2026-07-30T14:23:00+02:00',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    // Sync "now" is deliberately far from the upstream post time, so a doc that
+    // stored the sync instant instead would fail the assertion below.
+    const syncNow = new Date('2026-07-31T20:00:00Z');
+    const result = await runTrafikverketSync(syncNow, 'fake-key', async () => mock);
+    expect(result).toEqual({ skipped: false, upserted: 1 });
+
+    const stored = await adminDb
+      .collection('incidents')
+      .doc(importedIncidentDocId('DEV-posted-1'))
+      .get();
+    const postedAt = stored.data()?.postedAt as Timestamp | undefined;
+    expect(postedAt).toBeInstanceOf(Timestamp);
+    expect(postedAt?.toMillis()).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
+    // createdAt stays the sync instant (load-bearing for the TTL / lifetime cap).
+    expect((stored.data()?.createdAt as Timestamp).toMillis()).toBe(syncNow.getTime());
+  });
+
+  it('does NOT crash and omits postedAt when the upstream time is missing/unparseable', async () => {
+    const mock: TrafikverketResponse = {
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-notime',
+                Deviation: [
+                  {
+                    Id: 'DEV-notime-1',
+                    MessageType: 'Vägarbete',
+                    Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+                    // Zone-less → treated as unusable, so the field is omitted.
+                    CreationTime: '2026-07-30T14:23:00',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+    const result = await runTrafikverketSync(new Date(), 'fake-key', async () => mock);
+    expect(result).toEqual({ skipped: false, upserted: 1 });
+    const stored = await adminDb
+      .collection('incidents')
+      .doc(importedIncidentDocId('DEV-notime-1'))
+      .get();
+    expect(stored.exists).toBe(true);
+    expect(stored.data()?.postedAt).toBeUndefined();
   });
 
   it('imports >500 classified incidents without tripping the 500-write WriteBatch limit', async () => {

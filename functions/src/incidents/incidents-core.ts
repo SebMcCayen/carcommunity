@@ -780,6 +780,18 @@ export interface IncidentView {
   reporterUid: string | null;
   note: string | null;
   createdAt: string | null;
+  /**
+   * When the incident was originally POSTED, as an ISO-8601 instant, or null.
+   *
+   * For a member report `createdAt` already IS the post time, so this is null
+   * and the client uses `createdAt`. For a Trafikverket import `createdAt` is our
+   * SYNC time (when the importer wrote the doc), which is NOT when Trafikverket
+   * posted — so the importer stores the upstream original time here and the
+   * client shows THIS as "x min ago". Null on a Trafikverket row means upstream
+   * sent no usable time, and the client hides the age line rather than showing
+   * the misleading sync time.
+   */
+  postedAt: string | null;
   expiresAt: string | null;
   /** How many OTHER members have confirmed it is still there (0 when none). */
   confirmationCount: number;

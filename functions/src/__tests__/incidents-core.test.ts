@@ -66,6 +66,7 @@ import {
   classifyIncidentType,
   importedIncidentDocId,
   parseTrafikverketResponse,
+  parseTrafikverketTime,
   parseWgs84Point,
 } from '../incidents/trafikverket-core';
 
@@ -219,6 +220,32 @@ describe('trafikverket-core', () => {
     expect(body).toContain('authenticationkey="SECRET&amp;KEY"'); // XML-escaped
     expect(body).toContain('Deviation.MessageCodeValue'); // classification key
     expect(body).toContain('Deviation.Geometry.WGS84');
+    // The original-post times the app shows as "x min ago" (fix: not the sync time).
+    expect(body).toContain('Deviation.CreationTime');
+    expect(body).toContain('Deviation.PublicationTime');
+  });
+
+  it('parses an offset ISO time to the correct instant (offset NOT reinterpreted as local)', () => {
+    // 14:23:00+02:00 is 12:23:00Z. The epoch must match that UTC instant exactly,
+    // regardless of the runtime's own zone — the ISO-offset-as-local trap.
+    expect(parseTrafikverketTime('2026-07-30T14:23:00+02:00')).toBe(
+      Date.UTC(2026, 6, 30, 12, 23, 0),
+    );
+    // Winter offset + fractional seconds + Z all parse to the right instant.
+    expect(parseTrafikverketTime('2026-01-15T08:00:00.000+01:00')).toBe(
+      Date.UTC(2026, 0, 15, 7, 0, 0),
+    );
+    expect(parseTrafikverketTime('2026-07-30T12:23:00Z')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
+    expect(parseTrafikverketTime('2026-07-30T12:23:00+0200')).toBe(Date.UTC(2026, 6, 30, 10, 23, 0));
+  });
+
+  it('rejects a zone-less or unparseable time (so the client hides the age)', () => {
+    // No zone designator → would be read as LOCAL wall-clock → rejected as unusable.
+    expect(parseTrafikverketTime('2026-07-30T14:23:00')).toBeNull();
+    expect(parseTrafikverketTime('2026-07-30')).toBeNull();
+    expect(parseTrafikverketTime('not-a-date')).toBeNull();
+    expect(parseTrafikverketTime('')).toBeNull();
+    expect(parseTrafikverketTime(undefined)).toBeNull();
   });
 
   it('parses a WGS84 POINT string', () => {
@@ -366,6 +393,49 @@ describe('trafikverket-core', () => {
     );
     expect(unknown).toEqual(['someBrandNewIncidentCode']);
     expect(imported[0]).toMatchObject({ sourceId: 'U1', type: 'hazard' }); // still imported
+  });
+
+  it('captures the upstream original post time (CreationTime preferred, PublicationTime fallback, else null)', () => {
+    const imported = parseTrafikverketResponse({
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'S1',
+                Deviation: [
+                  {
+                    Id: 'HAS-CREATION',
+                    MessageCodeValue: 'roadworks',
+                    Geometry: { WGS84: 'POINT (12.0 57.5)' },
+                    CreationTime: '2026-07-30T14:23:00+02:00',
+                    PublicationTime: '2026-07-31T09:00:00+02:00',
+                  },
+                  {
+                    Id: 'PUB-ONLY',
+                    MessageCodeValue: 'roadworks',
+                    Geometry: { WGS84: 'POINT (12.1 57.5)' },
+                    PublicationTime: '2026-07-30T14:23:00+02:00',
+                  },
+                  {
+                    Id: 'NO-TIME',
+                    MessageCodeValue: 'roadworks',
+                    Geometry: { WGS84: 'POINT (12.2 57.5)' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    const byId = new Map(imported.map((i) => [i.sourceId, i.postedAtMs]));
+    // Prefers CreationTime over PublicationTime.
+    expect(byId.get('HAS-CREATION')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
+    // Falls back to PublicationTime when CreationTime is absent.
+    expect(byId.get('PUB-ONLY')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
+    // Null when upstream sent no usable time → client hides the age line.
+    expect(byId.get('NO-TIME')).toBeNull();
   });
 
   it('builds a Firestore-safe deterministic doc id', () => {

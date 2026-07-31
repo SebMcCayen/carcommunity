@@ -62,6 +62,19 @@ data class Incident(
     /** ISO-8601 creation instant as sent by the backend, or null when unresolved. */
     val createdAtIso: String? = null,
     /**
+     * ISO-8601 instant Trafikverket ORIGINALLY posted about this, or null.
+     *
+     * Only Trafikverket imports carry it: their [createdAtIso] is our SYNC time
+     * (when the backend importer wrote the doc every 30 min), which is NOT when
+     * Trafikverket posted — showing it claimed a days-old roadwork was reported
+     * "2 min ago". The backend now stores the upstream original time and sends it
+     * here, and the sheet shows THIS as the age for a Trafikverket row. Null on a
+     * Trafikverket row (upstream sent no usable time) ⇒ the sheet HIDES the age
+     * line rather than showing the sync time. Always null for member reports,
+     * whose [createdAtIso] already is their post time.
+     */
+    val postedAtIso: String? = null,
+    /**
      * How many OTHER members have confirmed this incident is still there
      * (`incidents-confirm`). Carried on the backend's `IncidentView`; 0 until the
      * first confirmation and for imported rows (which are not confirmable). Drives
