@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clampCoordinate,
   formatLatLng,
+  geofenceCirclePolygon,
   getMapStyleUrl,
   isMapAvailable,
   isValidCoordinate,
@@ -102,6 +103,35 @@ describe('clampCoordinate', () => {
       lat: -90,
       lng: -180,
     });
+  });
+});
+
+describe('geofenceCirclePolygon', () => {
+  const allFinite = (poly: ReturnType<typeof geofenceCirclePolygon>) =>
+    poly.geometry.coordinates[0]!.every(
+      ([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat),
+    );
+
+  it('produces a closed ring around a mid-latitude centre', () => {
+    const poly = geofenceCirclePolygon({ lat: 57.4874, lng: 12.0761 }, 100);
+    const ring = poly.geometry.coordinates[0]!;
+    expect(ring.length).toBe(65); // steps + 1
+    expect(ring[0]).toEqual(ring[ring.length - 1]); // closed
+    expect(allFinite(poly)).toBe(true);
+  });
+
+  it('never emits Infinity/NaN at the poles (cos(lat) -> 0 guard)', () => {
+    for (const lat of [90, -90, 89.9999, -89.9999]) {
+      const poly = geofenceCirclePolygon({ lat, lng: 0 }, 150);
+      expect(allFinite(poly)).toBe(true);
+    }
+  });
+
+  it('scales the ring with the radius', () => {
+    const center = { lat: 0, lng: 0 };
+    const small = geofenceCirclePolygon(center, 100).geometry.coordinates[0]![0]!;
+    const large = geofenceCirclePolygon(center, 1000).geometry.coordinates[0]![0]!;
+    expect(Math.abs(large[0])).toBeGreaterThan(Math.abs(small[0]));
   });
 });
 

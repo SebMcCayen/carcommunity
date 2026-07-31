@@ -98,6 +98,49 @@ export function clampCoordinate(value: LatLng): LatLng {
   };
 }
 
+/** A GeoJSON Polygon feature (the shape a MapLibre geojson source accepts). */
+export interface CirclePolygonFeature {
+  type: 'Feature';
+  geometry: { type: 'Polygon'; coordinates: [number, number][][] };
+  properties: Record<string, never>;
+}
+
+/**
+ * Build a GeoJSON polygon approximating a circle of `radiusMeters` around
+ * `center`. Pure and testable — kept out of the GL callbacks.
+ *
+ * Pole guard: the east/west spread divides by cos(latitude), which collapses to
+ * ~0 at ±90°, so an unguarded formula emits Infinity / huge longitudes that
+ * break GeoJSON rendering. `cos` is floored to a small positive value so the
+ * output is always finite (the ring simply widens in longitude very near the
+ * poles, which is geometrically expected).
+ */
+export function geofenceCirclePolygon(
+  center: LatLng,
+  radiusMeters: number,
+  steps = 64,
+): CirclePolygonFeature {
+  const coords: [number, number][] = [];
+  const earth = 6378137; // metres
+  const latRad = (center.lat * Math.PI) / 180;
+  // cos(lat) >= 0 for lat in [-90, 90]; floor it away from 0 to stay finite.
+  const cosLat = Math.max(Math.cos(latRad), 1e-3);
+  for (let i = 0; i <= steps; i += 1) {
+    const angle = (i / steps) * 2 * Math.PI;
+    const dx = (radiusMeters * Math.cos(angle)) / (earth * cosLat);
+    const dy = (radiusMeters * Math.sin(angle)) / earth;
+    coords.push([
+      center.lng + (dx * 180) / Math.PI,
+      center.lat + (dy * 180) / Math.PI,
+    ]);
+  }
+  return {
+    type: 'Feature',
+    geometry: { type: 'Polygon', coordinates: [coords] },
+    properties: {},
+  };
+}
+
 /**
  * The MapLibre GL JS style URL, read from the Vite env at build time.
  *

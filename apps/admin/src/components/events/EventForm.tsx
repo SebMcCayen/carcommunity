@@ -422,7 +422,11 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
         disabled={isSubmitting}
-        error={clientErrors.latitude ?? clientErrors.longitude}
+        error={
+          [clientErrors.latitude, clientErrors.longitude]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
         labelClassName={styles.label}
         inputClassName={styles.input}
       />

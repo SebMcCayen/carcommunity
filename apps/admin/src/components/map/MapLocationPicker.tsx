@@ -33,6 +33,7 @@ import {
   DEFAULT_ZOOM,
   clampCoordinate,
   formatLatLng,
+  geofenceCirclePolygon,
   getMapStyleUrl,
   parseLatLng,
   roundCoordinate,
@@ -59,8 +60,10 @@ interface GlMap {
   on(type: string, listener: (ev: { lngLat: GlLngLat }) => void): void;
   addSource(id: string, source: unknown): void;
   getSource(id: string): unknown;
+  removeSource(id: string): void;
   addLayer(layer: unknown): void;
   getLayer(id: string): unknown;
+  removeLayer(id: string): void;
   easeTo(options: { center: [number, number] }): void;
   remove(): void;
   resize(): void;
@@ -97,28 +100,22 @@ export interface MapLocationPickerProps {
   inputClassName?: string;
 }
 
+const GEOFENCE_SOURCE = 'geofence';
+const GEOFENCE_LAYERS = ['geofence-fill', 'geofence-outline'] as const;
+
 /**
- * Build a GeoJSON polygon approximating a circle of `radiusMeters` around
- * `center`. Kept pure and outside the GL callbacks.
+ * Remove the geofence layers + source if present. MapLibre throws when asked to
+ * remove a layer/source that does not exist, so each removal is guarded.
  */
-function circlePolygon(center: LatLng, radiusMeters: number, steps = 64) {
-  const coords: [number, number][] = [];
-  const earth = 6378137; // metres
-  const latRad = (center.lat * Math.PI) / 180;
-  for (let i = 0; i <= steps; i += 1) {
-    const angle = (i / steps) * 2 * Math.PI;
-    const dx = (radiusMeters * Math.cos(angle)) / (earth * Math.cos(latRad));
-    const dy = (radiusMeters * Math.sin(angle)) / earth;
-    coords.push([
-      center.lng + (dx * 180) / Math.PI,
-      center.lat + (dy * 180) / Math.PI,
-    ]);
+function clearGeofence(map: GlMap): void {
+  try {
+    for (const layerId of GEOFENCE_LAYERS) {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+    }
+    if (map.getSource(GEOFENCE_SOURCE)) map.removeSource(GEOFENCE_SOURCE);
+  } catch {
+    // Non-fatal — style may be mid-load; the next update re-attempts.
   }
-  return {
-    type: 'Feature' as const,
-    geometry: { type: 'Polygon' as const, coordinates: [coords] },
-    properties: {},
-  };
 }
 
 export function MapLocationPicker({
@@ -221,12 +218,16 @@ export function MapLocationPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, styleUrl, disabled]);
 
-  // --- Keep the pin in sync when the operator types into the inputs -------
+  // --- Keep the pin in sync with the inputs (BOTH directions) -------------
   useEffect(() => {
     const map = mapRef.current;
     const marker = markerRef.current;
     if (!map || !marker) return;
-    if (!value) return;
+    if (!value) {
+      // Inputs were cleared → reflect the cleared state by detaching the pin.
+      marker.remove();
+      return;
+    }
     const current = marker.getLngLat();
     if (
       roundCoordinate(current.lat) === roundCoordinate(value.lat) &&
@@ -238,30 +239,36 @@ export function MapLocationPicker({
     map.easeTo({ center: [value.lng, value.lat] });
   }, [value?.lat, value?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- Draw / update the optional geofence circle -------------------------
+  // --- Draw / update / clear the optional geofence circle -----------------
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !radiusMeters || !value) return;
-    const data = circlePolygon(value, radiusMeters);
-    const existing = map.getSource('geofence') as
+    if (!map) return;
+    const hasRadius = typeof radiusMeters === 'number' && radiusMeters > 0;
+    if (!value || !hasRadius) {
+      // No coordinate or no positive radius → remove any stale ring.
+      clearGeofence(map);
+      return;
+    }
+    const data = geofenceCirclePolygon(value, radiusMeters);
+    const existing = map.getSource(GEOFENCE_SOURCE) as
       | { setData?: (d: unknown) => void }
       | undefined;
     try {
       if (existing?.setData) {
         existing.setData(data);
       } else {
-        map.addSource('geofence', { type: 'geojson', data });
+        map.addSource(GEOFENCE_SOURCE, { type: 'geojson', data });
         if (!map.getLayer('geofence-fill')) {
           map.addLayer({
             id: 'geofence-fill',
             type: 'fill',
-            source: 'geofence',
+            source: GEOFENCE_SOURCE,
             paint: { 'fill-color': '#2563eb', 'fill-opacity': 0.12 },
           });
           map.addLayer({
             id: 'geofence-outline',
             type: 'line',
-            source: 'geofence',
+            source: GEOFENCE_SOURCE,
             paint: { 'line-color': '#2563eb', 'line-width': 1.5 },
           });
         }
