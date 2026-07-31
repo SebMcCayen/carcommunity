@@ -3,7 +3,7 @@
     "dateLabel": "Date",
     "timeLabel": "Time",
     "dateFormatPlaceholder": "yyyy-mm-dd",
-    "timeFormatPlaceholder": "hh:mm"
+    "timeFormatPlaceholder": "HH:mm"
   },
   "placeholder": {
     "plannedFunctionality": "Planned functionality",
