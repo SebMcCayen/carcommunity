@@ -9,6 +9,10 @@
     "settingsTodoNote": "TODO: Funktionsflaggor och inställningar måste hanteras i backend. Den här sidan är endast visning tills backend-RBAC är implementerat. Växla aldrig funktionsflaggor enbart via klientstatus.",
     "userDetailTodoNote": "TODO: Ersätt ruttparametern med riktig användaruppslagning från backend-API:et. Backend måste verifiera administratörsroll innan användardata skickas. Exponera aldrig mer persondata än nödvändigt."
   },
+  "map": {
+    "dragHint": "Dra nålen eller klicka på kartan för att välja platsen. Du kan även skriva exakta koordinater nedan.",
+    "unavailable": "Kartan är inte tillgänglig — ingen karta är konfigurerad. Ange koordinaterna manuellt nedan."
+  },
   "announcements": {
     "title": "Meddelanden",
     "subtitle": "Skapa och hantera meddelanden som visas för medlemmar i appen. Att dra tillbaka (inaktivera) är det primära sättet att dölja ett meddelande.",

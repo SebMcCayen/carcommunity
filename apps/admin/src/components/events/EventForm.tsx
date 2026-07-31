@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { DateTimeField } from '@/components/ui/DateTimeField';
+import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 import type { AdminEventDetail, CreateEventRequest, UpdateEventRequest } from '@/features/events';
 import { translate } from '@/i18n';
 import {
@@ -409,49 +410,26 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         />
       </div>
 
-      <div className={styles.coordinateRow}>
-        <div className={styles.fieldGroup}>
-          <label className={styles.label} htmlFor="ev-lat">
-            {t('events.form.latitudeLabel')}
-          </label>
-          <input
-            id="ev-lat"
-            className={styles.input}
-            type="number"
-            step="any"
-            min={-90}
-            max={90}
-            value={form.latitude}
-            onChange={(e) => handleChange('latitude', e.target.value)}
-            disabled={isSubmitting}
-            aria-describedby={clientErrors.latitude ? 'ev-lat-error' : undefined}
-          />
-          {clientErrors.latitude && (
-            <span id="ev-lat-error" className={styles.fieldError} role="alert">{clientErrors.latitude}</span>
-          )}
-        </div>
-
-        <div className={styles.fieldGroup}>
-          <label className={styles.label} htmlFor="ev-lon">
-            {t('events.form.longitudeLabel')}
-          </label>
-          <input
-            id="ev-lon"
-            className={styles.input}
-            type="number"
-            step="any"
-            min={-180}
-            max={180}
-            value={form.longitude}
-            onChange={(e) => handleChange('longitude', e.target.value)}
-            disabled={isSubmitting}
-            aria-describedby={clientErrors.longitude ? 'ev-lon-error' : undefined}
-          />
-          {clientErrors.longitude && (
-            <span id="ev-lon-error" className={styles.fieldError} role="alert">{clientErrors.longitude}</span>
-          )}
-        </div>
-      </div>
+      <MapLocationPicker
+        latitude={form.latitude}
+        longitude={form.longitude}
+        onChange={(latitude, longitude) => {
+          handleChange('latitude', latitude);
+          handleChange('longitude', longitude);
+        }}
+        labelLat={t('events.form.latitudeLabel')}
+        labelLng={t('events.form.longitudeLabel')}
+        helpText={t('map.dragHint')}
+        unavailableText={t('map.unavailable')}
+        disabled={isSubmitting}
+        error={
+          [clientErrors.latitude, clientErrors.longitude]
+            .filter(Boolean)
+            .join(' ') || undefined
+        }
+        labelClassName={styles.label}
+        inputClassName={styles.input}
+      />
 
       <div className={styles.formActions}>
         <button type="submit" className={styles.buttonPrimary} disabled={isSubmitting}>
