@@ -119,23 +119,40 @@ export const OTHER_MODEL_DISPLAY = 'Other model';
  * are additive: NOTHING downstream had to change, and a legacy vehicle with no
  * ids keeps rendering exactly as before.
  *
- * The "Other" bucket never overwrites an existing label: when a member edits a
+ * The "Other" bucket never destroys OWNER-AUTHORED text: when a member edits a
  * pre-catalogue car and picks Other — because their brand or model genuinely is
  * not listed — the free text they originally typed is KEPT as the display value.
  * Replacing "Duett" with "Other model" would destroy the only description of
  * their car that ever existed, which is exactly what this migration must not do.
- * [existing] is the currently-stored document text (absent when adding).
+ *
+ * That only applies to text the OWNER wrote, which is why the check is per level
+ * and looks at the stored id, not just the stored text. Text on a document that
+ * already had a catalogue id was DERIVED by this function on a previous write,
+ * so keeping it would be a lie: a member who picked `volvo`/`240` by mistake and
+ * corrects it to Other would otherwise keep a car labelled "Volvo 240" while
+ * being counted in the `other` bucket.
+ *
+ * [existing] is the currently-stored document (absent when adding).
  */
 export function resolveCatalogueDisplayNames(
   makeId: string,
   modelId: string,
-  existing?: { make?: unknown; model?: unknown },
+  existing?: { make?: unknown; model?: unknown; makeId?: unknown; modelId?: unknown },
 ): { make: string; model: string } {
-  const keep = (value: unknown): string | null =>
-    typeof value === 'string' && value.trim().length > 0 ? value : null;
+  /** The stored text, but only when the OWNER wrote it (no id at that level). */
+  const ownerAuthored = (text: unknown, storedId: unknown): string | null => {
+    if (storedId != null) return null;
+    return typeof text === 'string' && text.trim().length > 0 ? text : null;
+  };
   return {
-    make: makeDisplayName(makeId) ?? keep(existing?.make) ?? OTHER_MAKE_DISPLAY,
-    model: modelDisplayName(makeId, modelId) ?? keep(existing?.model) ?? OTHER_MODEL_DISPLAY,
+    make:
+      makeDisplayName(makeId) ??
+      ownerAuthored(existing?.make, existing?.makeId) ??
+      OTHER_MAKE_DISPLAY,
+    model:
+      modelDisplayName(makeId, modelId) ??
+      ownerAuthored(existing?.model, existing?.modelId) ??
+      OTHER_MODEL_DISPLAY,
   };
 }
 
@@ -768,10 +785,11 @@ export function buildVehicleDocument(
 /**
  * Partial update; returns changed field names for validation/emptiness.
  *
- * @param existing the vehicle's CURRENT stored data, used only so an "Other /
- *   not listed" selection keeps the label the document already has instead of
- *   flattening a member's original free text to a placeholder. Omit when it is
- *   unavailable; the placeholder is then used.
+ * @param existing the vehicle's CURRENT stored data (text AND ids), used only so
+ *   an "Other / not listed" selection keeps a member's original free text
+ *   instead of flattening it to a placeholder. The ids matter: text that a
+ *   previous write DERIVED from a catalogue id must not be kept when the owner
+ *   moves that level to Other. Omit when unavailable; the placeholder is used.
  */
 export function buildVehicleUpdate(
   input: UpdateVehicleInput,

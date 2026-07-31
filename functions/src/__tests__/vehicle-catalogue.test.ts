@@ -159,15 +159,43 @@ describe('structured display-name resolution', () => {
     });
   });
 
-  it('KEEPS an existing label rather than flattening it to the placeholder', () => {
+  it('KEEPS owner-authored text rather than flattening it to the placeholder', () => {
     // The migration promise: a pre-catalogue car edited by an owner who picks
-    // "Other" must not lose the only description of it that ever existed.
+    // "Other" must not lose the only description of it that ever existed. These
+    // stored docs carry no ids, so their text is the owner's own.
     expect(
       resolveCatalogueDisplayNames('volvo', OTHER_ID, { make: 'Volvo', model: 'Duett' }),
     ).toEqual({ make: 'Volvo', model: 'Duett' });
     expect(
       resolveCatalogueDisplayNames(OTHER_ID, OTHER_ID, { make: 'Kaipan', model: '57' }),
     ).toEqual({ make: 'Kaipan', model: '57' });
+  });
+
+  it('does NOT keep text a previous write DERIVED from a catalogue id', () => {
+    // A member who picked volvo/240 by mistake and corrects it to Other would
+    // otherwise keep a car labelled "Volvo 240" while being counted in the
+    // `other` bucket — that label is a lie, not a rescued description.
+    expect(
+      resolveCatalogueDisplayNames(OTHER_ID, OTHER_ID, {
+        make: 'Volvo',
+        model: '240',
+        makeId: 'volvo',
+        modelId: '240',
+      }),
+    ).toEqual({ make: OTHER_MAKE_DISPLAY, model: OTHER_MODEL_DISPLAY });
+  });
+
+  it('applies the rule per level, not per document', () => {
+    // Half-migrated: the make was selected from the catalogue on an earlier edit,
+    // the model never was. Only the model text is still the owner's.
+    expect(
+      resolveCatalogueDisplayNames('volvo', OTHER_ID, {
+        make: 'Volvo',
+        model: 'Duett',
+        makeId: 'volvo',
+        modelId: null,
+      }),
+    ).toEqual({ make: 'Volvo', model: 'Duett' });
   });
 
   it('ignores blank existing labels', () => {

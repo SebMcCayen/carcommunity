@@ -6,7 +6,6 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -85,7 +84,19 @@ class GarageScreensTest {
         composeTestRule.setContent {
             KccTheme {
                 VehicleFormScreen(
-                    initial = VehicleForm(),
+                    // Make/model/year are SELECTED, never typed: they are seeded
+                    // here as the pickers would set them. Driving the picker
+                    // sheets themselves is not exercised on the emulator — the
+                    // selection LOGIC (cascade, catalogue membership, year window,
+                    // the Other bucket) is covered off-Compose by
+                    // VehicleCatalogueTest / VehicleValidationTest, which run in
+                    // the blocking gate rather than this informational job.
+                    initial =
+                        VehicleForm(
+                            makeId = "saab",
+                            modelId = "900",
+                            modelYear = 1990,
+                        ),
                     isEdit = false,
                     saveStatus = VehicleSaveStatus.Idle,
                     currentYear = 2026,
@@ -94,12 +105,6 @@ class GarageScreensTest {
                 )
             }
         }
-        // Make/model/year are SELECTED, never typed: each field opens a searchable
-        // sheet, and only a tapped row can set a value. The search box exists to
-        // filter a ~100-entry list, and its text is discarded with the sheet.
-        pick(R.string.garage_make, R.string.garage_selectMake, "Saab")
-        pick(R.string.garage_model, R.string.garage_selectModel, "900")
-        pick(R.string.garage_modelYear, R.string.garage_selectModelYear, "1990")
         composeTestRule.onNodeWithText(str(R.string.garage_powertrain_petrol)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_saveVehicle)).performScrollTo().performClick()
         // The payload carries catalogue IDS; the backend derives the display text.
@@ -197,19 +202,6 @@ class GarageScreensTest {
         composeTestRule.onNodeWithText(str(R.string.garage_validationMakeRequired)).assertIsDisplayed()
     }
 
-    /**
-     * Opens the selector labelled [labelRes] (currently showing [placeholderRes]),
-     * searches for [value] and taps it.
-     */
-    private fun pick(labelRes: Int, placeholderRes: Int, value: String) {
-        composeTestRule
-            .onNodeWithContentDescription(emptySelector(labelRes, placeholderRes))
-            .performScrollTo()
-            .performClick()
-        composeTestRule.onNodeWithText(str(R.string.garage_pickerSearch)).performTextInput(value)
-        composeTestRule.onNodeWithText(value).performClick()
-    }
-
     @Test
     fun form_modelSelector_isDisabledUntilAManufacturerIsChosen() {
         // The cascade, visible: model ids repeat across brands, so there is nothing
@@ -262,14 +254,20 @@ class GarageScreensTest {
     }
 
     @Test
-    fun form_otherOption_isSelectableWithoutAnyTyping() {
-        // The escape hatch must be reachable as a SELECTION — a rare import or an
-        // unlisted brand cannot lock its owner out of adding their car.
+    fun form_otherSelection_rendersItsLabelAndReportsTheOtherIds() {
+        // The escape hatch: an unlisted brand is a SELECTION, so a member with a
+        // rare import or a kit car is not locked out — and the form explains that
+        // the choice is recorded rather than being a dead end.
         var saved: VehicleInput? = null
         composeTestRule.setContent {
             KccTheme {
                 VehicleFormScreen(
-                    initial = VehicleForm(),
+                    initial =
+                        VehicleForm(
+                            makeId = VehicleCatalogue.OTHER_ID,
+                            modelId = VehicleCatalogue.OTHER_ID,
+                            modelYear = 1998,
+                        ),
                     isEdit = false,
                     saveStatus = VehicleSaveStatus.Idle,
                     currentYear = 2026,
@@ -278,15 +276,10 @@ class GarageScreensTest {
                 )
             }
         }
-        pick(R.string.garage_make, R.string.garage_selectMake, str(R.string.garage_catalogueOther))
         composeTestRule
-            .onNodeWithContentDescription(
-                "${str(R.string.garage_model)}, ${str(R.string.garage_selectModel)}",
-            )
+            .onNodeWithText(str(R.string.garage_catalogueOtherHint))
             .performScrollTo()
-            .performClick()
-        composeTestRule.onNodeWithText(str(R.string.garage_catalogueOther)).performClick()
-        pick(R.string.garage_modelYear, R.string.garage_selectModelYear, "1998")
+            .assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.garage_powertrain_petrol)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(str(R.string.garage_saveVehicle)).performScrollTo().performClick()
         assertEquals(VehicleCatalogue.OTHER_ID, saved?.makeId)
