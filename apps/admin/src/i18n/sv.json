@@ -647,6 +647,7 @@
     "empty": "Inga användare hittades.",
     "emptyFiltered": "Inga användare matchar sökningen.",
     "unnamed": "(namnlös)",
+    "noNickname": "Inget smeknamn registrerat",
     "columns": {
       "name": "Namn",
       "role": "Roll",

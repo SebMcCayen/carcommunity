@@ -1120,6 +1120,7 @@ describe('users module', () => {
             suspended: false,
             deleted: false,
             createdAt: ts('2026-07-01T10:00:00Z'),
+            onboardingCompletedAt: ts('2026-07-01T10:05:00Z'),
           }),
         },
       ],
@@ -1134,6 +1135,7 @@ describe('users module', () => {
       suspended: false,
       deleted: false,
       createdAt: '2026-07-01T10:00:00.000Z',
+      onboardingCompletedAt: '2026-07-01T10:05:00.000Z',
     });
   });
 
@@ -1149,7 +1151,7 @@ describe('users module', () => {
             activeMember: 'yes',
             suspended: 1,
             deleted: null,
-            // Missing displayName / createdAt.
+            // Missing displayName / createdAt / onboardingCompletedAt.
           }),
         },
       ],
@@ -1163,6 +1165,7 @@ describe('users module', () => {
       suspended: false,
       deleted: false,
       createdAt: null,
+      onboardingCompletedAt: null,
     });
   });
 

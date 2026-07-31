@@ -57,6 +57,49 @@ export interface AdminUserSummary {
   suspended: boolean;
   deleted: boolean;
   createdAt: string | null;
+  /**
+   * ISO string of `users/{uid}.onboardingCompletedAt`, or null when onboarding
+   * has not completed. Onboarding requires a member-chosen nickname, so a set
+   * marker is the authoritative signal that `displayName` is a real nickname
+   * rather than the provisioning placeholder — see [hasMemberSetNickname].
+   */
+  onboardingCompletedAt: string | null;
+}
+
+/**
+ * The neutral placeholder `displayName` every account is provisioned with and
+ * keeps until the member picks their own nickname during onboarding. Mirrors
+ * `DEFAULT_DISPLAY_NAME` in functions/src/auth/provisioning.ts — a value that is
+ * deliberately NEVER derived from the identity provider (privacy invariant). It
+ * is duplicated here (rather than imported) because the admin app does not
+ * depend on the functions package; it is only ever compared, never written.
+ */
+export const PROVISIONING_PLACEHOLDER_NAME = 'New member';
+
+/**
+ * Whether the account has a MEMBER-SET nickname worth displaying, as opposed to
+ * an account still sitting on the provisioning placeholder.
+ *
+ * The check is deliberately ordered:
+ *  1. An empty / whitespace-only `displayName` always yields the label — there
+ *     is literally nothing to render, so this wins even if `onboardingCompletedAt`
+ *     is somehow set (a hand-edited/partial doc). Showing the label beats
+ *     rendering an empty cell.
+ *  2. Among NON-empty names, `onboardingCompletedAt` is authoritative: onboarding
+ *     stamps it and cannot complete without a valid member-typed nickname
+ *     (auth.completeOnboarding), so a set marker ⟺ the name is a real nickname —
+ *     it is shown even if it happens to equal the placeholder string.
+ *  3. Belt-and-suspenders for old/partial/hand-edited docs missing the marker: a
+ *     non-empty name that still exactly equals the provisioning placeholder
+ *     counts as "not set"; any other non-empty name is shown.
+ */
+export function hasMemberSetNickname(
+  summary: Pick<AdminUserSummary, 'displayName' | 'onboardingCompletedAt'>,
+): boolean {
+  const name = summary.displayName.trim();
+  if (name === '') return false;
+  if (summary.onboardingCompletedAt != null) return true;
+  return name !== PROVISIONING_PLACEHOLDER_NAME;
 }
 
 /** Admin-safe user detail. Never includes anything from `userPrivate/{uid}`. */
@@ -143,6 +186,7 @@ function toSummary(uid: string, data: Record<string, unknown>): AdminUserSummary
     suspended: data.suspended === true,
     deleted: data.deleted === true,
     createdAt: toIso(data.createdAt),
+    onboardingCompletedAt: toIso(data.onboardingCompletedAt),
   };
 }
 

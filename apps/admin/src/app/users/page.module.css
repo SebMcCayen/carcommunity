@@ -127,6 +127,15 @@
   margin-top: var(--space-1);
 }
 
+/* Muted, italic label for accounts that have not registered a nickname yet
+ * (still on the provisioning placeholder). Overrides the accent colour the
+ * enclosing .rowLink sets so it reads as an absent value, not a name. */
+.noNickname {
+  color: var(--text-secondary);
+  font-style: italic;
+  font-weight: var(--fw-normal);
+}
+
 .badgeActive,
 .badgeSuspended,
 .badgeDeleted {

@@ -17,7 +17,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { adminListUsers, type AdminUserSummary, type ApiError } from '@/features/users';
+import {
+  adminListUsers,
+  hasMemberSetNickname,
+  type AdminUserSummary,
+  type ApiError,
+} from '@/features/users';
 import { translate } from '@/i18n';
 import { formatDateOnly } from '@/lib/format';
 
@@ -121,7 +126,11 @@ export default function UsersPage() {
                 <tr key={u.uid}>
                   <td>
                     <Link className={styles.rowLink} to={`/users/${u.uid}`}>
-                      {u.displayName || t('users.unnamed')}
+                      {hasMemberSetNickname(u) ? (
+                        u.displayName
+                      ) : (
+                        <span className={styles.noNickname}>{t('users.noNickname')}</span>
+                      )}
                     </Link>
                     <span className={styles.uid}>{u.uid}</span>
                   </td>
