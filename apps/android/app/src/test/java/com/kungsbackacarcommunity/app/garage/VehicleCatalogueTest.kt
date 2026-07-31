@@ -122,6 +122,32 @@ class VehicleCatalogueTest {
     }
 
     @Test
+    fun `search still matches under the Turkish locale`() {
+        // Turkish lower-cases 'I' to the DOTLESS 'ı' under a locale-SENSITIVE
+        // fold, which would make "INFINITI" fold to "ınfınıtı" and stop matching
+        // the catalogue's "Infiniti" on every Turkish-locale device.
+        //
+        // Kotlin's no-arg String.lowercase() is already locale-invariant (the
+        // stdlib defines it as toLowerCase(Locale.ROOT)), unlike Java's
+        // deprecated toLowerCase() — so VehicleCatalogue.fold() needs no Locale
+        // argument. This pins BOTH forms so nobody "fixes" it back and forth,
+        // the same way VehicleValidationTest pins the plate's uppercase().
+        val previous = java.util.Locale.getDefault()
+        try {
+            java.util.Locale.setDefault(java.util.Locale.forLanguageTag("tr-TR"))
+            val options = VehicleCatalogue.makeOptions()
+            assertTrue(VehicleCatalogue.filter(options, "INFINITI").any { it.id == "infiniti" })
+            assertTrue(VehicleCatalogue.filter(options, "infiniti").any { it.id == "infiniti" })
+            // The locale-invariant form is what fold() uses; the locale-sensitive
+            // form is what would have broken it.
+            assertEquals("infiniti", "INFINITI".lowercase())
+            assertEquals("ınfınıtı", "INFINITI".lowercase(java.util.Locale.getDefault()))
+        } finally {
+            java.util.Locale.setDefault(previous)
+        }
+    }
+
+    @Test
     fun `an empty query returns everything unchanged`() {
         val options = VehicleCatalogue.makeOptions()
         assertEquals(options, VehicleCatalogue.filter(options, "   "))
