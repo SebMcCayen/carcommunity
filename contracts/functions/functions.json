@@ -1025,6 +1025,15 @@
       "appCheck": true,
       "status": "implemented",
       "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "finance.estimate",
+      "domain": "finance",
+      "description": "Admin-only on-demand cost estimate in SEK ({} input — takes no client-controlled fields). Computes an IN-APP COST MODEL (estimated, NOT the real Google Cloud bill): a sourced+dated price table (functions/src/finance/pricing.ts), labelled usage assumptions (assumptions.ts), and the function inventory (inventory.ts). Reads the latest metrics/{YYYY-MM-DD} snapshot's totalUsers for the LIVE member count so the variable half tracks community growth (falls back to a labelled default with source:'fallback' when no snapshot exists yet). Splits cost into two honest halves: COMMITTED (scheduled jobs — cadence x per-run work, independent of members; Trafikverket's ~2,775 writes/run x 48 runs/day dominates) and VARIABLE (per-member Firestore/Functions/RTDB/Storage usage). Applies each service's free tier explicitly (gross -> free -> billable -> SEK). Returns a Google Cloud subtotal, a SEPARATE Mapbox vendor estimate (never blended in), and a SEPARATE fixed-subscriptions section (e.g. Claude — placeholder until Seb sets his real plan cost), plus a grand total and any uncosted functions. On-demand rather than scheduled on purpose: no history is needed, so it avoids adding a scheduled Firestore write (a cost of its own). Every figure is a MODEL ESTIMATE; the admin page carries that banner and links to the Google Cloud billing console. Deployed via grouped export as finance-estimate (functions/src/finance/estimate.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
     }
   ]
 }
