@@ -508,7 +508,10 @@
     "endTitle": "End billboard placement",
     "reasonLabel": "Reason",
     "prevPage": "Previous",
-    "nextPage": "Next"
+    "nextPage": "Next",
+    "columnOnMap": "On the map",
+    "onMapYes": "Yes",
+    "onMapNo": "No"
   },
   "notifications": {
     "pageTitle": "Notifications",

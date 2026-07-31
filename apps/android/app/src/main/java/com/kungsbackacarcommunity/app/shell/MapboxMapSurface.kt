@@ -170,6 +170,10 @@ class MapboxMapSurface : MapSurface {
     private val eventMarkersFlow = MutableStateFlow<List<MapEventMarker>>(emptyList())
     override val eventMarkers: StateFlow<List<MapEventMarker>> = eventMarkersFlow.asStateFlow()
 
+    private val billboardMarkersFlow = MutableStateFlow<List<MapBillboardMarker>>(emptyList())
+    override val billboardMarkers: StateFlow<List<MapBillboardMarker>> =
+        billboardMarkersFlow.asStateFlow()
+
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
 
@@ -203,6 +207,9 @@ class MapboxMapSurface : MapSurface {
 
     private val eventTapFlow = MutableStateFlow<String?>(null)
     override val eventTap: StateFlow<String?> = eventTapFlow.asStateFlow()
+
+    private val billboardTapFlow = MutableStateFlow<String?>(null)
+    override val billboardTap: StateFlow<String?> = billboardTapFlow.asStateFlow()
 
     // The map long-click gesture listener ("hold to navigate here"); held so it
     // can be detached in onRelease.
@@ -355,6 +362,27 @@ class MapboxMapSurface : MapSurface {
     // re-uploads it.
     private val registeredEventImages = mutableSetOf<String>()
     private var lastAppliedEvents: List<MapEventMarker>? = null
+
+    // ---- Sponsored billboards layer ------------------------------------------
+    // The fourth annotation manager on this surface, and its own for exactly the
+    // reasons the three above are: the layer must be emptiable on its own (the
+    // digitalBillboards flag going off) without touching an incident, a crown or
+    // an event pin, and a tap must resolve against exactly ONE lookup — a
+    // billboard tap that opened an incident sheet, or an incident tap that
+    // recorded a sponsor impression, are both bugs this seam makes impossible.
+    // Style-image names are namespaced `kcc-billboard-` by
+    // BillboardMarkerBitmaps.imageId so they cannot collide with
+    // `kcc-incident-`, `kcc-crown-` or `kcc-event-marker`.
+    private var billboardMarkerManager: PointAnnotationManager? = null
+
+    // Annotation id → billboard id, rebuilt on every redraw and cleared with the
+    // manager. Module-visible for the same reason as the other lookups:
+    // annotations cannot be created off-device, so a unit test seeds it directly.
+    internal val billboardIdsByAnnotation = mutableMapOf<String, String>()
+
+    private var billboardClickListener: OnPointAnnotationClickListener? = null
+    private val registeredBillboardImages = mutableSetOf<String>()
+    private var lastAppliedBillboards: List<MapBillboardMarker>? = null
 
     // Camera-change listener that mirrors the live map bearing into [bearingFlow]
     // (so the compass control rotates); held so it can be detached in onRelease.
@@ -527,6 +555,15 @@ class MapboxMapSurface : MapSurface {
         crownMarkersFlow.value = markers
     }
 
+    override fun setBillboardMarkers(markers: List<MapBillboardMarker>) {
+        // Same contract again: the Content update lambda observes this flow and
+        // redraws only on a real change. An empty list takes the layer down,
+        // which is what the host pushes when the digitalBillboards flag reads
+        // false — and what it pushes when the server stops calling a billboard
+        // map-visible.
+        billboardMarkersFlow.value = markers
+    }
+
     override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
         val map = mapViewRef ?: return null
         return runCatching {
@@ -685,6 +722,14 @@ class MapboxMapSurface : MapSurface {
 
     override fun consumeEventTap() {
         eventTapFlow.value = null
+    }
+
+    override fun emitBillboardTap(billboardId: String) {
+        billboardTapFlow.value = billboardId
+    }
+
+    override fun consumeBillboardTap() {
+        billboardTapFlow.value = null
     }
 
     override fun emitLongPress(point: MapPoint) {
@@ -1043,6 +1088,7 @@ class MapboxMapSurface : MapSurface {
         val incidents by incidentMarkersFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
         val events by eventMarkersFlow.collectAsState()
+        val billboards by billboardMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
         // is the device puck): a green pulse signals sharing, blue otherwise.
         val marker by userMarkerFlow.collectAsState()
@@ -1526,6 +1572,29 @@ class MapboxMapSurface : MapSurface {
                             registeredEventImages.clear()
                             applyEventMarkersIfChanged(eventMarkersFlow.value)
                         }
+                        // Sponsored billboards manager — again its OWN manager,
+                        // for the same reasons as the three above: its own tap
+                        // intent ("show me this advert"), its own lookup, and
+                        // the ability to be emptied (the digitalBillboards flag
+                        // going off) without disturbing anything else on the
+                        // map. Drawn from the current flow value so billboards
+                        // that arrived while the style was still loading are
+                        // rendered rather than lost.
+                        runCatching {
+                            val billboardManager = annotations.createPointAnnotationManager()
+                            BillboardMarkerLayer.configure(billboardManager)
+                            val billboardClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    onBillboardAnnotationClicked(annotation.id)
+                                }
+                            billboardClickListener = billboardClick
+                            billboardManager.addClickListener(billboardClick)
+                            billboardMarkerManager = billboardManager
+                            lastAppliedBillboards = null
+                            // Style images die with the style that owned them.
+                            registeredBillboardImages.clear()
+                            applyBillboardMarkersIfChanged(billboardMarkersFlow.value)
+                        }
                         // Private breadcrumb tail: a GeoJSON line source + a
                         // line-gradient layer (both hidden until there is a tail to
                         // draw), created once the style is ready. Idempotent. If a
@@ -1616,6 +1685,11 @@ class MapboxMapSurface : MapSurface {
                 // (Re)draw the community event pins only when the set actually
                 // changes; a no-op until the manager exists (style loaded).
                 runCatching { applyEventMarkersIfChanged(events) }
+                // Same again for the sponsored billboards — a no-op until its
+                // manager exists, and a no-op whenever the set is unchanged
+                // (which, with the digitalBillboards flag off, is "empty"
+                // forever).
+                runCatching { applyBillboardMarkersIfChanged(billboards) }
                 // Reflect live-sharing on the puck: green pulse while sharing.
                 runCatching {
                     mapView.location.updateSettings { pulsingColor = pulseColorFor(marker) }
@@ -1709,28 +1783,41 @@ class MapboxMapSurface : MapSurface {
                     runCatching { eventMarkerManager?.removeClickListener(l) }
                 }
                 eventClickListener = null
+                // Same teardown for the billboards layer, so a torn-down map
+                // cannot keep publishing billboard taps into a popup that is
+                // gone — or, worse, record a sponsor-facing `open` interaction
+                // for a marker nobody is looking at.
+                billboardClickListener?.let { l ->
+                    runCatching { billboardMarkerManager?.removeClickListener(l) }
+                }
+                billboardClickListener = null
                 destMarkerManager = null
                 incidentMarkerManager = null
                 crownMarkerManager = null
                 eventMarkerManager = null
+                billboardMarkerManager = null
                 // The annotations are gone with their manager, so the lookup that
                 // described them must go too — otherwise a stale annotation id
                 // could resolve to an incident/event on the NEXT map.
                 incidentIdsByAnnotation.clear()
                 crownIdsByAnnotation.clear()
                 eventIdsByAnnotation.clear()
+                billboardIdsByAnnotation.clear()
                 // Managers are gone, so a later re-init must redraw the overlay,
-                // the incident markers, the crowns and the event pins.
+                // the incident markers, the crowns, the event pins and the
+                // billboards.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
                 lastAppliedCrowns = null
                 lastAppliedEvents = null
+                lastAppliedBillboards = null
                 // The style (and every image registered on it) dies with this
                 // MapView, so a later map must re-upload the marker images
                 // rather than believe these are still present.
                 registeredIncidentImages.clear()
                 registeredCrownImages.clear()
                 registeredEventImages.clear()
+                registeredBillboardImages.clear()
                 appContext = null
                 mapViewRef = null
                 lastPoint = null
@@ -1938,6 +2025,65 @@ class MapboxMapSurface : MapSurface {
             markers = markers,
             registeredImages = registeredIncidentImages,
             idsByAnnotation = incidentIdsByAnnotation,
+        )
+    }
+
+    /**
+     * Handles a tap on one of THIS surface's billboard markers, returning whether
+     * the tap was consumed.
+     *
+     * **Always returns true**, for the reasons on [onIncidentAnnotationClicked]:
+     * the annotation plugin has already hit-tested against the BILLBOARD
+     * manager's own annotations, so the tap definitionally landed on a
+     * billboard, and returning false would pass it to the basemap-POI
+     * interaction — offering to navigate the user to some unrelated shop because
+     * they tapped an advert.
+     *
+     * An unresolvable id means [billboardIdsByAnnotation] has drifted from what
+     * is drawn; the same reset-then-redraw repair is used, and nothing is shown
+     * to the user because the condition means nothing to them.
+     */
+    internal fun onBillboardAnnotationClicked(annotationId: String): Boolean {
+        val billboardId = billboardIdsByAnnotation[annotationId]
+        if (billboardId != null) {
+            emitBillboardTap(billboardId)
+            return true
+        }
+        lastAppliedBillboards = null
+        applyBillboardMarkersIfChanged(billboardMarkersFlow.value)
+        return true
+    }
+
+    /**
+     * Redraws the billboard markers only when the set differs from the last one
+     * applied. Same incomplete-draw rule as every other layer here: a draw that
+     * could not upload its image is NOT cached, so the next update repairs it
+     * rather than leaving permanently blank annotations.
+     */
+    private fun applyBillboardMarkersIfChanged(markers: List<MapBillboardMarker>) {
+        if (markers == lastAppliedBillboards) return
+        if (applyBillboardMarkers(markers)) {
+            lastAppliedBillboards = markers
+        }
+    }
+
+    /**
+     * Clears and redraws the sponsored billboards on THIS surface. A no-op until
+     * the manager exists (style loaded).
+     *
+     * The draw itself is [BillboardMarkerLayer.draw]; everything with a lifetime
+     * (the manager, the registered style image, the annotation → billboard
+     * lookup) is this surface's own and is passed in.
+     */
+    private fun applyBillboardMarkers(markers: List<MapBillboardMarker>): Boolean {
+        val manager = billboardMarkerManager ?: return false
+        return BillboardMarkerLayer.draw(
+            manager = manager,
+            style = mapViewRef?.mapboxMap?.style,
+            context = appContext,
+            markers = markers,
+            registeredImages = registeredBillboardImages,
+            idsByAnnotation = billboardIdsByAnnotation,
         )
     }
 

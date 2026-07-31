@@ -1079,6 +1079,7 @@
     <string name="billboard_availableUntil">Tillgänglig till</string>
     <string name="billboard_availableFrom">Tillgänglig från</string>
     <string name="billboard_loadError">Kunde inte hämta reklamskylten.</string>
+    <string name="billboard_mapPopupClose">Stäng</string>
     <string name="notifications_title">Notiser</string>
     <string name="notifications_empty">Inga notiser ännu.</string>
     <string name="notifications_loadError">Kunde inte hämta notiser. Försök igen.</string>

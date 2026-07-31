@@ -1161,7 +1161,8 @@
     "safeDrivingInteractionDisabled": "Advertising interactions are disabled while driving.",
     "availableUntil": "Available until",
     "availableFrom": "Available from",
-    "loadError": "Could not load the billboard."
+    "loadError": "Could not load the billboard.",
+    "mapPopupClose": "Close"
   },
   "notifications": {
     "title": "Notifications",

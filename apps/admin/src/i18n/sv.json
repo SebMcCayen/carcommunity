@@ -583,7 +583,10 @@
     "endTitle": "Avsluta reklamskyltsplacering",
     "reasonLabel": "Orsak",
     "prevPage": "Föregående",
-    "nextPage": "Nästa"
+    "nextPage": "Nästa",
+    "columnOnMap": "På kartan",
+    "onMapYes": "Ja",
+    "onMapNo": "Nej"
   },
   "notifications": {
     "pageTitle": "Notiser och meddelanden",

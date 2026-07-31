@@ -25,9 +25,13 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
+  orderBy,
+  query,
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { get as dbGet, ref as dbRef, set as dbSet } from 'firebase/database';
 import { getBytes, ref as storageRef, uploadBytes } from 'firebase/storage';
@@ -678,12 +682,37 @@ describe('Firestore – billboards (Phase 9k)', () => {
         headline: 'Aktiv skylt',
         message: 'Meddelande',
         status: 'active',
+        mapVisible: true,
+        createdAt: serverTimestamp(),
       });
       await setDoc(doc(ctx.firestore(), 'billboards', 'bb-draft'), {
         partnerCompanyId: 'co-1',
         headline: 'Utkast',
         message: 'Meddelande',
         status: 'draft',
+        mapVisible: false,
+        createdAt: serverTimestamp(),
+      });
+      // ACTIVE but outside its availability window — the server resolved that
+      // into mapVisible=false (the lifecycle callables, or the scheduled
+      // sweep). This is the fixture that proves the SCHEDULE is enforced by the
+      // rule, not merely by client filtering.
+      await setDoc(doc(ctx.firestore(), 'billboards', 'bb-out-of-window'), {
+        partnerCompanyId: 'co-1',
+        headline: 'Schemalagd skylt',
+        message: 'Meddelande',
+        status: 'active',
+        mapVisible: false,
+        createdAt: serverTimestamp(),
+      });
+      // A legacy document from before the field existed: absent, not false.
+      // Must read as hidden until the sweep backfills it.
+      await setDoc(doc(ctx.firestore(), 'billboards', 'bb-legacy'), {
+        partnerCompanyId: 'co-1',
+        headline: 'Gammal skylt',
+        message: 'Meddelande',
+        status: 'active',
+        createdAt: serverTimestamp(),
       });
     });
   });
@@ -697,6 +726,47 @@ describe('Firestore – billboards (Phase 9k)', () => {
     await assertFails(
       updateDoc(doc(adminCtx.firestore(), 'billboards', 'bb-active'), { headline: 'Hacked' }),
     );
+  });
+
+  it('an active billboard OUTSIDE its window is unreadable, not merely undrawn', async () => {
+    // "If it isn't activated it shouldn't be shown" — a client-side filter
+    // would satisfy the map and nothing else. This asserts a member cannot
+    // fetch the document at all, however they ask for it.
+    const ctx = testEnv.authenticatedContext('bb-window-user');
+    await assertFails(getDoc(doc(ctx.firestore(), 'billboards', 'bb-out-of-window')));
+    await assertFails(getDoc(doc(ctx.firestore(), 'billboards', 'bb-legacy')));
+    // Admins still see everything, for the admin portal.
+    const adminCtx = testEnv.authenticatedContext('bb-window-admin', { admin: true });
+    await assertSucceeds(getDoc(doc(adminCtx.firestore(), 'billboards', 'bb-out-of-window')));
+  });
+
+  it('the map layer query succeeds and returns only map-visible billboards', async () => {
+    // This is the regression guard for the coupling between the read rule and
+    // the map query. A `list` is evaluated against the QUERY's constraints, not
+    // against the documents it returns, so the query must filter on every field
+    // the rule reads — drop either `where` below and this fails with "Property
+    // <x> is undefined on object", i.e. the whole billboard layer goes dark
+    // rather than merely showing too much.
+    //
+    // It also asserts the collection can hold a draft, an out-of-window and a
+    // legacy billboard without any of them reaching a member.
+    const ctx = testEnv.authenticatedContext('bb-query-user');
+    const snapshot = await assertSucceeds(
+      getDocs(
+        query(
+          collection(ctx.firestore(), 'billboards'),
+          where('status', '==', 'active'),
+          where('mapVisible', '==', true),
+          orderBy('createdAt', 'asc'),
+          limit(150),
+        ),
+      ),
+    );
+    const ids = (snapshot as { docs: Array<{ id: string }> }).docs.map((d) => d.id);
+    expect(ids).toContain('bb-active');
+    expect(ids).not.toContain('bb-out-of-window');
+    expect(ids).not.toContain('bb-legacy');
+    expect(ids).not.toContain('bb-draft');
   });
 
   it('billboard images: authenticated read, admin-only write', async () => {

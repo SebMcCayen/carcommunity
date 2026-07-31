@@ -164,6 +164,28 @@ data class MapEventMarker(
 )
 
 /**
+ * One sponsored BILLBOARD to draw on the map.
+ *
+ * The same shape as [MapEventMarker] and for the same reason: there is exactly
+ * one billboard marker image (a billboard has no per-item variants the way an
+ * incident has categories or a crown has rarities), so the marker's appearance
+ * is a fixed part of the surface's billboard layer and only the id and position
+ * cross the seam. The host resolves a tapped [id] back to the billboard it
+ * holds, and opens its popup.
+ *
+ * Its OWN type rather than a reused [MapEventMarker] for the reason spelled out
+ * on [MapCrownMarker]: the two are drawn by different managers into different
+ * style images, and a shared type would turn "which layer is this?" from a
+ * compile-time question into a runtime one — with a tap that opened an event
+ * popup for an advert as the payoff.
+ */
+data class MapBillboardMarker(
+    val id: String,
+    val longitude: Double,
+    val latitude: Double,
+)
+
+/**
  * One auto-spawned Kronjakt crown to draw on the map.
  *
  * The exact sibling of [MapIncidentMarker], and separate from it for the same
@@ -421,6 +443,20 @@ interface MapSurface : MapProjection {
      */
     val crownMarkers: StateFlow<List<MapCrownMarker>>
 
+    /**
+     * The sponsored billboards to draw (the billboards layer).
+     *
+     * Empty whenever the `digitalBillboards` flag is off, and empty whenever the
+     * server says a billboard is not currently map-visible — the host never
+     * queries in the first case, and the query itself cannot return a hidden
+     * billboard in the second (the read rule requires the server-owned
+     * `mapVisible` flag). There is no member-facing toggle for this layer and
+     * no member-facing menu entry anywhere else: the map is the ONLY place a
+     * billboard appears, and an admin deciding it is active is the only thing
+     * that puts it there.
+     */
+    val billboardMarkers: StateFlow<List<MapBillboardMarker>>
+
     // [cameraSnapshot] and [screenPositionFor] are inherited from [MapProjection]
     // — the two members the convoy / nearby-live marker overlays actually need.
     // They live there, not here, so those overlays can also be drawn over the
@@ -520,6 +556,18 @@ interface MapSurface : MapProjection {
      */
     val crownTap: StateFlow<String?>
 
+    /**
+     * The id of the billboard marker most recently TAPPED, or null when none is
+     * pending. The host observes this to open the billboard popup, then calls
+     * [consumeBillboardTap].
+     *
+     * A SEPARATE flow, for the reason given on [crownTap]: four layers now draw
+     * onto this surface, and a shared tap slot would let an id from one
+     * collection be looked up in another — finding nothing, so the tap would
+     * silently do nothing. A failure with no symptom is the one to design out.
+     */
+    val billboardTap: StateFlow<String?>
+
     /** Recentre the camera on the user's position. */
     fun recenter()
 
@@ -568,6 +616,16 @@ interface MapSurface : MapProjection {
 
     /** Clear the pending [crownTap] once the host has opened the popup for it. */
     fun consumeCrownTap()
+
+    /**
+     * Record a tap on the billboard marker with [billboardId]. Called by the
+     * real surface's annotation click listener; also drivable by the stub/tests
+     * to simulate the tap without a GL surface.
+     */
+    fun emitBillboardTap(billboardId: String)
+
+    /** Clear the pending [billboardTap] once the host has opened the popup for it. */
+    fun consumeBillboardTap()
 
     /**
      * Reset the map to north-up: ease the camera bearing back to 0. Moves no
@@ -690,6 +748,16 @@ interface MapSurface : MapProjection {
     fun setCrownMarkers(markers: List<MapCrownMarker>)
 
     /**
+     * Replace the set of sponsored billboards drawn on the map. The host reads
+     * these from the `billboards` collection (a bounded snapshot listener, NOT a
+     * viewport query — see `FirebaseBillboardsRepository`) and pushes them here.
+     * Pushing an empty list is how the layer is taken DOWN, which is what the
+     * host does the moment the `digitalBillboards` flag reads false. A no-op
+     * beyond storing the value on the stub.
+     */
+    fun setBillboardMarkers(markers: List<MapBillboardMarker>)
+
+    /**
      * The map view itself, filling [modifier].
      *
      * Composed at exactly ONE place in the whole signed-in shell (see
@@ -749,6 +817,10 @@ class StubMapSurface(
 
     private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
     override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
+
+    private val billboardMarkersFlow = MutableStateFlow<List<MapBillboardMarker>>(emptyList())
+    override val billboardMarkers: StateFlow<List<MapBillboardMarker>> =
+        billboardMarkersFlow.asStateFlow()
 
     private val placeRequestFlow = MutableStateFlow<MapPlaceRequest?>(null)
     override val placeRequest: StateFlow<MapPlaceRequest?> = placeRequestFlow.asStateFlow()
@@ -821,6 +893,9 @@ class StubMapSurface(
 
     private val crownTapFlow = MutableStateFlow<String?>(null)
     override val crownTap: StateFlow<String?> = crownTapFlow.asStateFlow()
+
+    private val billboardTapFlow = MutableStateFlow<String?>(null)
+    override val billboardTap: StateFlow<String?> = billboardTapFlow.asStateFlow()
 
     /** Number of [recenter] calls — used by tests to assert the wiring. */
     var recenterCount: Int = 0
@@ -908,6 +983,14 @@ class StubMapSurface(
 
     override fun consumeCrownTap() {
         crownTapFlow.value = null
+    }
+
+    override fun emitBillboardTap(billboardId: String) {
+        billboardTapFlow.value = billboardId
+    }
+
+    override fun consumeBillboardTap() {
+        billboardTapFlow.value = null
     }
 
     /**
@@ -999,6 +1082,10 @@ class StubMapSurface(
 
     override fun setCrownMarkers(markers: List<MapCrownMarker>) {
         crownMarkersFlow.value = markers
+    }
+
+    override fun setBillboardMarkers(markers: List<MapBillboardMarker>) {
+        billboardMarkersFlow.value = markers
     }
 
     /** Test/impl hook to force the load state (e.g. after tiles finish). */

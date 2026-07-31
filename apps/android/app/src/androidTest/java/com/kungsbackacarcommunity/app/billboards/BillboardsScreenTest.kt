@@ -32,7 +32,19 @@ class BillboardsScreenTest {
             KccTheme {
                 BillboardsScreen(
                     state = BillboardsState.Loaded(
-                        listOf(Billboard("b1", "Summer sale", "20% off tyres", "c1")),
+                        // Coordinates are required now that billboards are drawn
+                        // as map markers — a billboard with nowhere to stand is
+                        // dropped at parse, so the model no longer allows one.
+                        listOf(
+                            Billboard(
+                                id = "b1",
+                                headline = "Summer sale",
+                                message = "20% off tyres",
+                                companyId = "c1",
+                                latitude = 57.49,
+                                longitude = 12.07,
+                            ),
+                        ),
                     ),
                     onOpen = { opened = it },
                     onBack = {},

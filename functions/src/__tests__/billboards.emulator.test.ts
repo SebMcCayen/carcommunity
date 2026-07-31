@@ -174,6 +174,11 @@ describe('billboards lifecycle and the safety gate', () => {
     expect(active.status).toBe('active');
     expect(active.approvedByUserId).toBe(adminUser.uid);
     expect(active.approvedAt).not.toBeNull();
+    // Activation puts it on the map in the SAME write — not at the next sweep.
+    // `mapVisible` is what the member query filters on and what the read rule
+    // requires, so an activation that forgot it would be an activation that
+    // silently did nothing visible.
+    expect(active.mapVisible).toBe(true);
 
     const audit = await adminDb
       .collection('adminAuditEvents')
@@ -191,8 +196,15 @@ describe('billboards lifecycle and the safety gate', () => {
       ),
     ).toBe('functions/failed-precondition');
     await call('billboards-setStatus', { billboardId: created.billboardId, action: 'pause' });
+    // Pausing takes the marker off every member's map immediately — "I paused
+    // it" must not mean "gone within ten minutes".
+    const paused = (await adminDb.collection('billboards').doc(created.billboardId).get()).data()!;
+    expect(paused.status).toBe('paused');
+    expect(paused.mapVisible).toBe(false);
     await call('billboards-update', { billboardId: created.billboardId, headline: 'Ny rubrik' });
     await call('billboards-setStatus', { billboardId: created.billboardId, action: 'end' });
+    const ended = (await adminDb.collection('billboards').doc(created.billboardId).get()).data()!;
+    expect(ended.mapVisible).toBe(false);
     expect(
       await callableErrorCode(
         call('billboards-setStatus', { billboardId: created.billboardId, action: 'pause' }),

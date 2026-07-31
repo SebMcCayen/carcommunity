@@ -1161,7 +1161,8 @@
     "safeDrivingInteractionDisabled": "Marknadsföringsinteraktioner är avstängda medan du kör.",
     "availableUntil": "Tillgänglig till",
     "availableFrom": "Tillgänglig från",
-    "loadError": "Kunde inte hämta reklamskylten."
+    "loadError": "Kunde inte hämta reklamskylten.",
+    "mapPopupClose": "Stäng"
   },
   "notifications": {
     "title": "Notiser",

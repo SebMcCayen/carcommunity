@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
@@ -111,8 +113,14 @@ import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
+import com.kungsbackacarcommunity.app.billboards.Billboard
+import com.kungsbackacarcommunity.app.billboards.BillboardCallToAction
+import com.kungsbackacarcommunity.app.billboards.BillboardInteractionType
+import com.kungsbackacarcommunity.app.billboards.BillboardMapPopup
+import com.kungsbackacarcommunity.app.billboards.BillboardVisibility
 import com.kungsbackacarcommunity.app.billboards.BillboardsRepository
 import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
+import com.kungsbackacarcommunity.app.billboards.BillboardsState
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.config.FeatureFlags
@@ -313,6 +321,7 @@ import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
 import com.kungsbackacarcommunity.app.shell.MapCrownMarker
+import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -991,6 +1000,75 @@ fun AuthenticatedApp(
                 remember(tappedEventId, publishedEventsForMap) {
                     tappedEventId?.let { id -> publishedEventsForMap.firstOrNull { it.id == id } }
                 }
+            // ---- Sponsored billboards layer ---------------------------------
+            // Billboards are admin-managed and appear in exactly ONE place in
+            // the app: as markers on this map. There is no member-facing menu
+            // entry, no layer toggle and no list screen in the navigation —
+            // whether a billboard exists for a member to see at all is an admin
+            // decision, enforced by the read rule on `billboards`, not by
+            // anything here.
+            val billboardsEnabled = flags.isEnabled(FeatureFlag.DIGITAL_BILLBOARDS)
+            // ONE bounded snapshot listener for the whole signed-in session,
+            // deliberately NOT keyed on the selected tab and NOT re-issued for a
+            // camera move. See FirebaseBillboardsRepository for the cost
+            // reasoning: billboards are a few dozen slow-moving, human-curated
+            // records, so a viewport query would re-read them on every settled
+            // pan and buy nothing; keying on the tab would re-read the whole set
+            // on every tab switch. With the flag off no listener is attached at
+            // all — "off" costs nothing rather than costing a hidden layer's
+            // worth of reads.
+            val billboardsStateFlow =
+                remember(billboardsRepository, billboardsEnabled) {
+                    if (billboardsRepository != null && billboardsEnabled) {
+                        billboardsRepository.observeActiveBillboards()
+                    } else {
+                        flowOf(BillboardsState.Loaded(emptyList()))
+                    }
+                }
+            val billboardsState by
+                billboardsStateFlow.collectAsState(initial = BillboardsState.Loading)
+            val loadedBillboards =
+                (billboardsState as? BillboardsState.Loaded)?.billboards ?: emptyList()
+            // The window re-check. The query and the rule already exclude
+            // anything the server does not currently call map-visible, but the
+            // sweep that maintains that flag runs on a ten-minute cadence, so
+            // there is a bounded interval in which an expired billboard is still
+            // flagged visible and still sitting in this open listener. Rather
+            // than re-filter on a timer, filter now and then sleep exactly until
+            // the next boundary any loaded billboard has — the same one
+            // scheduled wake-up shape the event pins use for their "not past"
+            // cutoff. Falls out of the loop once nothing loaded is time-limited.
+            val visibleBillboards by
+                produceState(initialValue = emptyList<Billboard>(), loadedBillboards) {
+                    while (true) {
+                        val now = nowMillis()
+                        value = BillboardVisibility.visibleAt(loadedBillboards, now)
+                        val next =
+                            BillboardVisibility.nextBoundaryMillis(loadedBillboards, now) ?: break
+                        delay((next - now + 1L).coerceAtLeast(1L))
+                    }
+                }
+            val mapBillboardMarkers =
+                remember(visibleBillboards) {
+                    visibleBillboards.map { billboard ->
+                        MapBillboardMarker(
+                            id = billboard.id,
+                            longitude = billboard.longitude,
+                            latitude = billboard.latitude,
+                        )
+                    }
+                }
+            // The billboard the user TAPPED, resolved back from the id the
+            // surface published. Derived (not snapshotted) so a billboard that
+            // is paused, or whose window closes, while its popup is open CLOSES
+            // that popup rather than leaving an advert on screen that the member
+            // is no longer meant to be shown.
+            val tappedBillboardId by mapSurface.billboardTap.collectAsState()
+            val tappedBillboard =
+                remember(tappedBillboardId, visibleBillboards) {
+                    tappedBillboardId?.let { id -> visibleBillboards.firstOrNull { it.id == id } }
+                }
+
             // True while a removal is in flight, so the sheet can disable its
             // remove button. Keyed to the open incident: the sheet now survives
             // the round-trip, and a flag left set by a previous sheet would
@@ -3599,6 +3677,13 @@ fun AuthenticatedApp(
                                     // locations are public. Tapping one opens the
                                     // event info popup composed below.
                                     eventMarkers = mapEventMarkers,
+                                    // Sponsored billboards, drawn as their own
+                                    // layer with their own tap intent. Already
+                                    // filtered to what the server says is
+                                    // map-visible AND to what the schedule
+                                    // allows right now; empty when the
+                                    // digitalBillboards flag is off.
+                                    billboardMarkers = mapBillboardMarkers,
                                     // Credit Trafikverket only while their data is
                                     // actually on the map (so: not abroad, where the
                                     // Sweden-only importer contributes nothing).
@@ -3889,6 +3974,72 @@ fun AuthenticatedApp(
                                             route = ShellRoute.Events
                                         },
                                         onDismiss = { mapSurface.consumeEventTap() },
+                                    )
+                                }
+                                // Tapping a sponsored billboard opens its popup
+                                // (sponsorship label, headline, message, and the
+                                // partner link when there is one). Composed in
+                                // the same map-chrome subtree as the incident
+                                // sheet and the event popup, so a tab switch
+                                // takes it out of the semantics tree.
+                                //
+                                // Rendered only while the tapped id still
+                                // resolves to a currently-visible billboard: one
+                                // that an admin pauses, or whose window closes,
+                                // while the popup is open takes the popup with
+                                // it rather than leaving an advert on screen the
+                                // member is no longer meant to be shown.
+                                val openBillboard = tappedBillboard
+                                if (openBillboard != null) {
+                                    val action =
+                                        remember(openBillboard) {
+                                            BillboardCallToAction.resolve(openBillboard)
+                                        }
+                                    // The `open` impression, recorded once per
+                                    // opened billboard (keyed on the id, so
+                                    // recompositions do not re-report it). Best
+                                    // effort by design — the callable's own
+                                    // contract is that analytics never block the
+                                    // member's action, so a failure here must
+                                    // not surface or retry.
+                                    LaunchedEffect(openBillboard.id, billboardsRepository) {
+                                        runCatching {
+                                            billboardsRepository?.recordInteraction(
+                                                openBillboard.id,
+                                                BillboardInteractionType.OPEN,
+                                            )
+                                        }
+                                    }
+                                    BillboardMapPopup(
+                                        headline = openBillboard.headline,
+                                        message = openBillboard.message,
+                                        ctaLabel = action?.let { stringResource(it.labelRes) },
+                                        onCallToAction = {
+                                            val target = action ?: return@BillboardMapPopup
+                                            scope.launch {
+                                                runCatching {
+                                                    billboardsRepository?.recordInteraction(
+                                                        openBillboard.id,
+                                                        target.interactionType,
+                                                    )
+                                                }
+                                            }
+                                            // The launch itself is separate from
+                                            // the reporting above and must not
+                                            // wait on it: a member who taps
+                                            // "Ring" gets the dialler whether or
+                                            // not the analytics write lands.
+                                            runCatching {
+                                                context.startActivity(
+                                                    Intent(
+                                                        Intent.ACTION_VIEW,
+                                                        Uri.parse(target.uri),
+                                                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                                                )
+                                            }
+                                            mapSurface.consumeBillboardTap()
+                                        },
+                                        onDismiss = { mapSurface.consumeBillboardTap() },
                                     )
                                 }
                                 // Location explanation, over the map rather than

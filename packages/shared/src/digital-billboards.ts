@@ -58,6 +58,20 @@ export interface AdminBillboardSummary {
   latitude: number;
   longitude: number;
   status: BillboardStatus;
+  /**
+   * Whether this billboard is on the member map RIGHT NOW.
+   *
+   * Server-owned (`billboards/{id}.mapVisible`) and distinct from [status]:
+   * `status` is what the admin decided, `mapVisible` is what the availability
+   * window makes of that decision at this instant. An admin who activates a
+   * placement scheduled for next week sees `status: 'active'` with
+   * `mapVisible: false`, which is the honest answer to "why isn't it on the
+   * map?" — and the alternative, showing "Aktiv" alone, is a support call.
+   *
+   * The member read rule requires it, so it is also the field that decides
+   * whether anyone outside the admin portal can see this document at all.
+   */
+  mapVisible: boolean;
   availableFrom: string | null;
   availableUntil: string | null;
   callToActionType: BillboardCtaType | null;
