@@ -2,6 +2,24 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 25,
+      "versionName": "0.8.14",
+      "releaseDate": "2026-08-01",
+      "highlights": [
+        "Lägg till bil i garaget med färdiga listor för märke, modell och år",
+        "I en konvoj kan du välja att lämna själv eller avsluta för alla",
+        "Uppstädade menyer – dina poäng når du direkt från profilkortet"
+      ],
+      "changes": [
+        "När du lägger till eller ändrar en bil i garaget väljer du märke, modell och årsmodell från färdiga listor – med sökfunktion och de vanligaste märkena överst",
+        "I en konvoj kan du nu välja mellan att lämna den själv och låta de andra fortsätta, eller – om du startat den – avsluta körningen för hela gruppen",
+        "Lämnar du en konvoj där du var ledare tar en annan medlem automatiskt över som ledare",
+        "Tryck på poängen på ditt profilkort för att öppna hela din poänghistorik",
+        "Menyerna är uppstädade: Anslagstavlor och den separata Utmärkelser-sidan ligger inte längre som egna rader – dina utmärkelser ser du på din profil – och Vänner har flyttats",
+        "Rubriken \"Chatt\" högst upp i chatten är borttagen så listan börjar högre upp"
+      ]
+    },
+    {
       "versionCode": 24,
       "versionName": "0.8.13",
       "releaseDate": "2026-07-30",
