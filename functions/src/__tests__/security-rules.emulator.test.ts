@@ -363,13 +363,18 @@ describe('Firestore – points ledger (Phase 9g)', () => {
     });
   });
 
-  it('owner can read their wallet and ledger entries; others cannot', async () => {
+  it('owner reads wallet + entries; another member reads the PUBLIC balance doc but NOT the entries', async () => {
     const ownerFs = testEnv.authenticatedContext(OWNER).firestore();
     await assertSucceeds(getDoc(doc(ownerFs, 'pointsLedger', OWNER)));
     await assertSucceeds(getDoc(doc(ownerFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
 
+    // The balance document is public profile info (2026-08): any authenticated
+    // member may read another member's balance for their profile — same gate as
+    // the badge wall and garage rendered beside it.
     const otherFs = testEnv.authenticatedContext(OTHER).firestore();
-    await assertFails(getDoc(doc(otherFs, 'pointsLedger', OWNER)));
+    await assertSucceeds(getDoc(doc(otherFs, 'pointsLedger', OWNER)));
+    // The append-only ledger ENTRIES stay owner-only — the profile shows the
+    // balance, never the per-transaction activity statement behind it.
     await assertFails(getDoc(doc(otherFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
   });
 

@@ -1231,13 +1231,40 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // pointsLedger – Kronpoäng balances and append-only ledger (Phase 9g)
-    // Owner-only read (wallet + history); ALL writes are backend transactions
-    // (creditPoints/debitPoints + the points.admin* callables) — clients
-    // never calculate or write balances, entries are never edited or
-    // deleted, and a balance can never go negative.
+    // ALL writes are backend transactions (creditPoints/debitPoints + the
+    // points.admin* callables) — clients never calculate or write balances,
+    // entries are never edited or deleted, and a balance can never go negative.
+    //
+    // READ SPLIT (2026-08): the ledger DOCUMENT and its ENTRIES have different
+    // audiences.
+    //
+    //  - The DOCUMENT (`pointsLedger/{uid}`) carries ONLY the denormalized
+    //    balance {balance, updatedAt} — no per-transaction detail. The balance
+    //    is public PROFILE info now: Seb asked (2026-08) that a member's
+    //    Kronpoäng be visible on their profile to any other member, exactly like
+    //    the badge wall (users/{uid}/badges) and the garage (/vehicles) rendered
+    //    beside it. So the document is readable by any authenticated user. That
+    //    is the SAME isAuthenticated() gate those two already use, so the
+    //    read-only member-profile screen renders as one consistent page.
+    //    Firestore has no field-level read security, but this document has
+    //    nothing to hide field-by-field: {balance, updatedAt} IS the number the
+    //    profile shows. Block invisibility is enforced a layer up, identically
+    //    to badges/vehicles: MemberProfileCoordinator withholds the WHOLE
+    //    profile (this balance included) when the viewer has blocked the target,
+    //    so there is no rules-layer block term here — matching the existing
+    //    public-profile reads rather than diverging from them.
+    //
+    //  - The ENTRIES (`pointsLedger/{uid}/entries/{id}`) are the append-only
+    //    ledger: every credit and debit, each with its source and reason. That
+    //    is a running activity log ("Sparad körning", "Märke upplåst",
+    //    "Kronjakt") and stays OWNER-ONLY — the profile shows the balance, never
+    //    the statement behind it. This is deliberately UNCHANGED.
     // -------------------------------------------------------------------------
     match /pointsLedger/{userId} {
-      allow read: if isOwner(userId);
+      // Public balance: the denormalized {balance, updatedAt} document is
+      // readable by any authenticated user (public profile info). Entries below
+      // stay owner-only.
+      allow read: if isAuthenticated();
       // No client writes.
 
       match /entries/{entryId} {

@@ -56,6 +56,14 @@ import com.kungsbackacarcommunity.app.points.PointsEntry
  * @param onOpenLedger opens the full Kronpoäng ledger. Null in a build with no
  *   points repository wired, which renders the card as a plain, inert summary
  *   rather than a button that navigates to a permanent spinner.
+ * @param showDetails whether to render the activity DETAIL below the balance —
+ *   the "how active you have been" subtitle, the divider, the recent-earnings
+ *   list and the "view all" affordance. True on the OWNER's own profile (the
+ *   default). False on ANOTHER member's profile, where only the public balance
+ *   is shown: the recent-earnings entries are the owner-only ledger (a private
+ *   activity statement) and the first-person subtitle would read wrong on a
+ *   stranger, so the member view is just the labelled headline number. With
+ *   [onOpenLedger] also null (as it always is for a member), the card is inert.
  */
 @Composable
 fun ProfilePointsSection(
@@ -63,6 +71,7 @@ fun ProfilePointsSection(
     recentEarnings: List<PointsEntry>,
     modifier: Modifier = Modifier,
     onOpenLedger: (() -> Unit)? = null,
+    showDetails: Boolean = true,
 ) {
     val openLabel = stringResource(R.string.profile_pointsViewAll)
     val body: @Composable ColumnScope.() -> Unit = {
@@ -70,6 +79,7 @@ fun ProfilePointsSection(
             balance = balance,
             recentEarnings = recentEarnings,
             openLabel = if (onOpenLedger != null) openLabel else null,
+            showDetails = showDetails,
         )
     }
     if (onOpenLedger != null) {
@@ -122,6 +132,7 @@ private fun PointsSummaryBody(
     balance: Long?,
     recentEarnings: List<PointsEntry>,
     openLabel: String?,
+    showDetails: Boolean,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -145,6 +156,12 @@ private fun PointsSummaryBody(
                 modifier = Modifier.padding(bottom = KccSpacing.s1),
             )
         }
+
+        // Another member's profile shows only the public headline balance above:
+        // the first-person subtitle, the owner-only recent-earnings ledger and
+        // the "view all" tap-through are all owner-view detail.
+        if (!showDetails) return@Column
+
         Text(
             text = stringResource(R.string.profile_pointsSubtitle),
             style = MaterialTheme.typography.bodySmall,

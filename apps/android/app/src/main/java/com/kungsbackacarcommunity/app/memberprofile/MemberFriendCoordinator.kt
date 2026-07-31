@@ -5,6 +5,7 @@ import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendRelationship
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsResult
+import com.kungsbackacarcommunity.app.friends.RemoveResult
 import com.kungsbackacarcommunity.app.friends.RespondResult
 import com.kungsbackacarcommunity.app.friends.SendRequestResult
 import com.kungsbackacarcommunity.app.friends.resolveFriendRelationship
@@ -14,7 +15,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /** Which friend callable is currently in flight, if any. */
-enum class FriendActionInFlight { Send, Cancel, Accept, Decline }
+enum class FriendActionInFlight { Send, Cancel, Accept, Decline, Remove }
 
 /** The friend affordance a member profile should render. */
 sealed interface MemberFriendControl {
@@ -35,9 +36,10 @@ sealed interface MemberFriendControl {
     data object Respond : MemberFriendControl
 
     /**
-     * Already friends. A status, not an action: unfriending stays on the
-     * Friends screen (which owns the confirm dialog), so a profile visit can't
-     * end a friendship by one stray tap.
+     * Already friends. On a member profile this is expressed by the bottom
+     * actions (Message + Unfriend) rather than a top control (Seb, 2026-08); the
+     * Unfriend action is confirm-guarded by the screen, so a friendship can't be
+     * ended by one stray tap. See [MemberFriendCoordinator.removeFriend].
      */
     data object Friends : MemberFriendControl
 }
@@ -151,6 +153,21 @@ class MemberFriendCoordinator(
         when (val result = repository.cancelRequest(targetUid)) {
             CancelResult.Cancelled -> Outcome.Settled(FriendRelationship.None)
             is CancelResult.Failed -> Outcome.Failed(result.error)
+        }
+    }
+
+    /**
+     * Removes the established friendship with the profile owner (`friend-remove`,
+     * idempotent). Optimistically settles on [FriendRelationship.None] so the
+     * Message/Unfriend actions vanish and the top control falls back to "Add
+     * friend" the instant the callable succeeds; a failure leaves the friendship
+     * untouched and surfaces the mapped error. The screen owns the confirm
+     * dialog, so this is only ever reached after the viewer confirmed.
+     */
+    suspend fun removeFriend() = run(FriendActionInFlight.Remove) {
+        when (val result = repository.remove(targetUid)) {
+            RemoveResult.Removed -> Outcome.Settled(FriendRelationship.None)
+            is RemoveResult.Failed -> Outcome.Failed(result.error)
         }
     }
 

@@ -692,7 +692,8 @@
     "requestPending": "Friend request sent — waiting for a reply.",
     "cancelRequest": "Cancel request",
     "wantsToBeFriends": "This member wants to be your friend.",
-    "friendsAlready": "You're friends"
+    "statsTitle": "Stats",
+    "statsMemberSince": "Member since"
   },
   "groupDrive": {
     "screenTitle": "Group Drive",

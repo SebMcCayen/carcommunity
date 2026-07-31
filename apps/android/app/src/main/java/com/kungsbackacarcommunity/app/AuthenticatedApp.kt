@@ -5630,6 +5630,15 @@ private fun RouteHost(
                     // Optional, like the blocking repo: without it the profile
                     // simply carries no friend action (config-less build).
                     friendsRepository = friendsRepository,
+                    // Opens a 1:1 DM with this member from the profile's Message
+                    // action (shown only when already friends). Guarded on DM
+                    // being wired, exactly like the Friends list's Message row.
+                    onOpenChat =
+                        if (dmRepository != null) {
+                            { targetUid, displayName -> onOpenChat(targetUid, displayName) }
+                        } else {
+                            null
+                        },
                 )
             } else {
                 LoadingScreen()

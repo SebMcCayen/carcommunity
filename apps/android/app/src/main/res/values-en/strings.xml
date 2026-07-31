@@ -641,7 +641,8 @@
     <string name="memberProfile_requestPending">Friend request sent — waiting for a reply.</string>
     <string name="memberProfile_cancelRequest">Cancel request</string>
     <string name="memberProfile_wantsToBeFriends">This member wants to be your friend.</string>
-    <string name="memberProfile_friendsAlready">You\'re friends</string>
+    <string name="memberProfile_statsTitle">Stats</string>
+    <string name="memberProfile_statsMemberSince">Member since</string>
     <string name="groupDrive_screenTitle">Group Drive</string>
     <string name="groupDrive_joinButton">Join group drive</string>
     <string name="groupDrive_leaveButton">Leave group drive</string>

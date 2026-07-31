@@ -37,12 +37,15 @@ class MemberFriendCoordinatorTest {
         var sendResult: SendRequestResult = SendRequestResult.Requested
         var cancelResult: CancelResult = CancelResult.Cancelled
         var respondResult: RespondResult = RespondResult.Accepted
+        var removeResult: RemoveResult = RemoveResult.Removed
 
         var listCalls = 0
         var sendCalls = 0
         var cancelCalls = 0
+        var removeCalls = 0
         var lastSendUid: String? = null
         var lastCancelUid: String? = null
+        var lastRemoveUid: String? = null
         var lastRespondId: String? = null
         var lastRespondAccept: Boolean? = null
 
@@ -72,7 +75,11 @@ class MemberFriendCoordinatorTest {
             return cancelResult
         }
 
-        override suspend fun remove(friendUid: String): RemoveResult = error("unused")
+        override suspend fun remove(friendUid: String): RemoveResult {
+            removeCalls++
+            lastRemoveUid = friendUid
+            return removeResult
+        }
     }
 
     private fun loaded(
@@ -425,6 +432,50 @@ class MemberFriendCoordinatorTest {
             coordinator.state.value.relationship,
         )
         assertEquals(FriendActionError.RequestGone, coordinator.state.value.error)
+    }
+
+    // --- remove (unfriend) ------------------------------------------------------
+
+    @Test
+    fun `unfriending a friend addresses the profile owner and lands on None`() = runTest {
+        // Being friends is expressed by the bottom Message + Unfriend actions;
+        // unfriending must drop the relationship so those actions disappear and
+        // the top control falls back to Add.
+        val repo = FakeRepo().apply { listResult = loaded(friends = listOf(FriendSummary(TARGET, "Name", null, null))) }
+        val coordinator = MemberFriendCoordinator(repo, TARGET)
+        coordinator.load()
+        assertEquals(FriendRelationship.Friends, coordinator.state.value.relationship)
+        // After the remove the coordinator re-syncs; the graph no longer lists
+        // the friendship, matching what the backend just did.
+        repo.listResult = loaded()
+
+        coordinator.removeFriend()
+
+        assertEquals(TARGET, repo.lastRemoveUid)
+        assertEquals(FriendRelationship.None, coordinator.state.value.relationship)
+        assertEquals(MemberFriendControl.Add, coordinator.state.value.control)
+        assertNull(coordinator.state.value.error)
+        assertNull(coordinator.state.value.inFlight)
+    }
+
+    @Test
+    fun `a failed unfriend keeps the friendship and surfaces the error`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                listResult = loaded(friends = listOf(FriendSummary(TARGET, "Name", null, null)))
+                removeResult = RemoveResult.Failed(FriendActionError.Network)
+            }
+        val coordinator = MemberFriendCoordinator(repo, TARGET)
+        coordinator.load()
+
+        coordinator.removeFriend()
+
+        // Unchanged relationship → Message/Unfriend are still there to retry with.
+        assertEquals(FriendRelationship.Friends, coordinator.state.value.relationship)
+        assertEquals(MemberFriendControl.Friends, coordinator.state.value.control)
+        assertEquals(FriendActionError.Network, coordinator.state.value.error)
+        // No re-sync after a failure: the backend state never changed.
+        assertEquals(1, repo.listCalls)
     }
 
     @Test
