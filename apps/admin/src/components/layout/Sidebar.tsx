@@ -39,6 +39,7 @@ const navGroups: NavGroup[] = [
       { label: 'Users', href: '/users', icon: '◎' },
       { label: 'Subscription', href: '/subscription', icon: '★' },
       { label: 'Growth & Metrics', href: '/metrics', icon: '◱' },
+      { label: 'Finance & Cost', href: '/finance', icon: '¤' },
     ],
   },
   {

@@ -127,6 +127,7 @@ import { reportCleared as reportIncidentCleared } from './incidents/reportCleare
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
+import { estimate as financeEstimate } from './finance/estimate';
 import {
   cancelRequest as cancelFriendRequest,
   list as listFriends,
@@ -1045,4 +1046,21 @@ export const moderation = {
  */
 export const metrics = {
   captureDaily: metricsCaptureDaily,
+};
+
+/**
+ * Finance cost model domain (grouped export → deployed as `finance-estimate`).
+ *
+ * An admin-only on-demand callable that estimates monthly spend in SEK from an
+ * in-app COST MODEL: a sourced+dated price table (functions/src/finance/
+ * pricing.ts), labelled usage assumptions, and the function inventory. It reads
+ * the latest metrics/{date} snapshot for the live member count so the variable
+ * half tracks community growth, applies each service's free tier, and returns a
+ * Google Cloud subtotal, a separate Mapbox estimate, and a separate fixed-
+ * subscriptions section. Every figure is a MODEL ESTIMATE, not the real bill —
+ * the admin page carries that banner and links to the billing console. No
+ * scheduled write (and so no added cost) — see finance/estimate.ts for why.
+ */
+export const finance = {
+  estimate: financeEstimate,
 };

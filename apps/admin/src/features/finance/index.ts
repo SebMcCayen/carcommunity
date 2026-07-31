@@ -1,0 +1,124 @@
+/**
+ * Finance cost board (admin portal).
+ *
+ * Invokes the admin-only `finance-estimate` callable and shapes its result for
+ * the /finance page. The callable computes an IN-APP COST MODEL in SEK — a
+ * sourced+dated price table × modelled usage — NOT the real Google Cloud bill.
+ * The page renders that estimate with a permanent "estimate, not your invoice"
+ * banner and a link to the billing console.
+ *
+ * The FinanceEstimate shape mirrors functions/src/finance/model.ts by hand: the
+ * Cloud Functions codebase is standalone (it does not depend on
+ * @carcommunity/shared), so — like MetricsSnapshot and the partner-insights
+ * types — the writer and reader each declare the shape. Keep the two in sync.
+ */
+
+import { callAdmin } from '@/lib/callables';
+
+export type MemberCountSource = 'metrics-snapshot' | 'fallback';
+
+/** One row in the detailed per-service table. */
+export interface ServiceLine {
+  service: string;
+  driver: string;
+  unit: string;
+  gross: number;
+  freeTier: number;
+  billable: number;
+  sekPerMonth: number;
+  committed: boolean;
+  free: boolean;
+  note?: string;
+}
+
+export interface CommittedJobLine {
+  id: string;
+  label: string;
+  schedule: string;
+  runsPerDay: number;
+  writesPerMonth: number;
+  readsPerMonth: number;
+  deletesPerMonth: number;
+  note: string;
+}
+
+export interface MapboxEstimate {
+  loadsPerMemberPerDay: number;
+  loadsPerMonth: number;
+  freeLoadsPerMonth: number;
+  billableLoads: number;
+  sekPerMonth: number;
+  capturedOn: string;
+  source: string;
+}
+
+export interface SubscriptionLine {
+  id: string;
+  name: string;
+  amount: number | null;
+  currency: 'SEK' | 'USD';
+  period: 'monthly' | 'annual';
+  sekPerMonth: number | null;
+  capturedOn: string;
+  note?: string;
+}
+
+export interface ProjectionPoint {
+  members: number;
+  googleCloudSekPerMonth: number;
+  mapboxSekPerMonth: number;
+  subscriptionsSekPerMonth: number;
+  grandTotalSekPerMonth: number;
+}
+
+export interface FinanceEstimate {
+  generatedAtMs: number;
+  fx: { usdToSek: number; capturedOn: string };
+  member: { count: number; source: MemberCountSource; asOf: string | null };
+  googleCloud: {
+    services: ServiceLine[];
+    committedJobs: CommittedJobLine[];
+    trafikverketWritesSekPerMonth: number;
+    trafikverketSituationsPerRun: number;
+    trafikverketSituationsCap: number;
+    committedSekPerMonth: number;
+    variableSekPerMonth: number;
+    totalSekPerMonth: number;
+  };
+  mapbox: MapboxEstimate;
+  fixedSubscriptions: {
+    items: SubscriptionLine[];
+    totalSekPerMonth: number;
+    hasUnset: boolean;
+  };
+  grandTotalSekPerMonth: number;
+  functionInventory: {
+    totalCallables: number;
+    scheduledJobs: number;
+    byClass: Record<string, number>;
+    uncosted: string[];
+  };
+  projection: ProjectionPoint[];
+}
+
+/** The Google Cloud billing console — the source of the REAL invoice. */
+export const GCP_BILLING_URL = 'https://console.cloud.google.com/billing';
+
+/** Loads the on-demand cost estimate from the backend cost model. */
+export function loadFinanceEstimate(): Promise<FinanceEstimate> {
+  return callAdmin<FinanceEstimate>('finance-estimate', {});
+}
+
+/** Formats a SEK amount for display (Swedish grouping, 2 decimals under 100). */
+export function formatSek(value: number): string {
+  const decimals = value !== 0 && Math.abs(value) < 100 ? 2 : 0;
+  return `${value.toLocaleString('sv-SE', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })} kr`;
+}
+
+/** Formats a large count with Swedish grouping. */
+export function formatCount(value: number): string {
+  return Math.round(value).toLocaleString('sv-SE');
+}

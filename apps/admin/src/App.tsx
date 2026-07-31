@@ -27,6 +27,7 @@ const PartnerInsightsPage = lazy(() => import('@/app/partners/[partnerId]/insigh
 const BillboardsPage = lazy(() => import('@/app/billboards/page'));
 const KronjaktPage = lazy(() => import('@/app/kronjakt/page'));
 const MetricsPage = lazy(() => import('@/app/metrics/page'));
+const FinancePage = lazy(() => import('@/app/finance/page'));
 const BadgesPage = lazy(() => import('@/app/badges/page'));
 const ReportsPage = lazy(() => import('@/app/reports/page'));
 const ErrorReportsPage = lazy(() => import('@/app/error-reports/page'));
@@ -86,6 +87,7 @@ export function App() {
         <Route path="/billboards" element={<BillboardsPage />} />
         <Route path="/kronjakt" element={<KronjaktPage />} />
         <Route path="/metrics" element={<MetricsPage />} />
+        <Route path="/finance" element={<FinancePage />} />
         <Route path="/badges" element={<BadgesPage />} />
         <Route path="/reports" element={<ReportsPage />} />
         <Route path="/error-reports" element={<ErrorReportsPage />} />
