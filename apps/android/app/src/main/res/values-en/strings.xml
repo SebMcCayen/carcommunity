@@ -673,6 +673,7 @@
     <string name="savedDrives_distance">Distance</string>
     <string name="savedDrives_duration">Drive time</string>
     <string name="savedDrives_averageSpeed">Average speed</string>
+    <string name="savedDrives_topSpeed">Top speed</string>
     <string name="savedDrives_maxSpeed">Highest speed</string>
     <string name="savedDrives_maxSpeedShort">Max %1$s</string>
     <string name="savedDrives_date">Date</string>
@@ -691,6 +692,7 @@
     <string name="savedDrives_routeEmpty">This drive has no recorded route to show.</string>
     <string name="savedDrives_routeExpand">Open full-screen map</string>
     <string name="savedDrives_routeMapThumbnailLabel">Drive route map, tap to expand</string>
+    <string name="savedDrives_routeTopSpeedMarkerDescription">Top speed here</string>
     <string name="savedDrives_routeThumbnailLabel">Route overview for this drive</string>
     <string name="savedDrives_routeThumbnailUnavailable">No route overview for this drive</string>
     <string name="savedDrives_routeMapFullscreenLabel">Full-screen route map</string>

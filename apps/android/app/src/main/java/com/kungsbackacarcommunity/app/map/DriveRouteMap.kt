@@ -56,6 +56,12 @@ import com.mapbox.maps.plugin.scalebar.scalebar
 fun DriveRouteMap(
     points: List<RoutePoint>,
     modifier: Modifier = Modifier,
+    // The fix where the drive's top speed occurred, marked with a distinct dot
+    // (its own `kcc-topspeed-…` layer, drawn over the route). Null — the default,
+    // so History's existing callers are unaffected — draws no such marker; the
+    // end-of-session summary passes it so the user can see WHERE they went
+    // fastest. The caller only supplies a point that lies on [points].
+    topSpeedMarker: RoutePoint? = null,
     // Whether the map's own pan/pinch/rotate gestures are live. Defaults to OFF:
     // the embedded History thumbnail is a STATIC preview wrapped in a parent
     // `clickable` that opens the full-screen popup, and a gesture-enabled MapView
@@ -103,6 +109,7 @@ fun DriveRouteMap(
                 }
                 mapboxMap.loadStyle(Style.STANDARD) { _ ->
                     drawRoute(this, points)
+                    drawTopSpeedMarker(this, topSpeedMarker)
                 }
             }
         },
@@ -205,6 +212,40 @@ internal fun drawKmMarkers(
     }
 }
 
+/**
+ * Draws a single distinct marker at [point], the fix where the drive's TOP SPEED
+ * occurred, on [mapView]. Used by the end-of-session summary (both the inline
+ * thumbnail and the full-screen popup) so the user can see WHERE they went
+ * fastest, not just the number. Draws nothing when [point] is null (History's
+ * route maps, which pass no top-speed point).
+ *
+ * Its own `kcc-topspeed-…` layer/source ids keep it clear of [drawRoute]'s
+ * route/endpoint layers and [drawKmMarkers]' km layers, so it never collides with
+ * them (or the shell surface's) if a style is ever shared. A visually distinct
+ * amber dot, larger than the km dots and coloured apart from the green start / red
+ * end endpoints, so it reads unambiguously as its own thing. Composed AFTER the
+ * route so it sits on top of the line. Wrapped in `runCatching`, like every other
+ * native map call here, so a not-yet-loaded style degrades to no marker rather
+ * than a crash. On-device verification only.
+ */
+internal fun drawTopSpeedMarker(mapView: MapView, point: RoutePoint?) {
+    if (point == null) return
+    runCatching {
+        val manager =
+            mapView.annotations.createCircleAnnotationManager(
+                AnnotationConfig(layerId = TOPSPEED_LAYER_ID, sourceId = TOPSPEED_SOURCE_ID),
+            )
+        manager.create(
+            CircleAnnotationOptions()
+                .withPoint(Point.fromLngLat(point.longitude, point.latitude))
+                .withCircleRadius(TOPSPEED_MARKER_RADIUS)
+                .withCircleColor(TOPSPEED_MARKER_COLOR)
+                .withCircleStrokeWidth(TOPSPEED_MARKER_STROKE)
+                .withCircleStrokeColor(TOPSPEED_MARKER_STROKE_COLOR),
+        )
+    }
+}
+
 private fun startMarker(point: Point): CircleAnnotationOptions =
     CircleAnnotationOptions()
         .withPoint(point)
@@ -263,6 +304,21 @@ private const val ROUTE_LINE_WIDTH = 6.0
 
 // Start pin green (drive origin); end reuses the shared destination red.
 private const val START_MARKER_COLOR = 0xFF2E7D32.toInt()
+
+// ---- Top-speed marker styling (summary map only) ------------------------------
+// Distinct `kcc-topspeed-…` layer/source ids so the top-speed dot never collides
+// with drawRoute's route/endpoint layers, drawKmMarkers' km layers, or the shell
+// surface's layers.
+private const val TOPSPEED_LAYER_ID = "kcc-topspeed-marker"
+private const val TOPSPEED_SOURCE_ID = "kcc-topspeed-marker-src"
+
+// A bold amber dot, distinct from the green start and red end endpoints and
+// larger than the small blue km dots, with a white outline so it reads over both
+// the route line and the basemap. Marks the single fastest fix on the drive.
+private const val TOPSPEED_MARKER_COLOR = 0xFFFFA000.toInt()
+private const val TOPSPEED_MARKER_RADIUS = 8.0
+private const val TOPSPEED_MARKER_STROKE = 2.0
+private const val TOPSPEED_MARKER_STROKE_COLOR = 0xFFFFFFFF.toInt()
 
 // Camera-fit padding (dp; scaled to px before use) so the route clears the edges.
 private const val FIT_PAD = 48.0

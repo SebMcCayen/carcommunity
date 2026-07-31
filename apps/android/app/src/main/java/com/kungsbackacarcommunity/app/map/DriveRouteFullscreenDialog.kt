@@ -59,12 +59,16 @@ import com.mapbox.maps.plugin.scalebar.scalebar
  * lives in the pure, unit-tested [com.kungsbackacarcommunity.app.drives.RouteDistanceMarkers].
  *
  * @param points the decoded route (≥ 2 points) to draw.
+ * @param topSpeedMarker the fix where the drive's top speed occurred, marked with
+ *   a distinct dot; null (the default, so History's callers are unaffected) draws
+ *   none. The end-of-session summary passes it through from its thumbnail.
  * @param onDismiss close the popup (back press, close button, or scrim tap).
  */
 @Composable
 fun DriveRouteFullscreenDialog(
     points: List<RoutePoint>,
     onDismiss: () -> Unit,
+    topSpeedMarker: RoutePoint? = null,
 ) {
     val kmLabelTemplate = stringResource(R.string.savedDrives_routeKmMarkerLabel)
     val zoomInDesc = stringResource(R.string.savedDrives_routeZoomIn)
@@ -110,6 +114,7 @@ fun DriveRouteFullscreenDialog(
                             drawKmMarkers(this, points) { km ->
                                 kmLabelTemplate.format(km)
                             }
+                            drawTopSpeedMarker(this, topSpeedMarker)
                         }
                     }
                 },

@@ -673,6 +673,7 @@
     <string name="savedDrives_distance">Distans</string>
     <string name="savedDrives_duration">Körtid</string>
     <string name="savedDrives_averageSpeed">Medelhastighet</string>
+    <string name="savedDrives_topSpeed">Toppfart</string>
     <string name="savedDrives_maxSpeed">Högsta hastighet</string>
     <string name="savedDrives_maxSpeedShort">Max %1$s</string>
     <string name="savedDrives_date">Datum</string>
@@ -691,6 +692,7 @@
     <string name="savedDrives_routeEmpty">Den här körningen har ingen inspelad rutt att visa.</string>
     <string name="savedDrives_routeExpand">Öppna karta i helskärm</string>
     <string name="savedDrives_routeMapThumbnailLabel">Körningens ruttkarta, tryck för att förstora</string>
+    <string name="savedDrives_routeTopSpeedMarkerDescription">Toppfart här</string>
     <string name="savedDrives_routeThumbnailLabel">Ruttöversikt för den här körningen</string>
     <string name="savedDrives_routeThumbnailUnavailable">Ingen ruttöversikt för den här körningen</string>
     <string name="savedDrives_routeMapFullscreenLabel">Ruttkarta i helskärm</string>
