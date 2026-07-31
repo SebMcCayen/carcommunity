@@ -397,4 +397,34 @@ class BadgeShowcaseTest {
         assertTrue(showcase.recentAwards.isEmpty())
         assertEquals(showcase.earnedCount, showcase.recentAwards.size)
     }
+
+    @Test
+    fun `a duplicated key collapses to its newest doc, never an older or undated one`() {
+        // The backend never writes a key twice (the doc id IS the key), but if it
+        // ever did, the recency strip and the detail date must both take the
+        // NEWEST occurrence — not the first-seen, older, or undated one.
+        val showcase =
+            BadgeShowcase.from(
+                badges =
+                    listOf(
+                        badge("kronjagare_brons", awardedAtMillis = null),
+                        badge("kronjagare_brons", awardedAtMillis = 100L),
+                        badge("kronjagare_brons", awardedAtMillis = 900L),
+                        badge("vagfarare_brons", awardedAtMillis = 500L),
+                    ),
+            )
+
+        // Two distinct keys held; the three kronjagare_brons docs collapse to one.
+        assertEquals(2, showcase.earnedCount)
+        assertEquals(showcase.earnedCount, showcase.recentAwards.size)
+
+        // kronjagare_brons acquired at 900 is NEWER than vagfarare_brons at 500,
+        // so it leads — proving the survivor is the newest doc, not the first.
+        assertEquals(
+            listOf("kronjagare_brons", "vagfarare_brons"),
+            showcase.recentAwards.map { it.badgeKey },
+        )
+        // The detail-sheet date agrees: newest timestamp per key, never null.
+        assertEquals(900L, showcase.awardedAtByKey["kronjagare_brons"])
+    }
 }

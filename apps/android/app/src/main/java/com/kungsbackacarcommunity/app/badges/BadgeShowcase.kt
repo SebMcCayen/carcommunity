@@ -203,8 +203,14 @@ data class BadgeShowcase(
          */
         fun from(badges: List<Badge>, counters: BadgeCounters = BadgeCounters.NONE): BadgeShowcase {
             val heldKeys = badges.map { it.key }.toSet()
+            // Newest timestamp per key: were the same key ever to arrive on more
+            // than one doc, the detail sheet shows its most recent award, and that
+            // matches how the recency strip collapses duplicates below.
             val awardedAt =
-                badges.mapNotNull { badge -> badge.awardedAtMillis?.let { badge.key to it } }.toMap()
+                badges
+                    .mapNotNull { badge -> badge.awardedAtMillis?.let { badge.key to it } }
+                    .groupingBy { it.first }
+                    .fold(Long.MIN_VALUE) { acc, (_, millis) -> maxOf(acc, millis) }
 
             val ladders =
                 BADGE_LADDERS.map { ladder ->
@@ -237,7 +243,6 @@ data class BadgeShowcase(
             // is the only reason it can ever hold fewer than the count.
             val recentAwards =
                 badges
-                    .distinctBy { it.key }
                     .mapNotNull { badge ->
                         val rung = rungForBadgeKey(badge.key)
                         when {
@@ -266,6 +271,11 @@ data class BadgeShowcase(
                         compareByDescending<EarnedAward> { it.awardedAtMillis ?: Long.MIN_VALUE }
                             .thenBy { it.badgeKey },
                     )
+                    // Collapse duplicate docs for the same key AFTER sorting, so the
+                    // survivor is the NEWEST one — never an older/undated doc. This
+                    // keeps recency consistent with `awardedAtByKey`, which likewise
+                    // carries the newest timestamp per key.
+                    .distinctBy { it.badgeKey }
                     .take(RECENT_AWARDS_LIMIT)
 
             return BadgeShowcase(
