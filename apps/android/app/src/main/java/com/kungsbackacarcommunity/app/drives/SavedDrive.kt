@@ -95,6 +95,19 @@ object DriveFormatters {
             return MISSING_VALUE
         }
         val kmh = (metersPerSecond * 3.6).roundToInt()
+        return formatSpeedKmh(kmh)
+    }
+
+    /**
+     * Whole km/h → "54 km/h", or the missing-value dash when null. The map's
+     * live-session bar has already turned its GPS sample into a deadbanded whole
+     * km/h (`shell.LiveSpeedReadout`) rather than a raw m/s, so it appends the
+     * unit through this overload — sharing the SAME "km/h" label [formatSpeed]
+     * uses instead of duplicating the literal at the call site — without letting
+     * [formatSpeed] re-round the number and undo the deadband.
+     */
+    fun formatSpeedKmh(kmh: Int?): String {
+        if (kmh == null) return MISSING_VALUE
         return "$kmh km/h"
     }
 

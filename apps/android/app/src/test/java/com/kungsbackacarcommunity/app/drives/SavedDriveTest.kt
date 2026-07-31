@@ -72,6 +72,17 @@ class SavedDriveTest {
     }
 
     @Test
+    fun `formatSpeedKmh appends the unit to a whole km per hour and dashes null`() {
+        // The live-session bar formats an already-deadbanded Int km/h through
+        // this overload, so it must carry the same "km/h" label formatSpeed does.
+        assertEquals("54 km/h", DriveFormatters.formatSpeedKmh(54))
+        // Zero is a fact (stationary), rendered as a number, not the "unknown" dash.
+        assertEquals("0 km/h", DriveFormatters.formatSpeedKmh(0))
+        // No sample yet → the missing-value dash, never a bogus "0 km/h".
+        assertEquals("—", DriveFormatters.formatSpeedKmh(null))
+    }
+
+    @Test
     fun `formatSpeed renders em dash for non-finite values`() {
         assertEquals("—", DriveFormatters.formatSpeed(Double.POSITIVE_INFINITY))
         assertEquals("—", DriveFormatters.formatSpeed(Double.NEGATIVE_INFINITY))
