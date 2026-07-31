@@ -184,10 +184,13 @@
     "reportedMessages": "Rapporterade meddelanden",
     "underReview": "Under granskning",
     "removeMessage": "Ta bort meddelande",
+    "allowMessage": "Tillåt meddelande",
     "reasonRequired": "Orsak krävs",
     "dismissReport": "Avvisa rapport",
     "visible": "Synligt",
+    "autoHidden": "Dolt (anmält)",
     "removed": "Borttaget",
+    "allowed": "Tillåtet",
     "columns": {
       "event": "Händelse",
       "author": "Avsändare",

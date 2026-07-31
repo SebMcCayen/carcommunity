@@ -2,12 +2,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/SebMcCayen/carcommunity/contracts/schemas/event-chat.schema.json",
   "title": "Event chat contract",
-  "description": "Language-neutral event chat shapes shared by iOS, Android, backend, and admin. chatMessage mirrors the Firestore `events/{eventId}/messages/{messageId}` document (docs/firebase-data-model.md); messages are written only via the events.postChatMessage callable and moderated via events.removeChatMessage. Removed messages keep moderationState 'removed' with an empty body — clients render a neutral placeholder and the original text lives only in the admin audit record. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
+  "description": "Language-neutral event chat shapes shared by iOS, Android, backend, and admin. chatMessage mirrors the Firestore `events/{eventId}/messages/{messageId}` document (docs/firebase-data-model.md); messages are written only via the events.postChatMessage callable and moderated via the events.removeChatMessage / events.allowChatMessage callables and the events-onMessageReportCreate auto-hide trigger. Moderation is a state machine: visible → auto_hidden (trigger, once several DISTINCT users report the message) and the terminal admin overrides removed and allowed. auto_hidden PRESERVES the body (clients show a collapsed 'Show reported message' placeholder with per-user ephemeral reveal); removed has an empty body (a permanent moderator-removed placeholder, no reveal) with the original text only in the admin audit record; allowed restores visibility and is never auto-hidden again. Firestore stores timestamps as native Timestamp values; this contract describes their ISO 8601 JSON serialization.",
   "$defs": {
     "chatMessageModerationState": {
       "type": "string",
-      "enum": ["visible", "removed"],
-      "description": "Moderation state. Removed messages have an empty body; clients show a placeholder."
+      "enum": ["visible", "auto_hidden", "removed", "allowed"],
+      "description": "Moderation state machine. visible: normal. auto_hidden: hidden after >= CHAT_AUTO_HIDE_REPORTER_THRESHOLD distinct reporters (body preserved; reveal control). removed: tombstoned, empty body, permanent placeholder. allowed: admin-cleared, visible again, never auto-hidden again. Only the trigger's visible → auto_hidden transition is automatic; allowed/removed are terminal admin overrides."
     },
     "chatMessageReportReason": {
       "type": "string",
@@ -31,13 +31,30 @@
         "message": {
           "type": "string",
           "maxLength": 1000,
-          "description": "Plain text. Empty string when moderationState is 'removed'."
+          "description": "Plain text. Empty string when moderationState is 'removed' (auto_hidden and allowed preserve the body)."
         },
         "moderationState": { "$ref": "#/$defs/chatMessageModerationState" },
+        "hiddenAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "When the auto-hide trigger hid the message; null unless it was ever auto_hidden."
+        },
+        "reportCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct-reporter tally recorded at auto-hide time; 0 until auto-hidden. Always a non-negative integer (a Set size)."
+        },
+        "allowedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "When an admin allowed (un-hid) the message; null unless allowed."
+        },
+        "allowedByUserId": {
+          "type": ["string", "null"],
+          "description": "Admin UID who allowed the message, null unless allowed."
+        },
         "removedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "removedByUserId": {
           "type": ["string", "null"],
-          "description": "Moderating admin UID, null while visible."
+          "description": "Moderating admin UID, null unless removed."
         },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
@@ -46,6 +63,10 @@
         "authorDisplayName",
         "message",
         "moderationState",
+        "hiddenAt",
+        "reportCount",
+        "allowedAt",
+        "allowedByUserId",
         "removedAt",
         "removedByUserId",
         "createdAt"
@@ -108,6 +129,16 @@
         "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
       },
       "required": ["eventId", "messageId", "reason"],
+      "additionalProperties": false
+    },
+    "allowChatMessageRequest": {
+      "type": "object",
+      "description": "Input for events.allowChatMessage (admin). Un-hides an auto_hidden (or visible) message and marks it allowed (terminal, never auto-hidden again). No reason needed — allowing is benign; the audit record captures who and when.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "messageId": { "type": "string", "minLength": 1 }
+      },
+      "required": ["eventId", "messageId"],
       "additionalProperties": false
     }
   }

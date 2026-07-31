@@ -509,8 +509,15 @@ service cloud.firestore {
       // member + published event + a going/maybe RSVP (legacy
       // canReadEventChat). Removed messages stay readable but their body is
       // blanked by events.removeChatMessage, so no removed text can leak.
-      // All writes go through the events.postChatMessage /
-      // events.removeChatMessage callables — no client writes.
+      //
+      // MODERATION FIELDS ARE FUNCTION-WRITE-ONLY: the whole document (message,
+      // moderationState, hiddenAt, reportCount, allowedAt/By, removedAt/By) is
+      // written ONLY by the events.* callables + the events-onMessageReportCreate
+      // auto-hide trigger via the Admin SDK — this block has NO `allow write`, so
+      // every client write (including forging/clearing a moderation flag) is
+      // denied by default. Clients CAN read moderationState to render the
+      // 'Show reported message' (auto_hidden) / moderator-removed (removed)
+      // placeholders; the auto-hide/allow/remove decisions never touch the client.
       match /messages/{messageId} {
         allow read: if isAdmin()
           || (isActiveMember()

@@ -25,6 +25,7 @@ import styles from './page.module.css';
 import { formatDateOnly } from '@/lib/format';
 
 import {
+  allowAdminChatMessageFromReport,
   formatReportReason,
   formatReportStatus,
   loadAdminChatReports,
@@ -114,6 +115,7 @@ export default function EventChatModerationPage() {
 
   const [removeTarget, setRemoveTarget] = useState<AdminEventChatReportRow | null>(null);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isAllowing, setIsAllowing] = useState(false);
   // Report id currently being transitioned, to disable its row buttons.
   const [pendingReportId, setPendingReportId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -138,7 +140,7 @@ export default function EventChatModerationPage() {
   // Any moderation action in flight (resolve transition or message removal).
   // While true, every row's action buttons are disabled to prevent concurrent
   // actions racing against the queue refresh.
-  const anyActionInFlight = pendingReportId !== null || isRemoving;
+  const anyActionInFlight = pendingReportId !== null || isRemoving || isAllowing;
 
   const handleResolve = useCallback(
     async (report: AdminEventChatReportRow, status: ResolvableReportStatus) => {
@@ -151,6 +153,23 @@ export default function EventChatModerationPage() {
         setActionError((err as ApiError)?.message ?? 'Åtgärden misslyckades. Försök igen.');
       } finally {
         setPendingReportId(null);
+      }
+    },
+    [fetchReports],
+  );
+
+  const handleAllow = useCallback(
+    async (report: AdminEventChatReportRow) => {
+      setIsAllowing(true);
+      setActionError(null);
+      try {
+        await allowAdminChatMessageFromReport(report.eventId, report.messageId);
+        // Allow un-hides the message and dismisses its open reports — refresh.
+        await fetchReports();
+      } catch (err) {
+        setActionError((err as ApiError)?.message ?? 'Kunde inte tillåta meddelandet. Försök igen.');
+      } finally {
+        setIsAllowing(false);
       }
     },
     [fetchReports],
@@ -258,6 +277,14 @@ export default function EventChatModerationPage() {
                             disabled={disableActions}
                           >
                             Avvisa
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.actionButton}
+                            onClick={() => void handleAllow(report)}
+                            disabled={disableActions}
+                          >
+                            Tillåt meddelande
                           </button>
                           <button
                             type="button"

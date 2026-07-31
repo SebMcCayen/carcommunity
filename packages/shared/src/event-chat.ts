@@ -31,7 +31,12 @@ const CHAT_MESSAGE_REPORT_STATUSES = [
 ] as const;
 export type ChatMessageReportStatus = (typeof CHAT_MESSAGE_REPORT_STATUSES)[number];
 
-const CHAT_MESSAGE_MODERATION_STATES = ['visible', 'removed'] as const;
+const CHAT_MESSAGE_MODERATION_STATES = [
+  'visible',
+  'auto_hidden',
+  'removed',
+  'allowed',
+] as const;
 export type ChatMessageModerationState = (typeof CHAT_MESSAGE_MODERATION_STATES)[number];
 
 export interface AdminEventChatReportSummary {

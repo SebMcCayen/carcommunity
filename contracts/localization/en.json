@@ -399,6 +399,8 @@
       "other": "Other"
     },
     "removedMessage": "This message has been removed.",
+    "reportedHidden": "This message was hidden after multiple reports.",
+    "showReportedMessage": "Show reported message",
     "memberRequired": "Active membership required for event chat.",
     "rsvpRequired": "You need to respond Going or Maybe to join the chat.",
     "accessLost": "You no longer have access to this chat.",

@@ -184,10 +184,13 @@
     "reportedMessages": "Reported messages",
     "underReview": "Under review",
     "removeMessage": "Remove message",
+    "allowMessage": "Allow message",
     "reasonRequired": "Reason required",
     "dismissReport": "Dismiss report",
     "visible": "Visible",
+    "autoHidden": "Hidden (reported)",
     "removed": "Removed",
+    "allowed": "Allowed",
     "columns": {
       "event": "Event",
       "author": "Author",

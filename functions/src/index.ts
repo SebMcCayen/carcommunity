@@ -26,7 +26,9 @@ import { remindUpcoming } from './events/eventReminders';
 import { create, update } from './events/manageEvent';
 import { postChatMessage } from './events/postChatMessage';
 import { removeChatMessage } from './events/removeChatMessage';
+import { allowChatMessage } from './events/allowChatMessage';
 import { reportChatMessage } from './events/reportChatMessage';
+import { onMessageReportCreate } from './events/onMessageReportCreate';
 import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
@@ -242,6 +244,18 @@ export const admin = {
  * completes finished events unattended (events/scheduled.ts), and
  * events-remindUpcoming nudges going-RSVP attendees a couple of hours before an
  * event starts (events/eventReminders.ts).
+ *
+ * CHAT AUTO-MODERATION (events-onMessageReportCreate + events-allowChatMessage):
+ * a message has a moderation state machine — visible → auto_hidden (trigger,
+ * when >= CHAT_AUTO_HIDE_REPORTER_THRESHOLD DISTINCT reporters have reported it)
+ * and the two TERMINAL admin overrides removed (events-removeChatMessage) and
+ * allowed (events-allowChatMessage). The onMessageReportCreate Firestore trigger
+ * recomputes the distinct-reporter count on every report and only performs the
+ * visible → auto_hidden transition transactionally; it treats allowed/removed as
+ * terminal, so an admin Allow is sticky (never re-hidden) and a Remove is
+ * permanent. Clients render auto_hidden as a collapsed "Show reported message"
+ * placeholder (reveal is per-user ephemeral, never persisted); removed as a
+ * permanent moderator-removed placeholder with no reveal.
  */
 export const events = {
   create,
@@ -259,6 +273,10 @@ export const events = {
   postChatMessage,
   reportChatMessage,
   removeChatMessage,
+  // Chat auto-moderation: onCreate trigger auto-hides a message once enough
+  // DISTINCT users report it, and the admin Allow override un-hides it (sticky).
+  onMessageReportCreate,
+  allowChatMessage,
   // Chat report moderation queue (Phase 18d): admin list + resolve.
   listChatReports,
   resolveChatReport,

@@ -6,15 +6,21 @@
 import { describe, expect, it } from 'vitest';
 import type { UserAccessState } from '../shared/access';
 import {
+  CHAT_AUTO_HIDE_REPORTER_THRESHOLD,
   CHAT_MESSAGE_MAX_LENGTH,
+  buildChatMessageAllow,
+  buildChatMessageAutoHide,
   buildChatMessageDocument,
   buildChatMessageRemoval,
   buildChatReportDocument,
   chatReportDocId,
+  countDistinctReporters,
   guardChatParticipant,
+  parseAllowChatMessageInput,
   parsePostChatMessageInput,
   parseRemoveChatMessageInput,
   parseReportChatMessageInput,
+  shouldAutoHide,
 } from '../events/chat-core';
 
 const serverTimestamp = () => 'SERVER_TS';
@@ -134,6 +140,17 @@ describe('chat-core document builders', () => {
     expect(docData.removedAt).toBeNull();
   });
 
+  it('seeds the auto-hide + allow bookkeeping fields on a fresh message', () => {
+    const docData = buildChatMessageDocument(
+      { authorUserId: 'u1', authorDisplayName: 'Kalle', message: 'hej' },
+      serverTimestamp,
+    );
+    expect(docData.hiddenAt).toBeNull();
+    expect(docData.reportCount).toBe(0);
+    expect(docData.allowedAt).toBeNull();
+    expect(docData.allowedByUserId).toBeNull();
+  });
+
   it('blanks the body on removal and never carries the removal reason', () => {
     const removal = buildChatMessageRemoval('admin-1', serverTimestamp);
     expect(removal.message).toBe('');
@@ -142,6 +159,66 @@ describe('chat-core document builders', () => {
     expect(removal).not.toHaveProperty('removalReason');
   });
 
+  it('auto-hide PRESERVES the body (no message key) and records the distinct count', () => {
+    const hide = buildChatMessageAutoHide(4, serverTimestamp);
+    expect(hide.moderationState).toBe('auto_hidden');
+    expect(hide.reportCount).toBe(4);
+    expect(hide.hiddenAt).toBe('SERVER_TS');
+    // Auto-hide must never blank the body — it is reversible via Allow.
+    expect(hide).not.toHaveProperty('message');
+  });
+
+  it('allow marks the terminal allowed state, keeps the body, and stamps the admin', () => {
+    const allow = buildChatMessageAllow('admin-2', serverTimestamp);
+    expect(allow.moderationState).toBe('allowed');
+    expect(allow.allowedByUserId).toBe('admin-2');
+    expect(allow.allowedAt).toBe('SERVER_TS');
+    expect(allow).not.toHaveProperty('message');
+  });
+});
+
+describe('distinct-reporter auto-hide rule', () => {
+  it('counts DISTINCT reporterUserId, not report documents', () => {
+    // One user, three reasons → three report docs but ONE reporter.
+    const oneUserThreeReasons = [
+      { reporterUserId: 'u1' },
+      { reporterUserId: 'u1' },
+      { reporterUserId: 'u1' },
+    ];
+    expect(countDistinctReporters(oneUserThreeReasons)).toBe(1);
+    expect(shouldAutoHide(countDistinctReporters(oneUserThreeReasons))).toBe(false);
+
+    const threeUsers = [
+      { reporterUserId: 'u1' },
+      { reporterUserId: 'u2' },
+      { reporterUserId: 'u3' },
+    ];
+    expect(countDistinctReporters(threeUsers)).toBe(3);
+    expect(shouldAutoHide(countDistinctReporters(threeUsers))).toBe(true);
+  });
+
+  it('ignores malformed reporter ids', () => {
+    expect(
+      countDistinctReporters([{ reporterUserId: '' }, { reporterUserId: undefined }, { other: 1 } as never]),
+    ).toBe(0);
+  });
+
+  it('crosses exactly at the threshold constant', () => {
+    expect(shouldAutoHide(CHAT_AUTO_HIDE_REPORTER_THRESHOLD - 1)).toBe(false);
+    expect(shouldAutoHide(CHAT_AUTO_HIDE_REPORTER_THRESHOLD)).toBe(true);
+  });
+});
+
+describe('parseAllowChatMessageInput', () => {
+  it('accepts { eventId, messageId } and rejects extras / missing fields', () => {
+    expect(parseAllowChatMessageInput({ eventId: 'e1', messageId: 'm1' }).ok).toBe(true);
+    expect(parseAllowChatMessageInput({ eventId: 'e1' }).ok).toBe(false);
+    expect(parseAllowChatMessageInput({ eventId: 'e1', messageId: 'm1', reason: 'x' }).ok).toBe(false);
+    expect(parseAllowChatMessageInput({ eventId: '', messageId: 'm1' }).ok).toBe(false);
+  });
+});
+
+describe('chat-core report document builder', () => {
   it('derives a deterministic report ID and clamps details', () => {
     expect(chatReportDocId('m1', 'u1', 'spam')).toBe('m1_u1_spam');
     const report = buildChatReportDocument(
