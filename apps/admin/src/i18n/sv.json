@@ -1,7 +1,9 @@
 {
   "common": {
     "dateLabel": "Datum",
-    "timeLabel": "Tid"
+    "timeLabel": "Tid",
+    "dateFormatPlaceholder": "åååå-mm-dd",
+    "timeFormatPlaceholder": "tt:mm"
   },
   "placeholder": {
     "plannedFunctionality": "Planerad funktionalitet",
