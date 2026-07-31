@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BusinessCenter
-import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
@@ -35,7 +34,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Stars
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
@@ -3557,7 +3555,6 @@ fun AuthenticatedApp(
                                         profileMenuEntries(
                                             profileEditCoordinator = profileEditCoordinator,
                                             friendsRepository = friendsRepository,
-                                            pointsRepository = pointsRepository,
                                             partnerApplicationCoordinator =
                                                 partnerApplicationCoordinator,
                                             // Top-level entries from the map-home
@@ -4059,22 +4056,28 @@ fun AuthenticatedApp(
                                                                     null
                                                                 },
                                                             ),
-                                                            HubEntry(
-                                                                stringResource(R.string.shell_socialBillboards),
-                                                                Icons.Filled.Campaign,
-                                                                if (billboardsRepository != null &&
-                                                                    FeatureGate.isAvailable(
-                                                                        flags = flags,
-                                                                        flag = FeatureFlag.DIGITAL_BILLBOARDS,
-                                                                        memberGated = false,
-                                                                        isActiveMember = profile?.activeMember == true,
-                                                                    )
-                                                                ) {
-                                                                    { openRootRoute(ShellRoute.Billboards) }
-                                                                } else {
-                                                                    null
-                                                                },
-                                                            ),
+                                                            // Billboards intentionally removed from
+                                                            // the Social menu (Seb, 2026-07-31).
+                                                            // Billboards are meant to be MAP PINS
+                                                            // — "something that should be within
+                                                            // the map, if it isn't activated it
+                                                            // shouldn't be shown for our users" —
+                                                            // and no billboard rendering exists in
+                                                            // the map yet. A menu row leading to a
+                                                            // flat list therefore advertised a
+                                                            // feature that does not work as
+                                                            // intended, so the row is gone and
+                                                            // billboards are invisible to members
+                                                            // until the map work lands. That is
+                                                            // intended, not an oversight.
+                                                            //
+                                                            // The screen, the repository wiring and
+                                                            // ShellRoute.Billboards all REMAIN —
+                                                            // deliberately unreferenced, ready for
+                                                            // the map integration (see
+                                                            // BillboardsScreen / ShellRoute
+                                                            // .Billboards). Do not delete them as
+                                                            // dead code.
                                                         ),
                                                         locale = LocalConfiguration.current.locales[0],
                                                     ),
@@ -5161,6 +5164,16 @@ private fun RouteHost(
                     badgeShowcase = badgeShowcase,
                     pointsBalance = pointsBalance,
                     recentPointsEarnings = recentPointsEarnings,
+                    // The points card is now the ONLY way into the full ledger
+                    // (the profile menu's "Points" row was removed). Pushed, not
+                    // opened as a root, so Back returns to the profile that sent
+                    // them there — the same hub → child rule Settings uses.
+                    onOpenPoints =
+                        if (pointsRepository != null) {
+                            { onOpenRoute(ShellRoute.Points) }
+                        } else {
+                            null
+                        },
                 )
             }
         }
@@ -5648,7 +5661,6 @@ private fun LoadingScreen() {
 private fun profileMenuEntries(
     profileEditCoordinator: ProfileEditCoordinator?,
     friendsRepository: FriendsRepository?,
-    pointsRepository: PointsRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     onOpenRoute: (ShellRoute) -> Unit,
     onSignOut: () -> Unit,
@@ -5687,15 +5699,15 @@ private fun profileMenuEntries(
                 null
             },
         ),
-        HubEntry(
-            stringResource(R.string.profile_points),
-            Icons.Filled.Stars,
-            if (pointsRepository != null) {
-                { onOpenRoute(ShellRoute.Points) }
-            } else {
-                null
-            },
-        ),
+        // "Points" was removed from this menu (Seb, 2026-07-31): Kronpoäng is a
+        // profile concern and belongs on the profile page, not in the account
+        // menu beside it. The full ledger did NOT go with it — the profile's
+        // points card only summarises (balance + 4 recent, undated CREDITS)
+        // while PointsScreen is the whole statement (credits and debits, each
+        // dated), so the card was made TAPPABLE and now opens
+        // ShellRoute.Points itself (see the Profile branch of RouteHost:
+        // `onOpenPoints`). That card is the app's ONLY door to the ledger; do
+        // not add a second one here without removing that one.
         // "Awards" (the flat BadgesScreen list) was removed from this menu: the
         // profile screen's own ProfileBadgesSection is a strict superset of it —
         // every rung of every ladder plus the standalone milestones, earned lit
