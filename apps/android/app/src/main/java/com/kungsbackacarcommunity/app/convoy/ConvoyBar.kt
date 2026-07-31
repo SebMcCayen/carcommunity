@@ -43,6 +43,54 @@ package com.kungsbackacarcommunity.app.convoy
  * group-wide End structurally (see [ConvoyStatusBar]).
  */
 
+/**
+ * What the trailing exit control on the convoy bar actually offers this member,
+ * derived from ownership and the accepted-member count — the ONE decision that
+ * keeps a member from being shown an action the server would refuse, and keeps
+ * "end everyone's drive" from ever being reachable by accident.
+ *
+ * There are four cases and no fifth, because two independent facts decide it:
+ * whether the viewer is the leader (only the leader may end the convoy for
+ * everyone) and whether at least [ConvoyBar.MIN_REMAINING_MEMBERS] members would
+ * be LEFT once the viewer walked away (below that, leaving ends the convoy —
+ * see the server's MIN_REMAINING_MEMBERS_TO_STAY_ALIVE).
+ *
+ * The count only picks the LABEL. The server re-decides the outcome inside the
+ * leave transaction from the roster it reads, so a stale bar can show the wrong
+ * wording for a moment but can never cause the wrong thing to happen.
+ */
+enum class ConvoyExitChoice {
+    /**
+     * The leader, in a convoy big enough to survive them leaving: a real CHOICE
+     * between stepping out (leadership transfers, the others carry on) and ending
+     * the drive for everyone. Two distinct actions, never one with a modifier.
+     */
+    LeaveOrEnd,
+
+    /**
+     * The leader, where leaving would take the convoy below the survival
+     * threshold. Leaving and ending have the SAME outcome here, so offering both
+     * would be two buttons for one action: they get End, honestly labelled.
+     */
+    EndOnly,
+
+    /** A non-leader with enough people left behind: Leave, and only Leave. */
+    LeaveOnly,
+
+    /**
+     * A non-leader whose exit takes the convoy below the threshold. Still Leave —
+     * NEVER hidden — but the confirmation says out loud that the convoy ends,
+     * because the alternative (hiding the only exit a non-leader has) would trap
+     * them in a convoy they cannot end and cannot leave.
+     */
+    LeaveEndsConvoy,
+    ;
+
+    /** True when picking this exit will end the convoy for whoever is left. */
+    val endsConvoy: Boolean
+        get() = this == EndOnly || this == LeaveEndsConvoy
+}
+
 /** Whether a convoy-bar action can actually reach a backend. */
 enum class ConvoyBarActionAvailability {
     /** A callable exists and is wired — the control runs for real. */
@@ -96,8 +144,9 @@ data class ConvoyBarMember(
  *   both the member count shown on the bar ([memberCount], derived from this) and
  *   the tap-to-open member-list popup, so the count and the list are ONE source of
  *   truth and cannot disagree.
- * @param viewerIsOwner drives the leave-vs-end split: the owner has no "leave",
- *   only "end this convoy for everyone".
+ * @param viewerIsOwner whether the viewer is the convoy's current LEADER. Feeds
+ *   [ConvoyBarState.exitChoice]: only the leader is offered "end for everyone",
+ *   and only the leader's Leave has leadership to hand over.
  * @param busy true while a mutation for this convoy is in flight, so the actions
  *   disable rather than fire twice.
  */
@@ -143,6 +192,14 @@ data class ConvoyBarState(
      * were ever set back to [ConvoyBarActionAvailability.BackendMissing] the notice
      * still names exactly what is missing rather than overclaiming from one flag.
      */
+    /**
+     * What the trailing exit control offers — see [ConvoyExitChoice]. Derived
+     * from [viewerIsOwner] + [memberCount] rather than stored, so it cannot
+     * disagree with the roster the bar is rendering.
+     */
+    val exitChoice: ConvoyExitChoice
+        get() = ConvoyBar.exitChoice(viewerIsOwner = viewerIsOwner, acceptedMemberCount = memberCount)
+
     val notice: ConvoyBarNotice
         get() {
             val inviteMissing = inviteAvailability == ConvoyBarActionAvailability.BackendMissing
@@ -210,6 +267,37 @@ object ConvoyBar {
      * (like [inviteAvailability]) — it takes no role argument.
      */
     val leaveAvailability: ConvoyBarActionAvailability = ConvoyBarActionAvailability.Wired
+
+    /**
+     * How many ACCEPTED members must be LEFT for a convoy to survive somebody
+     * leaving it. Mirrors the backend's MIN_REMAINING_MEMBERS_TO_STAY_ALIVE
+     * (convoy-core.ts) — the server is authoritative and re-decides inside the
+     * leave transaction; this copy exists only so the bar can LABEL the action
+     * honestly before the tap.
+     */
+    const val MIN_REMAINING_MEMBERS = 2
+
+    /**
+     * Which exit(s) to offer, from ownership and the ACCEPTED member count (the
+     * viewer included, which is why the remaining count is one less).
+     *
+     * Owner-or-not is checked FIRST and independently of the count, so a member's
+     * tap can never route into the leader-only "end for everyone" no matter what
+     * the count says — the same structural separation the bar has always had,
+     * expressed once here instead of at the tap site.
+     */
+    fun exitChoice(viewerIsOwner: Boolean, acceptedMemberCount: Int): ConvoyExitChoice {
+        // Defensive coerce: a roster that has not loaded yet must not report a
+        // NEGATIVE remaining count and read as "plenty will be left".
+        val remainingIfViewerLeaves = (acceptedMemberCount - 1).coerceAtLeast(0)
+        val survives = remainingIfViewerLeaves >= MIN_REMAINING_MEMBERS
+        return when {
+            viewerIsOwner && survives -> ConvoyExitChoice.LeaveOrEnd
+            viewerIsOwner -> ConvoyExitChoice.EndOnly
+            survives -> ConvoyExitChoice.LeaveOnly
+            else -> ConvoyExitChoice.LeaveEndsConvoy
+        }
+    }
 
     /**
      * The convoy the bar should describe, or null when the caller is not in one

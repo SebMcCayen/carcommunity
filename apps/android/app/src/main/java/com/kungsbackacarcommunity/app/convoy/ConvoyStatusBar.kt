@@ -30,6 +30,8 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -85,8 +87,14 @@ const val CONVOY_BAR_CHAT_TAG = "convoy_bar_chat"
 /** Test tag on the bar's invite ("person +") control. */
 const val CONVOY_BAR_INVITE_TAG = "convoy_bar_invite"
 
-/** Test tag on the bar's leave / end-convoy control. */
+/** Test tag on the bar's exit control (leave / end / the leader's chooser). */
 const val CONVOY_BAR_LEAVE_TAG = "convoy_bar_leave"
+
+/** Test tag on the "Leave the convoy" option inside the leader's exit chooser. */
+const val CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG = "convoy_bar_exit_choice_leave"
+
+/** Test tag on the "End for everyone" option inside the leader's exit chooser. */
+const val CONVOY_BAR_EXIT_CHOICE_END_TAG = "convoy_bar_exit_choice_end"
 
 /** Test tag on the bar's set/change shared-destination control. */
 const val CONVOY_BAR_DESTINATION_SET_TAG = "convoy_bar_destination_set"
@@ -99,8 +107,9 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
 
 /**
  * A compact, full-width bar describing the convoy the user is currently in: how
- * many people are in it, a map-focus toggle, an invite affordance, and a leave
- * (member) or end (owner) affordance — ALL visible inline, no expand step.
+ * many people are in it, a map-focus toggle, an invite affordance, and the EXIT
+ * (leave, or — for the leader — leave-or-end) — ALL visible inline, no expand
+ * step.
  *
  * Rendered by the map home (wedged full-width into the search row between the
  * search control and the profile avatar) and by turn-by-turn navigation through a
@@ -112,7 +121,7 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  *
  * ## Every control is inline and live
  * There is no expand/collapse and no popup: the member count, focus toggle, chat,
- * invite and leave/End all sit in the one always-visible row. All of the actions
+ * invite and the exit all sit in the one always-visible row. All of the actions
  * are backed by deployed callables (see [ConvoyBar]); each still gates on BOTH an
  * availability flag AND the presence of a handler, so a control never looks live
  * while doing nothing. Space is kept by using icon buttons (no text labels) for
@@ -120,15 +129,28 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * icon's unread badge is capped ("9+") for the same reason, so no amount of
  * chatter can widen the row.
  *
- * ## Owner vs member
- * The trailing control is deliberately NOT one action with two labels. The owner
- * gets "End convoy" — which really does end the drive for the whole group (that
- * is what `convoy-end` does) — and it confirms first. A member gets "Leave
- * convoy" (`convoy-leave`, removing only the caller), which ALSO confirms first.
- * A member's tap is routed on `viewerIsOwner`, so it reaches [onLeaveConvoy] and
- * can never fall through to the group-wide end-convoy confirmation: "leave"
- * ending everyone's drive is the one failure in this component that would truly
- * hurt people, so it is prevented structurally, not by the availability flag.
+ * ## The two exits
+ * The trailing control is deliberately NOT one action with two labels. What it
+ * offers is [ConvoyBarState.exitChoice], and there are three shapes:
+ *
+ *  - **A leader with people to leave behind** taps into a CHOOSER offering two
+ *    separate actions: "Leave the convoy" (the others carry on; leadership
+ *    transfers) and "End for everyone" (the whole drive stops). The chooser has no
+ *    affirmative default button, and the destructive option is a text action in
+ *    the error colour next to the leave action's filled button, so ending cannot
+ *    be the thing a stray tap lands on.
+ *  - **A leader whose exit would end it anyway** gets End alone — offering both
+ *    would be two buttons for one outcome.
+ *  - **A non-leader** gets Leave alone, because `convoy-end` is leader-only. When
+ *    their exit would take the convoy below the survival threshold the Leave
+ *    confirmation says the convoy will end; it is never HIDDEN, because a member
+ *    who can neither leave nor end would be trapped in the convoy.
+ *
+ * Each path confirms before it fires, and a non-leader's tap is routed on the
+ * exit choice, so it reaches [onLeaveConvoy] and can never fall through to the
+ * group-wide end-convoy confirmation: "leave" ending everyone's drive is the one
+ * failure in this component that would truly hurt people, so it is prevented
+ * structurally, not by the availability flag.
  *
  * Styled from the same frosted, rounded, tonally-elevated `surface` language as
  * the map's search bar and floating controls, so it reads as one more piece of
@@ -142,8 +164,8 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  *   home's inline placement sits in a single-line band between the search control
  *   and the avatar, so it passes `false` — a second text row would not fit that
  *   band. Turn-by-turn navigation, which has the vertical room, keeps it `true`.
- * @param onEndConvoy invoked (after the user confirms) when the OWNER ends the
- *   convoy. Never invoked for a member.
+ * @param onEndConvoy invoked (after the user confirms) when the LEADER ends the
+ *   convoy for everyone. Never invoked for a member who is not the leader.
  * @param onInvite invites people into THIS convoy (by id) — the host opens the
  *   friend picker and calls `convoy-invite`. The invite control needs both this
  *   handler AND [ConvoyBarState.inviteAvailability] `== Wired` before it enables.
@@ -152,10 +174,11 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  *   looks live while doing nothing" rule the other actions follow, expressed as
  *   absence because a chat icon has no honest disabled meaning. The unread badge
  *   on it comes from [ConvoyBarState.unreadChatCount] and is hidden at zero.
- * @param onLeaveConvoy removes the CALLER from this convoy — a member's action,
- *   never an owner's. Invoked only after the "Leave convoy?" confirmation. A
- *   member's tap is routed here on `viewerIsOwner`, so it can never reach the
- *   end-convoy confirmation no matter what [ConvoyBarState.leaveAvailability] says.
+ * @param onLeaveConvoy removes the CALLER from this convoy. Any accepted member's
+ *   action, the LEADER included (leadership transfers server-side). Invoked only
+ *   after the leave confirmation. A non-leader's tap is routed here by
+ *   [ConvoyBarState.exitChoice], so it can never reach the end-convoy
+ *   confirmation no matter what [ConvoyBarState.leaveAvailability] says.
  * @param focusMode what the map camera is currently framing. Defaults to
  *   [ConvoyFocusMode.Me]. @param onFocusModeChange invoked with the picked mode.
  * @param onSetDestination open the place picker to set (or replace) the convoy's
@@ -198,6 +221,12 @@ fun ConvoyStatusBar(
     var pendingEndConvoyId by remember { mutableStateOf<String?>(null) }
     var pendingLeaveConvoyId by remember { mutableStateOf<String?>(null) }
 
+    // Whether the LEADER's two-option chooser is up. A bare boolean rather than a
+    // captured id, unlike the two confirmations above, because it does not itself
+    // commit anything — picking an option opens the matching confirmation, which
+    // captures the id at that point.
+    var showExitChoice by remember { mutableStateOf(false) }
+
     // Whether the member-list popup (opened by tapping the member count) is up.
     //
     // Keyed to the convoy id — UNLIKE the destructive end/leave dialogs above,
@@ -227,9 +256,11 @@ fun ConvoyStatusBar(
         state.inviteAvailability == ConvoyBarActionAvailability.Wired && onInvite != null
     val leaveUsable =
         state.leaveAvailability == ConvoyBarActionAvailability.Wired &&
-            // The owner's control is `convoy-end`, whose handler is non-null by
-            // signature; only a member's leave depends on the optional handler.
-            (state.viewerIsOwner || onLeaveConvoy != null)
+            // `convoy-end`'s handler is non-null by signature, so the ONE case
+            // that can still be unusable is a leave with no handler wired. That
+            // now includes the LEADER — they can leave too — except when their
+            // only offer IS the end (EndOnly), which needs no leave handler.
+            (state.exitChoice == ConvoyExitChoice.EndOnly || onLeaveConvoy != null)
 
     Surface(
         modifier = modifier.fillMaxWidth().testTag(CONVOY_BAR_TEST_TAG),
@@ -435,20 +466,28 @@ fun ConvoyStatusBar(
                     )
                 }
 
-                // Leave (member) / End (owner). Two genuinely different actions
-                // sharing a slot, so ownership — not availability — decides which
-                // one a tap runs. Routing on `viewerIsOwner` explicitly is what
-                // keeps a member's tap from ever falling through into "end the
-                // convoy for everyone": it opens the LEAVE confirmation, whose
-                // confirm calls [onLeaveConvoy], while the owner's tap opens the END
-                // confirmation. Each stays disabled until its handler is supplied.
+                // THE EXIT. What this ONE control offers is [ConvoyExitChoice]'s
+                // decision, taken from ownership AND how many members would be left
+                // behind — never from the availability flag. Routing on the choice
+                // is what keeps a non-leader's tap from ever falling through into
+                // "end the convoy for everyone": their branches only ever open the
+                // LEAVE confirmation, whose confirm calls [onLeaveConvoy].
+                //
+                // A LEADER with enough people behind them gets a real CHOICE (the
+                // chooser below): two separate, separately-labelled actions rather
+                // than one button with a hidden modifier. Everyone else gets the
+                // single action they are actually allowed to take, worded to match
+                // what it will really do.
                 val leaveEnabled = leaveUsable && !state.busy
+                val exitChoice = state.exitChoice
                 IconButton(
                     onClick = {
-                        if (state.viewerIsOwner) {
-                            pendingEndConvoyId = state.convoyId
-                        } else {
-                            pendingLeaveConvoyId = state.convoyId
+                        when (exitChoice) {
+                            ConvoyExitChoice.LeaveOrEnd -> showExitChoice = true
+                            ConvoyExitChoice.EndOnly -> pendingEndConvoyId = state.convoyId
+                            ConvoyExitChoice.LeaveOnly,
+                            ConvoyExitChoice.LeaveEndsConvoy,
+                            -> pendingLeaveConvoyId = state.convoyId
                         }
                     },
                     enabled = leaveEnabled,
@@ -467,17 +506,26 @@ fun ConvoyStatusBar(
                 ) {
                     Icon(
                         imageVector =
-                            if (state.viewerIsOwner) {
-                                Icons.Filled.StopCircle
-                            } else {
+                            // The stop glyph means "this can end the convoy", so it
+                            // is shown exactly when the tap can do that — including
+                            // the chooser, where ending is one of the two offers.
+                            // Plain "leave" is the only case that gets the door.
+                            if (exitChoice == ConvoyExitChoice.LeaveOnly) {
                                 Icons.AutoMirrored.Filled.Logout
+                            } else {
+                                Icons.Filled.StopCircle
                             },
                         contentDescription =
                             stringResource(
                                 when {
-                                    state.viewerIsOwner -> R.string.convoy_barEnd
-                                    leaveUsable -> R.string.convoy_barLeave
-                                    else -> R.string.convoy_barLeaveUnavailable
+                                    !leaveUsable -> R.string.convoy_barLeaveUnavailable
+                                    exitChoice == ConvoyExitChoice.LeaveOrEnd ->
+                                        R.string.convoy_barExit
+                                    exitChoice == ConvoyExitChoice.EndOnly ->
+                                        R.string.convoy_barEnd
+                                    exitChoice == ConvoyExitChoice.LeaveEndsConvoy ->
+                                        R.string.convoy_barLeaveEnds
+                                    else -> R.string.convoy_barLeave
                                 },
                             ),
                         // No explicit tint: LocalContentColor carries whichever of
@@ -557,12 +605,39 @@ fun ConvoyStatusBar(
     // Leaving removes only the caller — but it is still a deliberate exit, so it
     // confirms too. Same captured-id discipline as the end dialog above, so a
     // background refresh cannot re-point which convoy is left.
+    //
+    // The BODY is the [ConvoyExitChoice]'s, not a constant: for a member whose
+    // exit takes the convoy below the survival threshold, "the others keep driving
+    // without you" is simply false — the convoy ends. Saying so is what stops a
+    // member being surprised, and it is why "Leave" is still offered here at all
+    // rather than hidden: hiding it would leave a non-leader with no exit.
     val confirmingLeaveConvoyId = pendingLeaveConvoyId
     if (confirmingLeaveConvoyId != null) {
+        val leaveEnds = state.exitChoice == ConvoyExitChoice.LeaveEndsConvoy
         AlertDialog(
             onDismissRequest = { pendingLeaveConvoyId = null },
-            title = { Text(stringResource(R.string.convoy_barLeaveConfirmTitle)) },
-            text = { Text(stringResource(R.string.convoy_barLeaveConfirmBody)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (leaveEnds) {
+                            R.string.convoy_barLeaveEndsConfirmTitle
+                        } else {
+                            R.string.convoy_barLeaveConfirmTitle
+                        },
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (leaveEnds) {
+                            R.string.convoy_barLeaveEndsConfirmBody
+                        } else {
+                            R.string.convoy_barLeaveConfirmBody
+                        },
+                    ),
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -570,11 +645,96 @@ fun ConvoyStatusBar(
                         onLeaveConvoy?.invoke(confirmingLeaveConvoyId)
                     },
                 ) {
-                    Text(stringResource(R.string.convoy_barLeaveConfirmAction))
+                    Text(
+                        stringResource(
+                            if (leaveEnds) {
+                                R.string.convoy_barLeaveEndsConfirmAction
+                            } else {
+                                R.string.convoy_barLeaveConfirmAction
+                            },
+                        ),
+                    )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { pendingLeaveConvoyId = null }) {
+                    Text(stringResource(R.string.convoy_barConfirmCancel))
+                }
+            },
+        )
+    }
+
+    // THE LEADER'S CHOICE. Two genuinely different actions, presented as two
+    // separate controls with their own explanation of what each does — never one
+    // button with a modifier, and never a plain yes/no where "yes" could mean
+    // either.
+    //
+    // Deliberately NO affirmative `confirmButton`: both options live in the body
+    // and the only dialog-level action is Cancel. That is what keeps the
+    // destructive option from becoming the accidental default — there is no
+    // default, no button the Enter key or a stray tap lands on, and the two are
+    // visually distinct (Leave is a normal filled action, End for everyone is a
+    // text action in the error colour). Ending is one deliberate tap inside a
+    // dialog that already spells out how many people it stops, which is the same
+    // two-step commitment the old single End button had.
+    if (showExitChoice) {
+        AlertDialog(
+            onDismissRequest = { showExitChoice = false },
+            title = { Text(stringResource(R.string.convoy_barExitChoiceTitle)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                    Text(
+                        text = stringResource(R.string.convoy_barExitChoiceBody),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = {
+                            showExitChoice = false
+                            pendingLeaveConvoyId = state.convoyId
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(CONVOY_BAR_EXIT_CHOICE_LEAVE_TAG),
+                    ) {
+                        Text(stringResource(R.string.convoy_barExitChoiceLeave))
+                    }
+                    Text(
+                        text = stringResource(R.string.convoy_barExitChoiceLeaveDetail),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(
+                        onClick = {
+                            showExitChoice = false
+                            pendingEndConvoyId = state.convoyId
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(CONVOY_BAR_EXIT_CHOICE_END_TAG),
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                    ) {
+                        Text(stringResource(R.string.convoy_barExitChoiceEnd))
+                    }
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.convoy_barExitChoiceEndDetail,
+                                state.memberCount,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showExitChoice = false }) {
                     Text(stringResource(R.string.convoy_barConfirmCancel))
                 }
             },

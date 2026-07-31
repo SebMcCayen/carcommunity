@@ -54,7 +54,8 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  * security review — they are deliberately NOT accepted here.
  *
  * The social categories (direct_message, community_chat, convoy_chat,
- * friend_request, convoy_invite) back the per-category preferences for the
+ * friend_request, convoy_invite, convoy_update) back the per-category
+ * preferences for the
  * chat/social features. The same review rule applies: they exist so users
  * can opt out and so producers have a category to check before writing, but
  * activating them as a delivery surface needs the product/security review
@@ -63,7 +64,15 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  * Producers today. Each writes the in-app inbox item; the
  * notifications-onNotificationCreated trigger turns that item into a push, so
  * no producer sends push directly and none can bypass the opt-outs:
- *  - convoy_invite   — convoy/manageConvoy.ts (invite)
+ *  - convoy_invite   — convoy/manageConvoy.ts (create + invite: you were
+ *                      invited to a convoy)
+ *  - convoy_update   — convoy/manageConvoy.ts (leave + end: somebody left the
+ *                      convoy you are in, leadership transferred to you or to
+ *                      another member, or the convoy was ended). Kept SEPARATE
+ *                      from convoy_invite on purpose: silencing "people keep
+ *                      inviting me to convoys" must not also silence "the convoy
+ *                      you are driving in just ended", and vice versa — that is
+ *                      different noise with different urgency.
  *  - direct_message  — dm/manageDirectMessages.ts (sendMessage; first message
  *                      of an unread run only)
  *  - friend_request  — friends/manageFriends.ts (new request → invitee;
@@ -91,6 +100,7 @@ export const NOTIFICATION_CATEGORIES = [
   'convoy_chat',
   'friend_request',
   'convoy_invite',
+  'convoy_update',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
@@ -104,6 +114,7 @@ export const SOCIAL_NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'convoy_chat',
   'friend_request',
   'convoy_invite',
+  'convoy_update',
 ] as const;
 
 /**
@@ -445,9 +456,11 @@ export function buildPushDeepLink(
       // The channel itself is the only unambiguous destination.
       return { target: 'community_chat', entityId: null };
     case 'convoy_invite':
-      // relatedEntityId is the convoy id (manageConvoy.notifyInvitees). Passing
-      // it through is what lets a tapped invite open THAT convoy rather than
-      // dumping the member on the convoy list.
+    case 'convoy_update':
+      // relatedEntityId is the convoy id (manageConvoy.notifyInvitees /
+      // notifyConvoyMembers). Passing it through is what lets a tapped invite —
+      // or a "someone left" / "convoy ended" notice — open THAT convoy rather
+      // than dumping the member on the convoy list.
       return { target: 'convoys', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
       return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };

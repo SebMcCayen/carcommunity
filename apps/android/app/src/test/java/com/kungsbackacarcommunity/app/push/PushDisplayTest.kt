@@ -165,6 +165,7 @@ class PushDisplayTest {
                 NotificationCategory.CONVOY_CHAT to PushChannel.SOCIAL,
                 NotificationCategory.FRIEND_REQUEST to PushChannel.SOCIAL,
                 NotificationCategory.CONVOY_INVITE to PushChannel.SOCIAL,
+                NotificationCategory.CONVOY_UPDATE to PushChannel.SOCIAL,
             )
         // Exhaustive: a new category must be assigned a channel here too.
         assertEquals(NotificationCategory.entries.toSet(), expected.keys)

@@ -120,6 +120,7 @@ describe('pushPreviewsEnabled', () => {
 const PASS_THROUGH_CATEGORIES = [
   'convoy_chat',
   'convoy_invite',
+  'convoy_update',
   'friend_request',
   'event_reminder',
   'event_updated',

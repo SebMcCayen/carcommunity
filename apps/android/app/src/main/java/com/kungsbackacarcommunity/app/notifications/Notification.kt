@@ -27,6 +27,15 @@ enum class NotificationCategory(val wire: String) {
     CONVOY_CHAT("convoy_chat"),
     FRIEND_REQUEST("friend_request"),
     CONVOY_INVITE("convoy_invite"),
+
+    /**
+     * Convoy MEMBERSHIP / LIFECYCLE notices: somebody left the convoy you are
+     * in, leadership transferred (to you or to another member), or the convoy
+     * was ended. Deliberately separate from [CONVOY_INVITE] so silencing "people
+     * keep inviting me to convoys" does not also silence "the convoy you are
+     * driving in just ended".
+     */
+    CONVOY_UPDATE("convoy_update"),
     ;
 
     companion object {

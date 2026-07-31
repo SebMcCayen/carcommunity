@@ -18,7 +18,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,6 +30,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +60,12 @@ import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 /** Test tag on the create-convoy submit button, so a UI test can assert it goes
  *  inert (disabled) during the create + post-create hand-off to the map. */
 const val CONVOY_CREATE_SUBMIT_TAG = "convoy-create-submit"
+
+/** Test tag on the convoy detail screen's "Leave convoy" button. */
+const val CONVOY_DETAIL_LEAVE_TAG = "convoy-detail-leave"
+
+/** Test tag on the convoy detail screen's "End convoy" (for everyone) button. */
+const val CONVOY_DETAIL_END_TAG = "convoy-detail-end"
 
 // ---------------------------------------------------------------------------
 // Convoy list
@@ -603,11 +615,21 @@ fun ConvoyInvitePickerScreen(
 // ---------------------------------------------------------------------------
 
 /**
- * A single convoy's members and their invite statuses. The owner sees Start
- * (while forming) and End (while active); a non-owner just sees the status. When
- * the convoy has ended, the post-drive [ConvoySummaryStats] is shown to ALL
- * members. The live-map is a separate surface and is deliberately not linked
- * here (a "+" chooser / driving-mode follow-up wires start-and-drive).
+ * A single convoy's members and their invite statuses. When the convoy has ended,
+ * the post-drive [ConvoySummaryStats] is shown to ALL members. The live-map is a
+ * separate surface and is deliberately not linked here (a "+" chooser /
+ * driving-mode follow-up wires start-and-drive).
+ *
+ * ## The two exits, as two buttons
+ * This screen has the vertical room the convoy bar does not, so the choice is
+ * simply two separate buttons rather than the bar's chooser dialog — same rule,
+ * same [ConvoyExitChoice], different presentation:
+ *  - the LEADER of a live convoy sees "End convoy" (group-wide, destructive), and
+ *    additionally "Leave convoy" when enough members would be left behind;
+ *  - any other accepted member sees "Leave convoy" alone, since ending is
+ *    leader-only. Its confirmation says so when leaving will end the convoy.
+ * The destructive one is visually distinguished (error-coloured) and is never the
+ * only thing a non-leader can reach.
  *
  * @param onViewMember opens a roster member's read-only profile. Null (the
  *   config-less build) leaves the rows inert.
@@ -626,7 +648,16 @@ fun ConvoyDetailScreen(
     modifier: Modifier = Modifier,
     onViewMember: ((String) -> Unit)? = null,
     viewerUid: String? = null,
+    /**
+     * Removes the CALLER from this convoy. Null omits the control entirely rather
+     * than rendering a dead one — a config-less build has no repository to call.
+     */
+    onLeave: (() -> Unit)? = null,
 ) {
+    // The convoy this confirmation is ABOUT is this screen's single [convoy], so a
+    // plain boolean is enough here (unlike the bar, which re-picks which convoy it
+    // describes underneath itself and therefore captures the id).
+    var confirmLeave by remember { mutableStateOf(false) }
     AeroPage(title = convoy.displayTitle(), modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
             StatusChip(convoy.status)
@@ -655,19 +686,118 @@ fun ConvoyDetailScreen(
             )
         }
 
-        if (convoy.viewerIsOwner) {
-            when (convoy.status) {
-                ConvoyStatus.Forming ->
-                    Button(onClick = onStart, enabled = !working, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.convoy_start))
-                    }
-                ConvoyStatus.Active ->
-                    Button(onClick = onEnd, enabled = !working, modifier = Modifier.fillMaxWidth()) {
-                        Text(stringResource(R.string.convoy_end))
-                    }
-                ConvoyStatus.Ended -> Unit
+        if (convoy.status != ConvoyStatus.Ended) {
+            val acceptedCount =
+                convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted }
+            val exitChoice =
+                ConvoyBar.exitChoice(
+                    viewerIsOwner = convoy.viewerIsOwner,
+                    acceptedMemberCount = acceptedCount,
+                )
+            // The legacy owner-only Start, unchanged: a convoy is born active, so
+            // this only ever appears for a convoy still stuck `forming`.
+            if (convoy.viewerIsOwner && convoy.status == ConvoyStatus.Forming) {
+                Button(onClick = onStart, enabled = !working, modifier = Modifier.fillMaxWidth()) {
+                    Text(stringResource(R.string.convoy_start))
+                }
+            }
+            // Leave: offered to any accepted member whose exit does not simply end
+            // the convoy (in which case End below IS the same action, and two
+            // buttons for one outcome would only confuse). The viewer must
+            // actually be in the convoy — a still-invited member has nothing to
+            // leave, and the backend refuses them.
+            val viewerAccepted = convoy.viewer?.inviteStatus == ConvoyInviteStatus.Accepted
+            if (onLeave != null && viewerAccepted && exitChoice != ConvoyExitChoice.EndOnly) {
+                OutlinedButton(
+                    onClick = { confirmLeave = true },
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_DETAIL_LEAVE_TAG),
+                ) {
+                    Text(
+                        stringResource(
+                            if (exitChoice == ConvoyExitChoice.LeaveEndsConvoy) {
+                                R.string.convoy_barLeaveEnds
+                            } else {
+                                R.string.convoy_leave
+                            },
+                        ),
+                    )
+                }
+            }
+            // End for everyone: LEADER-ONLY, and error-coloured because it stops
+            // other people's drive.
+            if (convoy.viewerIsOwner && convoy.status == ConvoyStatus.Active) {
+                Button(
+                    onClick = onEnd,
+                    enabled = !working,
+                    modifier = Modifier.fillMaxWidth().testTag(CONVOY_DETAIL_END_TAG),
+                    colors =
+                        ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.error,
+                            contentColor = MaterialTheme.colorScheme.onError,
+                        ),
+                ) {
+                    Text(stringResource(R.string.convoy_end))
+                }
             }
         }
+    }
+
+    if (confirmLeave) {
+        val leaveEnds =
+            ConvoyBar.exitChoice(
+                viewerIsOwner = convoy.viewerIsOwner,
+                acceptedMemberCount =
+                    convoy.members.count { it.inviteStatus == ConvoyInviteStatus.Accepted },
+            ) == ConvoyExitChoice.LeaveEndsConvoy
+        AlertDialog(
+            onDismissRequest = { confirmLeave = false },
+            title = {
+                Text(
+                    stringResource(
+                        if (leaveEnds) {
+                            R.string.convoy_barLeaveEndsConfirmTitle
+                        } else {
+                            R.string.convoy_barLeaveConfirmTitle
+                        },
+                    ),
+                )
+            },
+            text = {
+                Text(
+                    stringResource(
+                        if (leaveEnds) {
+                            R.string.convoy_barLeaveEndsConfirmBody
+                        } else {
+                            R.string.convoy_barLeaveConfirmBody
+                        },
+                    ),
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmLeave = false
+                        onLeave?.invoke()
+                    },
+                ) {
+                    Text(
+                        stringResource(
+                            if (leaveEnds) {
+                                R.string.convoy_barLeaveEndsConfirmAction
+                            } else {
+                                R.string.convoy_barLeaveConfirmAction
+                            },
+                        ),
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmLeave = false }) {
+                    Text(stringResource(R.string.convoy_barConfirmCancel))
+                }
+            },
+        )
     }
 }
 
@@ -1010,6 +1140,7 @@ internal fun ConvoyActionError.messageRes(): Int =
         ConvoyActionError.AlreadyEnded -> R.string.convoy_errorAlreadyEnded
         ConvoyActionError.LeaveFailed -> R.string.convoy_errorLeaveFailed
         ConvoyActionError.NotAllowed -> R.string.convoy_errorNotAllowed
+        ConvoyActionError.NotLeader -> R.string.convoy_errorNotLeader
         ConvoyActionError.AlreadyInConvoy -> R.string.convoy_errorAlreadyInConvoy
         ConvoyActionError.Generic -> R.string.convoy_errorGeneric
     }

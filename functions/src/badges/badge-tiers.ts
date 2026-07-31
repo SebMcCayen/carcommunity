@@ -240,8 +240,20 @@ export function rideDistanceDelta(data: DocData): number {
  * actively accept the invite.
  *
  * Credit fires on the transition INTO ended (`endedAt` going from unset to
- * set), which convoy.end makes exactly once, so re-writing an ended convoy
- * credits nothing more.
+ * set) — which the convoy domain makes exactly once, whether that is convoy.end
+ * or the convoy.leave that ends a convoy nobody would be left in — so re-writing
+ * an ended convoy credits nothing more, and the two end paths cannot double-count.
+ *
+ * CREDITED UID: `createdByUid`, the member who CREATED the convoy, falling back
+ * to `ownerUid` for documents written before that field existed (for which the
+ * two are the same person, because leadership could not transfer then, so the
+ * credit for every pre-existing convoy is bit-identical). It is deliberately NOT
+ * the current `ownerUid`: leadership now transfers when a leader leaves
+ * (convoy-core.ts::decideLeaveConvoy), and crediting whoever happens to be
+ * holding the convoy at the end would hand the ladder a "choose the recipient"
+ * knob — A creates, B accepts, A hands over and leaves, B ends, and B is credited
+ * for a convoy they did not organise. "Led" means INITIATED, so the field that
+ * never moves is the one to read.
  */
 export function convoyLedOwnerUid(before: DocData, after: DocData): string | null {
   const hadEnded = before != null && before.endedAt != null;
@@ -249,11 +261,13 @@ export function convoyLedOwnerUid(before: DocData, after: DocData): string | nul
   if (hadEnded || !hasEnded) {
     return null;
   }
-  const ownerUid = after?.ownerUid;
-  if (typeof ownerUid !== 'string' || ownerUid.length === 0) {
+  const createdBy = after?.createdByUid;
+  const creditUid =
+    typeof createdBy === 'string' && createdBy.length > 0 ? createdBy : after?.ownerUid;
+  if (typeof creditUid !== 'string' || creditUid.length === 0) {
     return null;
   }
-  return acceptedConvoyParticipants(after, ownerUid) >= 1 ? ownerUid : null;
+  return acceptedConvoyParticipants(after, creditUid) >= 1 ? creditUid : null;
 }
 
 /**

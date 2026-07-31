@@ -54,6 +54,7 @@ object NotificationCategories {
             "convoy_chat",
             "friend_request",
             "convoy_invite",
+            "convoy_update",
             "account_warning",
             "account_suspension",
         )
@@ -64,7 +65,14 @@ object NotificationCategories {
      * able to silence other members.
      */
     val SOCIAL: Set<String> =
-        setOf("direct_message", "community_chat", "convoy_chat", "friend_request", "convoy_invite")
+        setOf(
+            "direct_message",
+            "community_chat",
+            "convoy_chat",
+            "friend_request",
+            "convoy_invite",
+            "convoy_update",
+        )
 
     /** Essential account notices — cannot be disabled in-app or push. */
     val ESSENTIAL: Set<String> = setOf("account_warning", "account_suspension")

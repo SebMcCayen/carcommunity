@@ -582,7 +582,7 @@
     "errorCannotStart": "This convoy can no longer be started.",
     "errorAlreadyEnded": "This convoy has already ended.",
     "errorLeaveFailed": "Couldn't leave the convoy. Refresh and try again.",
-    "errorNotAllowed": "Only the person who set the destination, or the convoy owner, can clear it.",
+    "errorNotAllowed": "Only the person who set the destination, or the convoy leader, can clear it.",
     "errorGeneric": "Something went wrong. Please try again.",
     "errorAlreadyInConvoy": "You're already in a convoy. Leave or end it before joining another.",
     "alreadyInConvoyCreateHint": "You're already in a convoy — leave or end it to start a new one.",
@@ -647,7 +647,24 @@
     "barDestinationPickAction": "Set for the convoy",
     "inviteLinkEnded": "That convoy has ended.",
     "inviteLinkAnswered": "You've already answered that invite.",
-    "inviteLinkGone": "That invite is no longer available."
+    "inviteLinkGone": "That invite is no longer available.",
+    "barExitChoiceTitle": "Leave or end the convoy?",
+    "barExitChoiceBody": "You can step out and let the others carry on, or end the drive for everyone.",
+    "barExitChoiceLeave": "Leave the convoy",
+    "barExitChoiceLeaveDetail": "You're out. The others keep driving, and another member takes over as leader.",
+    "barExitChoiceEnd": "End for everyone",
+    "barExitChoiceEndDetail": "Ends the drive for all %1$d people in the convoy. The summary is saved.",
+    "barExit": "Leave or end convoy",
+    "barLeaveEndsConfirmTitle": "Leave and end the convoy?",
+    "barLeaveEndsConfirmBody": "You're the second-to-last member, so leaving ends the convoy — nobody is left driving in it alone. The summary is saved.",
+    "barLeaveEndsConfirmAction": "Leave and end",
+    "barLeaveEnds": "Leave convoy (this ends it)",
+    "leftConvoyToast": "You left the convoy.",
+    "leftAndEndedToast": "You left, and the convoy ended.",
+    "leftAsLeaderToast": "You left. Another member is now the convoy leader.",
+    "nowLeaderNotice": "You're now the convoy leader.",
+    "leave": "Leave convoy",
+    "errorNotLeader": "Only the convoy leader can end the convoy for everyone. You can leave it instead."
   },
   "memberProfile": {
     "title": "Profile",
@@ -1210,7 +1227,8 @@
     "channelGeneralDescription": "Membership updates and other messages from the club.",
     "convoyEndedLabel": "Convoy has ended",
     "convoyEndedRowDescription": "%1$s. Convoy has ended.",
-    "convoyInviteAnsweredLabel": "You have already answered this invite"
+    "convoyInviteAnsweredLabel": "You have already answered this invite",
+    "categoryConvoyUpdate": "Convoy updates"
   },
   "feedback": {
     "title": "Report a problem",

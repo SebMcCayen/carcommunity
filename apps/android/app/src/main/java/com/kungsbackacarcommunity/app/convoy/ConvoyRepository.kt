@@ -49,15 +49,22 @@ interface ConvoyRepository {
     suspend fun invite(convoyId: String, inviteeUids: List<String>): CreateConvoyResult
 
     /**
-     * Removes the CALLER from a convoy they have ACCEPTED (a non-owner member's
-     * action — the owner uses [end] instead). Returns the refreshed convoy, whose
-     * `viewer` is now null because the caller is no longer a member.
+     * Removes the CALLER from a convoy they have ACCEPTED — available to ANY
+     * accepted member, the LEADER included (leadership transfers to another
+     * member). Returns the refreshed convoy, whose `viewer` is now null because
+     * the caller is no longer a member, plus what the exit did to the convoy:
+     * whether it survived or ENDED because too few would have been left, and who
+     * inherited leadership. See [LeaveConvoyResult] / [ConvoyLeaveOutcome].
      */
-    suspend fun leave(convoyId: String): ConvoyMutationResult
+    suspend fun leave(convoyId: String): LeaveConvoyResult
 
     /** Owner-only: moves a forming convoy to active. */
     suspend fun start(convoyId: String): ConvoyMutationResult
 
-    /** Owner-only: ends the convoy (computes + stores the summary). */
+    /**
+     * LEADER-ONLY: ends the convoy for EVERYONE (computes + stores the summary).
+     * A member who is not the leader is refused server-side; the UI only offers
+     * this to the leader ([ConvoyBar.exitChoice]).
+     */
     suspend fun end(convoyId: String): ConvoyMutationResult
 }

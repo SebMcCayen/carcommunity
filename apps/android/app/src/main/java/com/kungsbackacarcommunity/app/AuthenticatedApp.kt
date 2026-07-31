@@ -127,6 +127,7 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
 import com.kungsbackacarcommunity.app.convoy.ConvoyInviteStatus
+import com.kungsbackacarcommunity.app.convoy.ConvoyLeaveOutcome
 import com.kungsbackacarcommunity.app.convoy.ConvoyInvitePickerScreen
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
@@ -2625,10 +2626,38 @@ fun AuthenticatedApp(
                     convoyInviteSelected = emptySet()
                     convoyInviteConvoyId = convoyId
                 }
-                // Removes the caller from [convoyId] (a member's Leave, confirmed in
-                // the bar before this runs).
+                // Removes the caller from [convoyId] (Leave, confirmed in the bar
+                // before this runs). Any accepted member, the LEADER included.
                 val leaveConvoy: (String) -> Unit = { convoyId ->
                     convoyBarCoordinator?.let { c -> scope.launch { c.leave(convoyId) } }
+                }
+
+                // What the caller's own exit DID, said once.
+                //
+                // It cannot be read off the refreshed snapshot: after a successful
+                // leave the convoy simply drops out of the caller's list, which
+                // looks identical whether the others are still driving, the convoy
+                // ended behind them, or they handed leadership on. Only the server
+                // knows which, so its answer is what is shown — and it is cleared
+                // as soon as it has been, so it never re-appears on recomposition.
+                val convoyLeftNotice by
+                    (convoyBarCoordinator?.leftNotice ?: remember { MutableStateFlow(null) })
+                        .collectAsState()
+                val convoyLeftMessage =
+                    convoyLeftNotice?.let { notice ->
+                        stringResource(
+                            when {
+                                notice.outcome == ConvoyLeaveOutcome.LeftAndEnded ->
+                                    R.string.convoy_leftAndEndedToast
+                                notice.transferredLeadership -> R.string.convoy_leftAsLeaderToast
+                                else -> R.string.convoy_leftConvoyToast
+                            },
+                        )
+                    }
+                LaunchedEffect(convoyLeftNotice) {
+                    val message = convoyLeftMessage ?: return@LaunchedEffect
+                    convoyBarCoordinator?.clearLeftNotice()
+                    snackbarHostState.showSnackbar(message)
                 }
 
                 // Track what happened to the destination the user is CURRENTLY
@@ -2963,7 +2992,9 @@ fun AuthenticatedApp(
                                 showDestination = showDestination,
                                 focusMode = convoyFocusMode,
                                 onFocusModeChange = { convoyFocusStore.setMode(it) },
-                                // The OWNER's End (group-wide, confirmed in the bar).
+                                // The LEADER's End — group-wide, and only ever
+                                // reached from the leader's own exit choice or
+                                // chooser (the bar decides; see ConvoyExitChoice).
                                 onEndConvoy = { convoyId ->
                                     scope.launch { convoyBarCoordinator.end(convoyId) }
                                 },
@@ -2989,9 +3020,14 @@ fun AuthenticatedApp(
                                     } else {
                                         null
                                     },
-                                // A member's Leave via `convoy-leave` (confirmed in
-                                // the bar; routed on viewerIsOwner so it can never
-                                // reach the owner's End path).
+                                // Leave via `convoy-leave`, confirmed in the bar.
+                                // Wired for EVERY accepted member now, the leader
+                                // included — leaving is one of the two exits, not
+                                // the non-leader's consolation prize, and the
+                                // server transfers leadership rather than refusing
+                                // a leader who wants out. A non-leader's tap is
+                                // still routed here by ConvoyExitChoice, so it can
+                                // never reach the group-wide End path.
                                 onLeaveConvoy = leaveConvoy,
                                 // Reuse the map's own search / saved-places /
                                 // long-press picker instead of a second one; it

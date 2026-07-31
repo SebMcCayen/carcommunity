@@ -20,8 +20,22 @@
  *    SKIPPED (reported in the response), never surfaced as an error that would
  *    reveal a block.
  *  - Membership CHANGES are member-driven but bounded: any accepted member may
- *    invite (friend-gated), a non-owner accepted member may leave, and the
- *    convoy is capped at MAX_CONVOY_SIZE. The OWNER may not leave — they end.
+ *    invite (friend-gated), ANY accepted member — the leader included — may
+ *    leave, and the convoy is capped at MAX_CONVOY_SIZE.
+ *  - THE TWO EXITS. A member ending their participation chooses between two
+ *    genuinely different actions, never one button with a modifier:
+ *      * convoy.leave — removes ONLY the caller; the convoy carries on for the
+ *        others. When the LEADER leaves, leadership TRANSFERS to the
+ *        longest-joined remaining accepted member (deterministic + recorded).
+ *        When fewer than MIN_REMAINING_MEMBERS_TO_STAY_ALIVE would be left, the
+ *        convoy is ENDED instead of stranding someone alone in it.
+ *      * convoy.end — closes the convoy for EVERYONE. LEADER-ONLY; a member who
+ *        is not the leader gets permission-denied and has Leave instead.
+ *    Both the count check and the removal happen in ONE transaction, so two
+ *    simultaneous leaves cannot both see "enough will remain".
+ *  - Membership/lifecycle events notify the OTHER members through the same
+ *    in-app producer invites use, under the 'convoy_update' category (never
+ *    email): someone left, leadership moved, the convoy ended.
  *  - Member actions here write NO adminAuditEvents: that log is admin-only.
  *  - Membership + lifecycle transitions (forming → active → ended) run through
  *    these callables so the server owns them; the summary is computed + stored
@@ -46,6 +60,7 @@ import { requireMemberActor } from '../shared/memberActor';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
+import { reportServerError } from '../errors/serverErrors';
 import {
   isLiveShareEnabled,
   startConvoyAutoSession,
@@ -62,17 +77,19 @@ import {
   INVITE_ALREADY_HANDLED_MESSAGE,
   NOT_INVITED_MESSAGE,
   NO_VALID_INVITEES_MESSAGE,
-  OWNER_CANNOT_LEAVE_MESSAGE,
+  ONLY_LEADER_CAN_END_MESSAGE,
   NOT_ACCEPTED_MEMBER_MESSAGE,
   CONVOY_FULL_MESSAGE,
   DESTINATION_CLEAR_FORBIDDEN_MESSAGE,
   MAX_CONVOYS_RETURNED,
   MAX_CONVOY_SIZE,
   acceptedMemberUids,
+  appendLeadershipTransfer,
   buildConvoyDocument,
-  buildLeaveConvoyUpdate,
   buildMemberEntry,
   computeConvoySummary,
+  decideLeaveConvoy,
+  type LeaveConvoyOutcome,
   isAcceptedConvoyMember,
   isBlockedAgainstAnyPeer,
   isConvoyMember,
@@ -167,6 +184,13 @@ async function assertNotAlreadyInConvoy(
  * over a set of uids. Every call is independently caught so one failure (or an
  * absent live-share flag) can never fail the convoy mutation that triggered it,
  * and so a partial fan-out still starts/stops everyone it can.
+ *
+ * The swallow is REPORTED, not just logged. On the teardown side this op is what
+ * removes a member's RTDB marker when they leave or the convoy ends, so a
+ * silently failed call leaves somebody who is no longer in the convoy still
+ * broadcasting a live position to it — a correctness problem that a warning in
+ * Cloud Logging would never surface to anyone. reportServerError never throws and
+ * never masks, so this stays strictly best-effort.
  */
 async function forEachAutoSession(
   uids: string[],
@@ -174,10 +198,11 @@ async function forEachAutoSession(
 ): Promise<void> {
   await Promise.all(
     uids.map((uid) =>
-      op(uid).catch((error) => {
+      op(uid).catch(async (error) => {
         // A swallowed best-effort op is logged (not silently dropped) so a
         // convoy that fails to auto-start/stop a live session is diagnosable.
         logger.warn('convoy auto-session op failed', { uid, error: String(error) });
+        await reportServerError({ source: 'convoy.autoSession', error, context: { uid } });
       }),
     ),
   );
@@ -228,6 +253,56 @@ async function startConvoyAutoSessionsForAccepted(
 function toDate(value: unknown): Date | null {
   return value instanceof Timestamp ? value.toDate() : null;
 }
+
+/** Converts a stored Firestore value to epoch millis, or null (successor pick). */
+function toMillis(value: unknown): number | null {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+/** A member's denormalized display name off the convoy's memberProfiles map. */
+function memberDisplayName(data: Record<string, unknown>, uid: string): string | null {
+  const profiles = (data.memberProfiles ?? {}) as Record<
+    string,
+    Record<string, unknown> | undefined
+  >;
+  return toProfileProjection(profiles[uid]).displayName;
+}
+
+/**
+ * Best-effort in-app notification fan-out for a convoy MEMBERSHIP/LIFECYCLE
+ * event — somebody left, leadership moved, the convoy ended.
+ *
+ * The SAME producer the invite path uses (writeInAppNotification, which is what
+ * turns into a push via notifications-onNotificationCreated and which checks the
+ * recipient's per-category opt-out itself), under the dedicated 'convoy_update'
+ * category so a member can silence convoy comings-and-goings without silencing
+ * convoy INVITES — and vice versa. Never email, and never fails the mutation
+ * that triggered it: these run after the transaction has already committed, so a
+ * throw here would report a completed leave as a failure.
+ */
+async function notifyConvoyMembers(
+  recipientUids: string[],
+  convoyId: string,
+  title: string,
+  previewText: string,
+): Promise<void> {
+  await Promise.all(
+    recipientUids.map((uid) =>
+      writeInAppNotification(uid, {
+        category: 'convoy_update',
+        title,
+        previewText,
+        // relatedEntityId is the convoy id, so buildPushDeepLink can open THAT
+        // convoy — same shape as the invite notification.
+        actionType: 'open_notifications',
+        relatedEntityId: convoyId,
+      }).catch(() => undefined),
+    ),
+  );
+}
+
+/** Display name for notification copy when the roster has none. */
+const UNKNOWN_MEMBER_NAME = 'En medlem';
 
 /**
  * Reads a users/{uid} profile projection. Returns null when the user is missing
@@ -632,9 +707,30 @@ export const start = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Co
 });
 
 // ---------------------------------------------------------------------------
-// convoy.end (owner: → ended + compute/store summary)
+// convoy.end (LEADER: → ended + compute/store summary, for EVERYONE)
 // ---------------------------------------------------------------------------
 
+/**
+ * Ends the convoy FOR EVERY MEMBER.
+ *
+ * WHO MAY END: the current LEADER (`ownerUid`) only — the one genuinely
+ * hierarchical action in the domain, and deliberately so. This action reaches
+ * into other people's drive and stops it; any accepted member being able to close
+ * everyone else's convoy is both surprising ("why did my convoy vanish?") and
+ * abusable in a group that only needs one annoyed member to spoil a meet. Every
+ * other member has "Leave", which affects only them (convoy.leave) — so nobody is
+ * trapped, and the destructive option stays with the one person the group already
+ * treats as running the drive. Leadership is not a life sentence either: a leader
+ * who wants out without ending it leaves, and leadership transfers (convoy.leave).
+ *
+ * A member of the convoy who is NOT the leader gets permission-denied with an
+ * explanation, not not-found: they can already see the convoy, so not-found would
+ * merely mislead (same reasoning as convoy.clearDestination). A total outsider
+ * still gets not-found so a convoy cannot be probed.
+ *
+ * There is no admin override on this callable today and none is added here: the
+ * admin surface has no convoy tooling at all, so there is nothing to preserve.
+ */
 export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: ConvoySummary }> => {
   const actor = await requireMemberActor(request);
 
@@ -644,20 +740,32 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
   }
   const ref = convoyRef(parsed.input.convoyId);
 
+  // Captured inside the transaction so the notification fan-out below describes
+  // the roster the end actually applied to (and re-captured on a retry).
+  let endedFor: string[] = [];
+  let enderName: string | null = null;
+
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
-    if (!snap.exists || snap.data()?.ownerUid !== actor.uid) {
+    // A convoy the caller is not in at all must not be probeable.
+    if (!snap.exists || !isConvoyMember(snap.data(), actor.uid)) {
       throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
     }
-    if (snap.data()?.status === 'ended') {
+    const data = snap.data()!;
+    if (data.ownerUid !== actor.uid) {
+      throw new HttpsError('permission-denied', ONLY_LEADER_CAN_END_MESSAGE);
+    }
+    if (data.status === 'ended') {
       throw new HttpsError('failed-precondition', CONVOY_ALREADY_ENDED_MESSAGE);
     }
     // Single local-clock instant used for BOTH the summary math and the stored
     // endedAt, matching convoy.start's local-clock startedAt so the duration is
     // computed from one coherent time source.
     const endedAt = Timestamp.fromDate(new Date());
-    const summary = computeConvoySummary(snap.data()!, endedAt.toDate(), toDate);
+    const summary = computeConvoySummary(data, endedAt.toDate(), toDate);
     tx.set(ref, { status: 'ended', endedAt, summary }, { merge: true });
+    endedFor = acceptedMemberUids(data).filter((uid) => uid !== actor.uid);
+    enderName = memberDisplayName(data, actor.uid);
   });
 
   const fresh = await ref.get();
@@ -669,6 +777,17 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
   // set is still readable here.
   await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
     stopConvoyAutoSession(uid, parsed.input.convoyId),
+  );
+
+  // Tell the other members their drive is over. Their bar disappears either way
+  // (the live convoy listener sees status 'ended'), but a group surface that
+  // silently vanishes reads as a bug — and someone whose app was backgrounded
+  // gets no signal at all without this.
+  await notifyConvoyMembers(
+    endedFor,
+    parsed.input.convoyId,
+    'Konvojen har avslutats',
+    `${enderName ?? UNKNOWN_MEMBER_NAME} har avslutat konvojen.`,
   );
 
   return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
@@ -724,35 +843,74 @@ export interface LeaveConvoyResult {
    * client would render a roster from.
    */
   convoy: ConvoySummary;
-  /** Accepted members still in the convoy (owner included) after the removal. */
+  /** Accepted members still in the convoy (leader included) after the removal. */
   remainingMemberCount: number;
+  /**
+   * Whether the convoy survived the caller's exit (`left`) or was ENDED because
+   * too few members would have been left (`left_and_ended`). Returned rather
+   * than left for the client to infer from `remainingMemberCount`, because the
+   * threshold is a server rule and a client that re-derived it would eventually
+   * disagree with it.
+   */
+  outcome: LeaveConvoyOutcome;
+  /**
+   * The member who INHERITED leadership because the caller was the leader, or
+   * null (they were not the leader, or the convoy ended and there is no
+   * leadership left to hold). Lets the client confirm the hand-over by name.
+   */
+  newLeaderUid: string | null;
 }
 
 /**
- * Removes the CALLER from a convoy they have accepted.
+ * Removes the CALLER from a convoy they have accepted — the "leave, but the
+ * convoy carries on" half of the two exits a member is offered (the other being
+ * convoy.end, which closes it for everyone and is leader-only).
  *
- * This gap exists because none of the shipped callables can serve it:
+ * This gap exists because none of the other callables can serve it:
  * convoy.respond hard-requires inviteStatus === 'invited' and throws
- * failed-precondition once you have accepted; convoy.end is owner-only and ends
- * the drive for EVERYONE.
+ * failed-precondition once you have accepted; convoy.end ends the drive for
+ * EVERYONE.
  *
- * The OWNER is refused (failed-precondition, not silently accepted): an owner
- * who left would orphan the convoy — nobody could then start it, end it, or
- * write the shared summary, because every lifecycle transition is owner-gated
- * and there is no succession rule. They must use convoy.end, which is the
- * honest action ("this is over for all of us") rather than a quiet exit that
- * strands the group. A DECLINED or still-INVITED member is also refused
- * (failed-precondition): there is nothing to leave, and convoy.respond is their
- * path.
+ * ## The LEADER may leave; leadership TRANSFERS
+ * The leader is no longer refused. Blocking them would mean the one person most
+ * likely to be driving somewhere else afterwards can only get out by ending
+ * everybody else's drive, and a leaderless convoy would be an orphan nobody can
+ * end that keeps consuming live-location writes. So `ownerUid` and the
+ * successor's `members[uid].role` are rewritten in the same update that removes
+ * the leaver — atomically, and only ever to the deterministic successor
+ * (longest-joined remaining accepted member, tie-broken by uid; see
+ * pickSuccessorLeaderUid). Every leader-gated action in the domain reads one of
+ * those two fields and nothing else, so the successor inherits exactly the
+ * privileges the leaver held. The hand-over is RECORDED on the document
+ * (`leadershipTransfers`) and both the group and the successor are notified.
  *
- * LAST NON-OWNER LEAVES → the convoy is left ALIVE with the owner alone, NOT
- * auto-ended. Ending is a deliberate act that writes the permanent summary
- * every member reads, and inferring it from the last person leaving would end
- * the owner's own drive out from under them — while they are quite possibly
- * still driving, and quite possibly about to invite someone else (convoy.invite
- * exists precisely so a convoy can regrow). The owner already has an End
- * button; the server should not press it for them. `remainingMemberCount` is
- * returned so the client can say "you're the only one left" without deriving it.
+ * ## Fewer than two would remain → the convoy ENDS
+ * A convoy of one is not a convoy, so when leaving would leave fewer than
+ * MIN_REMAINING_MEMBERS_TO_STAY_ALIVE accepted members, this call removes the
+ * caller AND ends the convoy (status 'ended', endedAt, and the same computed
+ * summary convoy.end writes), telling whoever was left. The alternative — hiding
+ * "Leave" from a member in a two-person convoy — would trap them: their only
+ * exits would be an end-for-everyone they are not allowed to call, or nothing.
+ * Nobody is ever left holding a live convoy alone and nobody is ever unable to
+ * get out. `outcome` says which of the two happened, so the client never has to
+ * re-derive the threshold.
+ *
+ * The summary is computed from the roster BEFORE the removal, so the leaver
+ * counts as a participant of the drive they were on — exactly as if the leader
+ * had pressed End an instant earlier.
+ *
+ * A DECLINED or still-INVITED member is refused (failed-precondition): there is
+ * nothing to leave, and convoy.respond is their path.
+ *
+ * ## Why the count and the removal are ONE transaction
+ * The "would two remain?" test is computed from the document this transaction
+ * read, in the same transaction that writes the removal (decideLeaveConvoy). The
+ * caller supplies no count and no mode. Two members leaving in the same instant
+ * therefore cannot both be told "2 will remain" and both leave, dropping the
+ * convoy to one: they contend on the same document, the loser aborts and retries
+ * against the post-first-leave roster, and re-decides — taking the
+ * `left_and_ended` branch instead. A pre-read count outside the transaction is
+ * exactly the bug this shape prevents.
  */
 export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyResult> => {
   const actor = await requireMemberActor(request);
@@ -767,6 +925,11 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   interface LeaveOutcome {
     snapshot: Record<string, unknown>;
     remainingMemberCount: number;
+    remainingAcceptedUids: string[];
+    outcome: LeaveConvoyOutcome;
+    newLeaderUid: string | null;
+    leaverName: string | null;
+    newLeaderName: string | null;
   }
   // Assigned inside the transaction body (and re-assigned on a retry), so the
   // post-state is read from the transaction rather than from a fresh get().
@@ -775,7 +938,7 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     // Not-found (never permission-denied) so a convoy can't be probed by a
-    // non-member — matching respond/start/end.
+    // non-member — matching respond/start.
     if (!snap.exists || !isConvoyMember(snap.data(), actor.uid)) {
       throw new HttpsError('not-found', CONVOY_NOT_FOUND_MESSAGE);
     }
@@ -783,25 +946,58 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
     if (data.status === 'ended') {
       throw new HttpsError('failed-precondition', CONVOY_ENDED_MESSAGE);
     }
-    if (data.ownerUid === actor.uid) {
-      throw new HttpsError('failed-precondition', OWNER_CANNOT_LEAVE_MESSAGE);
-    }
     if (!isAcceptedConvoyMember(data, actor.uid)) {
       throw new HttpsError('failed-precondition', NOT_ACCEPTED_MEMBER_MESSAGE);
     }
 
-    const update = buildLeaveConvoyUpdate(data, actor.uid);
+    // ONE decision, taken from the roster this transaction read — see the
+    // concurrency note in this callable's doc comment.
+    const decision = decideLeaveConvoy(data, actor.uid, toMillis);
+    // ONE instant for whatever this exit stamps (a leadership transfer, or the
+    // convoy ending), recomputed on a retry so it is the real write moment.
+    const now = Timestamp.fromDate(new Date());
     // memberUids / members / memberProfiles are written WHOLE in one update so
     // the three never disagree — every gate in this domain (rules read,
     // convoy chat, live positions) reads a different one of them.
-    tx.update(ref, {
-      memberUids: update.memberUids,
-      members: update.members,
-      memberProfiles: update.memberProfiles,
-    });
+    const patch: Record<string, unknown> = {
+      memberUids: decision.memberUids,
+      members: decision.members,
+      memberProfiles: decision.memberProfiles,
+    };
+    if (decision.newLeaderUid) {
+      patch.ownerUid = decision.newLeaderUid;
+      patch.leadershipTransfers = appendLeadershipTransfer(data, {
+        fromUid: actor.uid,
+        toUid: decision.newLeaderUid,
+        // A CONCRETE Timestamp, not FieldValue.serverTimestamp(): Firestore
+        // rejects a sentinel nested inside an array value, so this is the only
+        // shape that can be stored here at all. Nothing is lost — the array's
+        // own order is the ordering (entries are appended), and this field is a
+        // support/debug record rather than something the domain reads back.
+        // It shares its clock with startedAt/endedAt, which are local-clock too.
+        at: now,
+      });
+    }
+    if (decision.outcome === 'left_and_ended') {
+      // Same shape convoy.end writes, from ONE local-clock instant shared by the
+      // summary math and the stored endedAt (matching startedAt's time source).
+      // Computed from `data` — the PRE-removal roster — so the leaver counts as a
+      // participant of the drive that just finished.
+      patch.status = 'ended';
+      patch.endedAt = now;
+      patch.summary = computeConvoySummary(data, now.toDate(), toDate);
+    }
+    tx.update(ref, patch);
     result = {
-      snapshot: { ...data, ...update },
-      remainingMemberCount: update.remainingAcceptedCount,
+      snapshot: { ...data, ...patch },
+      remainingMemberCount: decision.remainingAcceptedCount,
+      remainingAcceptedUids: decision.remainingAcceptedUids,
+      outcome: decision.outcome,
+      newLeaderUid: decision.newLeaderUid,
+      leaverName: memberDisplayName(data, actor.uid),
+      newLeaderName: decision.newLeaderUid
+        ? memberDisplayName(data, decision.newLeaderUid)
+        : null,
     };
   });
 
@@ -810,22 +1006,68 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
   // be a read of a convoy they can no longer see. The summary is still built
   // with the caller's uid, which now yields viewer: null — correct, and the
   // point. (The transaction either assigned this or threw, so it is defined.)
+  const settled = result!;
+
   // ITEM 2 lifecycle: leaving stops the live session the convoy auto-started for
   // this member (and only that — a manual session or one from another convoy is
-  // left running). Mirror of convoy.end, scoped to the single leaver. Best-effort
-  // but logged, so a partial teardown (member left broadcasting) is diagnosable.
-  await stopConvoyAutoSession(actor.uid, convoyId).catch((error) => {
-    logger.warn('convoy auto-session op failed', {
-      uid: actor.uid,
-      convoyId,
-      error: String(error),
-    });
-  });
+  // left running), which is what actually removes their marker from the other
+  // members' maps: the RTDB liveLocation/{uid}/latest node and the nearby
+  // discovery doc are both deleted. The roster removal above is the other half —
+  // the remaining members' convoy listener re-derives livePositionUids without
+  // the leaver and tears down its per-uid subscription. Best-effort but logged,
+  // so a partial teardown (member left broadcasting) is diagnosable.
+  //
+  // When the convoy ENDED as a result, every remaining member's auto session is
+  // stopped too — the same fan-out convoy.end runs, because the same thing
+  // happened to them.
+  const stopFor =
+    settled.outcome === 'left_and_ended'
+      ? [actor.uid, ...settled.remainingAcceptedUids]
+      : [actor.uid];
+  await forEachAutoSession(stopFor, (uid) => stopConvoyAutoSession(uid, convoyId));
 
-  const settled = result!;
+  // Tell the people still in it (or, when it ended, the people it ended for).
+  // Nothing is written to the leaver: they just performed the action.
+  const leaverName = settled.leaverName ?? UNKNOWN_MEMBER_NAME;
+  if (settled.outcome === 'left_and_ended') {
+    await notifyConvoyMembers(
+      settled.remainingAcceptedUids,
+      convoyId,
+      'Konvojen har avslutats',
+      `${leaverName} har lämnat konvojen, så den har avslutats.`,
+    );
+  } else if (settled.newLeaderUid) {
+    const newLeaderName = settled.newLeaderName ?? UNKNOWN_MEMBER_NAME;
+    await Promise.all([
+      // The successor is told what they now are, in their own notification —
+      // "someone left" would bury the part that changed for them.
+      notifyConvoyMembers(
+        [settled.newLeaderUid],
+        convoyId,
+        'Du är nu konvojledare',
+        `${leaverName} har lämnat konvojen. Du leder den nu.`,
+      ),
+      notifyConvoyMembers(
+        settled.remainingAcceptedUids.filter((uid) => uid !== settled.newLeaderUid),
+        convoyId,
+        'Konvojen har en ny ledare',
+        `${leaverName} har lämnat konvojen. ${newLeaderName} leder den nu.`,
+      ),
+    ]);
+  } else {
+    await notifyConvoyMembers(
+      settled.remainingAcceptedUids,
+      convoyId,
+      'Någon har lämnat konvojen',
+      `${leaverName} har lämnat konvojen.`,
+    );
+  }
+
   return {
     convoy: toConvoySummary(convoyId, settled.snapshot, actor.uid, toIso),
     remainingMemberCount: settled.remainingMemberCount,
+    outcome: settled.outcome,
+    newLeaderUid: settled.newLeaderUid,
   };
 });
 

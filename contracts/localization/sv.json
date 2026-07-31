@@ -582,7 +582,7 @@
     "errorCannotStart": "Konvojen kan inte längre startas.",
     "errorAlreadyEnded": "Konvojen är redan avslutad.",
     "errorLeaveFailed": "Det gick inte att lämna konvojen. Uppdatera och försök igen.",
-    "errorNotAllowed": "Bara den som satte destinationen, eller konvojens ägare, kan ta bort den.",
+    "errorNotAllowed": "Bara den som satte destinationen, eller konvojledaren, kan ta bort den.",
     "errorGeneric": "Något gick fel. Försök igen.",
     "errorAlreadyInConvoy": "Du är redan med i en konvoj. Lämna eller avsluta den innan du går med i en annan.",
     "alreadyInConvoyCreateHint": "Du är redan med i en konvoj – lämna eller avsluta den för att starta en ny.",
@@ -647,7 +647,24 @@
     "barDestinationPickAction": "Sätt för konvojen",
     "inviteLinkEnded": "Konvojen är avslutad.",
     "inviteLinkAnswered": "Du har redan svarat på inbjudan.",
-    "inviteLinkGone": "Inbjudan är inte längre tillgänglig."
+    "inviteLinkGone": "Inbjudan är inte längre tillgänglig.",
+    "barExitChoiceTitle": "Lämna eller avsluta konvojen?",
+    "barExitChoiceBody": "Du kan kliva av och låta de andra fortsätta, eller avsluta körningen för alla.",
+    "barExitChoiceLeave": "Lämna konvojen",
+    "barExitChoiceLeaveDetail": "Du kliver av. De andra fortsätter köra, och en annan medlem tar över som konvojledare.",
+    "barExitChoiceEnd": "Avsluta för alla",
+    "barExitChoiceEndDetail": "Avslutar körningen för alla %1$d personer i konvojen. Sammanfattningen sparas.",
+    "barExit": "Lämna eller avsluta konvojen",
+    "barLeaveEndsConfirmTitle": "Lämna och avsluta konvojen?",
+    "barLeaveEndsConfirmBody": "Du är näst sista medlemmen, så konvojen avslutas när du lämnar — ingen blir kvar och kör ensam. Sammanfattningen sparas.",
+    "barLeaveEndsConfirmAction": "Lämna och avsluta",
+    "barLeaveEnds": "Lämna konvojen (den avslutas då)",
+    "leftConvoyToast": "Du lämnade konvojen.",
+    "leftAndEndedToast": "Du lämnade konvojen, och den avslutades.",
+    "leftAsLeaderToast": "Du lämnade konvojen. En annan medlem är nu konvojledare.",
+    "nowLeaderNotice": "Du är nu konvojledare.",
+    "leave": "Lämna konvojen",
+    "errorNotLeader": "Bara konvojledaren kan avsluta konvojen för alla. Du kan lämna den i stället."
   },
   "memberProfile": {
     "title": "Profil",
@@ -1210,7 +1227,8 @@
     "channelGeneralDescription": "Medlemskapsuppdateringar och andra meddelanden från klubben.",
     "convoyEndedLabel": "Konvojen är avslutad",
     "convoyEndedRowDescription": "%1$s. Konvojen är avslutad.",
-    "convoyInviteAnsweredLabel": "Du har redan svarat på inbjudan"
+    "convoyInviteAnsweredLabel": "Du har redan svarat på inbjudan",
+    "categoryConvoyUpdate": "Konvojuppdateringar"
   },
   "feedback": {
     "title": "Rapportera ett problem",

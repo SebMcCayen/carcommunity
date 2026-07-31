@@ -15,8 +15,18 @@ import com.kungsbackacarcommunity.app.friends.FriendSummary
  *  - create: invitees must be the owner's friends; non-friends/blocked are
  *    skipped (with a neutral reason), never surfaced as who blocked whom.
  *  - respond: an invitee accepts/declines their pending invite.
- *  - start/end: owner-only (a non-owner gets not-found, so a convoy can't be
- *    probed); end computes + stores the summary all members read.
+ *  - start: owner-only (a non-owner gets not-found, so a convoy can't be probed).
+ *  - THE TWO EXITS. Ending participation is two genuinely different actions, and
+ *    which of them a member is offered is [ConvoyBar.exitChoice]'s decision:
+ *      * `convoy-leave` removes only the CALLER. ANY accepted member may, the
+ *        LEADER included — leadership transfers to the longest-joined remaining
+ *        member. If fewer than the server's minimum would be left, the server
+ *        ends the convoy instead of stranding somebody alone in it, and says so
+ *        in [ConvoyLeaveOutcome].
+ *      * `convoy-end` closes the convoy for EVERYONE and computes + stores the
+ *        summary all members read. LEADER-ONLY: a member who is not the leader
+ *        gets permission-denied (they can see the convoy, so not-found would
+ *        merely mislead), while an outsider still gets not-found.
  */
 
 /** Lifecycle of a convoy. */
@@ -161,22 +171,25 @@ enum class ConvoyActionError {
 
     /**
      * A `convoy-leave` precondition failure that the code-only client cannot pin
-     * to a cause. The backend throws `failed-precondition` for THREE distinct
-     * situations — the convoy has ended, the owner tried to leave (they must End),
-     * or the caller is not an accepted member — and distinguishes them only by the
-     * HttpsError message text, which the client deliberately never reads (it
-     * branches on the code alone; see [ConvoyErrorCode]). With no discriminator on
-     * the code, asserting any one specific cause (e.g. [AlreadyEnded]) would be a
-     * guess that is wrong two times out of three, so this maps to a neutral
-     * "couldn't leave" message instead. All three are defensive: the UI routes an
-     * owner to End and only offers Leave to an accepted member.
+     * to a cause. The backend throws `failed-precondition` for TWO distinct
+     * situations — the convoy has already ended, or the caller is not an accepted
+     * member — and distinguishes them only by the HttpsError message text, which
+     * the client deliberately never reads (it branches on the code alone; see
+     * [ConvoyErrorCode]). With no discriminator on the code, asserting either one
+     * would be a guess that is wrong half the time, so this maps to a neutral
+     * "couldn't leave" message instead.
+     *
+     * It used to be three: "the owner cannot leave" is gone, because the LEADER
+     * may now leave and leadership transfers to another member. Both remaining
+     * cases are defensive — the UI only offers Leave to an accepted member of a
+     * convoy that has not ended.
      */
     LeaveFailed,
 
     /**
      * The caller IS a member, but is not permitted to do this particular thing —
      * today only clearing a shared destination someone else set when you are not
-     * the convoy owner (see [ConvoyErrorMapper.mapClearDestination]).
+     * the convoy leader (see [ConvoyErrorMapper.mapClearDestination]).
      *
      * Distinct from [NotMember], which says you are not in the convoy at all.
      * Telling a member they are "not a member" for an authorization refusal
@@ -196,6 +209,17 @@ enum class ConvoyActionError {
      * from "no invitees"/"invite gone").
      */
     AlreadyInConvoy,
+
+    /**
+     * The caller is a member of the convoy but NOT its leader, and tried to end it
+     * for EVERYONE ([ConvoyErrorMapper.mapEnd]).
+     *
+     * Deliberately its own case rather than reusing [NotAllowed]: the two carry
+     * different advice. "Only the leader can end this — you can leave instead"
+     * points at the action that IS available to them, where the destination
+     * message would send them looking at a destination they never touched.
+     */
+    NotLeader,
     Generic,
 }
 
@@ -225,6 +249,62 @@ sealed interface ConvoyMutationResult {
     data class Updated(val convoy: ConvoySummary) : ConvoyMutationResult
 
     data class Failed(val error: ConvoyActionError) : ConvoyMutationResult
+}
+
+/**
+ * What leaving actually did to the convoy, straight from the backend's `outcome`
+ * field — deliberately NOT re-derived from the member count.
+ *
+ * The survival threshold is a SERVER rule (MIN_REMAINING_MEMBERS_TO_STAY_ALIVE),
+ * applied inside the leave transaction against the roster the server read. The
+ * client's roster is always a moment behind and is only ever used to pick a
+ * LABEL, so a client that re-derived this would eventually contradict what
+ * actually happened — telling someone "the others keep driving" about a convoy
+ * that had just ended underneath them.
+ */
+enum class ConvoyLeaveOutcome {
+    /** The caller is out; the convoy carries on for the remaining members. */
+    Left,
+
+    /**
+     * The caller is out AND the convoy ended, because fewer than the server's
+     * minimum would have been left. Nobody is stranded alone in a live convoy.
+     */
+    LeftAndEnded,
+    ;
+
+    companion object {
+        /**
+         * An unrecognised or missing wire value reads as [Left] — the
+         * conservative choice for a confirmation message. Announcing that
+         * everyone's drive is over when it is not is a far worse thing to be
+         * wrong about than under-reporting.
+         */
+        fun fromWire(value: Any?): ConvoyLeaveOutcome =
+            if (value == "left_and_ended") LeftAndEnded else Left
+    }
+}
+
+/** Outcome of `convoy-leave` — richer than a plain mutation, see [ConvoyLeaveOutcome]. */
+sealed interface LeaveConvoyResult {
+    /**
+     * @param convoy the convoy AFTER the caller left. Its `viewer` is null — the
+     *   caller is no longer a member, and the backend says so rather than
+     *   returning a membership the client would render a roster from.
+     * @param remainingMemberCount accepted members still in it after the removal.
+     * @param outcome whether the convoy survived this exit, or ended because of it.
+     * @param newLeaderUid the member who INHERITED leadership because the caller
+     *   was the leader, or null (they were not the leader, or the convoy ended and
+     *   there is no leadership left to hold).
+     */
+    data class Left(
+        val convoy: ConvoySummary,
+        val remainingMemberCount: Int,
+        val outcome: ConvoyLeaveOutcome,
+        val newLeaderUid: String?,
+    ) : LeaveConvoyResult
+
+    data class Failed(val error: ConvoyActionError) : LeaveConvoyResult
 }
 
 /**
@@ -276,14 +356,19 @@ object ConvoyErrorMapper {
         }
 
     /**
-     * For `convoy-leave`. A non-member / unknown convoy is `not-found`. A
-     * precondition failure here is overloaded across THREE backend cases — the
-     * convoy has ended, the owner tried to leave (they must End instead), or the
-     * caller is not an accepted member — separated on the backend only by message
-     * text, which this code-only mapper never reads. Since the code alone cannot
-     * tell them apart, it maps to the neutral [LeaveFailed] ("couldn't leave the
-     * convoy") rather than asserting a single cause like [AlreadyEnded] that would
-     * be wrong for the other two.
+     * For `convoy-leave`. A non-member / unknown convoy is `not-found` (which is
+     * also what a RETRY of a completed leave gets — the caller really is no longer
+     * a member).
+     *
+     * A precondition failure is overloaded across TWO backend cases — the convoy
+     * has already ended, or the caller is not an accepted member — separated on
+     * the backend only by message text, which this code-only mapper never reads.
+     * (It used to be three: "the owner may not leave" is gone, because the LEADER
+     * may now leave and leadership transfers.) With no discriminator on the code,
+     * this maps to the neutral [LeaveFailed] rather than asserting a single cause
+     * like [AlreadyEnded] that would be wrong half the time. Both remaining cases
+     * are defensive: the UI only offers Leave to an accepted member of a live
+     * convoy.
      */
     fun mapLeave(code: ConvoyErrorCode): ConvoyActionError =
         when (code) {
@@ -320,10 +405,26 @@ object ConvoyErrorMapper {
             else -> ConvoyActionError.Generic
         }
 
+    /**
+     * For `convoy-end`, which ends the convoy for EVERYONE and is LEADER-ONLY.
+     *
+     * `permission-denied` here is specifically "you are a member of this convoy
+     * but you are not its leader" — NOT the generic non-member refusal every other
+     * convoy callable reserves that code for. A total outsider still gets
+     * `not-found` (a convoy must not be probeable), so [NotMember] would be the
+     * wrong thing to tell the one caller who actually reaches this branch: they
+     * are very much a member. [NotLeader] is the honest mapping. It is a case of
+     * its own rather than the [NotAllowed] that [mapClearDestination] uses for its
+     * own member-but-not-permitted refusal, because the useful thing to tell this
+     * caller — "you can leave instead" — is different advice.
+     *
+     * Defensive in practice: [ConvoyBar.exitChoice] never offers "end for
+     * everyone" to a non-leader.
+     */
     fun mapEnd(code: ConvoyErrorCode): ConvoyActionError =
         when (code) {
             ConvoyErrorCode.Unauthenticated -> ConvoyActionError.SignedOut
-            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotMember
+            ConvoyErrorCode.PermissionDenied -> ConvoyActionError.NotLeader
             ConvoyErrorCode.InvalidArgument -> ConvoyActionError.Invalid
             ConvoyErrorCode.NotFound -> ConvoyActionError.NotFound
             ConvoyErrorCode.FailedPrecondition -> ConvoyActionError.AlreadyEnded
@@ -397,6 +498,24 @@ object ConvoyResponseParser {
             convoy = convoy,
             invited = (data?.get("invited") as? List<*>).orEmpty().mapNotNull { it as? String },
             skipped = (data?.get("skipped") as? List<*>).orEmpty().mapNotNull { parseSkipped(it) },
+        )
+    }
+
+    /**
+     * `convoy-leave` returns more than the convoy: what happened to it and who
+     * inherited leadership. Both are read STRAIGHT from the payload rather than
+     * re-derived — see [ConvoyLeaveOutcome].
+     */
+    fun parseLeave(data: Map<String, Any?>?): LeaveConvoyResult {
+        val convoy = parseConvoy(data?.get("convoy"))
+            ?: return LeaveConvoyResult.Failed(ConvoyActionError.Generic)
+        return LeaveConvoyResult.Left(
+            convoy = convoy,
+            remainingMemberCount = (data?.get("remainingMemberCount") as? Number)?.toInt() ?: 0,
+            outcome = ConvoyLeaveOutcome.fromWire(data?.get("outcome")),
+            // Blank is treated as absent: a successor uid that cannot name anybody
+            // must not be rendered as "someone" took over.
+            newLeaderUid = (data?.get("newLeaderUid") as? String)?.takeIf { it.isNotBlank() },
         )
     }
 

@@ -442,6 +442,9 @@ fun ConvoyRoute(
                         }
                     },
                     onEnd = { scope.launch { coordinator.end(convoy.convoyId) } },
+                    // Leave — the other exit. Any accepted member, the leader
+                    // included; the screen decides whether to offer it.
+                    onLeave = { scope.launch { coordinator.leave(convoy.convoyId) } },
                     onClearActionError = { coordinator.clearActionError() },
                     onViewMember = onViewMember,
                     viewerUid = viewerUid,

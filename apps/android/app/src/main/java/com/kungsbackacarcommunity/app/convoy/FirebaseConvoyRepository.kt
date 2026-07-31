@@ -108,10 +108,12 @@ class FirebaseConvoyRepository private constructor(
             onFailure = { CreateConvoyResult.Failed(ConvoyErrorMapper.mapInvite(it.toErrorCode())) },
         )
 
-    override suspend fun leave(convoyId: String): ConvoyMutationResult =
+    override suspend fun leave(convoyId: String): LeaveConvoyResult =
         callForData(LEAVE, mapOf("convoyId" to convoyId)).fold(
-            onSuccess = { ConvoyResponseParser.parseMutation(it) },
-            onFailure = { ConvoyMutationResult.Failed(ConvoyErrorMapper.mapLeave(it.toErrorCode())) },
+            // NOT parseMutation: leaving reports more than the convoy — what the
+            // exit did to it, and who inherited leadership.
+            onSuccess = { ConvoyResponseParser.parseLeave(it) },
+            onFailure = { LeaveConvoyResult.Failed(ConvoyErrorMapper.mapLeave(it.toErrorCode())) },
         )
 
     override suspend fun start(convoyId: String): ConvoyMutationResult =
