@@ -236,7 +236,6 @@
   },
   "profile": {
     "title": "Profile",
-    "badges": "Awards",
     "openSettings": "Open settings",
     "openAbout": "Open about app",
     "points": "Points",
@@ -891,12 +890,7 @@
   },
   "badges": {
     "screenTitle": "Awards",
-    "loading": "Loading awards...",
-    "error": "Could not load awards. Please try again.",
     "retry": "Try again",
-    "empty": "You have no awards yet.",
-    "emptyHint": "Keep contributing positively to the community.",
-    "awardedOn": "Awarded",
     "noticeTitle": "New Award",
     "noticeBodyPrefix": "You have received the award",
     "noticeDismiss": "OK",

@@ -213,7 +213,6 @@
     <string name="subscription_errorPurchase">Köpet kunde inte slutföras.</string>
     <string name="subscription_errorVerification">Vi kunde inte verifiera ditt köp. Det har ännu inte debiterats för medlemskap.</string>
     <string name="profile_title">Profil</string>
-    <string name="profile_badges">Utmärkelser</string>
     <string name="profile_openSettings">Öppna inställningar</string>
     <string name="profile_openAbout">Öppna om appen</string>
     <string name="profile_points">Poäng</string>
@@ -830,12 +829,7 @@
     <string name="garage_photoRemoveConfirm">Vill du ta bort den här bilden från din bil?</string>
     <string name="garage_photoRemoveConfirmButton">Ta bort</string>
     <string name="badges_screenTitle">Utmärkelser</string>
-    <string name="badges_loading">Laddar utmärkelser...</string>
-    <string name="badges_error">Kunde inte hämta utmärkelser. Försök igen.</string>
     <string name="badges_retry">Försök igen</string>
-    <string name="badges_empty">Du har inga utmärkelser ännu.</string>
-    <string name="badges_emptyHint">Fortsätt bidra positivt i communityn.</string>
-    <string name="badges_awardedOn">Tilldelad</string>
     <string name="badges_noticeTitle">Ny utmärkelse</string>
     <string name="badges_noticeBodyPrefix">Du har fått utmärkelsen</string>
     <string name="badges_noticeDismiss">OK</string>

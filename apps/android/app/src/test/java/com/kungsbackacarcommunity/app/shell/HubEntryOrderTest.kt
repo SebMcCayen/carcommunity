@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.shell
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Groups
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.util.Locale
 
@@ -24,18 +25,25 @@ class HubEntryOrderTest {
 
     /**
      * The Social hub's entries in declaration order — see AuthenticatedApp.
-     * Notifications is deliberately absent: that menu entry was removed once the
-     * chat hub's Notifications tab became the way in.
+     *
+     * Two entries are deliberately absent, and the absences are asserted below
+     * so the menu cannot quietly drift back:
+     *  - Notifications, removed once the chat hub's Notifications tab became the
+     *    way in;
+     *  - Friends, which MOVED to the map-home profile menu (see
+     *    `profileMenuEntries`) — it did not disappear.
+     * Billboards deliberately REMAINS: it is the only entry point to the
+     * billboards screen, which does not render on the map.
      */
     private val socialEn =
-        listOf("Friends", "Events", "Crown Hunt", "Partners", "Billboards")
+        listOf("Events", "Crown Hunt", "Partners", "Billboards")
     private val socialSv =
-        listOf("Vänner", "Event", "Kronjakt", "Partners", "Anslagstavlor")
+        listOf("Event", "Kronjakt", "Partners", "Anslagstavlor")
 
     @Test
     fun socialEntriesAreAlphabeticalInEnglish() {
         assertEquals(
-            listOf("Billboards", "Crown Hunt", "Events", "Friends", "Partners"),
+            listOf("Billboards", "Crown Hunt", "Events", "Partners"),
             order(socialEn, Locale.ENGLISH),
         )
     }
@@ -43,9 +51,21 @@ class HubEntryOrderTest {
     @Test
     fun socialEntriesAreAlphabeticalInSwedish() {
         assertEquals(
-            listOf("Anslagstavlor", "Event", "Kronjakt", "Partners", "Vänner"),
+            listOf("Anslagstavlor", "Event", "Kronjakt", "Partners"),
             order(socialSv, Locale.forLanguageTag("sv")),
         )
+    }
+
+    /**
+     * Friends moved OUT of the Social menu and INTO the map-home profile menu.
+     * Pinned as an explicit absence rather than left implicit in the lists above,
+     * because a re-added Social "Friends" row would give the friends list two
+     * menu doors again — the exact drift this file exists to catch.
+     */
+    @Test
+    fun socialEntriesDoNotContainFriends() {
+        assertFalse(socialEn.contains("Friends"))
+        assertFalse(socialSv.contains("Vänner"))
     }
 
     /**
@@ -56,10 +76,11 @@ class HubEntryOrderTest {
     fun englishAndSwedishOrderTheSameEntriesDifferently() {
         val en = order(socialEn, Locale.ENGLISH)
         val sv = order(socialSv, Locale.forLanguageTag("sv"))
-        // Friends/Vänner is 4th in English but last in Swedish; Events is 3rd in
-        // English while its Swedish label Event is 2nd.
-        assertEquals(3, en.indexOf("Friends"))
-        assertEquals(4, sv.indexOf("Vänner"))
+        // Crown Hunt is 2nd in English while its Swedish label Kronjakt is 3rd;
+        // Events is 3rd in English while its Swedish label Event is 2nd — the two
+        // swap places, so one shared order cannot satisfy both.
+        assertEquals(1, en.indexOf("Crown Hunt"))
+        assertEquals(2, sv.indexOf("Kronjakt"))
         assertEquals(2, en.indexOf("Events"))
         assertEquals(1, sv.indexOf("Event"))
     }

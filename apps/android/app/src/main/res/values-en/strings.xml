@@ -213,7 +213,6 @@
     <string name="subscription_errorPurchase">The purchase could not be completed.</string>
     <string name="subscription_errorVerification">We could not verify your purchase. It has not been charged for membership yet.</string>
     <string name="profile_title">Profile</string>
-    <string name="profile_badges">Awards</string>
     <string name="profile_openSettings">Open settings</string>
     <string name="profile_openAbout">Open about app</string>
     <string name="profile_points">Points</string>
@@ -830,12 +829,7 @@
     <string name="garage_photoRemoveConfirm">Remove this photo from your car?</string>
     <string name="garage_photoRemoveConfirmButton">Remove</string>
     <string name="badges_screenTitle">Awards</string>
-    <string name="badges_loading">Loading awards...</string>
-    <string name="badges_error">Could not load awards. Please try again.</string>
     <string name="badges_retry">Try again</string>
-    <string name="badges_empty">You have no awards yet.</string>
-    <string name="badges_emptyHint">Keep contributing positively to the community.</string>
-    <string name="badges_awardedOn">Awarded</string>
     <string name="badges_noticeTitle">New Award</string>
     <string name="badges_noticeBodyPrefix">You have received the award</string>
     <string name="badges_noticeDismiss">OK</string>
