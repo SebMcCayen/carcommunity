@@ -5,13 +5,14 @@
 <resources>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="appUpdate_title">New version available</string>
-    <string name="appUpdate_message">A newer version of the app is available on Google Play. Update to get the latest features and fixes.</string>
-    <string name="appUpdate_messageWithVersion">Version %1$s is now available on Google Play. Update to get the latest features and fixes.</string>
+    <string name="appUpdate_message">A newer version of the app is available on Google Play. It downloads in the background, so you can keep using the app while it does.</string>
     <string name="appUpdate_update">Update</string>
     <string name="appUpdate_dismiss">Not now</string>
     <string name="appUpdate_requiredTitle">Update required</string>
-    <string name="appUpdate_requiredMessage">This version of the app is no longer supported. Update via Google Play to keep using the app.</string>
-    <string name="appUpdate_storeUnavailable">Google Play could not be opened on this device.</string>
+    <string name="appUpdate_requiredMessage">This update has to be installed before you can carry on. Google Play takes over while it installs.</string>
+    <string name="appUpdate_downloaded">The update is downloaded and installs on restart.</string>
+    <string name="appUpdate_restart">Restart</string>
+    <string name="appUpdate_storeUnavailable">The update could not be completed, and Google Play could not be opened on this device.</string>
     <string name="navigation_home">Home</string>
     <string name="navigation_map">Map</string>
     <string name="navigation_events">Events</string>

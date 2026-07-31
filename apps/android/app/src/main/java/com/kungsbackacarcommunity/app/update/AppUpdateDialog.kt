@@ -11,16 +11,26 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccAlpha
 
 /**
- * The update prompt: a newer build is on Play, go get it — or not now.
+ * The update prompt: Google Play has a newer build, go get it — or not now.
  *
  * Two shapes, from one decision:
- *  - [AppUpdateDecision.OPTIONAL] — what Seb asked for. Dismissible by the
+ *  - [AppUpdateDecision.FLEXIBLE] — the normal case. Dismissible by the
  *    "Inte nu" button, by Back and by an outside tap; every one of those
  *    paths runs [onDismiss], which is what records the suppression window.
- *  - [AppUpdateDecision.REQUIRED] — the separate, default-inert
- *    unsupported-version block. No dismiss button, and Back/outside taps do
- *    nothing, because there is nothing useful the user can do in an
- *    unsupported build.
+ *    Accepting hands off to Play's BACKGROUND download, so the app stays
+ *    usable — nothing is interrupted, including a drive in progress.
+ *  - [AppUpdateDecision.IMMEDIATE] — the default-inert blocking path, reached
+ *    only for a release published at Play's top `inAppUpdatePriority` or to
+ *    resume a blocking flow already begun. No dismiss button, and
+ *    Back/outside taps do nothing.
+ *
+ * [AppUpdateDecision.AWAITING_RESTART] is deliberately NOT a dialog — a
+ * finished download is good news, not an interruption, so the shell offers the
+ * restart in a snackbar instead.
+ *
+ * There is no version number in the copy: Play's In-App Updates API reports a
+ * `versionCode`, not the `versionName` a person would recognise, and showing a
+ * raw build integer to a member is worse than showing nothing.
  *
  * Follows the shell's translucent Material3 [AlertDialog] convention so the
  * map home stays visible behind it.
@@ -28,12 +38,11 @@ import com.kungsbackacarcommunity.app.design.KccAlpha
 @Composable
 fun AppUpdateDialog(
     decision: AppUpdateDecision,
-    latestVersionName: String?,
     onUpdate: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    if (decision == AppUpdateDecision.NONE) return
-    val required = decision == AppUpdateDecision.REQUIRED
+    if (decision != AppUpdateDecision.FLEXIBLE && decision != AppUpdateDecision.IMMEDIATE) return
+    val required = decision == AppUpdateDecision.IMMEDIATE
 
     AlertDialog(
         onDismissRequest = { if (!required) onDismiss() },
@@ -52,15 +61,13 @@ fun AppUpdateDialog(
         },
         text = {
             Text(
-                when {
-                    required -> stringResource(R.string.appUpdate_requiredMessage)
-                    // The version name is display text only — it is never what
-                    // the decision was made on. Omitted when the server did not
-                    // supply one, rather than showing a raw versionCode.
-                    latestVersionName != null ->
-                        stringResource(R.string.appUpdate_messageWithVersion, latestVersionName)
-                    else -> stringResource(R.string.appUpdate_message)
-                },
+                stringResource(
+                    if (required) {
+                        R.string.appUpdate_requiredMessage
+                    } else {
+                        R.string.appUpdate_message
+                    },
+                ),
             )
         },
         confirmButton = {
@@ -69,8 +76,8 @@ fun AppUpdateDialog(
             }
         },
         dismissButton = {
-            // Nothing at all in the required case: an unsupported build has no
-            // "later" to offer, so there is no button to press.
+            // Nothing at all in the blocking case: there is no "later" to
+            // offer, so there is no button to press.
             if (!required) {
                 TextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.appUpdate_dismiss))

@@ -5,13 +5,14 @@
 <resources>
     <string name="app_name">Kungsbacka Car Community</string>
     <string name="appUpdate_title">Ny version tillgänglig</string>
-    <string name="appUpdate_message">Det finns en nyare version av appen i Google Play. Uppdatera för att få de senaste funktionerna och rättningarna.</string>
-    <string name="appUpdate_messageWithVersion">Version %1$s finns nu i Google Play. Uppdatera för att få de senaste funktionerna och rättningarna.</string>
+    <string name="appUpdate_message">Det finns en nyare version av appen i Google Play. Den laddas ner i bakgrunden, så du kan fortsätta använda appen under tiden.</string>
     <string name="appUpdate_update">Uppdatera</string>
     <string name="appUpdate_dismiss">Inte nu</string>
     <string name="appUpdate_requiredTitle">Uppdatering krävs</string>
-    <string name="appUpdate_requiredMessage">Den här versionen av appen stöds inte längre. Uppdatera via Google Play för att fortsätta använda appen.</string>
-    <string name="appUpdate_storeUnavailable">Google Play kunde inte öppnas på den här enheten.</string>
+    <string name="appUpdate_requiredMessage">Den här uppdateringen måste installeras innan du kan fortsätta. Google Play tar över under installationen.</string>
+    <string name="appUpdate_downloaded">Uppdateringen är nedladdad och installeras vid omstart.</string>
+    <string name="appUpdate_restart">Starta om</string>
+    <string name="appUpdate_storeUnavailable">Uppdateringen kunde inte slutföras, och Google Play gick inte att öppna på den här enheten.</string>
     <string name="navigation_home">Hem</string>
     <string name="navigation_map">Karta</string>
     <string name="navigation_events">Träffar</string>

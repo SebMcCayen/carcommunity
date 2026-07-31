@@ -48,8 +48,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -256,7 +258,6 @@ import com.kungsbackacarcommunity.app.navigation.SavedPlaceEdit
 import com.kungsbackacarcommunity.app.navigation.SavedPlaces
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesScreen
 import com.kungsbackacarcommunity.app.navigation.SavedPlacesStore
-import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import com.kungsbackacarcommunity.app.navigation.turnbyturn.TurnByTurnNavScreen
 import com.kungsbackacarcommunity.app.onboarding.OnboardingCoordinator
 import com.kungsbackacarcommunity.app.onboarding.OnboardingScreen
@@ -332,12 +333,13 @@ import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.update.AppUpdateCheck
 import com.kungsbackacarcommunity.app.update.AppUpdateDecision
 import com.kungsbackacarcommunity.app.update.AppUpdateDialog
 import com.kungsbackacarcommunity.app.update.AppUpdateDismissalStore
-import com.kungsbackacarcommunity.app.update.AppUpdatePolicy
-import com.kungsbackacarcommunity.app.update.AppVersionConfig
-import com.kungsbackacarcommunity.app.update.FirebaseAppVersionConfigRepository
+import com.kungsbackacarcommunity.app.update.AppUpdateFlowOutcome
+import com.kungsbackacarcommunity.app.update.AppUpdateFlowResult
+import com.kungsbackacarcommunity.app.update.PlayAppUpdateSource
 import com.kungsbackacarcommunity.app.update.PlayStoreLink
 import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
@@ -4141,78 +4143,164 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // In-app update prompt: this build's versionCode against the
-                // server-held config/appVersion record. Checked once per app
-                // session (a cold start is the natural moment to update, and
-                // an update prompt that arrives mid-use is just noise), off
-                // the main thread, and entirely fail-safe — a missing or
-                // unreadable or malformed record yields NONE, so the prompt
-                // simply never appears and nothing else about the app changes.
+                // In-app update prompt, driven by GOOGLE PLAY ITSELF (the
+                // In-App Updates API). Play is asked whether a newer build is
+                // live on the track this install came from — so there is no
+                // version number for anyone to maintain, no admin step at
+                // release time, and no window in which the app can announce a
+                // build Play would refuse to serve.
+                //
+                // Asked ONCE per app session: a cold start is the natural
+                // moment to update, an update prompt that arrives mid-use is
+                // just noise, and Play must not be re-queried per screen or per
+                // recomposition. Entirely fail-safe — a non-Play install
+                // (a debug/adb/sideloaded build, a device with no Play Store)
+                // reports nothing to offer, so the prompt never appears, no
+                // error is shown, and nothing else about the app changes.
                 val appUpdateDismissals = remember(context) { AppUpdateDismissalStore(context) }
+                val appUpdateSource = remember(context) {
+                    PlayAppUpdateSource.createIfAvailable(context)
+                }
                 var appUpdateDecision by remember { mutableStateOf(AppUpdateDecision.NONE) }
-                var appUpdateConfig by remember { mutableStateOf<AppVersionConfig?>(null) }
-                LaunchedEffect(appUpdateDismissals) {
-                    val repository =
-                        FirebaseAppVersionConfigRepository.createIfAvailable(context)
-                            ?: return@LaunchedEffect
-                    val config =
-                        runCatchingCancellable { repository.fetch() }.getOrNull()
-                            ?: return@LaunchedEffect
+                var appUpdateVersionCode by remember { mutableStateOf<Int?>(null) }
+                val appUpdateStoreUnavailable =
+                    stringResource(R.string.appUpdate_storeUnavailable)
+                val appUpdateDownloaded = stringResource(R.string.appUpdate_downloaded)
+                val appUpdateRestart = stringResource(R.string.appUpdate_restart)
+
+                // THE ONE RECOVERY, shared by every way Play can let the member
+                // down: a flow that never started, a flow that started and came
+                // back failed, and a downloaded update Play could not install.
+                // All three mean the same thing — the in-app route is out — so
+                // all three hand off to the Play listing, which is the same
+                // update by a longer road, and only say something if even that
+                // has nowhere to go. Nothing is ever said while the listing is
+                // still openable — which is exactly what the message says
+                // happened, so it never sends anyone to a Play Store this
+                // device has just proved it cannot open.
+                //
+                // A decline is not one of these and does not come through here:
+                // backing out of Play's consent sheet is an answer, not a
+                // failure.
+                val appUpdateStoreFallback = {
+                    PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
+                        scope.launch {
+                            snackbarHostState.showSnackbar(appUpdateStoreUnavailable)
+                        }
+                    }
+                }
+
+                // Play owns the consent UI once the flow starts; this reads
+                // what it hands back. A decline is silent — it is an answer,
+                // not a failure, and the suppression window was already
+                // recorded on the tap — and only a genuine failure recovers.
+                val appUpdateFlowLauncher =
+                    rememberLauncherForActivityResult(
+                        ActivityResultContracts.StartIntentSenderForResult(),
+                    ) { result ->
+                        if (AppUpdateFlowResult.read(result.resultCode) ==
+                            AppUpdateFlowOutcome.FAILED
+                        ) {
+                            appUpdateStoreFallback()
+                        }
+                    }
+
+                LaunchedEffect(appUpdateSource, appUpdateDismissals) {
                     val dismissal = withContext(Dispatchers.IO) { appUpdateDismissals.read() }
-                    appUpdateConfig = config
-                    appUpdateDecision =
-                        AppUpdatePolicy.decide(
-                            config = config,
-                            currentVersionCode = BuildConfig.VERSION_CODE,
+                    val result =
+                        AppUpdateCheck.run(
+                            source = appUpdateSource,
                             dismissal = dismissal,
                             nowMillis = System.currentTimeMillis(),
                         )
+                    appUpdateVersionCode = result.availability?.availableVersionCode
+                    appUpdateDecision = result.decision
                 }
-                if (appUpdateDecision != AppUpdateDecision.NONE) {
-                    // Never in front of someone who is driving: while a live
-                    // session is running or the navigation overlay is open the
-                    // prompt is held back (the same pair the shell already
-                    // treats as "user is on the road" for KeepScreenOn), and it
-                    // never stacks on top of the what's-new popup. Held, not
-                    // cancelled — it reappears once the drive ends.
-                    val onTheRoad = isSharingUi || navSearchOpen
-                    if (!onTheRoad && whatsNewAnnouncement == null) {
-                        val storeUnavailable =
-                            stringResource(R.string.appUpdate_storeUnavailable)
-                        val decision = appUpdateDecision
-                        AppUpdateDialog(
-                            decision = decision,
-                            latestVersionName = appUpdateConfig?.latestVersionName,
-                            onUpdate = {
-                                PlayStoreLink.open(context, BuildConfig.APPLICATION_ID) {
-                                    scope.launch { snackbarHostState.showSnackbar(storeUnavailable) }
-                                }
-                                // Sending the user to Play closes the OPTIONAL
-                                // prompt and starts the suppression window, so
-                                // they are not asked again the moment they come
-                                // back. An unsupported build stays walled until
-                                // it is actually updated.
-                                if (decision == AppUpdateDecision.OPTIONAL) {
-                                    appUpdateConfig?.let { config ->
-                                        appUpdateDismissals.record(
-                                            config.latestVersionCode,
-                                            System.currentTimeMillis(),
-                                        )
-                                    }
-                                    appUpdateDecision = AppUpdateDecision.NONE
-                                }
-                            },
-                            onDismiss = {
-                                appUpdateConfig?.let { config ->
-                                    appUpdateDismissals.record(
-                                        config.latestVersionCode,
-                                        System.currentTimeMillis(),
-                                    )
-                                }
-                                appUpdateDecision = AppUpdateDecision.NONE
-                            },
-                        )
+
+                // A flexible download that finishes while the app is open:
+                // Play reports it here, and the shell turns it into the
+                // restart offer rather than leaving the bytes unused.
+                DisposableEffect(appUpdateSource) {
+                    val source = appUpdateSource
+                    if (source == null) {
+                        onDispose {}
+                    } else {
+                        val unregister = source.onDownloadComplete {
+                            appUpdateDecision = AppUpdateDecision.AWAITING_RESTART
+                        }
+                        onDispose { unregister() }
                     }
+                }
+
+                // Never in front of someone who is driving: while a live
+                // session is running or the navigation overlay is open the
+                // prompt is held back (the same pair the shell already treats
+                // as "user is on the road" for KeepScreenOn), and it never
+                // stacks on top of the what's-new popup. Held, not cancelled —
+                // it reappears once the drive ends. This is also the reason the
+                // flow is FLEXIBLE: even once accepted, the download runs in
+                // the background and the drive is never interrupted.
+                val appUpdateOnTheRoad = isSharingUi || navSearchOpen
+                val appUpdateShowable = !appUpdateOnTheRoad && whatsNewAnnouncement == null
+
+                // The finished-download offer is a snackbar, not a dialog: a
+                // restart is the member's call, and the app works fine until
+                // they take it. Keyed on the decision so it is offered once.
+                LaunchedEffect(appUpdateDecision, appUpdateShowable) {
+                    if (appUpdateDecision != AppUpdateDecision.AWAITING_RESTART) {
+                        return@LaunchedEffect
+                    }
+                    if (!appUpdateShowable) return@LaunchedEffect
+                    val snackbarResult =
+                        snackbarHostState.showSnackbar(
+                            message = appUpdateDownloaded,
+                            actionLabel = appUpdateRestart,
+                            duration = SnackbarDuration.Long,
+                        )
+                    appUpdateDecision = AppUpdateDecision.NONE
+                    if (snackbarResult == SnackbarResult.ActionPerformed &&
+                        appUpdateSource?.completeUpdate() != true
+                    ) {
+                        // Same recovery again: Play could not install what it
+                        // downloaded, so the listing is the remaining route.
+                        appUpdateStoreFallback()
+                    }
+                }
+
+                if (appUpdateShowable) {
+                    val decision = appUpdateDecision
+                    val recordDismissal = {
+                        appUpdateVersionCode?.let { versionCode ->
+                            appUpdateDismissals.record(versionCode, System.currentTimeMillis())
+                        }
+                        Unit
+                    }
+                    AppUpdateDialog(
+                        decision = decision,
+                        onUpdate = {
+                            val immediate = decision == AppUpdateDecision.IMMEDIATE
+                            val started =
+                                appUpdateSource?.startFlow(appUpdateFlowLauncher, immediate) == true
+                            // Play could not take over. Rather than a dead
+                            // button, the shared fallback hands off to the
+                            // store listing.
+                            if (!started) appUpdateStoreFallback()
+                            // Handing over closes the dismissible prompt and
+                            // starts the suppression window, so the member is
+                            // not asked again the moment they come back. The
+                            // blocking prompt is deliberately left standing:
+                            // backing out of Play's full-screen flow returns to
+                            // it rather than past it.
+                            if (!immediate) {
+                                recordDismissal()
+                                appUpdateDecision = AppUpdateDecision.NONE
+                            }
+                        },
+                        onDismiss = {
+                            recordDismissal()
+                            appUpdateDecision = AppUpdateDecision.NONE
+                        },
+                    )
                 }
 
                 // Transparent chooser raised by the Create tab: "Single session"

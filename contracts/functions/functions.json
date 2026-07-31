@@ -721,15 +721,6 @@
       "source": "docs/api-guidelines.md"
     },
     {
-      "name": "admin.setAppVersion",
-      "domain": "admin",
-      "description": "Publishes the server-held app version record to the flat config/appVersion document: latestVersionCode (the newest build on Play), a display-only latestVersionName, and minimumSupportedVersionCode (0 = nothing blocked, the default). Each call writes the COMPLETE config, so an omitted minimum resets to 0 (block nobody) rather than keeping an old block alive; a minimum above latestVersionCode is invalid-argument because no published build could satisfy it. The write commits atomically with an adminAuditEvents record. Clients read the document directly (authenticated, rules-gated) and compare it against their own integer versionCode to raise the dismissible update prompt; an absent or malformed document means no prompt. OPERATOR: run this at every Play release or the prompt never fires. Deployed via grouped export as admin-setAppVersion (functions/src/admin/setAppVersion.ts).",
-      "access": "admin",
-      "appCheck": true,
-      "status": "implemented",
-      "source": "docs/api-guidelines.md"
-    },
-    {
       "name": "admin.setAdminRole",
       "domain": "admin",
       "description": "Grants or revokes the admin custom claim and mirrors it to users/{uid}.role. No client self-elevation: callers can never change their own role, and owner accounts are never modified. Writes an immutable adminAuditEvents record. Deployed via grouped export as admin-setAdminRole (functions/src/admin/setAdminRole.ts).",

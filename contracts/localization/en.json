@@ -4,13 +4,14 @@
   },
   "appUpdate": {
     "title": "New version available",
-    "message": "A newer version of the app is available on Google Play. Update to get the latest features and fixes.",
-    "messageWithVersion": "Version %1$s is now available on Google Play. Update to get the latest features and fixes.",
+    "message": "A newer version of the app is available on Google Play. It downloads in the background, so you can keep using the app while it does.",
     "update": "Update",
     "dismiss": "Not now",
     "requiredTitle": "Update required",
-    "requiredMessage": "This version of the app is no longer supported. Update via Google Play to keep using the app.",
-    "storeUnavailable": "Google Play could not be opened on this device."
+    "requiredMessage": "This update has to be installed before you can carry on. Google Play takes over while it installs.",
+    "downloaded": "The update is downloaded and installs on restart.",
+    "restart": "Restart",
+    "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device."
   },
   "navigation": {
     "home": "Home",

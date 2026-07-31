@@ -333,6 +333,15 @@ dependencies {
     // Google Play Services — fused location provider (Phase 12 slice 6)
     implementation(libs.play.services.location)
 
+    // Google Play In-App Updates. The update prompt asks Play itself whether a
+    // newer build is live on the track this install came from, so there is no
+    // server-held version number for anyone to keep in sync (see
+    // update/AppUpdateSource.kt). A non-Play install (adb/debug/sideloaded) has
+    // no Play install context and the library reports an error, which
+    // PlayAppUpdateSource degrades to "nothing to offer" — so debug and CI
+    // builds simply never prompt.
+    implementation(libs.play.app.update)
+
     // Credential Manager — Google Sign-In (docs/auth-mobile-requirements.md)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)

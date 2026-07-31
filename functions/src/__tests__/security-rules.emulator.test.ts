@@ -911,13 +911,6 @@ describe('Firestore – config / feature flags (Phase 9m)', () => {
       // insights threshold) would leak into their behavior.
       await setDoc(doc(ctx.firestore(), 'config/featureFlags'), { chat: true }, { merge: true });
       await setDoc(doc(ctx.firestore(), 'config/partnerInsights'), { minThreshold: 10 });
-      // Inert app-version config: latest 1 is behind nothing and a minimum
-      // of 0 blocks nobody, so it cannot leak a prompt into other suites.
-      await setDoc(doc(ctx.firestore(), 'config/appVersion'), {
-        latestVersionCode: 1,
-        latestVersionName: null,
-        minimumSupportedVersionCode: 0,
-      });
     });
   });
 
@@ -926,7 +919,6 @@ describe('Firestore – config / feature flags (Phase 9m)', () => {
     // their expected floor-default state.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await deleteDoc(doc(ctx.firestore(), 'config/partnerInsights'));
-      await deleteDoc(doc(ctx.firestore(), 'config/appVersion'));
     });
   });
 
@@ -952,26 +944,6 @@ describe('Firestore – config / feature flags (Phase 9m)', () => {
     await assertFails(
       updateDoc(doc(ctx.firestore(), 'config/partnerInsights'), { minThreshold: 1 }),
     );
-  });
-
-  it('any authenticated user can read the app version document', async () => {
-    const ctx = testEnv.authenticatedContext('av-reader');
-    await assertSucceeds(getDoc(doc(ctx.firestore(), 'config/appVersion')));
-  });
-
-  it('unauthenticated clients cannot read the app version document', async () => {
-    const ctx = testEnv.unauthenticatedContext();
-    await assertFails(getDoc(doc(ctx.firestore(), 'config/appVersion')));
-  });
-
-  it('clients can never write the app version (admin.setAppVersion only)', async () => {
-    // Otherwise any signed-in device could declare itself the latest build
-    // and silence the prompt — or raise the minimum and wall everyone out.
-    const ctx = testEnv.authenticatedContext('av-writer');
-    await assertFails(
-      updateDoc(doc(ctx.firestore(), 'config/appVersion'), { latestVersionCode: 999 }),
-    );
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'config/appVersion')));
   });
 
 // ---------------------------------------------------------------------------
