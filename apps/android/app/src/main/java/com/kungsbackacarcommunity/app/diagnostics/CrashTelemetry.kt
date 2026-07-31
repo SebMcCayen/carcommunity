@@ -35,7 +35,8 @@ package com.kungsbackacarcommunity.app.diagnostics
  *   [CrashTelemetryText.userDerived] first — but prefer not needing to.
  * - **Never break the UX.** Every implementation returns immediately and
  *   swallows its own failures; reporting must never become the thing that fails.
- * - **Be selective with breadcrumbs.** The buffer is bounded (~64 entries), so a
+ * - **Be selective with breadcrumbs.** The buffer is bounded — Crashlytics keeps
+ *   64 kB of logs per session and deletes the oldest entries past that — so a
  *   breadcrumb per recomposition pushes out the ones that would have explained
  *   the crash. Log navigation and significant state transitions, nothing else.
  *
@@ -71,12 +72,20 @@ interface CrashTelemetry {
 }
 
 /**
- * No-op telemetry: the default in every constructor that takes a
- * [CrashTelemetry], so unit tests and config-less builds need no Firebase.
- * Production call sites receive `null` from
- * [FirebaseCrashTelemetry.createIfAvailable] when Firebase is absent and use
- * `?.` — this object is for the injected-dependency case, matching
- * [NoopDiagnosticsReporter].
+ * No-op telemetry, matching [NoopDiagnosticsReporter]. It is the default in every
+ * constructor that takes a [CrashTelemetry], so unit tests need no Firebase.
+ *
+ * It is **not** test-only. [FirebaseCrashTelemetry.createIfAvailable] returns
+ * null when Firebase is unconfigured, and production call sites absorb that null
+ * in one of two ways depending on what they need:
+ *
+ * - `crashTelemetry?.log(…)` where the telemetry call is the whole statement
+ *   (`AuthenticatedApp`'s nav breadcrumb, `LocationSharingService`);
+ * - `crashTelemetry ?: NoopCrashTelemetry` where a non-null instance has to be
+ *   handed to a constructor — which is every controller below, because they take
+ *   a non-null [CrashTelemetry] precisely so their bodies contain no null checks.
+ *
+ * Both mean the same thing: drop the telemetry, change nothing else.
  */
 object NoopCrashTelemetry : CrashTelemetry {
     override fun setKey(key: String, value: String) = Unit

@@ -47,9 +47,18 @@ crash. `CrashReporterChainTest` pins this.
 - Rationale: a developer's crashes — deliberate test crashes included — would
   otherwise land in the same dashboard as members' and drag down crash-free
   users, the one number that has to stay trustworthy.
-- To exercise the integration locally, flip
-  `manifestPlaceholders["crashlyticsCollectionEnabled"]` to `"true"` in the
-  `debug` block for a single build. **Do not commit it.**
+- To exercise the integration locally you have to flip **both**, for a single
+  build, and commit neither:
+  1. `manifestPlaceholders["crashlyticsCollectionEnabled"]` to `"true"` in the
+     `debug` block of `app/build.gradle.kts`, and
+  2. the runtime decision — pass `isDebugBuild = false` to
+     `FirebaseCrashTelemetry.install(...)` in `KccApplication#onCreate`.
+
+  The manifest value on its own is **not** enough: `install` calls the runtime
+  setter unconditionally from `CrashTelemetryPolicy.collectionEnabled`, and the
+  runtime override takes precedence over the manifest. That override also
+  persists across launches, so after reverting both, run the debug build once —
+  `install` then writes `false` back.
 
 ## Consent
 
@@ -68,13 +77,33 @@ The app has two consent surfaces and neither governs crash diagnostics:
 The existing crash pipeline (`diagnostics-submitReport`) is likewise ungated, so
 gating only the new half would be inconsistent as well as invented. If a
 telemetry opt-out is wanted later, the seam is ready for it: honour it in
-`CrashTelemetryPolicy.collectionEnabled` and call
-`FirebaseCrashlytics.setCrashlyticsCollectionEnabled(false)`, which also stops
-uploading anything already queued.
+`CrashTelemetryPolicy.collectionEnabled`, which `FirebaseCrashTelemetry.install`
+already feeds straight into the SDK setter.
+
+`setCrashlyticsCollectionEnabled` is an **instance** method — the only static on
+`FirebaseCrashlytics` is `getInstance()` (verified against
+`firebase-crashlytics` 20.1.0, the version the Firebase BoM `34.16.0` in
+`gradle/libs.versions.toml` resolves):
+
+```kotlin
+FirebaseCrashlytics.getInstance().setCrashlyticsCollectionEnabled(false)
+```
+
+`FirebaseCrashTelemetry.install` writes the same call through the Kotlin
+synthetic property (`...getInstance().isCrashlyticsCollectionEnabled = …`).
+
+Two things that matter if this is ever wired to a user-facing switch: the
+override takes precedence over the manifest meta-data and **persists across
+subsequent launches**, and it does **not** retract anything already collected.
+Reports still sitting on the device are dropped with a separate
+`FirebaseCrashlytics.getInstance().deleteUnsentReports()`; reports already
+uploaded cannot be recalled from the app at all.
 
 ## What is attached to a crash
 
-**Custom keys** (`CrashKeys`) — all app-generated, never user data:
+**Custom keys** (`CrashKeys`) — all app-generated, never user data. Crashlytics
+caps these at **64 key/value pairs** and truncates keys or values past 1024
+characters (`CrashTelemetryText.MAX_LENGTH` bounds them first); we use nine:
 
 | Key | Value |
 |---|---|
@@ -87,7 +116,8 @@ uploading anything already queued.
 | `last_non_fatal` | the `CrashFeatures` path of the most recent non-fatal |
 
 **Breadcrumbs** (`CrashEvents`) — deliberately few, because the buffer is bounded
-(~64 entries) and a chatty crumb evicts the useful ones:
+(Crashlytics keeps **64 kB of logs per session** and deletes the oldest entries
+once a session goes past that) and a chatty crumb evicts the useful ones:
 
 - `app.start` — process start
 - `nav: tab=<Tab> route=<Route>` — every tab switch / sub-route open / Back /
@@ -103,6 +133,23 @@ or vehicle data — in keys, breadcrumbs, or feature names. `ShellRoute.Chat` sa
 derived from user data, run it through `CrashTelemetryText.userDerived`, which
 applies the same masking the diagnostics pipeline applies (emails, UUIDs, unix
 paths and digit runs). Prefer a constant.
+
+`FirebaseCrashlytics.setUserId` is deliberately **never** called, so no report is
+keyed to an account. Crashlytics still identifies the *install* — the SDK
+attaches its own Crashlytics Installation UUID and the Firebase installation ID,
+plus device state (model, OS, RAM, disk, rotation, root status), and Google
+retains those for 90 days. That is the SDK's floor, not something this code adds.
+
+The rule above covers what *we* attach. The one thing on this pipeline that is
+**not** sanitized is the throwable: `recordException` and the fatal handler
+upload the exception's own class, message and full stack trace verbatim, which is
+exactly the point of Crashlytics and exactly what `diagnostics-submitReport`
+refuses to send (it masks the message and carries no stack trace at all). A
+platform or Firestore exception can therefore carry a document path or a URL in
+its message. The destination is the access-controlled Firebase console rather
+than anything readable by members, so this is acceptable — but do not read "no
+PII in Crashlytics" as absolute, and never construct a throwable of our own whose
+message you would not want to read in the console.
 
 ## Non-fatals
 
@@ -123,8 +170,8 @@ fail), `ActivityNotFoundException` on external intents (no app installed is a
 normal outcome), `SecurityException` from location starts (permission not
 granted is a normal outcome), `createIfAvailable` fallbacks (config-less builds
 are expected), mapped/modelled failures such as `DmSendResult.Failed` (the app
-working correctly), and the ~50 defensive `runCatching` calls in
-`MapboxMapSurface` (per-call recording would flood the console; map render
+working correctly), and the ~80 defensive `runCatching` calls in
+`shell/MapboxMapSurface.kt` (per-call recording would flood the console; map render
 failures are already covered by `FeatureHealth` → `ClientErrorReporter`).
 
 ## Mapping-file upload
@@ -140,6 +187,25 @@ wired now so that turning minification on later — a separate change with its o
 risk — does not silently start producing unreadable traces. Native symbols are
 unrelated and already ship via the release `ndk { debugSymbolLevel = "FULL" }`
 block, which Play symbolicates.
+
+## Play data safety
+
+Adding this SDK changes what the Play Data safety form has to say, and
+`docs/play/data-safety.md` previously recorded "Crashlytics: not detected in the
+Android dependency set — do not declare it unless added". That note has been
+corrected to say it *is* in the dependency set; the declaration itself is a human
+decision and is still listed under that file's "Human decisions before
+submitting". What has to be weighed there:
+
+- **Crash logs / Diagnostics** — already declared "Collected: Yes" for the
+  home-grown pipeline; Crashlytics widens what that covers to full stack traces.
+- **Device or other IDs** — already declared; Crashlytics adds its own
+  Crashlytics Installation UUID and the Firebase installation ID.
+- **Shared** — Google is characterized as a processor everywhere else in that
+  document; Crashlytics does not change that, but the characterization should be
+  confirmed once rather than assumed per SDK.
+- `docs/play/privacy-policy.md` §"Google / Firebase" lists the Firebase services
+  in use and does not yet name Crashlytics.
 
 ## One-time setup (Firebase Console)
 

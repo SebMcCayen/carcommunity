@@ -274,8 +274,12 @@ android {
             // dashboard as members' crashes and drag the crash-free-users metric
             // down, which is the one number that has to stay trustworthy.
             // Mirrored at runtime by CrashTelemetryPolicy.collectionEnabled.
-            // To test the integration locally, flip this to "true" for one build
-            // (do not commit it) — see docs/crashlytics.md.
+            // To exercise the integration locally, flipping THIS to "true" is not
+            // enough on its own: KccApplication calls the runtime setter with
+            // BuildConfig.DEBUG afterwards, and the runtime override takes
+            // precedence over the manifest. Flip this AND pass
+            // isDebugBuild = false to FirebaseCrashTelemetry.install, for one
+            // build; commit neither. See docs/crashlytics.md.
             manifestPlaceholders["crashlyticsCollectionEnabled"] = "false"
         }
         release {

@@ -56,7 +56,8 @@ class FirebaseCrashTelemetry private constructor(
     companion object {
         /**
          * @return a live telemetry sink, or null when Firebase is not configured
-         *   (callers use `?.`, exactly like [FirebaseClientErrorReporter]).
+         *   (guarded exactly like [FirebaseClientErrorReporter]; see
+         *   [rememberCrashTelemetry] for the two ways callers absorb the null).
          */
         fun createIfAvailable(context: Context): CrashTelemetry? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -109,8 +110,27 @@ class FirebaseCrashTelemetry private constructor(
 
 /**
  * Composable accessor for [CrashTelemetry], mirroring
- * [rememberClientErrorReporter]. Returns null when Firebase is not configured —
- * `?.` is the whole handling, never a fallback path.
+ * [rememberClientErrorReporter]. Returns null when Firebase is not configured
+ * (CI / local validation builds without `google-services.json`).
+ *
+ * Both call-site shapes are in use, and which one applies is decided by the
+ * consumer, not by preference:
+ *
+ * - **`?.` where the call is optional** — the telemetry call is the whole
+ *   statement, so a null sink simply means it does not happen. This is what
+ *   `AuthenticatedApp`'s navigation breadcrumb does (`crashTelemetry?.run { … }`)
+ *   and what `LocationSharingService` does for its start/stop keys.
+ * - **`?: NoopCrashTelemetry` where a non-null instance must be injected** — the
+ *   pure controllers ([com.kungsbackacarcommunity.app.live.NearbyLiveController],
+ *   [com.kungsbackacarcommunity.app.dm.DmThreadCoordinator],
+ *   [com.kungsbackacarcommunity.app.chatchannels.ChannelChatCoordinator],
+ *   [com.kungsbackacarcommunity.app.navigation.NavigationController]) take a
+ *   non-null `CrashTelemetry` by constructor so their own bodies stay free of
+ *   null checks, so the composable that builds them substitutes the no-op.
+ *
+ * Neither is a "fallback path" in the sense of alternative behaviour: both mean
+ * *drop the telemetry, change nothing else*. What must never appear is a null
+ * check that alters what the app does.
  */
 @Composable
 fun rememberCrashTelemetry(): CrashTelemetry? {
