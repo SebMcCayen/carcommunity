@@ -20,9 +20,7 @@ fun VehiclePowertrain.labelRes(): Int =
 fun VehicleFieldError.messageRes(): Int =
     when (this) {
         VehicleFieldError.MAKE_REQUIRED -> R.string.garage_validationMakeRequired
-        VehicleFieldError.MAKE_TOO_LONG -> R.string.garage_validationMakeTooLong
         VehicleFieldError.MODEL_REQUIRED -> R.string.garage_validationModelRequired
-        VehicleFieldError.MODEL_TOO_LONG -> R.string.garage_validationModelTooLong
         VehicleFieldError.MODEL_YEAR_REQUIRED -> R.string.garage_validationModelYearRequired
         VehicleFieldError.MODEL_YEAR_INVALID -> R.string.garage_validationModelYearInvalid
         VehicleFieldError.POWERTRAIN_REQUIRED -> R.string.garage_validationPowertrainRequired

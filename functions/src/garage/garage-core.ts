@@ -26,10 +26,43 @@
  * - Ownership failures surface as not-found, never permission-denied, to
  *   avoid leaking whether another user's vehicle exists (legacy parity).
  *
+ * STRUCTURED MAKE/MODEL (2026-07)
+ * -------------------------------
+ * Make and model are now SELECTED from the static catalogue
+ * (contracts/vehicles/vehicle-catalogue.json, see ./vehicle-catalogue.ts) so the
+ * community can count cars per manufacturer. Two write paths exist, and both
+ * stay accepted — the same "accept a superset of what we offer" rule the
+ * powertrain vocabulary already follows:
+ *
+ *  - STRUCTURED (`makeId` + `modelId`): the only path a current client uses.
+ *    Both ids are validated against the catalogue, the display strings
+ *    `make`/`model` are DERIVED here from the catalogue (never taken from the
+ *    request, so a client cannot label a `volvo` id "Ferrari"), and
+ *    `catalogueVersion` records which release the selection came from.
+ *  - LEGACY (`make` + `model` free text): what shipped clients send. Still
+ *    accepted verbatim so those builds keep working, but it leaves
+ *    `makeId`/`modelId` null, i.e. the vehicle is simply not part of the
+ *    aggregate.
+ *
+ * Mixing the two in one request is REJECTED: it is always a client bug, and
+ * silently preferring one would persist a document whose text and ids disagree.
+ *
+ * Vehicles created before this change keep their free-text `make`/`model`
+ * untouched and hold no ids. Nothing is backfilled or fuzzy-matched — a wrong
+ * mapping would be worse than an unmapped car (docs/firebase-data-model.md).
+ *
  * Pure module — no Firebase Admin SDK imports.
  */
 
 import { z } from 'zod';
+import {
+  CATALOGUE_RELEASE,
+  isKnownMakeId,
+  isKnownModelId,
+  makeDisplayName,
+  modelDisplayName,
+  offeredModelYearRange,
+} from './vehicle-catalogue';
 
 /** Legacy limits (packages/shared/src/garage.ts). */
 export const MAX_VEHICLES_PER_USER = 5;
@@ -54,6 +87,56 @@ export const MIN_MODEL_YEAR = 1886; // first automobile
 /** Small future margin for next-model-year vehicles. */
 export function maxModelYear(now: Date): number {
   return now.getFullYear() + 2;
+}
+
+/**
+ * Bound on a catalogue id on the wire. Real ids are short slugs (`volvo`,
+ * `range-rover-evoque`); this only stops a pathological string reaching the
+ * catalogue lookup, which then rejects anything not in the catalogue anyway.
+ */
+export const CATALOGUE_ID_MAX_LENGTH = 64;
+
+/**
+ * `make` / `model` display text stored for a vehicle whose brand (or model) is
+ * the "Other / not listed" bucket, when there is no pre-existing label to keep.
+ *
+ * Deliberately plain English rather than a localized string: `make`/`model` are
+ * stored ONCE on a document read by every client, the RTDB main-car mirror
+ * (functions/src/live) and the admin web, so it cannot follow the reader's
+ * locale. Clients that know about the catalogue render a localized label from
+ * `makeId === 'other'` instead of this text and never show it; it exists so the
+ * document is never blank and older readers show something sensible.
+ */
+export const OTHER_MAKE_DISPLAY = 'Other make';
+export const OTHER_MODEL_DISPLAY = 'Other model';
+
+/**
+ * Display text for a structured (`makeId`/`modelId`) selection.
+ *
+ * `make`/`model` remain the human-readable fields every existing reader already
+ * uses (the garage list, the public car profile, the live main-car mirror, the
+ * map marker subtitle, the admin web), so deriving them here means the new ids
+ * are additive: NOTHING downstream had to change, and a legacy vehicle with no
+ * ids keeps rendering exactly as before.
+ *
+ * The "Other" bucket never overwrites an existing label: when a member edits a
+ * pre-catalogue car and picks Other — because their brand or model genuinely is
+ * not listed — the free text they originally typed is KEPT as the display value.
+ * Replacing "Duett" with "Other model" would destroy the only description of
+ * their car that ever existed, which is exactly what this migration must not do.
+ * [existing] is the currently-stored document text (absent when adding).
+ */
+export function resolveCatalogueDisplayNames(
+  makeId: string,
+  modelId: string,
+  existing?: { make?: unknown; model?: unknown },
+): { make: string; model: string } {
+  const keep = (value: unknown): string | null =>
+    typeof value === 'string' && value.trim().length > 0 ? value : null;
+  return {
+    make: makeDisplayName(makeId) ?? keep(existing?.make) ?? OTHER_MAKE_DISPLAY,
+    model: modelDisplayName(makeId, modelId) ?? keep(existing?.model) ?? OTHER_MODEL_DISPLAY,
+  };
 }
 
 /**
@@ -145,8 +228,117 @@ const vehicleIdSchema = z
   .regex(/^[A-Za-z0-9._-]+$/)
   .refine((id) => id !== '.' && id !== '..');
 
+/**
+ * A catalogue id on the wire. Shape-checked here only; membership is checked
+ * against the catalogue in [refineVehicleIdentity], because a valid-looking
+ * slug that is not in the catalogue must be rejected just as hard.
+ */
+const catalogueIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(CATALOGUE_ID_MAX_LENGTH)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/);
+
+/** The make/model/year fields as they arrive, before the identity refinement. */
+type VehicleIdentityShape = {
+  makeId?: string;
+  modelId?: string;
+  make?: string;
+  model?: string;
+  modelYear?: number;
+};
+
+/**
+ * Enforces the two-write-path rule (see the module KDoc) plus the catalogue
+ * membership and the tighter structured year window.
+ *
+ * This is the ENFORCEMENT point for the whole feature: the dropdowns in the app
+ * are UX, and a request assembled by hand can carry any string at all. If this
+ * lets an unknown id through, "how many Volvos are there" stops being a fact.
+ *
+ * @param identityRequired true on the add path (a new vehicle must name itself),
+ *   false on update (a partial edit may touch neither make nor model).
+ */
+function refineVehicleIdentity(identityRequired: boolean, now: Date) {
+  return (value: VehicleIdentityShape, ctx: z.RefinementCtx): void => {
+    const structured = value.makeId !== undefined || value.modelId !== undefined;
+    const legacy = value.make !== undefined || value.model !== undefined;
+
+    if (structured && legacy) {
+      ctx.addIssue({
+        code: 'custom',
+        message:
+          'Send either makeId + modelId (catalogue selection) or make + model (legacy free text), never both.',
+      });
+      return;
+    }
+
+    if (structured) {
+      const { makeId, modelId } = value;
+      if (makeId === undefined || modelId === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'makeId and modelId must be sent together.',
+        });
+        return;
+      }
+      if (!isKnownMakeId(makeId)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Unknown makeId "${makeId}" (contracts/vehicles/vehicle-catalogue.json).`,
+        });
+        return;
+      }
+      // Model ids are unique only within a manufacturer, so the pair is checked
+      // together — "mazda"/"mgb" must not pass just because both halves exist.
+      if (!isKnownModelId(makeId, modelId)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `Unknown modelId "${modelId}" for makeId "${makeId}".`,
+        });
+        return;
+      }
+      // A structured write is held to the window the selector actually offers,
+      // which is narrower than the legacy 1886…+2 range kept for old clients.
+      if (value.modelYear !== undefined) {
+        const { min, max } = offeredModelYearRange(now);
+        if (value.modelYear < min || value.modelYear > max) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `modelYear must be between ${min} and ${max}.`,
+          });
+        }
+      }
+      return;
+    }
+
+    // A new vehicle must name itself fully; an EDIT may still change just one of
+    // the two free-text fields, which shipped clients are entitled to do and
+    // which worked before the catalogue existed. Either way the ids are cleared
+    // (see buildVehicleUpdate), so a half-edit cannot leave text and ids
+    // disagreeing.
+    if (legacy && identityRequired && (value.make === undefined || value.model === undefined)) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'make and model must be sent together.',
+      });
+      return;
+    }
+
+    if (identityRequired && !legacy) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'A vehicle needs makeId + modelId (or legacy make + model).',
+      });
+    }
+  };
+}
+
 function vehicleFieldSchemas(now: Date) {
   return {
+    makeId: catalogueIdSchema,
+    modelId: catalogueIdSchema,
     make: z.string().trim().min(1).max(VEHICLE_MAKE_MODEL_MAX_LENGTH),
     model: z.string().trim().min(1).max(VEHICLE_MAKE_MODEL_MAX_LENGTH),
     modelYear: z.number().int().min(MIN_MODEL_YEAR).max(maxModelYear(now)),
@@ -170,6 +362,19 @@ function vehicleFieldSchemas(now: Date) {
 }
 
 export type AddVehicleInput = {
+  /**
+   * Catalogue manufacturer id (`volvo`, or `other` for the not-listed bucket),
+   * or null when the request came in on the legacy free-text path. This — not
+   * [make] — is what aggregation counts.
+   */
+  makeId: string | null;
+  /** Catalogue model id within [makeId], or null on the legacy path. */
+  modelId: string | null;
+  /**
+   * Display text. DERIVED from the catalogue for a structured request (never
+   * taken from the wire), or the caller's free text on the legacy path. Kept as
+   * the field every existing reader renders, so the ids are purely additive.
+   */
   make: string;
   model: string;
   modelYear: number;
@@ -186,8 +391,30 @@ export type AddVehicleInput = {
   registrationPlate?: string | null;
 };
 
-export type UpdateVehicleInput = Partial<AddVehicleInput> & {
+export type UpdateVehicleInput = {
   vehicleId: string;
+  /**
+   * Structured selection. Present together with [modelId] or not at all;
+   * validated against the catalogue. When present, `make`/`model` are re-derived
+   * server-side, so these two never arrive alongside the legacy text fields.
+   */
+  makeId?: string;
+  modelId?: string;
+  /**
+   * Legacy free-text edit from a shipped client. Still accepted, but it CLEARS
+   * `makeId`/`modelId` (see [buildVehicleUpdate]): free text that no longer
+   * matches the stored ids would silently corrupt the aggregate, so the vehicle
+   * drops out of it instead.
+   */
+  make?: string;
+  model?: string;
+  modelYear?: number;
+  powertrain?: VehiclePowertrain;
+  engineDescription?: string | null;
+  description?: string | null;
+  color?: string | null;
+  /** Normalised plate, or null to clear (see [AddVehicleInput.registrationPlate]). */
+  registrationPlate?: string | null;
   /**
    * Cloud Storage image path — set after upload, or null to clear. Must lie
    * under the caller's own vehicleImages/{uid}/{vehicleId}/ prefix; the
@@ -228,12 +455,24 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
+/**
+ * The identity refinement's messages name the exact rejected id, which is the
+ * difference between a client author fixing a typo in minutes and guessing for
+ * an hour. Surface the first one alongside the generic shape hint.
+ */
+function withFirstIssue(expected: string, error: z.ZodError): string {
+  const first = error.issues[0];
+  return first?.message ? `${expected} ${first.message}` : expected;
+}
+
 export function parseAddVehicleInput(data: unknown, now: Date): ParseResult<AddVehicleInput> {
   const fields = vehicleFieldSchemas(now);
   const schema = z
     .object({
-      make: fields.make,
-      model: fields.model,
+      makeId: fields.makeId.optional(),
+      modelId: fields.modelId.optional(),
+      make: fields.make.optional(),
+      model: fields.model.optional(),
       modelYear: fields.modelYear,
       powertrain: fields.powertrain,
       engineDescription: fields.engineDescription.optional(),
@@ -241,12 +480,34 @@ export function parseAddVehicleInput(data: unknown, now: Date): ParseResult<AddV
       color: fields.color.optional(),
       registrationPlate: fields.registrationPlate.optional(),
     })
-    .strict();
-  return parse(
-    schema,
-    data,
-    'Expected addVehicleRequest (contracts/schemas/garage.schema.json): { make, model, modelYear, powertrain, engineDescription?, description?, color?, registrationPlate? }.',
-  );
+    .strict()
+    .superRefine(refineVehicleIdentity(true, now));
+  const expected =
+    'Expected addVehicleRequest (contracts/schemas/garage.schema.json): { makeId, modelId, modelYear, powertrain, … } (or legacy { make, model, … }).';
+  const result = schema.safeParse(data ?? {});
+  if (!result.success) {
+    return { ok: false, message: withFirstIssue(expected, result.error) };
+  }
+  const raw = result.data;
+  // Structured requests carry ids only; the display text is resolved HERE from
+  // the catalogue so the stored `make`/`model` can never contradict the ids.
+  // There is no existing document on add, so an `other` selection falls back to
+  // the neutral placeholder.
+  const identity =
+    raw.makeId !== undefined && raw.modelId !== undefined
+      ? {
+          makeId: raw.makeId,
+          modelId: raw.modelId,
+          ...resolveCatalogueDisplayNames(raw.makeId, raw.modelId),
+        }
+      : {
+          makeId: null,
+          modelId: null,
+          // The refinement guarantees both are present on the legacy path.
+          make: raw.make as string,
+          model: raw.model as string,
+        };
+  return { ok: true, input: { ...raw, ...identity } };
 }
 
 export function parseUpdateVehicleInput(
@@ -257,6 +518,8 @@ export function parseUpdateVehicleInput(
   const schema = z
     .object({
       vehicleId: vehicleIdSchema,
+      makeId: fields.makeId.optional(),
+      modelId: fields.modelId.optional(),
       make: fields.make.optional(),
       model: fields.model.optional(),
       modelYear: fields.modelYear.optional(),
@@ -267,12 +530,17 @@ export function parseUpdateVehicleInput(
       registrationPlate: fields.registrationPlate.optional(),
       imagePath: z.string().min(1).max(500).nullable().optional(),
     })
-    .strict();
-  return parse(
-    schema,
-    data,
-    'Expected { vehicleId } plus updateVehicleRequest fields (contracts/schemas/garage.schema.json).',
-  );
+    .strict()
+    // identityRequired = false: a partial edit (a new photo, a plate) touches
+    // neither make nor model, and must stay legal.
+    .superRefine(refineVehicleIdentity(false, now));
+  const expected =
+    'Expected { vehicleId } plus updateVehicleRequest fields (contracts/schemas/garage.schema.json).';
+  const result = schema.safeParse(data ?? {});
+  if (!result.success) {
+    return { ok: false, message: withFirstIssue(expected, result.error) };
+  }
+  return { ok: true, input: result.data };
 }
 
 export function parseDeleteVehicleInput(data: unknown): ParseResult<DeleteVehicleInput> {
@@ -468,6 +736,15 @@ export function buildVehicleDocument(
     userId,
     make: input.make,
     model: input.model,
+    // Catalogue ids — the aggregation keys. Explicitly null (not omitted) on the
+    // legacy free-text path so every document has the same shape and an
+    // aggregate can query `makeId == null` to see exactly what is unmapped.
+    makeId: input.makeId,
+    modelId: input.modelId,
+    // Which catalogue release the ids were picked from; null when there was no
+    // structured selection. Taken from the SERVER's catalogue, never the client's
+    // claim, so the provenance cannot be forged by an old or patched build.
+    catalogueVersion: input.makeId === null ? null : CATALOGUE_RELEASE,
     modelYear: input.modelYear,
     powertrain: input.powertrain,
     engineDescription: input.engineDescription ?? null,
@@ -488,10 +765,18 @@ export function buildVehicleDocument(
   };
 }
 
-/** Partial update; returns changed field names for validation/emptiness. */
+/**
+ * Partial update; returns changed field names for validation/emptiness.
+ *
+ * @param existing the vehicle's CURRENT stored data, used only so an "Other /
+ *   not listed" selection keeps the label the document already has instead of
+ *   flattening a member's original free text to a placeholder. Omit when it is
+ *   unavailable; the placeholder is then used.
+ */
 export function buildVehicleUpdate(
   input: UpdateVehicleInput,
   serverTimestamp: () => unknown,
+  existing?: { make?: unknown; model?: unknown },
 ): { update: Record<string, unknown>; changedFields: string[] } {
   const update: Record<string, unknown> = {};
   const changedFields: string[] = [];
@@ -500,8 +785,30 @@ export function buildVehicleUpdate(
     changedFields.push(key);
   };
 
-  if (input.make !== undefined) assign('make', input.make);
-  if (input.model !== undefined) assign('model', input.model);
+  if (input.makeId !== undefined && input.modelId !== undefined) {
+    // Structured selection: write the ids, re-derive the display text from the
+    // catalogue, and re-stamp the release. The parse refinement has already
+    // rejected any id the catalogue does not know.
+    const names = resolveCatalogueDisplayNames(input.makeId, input.modelId, existing);
+    assign('makeId', input.makeId);
+    assign('modelId', input.modelId);
+    assign('catalogueVersion', CATALOGUE_RELEASE);
+    assign('make', names.make);
+    assign('model', names.model);
+  } else {
+    // Legacy free-text edit (a shipped client). Accepted, but the stored ids can
+    // no longer be trusted to describe this text, so they are CLEARED rather
+    // than left to poison the aggregate. The text itself is never touched
+    // otherwise — a vehicle that predates the catalogue and is edited by an old
+    // client keeps exactly the make/model its owner typed.
+    if (input.make !== undefined) assign('make', input.make);
+    if (input.model !== undefined) assign('model', input.model);
+    if (input.make !== undefined || input.model !== undefined) {
+      assign('makeId', null);
+      assign('modelId', null);
+      assign('catalogueVersion', null);
+    }
+  }
   if (input.modelYear !== undefined) assign('modelYear', input.modelYear);
   if (input.powertrain !== undefined) assign('powertrain', input.powertrain);
   if (input.engineDescription !== undefined)

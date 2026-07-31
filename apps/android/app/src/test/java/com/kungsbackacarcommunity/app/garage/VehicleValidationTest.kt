@@ -12,53 +12,107 @@ class VehicleValidationTest {
 
     private fun valid() =
         VehicleForm(
-            make = "Volvo",
-            model = "240",
-            modelYear = "1988",
+            makeId = "volvo",
+            modelId = "240",
+            modelYear = 1988,
             powertrain = VehiclePowertrain.PETROL,
             engineDescription = "B230",
         )
 
     @Test
-    fun `a complete form is valid and maps to an input`() {
+    fun `a complete form is valid and maps to an input of catalogue ids`() {
         assertNull(VehicleValidation.validate(valid(), year))
         val input = VehicleValidation.toInput(valid(), year)
         assertNotNull(input)
-        assertEquals("Volvo", input!!.make)
+        // IDS, not display text: the backend derives the text from the same
+        // catalogue, and the ids are what community aggregation counts.
+        assertEquals("volvo", input!!.makeId)
+        assertEquals("240", input.modelId)
         assertEquals(1988, input.modelYear)
         assertEquals(VehiclePowertrain.PETROL, input.powertrain)
         assertEquals("B230", input.engineDescription)
     }
 
     @Test
-    fun `blank make, model, year, and missing powertrain each fail`() {
-        assertEquals(VehicleFieldError.MAKE_REQUIRED, VehicleValidation.validate(valid().copy(make = "  "), year))
-        assertEquals(VehicleFieldError.MODEL_REQUIRED, VehicleValidation.validate(valid().copy(model = ""), year))
-        assertEquals(VehicleFieldError.MODEL_YEAR_REQUIRED, VehicleValidation.validate(valid().copy(modelYear = ""), year))
+    fun `missing make, model, year, and powertrain each fail`() {
+        assertEquals(VehicleFieldError.MAKE_REQUIRED, VehicleValidation.validate(valid().copy(makeId = null), year))
+        assertEquals(VehicleFieldError.MODEL_REQUIRED, VehicleValidation.validate(valid().copy(modelId = null), year))
+        assertEquals(VehicleFieldError.MODEL_YEAR_REQUIRED, VehicleValidation.validate(valid().copy(modelYear = null), year))
         assertEquals(VehicleFieldError.POWERTRAIN_REQUIRED, VehicleValidation.validate(valid().copy(powertrain = null), year))
     }
 
     @Test
-    fun `year out of bounds or non-numeric is invalid`() {
-        assertEquals(VehicleFieldError.MODEL_YEAR_INVALID, VehicleValidation.validate(valid().copy(modelYear = "1800"), year))
-        assertEquals(VehicleFieldError.MODEL_YEAR_INVALID, VehicleValidation.validate(valid().copy(modelYear = "3000"), year))
-        assertEquals(VehicleFieldError.MODEL_YEAR_INVALID, VehicleValidation.validate(valid().copy(modelYear = "nope"), year))
-        // Boundary: currentYear + 2 is allowed.
-        assertNull(VehicleValidation.validate(valid().copy(modelYear = "2028"), year))
+    fun `an id that is not in the catalogue is rejected`() {
+        // The form can only produce catalogue ids, but a restored process state or
+        // a future catalogue shrink must not sneak an unknown id past validation
+        // and into an aggregate.
+        assertEquals(
+            VehicleFieldError.MAKE_REQUIRED,
+            VehicleValidation.validate(valid().copy(makeId = "wolvo"), year),
+        )
+        assertEquals(
+            VehicleFieldError.MODEL_REQUIRED,
+            VehicleValidation.validate(valid().copy(modelId = "241"), year),
+        )
     }
 
     @Test
-    fun `over-length make, model and engine description are rejected`() {
-        val longName = "x".repeat(VehicleValidation.MAKE_MODEL_MAX_LENGTH + 1)
-        assertEquals(VehicleFieldError.MAKE_TOO_LONG, VehicleValidation.validate(valid().copy(make = longName), year))
-        assertEquals(VehicleFieldError.MODEL_TOO_LONG, VehicleValidation.validate(valid().copy(model = longName), year))
+    fun `a model from a different manufacturer is rejected`() {
+        // Model ids are unique only WITHIN a manufacturer, so a stale selection
+        // left over from switching brand must not pass as a "Mazda MGB".
+        assertEquals(
+            VehicleFieldError.MODEL_REQUIRED,
+            VehicleValidation.validate(valid().copy(makeId = "mazda", modelId = "mgb"), year),
+        )
+        assertNull(VehicleValidation.validate(valid().copy(makeId = "mg", modelId = "mgb"), year))
+    }
+
+    @Test
+    fun `year out of the offered window is invalid`() {
+        assertEquals(VehicleFieldError.MODEL_YEAR_INVALID, VehicleValidation.validate(valid().copy(modelYear = 1800), year))
+        assertEquals(VehicleFieldError.MODEL_YEAR_INVALID, VehicleValidation.validate(valid().copy(modelYear = 3000), year))
+        // Boundaries: the catalogue floor and the NEXT model year are both offered.
+        assertNull(VehicleValidation.validate(valid().copy(modelYear = VehicleValidation.MIN_MODEL_YEAR), year))
+        assertNull(VehicleValidation.validate(valid().copy(modelYear = year + 1), year))
+        // One past the next model year is not: nobody owns a car two years out.
+        assertEquals(
+            VehicleFieldError.MODEL_YEAR_INVALID,
+            VehicleValidation.validate(valid().copy(modelYear = year + 2), year),
+        )
+    }
+
+    @Test
+    fun `an over-length engine description is rejected`() {
         val longEngine = "x".repeat(VehicleValidation.ENGINE_DESCRIPTION_MAX_LENGTH + 1)
         assertEquals(
             VehicleFieldError.ENGINE_DESCRIPTION_TOO_LONG,
             VehicleValidation.validate(valid().copy(engineDescription = longEngine), year),
         )
-        // Exactly at the bound is fine.
-        assertNull(VehicleValidation.validate(valid().copy(make = "x".repeat(VehicleValidation.MAKE_MODEL_MAX_LENGTH)), year))
+    }
+
+    // --- the "Other / not listed" escape hatch -----------------------------
+
+    @Test
+    fun `Other is a valid selection at both levels`() {
+        // The escape hatch: a rare import or a brand nobody listed must still be
+        // addable, WITHOUT a free-text field. A real brand plus an "other" model
+        // is the useful case — it says which brand needs a new model added.
+        assertNull(VehicleValidation.validate(valid().copy(modelId = VehicleCatalogue.OTHER_ID), year))
+        assertNull(
+            VehicleValidation.validate(
+                valid().copy(makeId = VehicleCatalogue.OTHER_ID, modelId = VehicleCatalogue.OTHER_ID),
+                year,
+            ),
+        )
+    }
+
+    @Test
+    fun `an unknown make cannot claim a known model`() {
+        // "other / 240" would be a nonsense pair in the aggregate.
+        assertEquals(
+            VehicleFieldError.MODEL_REQUIRED,
+            VehicleValidation.validate(valid().copy(makeId = VehicleCatalogue.OTHER_ID, modelId = "240"), year),
+        )
     }
 
     @Test
@@ -184,6 +238,19 @@ class VehicleValidationTest {
         // owner's garage — silently, with no error anywhere.
         assertEquals(VehiclePowertrain.PLUG_IN_HYBRID, VehiclePowertrain.fromWire("plug_in_hybrid"))
         assertEquals(VehiclePowertrain.OTHER, VehiclePowertrain.fromWire("other"))
+    }
+
+    // --- legacy (pre-catalogue) vehicles ----------------------------------
+
+    @Test
+    fun `a legacy vehicle carries its saved text but selects nothing`() {
+        // Editing a car created before the catalogue: the form opens EMPTY (we
+        // refuse to guess which entry "Wolwo 245" meant, because a wrong guess
+        // both mislabels the car and corrupts the counts) and shows the saved
+        // text, so the owner sees what they are replacing.
+        val legacy = VehicleForm(legacyMake = "Wolwo", legacyModel = "245", modelYear = 1985)
+        assertNull(legacy.makeId)
+        assertEquals(VehicleFieldError.MAKE_REQUIRED, VehicleValidation.validate(legacy, year))
     }
 
     @Test

@@ -93,7 +93,8 @@ fun VehicleDetailScreen(
         )
 
         Text(
-            text = "${vehicle.make} ${vehicle.model} (${vehicle.modelYear})",
+            // See VehicleDisplay: catalogue name / localized "Other" / legacy text.
+            text = VehicleDisplay.headline(vehicle, stringResource(R.string.garage_catalogueOther)),
             style = MaterialTheme.typography.headlineSmall,
             color = MaterialTheme.colorScheme.onSurface,
         )

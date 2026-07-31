@@ -264,7 +264,19 @@ describe('garage-core document builders', () => {
     expect(update.model).toBe('Absolut');
     expect(update.imagePath).toBeNull();
     expect(update.updatedAt).toBe('SERVER_TS');
-    expect(changedFields.sort()).toEqual(['imagePath', 'model']);
+    // A LEGACY free-text edit also clears the catalogue ids: text that no longer
+    // matches the stored ids would silently corrupt the per-manufacturer counts,
+    // so the vehicle drops out of the aggregate rather than lying inside it.
+    expect(changedFields.sort()).toEqual([
+      'catalogueVersion',
+      'imagePath',
+      'makeId',
+      'model',
+      'modelId',
+    ]);
+    expect(update.makeId).toBeNull();
+    expect(update.modelId).toBeNull();
+    expect(update.catalogueVersion).toBeNull();
 
     const empty = parseUpdateVehicleInput({ vehicleId: 'v1' }, NOW);
     if (!empty.ok) throw new Error('expected ok');

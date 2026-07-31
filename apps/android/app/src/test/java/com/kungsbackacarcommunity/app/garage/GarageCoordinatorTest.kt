@@ -72,7 +72,15 @@ class GarageCoordinatorTest {
         }
     }
 
-    private val input = VehicleInput("Volvo", "240", 1988, VehiclePowertrain.PETROL, null, null)
+    private val input =
+        VehicleInput(
+            makeId = "volvo",
+            modelId = "240",
+            modelYear = 1988,
+            powertrain = VehiclePowertrain.PETROL,
+            engineDescription = null,
+            modifications = null,
+        )
 
     @Test
     fun `save with null id adds and ends Saved`() = runTest {

@@ -28,7 +28,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -37,9 +36,23 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.util.Locale
 
 /**
+ * Which selector sheet is open. Only one at a time, so a single state value
+ * beats three booleans that could disagree.
+ */
+enum class VehiclePicker { None, Make, Model, Year }
+
+/**
  * Vehicle add/edit form (Phase 12 slice 13). Owns its field state; validates
  * against the backend bounds ([VehicleValidation]) before reporting a payload,
  * and closes on a successful save.
+ *
+ * Make, model and year are SELECTED from [VehicleCatalogue] through three
+ * dependent selectors (choosing a manufacturer filters the models); there is no
+ * free-text field for any of them, because per-manufacturer counts only work if
+ * everyone's Volvo stores the same id. Editing a vehicle created BEFORE the
+ * catalogue shows its saved free text under the empty selectors and asks the
+ * owner to pick — nothing is guessed on their behalf, and nothing is lost if
+ * they pick "Other / not listed".
  *
  * Rendered inside [AeroPage] like every other page in the app, which supplies
  * the status-bar inset — the title must never sit under the system clock — plus
@@ -69,20 +82,32 @@ fun VehicleFormScreen(
     photoUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
     onChangePhoto: (() -> Unit)? = null,
 ) {
-    var make by rememberSaveable { mutableStateOf(initial.make) }
-    var model by rememberSaveable { mutableStateOf(initial.model) }
+    var makeId by rememberSaveable { mutableStateOf(initial.makeId) }
+    var modelId by rememberSaveable { mutableStateOf(initial.modelId) }
     var year by rememberSaveable { mutableStateOf(initial.modelYear) }
     var engine by rememberSaveable { mutableStateOf(initial.engineDescription) }
     var powertrain by rememberSaveable { mutableStateOf(initial.powertrain) }
     var modifications by rememberSaveable { mutableStateOf(initial.modifications) }
     var registrationPlate by rememberSaveable { mutableStateOf(initial.registrationPlate) }
     var showError by rememberSaveable { mutableStateOf(false) }
+    var openPicker by rememberSaveable { mutableStateOf(VehiclePicker.None) }
 
     LaunchedEffect(saveStatus) {
         if (saveStatus == VehicleSaveStatus.Saved) onCancel()
     }
 
-    val form = VehicleForm(make, model, year, powertrain, engine, modifications, registrationPlate)
+    val form =
+        VehicleForm(
+            makeId = makeId,
+            modelId = modelId,
+            modelYear = year,
+            powertrain = powertrain,
+            engineDescription = engine,
+            modifications = modifications,
+            registrationPlate = registrationPlate,
+            legacyMake = initial.legacyMake,
+            legacyModel = initial.legacyModel,
+        )
     val error = VehicleValidation.validate(form, currentYear)
 
     AeroPage(
@@ -104,28 +129,114 @@ fun VehicleFormScreen(
                 )
             }
 
-            OutlinedTextField(
-                value = make,
-                onValueChange = { make = it },
-                label = { Text(text = stringResource(R.string.garage_make)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+            // Make / model / year are SELECTED, never typed (2026-07): the
+            // community can only count cars per manufacturer if every Volvo
+            // stores the same `volvo` id. See VehicleCataloguePicker.
+            val otherLabel = stringResource(R.string.garage_catalogueOther)
+            // A vehicle created before the catalogue has no ids. Show the text its
+            // owner originally typed underneath the empty selector so they can see
+            // what they are replacing — we deliberately do NOT guess which
+            // catalogue entry "Wolwo 245" meant, because a wrong guess would
+            // silently corrupt the counts and mislabel their car.
+            val legacyMakeHint =
+                initial.legacyMake
+                    .takeIf { it.isNotBlank() && makeId == null }
+                    ?.let { stringResource(R.string.garage_legacySavedValue, it) }
+            val legacyModelHint =
+                initial.legacyModel
+                    .takeIf { it.isNotBlank() && modelId == null }
+                    ?.let { stringResource(R.string.garage_legacySavedValue, it) }
+
+            CatalogueSelectorField(
+                label = stringResource(R.string.garage_make),
+                value = makeId?.let { id ->
+                    if (id == VehicleCatalogue.OTHER_ID) otherLabel else VehicleCatalogue.makeName(id)
+                },
+                placeholder = stringResource(R.string.garage_selectMake),
+                enabled = true,
+                supportingText = legacyMakeHint,
+                onClick = { openPicker = VehiclePicker.Make },
             )
-            OutlinedTextField(
-                value = model,
-                onValueChange = { model = it },
-                label = { Text(text = stringResource(R.string.garage_model)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+            CatalogueSelectorField(
+                label = stringResource(R.string.garage_model),
+                value = modelId?.let { id ->
+                    if (id == VehicleCatalogue.OTHER_ID) {
+                        otherLabel
+                    } else {
+                        VehicleCatalogue.modelName(makeId, id)
+                    }
+                },
+                // The cascade made visible: until a manufacturer is chosen there
+                // is no model list to open, and the field says so rather than
+                // opening an empty sheet.
+                placeholder =
+                    stringResource(
+                        if (makeId == null) R.string.garage_selectMakeFirst else R.string.garage_selectModel,
+                    ),
+                enabled = makeId != null,
+                supportingText = legacyModelHint,
+                onClick = { openPicker = VehiclePicker.Model },
             )
-            OutlinedTextField(
-                value = year,
-                onValueChange = { year = it.filter { ch -> ch.isDigit() } },
-                label = { Text(text = stringResource(R.string.garage_modelYear)) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier.fillMaxWidth(),
+            CatalogueSelectorField(
+                label = stringResource(R.string.garage_modelYear),
+                value = year?.toString(),
+                placeholder = stringResource(R.string.garage_selectModelYear),
+                enabled = true,
+                onClick = { openPicker = VehiclePicker.Year },
             )
+            if (legacyMakeHint != null) {
+                // Why this vehicle suddenly asks for a selection, and the promise
+                // that the saved text is not thrown away in the meantime.
+                Text(
+                    text = stringResource(R.string.garage_legacyReselectHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (makeId == VehicleCatalogue.OTHER_ID || modelId == VehicleCatalogue.OTHER_ID) {
+                // Tell the owner their choice is recorded as a request, not a
+                // dead end — an "other" selection is exactly how the catalogue
+                // learns what it is missing.
+                Text(
+                    text = stringResource(R.string.garage_catalogueOtherHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            when (openPicker) {
+                VehiclePicker.Make ->
+                    MakePickerSheet(
+                        onPick = { picked ->
+                            // Switching manufacturer invalidates the model: model
+                            // ids repeat across brands, so keeping the old one
+                            // would silently produce a "Mazda MGB".
+                            if (picked.id != makeId) modelId = null
+                            makeId = picked.id
+                            openPicker = VehiclePicker.None
+                        },
+                        onDismiss = { openPicker = VehiclePicker.None },
+                    )
+                VehiclePicker.Model ->
+                    ModelPickerSheet(
+                        makeId = makeId,
+                        onPick = { picked ->
+                            modelId = picked.id
+                            openPicker = VehiclePicker.None
+                        },
+                        onDismiss = { openPicker = VehiclePicker.None },
+                    )
+                VehiclePicker.Year ->
+                    ModelYearPickerSheet(
+                        currentYear = currentYear,
+                        onPick = { picked ->
+                            year = picked
+                            openPicker = VehiclePicker.None
+                        },
+                        onDismiss = { openPicker = VehiclePicker.None },
+                    )
+                VehiclePicker.None -> Unit
+            }
 
             Text(
                 text = stringResource(R.string.garage_powertrain),
