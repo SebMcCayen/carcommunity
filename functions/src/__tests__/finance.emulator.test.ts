@@ -103,6 +103,12 @@ let adminUser: TestUser;
 let memberUser: TestUser;
 
 const SNAPSHOT_MEMBER_COUNT = 137;
+// A far-future date so this snapshot is deterministically the LATEST one the
+// callable's `orderBy('date','desc')` picks, even though the emulator suite
+// shares one Firestore across files and OTHER files seed real-dated metrics
+// docs into the same collection (e.g. security-rules seeds metrics/2026-07-31)
+// without cleaning them up. '2999-12-31' outranks every real date.
+const SNAPSHOT_DATE = '2999-12-31';
 
 beforeAll(async () => {
   app = initializeApp(
@@ -127,8 +133,8 @@ beforeAll(async () => {
   );
 
   // Seed a metrics snapshot so the variable half reads a live member count.
-  await adminDb.collection('metrics').doc('2026-07-30').set({
-    date: '2026-07-30',
+  await adminDb.collection('metrics').doc(SNAPSHOT_DATE).set({
+    date: SNAPSHOT_DATE,
     capturedAtMs: Date.parse('2026-07-30T02:30:00Z'),
     totalUsers: SNAPSHOT_MEMBER_COUNT,
     convoysCreated: 0,
@@ -144,7 +150,7 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  await adminDb.collection('metrics').doc('2026-07-30').delete();
+  await adminDb.collection('metrics').doc(SNAPSHOT_DATE).delete();
   await deleteApp(app);
 });
 
@@ -169,7 +175,7 @@ describe('finance-estimate', () => {
 
     expect(result.member.count).toBe(SNAPSHOT_MEMBER_COUNT);
     expect(result.member.source).toBe('metrics-snapshot');
-    expect(result.member.asOf).toBe('2026-07-30');
+    expect(result.member.asOf).toBe(SNAPSHOT_DATE);
 
     // Trafikverket committed writes are the dominant Google Cloud line.
     expect(result.googleCloud.trafikverketWritesSekPerMonth).toBeGreaterThan(0);
