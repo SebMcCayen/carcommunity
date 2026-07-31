@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Straighten
 import androidx.compose.material3.Icon
@@ -36,6 +37,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.takeOrElse
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -56,6 +59,20 @@ const val LIVE_SESSION_BAR_TEST_TAG = "live_session_bar"
  * measure the same; the unit is a constant so it adds a constant width.
  */
 private const val SPEED_WIDTH_RESERVATION = "000 km/h"
+
+/**
+ * The floor the distance readout is allowed to auto-shrink to before it gives up
+ * and ellipsizes. The bar's normal metric size is `titleSmall` (16sp here), so
+ * this leaves a wide shrink range; it is a legibility floor, not a target — a
+ * driving readout smaller than this is not worth showing whole, so below it the
+ * text ellipsizes rather than becoming unreadable. Paired with
+ * [LIVE_METRIC_FONT_STEP] and a max of the live style's own size, so at any width
+ * that already fits nothing shrinks and the bar looks exactly as it did.
+ */
+private val LIVE_METRIC_MIN_FONT_SIZE = 10.sp
+
+/** The granularity the distance readout steps its font down by to find the fit. */
+private val LIVE_METRIC_FONT_STEP = 0.5.sp
 
 /**
  * A frosted bar shown at the top of the map — filling the strip between the
@@ -91,8 +108,9 @@ private const val SPEED_WIDTH_RESERVATION = "000 km/h"
  * would overflow the strip (the same reason the convoy bar shows a bare count).
  * The full sentence is kept as the bar's [contentDescription] for TalkBack. At a
  * narrow width (or a long value — a 3-digit `km`, an `Hh MMm` clock) the DISTANCE
- * is the part that gives: it may shrink and ellipsize, so the running time — the
- * one that changes every second — is never the thing that gets cut.
+ * is the part that gives: it AUTO-SHRINKS its font to stay whole and only
+ * ellipsizes as a last resort below the legibility floor, so the running time —
+ * the one that changes every second — is never the thing that gets cut.
  *
  * ### The speed readout carries a visible "km/h"
  * The number is drawn with its unit — `54 km/h` — beside the speedometer glyph,
@@ -101,10 +119,11 @@ private const val SPEED_WIDTH_RESERVATION = "000 km/h"
  * `screen − 2×16 (page padding) − 48+8 (search) − 48+8 (avatar)` and spends
  * another 2×16 on its own padding: 184dp of content on a 360dp phone, 144dp on a
  * 320dp one — so the unit is paid for by the one child allowed to give: at a
- * narrow width the DISTANCE ellipsizes first (it carries `weight(fill = false)`
- * and `TextOverflow.Ellipsis`), while the clock and this speed stay whole. The
- * unit is a constant, so [SPEED_WIDTH_RESERVATION] reserves the readout at its
- * widest and the distance beside it still never shuffles as the number grows.
+ * narrow width the DISTANCE gives first (it carries `weight(fill = false)` and
+ * auto-shrinks its font — see [DistanceMetric]), while the clock and this speed
+ * stay whole. The unit is a constant, so [SPEED_WIDTH_RESERVATION] reserves the
+ * readout at its widest and the distance beside it still never shuffles as the
+ * number grows.
  *
  * ### Neutral by construction
  * The speed is a plain readout of the member's own current speed. It is never
@@ -246,8 +265,10 @@ fun LiveSessionBar(
             SpeedMetric(value = speedText)
             DistanceMetric(
                 value = distanceText,
-                // Only the distance may shrink: at a narrow width the running clock
-                // and the speed stay whole and this ellipsizes instead.
+                // Only the distance may give: `weight(fill = false)` hands it just the
+                // width left after the clock and the (width-reserved) speed, and at a
+                // narrow width it auto-shrinks its font to fit that width rather than
+                // clipping — the clock and the speed stay whole.
                 modifier = Modifier.weight(1f, fill = false),
             )
         }
@@ -342,7 +363,18 @@ private fun SpeedMetric(
     }
 }
 
-/** The distance readout: glyph + number. */
+/**
+ * The distance readout: glyph + number. This is the one child the row lets give
+ * when the strip is tight (it is handed the leftover width via
+ * `weight(fill = false)` — see [LiveSessionBar]). Rather than clipping that
+ * leftover, the number AUTO-SHRINKS its font to fit it: [TextAutoSize.StepBased]
+ * steps down from the bar's normal `titleSmall` size to [LIVE_METRIC_MIN_FONT_SIZE],
+ * so at any width that already fits it renders exactly as before, and at a narrow
+ * width it stays whole and legible instead of ellipsizing. The ellipsis is kept
+ * only as the last resort for the pathological case where even the floor will not
+ * fit. The auto-size is purely visual — the spoken [contentDescription] the bar
+ * merges is unaffected.
+ */
 @Composable
 private fun DistanceMetric(
     value: String,
@@ -367,6 +399,19 @@ private fun DistanceMetric(
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
+            softWrap = false,
+            // Max = the bar's own titleSmall size, so nothing shrinks at a width
+            // that already fits; the readout only steps down when the leftover
+            // width forces it, never below the legibility floor.
+            autoSize =
+                TextAutoSize.StepBased(
+                    minFontSize = LIVE_METRIC_MIN_FONT_SIZE,
+                    maxFontSize =
+                        MaterialTheme.typography.titleSmall.fontSize.takeOrElse { 16.sp },
+                    stepSize = LIVE_METRIC_FONT_STEP,
+                ),
+            // Last resort only: a value that will not fit even at the floor
+            // ellipsizes rather than shrinking into illegibility.
             overflow = TextOverflow.Ellipsis,
         )
     }
