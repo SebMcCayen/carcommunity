@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -23,7 +22,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
@@ -46,8 +44,8 @@ val AeroPageHorizontalPadding: Dp = KccSpacing.s6
 val AeroPageBottomPadding: Dp = KccSpacing.s6
 
 /**
- * A scrollable Aero page: page background, top spacing, the frosted
- * [AeroPageTitle], then the caller's [content] as ordinary [Column] children.
+ * A scrollable Aero page: page background, top spacing, the [AeroPageTitle],
+ * then the caller's [content] as ordinary [Column] children.
  *
  * @param scrollable set false only when [content] already hosts its own scroll
  *   container; pages backed by a `LazyColumn` should instead keep that list and
@@ -186,10 +184,10 @@ fun AeroLazyPage(
 }
 
 /**
- * The shared frosted title header: the page title on a rounded, tonally-elevated
- * surface, matching the map-first home's floating controls. Exposed on its own
- * so `LazyColumn`-backed pages can drop it in as their first item and stay
- * visually identical to [AeroPage].
+ * The shared page title: a plain heading sitting directly on the page
+ * background — no surrounding box, so it reads as a clean, modern page title
+ * rather than a boxed-in card. Exposed on its own so `LazyColumn`-backed pages
+ * can drop it in as their first item and stay visually identical to [AeroPage].
  *
  * @param onClick makes the header tappable (announced as a button, so the
  *   affordance reaches accessibility services). Null (the default) keeps it a
@@ -201,7 +199,14 @@ fun AeroPageTitle(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
-    Surface(
+    // No surrounding box: the title sits directly on the page background as a
+    // clean page heading. It aligns to the page's own horizontal gutter (applied
+    // by AeroPage / aeroLazyContentPadding), so no horizontal padding is added
+    // here — that would indent the title away from the content below it. A small
+    // vertical padding keeps it from cramping against adjacent content and, when
+    // [onClick] is set, gives the tappable header a comfortable touch target.
+    Text(
+        text = title,
         modifier =
             modifier
                 .fillMaxWidth()
@@ -211,19 +216,11 @@ fun AeroPageTitle(
                     } else {
                         Modifier
                     },
-                ),
-        shape = RoundedCornerShape(KccRadius.lg),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 3.dp,
-        shadowElevation = 3.dp,
-    ) {
-        Text(
-            text = title,
-            modifier = Modifier.padding(horizontal = KccSpacing.s5, vertical = KccSpacing.s4),
-            style = MaterialTheme.typography.headlineMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
+                )
+                .padding(vertical = KccSpacing.s2),
+        style = MaterialTheme.typography.headlineMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 /**
