@@ -32,6 +32,7 @@ import {
   guardAvailabilityWindow,
   guardCallToActionPair,
   guardEditableBillboard,
+  isBillboardMapVisible,
   parseActivateBillboardInput,
   parseCreateBillboardInput,
   parseRecordBillboardInteractionInput,
@@ -52,6 +53,41 @@ const CALLABLE_OPTS = {
 export interface BillboardIdResponse {
   billboardId: string;
   status: BillboardStatus;
+}
+
+/**
+ * Keys `update` seeds on every edit that are bookkeeping rather than something
+ * the admin changed — excluded from the audit entry's `changedFields`, and the
+ * baseline for "did this request actually ask for anything?".
+ */
+const UPDATE_BOOKKEEPING_KEYS = ['updatedAt', 'mapVisible'] as const;
+
+/**
+ * Reads a stored availability bound as a `Date`.
+ *
+ * Firestore hands these back as `Timestamp`, but a document written before the
+ * field existed (or by a test fixture) may hold a plain `Date`, a number, or
+ * nothing at all. Anything that is not a usable instant becomes null —
+ * "unbounded on this side" — which is safe here only because the bound it
+ * pairs with is evaluated independently and `status` still has to be active.
+ */
+function toDateOrNull(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) return value;
+  const maybeTimestamp = value as { toDate?: () => Date };
+  if (typeof maybeTimestamp.toDate === 'function') {
+    return runOrNull(() => maybeTimestamp.toDate!());
+  }
+  if (typeof value === 'number') return new Date(value);
+  return null;
+}
+
+function runOrNull(fn: () => Date): Date | null {
+  try {
+    return fn();
+  } catch {
+    return null;
+  }
 }
 
 export const create = onCall(CALLABLE_OPTS, async (request): Promise<BillboardIdResponse> => {
@@ -146,7 +182,13 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<BillboardId
       }
     }
 
-    const update: Record<string, unknown> = { updatedAt: serverTimestamp() };
+    // An edit is only reachable on a draft or paused billboard (the guard
+    // above), neither of which may be on the map — so re-assert it. Belt and
+    // braces against a future status ever becoming editable without someone
+    // remembering that the map reads this field. Not counted as a "changed
+    // field" below, because it is an invariant repair rather than something
+    // the admin asked for.
+    const update: Record<string, unknown> = { updatedAt: serverTimestamp(), mapVisible: false };
     for (const [key, value] of Object.entries(input)) {
       if (key === 'billboardId' || value === undefined) continue;
       if (key === 'availableFrom' || key === 'availableUntil') {
@@ -155,7 +197,9 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<BillboardId
         update[key] = value;
       }
     }
-    if (Object.keys(update).length === 1) {
+    // The two bookkeeping keys seeded above (updatedAt, mapVisible) are not an
+    // edit — an update carrying nothing else is still "no fields to update".
+    if (Object.keys(update).length === UPDATE_BOOKKEEPING_KEYS.length) {
       throw new HttpsError('invalid-argument', 'No billboard fields to update.');
     }
 
@@ -169,7 +213,11 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<BillboardId
           targetType: 'billboard',
           targetId: input.billboardId,
           reason: 'Billboard updated.',
-          details: { changedFields: Object.keys(update).filter((k) => k !== 'updatedAt') },
+          details: {
+            changedFields: Object.keys(update).filter(
+              (k) => !(UPDATE_BOOKKEEPING_KEYS as readonly string[]).includes(k),
+            ),
+          },
         },
         serverTimestamp,
       ),
@@ -219,6 +267,18 @@ export const activate = onCall(CALLABLE_OPTS, async (request): Promise<Billboard
 
     tx.update(billboardRef, {
       status: 'active',
+      // Resolve the availability window NOW rather than waiting for the sweep,
+      // so activating a billboard that is already inside its window puts it on
+      // the map immediately — and, more importantly, so activating one whose
+      // window has NOT opened yet (or has already closed) does not put it on
+      // the map at all. The sweep then only has to handle the boundary being
+      // crossed later, with nobody touching the record.
+      mapVisible: isBillboardMapVisible(
+        'active',
+        toDateOrNull(billboard.availableFrom),
+        toDateOrNull(billboard.availableUntil),
+        new Date(),
+      ),
       approvedAt: serverTimestamp(),
       approvedByUserId: actor.uid,
       updatedAt: serverTimestamp(),
@@ -262,7 +322,15 @@ export const setStatus = onCall(CALLABLE_OPTS, async (request): Promise<Billboar
     if (snap.data()!.status === 'ended') {
       throw new HttpsError('failed-precondition', 'Ended billboards cannot change status.');
     }
-    tx.update(billboardRef, { status: nextStatus, updatedAt: serverTimestamp() });
+    // Pausing or ending takes the marker off every member's map in the SAME
+    // write that changes the status, so "I paused it" means gone now rather
+    // than gone within a sweep interval. Neither target status can ever be
+    // map-visible, so this is an unconditional false.
+    tx.update(billboardRef, {
+      status: nextStatus,
+      mapVisible: false,
+      updatedAt: serverTimestamp(),
+    });
     tx.set(
       db.collection('adminAuditEvents').doc(),
       buildAdminAuditEvent(
@@ -306,7 +374,20 @@ export const recordInteraction = onCall(
     }
 
     const billboardSnap = await db.collection('billboards').doc(billboardId).get();
-    if (!billboardSnap.exists || billboardSnap.data()!.status !== 'active') {
+    const billboard = billboardSnap.exists ? billboardSnap.data()! : null;
+    // Gated on the SAME predicate the map draws by, not merely on `status`.
+    // A marker the client is still holding after a pause, or one whose window
+    // closed between the draw and the tap, must not be able to bill the partner
+    // for an impression on a billboard nobody is allowed to be looking at.
+    if (
+      billboard == null ||
+      !isBillboardMapVisible(
+        billboard.status as string,
+        toDateOrNull(billboard.availableFrom),
+        toDateOrNull(billboard.availableUntil),
+        new Date(),
+      )
+    ) {
       throw new HttpsError('not-found', 'Billboard not found or not active.');
     }
 

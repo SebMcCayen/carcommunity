@@ -847,12 +847,45 @@ service cloud.firestore {
     // six-point safety gate and requires an active sponsoring partner.
     // -------------------------------------------------------------------------
     match /billboards/{billboardId} {
-      // Authenticated users see ACTIVE billboards (map markers + detail);
-      // admins additionally see drafts/paused/ended for the admin portal
-      // (Phase 13d). All writes still go through the audited billboards.*
-      // callables.
-      allow read: if (isAuthenticated() && resource.data.status == 'active') || isAdmin();
-      // No client writes.
+      // Authenticated users see billboards that are BOTH active and inside
+      // their availability window (map markers + detail); admins additionally
+      // see drafts/paused/ended for the admin portal (Phase 13d). All writes
+      // still go through the audited billboards.* callables.
+      //
+      // THIS is where "if it isn't activated it shouldn't be shown" is
+      // enforced. The client also filters, but only as a latency cover for the
+      // seconds between a window closing and the sweep noticing — a member who
+      // ignores the client entirely and reads Firestore directly still cannot
+      // fetch a draft, a paused, an expired or a not-yet-started billboard.
+      //
+      // Why the window is not compared here against request.time: a `list` is
+      // evaluated SYMBOLICALLY, against the QUERY's constraints rather than
+      // against each returned document, so any field this rule reads that the
+      // query does not also filter on is undefined and fails the whole query.
+      // A rule comparing availableFrom/availableUntil against request.time
+      // would therefore not hide expired billboards — it would make the layer
+      // unreadable for everyone. The window is instead resolved server-side
+      // into `mapVisible` (billboards/scheduled.ts + the lifecycle callables).
+      //
+      // CONSEQUENCE, and the thing to preserve when editing this rule: the
+      // member query MUST constrain every field named here. It issues
+      // `where status == 'active' and mapVisible == true` (see
+      // FirebaseBillboardsRepository) against the matching composite index.
+      // Adding a condition here without adding the matching `where` there does
+      // not tighten anything — it takes the layer down.
+      //
+      // Both conditions are required, so the two fields must AGREE. That fails
+      // CLOSED, and because the query carries the same pair, it does so WITHOUT
+      // a "one bad document blanks the layer" failure mode: a document somehow
+      // holding mapVisible=true while paused would never enter the result set.
+      // The sweep's repair pass fixes such a document within one interval.
+      allow read:
+        if (isAuthenticated() &&
+            resource.data.status == 'active' &&
+            resource.data.mapVisible == true)
+           || isAdmin();
+      // No client writes — `mapVisible` in particular is Admin-SDK-only, so a
+      // client cannot flag itself a billboard to look at.
     }
 
     // -------------------------------------------------------------------------

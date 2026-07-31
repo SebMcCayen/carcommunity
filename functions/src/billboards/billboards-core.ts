@@ -59,6 +59,57 @@ export const BILLBOARD_CTA_TYPES = [
 ] as const;
 export type BillboardCtaType = (typeof BILLBOARD_CTA_TYPES)[number];
 
+/**
+ * The server-owned "draw this on the member map" flag: `billboards/{id}.mapVisible`.
+ *
+ * ## Why a denormalised field instead of a rule that reads the window
+ *
+ * The obvious implementation of "an inactive, expired or unscheduled billboard
+ * must not render" is a security rule that compares `availableFrom` /
+ * `availableUntil` against `request.time`. That works for a single `get()` and
+ * cannot work at all for the LIST the map issues.
+ *
+ * The reason is how Firestore evaluates a `list`: NOT against each returned
+ * document, but SYMBOLICALLY, against the query's own constraints. The rule
+ * must be provable from what the query filters on, and any field the rule reads
+ * that the query does not constrain is undefined — which raises "Property <x>
+ * is undefined on object" and fails the entire query. A rule comparing
+ * `availableFrom` against `request.time` is therefore not a rule that hides
+ * expired billboards; it is a rule that makes the billboard layer unreadable
+ * for everyone, always. (Verified, not assumed: see the map-layer query test in
+ * `__tests__/security-rules.emulator.test.ts`, which fails exactly that way if
+ * a constraint is dropped.)
+ *
+ * So the window is resolved to a single boolean on the server, and that boolean
+ * is both what the rule checks and what the client query filters on. Nothing
+ * but the Admin SDK can write it — all client writes to `billboards` are denied
+ * — so a client cannot opt itself into seeing a hidden billboard.
+ *
+ * **The coupling this creates, stated plainly because it is easy to break:**
+ * the member query must constrain EVERY field the read rule reads — today
+ * `status` and `mapVisible`, both of them. Adding a condition to the rule
+ * without adding the matching `where` to the query does not tighten anything;
+ * it takes the layer down.
+ *
+ * ## The invariant
+ *
+ * `mapVisible == true` implies `status == 'active'` AND the availability window
+ * is open. The lifecycle callables maintain it transactionally in the same
+ * write that changes `status` (so a pause takes the marker down immediately,
+ * not at the next sweep), and the scheduled sweep owns only the transitions
+ * that are driven by the CLOCK rather than by an admin — a window opening or
+ * expiring while nobody is touching the record.
+ *
+ * The rule checks `status == 'active'` as well, and the query filters on it
+ * too, so the two fields must agree for a member to read the document. That
+ * fails CLOSED and — because the query carries the same pair of constraints —
+ * it does so WITHOUT the "one bad document blanks the layer" failure mode:
+ * a document that somehow held `mapVisible: true` while paused would simply
+ * never enter the result set. Showing a deactivated billboard is the single
+ * outcome this feature is not allowed to produce.
+ */
+export const BILLBOARD_MAP_VISIBLE_FIELD = 'mapVisible';
+
 export const MAX_BILLBOARD_HEADLINE_LENGTH = 100;
 export const MAX_BILLBOARD_MESSAGE_LENGTH = 300;
 export const MAX_BILLBOARD_SAFETY_NOTE_LENGTH = 500;
@@ -249,6 +300,83 @@ export function guardCallToActionPair(
 }
 
 // ---------------------------------------------------------------------------
+// Map visibility (see BILLBOARD_MAP_VISIBLE_FIELD)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a billboard should be drawn on the member map right now.
+ *
+ * True only when it is ACTIVE — an admin has taken it through the six-point
+ * safety gate — and `now` falls inside its availability window. A null bound is
+ * "unbounded on that side", which is how an admin says "from the moment it is
+ * activated" or "until I stop it"; it is NOT a licence to ignore the other
+ * bound.
+ *
+ * The window is compared half-open, `[from, until)`: a billboard whose
+ * `availableUntil` is exactly now has, by the admin's own definition, finished.
+ *
+ * Pure and clock-injected so the boundary behaviour is unit-tested rather than
+ * inferred from a sweep that happened to run at the right second.
+ */
+export function isBillboardMapVisible(
+  status: string,
+  availableFrom: Date | null | undefined,
+  availableUntil: Date | null | undefined,
+  now: Date,
+): boolean {
+  if (status !== 'active') return false;
+  const t = now.getTime();
+  // An unparseable stored date (NaN) must not read as "unbounded" — every
+  // comparison against NaN is false, which would silently let a billboard with
+  // a corrupt window render forever. Treat it as closed.
+  if (availableFrom != null) {
+    const from = availableFrom.getTime();
+    if (!Number.isFinite(from) || t < from) return false;
+  }
+  if (availableUntil != null) {
+    const until = availableUntil.getTime();
+    if (!Number.isFinite(until) || t >= until) return false;
+  }
+  return true;
+}
+
+/** One document the visibility sweep decided to rewrite. */
+export interface VisibilityChange {
+  id: string;
+  mapVisible: boolean;
+}
+
+/**
+ * The scheduled sweep's per-document decision: given what is stored, what
+ * should `mapVisible` be, and does that differ from what is already there?
+ *
+ * Returns null when the document is already correct — the normal case, and the
+ * one that must not cost a write. Not merely a cost point: a no-op write would
+ * still push a snapshot delta to every device listening to the billboards
+ * layer.
+ *
+ * Lives here rather than in scheduled.ts so it is unit-testable without the
+ * Admin SDK — this module is deliberately Firebase-free.
+ */
+export function decideVisibility(
+  id: string,
+  status: unknown,
+  availableFrom: Date | null,
+  availableUntil: Date | null,
+  storedMapVisible: unknown,
+  now: Date,
+): VisibilityChange | null {
+  const desired = isBillboardMapVisible(String(status ?? ''), availableFrom, availableUntil, now);
+  // `storedMapVisible !== true` rather than `=== false`: a document written
+  // before the field existed holds `undefined`, and that is a mismatch worth
+  // repairing exactly when the billboard should now be visible. This is what
+  // makes the sweep double as a backfill, so no manual migration is needed.
+  const stored = storedMapVisible === true;
+  if (stored === desired) return null;
+  return { id, mapVisible: desired };
+}
+
+// ---------------------------------------------------------------------------
 // Document builder
 // ---------------------------------------------------------------------------
 
@@ -270,6 +398,12 @@ export function buildBillboardDocument(
     safetyNote: input.safetyNote ?? null,
     imagePath: input.imagePath ?? null,
     status: 'draft',
+    // Every billboard starts invisible. Drafts have not been through the safety
+    // gate, so there is no window in which a freshly created one may be drawn —
+    // the field is written explicitly rather than left absent so the member
+    // query (`where mapVisible == true`) and the read rule both have something
+    // to evaluate from the very first write.
+    mapVisible: false,
     availableFrom: input.availableFrom ? new Date(input.availableFrom) : null,
     availableUntil: input.availableUntil ? new Date(input.availableUntil) : null,
     approvedAt: null,

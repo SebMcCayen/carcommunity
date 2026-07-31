@@ -1079,6 +1079,7 @@
     <string name="billboard_availableUntil">Available until</string>
     <string name="billboard_availableFrom">Available from</string>
     <string name="billboard_loadError">Could not load the billboard.</string>
+    <string name="billboard_mapPopupClose">Close</string>
     <string name="notifications_title">Notifications</string>
     <string name="notifications_empty">No notifications yet.</string>
     <string name="notifications_loadError">Could not load notifications. Try again.</string>

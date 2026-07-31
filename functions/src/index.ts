@@ -81,6 +81,7 @@ import {
   setStatus as setBillboardStatus,
   update as updateBillboard,
 } from './billboards/manageBillboard';
+import { sweepVisibility as sweepBillboardVisibility } from './billboards/scheduled';
 import {
   deleteAllNotifications,
   deleteNotification,
@@ -475,12 +476,18 @@ export const partnerInsights = {
 /**
  * Digital billboards domain (grouped export → deployed as
  * `billboards-create`, `billboards-update`, `billboards-activate`,
- * `billboards-setStatus`, `billboards-recordInteraction`).
+ * `billboards-setStatus`, `billboards-recordInteraction`,
+ * `billboards-sweepVisibility`).
  *
  * Sponsored map billboards (contracts/functions/functions.json). Public
  * reads of active billboards; activation is a six-point safety gate with
  * an audited approval reason and an active sponsoring partner; billboard
  * taps flow into the partner-insights privacy pipeline.
+ *
+ * `sweepVisibility` is the scheduled half of the map-visibility invariant the
+ * lifecycle callables maintain: it owns only the transitions the CLOCK causes —
+ * an availability window opening or expiring with nobody touching the record.
+ * See billboards/scheduled.ts.
  */
 export const billboards = {
   create: createBillboard,
@@ -488,6 +495,7 @@ export const billboards = {
   activate: activateBillboard,
   setStatus: setBillboardStatus,
   recordInteraction: recordBillboardInteraction,
+  sweepVisibility: sweepBillboardVisibility,
 };
 
 /**

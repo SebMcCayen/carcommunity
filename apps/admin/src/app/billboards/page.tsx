@@ -676,6 +676,7 @@ export default function BillboardsPage() {
                     <th>{t('billboards.columnCompany')}</th>
                     <th>{t('billboards.columnPlacement')}</th>
                     <th>{t('billboards.columnStatus')}</th>
+                    <th>{t('billboards.columnOnMap')}</th>
                     <th>{t('billboards.columnAvailableUntil')}</th>
                     <th>{t('billboards.columnActions')}</th>
                   </tr>
@@ -690,6 +691,19 @@ export default function BillboardsPage() {
                         <span className={`${styles.badge} ${statusBadgeClass(billboard.status)}`}>
                           {statusLabel(billboard.status)}
                         </span>
+                      </td>
+                      {/*
+                        Distinct from the status badge on purpose. "Aktiv" is
+                        the admin's decision; this is whether members can
+                        actually see it at this instant, which the availability
+                        window can veto. Without this column an operator who
+                        schedules a placement for next week sees "Aktiv", looks
+                        at the map, and files a bug.
+                      */}
+                      <td>
+                        {billboard.mapVisible
+                          ? t('billboards.onMapYes')
+                          : t('billboards.onMapNo')}
                       </td>
                       <td>{formatDate(billboard.availableUntil)}</td>
                       <td>
@@ -744,7 +758,7 @@ export default function BillboardsPage() {
                   ))}
                   {billboards.length === 0 && (
                     <tr>
-                      <td colSpan={6}>{t('billboards.noBillboards')}</td>
+                      <td colSpan={7}>{t('billboards.noBillboards')}</td>
                     </tr>
                   )}
                 </tbody>

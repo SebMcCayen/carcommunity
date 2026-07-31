@@ -118,6 +118,9 @@ function toAdminBillboardSummary(
     latitude: (data.latitude as number | undefined) ?? 0,
     longitude: (data.longitude as number | undefined) ?? 0,
     status: data.status as BillboardStatus,
+    // Absent on documents written before the field existed — read as false
+    // (the scheduled sweep backfills them), never as "probably on the map".
+    mapVisible: data.mapVisible === true,
     availableFrom: toIso(data.availableFrom),
     availableUntil: toIso(data.availableUntil),
     callToActionType: (data.callToActionType as BillboardCtaType | null | undefined) ?? null,

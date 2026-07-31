@@ -192,6 +192,13 @@ fun MapHome(
     // toggle — event pins are always shown. Defaults empty so existing
     // callers/tests are unaffected.
     eventMarkers: List<MapEventMarker> = emptyList(),
+    // Sponsored billboard markers. There is no layer toggle and no menu entry
+    // anywhere in the app that reaches billboards — the map is the ONLY place
+    // they appear, and whether one appears at all is an admin decision the
+    // server enforces (see FirebaseBillboardsRepository). The host pushes an
+    // empty list when the digitalBillboards flag is off, which takes the layer
+    // down. Defaults empty so existing callers/tests are unaffected.
+    billboardMarkers: List<MapBillboardMarker> = emptyList(),
     incidentsLayerEnabled: Boolean = true,
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
@@ -373,6 +380,15 @@ fun MapHome(
     // toggle: event pins are always shown (event locations are public).
     LaunchedEffect(mapSurface, eventMarkers) {
         mapSurface.setEventMarkers(eventMarkers)
+    }
+
+    // Push the sponsored billboards onto the surface whenever they change (or
+    // the surface instance is swapped). No layer toggle, for the same reason
+    // there is no menu entry: a billboard is on the map because an admin
+    // activated it and it is inside its availability window, and that decision
+    // is the server's to make — see the read rule on `billboards`.
+    LaunchedEffect(mapSurface, billboardMarkers) {
+        mapSurface.setBillboardMarkers(billboardMarkers)
     }
 
     // Incident-report flow is a small local state machine:
