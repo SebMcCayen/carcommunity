@@ -57,6 +57,45 @@ export interface AdminUserSummary {
   suspended: boolean;
   deleted: boolean;
   createdAt: string | null;
+  /**
+   * ISO string of `users/{uid}.onboardingCompletedAt`, or null when onboarding
+   * has not completed. Onboarding requires a member-chosen nickname, so a set
+   * marker is the authoritative signal that `displayName` is a real nickname
+   * rather than the provisioning placeholder — see [hasMemberSetNickname].
+   */
+  onboardingCompletedAt: string | null;
+}
+
+/**
+ * The neutral placeholder `displayName` every account is provisioned with and
+ * keeps until the member picks their own nickname during onboarding. Mirrors
+ * `DEFAULT_DISPLAY_NAME` in functions/src/auth/provisioning.ts — a value that is
+ * deliberately NEVER derived from the identity provider (privacy invariant). It
+ * is duplicated here (rather than imported) because the admin app does not
+ * depend on the functions package; it is only ever compared, never written.
+ */
+export const PROVISIONING_PLACEHOLDER_NAME = 'New member';
+
+/**
+ * Whether the account has a MEMBER-SET nickname worth displaying, as opposed to
+ * an account still sitting on the provisioning placeholder.
+ *
+ * Authoritative signal: onboarding stamps `onboardingCompletedAt`, and
+ * onboarding cannot complete without a valid member-typed nickname
+ * (auth.completeOnboarding), so a set marker ⟺ `displayName` is a real nickname.
+ *
+ * Belt-and-suspenders for old/partial/hand-edited documents where the marker may
+ * be missing: a `displayName` that is empty or still exactly the provisioning
+ * placeholder counts as "not set". The two are combined so a genuinely-onboarded
+ * member is never mislabeled — a present marker alone is enough.
+ */
+export function hasMemberSetNickname(
+  summary: Pick<AdminUserSummary, 'displayName' | 'onboardingCompletedAt'>,
+): boolean {
+  const name = summary.displayName.trim();
+  if (name === '') return false;
+  if (summary.onboardingCompletedAt != null) return true;
+  return name !== PROVISIONING_PLACEHOLDER_NAME;
 }
 
 /** Admin-safe user detail. Never includes anything from `userPrivate/{uid}`. */
@@ -143,6 +182,7 @@ function toSummary(uid: string, data: Record<string, unknown>): AdminUserSummary
     suspended: data.suspended === true,
     deleted: data.deleted === true,
     createdAt: toIso(data.createdAt),
+    onboardingCompletedAt: toIso(data.onboardingCompletedAt),
   };
 }
 

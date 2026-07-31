@@ -572,6 +572,7 @@
     "empty": "No users found.",
     "emptyFiltered": "No users match the search.",
     "unnamed": "(unnamed)",
+    "noNickname": "No nickname registered",
     "columns": {
       "name": "Name",
       "role": "Role",
