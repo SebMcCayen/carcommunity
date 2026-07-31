@@ -126,6 +126,7 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { reportCleared as reportIncidentCleared } from './incidents/reportCleared';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
+import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import {
   cancelRequest as cancelFriendRequest,
   list as listFriends,
@@ -1027,4 +1028,21 @@ export const chatchannels = {
  */
 export const moderation = {
   reportUser: moderationReportUser,
+};
+
+/**
+ * Community growth metrics domain (grouped export → deployed as the scheduled
+ * `metrics-captureDaily`).
+ *
+ * A daily job writes ONE bounded document to `metrics/{YYYY-MM-DD}` recording
+ * cumulative community totals (users, convoys, km driven, events, vehicle-brand
+ * distribution, and a few "fun" counters) purely from Firestore count()/sum()
+ * aggregations — it never reads the documents themselves, and the brand
+ * distribution is O(catalogue), not O(vehicles). The admin web app charts the
+ * series (a screenshot-friendly growth page). Every field is a PII-free
+ * aggregate; the series starts empty and fills in going forward (no historical
+ * backfill). See functions/src/metrics/scheduled.ts for the cost/storage math.
+ */
+export const metrics = {
+  captureDaily: metricsCaptureDaily,
 };

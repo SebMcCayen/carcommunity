@@ -905,6 +905,18 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // metrics – community growth snapshots (admin-only, server-written)
+    // One bounded document per day (`metrics/{YYYY-MM-DD}`) of PII-free
+    // aggregate totals, written ONLY by the scheduled metrics-captureDaily job
+    // (Admin SDK, which bypasses these rules). The admin web app reads the
+    // series to chart growth. No client ever writes; only an admin may read.
+    // -------------------------------------------------------------------------
+    match /metrics/{date} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // partnerApplications – contact data, never client-readable (Phase 9i)
     // Written via partners.submitApplication; reviewed via
     // partners.reviewApplication (admin). No client access at all.
