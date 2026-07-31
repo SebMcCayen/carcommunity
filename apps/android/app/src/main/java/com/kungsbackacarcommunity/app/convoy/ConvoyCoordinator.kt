@@ -390,8 +390,11 @@ class ConvoyCoordinator(
     /**
      * Ends [convoyId] for EVERYONE — the LEADER's action, and the destructive half
      * of the two exits. A member who is not the leader is refused server-side
-     * ([ConvoyErrorMapper.mapEnd] maps that to [ConvoyActionError.NotAllowed]);
-     * the UI never offers it to them ([ConvoyBar.exitChoice]).
+     * ([ConvoyErrorMapper.mapEnd] maps that to [ConvoyActionError.NotLeader] — `end`
+     * gets its own case rather than the generic [ConvoyActionError.NotAllowed] that
+     * `clearDestination` uses, because "you are not the leader" is the actionable
+     * thing to tell this caller); the UI never offers it to them
+     * ([ConvoyBar.exitChoice]).
      */
     suspend fun end(convoyId: String) {
         runRowAction(convoyId) { repository.end(convoyId).errorOrNull() }
