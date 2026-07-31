@@ -1,14 +1,18 @@
 package com.kungsbackacarcommunity.app.profile
 
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -98,6 +102,51 @@ class ProfileScreenTest {
             .performScrollTo()
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
         composeTestRule.onNodeWithText(str(R.string.profile_pointsTitle)).performClick()
+        assertEquals(1, opened)
+    }
+
+    /**
+     * The card must be operable by an ACCESSIBILITY SERVICE, not merely by a
+     * finger. TalkBack does not synthesise a touch: it invokes
+     * [SemanticsActions.OnClick] on the merged node, so a node that carries the
+     * OnClick key with a null action announces as clickable, says "double tap
+     * to activate" — and then does nothing. A plain `performClick()` cannot see
+     * that: it drives the pointer input of the underlying `clickable`, which
+     * works regardless. Hence this test performs the SEMANTICS action instead
+     * and asserts the navigation callback actually fired.
+     *
+     * It also pins the custom label, which is the only reason the card writes
+     * its own `onClick(label = ...)` at all: [androidx.compose.material3.Card]
+     * with an `onClick` has no `onClickLabel` parameter to attach it to.
+     */
+    @Test
+    fun pointsCardIsOperableThroughTheAccessibilityClickAction() {
+        var opened = 0
+        composeTestRule.setContent {
+            KccTheme {
+                ProfileScreen(
+                    profile = profile,
+                    saveStatus = ProfileEditStatus.Idle,
+                    onSave = { _, _, _ -> },
+                    onBack = {},
+                    onSignOut = {},
+                    pointsBalance = 120L,
+                    onOpenPoints = { opened++ },
+                )
+            }
+        }
+        val card = composeTestRule.onNodeWithText(str(R.string.profile_pointsTitle))
+        card.performScrollTo().assertHasClickAction()
+        // The label survives on the merged node...
+        card.assert(
+            SemanticsMatcher("OnClick action carries the custom label") { node ->
+                node.config.getOrNull(SemanticsActions.OnClick)?.label == str(R.string.profile_pointsViewAll)
+            },
+        )
+        // ...and so does a real, invocable action. performSemanticsAction is a
+        // no-op when the action is null, so the callback assertion below — not
+        // the call itself — is what fails if the action is missing.
+        card.performSemanticsAction(SemanticsActions.OnClick)
         assertEquals(1, opened)
     }
 

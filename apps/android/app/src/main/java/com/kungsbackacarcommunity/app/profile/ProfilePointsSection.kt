@@ -84,6 +84,20 @@ fun ProfilePointsSection(
                     // generic "double tap to activate" with what it actually
                     // does. Merged so the whole card is one focusable target
                     // rather than a dozen unrelated text nodes.
+                    //
+                    // `action = null` RELABELS the click, it does not remove it.
+                    // Material3's Card(onClick = ...) has no onClickLabel
+                    // parameter to hang the label on, so the label has to arrive
+                    // through semantics; SemanticsConfiguration.set merges two
+                    // AccessibilityActions on the same node as
+                    // `new.label ?: old.label` / `new.action ?: old.action`, so
+                    // the null action falls back to the real one the Card's own
+                    // clickable installed. The merged node therefore ends up
+                    // with this label AND an invocable action — pinned by
+                    // ProfileScreenTest
+                    // .pointsCardIsOperableThroughTheAccessibilityClickAction,
+                    // which performs the SEMANTICS action (what TalkBack does)
+                    // rather than a touch and asserts onOpenLedger fires.
                     .semantics(mergeDescendants = true) {
                         role = Role.Button
                         onClick(label = openLabel, action = null)
