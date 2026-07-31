@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
@@ -38,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -81,6 +83,14 @@ import java.util.Date
 internal const val DRIVE_FILTER_TOGGLE_TAG = "drives_filter_toggle"
 
 /**
+ * Test tag on the small "your driving stats" action in the History header. This
+ * compact icon button replaced the full-width stats card that used to sit between
+ * the header and the filter section, so the stats page stays reachable without
+ * the large window. `internal` for the same reason as [DRIVE_FILTER_TOGGLE_TAG].
+ */
+internal const val DRIVE_STATS_ENTRY_TAG = "drives_stats_entry"
+
+/**
  * Expand/collapse duration for the History filter section, matching the shell's
  * search-bar transition so the two read as the same app.
  */
@@ -99,6 +109,10 @@ fun DrivesListScreen(
     modifier: Modifier = Modifier,
     // Re-invokes the drives load; when null the error state shows no retry.
     onRetry: (() -> Unit)? = null,
+    // Opens the personal "your driving" stats page. The entry is rendered only
+    // when at least one drive is loaded — a zero-drive member sees the empty card
+    // instead, so the stats entry never leads to a page of zeroes.
+    onShowStats: (() -> Unit)? = null,
 ) {
     // Search/filter/sort state for the History list. Survives config changes
     // (rememberSaveable): the query is a String and the three enums are
@@ -134,8 +148,7 @@ fun DrivesListScreen(
     // edge (a Calendar/time-zone concern) so the fold in [DriveFilters] stays
     // pure and deterministic. Recomputed each composition — cheap, and it lets a
     // week/month rollover correct itself on the next recomposition rather than
-    // pinning to the boundary the screen opened in (the same composable-edge
-    // pattern the profile stats fold uses).
+    // pinning to the boundary the screen opened in (mirrors [DriveStatsScreen]).
     val weekStartMillis = DrivePeriodBoundaries.startOfCurrentWeekMillis()
     val monthStartMillis = DrivePeriodBoundaries.startOfCurrentMonthMillis()
 
@@ -158,7 +171,17 @@ fun DrivesListScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item {
-                AeroPageTitle(stringResource(R.string.savedDrives_screenTitle))
+                // The personal "your driving" stats page is reached from a small,
+                // unobtrusive action beside the title (see [DrivesHeader]) rather
+                // than the full-width card that used to sit between the header and
+                // the filters. The action is offered only once at least one drive
+                // is loaded, so it never opens a page of zeroes — the same "shown
+                // only when a drive exists" rule the old card carried.
+                val statsEntry =
+                    onShowStats?.takeIf {
+                        (state as? DrivesState.Loaded)?.drives?.isNotEmpty() == true
+                    }
+                DrivesHeader(onShowStats = statsEntry)
             }
 
             // A delete launched from a row is reconciled by the Firestore
@@ -232,6 +255,36 @@ fun DrivesListScreen(
                             }
                         }
                     }
+            }
+        }
+    }
+}
+
+/**
+ * History page header: the title, plus a small "your driving stats" action when
+ * [onShowStats] is non-null. Keeping the action in the header (rather than a
+ * full-width card below it) is what lets the stats page stay reachable without
+ * the large window that used to sit between the header and the filters.
+ */
+@Composable
+private fun DrivesHeader(onShowStats: (() -> Unit)?) {
+    val title = stringResource(R.string.savedDrives_screenTitle)
+    if (onShowStats == null) {
+        AeroPageTitle(title)
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            AeroPageTitle(title, modifier = Modifier.weight(1f))
+            FilledTonalIconButton(
+                onClick = onShowStats,
+                modifier = Modifier.testTag(DRIVE_STATS_ENTRY_TAG),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.BarChart,
+                    contentDescription = stringResource(R.string.savedDrives_statsEntryAction),
+                )
             }
         }
     }

@@ -748,9 +748,17 @@
     <string name="savedDrives_recordPermissionDenied">Location access was denied. Allow location to record a drive.</string>
     <string name="savedDrives_recordLocationUnavailable">Location is not available on this device.</string>
     <string name="savedDrives_recordBack">Back</string>
+    <string name="savedDrives_statsEntryAction">Your driving stats</string>
+    <string name="savedDrives_statsTitle">Your driving</string>
+    <string name="savedDrives_statsEmpty">No drives to summarise yet.</string>
+    <string name="savedDrives_statsAllTime">All time</string>
+    <string name="savedDrives_statsThisMonth">This month</string>
     <string name="savedDrives_statsTotalDrives">Drives</string>
     <string name="savedDrives_statsTotalDistance">Distance</string>
     <string name="savedDrives_statsTotalTime">Total time</string>
+    <string name="savedDrives_statsLongest">Longest drive</string>
+    <string name="savedDrives_statsAverage">Average length</string>
+    <string name="savedDrives_statsFastest">Fastest average speed</string>
     <string name="savedDrives_filterToggle">Filters</string>
     <string name="savedDrives_filterToggleExpand">Show filters</string>
     <string name="savedDrives_filterToggleCollapse">Hide filters</string>
