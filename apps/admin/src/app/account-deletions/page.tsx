@@ -73,9 +73,16 @@ function NeverOnboardedPurgeSection() {
   const [purgeSuccess, setPurgeSuccess] = useState<string | null>(null);
 
   const busy = previewing || purging;
+  // Synchronous re-entry guard (like handleMarkProcessed's actingRef above):
+  // the `busy` STATE updates asynchronously, so a fast double-click could fire
+  // two concurrent preview/purge calls before the button disables. This ref
+  // flips synchronously, before any re-render, and blocks the second call —
+  // which matters most for the destructive purge.
+  const inFlightRef = useRef(false);
 
   const handlePreview = useCallback(async () => {
-    if (busy) return;
+    if (inFlightRef.current) return;
+    inFlightRef.current = true;
     setPreviewing(true);
     setPreviewError(null);
     setPurgeError(null);
@@ -87,11 +94,13 @@ function NeverOnboardedPurgeSection() {
       setPreviewError((err as ApiError)?.message ?? p('previewError'));
     } finally {
       setPreviewing(false);
+      inFlightRef.current = false;
     }
-  }, [busy]);
+  }, []);
 
   const handlePurge = useCallback(async () => {
-    if (busy || !preview || preview.candidateCount === 0) return;
+    if (inFlightRef.current) return;
+    if (!preview || preview.candidateCount === 0) return;
     if (confirmText !== NEVER_ONBOARDED_CONFIRM_TOKEN) return;
     if (
       !window.confirm(
@@ -100,6 +109,7 @@ function NeverOnboardedPurgeSection() {
     ) {
       return;
     }
+    inFlightRef.current = true;
     setPurging(true);
     setPurgeError(null);
     setPurgeSuccess(null);
@@ -116,8 +126,9 @@ function NeverOnboardedPurgeSection() {
       setPurgeError((err as ApiError)?.message ?? p('purgeError'));
     } finally {
       setPurging(false);
+      inFlightRef.current = false;
     }
-  }, [busy, preview, confirmText]);
+  }, [preview, confirmText]);
 
   const canDelete =
     !busy &&

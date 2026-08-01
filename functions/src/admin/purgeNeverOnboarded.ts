@@ -110,8 +110,14 @@ function toIso(value: unknown): string | null {
  * account and is deliberately left untouched — the safe direction for a
  * deletion.
  */
+/** A scanned candidate — uid plus its already-read createdAt (ISO or null). */
+interface ScannedCandidate {
+  uid: string;
+  createdAt: string | null;
+}
+
 async function scanCandidates(): Promise<{
-  candidateUids: string[];
+  candidates: ScannedCandidate[];
   excludedAdminOwnerCount: number;
   capped: boolean;
 }> {
@@ -120,12 +126,14 @@ async function scanCandidates(): Promise<{
     .orderBy('createdAt', 'desc')
     .limit(PURGE_MAX_SCAN)
     .get();
-  const candidateUids: string[] = [];
+  const candidates: ScannedCandidate[] = [];
   let excludedAdminOwnerCount = 0;
   for (const docSnap of snap.docs) {
     const decision = classifyAccount(docSnap.id, docSnap.data());
     if (decision.selected) {
-      candidateUids.push(docSnap.id);
+      // Carry createdAt out of the doc we just read, so the dry-run loop does
+      // not re-read users/{uid} — it only probes userPrivate/{uid}.
+      candidates.push({ uid: docSnap.id, createdAt: toIso(docSnap.data()?.createdAt) });
     } else if (decision.reason === 'admin_or_owner') {
       excludedAdminOwnerCount += 1;
     }
@@ -137,7 +145,7 @@ async function scanCandidates(): Promise<{
       cap: PURGE_MAX_SCAN,
     });
   }
-  return { candidateUids, excludedAdminOwnerCount, capped };
+  return { candidates, excludedAdminOwnerCount, capped };
 }
 
 export const purgeNeverOnboarded = onCall(
@@ -157,46 +165,47 @@ export const purgeNeverOnboarded = onCall(
     }
     const { dryRun, confirmToken } = parsed.input;
 
-    const { candidateUids, excludedAdminOwnerCount, capped } = await scanCandidates();
-
-    // ---- DRY RUN: delete nothing, return non-sensitive identifiers only. ----
-    if (dryRun) {
-      const candidates: PurgeCandidate[] = [];
-      for (const uid of candidateUids) {
-        // Read the user doc (for createdAt) and probe userPrivate existence.
-        // Deliberately NOT returned: displayName / email — returning them would
-        // re-expose the very data this cleanup removes. A uid is enough for Seb.
-        const [userSnap, privateSnap] = await Promise.all([
-          db.collection('users').doc(uid).get(),
-          db.collection('userPrivate').doc(uid).get(),
-        ]);
-        candidates.push({
-          uid,
-          createdAt: toIso(userSnap.data()?.createdAt),
-          hasUserPrivate: privateSnap.exists,
-        });
-      }
-      return {
-        dryRun: true,
-        candidateCount: candidates.length,
-        candidates,
-        excludedAdminOwnerCount,
-        capped,
-      };
-    }
-
-    // ---- REAL PURGE: require the confirm sentinel; never happens by default. --
-    if (!isConfirmed(confirmToken)) {
+    // Reject an unconfirmed REAL run BEFORE scanning — an invalid real-run call
+    // costs zero reads (the confirm sentinel is a fixed string, not data). Dry
+    // runs never need the token and fall through to the scan.
+    if (!dryRun && !isConfirmed(confirmToken)) {
       throw new HttpsError(
         'failed-precondition',
         'Confirmation required: pass confirmToken "PURGE" to run the real purge.',
       );
     }
 
+    const { candidates, excludedAdminOwnerCount, capped } = await scanCandidates();
+
+    // ---- DRY RUN: delete nothing, return non-sensitive identifiers only. ----
+    if (dryRun) {
+      const previewed: PurgeCandidate[] = [];
+      for (const candidate of candidates) {
+        // createdAt already came from scanCandidates' read — here we only PROBE
+        // userPrivate/{uid} existence. Deliberately NOT returned: displayName /
+        // email — returning them would re-expose the very data this cleanup
+        // removes. A uid is enough for Seb.
+        const privateSnap = await db.collection('userPrivate').doc(candidate.uid).get();
+        previewed.push({
+          uid: candidate.uid,
+          createdAt: candidate.createdAt,
+          hasUserPrivate: privateSnap.exists,
+        });
+      }
+      return {
+        dryRun: true,
+        candidateCount: previewed.length,
+        candidates: previewed,
+        excludedAdminOwnerCount,
+        capped,
+      };
+    }
+
+    // ---- REAL PURGE (confirm sentinel already verified above). ----
     // Bound the batch so one call cannot run the cascade over an unbounded set
     // and blow the timeout; a remainder is drained by a (idempotent) re-run.
-    const batch = candidateUids.slice(0, PURGE_MAX_BATCH);
-    const batchCapped = capped || candidateUids.length > PURGE_MAX_BATCH;
+    const batch = candidates.slice(0, PURGE_MAX_BATCH).map((candidate) => candidate.uid);
+    const batchCapped = capped || candidates.length > PURGE_MAX_BATCH;
 
     const purgedUids: string[] = [];
     const failures: { uid: string; error: string }[] = [];
