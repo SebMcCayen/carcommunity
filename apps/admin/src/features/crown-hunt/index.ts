@@ -58,6 +58,32 @@ export type {
 };
 export { ApiError };
 
+// Auto-spawn cell approval (spawn-cells.ts) — the admin half of the auto-spawn
+// safety model. Grid helpers, the direct crownSpawnCells read, and the
+// approve/revoke wrappers over crownHunt.setSpawnCellApproval.
+export {
+  CROWN_CELL_DEGREES,
+  cellKeyForCoords,
+  parseSpawnCellKey,
+  spawnCellBounds,
+  spawnCellCenter,
+  formatCellCenter,
+  spawnCellState,
+  toSpawnCellSummary,
+  adminListSpawnCells,
+  adminApproveSpawnCell,
+  adminRevokeSpawnCell,
+} from './spawn-cells';
+export type {
+  AdminSpawnCellSummary,
+  SpawnCellState,
+  SpawnCellTarget,
+  SetSpawnCellApprovalResponse,
+  SpawnCellIndices,
+  SpawnCellBounds,
+  LatLng as SpawnCellLatLng,
+} from './spawn-cells';
+
 const DEFAULT_PAGE_SIZE = 20;
 
 /** Firestore Timestamp | Date | null → ISO string (or null). */

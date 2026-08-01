@@ -405,6 +405,26 @@
   margin-bottom: var(--space-4);
 }
 
+.noticeBanner {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  background: var(--surface-2, var(--warning-bg));
+  border: 1px solid var(--border, var(--status-warning));
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.introText {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  margin-bottom: var(--space-3);
+}
+
+.cellKey {
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
 .loadingText {
   font-size: var(--text-sm);
   color: var(--text-secondary);
