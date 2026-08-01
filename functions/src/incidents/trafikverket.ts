@@ -36,17 +36,37 @@ const UPSERT_BATCH_SIZE = 400;
 
 export type SituationFetcher = (authenticationKey: string) => Promise<TrafikverketResponse>;
 
-/** Live fetcher: POSTs the XML query to the Trafikverket open API. */
-const httpFetcher: SituationFetcher = async (authenticationKey) => {
+/** Upper bound on a single Trafikverket API round-trip before we give up and let
+ * the scheduled run fail fast (well under the 300s function timeout). Exported
+ * so the unit test can assert httpFetcher requests exactly this bound. */
+export const FETCH_TIMEOUT_MS = 30_000;
+
+/** Live fetcher: POSTs the XML query to the Trafikverket open API.
+ * Exported for unit testing of the fetch-resilience paths (timeout / status /
+ * non-JSON body); production wiring uses it via the {@link runTrafikverketSync}
+ * default fetcher. */
+export const httpFetcher: SituationFetcher = async (authenticationKey) => {
   const res = await fetch(TRAFIKVERKET_ENDPOINT, {
     method: 'POST',
     headers: { 'Content-Type': 'text/xml' },
     body: buildTrafikverketRequestBody(authenticationKey),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`Trafikverket API responded ${res.status}`);
   }
-  return (await res.json()) as TrafikverketResponse;
+  const text = await res.text();
+  try {
+    return JSON.parse(text) as TrafikverketResponse;
+  } catch (parseError) {
+    // A non-JSON 200 (HTML error/maintenance page, truncated body, …) is a
+    // distinct failure mode from a bad status code — surface a snippet so a
+    // future occurrence is diagnosable from the error report alone, and keep
+    // the underlying parse error on `cause` for the full failure context.
+    throw new Error(`Trafikverket API returned non-JSON body: ${text.slice(0, 200)}`, {
+      cause: parseError,
+    });
+  }
 };
 
 /**
