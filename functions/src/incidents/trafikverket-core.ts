@@ -64,12 +64,16 @@ export function buildTrafikverketRequestBody(
     '<INCLUDE>Deviation.Geometry.WGS84</INCLUDE>',
     // When Trafikverket ORIGINALLY posted about the situation — the authoritative
     // "posted at" the app shows as "x min ago". CreationTime is the original
-    // creation instant; PublicationTime is a fallback (it re-stamps on every
-    // republish of an updated situation, so it can drift forward from the real
-    // first-posted time). Without these the client can only fall back to our sync
-    // time, which is what this fix removes. See parseTrafikverketTime.
+    // creation instant and IS a Deviation-level field. Without it the client can
+    // only fall back to our sync time. See parseTrafikverketTime.
+    //
+    // NB: request ONLY Deviation.CreationTime here. `PublicationTime` is a
+    // SITUATION-level field, NOT a Deviation field, so `Deviation.PublicationTime`
+    // is an invalid field reference that makes the API reject the WHOLE query with
+    // HTTP 400 (issue #678 — the entire sync was down). If a PublicationTime
+    // fallback is ever wanted, it must be requested as a top-level
+    // `<INCLUDE>PublicationTime</INCLUDE>` and read from the Situation object.
     '<INCLUDE>Deviation.CreationTime</INCLUDE>',
-    '<INCLUDE>Deviation.PublicationTime</INCLUDE>',
     '</QUERY>',
     '</REQUEST>',
   ].join('');
@@ -96,10 +100,13 @@ export interface TrafikverketDeviation {
   Message?: string;
   IconId?: string;
   Geometry?: { WGS84?: string };
-  /** ISO-8601 instant the situation was first created upstream (original post). */
+  /**
+   * ISO-8601 instant this deviation was first created upstream (original post).
+   * A Deviation-level field. NOTE: there is deliberately no `PublicationTime`
+   * here — it is a Situation-level field, so `Deviation.PublicationTime` is an
+   * invalid query reference (see buildTrafikverketRequestBody / issue #678).
+   */
   CreationTime?: string;
-  /** ISO-8601 instant the situation was published (fallback for CreationTime). */
-  PublicationTime?: string;
 }
 
 export interface TrafikverketSituation {
@@ -156,12 +163,17 @@ export function parseTrafikverketTime(value: string | undefined): number | null 
 
 /**
  * The instant Trafikverket originally posted about a deviation, in epoch millis,
- * or `null` when neither time is present/parseable. Prefers `CreationTime` (the
- * original creation instant — Seb asked for "when Trafikverket ORIGINALLY posted
- * about it") and falls back to `PublicationTime`, which re-stamps on republish.
+ * or `null` when the time is absent/unparseable. Derived from `CreationTime` —
+ * the original creation instant (Seb asked for "when Trafikverket ORIGINALLY
+ * posted about it"). A missing/unusable value degrades to `null` so the client
+ * hides the age line rather than showing our sync time.
+ *
+ * (Historical note: a `PublicationTime` fallback was dropped in the #678 fix —
+ * `Deviation.PublicationTime` is an invalid field reference that 400'd the whole
+ * query. PublicationTime lives on the Situation, not the Deviation.)
  */
 function deviationPostedAtMs(deviation: TrafikverketDeviation): number | null {
-  return parseTrafikverketTime(deviation.CreationTime) ?? parseTrafikverketTime(deviation.PublicationTime);
+  return parseTrafikverketTime(deviation.CreationTime);
 }
 
 /**
