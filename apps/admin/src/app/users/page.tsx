@@ -110,7 +110,7 @@ export default function UsersPage() {
         <p className={styles.successBanner} role="status">
           {t('users.detail.deleteSuccess').replace(
             '{name}',
-            deletedNotice.displayName || deletedNotice.uid,
+            deletedNotice.displayName.trim() || deletedNotice.uid,
           )}
         </p>
       )}

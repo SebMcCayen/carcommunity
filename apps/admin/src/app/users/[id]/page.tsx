@@ -163,8 +163,10 @@ export default function UserDetailPage() {
         replace: true,
         state: {
           deletedUser: {
+            // Trim so a whitespace-only name falls back to the uid rather than
+            // producing a blank success banner.
             uid: detail.uid,
-            displayName: detail.displayName || detail.uid,
+            displayName: detail.displayName.trim() || detail.uid,
           },
         },
       });
@@ -411,7 +413,7 @@ export default function UserDetailPage() {
               >
                 <p id="user-delete-title" className={styles.confirmText}>
                   {t('users.detail.deleteConfirmBody')
-                    .replace('{name}', detail.displayName || t('users.unnamed'))
+                    .replace('{name}', detail.displayName.trim() || t('users.unnamed'))
                     .replace('{uid}', detail.uid)}
                 </p>
 

@@ -165,12 +165,13 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   // deletion and the inactivity sweep run (functions/src/account/scheduled.ts).
   await purgeUserData(targetUid);
 
-  // Immutable audit record, retained in adminAuditEvents (never purged). Written
-  // to a DETERMINISTIC id keyed on the target uid — one deletion record per
-  // deleted user — so a retried or duplicate invocation updates the same record
-  // rather than accumulating duplicate `user.delete` events. The record itself
-  // is keyed by the actor + target uid, never a reference into the now-deleted
-  // user's own data.
+  // Immutable audit record, retained in adminAuditEvents (never purged). The
+  // DOCUMENT ID is deterministic and keyed on the TARGET uid
+  // (`user-delete_${targetUid}`) — one deletion record per deleted user — so a
+  // retried or duplicate invocation updates the same record rather than
+  // accumulating duplicate `user.delete` events. The actor and target uids are
+  // stored as FIELDS on the record (adminId / targetId), not encoded into the
+  // id, and never a reference into the now-deleted user's own data.
   await db
     .collection('adminAuditEvents')
     .doc(`user-delete_${targetUid}`)

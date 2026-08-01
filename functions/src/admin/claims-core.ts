@@ -210,7 +210,9 @@ export function guardNotLastAdmin(input: {
     return {
       ok: false,
       code: 'failed-precondition',
-      message: 'Cannot delete the last remaining admin account.',
+      // The guard protects BOTH admin and owner accounts, so the message names
+      // both rather than hardcoding "admin" (misleading when the target is an owner).
+      message: 'Cannot delete the last remaining admin/owner account.',
     };
   }
   return { ok: true };
