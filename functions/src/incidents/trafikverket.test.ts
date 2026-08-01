@@ -19,7 +19,7 @@ vi.mock('../firebase', () => ({
   adminRtdb: {},
 }));
 
-import { httpFetcher } from './trafikverket';
+import { FETCH_TIMEOUT_MS, httpFetcher } from './trafikverket';
 
 const okHeaders = { 'content-type': 'application/json' };
 
@@ -49,10 +49,14 @@ describe('httpFetcher (Trafikverket live fetcher)', () => {
       '<body>The Trafikverket API is temporarily down for maintenance.</body></html>';
     stubFetch(async () => new Response(body, { status: 200, headers: { 'content-type': 'text/html' } }));
 
-    await expect(httpFetcher('secret-key')).rejects.toThrow(/Trafikverket API returned non-JSON body:/);
+    const err = await captureError('secret-key');
+    expect(err.message).toMatch(/Trafikverket API returned non-JSON body:/);
     // The snippet is drawn from the RESPONSE body only — never the auth key,
-    // which lives solely in the request body — and is capped at 200 chars.
-    await expect(httpFetcher('secret-key')).rejects.toThrow(/503 Service Unavailable/);
+    // which lives solely in the request body.
+    expect(err.message).toMatch(/503 Service Unavailable/);
+    // The underlying parse error is preserved on `cause` for full context in
+    // the server-error report.
+    expect(err.cause).toBeInstanceOf(SyntaxError);
   });
 
   it('caps the non-JSON snippet at 200 characters', async () => {
@@ -86,32 +90,46 @@ describe('httpFetcher (Trafikverket live fetcher)', () => {
     await expect(httpFetcher('secret-key')).resolves.toEqual(payload);
   });
 
-  it('sends an abort signal so a hung request fails fast rather than hanging', async () => {
-    let capturedSignal: AbortSignal | undefined;
-    stubFetch(async (_input, init) => {
-      capturedSignal = init?.signal ?? undefined;
-      return new Response(JSON.stringify({ RESPONSE: { RESULT: [] } }), { status: 200, headers: okHeaders });
-    });
-
-    await httpFetcher('secret-key');
-    expect(capturedSignal).toBeInstanceOf(AbortSignal);
-  });
-
-  it('propagates an AbortSignal.timeout abort as a thrown TimeoutError (reportable, not an unhandled rejection)', async () => {
-    // Simulate the runtime aborting the fetch when the timeout fires: reject
-    // with the DOMException the platform raises so withServerErrorReporting can
-    // catch and report it.
-    stubFetch(async (_input, init) => {
-      return await new Promise<Response>((_resolve, reject) => {
-        const signal = init?.signal;
-        signal?.addEventListener('abort', () => reject(signal.reason as Error));
-        // Force the abort immediately for the test rather than waiting 30s.
-        const forced = AbortSignal.timeout(0);
-        forced.addEventListener('abort', () => reject(forced.reason as Error));
+  it('bounds the request with its own AbortSignal.timeout and surfaces the abort as a reportable TimeoutError', async () => {
+    // vitest/sinon fake timers do NOT drive AbortSignal.timeout (it is not
+    // backed by the mockable setTimeout — verified empirically), so we cannot
+    // advance a fake clock to fire the real 30s signal. Instead we spy on
+    // AbortSignal.timeout to (a) assert httpFetcher requests exactly the 30s
+    // bound, and (b) substitute a fast REAL timeout signal so the SAME
+    // abort → TimeoutError path fires without a 30s wait. The DOMException a
+    // short AbortSignal.timeout raises is byte-for-byte the one the 30s signal
+    // would raise, so the assertion is faithful. This test has teeth: removing
+    // the `signal: AbortSignal.timeout(...)` line from httpFetcher makes the
+    // spy assertion fail (and the fetch never receives a signal to abort).
+    const requestedTimeouts: number[] = [];
+    const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+    const timeoutSpy = vi
+      .spyOn(AbortSignal, 'timeout')
+      .mockImplementation((ms: number) => {
+        requestedTimeouts.push(ms);
+        return realTimeout(5); // fast real signal, same TimeoutError semantics
       });
-    });
+
+    // The stub honors the exact signal httpFetcher passes it: it rejects with
+    // that signal's own abort reason when it fires — i.e. the internal signal,
+    // not one supplied by the test to fetch.
+    stubFetch(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          if (!signal) {
+            // No signal wired (e.g. the `signal:` line was removed) — reject
+            // fast so the spy assertion below fails cleanly instead of hanging.
+            reject(new Error('httpFetcher passed no AbortSignal to fetch'));
+            return;
+          }
+          signal.addEventListener('abort', () => reject(signal.reason as Error));
+        }),
+    );
 
     const err = await captureError('secret-key');
+    expect(timeoutSpy).toHaveBeenCalledWith(FETCH_TIMEOUT_MS);
+    expect(requestedTimeouts).toContain(FETCH_TIMEOUT_MS);
     expect(err).toBeInstanceOf(Error);
     expect((err as DOMException).name).toBe('TimeoutError');
   });
