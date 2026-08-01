@@ -1264,7 +1264,14 @@ service cloud.firestore {
       // Public balance: the denormalized {balance, updatedAt} document is
       // readable by any authenticated user (public profile info). Entries below
       // stay owner-only.
-      allow read: if isAuthenticated();
+      //
+      // `get`, NOT `read`: this is a per-uid single-document read (the profile
+      // fetches pointsLedger/{targetUid} by id), so only `get` is granted. `list`
+      // is deliberately withheld — granting `read` would ALSO authorise a QUERY
+      // of the whole `pointsLedger` collection, letting any authenticated client
+      // enumerate and scrape every member's balance. The owner reads their own
+      // balance by id too (a get), so nothing legitimately needs `list` here.
+      allow get: if isAuthenticated();
       // No client writes.
 
       match /entries/{entryId} {

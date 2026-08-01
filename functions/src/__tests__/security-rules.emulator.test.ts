@@ -369,10 +369,14 @@ describe('Firestore – points ledger (Phase 9g)', () => {
     await assertSucceeds(getDoc(doc(ownerFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
 
     // The balance document is public profile info (2026-08): any authenticated
-    // member may read another member's balance for their profile — same gate as
-    // the badge wall and garage rendered beside it.
+    // member may GET another member's balance BY ID for their profile — same
+    // gate as the badge wall and garage rendered beside it.
     const otherFs = testEnv.authenticatedContext(OTHER).firestore();
     await assertSucceeds(getDoc(doc(otherFs, 'pointsLedger', OWNER)));
+    // ...but only a single-doc get: LISTING/querying the pointsLedger collection
+    // is DENIED, so the public balance can never be turned into a scrape of
+    // everyone's balances. The rule grants `get`, not `read`.
+    await assertFails(getDocs(collection(otherFs, 'pointsLedger')));
     // The append-only ledger ENTRIES stay owner-only — the profile shows the
     // balance, never the per-transaction activity statement behind it.
     await assertFails(getDoc(doc(otherFs, 'pointsLedger', OWNER, 'entries', 'e-1')));
