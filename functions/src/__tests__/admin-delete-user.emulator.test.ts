@@ -369,4 +369,40 @@ describe('admin-deleteUser – erasure', () => {
       code: 'auth/user-not-found',
     });
   });
+
+  it('audits immutably on retry: a repeated deletion does not re-stamp createdAt', async () => {
+    const actor = await createProvisionedUser('adu-idem-actor');
+    await promoteOutOfBand(actor, 'admin');
+    const target = await createProvisionedUser('adu-idem-target');
+    const uid = target.uid;
+    await signInAs(actor);
+
+    // First deletion writes the audit record via idempotent create().
+    await call('admin-deleteUser', { targetUid: uid, reason: 'first deletion' });
+    const auditRef = adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`);
+    const first = (await auditRef.get()).data()!;
+    expect(first.action).toBe('user.delete');
+    const firstCreatedAt = first.createdAt as Timestamp;
+
+    // Re-materialize ONLY the profile doc so the existence/role guard passes,
+    // then invoke the delete a SECOND time for the same uid. The audit create()
+    // hits ALREADY_EXISTS and is ignored — the original record must be untouched.
+    await adminDb
+      .collection('users')
+      .doc(uid)
+      .set({ role: 'user', displayName: 'Adu Idem Retry-adu' });
+    const second = await call('admin-deleteUser', { targetUid: uid, reason: 'second deletion' });
+    expect(second.data).toEqual({ targetUid: uid, deleted: true });
+
+    // Exactly one audit record; createdAt and reason are the FIRST write's.
+    const auditQuery = await adminDb
+      .collection('adminAuditEvents')
+      .where('targetId', '==', uid)
+      .where('action', '==', 'user.delete')
+      .get();
+    expect(auditQuery.size).toBe(1);
+    const after = (await auditRef.get()).data()!;
+    expect((after.createdAt as Timestamp).toMillis()).toBe(firstCreatedAt.toMillis());
+    expect(after.reason).toBe('first deletion');
+  });
 });

@@ -30,12 +30,16 @@
  * rather than usable (purgeUserData deletes the now-disabled Auth user at the
  * end; it is idempotent and safe to retry).
  *
- * Audit: an immutable adminAuditEvents record (action `user.delete`) is written
- * AFTER the purge with the actor uid, target uid, reason, server timestamp and
- * a snapshot of the target's displayName/role in `details`. It is keyed by the
- * ACTOR + target uid — never a reference into the deleted user's own (now gone)
- * data — and lives in the retained adminAuditEvents collection the purge never
- * touches.
+ * Audit: an adminAuditEvents record (action `user.delete`) is written AFTER the
+ * purge with the actor uid, target uid, reason, server timestamp and a snapshot
+ * of the target's displayName/role in `details`. The document id is deterministic
+ * and keyed on the TARGET uid alone (`user-delete_${targetUid}`) — one record per
+ * deleted user — and the write is an idempotent CREATE, so a retried invocation
+ * leaves the first record (and its createdAt) untouched: that is what makes it
+ * immutable on retry. The actor and target uids are stored as FIELDS
+ * (adminId / targetId), never encoded into the id and never a reference into the
+ * deleted user's own (now gone) data. It lives in the retained adminAuditEvents
+ * collection the purge never touches.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
@@ -51,6 +55,7 @@ import {
 } from './claims-core';
 import { toUserAccessState } from '../shared/access';
 import { purgeUserData } from '../account/scheduled';
+import { isAlreadyExistsError } from '../chatchannels/chat-core';
 import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
@@ -165,29 +170,37 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   // deletion and the inactivity sweep run (functions/src/account/scheduled.ts).
   await purgeUserData(targetUid);
 
-  // Immutable audit record, retained in adminAuditEvents (never purged). The
-  // DOCUMENT ID is deterministic and keyed on the TARGET uid
-  // (`user-delete_${targetUid}`) — one deletion record per deleted user — so a
-  // retried or duplicate invocation updates the same record rather than
-  // accumulating duplicate `user.delete` events. The actor and target uids are
-  // stored as FIELDS on the record (adminId / targetId), not encoded into the
-  // id, and never a reference into the now-deleted user's own data.
-  await db
-    .collection('adminAuditEvents')
-    .doc(`user-delete_${targetUid}`)
-    .set(
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'user.delete',
-          targetType: 'user',
-          targetId: targetUid,
-          reason,
-          details: { role: targetState.role, displayName },
-        },
-        () => FieldValue.serverTimestamp(),
-      ),
-    );
+  // Audit record, retained in adminAuditEvents (never purged). The DOCUMENT ID is
+  // deterministic and keyed on the TARGET uid (`user-delete_${targetUid}`) — one
+  // record per deleted user. The write is an idempotent CREATE so the FIRST
+  // record wins: a retried or duplicate invocation fails with ALREADY_EXISTS and
+  // is ignored, leaving the original record — and its createdAt — untouched
+  // (genuinely immutable on retry; a plain set() would re-stamp createdAt). The
+  // actor and target uids are stored as FIELDS (adminId / targetId), not encoded
+  // into the id, and never a reference into the now-deleted user's own data.
+  try {
+    await db
+      .collection('adminAuditEvents')
+      .doc(`user-delete_${targetUid}`)
+      .create(
+        buildAdminAuditEvent(
+          {
+            adminId: actor.uid,
+            action: 'user.delete',
+            targetType: 'user',
+            targetId: targetUid,
+            reason,
+            details: { role: targetState.role, displayName },
+          },
+          () => FieldValue.serverTimestamp(),
+        ),
+      );
+  } catch (error) {
+    // A prior invocation for this target already wrote the immutable record. The
+    // deletion itself has still succeeded, so skip the duplicate audit write;
+    // any other error is unexpected and propagates.
+    if (!isAlreadyExistsError(error)) throw error;
+  }
 
   return { targetUid, deleted: true };
 });
