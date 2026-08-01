@@ -101,7 +101,7 @@ export interface TrafikverketDeviation {
   IconId?: string;
   Geometry?: { WGS84?: string };
   /**
-   * ISO-8601 instant the situation was first created upstream (original post).
+   * ISO-8601 instant this deviation was first created upstream (original post).
    * A Deviation-level field. NOTE: there is deliberately no `PublicationTime`
    * here — it is a Situation-level field, so `Deviation.PublicationTime` is an
    * invalid query reference (see buildTrafikverketRequestBody / issue #678).
