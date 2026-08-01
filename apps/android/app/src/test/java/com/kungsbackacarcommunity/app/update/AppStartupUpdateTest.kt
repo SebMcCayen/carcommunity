@@ -3,8 +3,12 @@ package com.kungsbackacarcommunity.app.update
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.IntentSenderRequest
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /**
@@ -120,5 +124,62 @@ class AppStartupUpdateTest {
             )
         assertEquals(AppUpdateDecision.NONE, result.decision)
         assertEquals(AppStartupUpdateGate.CLEAR, AppStartupUpdate.verdict(result.decision))
+    }
+
+    // --- the fail-safe wrap, exercised directly -----------------------------
+    //
+    // AppUpdateCheck already swallows a Play read that throws, so to prove the
+    // gate's OWN guard — the one that has to hold if the check itself ever
+    // throws (a future policy change, a runtime edge) — the check is stubbed to
+    // throw / hang / report a reading, with no Play or Compose in the way.
+
+    @Test
+    fun `resolve treats a thrown check as CLEAR rather than crashing`() = runTest {
+        val gate =
+            AppStartupUpdate.resolve { throw IllegalStateException("policy blew up") }
+        assertEquals(AppStartupUpdateGate.CLEAR, gate)
+    }
+
+    @Test
+    fun `resolve treats a check that outruns the timeout as CLEAR`() = runTest {
+        val gate =
+            AppStartupUpdate.resolve(timeoutMillis = 1_000L) {
+                // Longer than the bound: the gate must proceed, not hang startup.
+                delay(10_000L)
+                AppUpdateCheckResult(AppUpdateDecision.IMMEDIATE, null)
+            }
+        assertEquals(AppStartupUpdateGate.CLEAR, gate)
+    }
+
+    @Test
+    fun `resolve reports FORCED for a blocking reading`() = runTest {
+        val gate =
+            AppStartupUpdate.resolve {
+                AppUpdateCheckResult(AppUpdateDecision.IMMEDIATE, blockingUpdate)
+            }
+        assertEquals(AppStartupUpdateGate.FORCED, gate)
+    }
+
+    @Test
+    fun `resolve reports CLEAR for a flexible reading`() = runTest {
+        val gate =
+            AppStartupUpdate.resolve {
+                AppUpdateCheckResult(AppUpdateDecision.FLEXIBLE, flexibleUpdate)
+            }
+        assertEquals(AppStartupUpdateGate.CLEAR, gate)
+    }
+
+    @Test
+    fun `resolve re-throws cancellation instead of swallowing it`() = runTest {
+        // Swallowing cancellation into "CLEAR" would break structured
+        // concurrency: leaving the composition would look like a finished check.
+        try {
+            AppStartupUpdate.resolve {
+                throw CancellationException("left composition")
+            }
+            fail("cancellation must propagate")
+        } catch (e: CancellationException) {
+            assertTrue(e.message?.contains("left composition") == true)
+        }
     }
 }

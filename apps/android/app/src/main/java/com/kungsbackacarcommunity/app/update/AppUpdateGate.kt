@@ -107,6 +107,37 @@ object AppStartupUpdate {
      * [rememberAppStartupUpdateGate]).
      */
     const val CHECK_TIMEOUT_MILLIS: Long = 1_000L
+
+    /**
+     * The fail-safe heart of the gate, pulled out of the composable so the
+     * "never crashes, never locks anyone out" property is enforced in one place
+     * and testable without Compose or Play.
+     *
+     * The verdict is [AppStartupUpdateGate.CLEAR] (proceed) for every outcome
+     * except a blocking update actually being reported:
+     *  - the check throws anything non-cancellation -> CLEAR,
+     *  - the check outruns [CHECK_TIMEOUT_MILLIS] -> CLEAR,
+     *  - the check reports NONE / FLEXIBLE / AWAITING_RESTART -> CLEAR.
+     *
+     * Only [AppUpdateDecision.IMMEDIATE] yields [AppStartupUpdateGate.FORCED].
+     * Cancellation is RE-THROWN, never swallowed, so leaving the composition (or
+     * a changed source key) unwinds the check instead of being misread as "no
+     * update" — the same discipline [AppUpdateCheck] keeps.
+     *
+     * @param check the update check to run, timed and guarded here. Defaulted so
+     *   production passes nothing; a test passes a block that throws, hangs or
+     *   returns a chosen reading.
+     */
+    suspend fun resolve(
+        timeoutMillis: Long = CHECK_TIMEOUT_MILLIS,
+        check: suspend () -> AppUpdateCheckResult,
+    ): AppStartupUpdateGate {
+        val decision =
+            runCatchingCancellable {
+                withTimeoutOrNull(timeoutMillis) { check() }?.decision
+            }.getOrNull() ?: AppUpdateDecision.NONE
+        return verdict(decision)
+    }
 }
 
 /**
@@ -134,27 +165,15 @@ fun rememberAppStartupUpdateGate(
             value = AppStartupUpdateGate.CLEAR
             return@produceState
         }
-        // Enforced, not merely asserted: the whole timed check is wrapped so a
-        // timeout (null), a thrown check, or anything a future policy change
-        // might throw all collapse to NONE -> CLEAR. runCatchingCancellable, not
-        // runCatching, so a real cancellation (the source key changed, or the
-        // shell left composition) still unwinds instead of being read as "no
-        // update". The app must never be locked out of itself by the very
-        // mechanism meant to keep it working.
-        val decision =
-            runCatchingCancellable {
-                withTimeoutOrNull(AppStartupUpdate.CHECK_TIMEOUT_MILLIS) {
-                    AppUpdateCheck.run(
-                        source = activeSource,
-                        // A forced update is never throttled by a dismissal, so
-                        // the gate needs no dismissal store — passing none keeps
-                        // it a read with no device state behind it.
-                        dismissal = null,
-                        nowMillis = nowMillis(),
-                    )
-                }?.decision
-            }.getOrNull() ?: AppUpdateDecision.NONE
-        value = AppStartupUpdate.verdict(decision)
+        // The whole "never crash, never lock out" property lives in
+        // AppStartupUpdate.resolve — timed, guarded, cancellation-respecting — so
+        // the composable only has to hand it the check to run. A forced update is
+        // never throttled by a dismissal, so the gate needs no dismissal store;
+        // passing none keeps it a read with no device state behind it.
+        value =
+            AppStartupUpdate.resolve {
+                AppUpdateCheck.run(source = activeSource, dismissal = null, nowMillis = nowMillis())
+            }
     }
 
 /**
