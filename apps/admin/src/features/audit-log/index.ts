@@ -49,6 +49,7 @@ export const AUDIT_LOG_PAGE_SIZE = 25;
  * status actions expanded: activate | pause | end).
  */
 export const KNOWN_AUDIT_ACTIONS = [
+  'admin.purgeNeverOnboarded',
   'admin.setFeatureFlag',
   'badge.awardHelpfulMember',
   'client.error',
@@ -101,6 +102,7 @@ export type KnownAuditAction = (typeof KNOWN_AUDIT_ACTIONS)[number];
  * new backend action is never hidden or mislabeled.
  */
 const ACTION_LABEL_KEYS: Record<KnownAuditAction, string> = {
+  'admin.purgeNeverOnboarded': 'auditLog.action.adminPurgeNeverOnboarded',
   'admin.setFeatureFlag': 'auditLog.action.adminSetFeatureFlag',
   'badge.awardHelpfulMember': 'auditLog.action.badgeAwardHelpfulMember',
   'client.error': 'auditLog.action.clientError',

@@ -185,3 +185,79 @@
   color: var(--status-success);
   font-size: var(--text-sm);
 }
+
+/* --- Never-onboarded purge (one-off maintenance) --- */
+
+.maintenance {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-top: var(--space-5);
+  margin-top: var(--space-2);
+  border-top: 1px solid var(--border-color);
+}
+
+.maintenanceTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.statRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-5);
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.statLabel {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.statValue {
+  font-size: var(--text-xl);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.warning {
+  margin: 0;
+  color: var(--status-warning);
+  font-size: var(--text-sm);
+}
+
+.confirmInput {
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-family: var(--font-mono, monospace);
+  width: 8rem;
+}
+
+.dangerButton {
+  composes: actionButton;
+  border-color: var(--status-error);
+  color: var(--status-error);
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--status-error);
+}

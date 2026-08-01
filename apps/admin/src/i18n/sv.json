@@ -772,6 +772,7 @@
     "columnReason": "Orsak",
     "columnTime": "Tidpunkt",
     "action": {
+      "adminPurgeNeverOnboarded": "Ej registrerade konton rensade",
       "adminSetFeatureFlag": "Funktionsflagga ändrad",
       "badgeAwardHelpfulMember": "Utmärkelse tilldelad (Hjälpsam medlem)",
       "clientError": "Appfel rapporterat",
@@ -849,6 +850,35 @@
     "markProcessedSuccess": "Begäran markerad som behandlad.",
     "alreadyProcessed": "Begäran var redan behandlad – ingen ändring gjordes.",
     "markProcessedError": "Kunde inte markera begäran som behandlad."
+  },
+  "neverOnboardedPurge": {
+    "title": "Underhåll: rensa konton som aldrig slutfört registrering",
+    "subtitle": "Engångsrensning. Raderar konton (Auth + Firestore) som aldrig slutförde registreringen – kvarlämnade av det tidigare namnläckaget. Admin- och ägarkonton undantas alltid. Förhandsgranska först, radera sedan.",
+    "previewButton": "Förhandsgranska rensning",
+    "previewPending": "Hämtar…",
+    "previewError": "Kunde inte hämta förhandsgranskningen.",
+    "candidateCountLabel": "Konton att radera",
+    "excludedLabel": "Undantagna admin-/ägarkonton",
+    "cappedWarning": "Gränsen nåddes – fler konton kan finnas. Kör igen efter raderingen.",
+    "noCandidates": "Inga konton att rensa.",
+    "table": {
+      "uid": "Användar-ID",
+      "createdAt": "Skapat",
+      "hasUserPrivate": "Privat dok"
+    },
+    "yes": "Ja",
+    "no": "Nej",
+    "confirmLabel": "Skriv PURGE för att bekräfta radering",
+    "confirmPlaceholder": "PURGE",
+    "deleteButton": "Radera konton",
+    "deletePending": "Raderar…",
+    "confirmDialogPrefix": "Radera",
+    "confirmDialogSuffix": "konton permanent (Auth + Firestore)? Detta kan inte ångras.",
+    "purgeError": "Rensningen misslyckades.",
+    "purgeSuccessPrefix": "Raderade",
+    "purgeSuccessSuffix": "konton.",
+    "failuresLabel": "Misslyckades",
+    "runPreviewFirst": "Kör förhandsgranskning först."
   },
   "moderationReports": {
     "title": "Moderationsanmälningar",

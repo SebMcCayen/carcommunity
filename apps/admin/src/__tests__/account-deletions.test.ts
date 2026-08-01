@@ -20,6 +20,11 @@ const txUpdateMock = vi.fn();
 
 const SERVER_TIMESTAMP = { __serverTimestamp: true };
 
+// The feature module now also imports callAdmin (for the never-onboarded
+// purge). Mock it so the real callables/firebase module — which requires
+// VITE_* env vars at import time — is never loaded by this Firestore-focused
+// suite.
+vi.mock('../lib/callables', () => ({ callAdmin: vi.fn() }));
 vi.mock('../lib/firestore', () => ({ getAdminFirestore: () => ({}) }));
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: unknown[]) => ({ segments }),

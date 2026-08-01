@@ -739,6 +739,15 @@
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
     },
     {
+      "name": "admin.purgeNeverOnboarded",
+      "domain": "admin",
+      "description": "One-off, dry-run-first cleanup of never-onboarded accounts left by the historical display-name leak (their Google real name sits in the world-readable users/{uid}.displayName). Input { dryRun: boolean, confirmToken?: string }. Selects users/{uid} docs where onboardingCompletedAt is null/absent, HARD-EXCLUDING any admin/owner role (Seb's operator account is never selected even if its onboarding flag were null) and any uid in an empty-by-default safelist. dryRun:true deletes nothing and returns non-sensitive identifiers only (uid, createdAt, whether a userPrivate doc exists) plus the count and the admin/owner-excluded count — never the leaked displayName or email. dryRun:false REFUSES unless confirmToken === 'PURGE', then reuses the existing account-deletion cascade (account/scheduled.ts purgeUserData — Auth user + all Firestore mirrors) per account (idempotent), writes ONE adminAuditEvents record (action admin.purgeNeverOnboarded, count + purged uids only, no names), and returns the count plus any failures. Deployed via grouped export as admin-purgeNeverOnboarded (functions/src/admin/purgeNeverOnboarded.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/native-firebase-migration-plan.md (display-name leak remediation)"
+    },
+    {
       "name": "admin.deleteUser",
       "domain": "admin",
       "description": "IRREVERSIBLE admin-initiated erasure of a target user and ALL their data. Reuses the single canonical purgeUserData routine (functions/src/account/scheduled.ts) that backs self-service account deletion and the inactivity sweep — Firestore doc trees, owned documents, social-graph mirrors (friends/blocks/convoy), Realtime Database live-location + block subtrees, Cloud Storage prefixes, and the Firebase Auth user — so nothing is re-implemented or partially copied. Unlike account.deleteAccount this is an IMMEDIATE hard purge (the admin confirms in the UI; no retention window). Fail-safe: the Auth user is disabled and refresh tokens revoked BEFORE the purge. Guards: an admin can never delete themselves (failed-precondition; use account deletion), admins cannot delete owner accounts (permission-denied), and the last remaining admin/owner can never be deleted (failed-precondition). Writes an immutable adminAuditEvents record (action user.delete) with actor, target, reason and a displayName/role snapshot AFTER the purge. Deployed via grouped export as admin-deleteUser (functions/src/admin/deleteUser.ts).",
