@@ -11,6 +11,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  DEFAULT_CENTER,
+  DEFAULT_ZOOM,
   clampCoordinate,
   formatLatLng,
   geofenceCirclePolygon,
@@ -20,6 +22,28 @@ import {
   parseLatLng,
   roundCoordinate,
 } from '@/components/map/coordinates';
+
+describe('DEFAULT_CENTER / DEFAULT_ZOOM (empty-picker default)', () => {
+  it('is a valid coordinate and never Null Island (0, 0)', () => {
+    expect(isValidCoordinate(DEFAULT_CENTER)).toBe(true);
+    expect(DEFAULT_CENTER).not.toEqual({ lat: 0, lng: 0 });
+  });
+
+  it('is centred on Kungsbacka town centre, Sweden (~57.49 N, ~12.08 E)', () => {
+    // Kungsbacka town centre is ≈ 57.4878 N, 12.0754 E. Assert the default
+    // sits within a tight ~2 km box of it so an accidental edit to a wrong
+    // region (or back to 0,0) fails the suite.
+    expect(DEFAULT_CENTER.lat).toBeGreaterThan(57.47);
+    expect(DEFAULT_CENTER.lat).toBeLessThan(57.51);
+    expect(DEFAULT_CENTER.lng).toBeGreaterThan(12.05);
+    expect(DEFAULT_CENTER.lng).toBeLessThan(12.1);
+  });
+
+  it('uses a town-level default zoom (frames the town, not the region/street)', () => {
+    expect(DEFAULT_ZOOM).toBeGreaterThanOrEqual(11);
+    expect(DEFAULT_ZOOM).toBeLessThanOrEqual(14);
+  });
+});
 
 describe('isValidCoordinate', () => {
   it('accepts an in-bounds finite coordinate', () => {

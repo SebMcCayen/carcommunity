@@ -74,6 +74,7 @@ interface GlMap {
   isStyleLoaded?(): boolean;
   setConfigProperty?(importId: string, configName: string, value: unknown): void;
   easeTo(options: { center: [number, number] }): void;
+  addControl(control: unknown, position?: string): void;
   remove(): void;
   resize(): void;
 }
@@ -181,6 +182,7 @@ export function MapLocationPicker({
           accessToken: string;
           Map: new (opts: unknown) => GlMap;
           Marker: new (opts: unknown) => GlMarker;
+          NavigationControl: new (opts?: unknown) => unknown;
         };
         // Mapbox GL JS reads the public token off the module singleton before
         // it fetches the mapbox:// style + tiles.
@@ -200,6 +202,24 @@ export function MapLocationPicker({
           bearing: 0,
         });
         mapRef.current = map;
+
+        // On-screen zoom in/out buttons (the + / − control). Scroll-wheel and
+        // drag zoom keep working; this just adds always-visible controls for
+        // operators who prefer clicking. Compass/pitch toggle is omitted because
+        // this is a flat 2D top-down picker (bearing/pitch are pinned to 0), so
+        // only the zoom buttons are meaningful. The control's button styling
+        // comes from mapbox-gl.css, which is already imported above. Placed
+        // top-right, the conventional Mapbox control corner.
+        try {
+          const nav = new mapboxgl.NavigationControl({
+            showZoom: true,
+            showCompass: false,
+          });
+          map.addControl(nav, 'top-right');
+        } catch {
+          // NavigationControl is non-essential chrome; never let it break the
+          // map (scroll/drag zoom still work without the buttons).
+        }
 
         map.on('load', () => {
           if (cancelled) return;
