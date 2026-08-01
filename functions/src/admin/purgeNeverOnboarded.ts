@@ -24,7 +24,7 @@
  *   Firestore mirror — so no orphan is left. It is idempotent per account
  *   (already-deleted → the cascade's own no-op), so a re-run is safe.
  * - A real purge writes ONE `adminAuditEvents` record (action
- *   `purge_never_onboarded`) naming the actor, the count, and the purged uids
+ *   `admin.purgeNeverOnboarded`) naming the actor, the count, and the purged uids
  *   (uids only — no names) as the accountability record.
  */
 
@@ -177,10 +177,17 @@ export const purgeNeverOnboarded = onCall(
 
     const { candidates, excludedAdminOwnerCount, capped } = await scanCandidates();
 
+    // The dry-run preview must MIRROR one real run: the real purge slices to
+    // PURGE_MAX_BATCH, so the preview shows exactly that first batch and reports
+    // `capped` when a batch cap OR the scan cap applies. Otherwise Seb would
+    // confirm a count larger than a single invocation actually deletes.
+    const batchCandidates = candidates.slice(0, PURGE_MAX_BATCH);
+    const batchCapped = capped || candidates.length > PURGE_MAX_BATCH;
+
     // ---- DRY RUN: delete nothing, return non-sensitive identifiers only. ----
     if (dryRun) {
       const previewed: PurgeCandidate[] = [];
-      for (const candidate of candidates) {
+      for (const candidate of batchCandidates) {
         // createdAt already came from scanCandidates' read — here we only PROBE
         // userPrivate/{uid} existence. Deliberately NOT returned: displayName /
         // email — returning them would re-expose the very data this cleanup
@@ -197,15 +204,16 @@ export const purgeNeverOnboarded = onCall(
         candidateCount: previewed.length,
         candidates: previewed,
         excludedAdminOwnerCount,
-        capped,
+        capped: batchCapped,
       };
     }
 
     // ---- REAL PURGE (confirm sentinel already verified above). ----
-    // Bound the batch so one call cannot run the cascade over an unbounded set
-    // and blow the timeout; a remainder is drained by a (idempotent) re-run.
-    const batch = candidates.slice(0, PURGE_MAX_BATCH).map((candidate) => candidate.uid);
-    const batchCapped = capped || candidates.length > PURGE_MAX_BATCH;
+    // Same batch the dry-run previewed (batchCandidates / batchCapped, computed
+    // above): one call runs the cascade over at most PURGE_MAX_BATCH accounts so
+    // it cannot blow the timeout; a remainder is drained by a (idempotent)
+    // re-run. Preview and real run therefore delete the same set.
+    const batch = batchCandidates.map((candidate) => candidate.uid);
 
     const purgedUids: string[] = [];
     const failures: { uid: string; error: string }[] = [];
@@ -233,7 +241,7 @@ export const purgeNeverOnboarded = onCall(
         buildAdminAuditEvent(
           {
             adminId: actor.uid,
-            action: 'purge_never_onboarded',
+            action: 'admin.purgeNeverOnboarded',
             targetType: 'account_batch',
             targetId: 'never_onboarded',
             reason: 'One-off cleanup of never-onboarded accounts (display-name leak remediation).',

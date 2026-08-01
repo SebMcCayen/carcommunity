@@ -252,7 +252,7 @@ describe('admin-purgeNeverOnboarded — real purge (cascade + audit + idempotenc
     // ONE audit record for the operation, by this actor, naming purged uids only.
     const audit = await adminDb
       .collection('adminAuditEvents')
-      .where('action', '==', 'purge_never_onboarded')
+      .where('action', '==', 'admin.purgeNeverOnboarded')
       .where('adminId', '==', actor.uid)
       .get();
     expect(audit.size).toBeGreaterThanOrEqual(1);

@@ -688,6 +688,7 @@
     "columnReason": "Reason",
     "columnTime": "Time",
     "action": {
+      "adminPurgeNeverOnboarded": "Never-onboarded accounts purged",
       "adminSetFeatureFlag": "Feature flag changed",
       "badgeAwardHelpfulMember": "Badge awarded (Helpful Member)",
       "clientError": "App error reported",
