@@ -97,6 +97,15 @@ jobs:
           # client identifier (baked into the bundle), so it lives as a `vars.*`
           # production ENVIRONMENT VARIABLE like the Firebase config above.
           VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
+          # Public Mapbox access token (pk.…) enabling the map location picker's
+          # Mapbox Standard view (mapbox://styles/mapbox/standard) — the SAME
+          # style the member Android app renders. OPTIONAL and deliberately NOT
+          # in the required-vars loop below: a missing token degrades the picker
+          # to manual lat/lng entry (getMapboxToken() → '' → graceful fallback),
+          # which must never block a deploy. `pk.` tokens are public-by-design
+          # (they ship in the client bundle, scoped/referrer-restricted on the
+          # Mapbox side), so this is a `vars.*` VARIABLE, not a secret.
+          VITE_MAPBOX_TOKEN: ${{ vars.VITE_MAPBOX_TOKEN }}
         run: |
           # Fail loudly if any value is missing — better than deploying a
           # bundle that throws "Missing required environment variable" on load,

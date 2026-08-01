@@ -1,7 +1,7 @@
 /**
  * Pure coordinate helpers for the admin map location picker.
  *
- * These functions contain NO MapLibre GL / DOM / WebGL code so they are fully
+ * These functions contain NO Mapbox GL / DOM / WebGL code so they are fully
  * unit-testable under jsdom. The React component (MapLocationPicker) keeps all
  * GL-callback wiring thin and delegates the value transforms here.
  */
@@ -98,7 +98,7 @@ export function clampCoordinate(value: LatLng): LatLng {
   };
 }
 
-/** A GeoJSON Polygon feature (the shape a MapLibre geojson source accepts). */
+/** A GeoJSON Polygon feature (the shape a Mapbox GL geojson source accepts). */
 export interface CirclePolygonFeature {
   type: 'Feature';
   geometry: { type: 'Polygon'; coordinates: [number, number][][] };
@@ -142,22 +142,31 @@ export function geofenceCirclePolygon(
 }
 
 /**
- * The MapLibre GL JS style URL, read from the Vite env at build time.
+ * The Mapbox Standard style URL — the SAME v3 style the member Android app
+ * renders (`Style.STANDARD` = `mapbox://styles/mapbox/standard`). Rendering it
+ * requires Mapbox GL JS v3 (MapLibre cannot render Standard), so the admin
+ * picker loads it via `mapbox-gl` with a public access token.
+ */
+export const MAPBOX_STANDARD_STYLE = 'mapbox://styles/mapbox/standard';
+
+/**
+ * The public Mapbox access token (`pk.…`), read from the Vite env at build
+ * time. Mapbox GL JS needs `mapboxgl.accessToken` set before it can fetch the
+ * `mapbox://` style and tiles.
  *
- * MapLibre (BSD-3-Clause, no access-token concept) is configured with a full
- * style JSON URL rather than a Mapbox style id + token. The value is an
- * operator/deploy choice (a free demo/OSM/MapTiler style, or a Mapbox style if
- * desired) — never hardcoded here.
+ * `pk.` tokens are public-by-design — they ship in the client bundle and are
+ * scoped/referrer-restricted on the Mapbox side — so the value lives as a
+ * GitHub Actions VARIABLE (not a secret) and is never hardcoded here.
  *
  * Returns an empty string when unset so callers degrade gracefully to the
  * manual latitude/longitude inputs rather than rendering a broken map.
  */
-export function getMapStyleUrl(): string {
-  const url = import.meta.env.VITE_MAP_STYLE_URL as string | undefined;
-  return typeof url === 'string' ? url.trim() : '';
+export function getMapboxToken(): string {
+  const token = import.meta.env.VITE_MAPBOX_TOKEN as string | undefined;
+  return typeof token === 'string' ? token.trim() : '';
 }
 
-/** Whether a usable map style URL is configured for this build. */
+/** Whether a usable Mapbox token is configured for this build. */
 export function isMapAvailable(): boolean {
-  return getMapStyleUrl() !== '';
+  return getMapboxToken() !== '';
 }

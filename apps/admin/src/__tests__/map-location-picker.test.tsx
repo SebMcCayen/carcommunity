@@ -1,11 +1,15 @@
 /**
  * Component tests for the shared MapLocationPicker.
  *
- * MapLibre GL JS cannot render under jsdom (no WebGL), so these tests exercise
+ * Mapbox GL JS cannot render under jsdom (no WebGL), so these tests exercise
  * the always-present, testable surface: the graceful no-map fallback (manual
  * latitude/longitude inputs + an "unavailable" notice) and that editing the
  * inputs surfaces the chosen coordinate through onChange. The GL map render,
  * marker drag, and geofence circle can only be verified in a real browser.
+ *
+ * `mapbox-gl` is mocked so an accidental map-path import never tries to touch
+ * WebGL under jsdom; with an empty token the picker takes the fallback path and
+ * never imports it, but the mock keeps the suite hermetic regardless.
  *
  * Rendered with react-dom/client + React.act (no testing-library dependency,
  * matching the app's zero-extra-deps test setup).
@@ -17,12 +21,52 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 
+// Hermetic stub for the proprietary Mapbox GL JS runtime (no WebGL in jsdom).
+vi.mock('mapbox-gl', () => {
+  class FakeMarker {
+    setLngLat() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    getLngLat() {
+      return { lng: 0, lat: 0 };
+    }
+    on() {}
+    remove() {}
+  }
+  class FakeMap {
+    on() {}
+    addSource() {}
+    getSource() {}
+    removeSource() {}
+    addLayer() {}
+    getLayer() {}
+    removeLayer() {}
+    isStyleLoaded() {
+      return true;
+    }
+    setConfigProperty() {}
+    easeTo() {}
+    remove() {}
+    resize() {}
+  }
+  return {
+    default: { accessToken: '', Map: FakeMap, Marker: FakeMarker },
+    accessToken: '',
+    Map: FakeMap,
+    Marker: FakeMarker,
+  };
+});
+vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}));
+
 let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  // Ensure the no-map fallback path (no MapLibre GL import under jsdom).
-  vi.stubEnv('VITE_MAP_STYLE_URL', '');
+  // Ensure the no-map fallback path (no Mapbox GL import under jsdom).
+  vi.stubEnv('VITE_MAPBOX_TOKEN', '');
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
