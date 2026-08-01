@@ -975,6 +975,14 @@
     <string name="crownHunt_resultFeatureDisabled">Kronjakt är inte tillgängligt just nu.</string>
     <string name="crownHunt_resultNotEligible">Du är inte behörig att samla in just nu.</string>
     <string name="crownHunt_locationUnavailable">Ingen aktuell GPS-position tillgänglig ännu. Vänta en stund och försök igen.</string>
+    <string name="crownHunt_emptyHeadline">Inga kronor i närheten just nu</string>
+    <string name="crownHunt_emptyBody">Samla kronor på kartan när du står stilla. Nya kronor dyker upp då och då – kika på kartan och håll utkik nästa gång du är ute och kör.</string>
+    <string name="crownHunt_statsTitle">Din Kronjägar-status</string>
+    <string name="crownHunt_statsRankCurrent">Nuvarande nivå: %1$s</string>
+    <string name="crownHunt_statsRankNone">Du har inte låst upp någon Kronjägar-nivå ännu – din första krona tar dig igång.</string>
+    <string name="crownHunt_statsNext">Nästa nivå: %1$s – samla %2$s kronor totalt.</string>
+    <string name="crownHunt_statsComplete">Du har nått högsta Kronjägar-nivån. Snyggt jobbat!</string>
+    <string name="crownHunt_statsServerNote">Din ställning räknas på servern – nästa nivå dyker upp här så fort du når den.</string>
     <string name="crownHunt_layerLabel">Kronor</string>
     <string name="crownHunt_popupTitle">Krona</string>
     <string name="crownHunt_rarityCommon">Vanlig</string>

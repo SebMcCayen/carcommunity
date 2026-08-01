@@ -5539,6 +5539,11 @@ private fun RouteHost(
                     coordinator = crownHuntCoordinator,
                     passesMemberGate = MemberGating.allows(profileActiveMember),
                     onBack = onClose,
+                    // Powers the member's own Kronjägare standing above the nearby
+                    // list — the same owner-scoped users/{uid}/badges listener the
+                    // profile badge wall uses, so no new query shape or index.
+                    badgesRepository = badgesRepository,
+                    uid = uid,
                 )
             } else {
                 LoadingScreen()
