@@ -351,14 +351,17 @@ import com.kungsbackacarcommunity.app.shell.runIncidentRemoval
 import com.kungsbackacarcommunity.app.subscription.BillingRepository
 import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
+import com.kungsbackacarcommunity.app.update.AppStartupUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateCheck
 import com.kungsbackacarcommunity.app.update.AppUpdateDecision
 import com.kungsbackacarcommunity.app.update.AppUpdateDialog
+import com.kungsbackacarcommunity.app.update.ForcedUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateDismissalStore
 import com.kungsbackacarcommunity.app.update.AppUpdateFlowOutcome
 import com.kungsbackacarcommunity.app.update.AppUpdateFlowResult
 import com.kungsbackacarcommunity.app.update.PlayAppUpdateSource
 import com.kungsbackacarcommunity.app.update.PlayStoreLink
+import com.kungsbackacarcommunity.app.update.rememberAppStartupUpdateGate
 import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import com.kungsbackacarcommunity.app.whatsnew.Changelog
@@ -525,6 +528,40 @@ fun AuthenticatedApp(
             profileRepository?.observeProfile(uid) ?: flowOf(ProfileState.Unavailable)
         }
     val profileState by profileFlow.collectAsState(initial = ProfileState.Loading)
+
+    // Google Play In-App Updates, hoisted to the shell's front door. ONE source
+    // for both the startup gate below and the in-shell flexible prompt further
+    // down (which reuses this same instance rather than creating a second
+    // AppUpdateManager). See AppUpdateGate for why a BLOCKING update has to gate
+    // whether the shell composes at all rather than merely overlay it: an
+    // outdated build can crash inside the shell's backend-dependent startup
+    // wiring before an overlay would ever get a frame, and this gate is what
+    // lets the "please update" verdict win that race on the first cold launch.
+    val appUpdateContext = LocalContext.current
+    val appUpdateSource =
+        remember(appUpdateContext) { PlayAppUpdateSource.createIfAvailable(appUpdateContext) }
+    val startupUpdateGate by rememberAppStartupUpdateGate(appUpdateSource)
+
+    // A mandatory update wins over everything: render the blocking update screen
+    // INSTEAD OF the shell and stop here, so none of the shell's
+    // version-incompatible startup wiring below composes on an outdated client.
+    // This is the whole fix for "crashes the first launch, prompts the second" —
+    // the "please update" verdict now gets ahead of the crash instead of racing
+    // it. Early return is deliberate: it is the one way to guarantee the wiring
+    // never composes, which an overlay could not.
+    if (startupUpdateGate == AppStartupUpdateGate.FORCED) {
+        ForcedUpdateGate(source = appUpdateSource)
+        return
+    }
+    // Still asking Play. Hold on the same loading state the shell would show
+    // anyway (the profile read is in flight concurrently), so a FORCED verdict
+    // that lands in this window still gets ahead of the shell. Bounded by
+    // AppStartupUpdate.CHECK_TIMEOUT_MILLIS and skipped entirely on a non-Play
+    // install, so an up-to-date member is not made to wait.
+    if (startupUpdateGate == AppStartupUpdateGate.CHECKING) {
+        LoadingScreen()
+        return
+    }
 
     when (authedDestination(profileState)) {
         AuthedDestination.Loading -> LoadingScreen()
@@ -4490,9 +4527,11 @@ fun AuthenticatedApp(
                 // reports nothing to offer, so the prompt never appears, no
                 // error is shown, and nothing else about the app changes.
                 val appUpdateDismissals = remember(context) { AppUpdateDismissalStore(context) }
-                val appUpdateSource = remember(context) {
-                    PlayAppUpdateSource.createIfAvailable(context)
-                }
+                // Reuses the single source created at the shell's front door for
+                // the startup gate (see appUpdateSource above) rather than
+                // constructing a second AppUpdateManager. The gate only acts on a
+                // BLOCKING update — every flexible / awaiting-restart case still
+                // flows through the wiring below.
                 var appUpdateDecision by remember { mutableStateOf(AppUpdateDecision.NONE) }
                 var appUpdateVersionCode by remember { mutableStateOf<Int?>(null) }
                 val appUpdateStoreUnavailable =
