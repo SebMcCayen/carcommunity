@@ -135,12 +135,20 @@ describe('toSpawnCellSummary', () => {
     });
   });
 
-  it('treats a missing approved flag as not approved and falls back to the doc id', () => {
+  it('treats a missing approved flag as not approved and derives the key from the doc id', () => {
     const summary = toSpawnCellSummary('10_20', {});
     expect(summary.cellKey).toBe('10_20');
     expect(summary.approved).toBe(false);
     expect(summary.approvedAt).toBeNull();
     expect(spawnCellState(summary)).toBe('revoked');
+  });
+
+  it('always keys off the doc id, never a stale/hand-edited data.cellKey field', () => {
+    // The document ID is canonical (crownSpawnCells/{cellKey}); a disagreeing
+    // stored field must never win, or the UI would render and act on the wrong
+    // cell and could collide React row keys.
+    const summary = toSpawnCellSummary('5748_1207', { cellKey: '9999_9999', approved: true });
+    expect(summary.cellKey).toBe('5748_1207');
   });
 
   it('maps a revoked document', () => {

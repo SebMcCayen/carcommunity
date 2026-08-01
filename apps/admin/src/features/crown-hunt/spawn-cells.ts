@@ -171,7 +171,11 @@ function toIso(value: unknown): string | null {
 /** Maps a crownSpawnCells/{cellKey} document to the admin summary. */
 export function toSpawnCellSummary(id: string, data: DocumentData): AdminSpawnCellSummary {
   return {
-    cellKey: (data.cellKey as string | undefined) ?? id,
+    // The document ID is the canonical cell key (crownSpawnCells/{cellKey}) and
+    // the value the spawner and callable key off. Never prefer a stored
+    // `data.cellKey` field: a stale or hand-edited one would make the UI render
+    // — and act — on the wrong cell, and could collide React row keys.
+    cellKey: id,
     approved: data.approved === true,
     approvalNote: (data.approvalNote as string | null | undefined) ?? null,
     approvedByUserId: (data.approvedByUserId as string | null | undefined) ?? null,
