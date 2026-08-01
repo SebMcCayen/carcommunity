@@ -19,7 +19,18 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DEFAULT_CENTER, DEFAULT_ZOOM } from '@/components/map/coordinates';
 import { MapLocationPicker } from '@/components/map/MapLocationPicker';
+
+// Shared capture buffers for the Mapbox GL mock, so the map-path tests can
+// assert what camera/controls the component asked GL for (the real GL render
+// needs WebGL and cannot run under jsdom). `vi.hoisted` runs before the hoisted
+// `vi.mock` factory below, so the factory can close over these.
+const gl = vi.hoisted(() => ({
+  mapOpts: [] as Array<{ center: [number, number]; zoom: number }>,
+  addedControls: [] as string[],
+  navControlCount: 0,
+}));
 
 // Hermetic stub for the proprietary Mapbox GL JS runtime (no WebGL in jsdom).
 vi.mock('mapbox-gl', () => {
@@ -36,7 +47,15 @@ vi.mock('mapbox-gl', () => {
     on() {}
     remove() {}
   }
+  class FakeNavigationControl {
+    constructor() {
+      gl.navControlCount += 1;
+    }
+  }
   class FakeMap {
+    constructor(opts: { center: [number, number]; zoom: number }) {
+      gl.mapOpts.push({ center: opts.center, zoom: opts.zoom });
+    }
     on() {}
     addSource() {}
     getSource() {}
@@ -49,15 +68,19 @@ vi.mock('mapbox-gl', () => {
     }
     setConfigProperty() {}
     easeTo() {}
+    addControl(_control: unknown, position?: string) {
+      gl.addedControls.push(position ?? '');
+    }
     remove() {}
     resize() {}
   }
-  return {
-    default: { accessToken: '', Map: FakeMap, Marker: FakeMarker },
+  const api = {
     accessToken: '',
     Map: FakeMap,
     Marker: FakeMarker,
+    NavigationControl: FakeNavigationControl,
   };
+  return { default: api, ...api };
 });
 vi.mock('mapbox-gl/dist/mapbox-gl.css', () => ({}));
 
@@ -67,6 +90,9 @@ let root: Root;
 beforeEach(() => {
   // Ensure the no-map fallback path (no Mapbox GL import under jsdom).
   vi.stubEnv('VITE_MAPBOX_TOKEN', '');
+  gl.mapOpts.length = 0;
+  gl.addedControls.length = 0;
+  gl.navControlCount = 0;
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -174,5 +200,68 @@ describe('MapLocationPicker (no map / fallback)', () => {
       />,
     );
     expect(container.textContent).toContain('Both coordinates or none');
+  });
+});
+
+describe('MapLocationPicker (map path — camera + zoom controls)', () => {
+  // The GL effect dynamically imports the (mocked) mapbox-gl and builds the map
+  // asynchronously, so each test renders with a token set and then flushes the
+  // async effect before inspecting what the component asked GL for.
+  async function renderWithMap(node: React.ReactElement) {
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.test.token');
+    render(node);
+    // Let the dynamic import()s + async IIFE inside the effect settle.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  it('centres a NEW/empty picker on Kungsbacka at the town-level default zoom', async () => {
+    await renderWithMap(
+      <MapLocationPicker
+        latitude=""
+        longitude=""
+        onChange={() => {}}
+        labelLat="Latitude"
+        labelLng="Longitude"
+      />,
+    );
+
+    expect(gl.mapOpts).toHaveLength(1);
+    // center is passed to Mapbox as [lng, lat].
+    expect(gl.mapOpts[0]!.center).toEqual([DEFAULT_CENTER.lng, DEFAULT_CENTER.lat]);
+    expect(gl.mapOpts[0]!.zoom).toBe(DEFAULT_ZOOM);
+  });
+
+  it('centres on an EXISTING coordinate (does not override it with Kungsbacka)', async () => {
+    await renderWithMap(
+      <MapLocationPicker
+        latitude="59.3293"
+        longitude="18.0686"
+        onChange={() => {}}
+        labelLat="Latitude"
+        labelLng="Longitude"
+      />,
+    );
+
+    expect(gl.mapOpts).toHaveLength(1);
+    // Stockholm, not Kungsbacka — the saved value wins.
+    expect(gl.mapOpts[0]!.center).toEqual([18.0686, 59.3293]);
+    expect(gl.mapOpts[0]!.center).not.toEqual([DEFAULT_CENTER.lng, DEFAULT_CENTER.lat]);
+  });
+
+  it('adds a NavigationControl (the on-screen zoom +/- buttons) top-right', async () => {
+    await renderWithMap(
+      <MapLocationPicker
+        latitude=""
+        longitude=""
+        onChange={() => {}}
+        labelLat="Latitude"
+        labelLng="Longitude"
+      />,
+    );
+
+    expect(gl.navControlCount).toBe(1);
+    expect(gl.addedControls).toContain('top-right');
   });
 });

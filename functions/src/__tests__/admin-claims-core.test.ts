@@ -11,8 +11,11 @@ import {
   buildModerationAction,
   computeUpdatedClaims,
   guardActorIsActiveAdmin,
+  guardDeleteUserTarget,
   guardModerationTarget,
+  guardNotLastAdmin,
   guardSetAdminRole,
+  isAuthUserNotFoundError,
   parseModerationInput,
   parseSetAdminRoleInput,
   MODERATION_REASON_MAX_LENGTH,
@@ -110,8 +113,12 @@ describe('guardSetAdminRole', () => {
 describe('guardModerationTarget', () => {
   it('allows an admin to moderate a plain user', () => {
     expect(
-      guardModerationTarget({ actorUid: 'a', actorRole: 'admin', targetUid: 'b', targetRole: 'user' })
-        .ok,
+      guardModerationTarget({
+        actorUid: 'a',
+        actorRole: 'admin',
+        targetUid: 'b',
+        targetRole: 'user',
+      }).ok,
     ).toBe(true);
   });
 
@@ -137,9 +144,108 @@ describe('guardModerationTarget', () => {
 
   it('allows owners to moderate owners', () => {
     expect(
-      guardModerationTarget({ actorUid: 'a', actorRole: 'owner', targetUid: 'b', targetRole: 'owner' })
-        .ok,
+      guardModerationTarget({
+        actorUid: 'a',
+        actorRole: 'owner',
+        targetUid: 'b',
+        targetRole: 'owner',
+      }).ok,
     ).toBe(true);
+  });
+});
+
+describe('guardDeleteUserTarget', () => {
+  it('allows an admin to delete a plain user', () => {
+    expect(
+      guardDeleteUserTarget({
+        actorUid: 'a',
+        actorRole: 'admin',
+        targetUid: 'b',
+        targetRole: 'user',
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('allows an admin to delete another admin (last-admin rule is enforced separately)', () => {
+    expect(
+      guardDeleteUserTarget({
+        actorUid: 'a',
+        actorRole: 'admin',
+        targetUid: 'b',
+        targetRole: 'admin',
+      }).ok,
+    ).toBe(true);
+  });
+
+  it('blocks self-deletion (failed-precondition — use account deletion)', () => {
+    const result = guardDeleteUserTarget({
+      actorUid: 'a',
+      actorRole: 'admin',
+      targetUid: 'a',
+      targetRole: 'admin',
+    });
+    expect(result).toMatchObject({ ok: false, code: 'failed-precondition' });
+  });
+
+  it('blocks admins from deleting owners', () => {
+    const result = guardDeleteUserTarget({
+      actorUid: 'a',
+      actorRole: 'admin',
+      targetUid: 'b',
+      targetRole: 'owner',
+    });
+    expect(result).toMatchObject({ ok: false, code: 'permission-denied' });
+  });
+
+  it('allows owners to delete owners', () => {
+    expect(
+      guardDeleteUserTarget({
+        actorUid: 'a',
+        actorRole: 'owner',
+        targetUid: 'b',
+        targetRole: 'owner',
+      }).ok,
+    ).toBe(true);
+  });
+});
+
+describe('guardNotLastAdmin', () => {
+  it('never gates a plain user, even with zero other admins', () => {
+    expect(guardNotLastAdmin({ targetRole: 'user', otherActiveAdminCount: 0 }).ok).toBe(true);
+  });
+
+  it('blocks deleting the last admin (no other active admins)', () => {
+    expect(guardNotLastAdmin({ targetRole: 'admin', otherActiveAdminCount: 0 })).toMatchObject({
+      ok: false,
+      code: 'failed-precondition',
+    });
+  });
+
+  it('blocks deleting the last owner (no other active admins/owners)', () => {
+    expect(guardNotLastAdmin({ targetRole: 'owner', otherActiveAdminCount: 0 })).toMatchObject({
+      ok: false,
+      code: 'failed-precondition',
+    });
+  });
+
+  it('allows deleting an admin when another active admin remains', () => {
+    expect(guardNotLastAdmin({ targetRole: 'admin', otherActiveAdminCount: 1 }).ok).toBe(true);
+  });
+});
+
+describe('isAuthUserNotFoundError', () => {
+  it('is true ONLY for the auth/user-not-found error', () => {
+    expect(isAuthUserNotFoundError({ code: 'auth/user-not-found' })).toBe(true);
+  });
+
+  it('is false for every other Auth error (must NOT be swallowed by a destructive op)', () => {
+    // Transient / real failures a fail-closed delete must re-throw.
+    expect(isAuthUserNotFoundError({ code: 'auth/internal-error' })).toBe(false);
+    expect(isAuthUserNotFoundError({ code: 'auth/invalid-uid' })).toBe(false);
+    expect(isAuthUserNotFoundError(new Error('network down'))).toBe(false);
+    expect(isAuthUserNotFoundError(null)).toBe(false);
+    expect(isAuthUserNotFoundError(undefined)).toBe(false);
+    expect(isAuthUserNotFoundError('auth/user-not-found')).toBe(false);
   });
 });
 

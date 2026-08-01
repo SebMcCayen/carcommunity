@@ -15,7 +15,7 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 
 import {
   adminListUsers,
@@ -45,11 +45,34 @@ function formatDate(iso: string | null): string {
   return formatDateOnly(iso);
 }
 
+interface DeletedUserNav {
+  uid: string;
+  displayName: string;
+}
+
 export default function UsersPage() {
   const [users, setUsers] = useState<AdminUserSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+
+  // A one-shot success banner after a user was deleted on the detail page,
+  // handed over via router navigation state. Captured on mount, then the
+  // history entry's state is cleared so a refresh/back does not re-show it.
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Captured once from the initial navigation state and never updated, so the
+  // setter is intentionally omitted.
+  const [deletedNotice] = useState<DeletedUserNav | null>(
+    (location.state as { deletedUser?: DeletedUserNav } | null)?.deletedUser ?? null,
+  );
+  useEffect(() => {
+    if ((location.state as { deletedUser?: DeletedUserNav } | null)?.deletedUser) {
+      navigate('.', { replace: true, state: null });
+    }
+    // Run once for the state this page was navigated in with.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,8 +95,7 @@ export default function UsersPage() {
   const term = search.trim().toLowerCase();
   const filtered = term
     ? users.filter(
-        (u) =>
-          u.displayName.toLowerCase().includes(term) || u.uid.toLowerCase().includes(term),
+        (u) => u.displayName.toLowerCase().includes(term) || u.uid.toLowerCase().includes(term),
       )
     : users;
 
@@ -83,6 +105,15 @@ export default function UsersPage() {
         <h1 className={styles.title}>{t('users.title')}</h1>
         <p className={styles.subtitle}>{t('users.subtitle')}</p>
       </header>
+
+      {deletedNotice && (
+        <p className={styles.successBanner} role="status">
+          {t('users.detail.deleteSuccess').replace(
+            '{name}',
+            deletedNotice.displayName.trim() || deletedNotice.uid,
+          )}
+        </p>
+      )}
 
       <div className={styles.searchRow}>
         <label className={styles.srOnly} htmlFor="users-search">

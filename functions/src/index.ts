@@ -19,6 +19,7 @@ import { restoreAccess } from './admin/restoreAccess';
 import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
+import { deleteUser as adminDeleteUser } from './admin/deleteUser';
 import { warnUser } from './admin/warnUser';
 import { purgeNeverOnboarded } from './admin/purgeNeverOnboarded';
 import { cancel, complete, publish } from './events/eventLifecycle';
@@ -211,7 +212,8 @@ export const auth = {
 
 /**
  * Admin domain (grouped export → deployed as `admin-setAdminRole`,
- * `admin-suspendUser`, and `admin-restoreAccess`).
+ * `admin-suspendUser`, `admin-restoreAccess`, `admin-warnUser`,
+ * `admin-setFeatureFlag`, `admin-purgeNeverOnboarded`, and `admin-deleteUser`).
  *
  * Authorization, moderation status, and custom-claim management
  * (contracts/functions/functions.json: admin.setAdminRole,
@@ -230,6 +232,11 @@ export const admin = {
   // historical display-name leak. Reuses the account-deletion cascade; a real
   // run requires confirmToken "PURGE" and writes an adminAuditEvents record.
   purgeNeverOnboarded,
+  // Admin-initiated IRREVERSIBLE erasure of a user and ALL their data. Reuses
+  // the canonical purgeUserData routine (account/scheduled.ts) that backs
+  // self-service deletion, plus fail-safe lockdown, self/owner/last-admin
+  // guards, and an immutable adminAuditEvents (action `user.delete`) record.
+  deleteUser: adminDeleteUser,
 };
 
 /**

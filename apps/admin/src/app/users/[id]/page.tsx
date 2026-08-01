@@ -19,9 +19,10 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 
 import {
+  adminDeleteUser,
   adminGetUser,
   adminRestoreAccess,
   adminSetAdminRole,
@@ -58,6 +59,7 @@ type ConfirmableAction = 'suspend' | 'grantAdmin' | 'revokeAdmin';
 
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
 
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -70,6 +72,17 @@ export default function UserDetailPage() {
   const [pendingConfirm, setPendingConfirm] = useState<ConfirmableAction | null>(null);
 
   const actingRef = useRef(false);
+
+  // Danger zone: irreversible full deletion. Kept in its own state so it never
+  // shares the moderation reason/confirm flow. The final Confirm is gated on the
+  // admin re-typing the user's display name (or the word DELETE when the account
+  // has no name) — a deliberate speed-bump for an unrecoverable action.
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteReason, setDeleteReason] = useState('');
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deletingRef = useRef(false);
 
   const load = useCallback(async (uid: string) => {
     setLoading(true);
@@ -137,6 +150,33 @@ export default function UserDetailPage() {
     [detail, reason, load],
   );
 
+  const runDelete = useCallback(async () => {
+    if (!detail || deletingRef.current) return;
+    deletingRef.current = true;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await adminDeleteUser(detail.uid, deleteReason.trim());
+      // The user (and this detail record) no longer exists — leave the page. The
+      // list route shows a transient success banner via router state.
+      navigate('/users', {
+        replace: true,
+        state: {
+          deletedUser: {
+            // Trim so a whitespace-only name falls back to the uid rather than
+            // producing a blank success banner.
+            uid: detail.uid,
+            displayName: detail.displayName.trim() || detail.uid,
+          },
+        },
+      });
+    } catch (err) {
+      setDeleteError((err as ApiError)?.message ?? t('users.detail.deleteError'));
+      setDeleting(false);
+      deletingRef.current = false;
+    }
+  }, [detail, deleteReason, navigate]);
+
   const confirmLabels: Record<ConfirmableAction, { message: string; run: () => void }> = {
     suspend: {
       message: t('users.detail.confirmSuspend'),
@@ -159,6 +199,23 @@ export default function UserDetailPage() {
   const hasReason = reason.trim().length > 0;
   const isAdminRole = detail?.role === 'admin';
   const isOwner = detail?.role === 'owner';
+
+  // The exact string the admin must re-type to arm the delete: the display name,
+  // or the literal DELETE when the account has no name to echo back.
+  const deleteConfirmPhrase = detail?.displayName.trim() || 'DELETE';
+  const deleteReady =
+    deleteReason.trim().length > 0 && deleteConfirmText.trim() === deleteConfirmPhrase;
+
+  const openDeleteDialog = () => {
+    setDeleteReason('');
+    setDeleteConfirmText('');
+    setDeleteError(null);
+    setShowDeleteDialog(true);
+  };
+  const closeDeleteDialog = () => {
+    if (deleting) return;
+    setShowDeleteDialog(false);
+  };
 
   return (
     <div className={styles.page}>
@@ -340,6 +397,88 @@ export default function UserDetailPage() {
           </section>
 
           <UserPointsSection userId={id} />
+
+          <section className={styles.dangerCard} aria-labelledby="user-danger-title">
+            <h2 id="user-danger-title" className={styles.dangerCardTitle}>
+              {t('users.detail.dangerTitle')}
+            </h2>
+            <p className={styles.meta}>{t('users.detail.deleteDescription')}</p>
+
+            {showDeleteDialog ? (
+              <div
+                className={styles.dangerConfirm}
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="user-delete-title"
+              >
+                <p id="user-delete-title" className={styles.confirmText}>
+                  {t('users.detail.deleteConfirmBody')
+                    .replace('{name}', detail.displayName.trim() || t('users.unnamed'))
+                    .replace('{uid}', detail.uid)}
+                </p>
+
+                <label className={styles.label} htmlFor="user-delete-reason">
+                  {t('users.detail.reasonLabel')} <span aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="user-delete-reason"
+                  className={styles.input}
+                  type="text"
+                  required
+                  autoComplete="off"
+                  maxLength={500}
+                  value={deleteReason}
+                  onChange={(e) => setDeleteReason(e.target.value)}
+                  placeholder={t('users.detail.reasonPlaceholder')}
+                />
+
+                <label className={styles.label} htmlFor="user-delete-confirm">
+                  {t('users.detail.deleteTypeToConfirm').replace('{phrase}', deleteConfirmPhrase)}
+                </label>
+                <input
+                  id="user-delete-confirm"
+                  className={styles.input}
+                  type="text"
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder={deleteConfirmPhrase}
+                />
+
+                <div className={styles.actions}>
+                  <button
+                    type="button"
+                    className={styles.solidDangerButton}
+                    onClick={() => void runDelete()}
+                    disabled={!deleteReady || deleting}
+                  >
+                    {deleting ? t('users.detail.deleting') : t('users.detail.deleteConfirm')}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.secondaryButton}
+                    onClick={closeDeleteDialog}
+                    disabled={deleting}
+                  >
+                    {t('users.detail.cancel')}
+                  </button>
+                </div>
+
+                {deleteError && (
+                  <p className={styles.error} role="alert">
+                    {deleteError}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className={styles.actions}>
+                <button type="button" className={styles.dangerButton} onClick={openDeleteDialog}>
+                  {t('users.detail.deleteUser')}
+                </button>
+              </div>
+            )}
+          </section>
         </>
       )}
     </div>

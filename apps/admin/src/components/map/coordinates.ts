@@ -18,14 +18,20 @@ export const LNG_MIN = -180;
 export const LNG_MAX = 180;
 
 /**
- * Default map viewport centre when no coordinate has been picked yet.
+ * Default map viewport centre + zoom when no coordinate has been picked yet.
  *
  * Deliberately NOT (0, 0): a fresh map must never suggest — or be able to
- * silently submit — Null Island. Centred on Kungsbacka, Sweden (the community's
- * home area) so the operator starts near the relevant region.
+ * silently submit — Null Island. Centred on Kungsbacka town centre, Sweden (the
+ * community's home area) so a new billboard / partner / event / Kronjakt point
+ * opens framed on the relevant town rather than the ocean. When an item ALREADY
+ * has a coordinate, the picker centres on that value instead (see
+ * MapLocationPicker); this default only applies to the empty/new case.
+ *
+ * `DEFAULT_ZOOM` is a town-level frame (~city scale) so the whole of Kungsbacka
+ * is visible at a glance while still showing street context.
  */
 export const DEFAULT_CENTER: LatLng = { lat: 57.4874, lng: 12.0761 };
-export const DEFAULT_ZOOM = 11;
+export const DEFAULT_ZOOM = 12;
 
 /**
  * True when `value` is a finite coordinate inside the WGS-84 bounds.

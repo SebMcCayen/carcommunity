@@ -663,7 +663,16 @@
       "restoreSuccess": "Access restored.",
       "grantAdminSuccess": "Admin privileges granted.",
       "revokeAdminSuccess": "Admin privileges revoked.",
-      "actionError": "The action failed."
+      "actionError": "The action failed.",
+      "dangerTitle": "Danger zone",
+      "deleteUser": "Delete user",
+      "deleteDescription": "Permanently delete this user and all of their data (profile, vehicles, drives, chats, friends, live location, points and their sign-in account). This cannot be undone.",
+      "deleteConfirmBody": "This permanently deletes {name} ({uid}) and ALL of their data. This action cannot be undone.",
+      "deleteTypeToConfirm": "Type “{phrase}” to confirm",
+      "deleteConfirm": "Delete permanently",
+      "deleting": "Deleting…",
+      "deleteError": "The user could not be deleted.",
+      "deleteSuccess": "{name} was permanently deleted."
     }
   },
   "auditLog": {
@@ -725,6 +734,7 @@
       "pointsAdminAdjust": "Points adjustment",
       "pointsAdminReverse": "Points transaction reversed",
       "subscriptionGrantEntitlement": "Membership changed manually",
+      "userDelete": "User deleted",
       "userRestoreAccess": "Access restored",
       "userSetAdminRole": "Admin role changed",
       "userSuspend": "User suspended",
