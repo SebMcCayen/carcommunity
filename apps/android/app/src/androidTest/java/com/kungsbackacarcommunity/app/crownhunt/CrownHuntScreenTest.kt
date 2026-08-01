@@ -8,6 +8,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.badges.BadgeTier
 import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -86,6 +87,51 @@ class CrownHuntScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.crownHunt_locationUnavailable)).assertIsDisplayed()
+    }
+
+    @Test
+    fun member_withNoCrownsNearby_seesEmptyStateNotBlank() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    pointsState = CrownHuntPointsState.Loaded(emptyList()),
+                    claimStatus = CrownHuntClaimStatus.Idle,
+                    passesMemberGate = true,
+                    onCollect = {},
+                    onBack = {},
+                )
+            }
+        }
+        // The core fix: an empty nearby list shows a friendly explanation, not a
+        // blank page, and never the collect button (nothing to collect).
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyHeadline)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyBody)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
+    }
+
+    @Test
+    fun statsCard_showsKronjagareStandingAboveEmptyState() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    pointsState = CrownHuntPointsState.Loaded(emptyList()),
+                    claimStatus = CrownHuntClaimStatus.Idle,
+                    passesMemberGate = true,
+                    onCollect = {},
+                    onBack = {},
+                    kronjagare =
+                        KronjagareStanding(
+                            highestTier = BadgeTier.SILVER,
+                            nextTier = BadgeTier.GULD,
+                            nextThresholdCrowns = 250L,
+                        ),
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsTitle)).assertIsDisplayed()
+        // The 250-crown Guld goal is named; no fabricated crowns-collected count.
+        composeTestRule.onNodeWithText("250", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyHeadline)).assertIsDisplayed()
     }
 
     @Test
