@@ -2,6 +2,30 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 26,
+      "versionName": "0.8.15",
+      "releaseDate": "2026-08-01",
+      "highlights": [
+        "Tryck och håll på kartan för att navigera dit, kopiera eller spara en plats",
+        "Dela en plats i en chatt och öppna delade platser direkt på kartan",
+        "Sortera dina vänner efter namn eller när ni blev vänner"
+      ],
+      "changes": [
+        "Tryck och håll på kartan för att välja en plats – navigera dit, kopiera positionen eller spara den. Dina sparade platser når du från en egen knapp på kartan.",
+        "En plats som delas i en chatt kan öppnas direkt på kartan med ett tryck",
+        "Du kan nu sortera dina vänner – efter namn (A–Ö), senast tillagd eller äldsta först",
+        "Det är tydligare när du tar bort en vän: knappen heter \"Ta bort vän\" och bekräftelsen visar vem det gäller",
+        "På en annan medlems profil ser du nu deras poäng och när de blev medlem, och när ni är vänner kan du skicka meddelande eller ta bort vänskapen direkt därifrån",
+        "I Historik har den stora statistikrutan ersatts av en liten statistikknapp uppe vid rubriken – din körstatistik når du fortfarande därifrån, och siffrorna stämmer även för korta körningar",
+        "Kronjakt-sidan visar nu din Kronjägar-status och information istället för att vara tom",
+        "På en sparad körnings ruttkarta markeras var toppfarten nåddes",
+        "Sidrubrikerna ligger som rena rubriker direkt på sidan istället för i egna boxar",
+        "Antalet upplåsta utmärkelser på din profil stämmer nu med de som visas",
+        "Siffrorna i live-fältet krymper för att få plats istället för att klippas när utrymmet är litet",
+        "Fler bilmodeller att välja i garaget, bland annat Toyota GT86 och NIO ET5 Touring"
+      ]
+    },
+    {
       "versionCode": 25,
       "versionName": "0.8.14",
       "releaseDate": "2026-08-01",
