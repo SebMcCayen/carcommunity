@@ -353,15 +353,16 @@ import com.kungsbackacarcommunity.app.subscription.SubscriptionRoute
 import com.kungsbackacarcommunity.app.subscription.SubscriptionVerifier
 import com.kungsbackacarcommunity.app.update.AppStartupUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateCheck
+import com.kungsbackacarcommunity.app.update.AppUpdateSource
 import com.kungsbackacarcommunity.app.update.AppUpdateDecision
 import com.kungsbackacarcommunity.app.update.AppUpdateDialog
 import com.kungsbackacarcommunity.app.update.ForcedUpdateGate
 import com.kungsbackacarcommunity.app.update.AppUpdateDismissalStore
 import com.kungsbackacarcommunity.app.update.AppUpdateFlowOutcome
 import com.kungsbackacarcommunity.app.update.AppUpdateFlowResult
-import com.kungsbackacarcommunity.app.update.PlayAppUpdateSource
 import com.kungsbackacarcommunity.app.update.PlayStoreLink
 import com.kungsbackacarcommunity.app.update.rememberAppStartupUpdateGate
+import com.kungsbackacarcommunity.app.update.rememberPlayAppUpdateSource
 import com.kungsbackacarcommunity.app.welcome.WelcomeScreen
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
 import com.kungsbackacarcommunity.app.whatsnew.Changelog
@@ -507,7 +508,39 @@ fun AuthenticatedApp(
     // reference to and assert the shell's map wiring (kept alive across tabs,
     // stood down while covered). Production never passes this.
     mapSurface: MapSurface = rememberMapSurface(),
+    // Google Play In-App Updates source for the startup gate below, and reused
+    // by the in-shell flexible prompt further down (one AppUpdateManager, not
+    // two). Injectable ONLY so a UI test can force a chosen verdict; production
+    // always takes the Play-backed default. Constructing it touches no app
+    // wire-data, so evaluating it ahead of the gate is safe.
+    appUpdateSource: AppUpdateSource? = rememberPlayAppUpdateSource(),
 ) {
+    // THE GATE RUNS FIRST — ahead of every backend-dependent startup effect in
+    // this composable (the push/login LaunchedEffects, the profile snapshot
+    // listener, and the whole Main shell below). That ordering is the fix, not a
+    // detail: an outdated build that a backend contract has moved out from under
+    // can throw inside one of those effects before any overlay would get a frame,
+    // so the "please update" verdict has to gate whether the shell composes AT
+    // ALL, not race it. See AppUpdateGate.
+    //
+    //  - FORCED  -> render the blocking update screen and nothing else; the early
+    //    return guarantees no shell wiring below ever composes on this launch.
+    //  - CHECKING -> a bare loading screen (no listeners, no callables) until Play
+    //    answers; bounded by AppStartupUpdate.CHECK_TIMEOUT_MILLIS and skipped
+    //    outright on a non-Play install, so an up-to-date member is not made to
+    //    wait.
+    //  - CLEAR (the default, and every failure/timeout) -> the shell composes
+    //    exactly as before.
+    val startupUpdateGate by rememberAppStartupUpdateGate(appUpdateSource)
+    if (startupUpdateGate == AppStartupUpdateGate.FORCED) {
+        ForcedUpdateGate(source = appUpdateSource)
+        return
+    }
+    if (startupUpdateGate == AppStartupUpdateGate.CHECKING) {
+        LoadingScreen()
+        return
+    }
+
     val scope = rememberCoroutineScope()
 
     // Sign-in-time push-token registration: best-effort, once per signed-in
@@ -528,40 +561,6 @@ fun AuthenticatedApp(
             profileRepository?.observeProfile(uid) ?: flowOf(ProfileState.Unavailable)
         }
     val profileState by profileFlow.collectAsState(initial = ProfileState.Loading)
-
-    // Google Play In-App Updates, hoisted to the shell's front door. ONE source
-    // for both the startup gate below and the in-shell flexible prompt further
-    // down (which reuses this same instance rather than creating a second
-    // AppUpdateManager). See AppUpdateGate for why a BLOCKING update has to gate
-    // whether the shell composes at all rather than merely overlay it: an
-    // outdated build can crash inside the shell's backend-dependent startup
-    // wiring before an overlay would ever get a frame, and this gate is what
-    // lets the "please update" verdict win that race on the first cold launch.
-    val appUpdateContext = LocalContext.current
-    val appUpdateSource =
-        remember(appUpdateContext) { PlayAppUpdateSource.createIfAvailable(appUpdateContext) }
-    val startupUpdateGate by rememberAppStartupUpdateGate(appUpdateSource)
-
-    // A mandatory update wins over everything: render the blocking update screen
-    // INSTEAD OF the shell and stop here, so none of the shell's
-    // version-incompatible startup wiring below composes on an outdated client.
-    // This is the whole fix for "crashes the first launch, prompts the second" —
-    // the "please update" verdict now gets ahead of the crash instead of racing
-    // it. Early return is deliberate: it is the one way to guarantee the wiring
-    // never composes, which an overlay could not.
-    if (startupUpdateGate == AppStartupUpdateGate.FORCED) {
-        ForcedUpdateGate(source = appUpdateSource)
-        return
-    }
-    // Still asking Play. Hold on the same loading state the shell would show
-    // anyway (the profile read is in flight concurrently), so a FORCED verdict
-    // that lands in this window still gets ahead of the shell. Bounded by
-    // AppStartupUpdate.CHECK_TIMEOUT_MILLIS and skipped entirely on a non-Play
-    // install, so an up-to-date member is not made to wait.
-    if (startupUpdateGate == AppStartupUpdateGate.CHECKING) {
-        LoadingScreen()
-        return
-    }
 
     when (authedDestination(profileState)) {
         AuthedDestination.Loading -> LoadingScreen()

@@ -141,6 +141,21 @@ object AppStartupUpdate {
 }
 
 /**
+ * The default, Play-backed source for the startup gate.
+ *
+ * Pulled out as its own remembered helper so the shell can take the source as
+ * an injectable parameter (defaulted to this) — production gets Play, a UI test
+ * passes a fake that forces a chosen verdict. Constructing the source touches no
+ * app wire-data (it only wraps Play's `AppUpdateManager`), so it is safe to
+ * evaluate ahead of the gate.
+ */
+@Composable
+fun rememberPlayAppUpdateSource(): AppUpdateSource? {
+    val context = LocalContext.current
+    return remember(context) { PlayAppUpdateSource.createIfAvailable(context) }
+}
+
+/**
  * Runs the Play check once, off the shell's critical path, and reports the
  * gate verdict.
  *
