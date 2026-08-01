@@ -405,4 +405,36 @@ describe('admin-deleteUser – erasure', () => {
     expect((after.createdAt as Timestamp).toMillis()).toBe(firstCreatedAt.toMillis());
     expect(after.reason).toBe('first deletion');
   });
+
+  it('tolerates an already-deleted Auth user and still purges the Firestore data', async () => {
+    const actor = await createProvisionedUser('adu-authgone-actor');
+    await promoteOutOfBand(actor, 'admin');
+    const target = await createProvisionedUser('adu-authgone-target');
+    const uid = target.uid;
+
+    // Seed Firestore data that must still be erased.
+    await adminDb
+      .collection('pointsLedger')
+      .doc(uid)
+      .set({ balance: 3, updatedAt: Timestamp.now() });
+    await adminDb.collection('vehicles').add({ userId: uid, make: 'Opel' });
+
+    // Remove ONLY the Auth user, leaving the users/{uid} doc + data behind — the
+    // partial-prior-purge / Auth-removed-first shape. getUser() now returns
+    // not-found, so the lockdown is skipped and the purge must still run.
+    await adminAuth.deleteUser(uid);
+    await signInAs(actor);
+
+    const result = await call('admin-deleteUser', { targetUid: uid, reason: 'auth already gone' });
+    expect(result.data).toEqual({ targetUid: uid, deleted: true });
+
+    // The Firestore data is erased (the purge completed despite the missing Auth user).
+    expect((await adminDb.collection('users').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('pointsLedger').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('vehicles').where('userId', '==', uid).get()).size).toBe(0);
+    // And the audit record was still written.
+    expect(
+      (await adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`).get()).exists,
+    ).toBe(true);
+  });
 });

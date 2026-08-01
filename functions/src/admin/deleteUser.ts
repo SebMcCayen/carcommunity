@@ -160,10 +160,20 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
 
   // Fail-safe lockdown: lock the account out FIRST so a partial purge cannot
   // leave a usable account. purgeUserData deletes the (disabled) Auth user at
-  // the end; disabling an already-absent user is skipped.
+  // the end; an already-absent Auth user (getUser returned not-found) is skipped.
   if (targetUser) {
-    await adminAuth.updateUser(targetUid, { disabled: true });
-    await adminAuth.revokeRefreshTokens(targetUid);
+    try {
+      await adminAuth.updateUser(targetUid, { disabled: true });
+      await adminAuth.revokeRefreshTokens(targetUid);
+    } catch (error) {
+      // The Auth user vanished between getUser() above and here — a retry after
+      // a partial prior purge, or a concurrent deletion race. That is the benign
+      // case: there is nothing left to lock out, so skip the lockdown and PROCEED
+      // to purge the remaining Firestore data (idempotent intent preserved). Any
+      // OTHER Auth error (transient outage, quota) is real — stay fail-closed and
+      // abort before touching the data.
+      if (!isAuthUserNotFoundError(error)) throw error;
+    }
   }
 
   // The comprehensive, idempotent erasure — the SAME routine self-service
