@@ -4,12 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +47,7 @@ import com.kungsbackacarcommunity.app.badges.ladderNameRes
 import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.friends.FriendRelationship
 import com.kungsbackacarcommunity.app.friends.messageRes
 import com.kungsbackacarcommunity.app.garage.Vehicle
 import com.kungsbackacarcommunity.app.garage.VehicleCard
@@ -54,8 +57,11 @@ import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
+import com.kungsbackacarcommunity.app.profile.ProfilePointsSection
 import com.kungsbackacarcommunity.app.profile.ProfileSocialLinksRow
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import java.text.DateFormat
+import java.util.Date
 
 /**
  * Read-only view of another member's public profile: avatar, display name, bio,
@@ -95,6 +101,13 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  *   entirely. It is only ever rendered on a LOADED profile — a withheld
  *   ([MemberProfileState.Blocked]) or missing one offers no friend action, so a
  *   blocked member can never be befriended from here.
+ * @param onMessage opens a 1:1 DM with this member; rendered as the bottom
+ *   **Message** action ONLY when the viewer is already a friend (and DM is
+ *   wired). Null omits it.
+ * @param onUnfriend removes the friendship (`friend-remove`); rendered as the
+ *   bottom **Unfriend** action ONLY when the viewer is already a friend, and
+ *   confirm-guarded by this screen before it fires. Null omits it. On success
+ *   the friend state falls back so Message/Unfriend disappear and Block remains.
  */
 @Composable
 fun MemberProfileScreen(
@@ -109,6 +122,8 @@ fun MemberProfileScreen(
     onCancelRequest: () -> Unit = {},
     onAcceptRequest: () -> Unit = {},
     onDeclineRequest: () -> Unit = {},
+    onUnfriend: (() -> Unit)? = null,
+    onMessage: (() -> Unit)? = null,
 ) {
     val title =
         (state as? MemberProfileState.Loaded)?.profile?.displayName
@@ -116,6 +131,7 @@ fun MemberProfileScreen(
             ?: stringResource(R.string.memberProfile_title)
     var confirmingBlock by rememberSaveable { mutableStateOf(false) }
     var confirmingUnblock by rememberSaveable { mutableStateOf(false) }
+    var confirmingUnfriend by rememberSaveable { mutableStateOf(false) }
 
     AeroPage(title = title, modifier = modifier) {
         if (blockStatus == BlockActionStatus.Failed) {
@@ -169,6 +185,10 @@ fun MemberProfileScreen(
                 }
 
             is MemberProfileState.Loaded -> {
+                // Already friends is expressed by the bottom actions (Message +
+                // Unfriend), not a top status line — so a member profile leads
+                // straight into the content once you're friends.
+                val isFriend = friendState?.relationship == FriendRelationship.Friends
                 ProfileHeader(state.profile)
                 if (friendState != null) {
                     FriendAction(
@@ -180,10 +200,22 @@ fun MemberProfileScreen(
                     )
                 }
                 CarsSection(state.vehicles)
+                PointsSection(state.pointsBalance)
                 BadgesSection(state.badges)
+                StatsSection(state.profile.createdAtMillis)
                 MemberActions(
                     onBlock = onBlock?.let { { confirmingBlock = true } },
                     blockStatus = blockStatus,
+                    // Message + Unfriend appear only when the viewer IS a friend
+                    // of this member; otherwise the bottom group is just Block.
+                    onMessage = if (isFriend) onMessage else null,
+                    onUnfriend =
+                        if (isFriend && onUnfriend != null) {
+                            { confirmingUnfriend = true }
+                        } else {
+                            null
+                        },
+                    friendActionEnabled = friendState?.enabled ?: true,
                 )
             }
         }
@@ -206,6 +238,34 @@ fun MemberProfileScreen(
                 onUnblock?.invoke()
             },
             onDismiss = { confirmingUnblock = false },
+        )
+    }
+    if (confirmingUnfriend) {
+        // Same confirm copy the Friends screen uses (friends_removeConfirm*),
+        // so unfriending reads identically wherever it is offered.
+        val memberName =
+            (state as? MemberProfileState.Loaded)?.profile?.displayName
+                ?.takeIf { it.isNotBlank() }
+                ?: stringResource(R.string.memberProfile_unknownMember)
+        AlertDialog(
+            onDismissRequest = { confirmingUnfriend = false },
+            title = { Text(stringResource(R.string.friends_removeConfirmTitle, memberName)) },
+            text = { Text(stringResource(R.string.friends_removeConfirmBody)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        confirmingUnfriend = false
+                        onUnfriend?.invoke()
+                    },
+                ) {
+                    Text(stringResource(R.string.friends_removeConfirmAction))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmingUnfriend = false }) {
+                    Text(stringResource(R.string.friends_removeCancel))
+                }
+            },
         )
     }
 }
@@ -233,7 +293,12 @@ private fun FriendAction(
     onDeclineRequest: () -> Unit,
 ) {
     val control = friendState.control
-    if (control == MemberFriendControl.None && friendState.error == null) return
+    // Neither None nor Friends draws a top control: None has nothing to offer,
+    // and Friends is now expressed by the bottom Message + Unfriend actions. An
+    // error is still surfaced in both cases (e.g. an unfriend that failed).
+    if (control == MemberFriendControl.None || control == MemberFriendControl.Friends) {
+        if (friendState.error == null) return
+    }
     val enabled = friendState.enabled
 
     Column(
@@ -289,12 +354,8 @@ private fun FriendAction(
                 }
             }
 
-            MemberFriendControl.Friends ->
-                Text(
-                    text = stringResource(R.string.memberProfile_friendsAlready),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+            // Expressed by the bottom Message + Unfriend actions, not here.
+            MemberFriendControl.Friends -> Unit
         }
 
         friendState.error?.let { error ->
@@ -308,27 +369,58 @@ private fun FriendAction(
 }
 
 /**
- * The viewer's safety actions on a loaded profile. Deliberately last on the page,
- * below the profile content: they are a rarely-used escape hatch, not the point
- * of the screen.
+ * The bottom action group on a loaded profile, below the profile content.
+ *
+ * When the viewer is a FRIEND of this member ([onMessage] / [onUnfriend]
+ * non-null), it leads with the two friend actions — **Message** (opens the 1:1
+ * DM) and **Unfriend** (confirm-guarded by the screen, then `friend-remove`) —
+ * above the safety actions. For a non-friend both are null and the group is just
+ * the safety actions, exactly as before.
  *
  * "Report user" is omitted entirely while no `moderation.reportUser` callable
  * exists to submit to ([MessageModeration.reportUserAvailability]) — the same
  * hide-don't-disable rule the message action sheet follows. It reappears when
  * that callable lands; nothing else here changes.
+ *
+ * @param friendActionEnabled false while a friend callable is already in flight,
+ *   which is what stops a double-tap from firing two unfriends.
  */
 @Composable
-private fun MemberActions(onBlock: (() -> Unit)?, blockStatus: BlockActionStatus) {
+private fun MemberActions(
+    onBlock: (() -> Unit)?,
+    blockStatus: BlockActionStatus,
+    onMessage: (() -> Unit)? = null,
+    onUnfriend: (() -> Unit)? = null,
+    friendActionEnabled: Boolean = true,
+) {
     val canReportUser =
         MessageModeration.reportUserAvailability == ReportAvailability.Wired
-    if (onBlock == null && !canReportUser) {
-        // Nothing actionable: no blocking wired, and reporting has no backend.
+    if (onBlock == null && onMessage == null && onUnfriend == null && !canReportUser) {
+        // Nothing actionable: not a friend, no blocking wired, reporting has no
+        // backend.
         return
     }
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
     ) {
+        if (onMessage != null) {
+            Button(
+                onClick = onMessage,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.friends_message))
+            }
+        }
+        if (onUnfriend != null) {
+            OutlinedButton(
+                onClick = onUnfriend,
+                enabled = friendActionEnabled,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(stringResource(R.string.friends_remove))
+            }
+        }
         if (onBlock != null) {
             OutlinedButton(
                 onClick = onBlock,
@@ -404,6 +496,67 @@ private fun Avatar(avatarPath: String?) {
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(48.dp),
             )
+        }
+    }
+}
+
+/**
+ * The member's PUBLIC Kronpoäng balance — "how active they have been". Reuses
+ * the owner's [ProfilePointsSection] with `showDetails = false`, so it renders
+ * the labelled headline number ALONE: no recent-earnings list (that is the
+ * owner-only ledger), no first-person subtitle, and no ledger tap-through
+ * (`onOpenLedger = null`, leaving the card inert). A member with no wallet yet
+ * has a null balance, which the shared card renders as "0 p".
+ */
+@Composable
+private fun PointsSection(balance: Long?) {
+    // The shared card self-titles ("Kronpoäng"), matching the owner's profile; no
+    // extra section header. showDetails = false → balance only (no owner-only
+    // ledger, no first-person subtitle, no tap-through).
+    ProfilePointsSection(
+        balance = balance,
+        recentEarnings = emptyList(),
+        onOpenLedger = null,
+        showDetails = false,
+    )
+}
+
+/**
+ * The member "Stats" card — deliberately MINIMAL (Seb, 2026-08): a self-titled
+ * card showing just "Member since", from the public `users/{uid}.createdAt`.
+ * Drive totals are NOT shown: they are computed from the member's owner-only
+ * ride history, which this screen never reads. When the join date is unknown (a
+ * very old account with no `createdAt`) the whole card is omitted rather than
+ * showing an empty one.
+ */
+@Composable
+private fun StatsSection(createdAtMillis: Long?) {
+    if (createdAtMillis == null) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            Text(
+                text = stringResource(R.string.memberProfile_statsTitle),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = stringResource(R.string.memberProfile_statsMemberSince),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(createdAtMillis)),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
     }
 }

@@ -28,8 +28,12 @@ import com.kungsbackacarcommunity.app.profile.SocialHandles
  *    [MemberBadges.Unavailable] and any other failure to [MemberBadges.Unknown],
  *    so an older deployed ruleset or a transient error degrades to a note
  *    instead of failing the whole profile.
+ *  - pointsLedger/{targetUid} — the member's PUBLIC Kronpoäng balance (rules:
+ *    the balance document is readable by any authenticated user; the `entries`
+ *    subcollection behind it stays owner-only, so it is not read). Best-effort:
+ *    any failure degrades to a null balance ("0 p"), never failing the profile.
  *
- * NOT read: `badgeProgress/{targetUid}`. The counters a badge was earned against
+ * NOT read: `badgeProgress/{targetUid}`, nor `pointsLedger/{targetUid}/entries`. The counters a badge was earned against
  * (streak, lifetime distance, meets attended, crowns) are denied to every
  * client, and the member-profile screen shows trophies only — no progress.
  */
@@ -87,13 +91,31 @@ class FirebaseMemberProfileRepository private constructor(
                     },
                 )
 
-        return MemberProfileResult.Loaded(profile, vehicles, badges)
+        // Public Kronpoäng balance from pointsLedger/{targetUid}.balance (the
+        // DOCUMENT is authenticated-readable; the entries subcollection behind it
+        // stays owner-only, so it is deliberately NOT read here). Best-effort:
+        // any failure — an older ruleset that has not been deployed yet, offline,
+        // or simply no wallet — degrades to null, which the profile renders as
+        // "0 p" rather than failing the whole page.
+        val pointsBalance: Long? =
+            runCatchingCancellable {
+                firestore
+                    .collection(POINTS_LEDGER)
+                    .document(targetUid)
+                    .get()
+                    .await()
+                    .let { snapshot -> (snapshot.get("balance") as? Number)?.toLong() }
+            }
+                .getOrNull()
+
+        return MemberProfileResult.Loaded(profile, vehicles, badges, pointsBalance)
     }
 
     companion object {
         private const val USERS = "users"
         private const val VEHICLES = "vehicles"
         private const val BADGES = "badges"
+        private const val POINTS_LEDGER = "pointsLedger"
 
         fun createIfAvailable(context: Context): MemberProfileRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -118,6 +140,8 @@ private fun DocumentSnapshot.toMemberProfile(): MemberProfile? {
                 instagram = getString("instagram"),
                 youtube = getString("youtube"),
             ),
+        // Public join date — the only figure the member "Stats" section shows.
+        createdAtMillis = getTimestamp("createdAt")?.toDate()?.time,
     )
 }
 

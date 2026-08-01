@@ -162,6 +162,35 @@ class MemberProfileCoordinatorTest {
     }
 
     @Test
+    fun points_balance_is_carried_into_the_loaded_state() = runTest {
+        val repo =
+            FakeRepo(
+                MemberProfileResult.Loaded(
+                    profile,
+                    emptyList(),
+                    MemberBadges.Available(emptyList()),
+                    pointsBalance = 275L,
+                ),
+            )
+        val coordinator = MemberProfileCoordinator("u2", repo)
+
+        coordinator.load()
+
+        assertEquals(275L, (coordinator.state.value as MemberProfileState.Loaded).pointsBalance)
+    }
+
+    @Test
+    fun a_member_with_no_wallet_carries_a_null_balance() = runTest {
+        // Null is the "no wallet / read failed" signal the screen renders as "0 p".
+        val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Available(emptyList())))
+        val coordinator = MemberProfileCoordinator("u2", repo)
+
+        coordinator.load()
+
+        assertEquals(null, (coordinator.state.value as MemberProfileState.Loaded).pointsBalance)
+    }
+
+    @Test
     fun badge_list_is_carried_when_available() = runTest {
         val badge = Badge(key = "first_event", fallbackName = "First meet", awardedAtMillis = 1L)
         val repo = FakeRepo(MemberProfileResult.Loaded(profile, emptyList(), MemberBadges.Available(listOf(badge))))

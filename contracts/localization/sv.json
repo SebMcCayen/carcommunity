@@ -692,7 +692,8 @@
     "requestPending": "Vänförfrågan skickad – väntar på svar.",
     "cancelRequest": "Ångra vänförfrågan",
     "wantsToBeFriends": "Den här medlemmen vill bli din vän.",
-    "friendsAlready": "Ni är vänner"
+    "statsTitle": "Statistik",
+    "statsMemberSince": "Medlem sedan"
   },
   "groupDrive": {
     "screenTitle": "Gruppkörning",

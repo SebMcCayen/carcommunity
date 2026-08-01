@@ -60,6 +60,7 @@ fun MemberProfileRoute(
     blockingRepository: BlockingRepository?,
     modifier: Modifier = Modifier,
     friendsRepository: FriendsRepository? = null,
+    onOpenChat: ((targetUid: String, displayName: String?) -> Unit)? = null,
 ) {
     val coordinator =
         remember(repository, targetUid, blockingRepository, viewerUid) {
@@ -156,6 +157,24 @@ fun MemberProfileRoute(
         onCancelRequest = { scope.launch { friendCoordinator?.cancelRequest() } },
         onAcceptRequest = { scope.launch { friendCoordinator?.acceptRequest() } },
         onDeclineRequest = { scope.launch { friendCoordinator?.declineRequest() } },
+        // Unfriend + Message are offered by the screen only when the viewer is
+        // already a friend (see MemberProfileScreen). Unfriend reuses the SAME
+        // friend-remove callable the Friends screen uses, then re-syncs the
+        // relationship so the actions disappear. Message reuses the app's DM
+        // entry point ([onOpenChat]); without a wired DM the screen shows no
+        // Message action. The display name comes from the loaded profile so the
+        // chat opens titled, mirroring the Friends list's Message action.
+        onUnfriend =
+            friendCoordinator?.let { coordinator ->
+                { scope.launch { coordinator.removeFriend() } }
+            },
+        onMessage =
+            onOpenChat?.let { openChat ->
+                {
+                    val name = (state as? MemberProfileState.Loaded)?.profile?.displayName
+                    openChat(targetUid, name)
+                }
+            },
     )
 }
 

@@ -24,6 +24,15 @@ data class MemberProfile(
      * is null and renders nothing.
      */
     val social: SocialHandles = SocialHandles.EMPTY,
+    /**
+     * Epoch-millis of `users/{uid}.createdAt` — when this member joined. Public
+     * (it rides on the already-public users/{uid} document), and the single
+     * figure the member-profile "Stats" section shows ("Member since"). Null when
+     * the field is absent (a very old account) — the row is then simply omitted.
+     * Drive totals are deliberately NOT here: they would require reading the
+     * member's owner-only ride history, which the profile never does.
+     */
+    val createdAtMillis: Long? = null,
 )
 
 /**
@@ -70,6 +79,15 @@ sealed interface MemberProfileResult {
         val profile: MemberProfile,
         val vehicles: List<Vehicle>,
         val badges: MemberBadges,
+        /**
+         * The member's Kronpoäng BALANCE — the public headline number from
+         * `pointsLedger/{uid}.balance` (readable by any authenticated user; the
+         * per-transaction `entries` behind it stay owner-only). Null when the
+         * member has no wallet yet or the read failed — either way the profile
+         * renders "0 p", a member with no points genuinely having none. NOT the
+         * ledger: no entries, no history, no tap-through — those are the owner's.
+         */
+        val pointsBalance: Long? = null,
     ) : MemberProfileResult
 }
 
@@ -103,5 +121,10 @@ sealed interface MemberProfileState {
         val profile: MemberProfile,
         val vehicles: List<Vehicle>,
         val badges: MemberBadges,
+        /**
+         * The member's public Kronpoäng balance (see
+         * [MemberProfileResult.Loaded.pointsBalance]). Null renders as "0 p".
+         */
+        val pointsBalance: Long? = null,
     ) : MemberProfileState
 }

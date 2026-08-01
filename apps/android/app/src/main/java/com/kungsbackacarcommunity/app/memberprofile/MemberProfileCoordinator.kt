@@ -45,7 +45,12 @@ class MemberProfileCoordinator(
             _state.value =
                 when (val result = repository.loadMemberProfile(targetUid)) {
                     is MemberProfileResult.Loaded ->
-                        MemberProfileState.Loaded(result.profile, result.vehicles, result.badges)
+                        MemberProfileState.Loaded(
+                            result.profile,
+                            result.vehicles,
+                            result.badges,
+                            result.pointsBalance,
+                        )
 
                     MemberProfileResult.NotFound -> MemberProfileState.Unavailable
                     MemberProfileResult.Error -> MemberProfileState.Error
