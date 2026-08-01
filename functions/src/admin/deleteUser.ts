@@ -53,7 +53,7 @@ import {
   isAuthUserNotFoundError,
   parseModerationInput,
 } from './claims-core';
-import { toUserAccessState } from '../shared/access';
+import { isUserRole, toUserAccessState, type UserRole } from '../shared/access';
 import { purgeUserData } from '../account/scheduled';
 import { isAlreadyExistsError } from '../chatchannels/chat-core';
 import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
@@ -72,6 +72,14 @@ const CALLABLE_OPTS = {
 export interface DeleteUserResponse {
   targetUid: string;
   deleted: true;
+}
+
+const DELETE_MARKER_COLLECTION = 'adminDeleteUserMarkers';
+
+function parseDeleteMarkerRole(value: unknown): UserRole | null {
+  if (!value || typeof value !== 'object') return null;
+  const role = (value as { targetRole?: unknown }).targetRole;
+  return isUserRole(role) ? role : null;
 }
 
 /**
@@ -112,39 +120,43 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   }
 
   const targetSnap = await db.collection('users').doc(targetUid).get();
+  const deleteMarkerRef = db.collection(DELETE_MARKER_COLLECTION).doc(targetUid);
+  const deleteMarkerSnap = await deleteMarkerRef.get();
+  const markerRole = parseDeleteMarkerRole(deleteMarkerSnap.data());
 
   // No Auth record AND no profile → the target does not exist at all.
-  if (!targetUser && !targetSnap.exists) {
+  if (!targetUser && !targetSnap.exists && !markerRole) {
     throw new HttpsError('not-found', 'Target user not found.');
   }
   // The authoritative users/{uid} doc is MISSING (e.g. a partially-provisioned
   // account). Fail CLOSED rather than defaulting the role to 'user': the
   // owner-protection and last-admin guards cannot be verified without it, and a
   // destructive delete must never run on an unverifiable role/status.
-  if (!targetSnap.exists) {
+  if (!targetSnap.exists && !markerRole) {
     throw new HttpsError(
       'failed-precondition',
       "Cannot verify the target user's role: the users/{uid} document is missing. Refusing to delete.",
     );
   }
-  const targetState = toUserAccessState(targetSnap.data());
+
+  const targetRole = targetSnap.exists ? toUserAccessState(targetSnap.data()).role : markerRole!;
 
   // Self / owner-protection guard.
   const guard = guardDeleteUserTarget({
     actorUid: actor.uid,
     targetUid,
     actorRole: actor.state.role,
-    targetRole: targetState.role,
+    targetRole,
   });
   if (!guard.ok) {
     throw new HttpsError(guard.code, guard.message);
   }
 
   // Last-admin guard (only when the target is itself privileged).
-  if (targetState.role === 'admin' || targetState.role === 'owner') {
+  if (targetRole === 'admin' || targetRole === 'owner') {
     const otherActiveAdminCount = await countOtherActiveAdmins(targetUid);
     const lastAdminGuard = guardNotLastAdmin({
-      targetRole: targetState.role,
+      targetRole,
       otherActiveAdminCount,
     });
     if (!lastAdminGuard.ok) {
@@ -157,6 +169,19 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
     typeof targetSnap.data()?.displayName === 'string'
       ? (targetSnap.data()!.displayName as string)
       : null;
+
+  // Retained idempotency marker: written before purge so retries can still run
+  // after users/{uid} is gone, using the verified role snapshot below.
+  await deleteMarkerRef.set(
+    {
+      targetUid,
+      targetRole,
+      status: 'pending',
+      updatedAt: FieldValue.serverTimestamp(),
+      ...(deleteMarkerSnap.exists ? {} : { createdAt: FieldValue.serverTimestamp() }),
+    },
+    { merge: true },
+  );
 
   // Fail-safe lockdown: lock the account out FIRST so a partial purge cannot
   // leave a usable account. purgeUserData deletes the (disabled) Auth user at
@@ -180,6 +205,16 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   // deletion and the inactivity sweep run (functions/src/account/scheduled.ts).
   await purgeUserData(targetUid);
 
+  await deleteMarkerRef.set(
+    {
+      targetRole,
+      status: 'processed',
+      processedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+
   // Audit record, retained in adminAuditEvents (never purged). The DOCUMENT ID is
   // deterministic and keyed on the TARGET uid (`user-delete_${targetUid}`) — one
   // record per deleted user. The write is an idempotent CREATE so the FIRST
@@ -200,7 +235,7 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
             targetType: 'user',
             targetId: targetUid,
             reason,
-            details: { role: targetState.role, displayName },
+            details: { role: targetRole, displayName },
           },
           () => FieldValue.serverTimestamp(),
         ),

@@ -437,4 +437,46 @@ describe('admin-deleteUser – erasure', () => {
       (await adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`).get()).exists,
     ).toBe(true);
   });
+
+  it('uses the retained delete marker to finish purge retries after users/{uid} is gone', async () => {
+    const actor = await createProvisionedUser('adu-marker-actor');
+    await promoteOutOfBand(actor, 'admin');
+    const target = await createProvisionedUser('adu-marker-target');
+    const uid = target.uid;
+
+    await adminDb
+      .collection('pointsLedger')
+      .doc(uid)
+      .set({ balance: 9, updatedAt: Timestamp.now() });
+    await adminDb.collection('vehicles').add({ userId: uid, make: 'Volvo' });
+
+    // Simulate a prior partial purge run:
+    // - users/{uid} already removed (first purge phase),
+    // - Auth user already removed,
+    // - idempotency marker retained with the verified role snapshot.
+    await adminDb.collection('users').doc(uid).delete();
+    await adminAuth.deleteUser(uid);
+    await adminDb.collection('adminDeleteUserMarkers').doc(uid).set({
+      targetUid: uid,
+      targetRole: 'user',
+      status: 'pending',
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now(),
+    });
+
+    await signInAs(actor);
+    const result = await call('admin-deleteUser', { targetUid: uid, reason: 'retry purge' });
+    expect(result.data).toEqual({ targetUid: uid, deleted: true });
+
+    expect((await adminDb.collection('pointsLedger').doc(uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('vehicles').where('userId', '==', uid).get()).size).toBe(0);
+
+    const marker = (await adminDb.collection('adminDeleteUserMarkers').doc(uid).get()).data();
+    expect(marker?.status).toBe('processed');
+    expect(marker?.targetRole).toBe('user');
+    expect(marker?.processedAt).toBeTruthy();
+    expect((await adminDb.collection('adminAuditEvents').doc(`user-delete_${uid}`).get()).exists).toBe(
+      true,
+    );
+  });
 });
