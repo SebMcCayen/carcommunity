@@ -14,7 +14,12 @@
  */
 
 import { z } from 'zod';
-import { canAccessAdminFeatures, isOwnerRole, type UserAccessState } from '../shared/access';
+import {
+  canAccessAdminFeatures,
+  isAdminRole,
+  isOwnerRole,
+  type UserAccessState,
+} from '../shared/access';
 
 export const MODERATION_REASON_MAX_LENGTH = 500;
 
@@ -69,8 +74,7 @@ export function parseModerationInput(data: unknown): ParseResult<ModerationInput
  * contracts/errors/errors.json.
  */
 export type GuardResult =
-  | { ok: true }
-  | { ok: false; code: 'permission-denied' | 'failed-precondition'; message: string };
+  { ok: true } | { ok: false; code: 'permission-denied' | 'failed-precondition'; message: string };
 
 /**
  * The actor must be a non-suspended, non-deleted admin or owner according to
@@ -145,6 +149,75 @@ export function guardModerationTarget(input: {
   return { ok: true };
 }
 
+/**
+ * True ONLY for the Firebase Auth "no such user" error. Every other Auth error
+ * (transient outage, quota, misconfiguration) is a real failure that a
+ * destructive operation must NOT swallow — the caller re-throws those and fails
+ * closed rather than proceeding as if the target simply had no Auth record.
+ */
+export function isAuthUserNotFoundError(error: unknown): boolean {
+  return (error as { code?: unknown } | null | undefined)?.code === 'auth/user-not-found';
+}
+
+/**
+ * Guard for admin.deleteUser (irreversible, comprehensive erasure):
+ * - Actors can never delete THEMSELVES via this tool. Deleting your own admin
+ *   account here risks locking the community out of admin, and the correct
+ *   self-service path is account.deleteAccount (soft delete + 30-day purge).
+ * - Admins cannot delete owner accounts; only owners can (mirrors
+ *   guardModerationTarget — owner accounts are managed by owners alone).
+ *
+ * The "last remaining admin" rule needs a Firestore count and is enforced
+ * separately by guardNotLastAdmin, called from the callable after this passes.
+ */
+export function guardDeleteUserTarget(input: {
+  actorUid: string;
+  targetUid: string;
+  actorRole: UserAccessState['role'];
+  targetRole: UserAccessState['role'];
+}): GuardResult {
+  if (input.actorUid === input.targetUid) {
+    return {
+      ok: false,
+      code: 'failed-precondition',
+      message: 'You cannot delete your own account with this tool. Use account deletion instead.',
+    };
+  }
+  if (isOwnerRole(input.targetRole) && !isOwnerRole(input.actorRole)) {
+    return {
+      ok: false,
+      code: 'permission-denied',
+      message: 'Admin users cannot delete owner accounts.',
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Guard against deleting the LAST privileged (admin or owner) account. A plain
+ * user is never gated. `otherActiveAdminCount` is the number of NON-deleted
+ * admin/owner accounts OTHER than the target (counted by the callable from the
+ * authoritative `users` collection); if deleting a privileged target would take
+ * that count to zero, the deletion is refused so the community can never be
+ * locked out of admin.
+ */
+export function guardNotLastAdmin(input: {
+  targetRole: UserAccessState['role'];
+  otherActiveAdminCount: number;
+}): GuardResult {
+  const targetIsPrivileged = isAdminRole(input.targetRole) || isOwnerRole(input.targetRole);
+  if (targetIsPrivileged && input.otherActiveAdminCount <= 0) {
+    return {
+      ok: false,
+      code: 'failed-precondition',
+      // The guard protects BOTH admin and owner accounts, so the message names
+      // both rather than hardcoding "admin" (misleading when the target is an owner).
+      message: 'Cannot delete the last remaining admin/owner account.',
+    };
+  }
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Custom-claim computation
 // ---------------------------------------------------------------------------
@@ -211,11 +284,7 @@ export async function applyPrivilegeChange(input: {
 
 /** Action types recorded in moderationActions (packages/shared/src/users.ts). */
 export type ModerationActionType =
-  | 'warning'
-  | 'temporary_suspension'
-  | 'permanent_suspension'
-  | 'restriction'
-  | 'restore_access';
+  'warning' | 'temporary_suspension' | 'permanent_suspension' | 'restriction' | 'restore_access';
 
 /**
  * Immutable audit record for `adminAuditEvents/{eventId}`

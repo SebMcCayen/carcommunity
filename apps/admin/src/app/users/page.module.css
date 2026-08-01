@@ -62,6 +62,17 @@
   font-size: var(--text-sm);
 }
 
+.successBanner {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--status-success);
+  border-radius: var(--radius-sm);
+  background: var(--success-bg, var(--bg-surface));
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+}
+
 .tableWrapper {
   overflow-x: auto;
   border: 1px solid var(--border-color);

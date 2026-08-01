@@ -134,6 +134,12 @@ export interface SetAdminRoleResult {
   admin: boolean;
 }
 
+/** Response of admin-deleteUser. */
+export interface DeleteUserResult {
+  targetUid: string;
+  deleted: true;
+}
+
 // ---------------------------------------------------------------------------
 // Coercion helpers
 // ---------------------------------------------------------------------------
@@ -277,4 +283,20 @@ export async function adminSetAdminRole(
   reason: string,
 ): Promise<SetAdminRoleResult> {
   return callAdmin<SetAdminRoleResult>('admin-setAdminRole', { targetUid, admin, reason });
+}
+
+/**
+ * IRREVERSIBLY deletes a user and ALL their data via admin-deleteUser. The
+ * backend reuses the same comprehensive erasure as self-service account
+ * deletion (every collection/subcollection, social-graph mirrors, live-location
+ * state, storage, and the Firebase Auth user) and writes an audited
+ * adminAuditEvents record. The backend refuses self-deletion, deleting owner
+ * accounts (unless the actor is an owner), and deleting the last remaining
+ * admin. Reason is mandatory and audited server-side. There is no undo.
+ */
+export async function adminDeleteUser(
+  targetUid: string,
+  reason: string,
+): Promise<DeleteUserResult> {
+  return callAdmin<DeleteUserResult>('admin-deleteUser', { targetUid, reason });
 }
