@@ -739,6 +739,15 @@
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
     },
     {
+      "name": "admin.deleteUser",
+      "domain": "admin",
+      "description": "IRREVERSIBLE admin-initiated erasure of a target user and ALL their data. Reuses the single canonical purgeUserData routine (functions/src/account/scheduled.ts) that backs self-service account deletion and the inactivity sweep — Firestore doc trees, owned documents, social-graph mirrors (friends/blocks/convoy), Realtime Database live-location + block subtrees, Cloud Storage prefixes, and the Firebase Auth user — so nothing is re-implemented or partially copied. Unlike account.deleteAccount this is an IMMEDIATE hard purge (the admin confirms in the UI; no retention window). Fail-safe: the Auth user is disabled and refresh tokens revoked BEFORE the purge. Guards: an admin can never delete themselves (failed-precondition; use account deletion), admins cannot delete owner accounts (permission-denied), and the last remaining admin/owner can never be deleted (failed-precondition). Writes an immutable adminAuditEvents record (action user.delete) with actor, target, reason and a displayName/role snapshot AFTER the purge. Deployed via grouped export as admin-deleteUser (functions/src/admin/deleteUser.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
       "name": "friend.sendRequest",
       "domain": "friend",
       "description": "Sends a friend request to a user resolved by nickname (displayName, NOT unique) or by a resolved toUid. Nickname resolution: 0 matches → not-found, 1 → proceed, >1 → failed-precondition with reason AMBIGUOUS_NICKNAME and a candidates:[{uid,displayName,avatarPath}] list in the error details, so the client re-calls with { toUid }. Rejects self (invalid-argument), already-friends and an existing pending outgoing request (already-exists), and either-way blocks (failed-precondition NOT_ADDABLE, neutral so the block direction is never revealed). If the target already has a PENDING request to the caller, the two are befriended immediately (returns status 'friends'). Writes friendRequests/{requestId} where requestId is a collision-resistant length-prefixed SHA-256 over the ordered (fromUid, toUid) pair. Deployed via grouped export as friend-sendRequest (functions/src/friends/manageFriends.ts).",

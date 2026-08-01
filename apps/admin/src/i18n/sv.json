@@ -738,7 +738,16 @@
       "restoreSuccess": "Åtkomsten har återställts.",
       "grantAdminSuccess": "Administratörsbehörighet beviljad.",
       "revokeAdminSuccess": "Administratörsbehörighet borttagen.",
-      "actionError": "Åtgärden misslyckades."
+      "actionError": "Åtgärden misslyckades.",
+      "dangerTitle": "Farozon",
+      "deleteUser": "Radera användare",
+      "deleteDescription": "Radera den här användaren och all deras data permanent (profil, fordon, körningar, chattar, vänner, liveplats, poäng och deras inloggningskonto). Detta kan inte ångras.",
+      "deleteConfirmBody": "Detta raderar {name} ({uid}) och ALL deras data permanent. Åtgärden kan inte ångras.",
+      "deleteTypeToConfirm": "Skriv ”{phrase}” för att bekräfta",
+      "deleteConfirm": "Radera permanent",
+      "deleting": "Raderar…",
+      "deleteError": "Användaren kunde inte raderas.",
+      "deleteSuccess": "{name} raderades permanent."
     }
   },
   "auditLog": {
@@ -799,6 +808,7 @@
       "pointsAdminAdjust": "Poängjustering",
       "pointsAdminReverse": "Poängtransaktion återförd",
       "subscriptionGrantEntitlement": "Medlemskap ändrat manuellt",
+      "userDelete": "Användare raderad",
       "userRestoreAccess": "Åtkomst återställd",
       "userSetAdminRole": "Adminroll ändrad",
       "userSuspend": "Användare avstängd",

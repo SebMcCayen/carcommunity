@@ -225,3 +225,59 @@
   color: var(--text-primary);
   font-size: var(--text-sm);
 }
+
+/* Danger zone: irreversible user deletion. Set apart from moderation with an
+ * error-toned border so it reads as destructive at a glance. */
+.dangerCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  box-shadow: var(--elevation-2);
+}
+
+.dangerCardTitle {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--status-error);
+}
+
+.dangerConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-sm);
+  background: var(--error-bg);
+}
+
+/* Solid destructive button for the final, type-to-confirm deletion. */
+.solidDangerButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-sm);
+  background: var(--status-error);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-semibold);
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+
+.solidDangerButton:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.solidDangerButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.solidDangerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
