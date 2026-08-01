@@ -17,11 +17,12 @@
  * ## Selection predicate (deliberately conservative)
  *
  * A `users/{uid}` document is a purge candidate when ALL of these hold:
- *  1. It is NEVER ONBOARDED — `onboardingCompletedAt` is null or absent.
- *     A document that carries ANY value there (a Timestamp) is treated as
- *     onboarded and is NEVER selected. `isNeverOnboarded` only ever returns
- *     true for the strictly-unset case, so the failure mode is "skip an
- *     account we were unsure about", never "delete a completed one".
+ *  1. It is NEVER ONBOARDED — `onboardingCompletedAt` is null OR the field is
+ *     absent. `isNeverOnboarded` returns true in both of those cases and only
+ *     those; a document that carries ANY value there (a Timestamp written by
+ *     completeOnboarding) is treated as onboarded and is NEVER selected. So the
+ *     failure mode is "skip an account we were unsure about", never "delete a
+ *     completed one".
  *  2. Its role is NOT `admin` or `owner`. This is a HARD safety net enforced
  *     regardless of the onboarding flag — Seb's operator account must never be
  *     selected even if its `onboardingCompletedAt` were somehow null.
@@ -90,9 +91,9 @@ export function parsePurgeInput(data: unknown): ParseResult<PurgeNeverOnboardedI
 
 /**
  * True when a `users` document has never completed onboarding: its
- * `onboardingCompletedAt` is null or absent. Any other value (a Timestamp
- * written by completeOnboarding) means the account IS onboarded and must be
- * kept — so this returns true ONLY for the strictly-unset case.
+ * `onboardingCompletedAt` is `null` OR the field is absent (undefined) — both
+ * cases return true, and only those. Any other value (a Timestamp written by
+ * completeOnboarding) means the account IS onboarded and must be kept.
  */
 export function isNeverOnboarded(doc: Record<string, unknown> | undefined): boolean {
   const value = doc?.onboardingCompletedAt;

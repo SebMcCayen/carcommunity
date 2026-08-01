@@ -84,16 +84,24 @@ function toIso(value: unknown): string | null {
  * partitions it via classifyAccount. Returns the selected candidate uids, the
  * admin/owner-excluded count, and whether the scan hit the cap.
  *
- * Ordered by `createdAt` DESCENDING (newest first). The target collection is
- * tiny (~20 docs), so in production the whole collection is scanned regardless
- * of order and the direction is immaterial. The ordering matters only when the
- * cap is hit: if there were ever more than PURGE_MAX_SCAN accounts, a single
- * pass sees the NEWEST PURGE_MAX_SCAN and a re-run (idempotent) drains the
- * older remainder — so no candidate is permanently missed, it is merely
- * reached on a later run. It also makes the scan DETERMINISTIC, which the
- * emulator test relies on (its freshly-created accounts are the newest, so
- * they are always in range). Uses the automatic single-field `createdAt` index
- * — no composite index to deploy.
+ * Ordered by `createdAt` DESCENDING (newest first). At the current scale the
+ * target collection is tiny (~20 docs), far below PURGE_MAX_SCAN, so the cap is
+ * never approached: the WHOLE collection is scanned on every run and the order
+ * is immaterial to completeness. This is a single, un-cursored page — there is
+ * NO pagination. So the ordering direction only matters in the (not-current)
+ * event that the cap is actually hit, and there it is a KNOWN LIMITATION, not a
+ * drain guarantee: a single pass sees only the newest PURGE_MAX_SCAN documents,
+ * and if those were dominated by kept (onboarded) accounts a plain re-run would
+ * just re-see the same newest page — older candidates beyond the cap would NOT
+ * be reached without a cursor. The cap-hit is therefore LOGGED (see the
+ * `capped` warning below) so a scan that outgrew this design is visible;
+ * completeness at that scale would require adding pagination, which is
+ * deliberately not built at ~20 docs.
+ *
+ * The ordering also makes the scan DETERMINISTIC, which the emulator test
+ * relies on (its freshly-created accounts are the newest, so they are always in
+ * range). Uses the automatic single-field `createdAt` index — no composite
+ * index to deploy.
  *
  * Note: Firestore `orderBy` excludes documents that lack the ordered field, so
  * a `users` doc without `createdAt` is not scanned. Every account provisioned
