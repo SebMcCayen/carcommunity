@@ -99,13 +99,20 @@ jobs:
           VITE_APPCHECK_SITE_KEY: ${{ vars.VITE_APPCHECK_SITE_KEY }}
           # Public Mapbox access token (pk.…) enabling the map location picker's
           # Mapbox Standard view (mapbox://styles/mapbox/standard) — the SAME
-          # style the member Android app renders. OPTIONAL and deliberately NOT
-          # in the required-vars loop below: a missing token degrades the picker
-          # to manual lat/lng entry (getMapboxToken() → '' → graceful fallback),
-          # which must never block a deploy. `pk.` tokens are public-by-design
-          # (they ship in the client bundle, scoped/referrer-restricted on the
-          # Mapbox side), so this is a `vars.*` VARIABLE, not a secret.
-          VITE_MAPBOX_TOKEN: ${{ vars.VITE_MAPBOX_TOKEN }}
+          # style the member Android app renders. Deliberately REUSES the app's
+          # existing MAPBOX_ACCESS_TOKEN — the runtime PUBLIC pk. token (see
+          # build-android-release.yml: "the RUNTIME token (public map tiles)"),
+          # NOT the private MAPBOX_DOWNLOADS_TOKEN (sk.). Reusing it means the
+          # operator sets nothing new. Injecting a secrets.* value into a client
+          # bundle is normally an anti-pattern, but is safe HERE because a pk.
+          # token is public-by-design and already ships in the Android client;
+          # it grants map-tile rendering only (no data/account access).
+          # OPTIONAL and deliberately NOT in the required-vars loop below: an
+          # empty value degrades the picker to manual lat/lng entry
+          # (getMapboxToken() → '' → graceful fallback) and must never block a
+          # deploy. Operator note: a harvested pk. token bills map loads to this
+          # account — set a Mapbox spending cap and, ideally, referrer-restrict.
+          VITE_MAPBOX_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
         run: |
           # Fail loudly if any value is missing — better than deploying a
           # bundle that throws "Missing required environment variable" on load,
