@@ -53,7 +53,13 @@ export const httpFetcher: SituationFetcher = async (authenticationKey) => {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
-    throw new Error(`Trafikverket API responded ${res.status}`);
+    // Include a snippet of the response body: on a 400 the API names the
+    // invalid field/reason (e.g. an unknown INCLUDE path), which is exactly what
+    // made issue #678 hard to diagnose from the bare status alone. The body
+    // carries no secret — the auth key lives only in the REQUEST body — so it is
+    // safe to surface in the server-error report. Bounded to 200 chars.
+    const body = await res.text().catch(() => '');
+    throw new Error(`Trafikverket API responded ${res.status}: ${body.slice(0, 200)}`);
   }
   const text = await res.text();
   try {

@@ -220,9 +220,13 @@ describe('trafikverket-core', () => {
     expect(body).toContain('authenticationkey="SECRET&amp;KEY"'); // XML-escaped
     expect(body).toContain('Deviation.MessageCodeValue'); // classification key
     expect(body).toContain('Deviation.Geometry.WGS84');
-    // The original-post times the app shows as "x min ago" (fix: not the sync time).
+    // The original-post time the app shows as "x min ago" (fix: not the sync time).
     expect(body).toContain('Deviation.CreationTime');
-    expect(body).toContain('Deviation.PublicationTime');
+    // #678: `Deviation.PublicationTime` is an INVALID field reference (PublicationTime
+    // is a Situation-level field, not a Deviation field) and 400'd the whole query,
+    // taking the entire sync down. It must NOT be requested under Deviation.
+    expect(body).not.toContain('Deviation.PublicationTime');
+    expect(body).not.toContain('PublicationTime');
   });
 
   it('parses an offset ISO time to the correct instant (offset NOT reinterpreted as local)', () => {
@@ -395,7 +399,7 @@ describe('trafikverket-core', () => {
     expect(imported[0]).toMatchObject({ sourceId: 'U1', type: 'hazard' }); // still imported
   });
 
-  it('captures the upstream original post time (CreationTime preferred, PublicationTime fallback, else null)', () => {
+  it('derives the upstream original post time from Deviation.CreationTime alone (#678)', () => {
     const imported = parseTrafikverketResponse({
       RESPONSE: {
         RESULT: [
@@ -409,13 +413,15 @@ describe('trafikverket-core', () => {
                     MessageCodeValue: 'roadworks',
                     Geometry: { WGS84: 'POINT (12.0 57.5)' },
                     CreationTime: '2026-07-30T14:23:00+02:00',
-                    PublicationTime: '2026-07-31T09:00:00+02:00',
                   },
                   {
-                    Id: 'PUB-ONLY',
+                    // No CreationTime → no usable original time. (We no longer
+                    // request PublicationTime — Deviation.PublicationTime is an
+                    // invalid field reference that 400'd the whole query, #678 —
+                    // so a deviation without CreationTime simply has no age.)
+                    Id: 'NO-CREATION',
                     MessageCodeValue: 'roadworks',
                     Geometry: { WGS84: 'POINT (12.1 57.5)' },
-                    PublicationTime: '2026-07-30T14:23:00+02:00',
                   },
                   {
                     Id: 'NO-TIME',
@@ -430,11 +436,10 @@ describe('trafikverket-core', () => {
       },
     });
     const byId = new Map(imported.map((i) => [i.sourceId, i.postedAtMs]));
-    // Prefers CreationTime over PublicationTime.
+    // postedAt derives from CreationTime.
     expect(byId.get('HAS-CREATION')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
-    // Falls back to PublicationTime when CreationTime is absent.
-    expect(byId.get('PUB-ONLY')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
-    // Null when upstream sent no usable time → client hides the age line.
+    // No CreationTime → null → client hides the age line.
+    expect(byId.get('NO-CREATION')).toBeNull();
     expect(byId.get('NO-TIME')).toBeNull();
   });
 

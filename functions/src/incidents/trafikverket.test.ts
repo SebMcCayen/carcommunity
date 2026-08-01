@@ -77,10 +77,28 @@ describe('httpFetcher (Trafikverket live fetcher)', () => {
     expect(err.message).not.toContain(authKey);
   });
 
-  it('throws a status error (not a parse error) on a non-OK response', async () => {
-    stubFetch(async () => new Response('nope', { status: 500, headers: { 'content-type': 'text/plain' } }));
+  it('throws a status error including a response-body snippet on a non-OK response (#678)', async () => {
+    // On a 400 the API body names the invalid field/reason — the exact detail
+    // that was never logged and made #678 hard to diagnose. The thrown error
+    // must carry a snippet of it so the next occurrence is self-diagnosing.
+    const body = "Invalid field reference 'Deviation.PublicationTime' in INCLUDE";
+    stubFetch(async () => new Response(body, { status: 400, headers: { 'content-type': 'text/plain' } }));
 
-    await expect(httpFetcher('secret-key')).rejects.toThrow('Trafikverket API responded 500');
+    const err = await captureError('secret-key');
+    expect(err.message).toContain('Trafikverket API responded 400');
+    expect(err.message).toContain(body); // the body naming the bad field is surfaced
+  });
+
+  it('caps the non-OK body snippet at 200 characters and never echoes the auth key', async () => {
+    const authKey = 'super-secret-auth-key-98765';
+    stubFetch(async () => new Response('y'.repeat(500), { status: 500, headers: { 'content-type': 'text/plain' } }));
+
+    const err = await captureError(authKey);
+    const snippet = err.message.replace('Trafikverket API responded 500: ', '');
+    expect(snippet.length).toBe(200);
+    // The snippet is drawn from the RESPONSE body only — the auth key lives
+    // solely in the request body and must never leak into the error.
+    expect(err.message).not.toContain(authKey);
   });
 
   it('parses and returns a valid JSON body', async () => {
