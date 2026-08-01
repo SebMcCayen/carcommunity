@@ -121,7 +121,12 @@ function NeverOnboardedPurgeSection() {
       setConfirmText('');
       // Refresh the preview so the operator sees the remaining count (0, or the
       // next batch if the run was capped).
-      setPreview(await previewNeverOnboardedPurge());
+      try {
+        setPreview(await previewNeverOnboardedPurge());
+        setPreviewError(null);
+      } catch (err) {
+        setPreviewError((err as ApiError)?.message ?? p('previewError'));
+      }
     } catch (err) {
       setPurgeError((err as ApiError)?.message ?? p('purgeError'));
     } finally {
