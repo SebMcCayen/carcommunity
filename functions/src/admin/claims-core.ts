@@ -150,6 +150,16 @@ export function guardModerationTarget(input: {
 }
 
 /**
+ * True ONLY for the Firebase Auth "no such user" error. Every other Auth error
+ * (transient outage, quota, misconfiguration) is a real failure that a
+ * destructive operation must NOT swallow — the caller re-throws those and fails
+ * closed rather than proceeding as if the target simply had no Auth record.
+ */
+export function isAuthUserNotFoundError(error: unknown): boolean {
+  return (error as { code?: unknown } | null | undefined)?.code === 'auth/user-not-found';
+}
+
+/**
  * Guard for admin.deleteUser (irreversible, comprehensive erasure):
  * - Actors can never delete THEMSELVES via this tool. Deleting your own admin
  *   account here risks locking the community out of admin, and the correct

@@ -57,8 +57,21 @@ const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
 const REGION = 'europe-west1';
 
+// A DEDICATED admin app found BY NAME with an explicit emulator databaseURL.
+// The `getAdminApps()[0]` shorthand is load-order-fragile in the shared emulator
+// process: a URL-less app (initialized with projectId only) can win the [0] slot
+// before any RTDB-using file adds a databaseURL, and getDatabase() then throws at
+// module load ("Can't determine Firebase Database URL"), collecting 0 tests. The
+// `?ns=${PROJECT_ID}` namespace matches the functions runtime
+// (functions/src/firebase.ts getDatabase()), so this app observes the purge's
+// RTDB deletions.
+const RTDB_APP_NAME = 'admin-delete-user-tests';
 const adminApp =
-  getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'admin-delete-user-tests');
+  getAdminApps().find((existing) => existing.name === RTDB_APP_NAME) ??
+  initializeAdminApp(
+    { projectId: PROJECT_ID, databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}` },
+    RTDB_APP_NAME,
+  );
 const adminAuth = getAdminAuth(adminApp);
 const adminDb = getAdminFirestore(adminApp);
 const adminBucket = getAdminStorage(adminApp).bucket(`${PROJECT_ID}.appspot.com`);
@@ -200,6 +213,23 @@ describe('admin-deleteUser – authorization & guards', () => {
         call('admin-deleteUser', { targetUid: 'no-such-uid-at-all', reason: 'r' }),
       ),
     ).toBe('functions/not-found');
+  });
+
+  it('fails CLOSED when the authoritative users/{uid} doc is missing (unverifiable role)', async () => {
+    // An Auth record with NO users/{uid} profile (partially-provisioned account):
+    // the owner/last-admin guards cannot be verified, so the delete must be
+    // refused rather than defaulting the role to a deletable 'user'.
+    const actor = await createProvisionedUser('adu-verifier');
+    await promoteOutOfBand(actor, 'admin');
+    const target = await createProvisionedUser('adu-noprofile');
+    await adminDb.collection('users').doc(target.uid).delete();
+    await signInAs(actor);
+
+    expect(
+      await callableErrorCode(call('admin-deleteUser', { targetUid: target.uid, reason: 'r' })),
+    ).toBe('functions/failed-precondition');
+    // Fail-closed: the Auth user is NOT deleted (no purge ran).
+    await expect(adminAuth.getUser(target.uid)).resolves.toBeTruthy();
   });
 });
 

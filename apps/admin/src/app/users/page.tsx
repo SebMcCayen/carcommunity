@@ -61,7 +61,9 @@ export default function UsersPage() {
   // history entry's state is cleared so a refresh/back does not re-show it.
   const location = useLocation();
   const navigate = useNavigate();
-  const [deletedNotice, setDeletedNotice] = useState<DeletedUserNav | null>(
+  // Captured once from the initial navigation state and never updated, so the
+  // setter is intentionally omitted.
+  const [deletedNotice] = useState<DeletedUserNav | null>(
     (location.state as { deletedUser?: DeletedUserNav } | null)?.deletedUser ?? null,
   );
   useEffect(() => {

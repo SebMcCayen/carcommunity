@@ -15,6 +15,7 @@ import {
   guardModerationTarget,
   guardNotLastAdmin,
   guardSetAdminRole,
+  isAuthUserNotFoundError,
   parseModerationInput,
   parseSetAdminRoleInput,
   MODERATION_REASON_MAX_LENGTH,
@@ -229,6 +230,22 @@ describe('guardNotLastAdmin', () => {
 
   it('allows deleting an admin when another active admin remains', () => {
     expect(guardNotLastAdmin({ targetRole: 'admin', otherActiveAdminCount: 1 }).ok).toBe(true);
+  });
+});
+
+describe('isAuthUserNotFoundError', () => {
+  it('is true ONLY for the auth/user-not-found error', () => {
+    expect(isAuthUserNotFoundError({ code: 'auth/user-not-found' })).toBe(true);
+  });
+
+  it('is false for every other Auth error (must NOT be swallowed by a destructive op)', () => {
+    // Transient / real failures a fail-closed delete must re-throw.
+    expect(isAuthUserNotFoundError({ code: 'auth/internal-error' })).toBe(false);
+    expect(isAuthUserNotFoundError({ code: 'auth/invalid-uid' })).toBe(false);
+    expect(isAuthUserNotFoundError(new Error('network down'))).toBe(false);
+    expect(isAuthUserNotFoundError(null)).toBe(false);
+    expect(isAuthUserNotFoundError(undefined)).toBe(false);
+    expect(isAuthUserNotFoundError('auth/user-not-found')).toBe(false);
   });
 });
 

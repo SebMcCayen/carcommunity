@@ -46,6 +46,7 @@ import {
   buildAdminAuditEvent,
   guardDeleteUserTarget,
   guardNotLastAdmin,
+  isAuthUserNotFoundError,
   parseModerationInput,
 } from './claims-core';
 import { toUserAccessState } from '../shared/access';
@@ -94,12 +95,32 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   }
   const { targetUid, reason } = parsed.input;
 
-  // Existence: either the Auth user or the Firestore profile must be present.
-  // A user in a partial state (one side already gone) is still purgeable.
-  const targetUser = await adminAuth.getUser(targetUid).catch(() => null);
+  // Resolve the Auth record, failing CLOSED: only the "no such user" error is
+  // the benign "no Auth record" case; any OTHER Auth error (transient outage,
+  // quota, misconfiguration) is re-thrown so a destructive delete never proceeds
+  // — and never skips the fail-safe lockdown — on an unverifiable Auth state.
+  let targetUser: Awaited<ReturnType<typeof adminAuth.getUser>> | null = null;
+  try {
+    targetUser = await adminAuth.getUser(targetUid);
+  } catch (error) {
+    if (!isAuthUserNotFoundError(error)) throw error;
+  }
+
   const targetSnap = await db.collection('users').doc(targetUid).get();
+
+  // No Auth record AND no profile → the target does not exist at all.
   if (!targetUser && !targetSnap.exists) {
     throw new HttpsError('not-found', 'Target user not found.');
+  }
+  // The authoritative users/{uid} doc is MISSING (e.g. a partially-provisioned
+  // account). Fail CLOSED rather than defaulting the role to 'user': the
+  // owner-protection and last-admin guards cannot be verified without it, and a
+  // destructive delete must never run on an unverifiable role/status.
+  if (!targetSnap.exists) {
+    throw new HttpsError(
+      'failed-precondition',
+      "Cannot verify the target user's role: the users/{uid} document is missing. Refusing to delete.",
+    );
   }
   const targetState = toUserAccessState(targetSnap.data());
 
@@ -144,12 +165,15 @@ export const deleteUser = onCall(CALLABLE_OPTS, async (request): Promise<DeleteU
   // deletion and the inactivity sweep run (functions/src/account/scheduled.ts).
   await purgeUserData(targetUid);
 
-  // Immutable audit record. adminAuditEvents is retained (never purged), and
-  // this write is keyed by the actor + target uid, not a reference into the
-  // now-deleted user's data.
+  // Immutable audit record, retained in adminAuditEvents (never purged). Written
+  // to a DETERMINISTIC id keyed on the target uid — one deletion record per
+  // deleted user — so a retried or duplicate invocation updates the same record
+  // rather than accumulating duplicate `user.delete` events. The record itself
+  // is keyed by the actor + target uid, never a reference into the now-deleted
+  // user's own data.
   await db
     .collection('adminAuditEvents')
-    .doc()
+    .doc(`user-delete_${targetUid}`)
     .set(
       buildAdminAuditEvent(
         {
