@@ -21,9 +21,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -133,19 +134,27 @@ fun rememberAppStartupUpdateGate(
             value = AppStartupUpdateGate.CLEAR
             return@produceState
         }
-        val result =
-            withTimeoutOrNull(AppStartupUpdate.CHECK_TIMEOUT_MILLIS) {
-                AppUpdateCheck.run(
-                    source = activeSource,
-                    // A forced update is never throttled by a dismissal, so the
-                    // gate needs no dismissal store — passing none keeps it a
-                    // read with no device state behind it.
-                    dismissal = null,
-                    nowMillis = nowMillis(),
-                )
-            }
-        // A timed-out check is not a reason to lock the member out: proceed.
-        value = AppStartupUpdate.verdict(result?.decision ?: AppUpdateDecision.NONE)
+        // Enforced, not merely asserted: the whole timed check is wrapped so a
+        // timeout (null), a thrown check, or anything a future policy change
+        // might throw all collapse to NONE -> CLEAR. runCatchingCancellable, not
+        // runCatching, so a real cancellation (the source key changed, or the
+        // shell left composition) still unwinds instead of being read as "no
+        // update". The app must never be locked out of itself by the very
+        // mechanism meant to keep it working.
+        val decision =
+            runCatchingCancellable {
+                withTimeoutOrNull(AppStartupUpdate.CHECK_TIMEOUT_MILLIS) {
+                    AppUpdateCheck.run(
+                        source = activeSource,
+                        // A forced update is never throttled by a dismissal, so
+                        // the gate needs no dismissal store — passing none keeps
+                        // it a read with no device state behind it.
+                        dismissal = null,
+                        nowMillis = nowMillis(),
+                    )
+                }?.decision
+            }.getOrNull() ?: AppUpdateDecision.NONE
+        value = AppStartupUpdate.verdict(decision)
     }
 
 /**
@@ -190,7 +199,7 @@ fun ForcedUpdateGate(
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
+            modifier = Modifier.fillMaxSize().padding(KccSpacing.s6),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
@@ -203,9 +212,9 @@ fun ForcedUpdateGate(
                 text = stringResource(R.string.appUpdate_requiredMessage),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.padding(top = 12.dp),
+                modifier = Modifier.padding(top = KccSpacing.s3),
             )
-            Button(onClick = onUpdate, modifier = Modifier.padding(top = 24.dp)) {
+            Button(onClick = onUpdate, modifier = Modifier.padding(top = KccSpacing.s6)) {
                 Text(stringResource(R.string.appUpdate_update))
             }
             if (storeUnavailable) {
@@ -213,7 +222,7 @@ fun ForcedUpdateGate(
                     text = stringResource(R.string.appUpdate_storeUnavailable),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 16.dp),
+                    modifier = Modifier.padding(top = KccSpacing.s4),
                 )
             }
         }
