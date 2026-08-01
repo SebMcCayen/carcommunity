@@ -31,7 +31,17 @@ import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.navigation.NAV_SEARCH_TEST_TAG
+import com.kungsbackacarcommunity.app.profile.ProfileRepository
+import com.kungsbackacarcommunity.app.profile.ProfileState
+import com.kungsbackacarcommunity.app.profile.SocialHandles
+import com.kungsbackacarcommunity.app.profile.UserProfile
+import com.kungsbackacarcommunity.app.update.AppUpdateAvailability
+import com.kungsbackacarcommunity.app.update.AppUpdateSource
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -76,13 +86,21 @@ class MapFirstShellTest {
         WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
     }
 
-    private fun setShell(mapSurface: MapSurface? = null) {
+    private fun setShell(
+        mapSurface: MapSurface? = null,
+        profileRepository: ProfileRepository? = null,
+        // Null by default so the startup update gate resolves CLEAR immediately
+        // (no Play, no CHECKING window) — these shell tests are about the shell,
+        // not the gate, and must not depend on a real Play reading in the
+        // emulator. The forced-update test below injects a source that gates.
+        appUpdateSource: AppUpdateSource? = null,
+    ) {
         composeTestRule.setContent {
             KccTheme {
                 AuthenticatedApp(
                     uid = TEST_UID,
                     authDisplayName = null,
-                    profileRepository = null,
+                    profileRepository = profileRepository,
                     onboardingCoordinator = null,
                     profileEditCoordinator = null,
                     liveLocationRepository = null,
@@ -130,6 +148,7 @@ class MapFirstShellTest {
                     // like production; tests that need to assert the map wiring
                     // pass a stub they hold a reference to.
                     mapSurface = mapSurface ?: rememberMapSurface(),
+                    appUpdateSource = appUpdateSource,
                 )
             }
         }
@@ -367,6 +386,114 @@ class MapFirstShellTest {
 
 
 
+
+    // ── Startup update gate ─────────────────────────────────────────────────
+
+    /**
+     * A [ProfileRepository] that records whether its snapshot listener was ever
+     * asked for. `observeProfile` is the FIRST backend-dependent thing the shell
+     * does, so "was it called" is the proxy for "did any shell wiring start".
+     */
+    private class RecordingProfileRepository : ProfileRepository {
+        var observeCalls = 0
+            private set
+
+        override fun observeProfile(uid: String): Flow<ProfileState> {
+            observeCalls += 1
+            return flowOf(
+                ProfileState.Loaded(
+                    UserProfile(
+                        displayName = "Tester",
+                        bio = null,
+                        onboardingComplete = true,
+                        social = SocialHandles.EMPTY,
+                    ),
+                ),
+            )
+        }
+
+        override suspend fun updateProfile(
+            uid: String,
+            displayName: String,
+            bio: String,
+            social: SocialHandles,
+        ) = Unit
+
+        override suspend fun updateAvatarPath(uid: String, avatarPath: String) = Unit
+    }
+
+    /** A Play source that always reports a mandatory (blocking) update. */
+    private class ForcingUpdateSource : AppUpdateSource {
+        override suspend fun fetch(): AppUpdateAvailability =
+            AppUpdateAvailability(
+                availableVersionCode = 999,
+                isFlexibleAllowed = true,
+                isImmediateAllowed = true,
+                priority = AppUpdateAvailability.MAX_PRIORITY,
+                isImmediateInProgress = false,
+                isDownloaded = false,
+            )
+
+        override fun startFlow(
+            launcher: ActivityResultLauncher<IntentSenderRequest>,
+            immediate: Boolean,
+        ): Boolean = true
+
+        override fun onDownloadComplete(onDownloaded: () -> Unit): () -> Unit = {}
+
+        override fun completeUpdate(): Boolean = false
+    }
+
+    /**
+     * The regression guard for the actual first-launch crash: when a mandatory
+     * update is live, the shell's backend wiring must NOT start. The profile
+     * snapshot listener — the first and most load-bearing of that wiring, since
+     * it feeds the destination router — is never even constructed, and the
+     * blocking update screen is what the member sees instead of the shell.
+     */
+    @Test
+    fun forcedUpdate_gatesShell_withoutStartingBackendWiring() {
+        val profileRepo = RecordingProfileRepository()
+        setShell(profileRepository = profileRepo, appUpdateSource = ForcingUpdateSource())
+        composeTestRule.waitForIdle()
+
+        // The blocking "update required" screen is shown...
+        composeTestRule.onNodeWithText(str(R.string.appUpdate_requiredTitle)).assertIsDisplayed()
+        // ...the map-first shell never composed...
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
+        // ...and, the point of the whole fix, no backend wiring started: the
+        // profile listener was not even asked for, so nothing it could throw
+        // inside ever ran.
+        composeTestRule.runOnIdle {
+            assertEquals(
+                "the profile listener must not start while a forced update gates the shell",
+                0,
+                profileRepo.observeCalls,
+            )
+        }
+    }
+
+    /**
+     * The flip side, so the gate is not just "always block": with no update to
+     * force (a null source resolves CLEAR at once), the shell composes as normal
+     * and DOES start its backend wiring — the deferral is conditional, not a
+     * permanent lock-out.
+     */
+    @Test
+    fun clearUpdate_composesShell_andStartsBackendWiring() {
+        val profileRepo = RecordingProfileRepository()
+        setShell(profileRepository = profileRepo, appUpdateSource = null)
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText(str(R.string.appUpdate_requiredTitle)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.runOnIdle {
+            assertTrue(
+                "the profile listener must start once the gate is clear",
+                profileRepo.observeCalls >= 1,
+            )
+        }
+    }
 
     private companion object {
         const val TEST_UID = "u1"
