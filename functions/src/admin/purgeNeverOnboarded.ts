@@ -59,7 +59,11 @@ export interface PurgeDryRunResponse {
   candidates: PurgeCandidate[];
   /** Accounts skipped because their role is admin/owner — Seb's own protection. */
   excludedAdminOwnerCount: number;
-  /** True if the scan hit PURGE_MAX_SCAN (collection larger than expected). */
+  /**
+   * True when EITHER the scan cap (PURGE_MAX_SCAN) OR the batch cap
+   * (PURGE_MAX_BATCH) was hit — this preview does not cover every candidate;
+   * one real run deletes only this previewed batch, so re-run for the rest.
+   */
   capped: boolean;
 }
 
@@ -69,7 +73,11 @@ export interface PurgeRealResponse {
   purgedUids: string[];
   failures: { uid: string; error: string }[];
   excludedAdminOwnerCount: number;
-  /** True if more than PURGE_MAX_BATCH candidates existed — re-run for the rest. */
+  /**
+   * True when EITHER the scan cap (PURGE_MAX_SCAN) OR the batch cap
+   * (PURGE_MAX_BATCH) was hit — not every candidate was covered in this run;
+   * re-run (idempotent) for the rest.
+   */
   capped: boolean;
 }
 
