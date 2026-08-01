@@ -20,6 +20,7 @@ import { setFeatureFlag } from './admin/setFeatureFlag';
 import { setAdminRole } from './admin/setAdminRole';
 import { suspendUser } from './admin/suspendUser';
 import { warnUser } from './admin/warnUser';
+import { purgeNeverOnboarded } from './admin/purgeNeverOnboarded';
 import { cancel, complete, publish } from './events/eventLifecycle';
 import { autoClose } from './events/scheduled';
 import { remindUpcoming } from './events/eventReminders';
@@ -225,6 +226,10 @@ export const admin = {
   warnUser,
   // Phase 9m: audited, key-whitelisted writes to config/featureFlags.
   setFeatureFlag,
+  // One-off, dry-run-first cleanup of never-onboarded accounts left by the
+  // historical display-name leak. Reuses the account-deletion cascade; a real
+  // run requires confirmToken "PURGE" and writes an adminAuditEvents record.
+  purgeNeverOnboarded,
 };
 
 /**

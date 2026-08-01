@@ -765,6 +765,35 @@
     "alreadyProcessed": "The request was already processed – no change was made.",
     "markProcessedError": "Could not mark the request as processed."
   },
+  "neverOnboardedPurge": {
+    "title": "Maintenance: purge never-onboarded accounts",
+    "subtitle": "One-off cleanup. Deletes accounts (Auth + Firestore) that never completed onboarding – left behind by the earlier display-name leak. Admin and owner accounts are always excluded. Preview first, then delete.",
+    "previewButton": "Preview purge",
+    "previewPending": "Loading…",
+    "previewError": "Could not load the preview.",
+    "candidateCountLabel": "Accounts to delete",
+    "excludedLabel": "Excluded admin/owner accounts",
+    "cappedWarning": "Cap reached – more accounts may exist. Re-run after deleting.",
+    "noCandidates": "No accounts to purge.",
+    "table": {
+      "uid": "User ID",
+      "createdAt": "Created",
+      "hasUserPrivate": "Private doc"
+    },
+    "yes": "Yes",
+    "no": "No",
+    "confirmLabel": "Type PURGE to confirm deletion",
+    "confirmPlaceholder": "PURGE",
+    "deleteButton": "Delete accounts",
+    "deletePending": "Deleting…",
+    "confirmDialogPrefix": "Delete",
+    "confirmDialogSuffix": "accounts permanently (Auth + Firestore)? This cannot be undone.",
+    "purgeError": "The purge failed.",
+    "purgeSuccessPrefix": "Deleted",
+    "purgeSuccessSuffix": "accounts.",
+    "failuresLabel": "Failed",
+    "runPreviewFirst": "Run the preview first."
+  },
   "moderationReports": {
     "title": "Moderation reports",
     "subtitle": "Queue of user reports of content and behaviour. Newest first per status. Only the status field can be changed – reporter, target, and reason are immutable.",

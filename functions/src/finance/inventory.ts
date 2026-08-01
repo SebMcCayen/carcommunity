@@ -385,6 +385,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'admin.restoreAccess': 'admin-rare',
   'admin.setFeatureFlag': 'admin-rare',
   'admin.setAdminRole': 'admin-rare',
+  'admin.purgeNeverOnboarded': 'admin-rare',
   'friend.sendRequest': 'variable-member',
   'friend.respondRequest': 'variable-member',
   'friend.cancelRequest': 'variable-member',

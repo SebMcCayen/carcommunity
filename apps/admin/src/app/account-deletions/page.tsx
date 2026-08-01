@@ -19,12 +19,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  NEVER_ONBOARDED_CONFIRM_TOKEN,
   adminListAccountDeletionRequests,
   daysUntilPurge,
   markAccountDeletionProcessed,
+  previewNeverOnboardedPurge,
+  runNeverOnboardedPurge,
   type AccountDeletionStatusFilter,
   type AdminAccountDeletionRequest,
   type ApiError,
+  type NeverOnboardedPreview,
 } from '@/features/account-deletions';
 import { translate } from '@/i18n';
 import { formatDate } from '@/lib/format';
@@ -46,6 +50,188 @@ function purgeCountdownLabel(request: AdminAccountDeletionRequest): string {
   if (days == null) return '–';
   if (days <= 0) return t('accountDeletions.purgeDue');
   return `${days} ${t(days === 1 ? 'accountDeletions.day' : 'accountDeletions.days')}`;
+}
+
+const p = (key: string) => t(`neverOnboardedPurge.${key}`);
+
+/**
+ * One-off maintenance: preview → typed-confirm delete of never-onboarded
+ * accounts (admin.purgeNeverOnboarded). The preview (dryRun) shows the count +
+ * uids and how many admin/owner accounts were protected; the delete button is
+ * enabled only after a preview has loaded a non-zero count AND the operator has
+ * typed the exact confirm sentinel. The backend independently re-checks the
+ * sentinel and re-selects the accounts, so the UI gate is convenience, not the
+ * security boundary.
+ */
+function NeverOnboardedPurgeSection() {
+  const [preview, setPreview] = useState<NeverOnboardedPreview | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [confirmText, setConfirmText] = useState('');
+  const [purging, setPurging] = useState(false);
+  const [purgeError, setPurgeError] = useState<string | null>(null);
+  const [purgeSuccess, setPurgeSuccess] = useState<string | null>(null);
+
+  const busy = previewing || purging;
+
+  const handlePreview = useCallback(async () => {
+    if (busy) return;
+    setPreviewing(true);
+    setPreviewError(null);
+    setPurgeError(null);
+    setPurgeSuccess(null);
+    try {
+      setPreview(await previewNeverOnboardedPurge());
+    } catch (err) {
+      setPreview(null);
+      setPreviewError((err as ApiError)?.message ?? p('previewError'));
+    } finally {
+      setPreviewing(false);
+    }
+  }, [busy]);
+
+  const handlePurge = useCallback(async () => {
+    if (busy || !preview || preview.candidateCount === 0) return;
+    if (confirmText !== NEVER_ONBOARDED_CONFIRM_TOKEN) return;
+    if (
+      !window.confirm(
+        `${p('confirmDialogPrefix')} ${preview.candidateCount} ${p('confirmDialogSuffix')}`,
+      )
+    ) {
+      return;
+    }
+    setPurging(true);
+    setPurgeError(null);
+    setPurgeSuccess(null);
+    try {
+      const result = await runNeverOnboardedPurge(confirmText);
+      setPurgeSuccess(
+        `${p('purgeSuccessPrefix')} ${result.purgedCount} ${p('purgeSuccessSuffix')}`,
+      );
+      setConfirmText('');
+      // Refresh the preview so the operator sees the remaining count (0, or the
+      // next batch if the run was capped).
+      setPreview(await previewNeverOnboardedPurge());
+    } catch (err) {
+      setPurgeError((err as ApiError)?.message ?? p('purgeError'));
+    } finally {
+      setPurging(false);
+    }
+  }, [busy, preview, confirmText]);
+
+  const canDelete =
+    !busy &&
+    preview !== null &&
+    preview.candidateCount > 0 &&
+    confirmText === NEVER_ONBOARDED_CONFIRM_TOKEN;
+
+  return (
+    <section className={styles.maintenance} aria-label={p('title')}>
+      <h2 className={styles.maintenanceTitle}>{p('title')}</h2>
+      <p className={styles.subtitle}>{p('subtitle')}</p>
+
+      <div className={styles.buttonRow}>
+        <button
+          type="button"
+          className={styles.actionButton}
+          onClick={() => void handlePreview()}
+          disabled={busy}
+        >
+          {previewing ? p('previewPending') : p('previewButton')}
+        </button>
+      </div>
+
+      {previewError && (
+        <p className={styles.error} role="alert">
+          {previewError}
+        </p>
+      )}
+      {purgeError && (
+        <p className={styles.error} role="alert">
+          {purgeError}
+        </p>
+      )}
+      {purgeSuccess && (
+        <p className={styles.success} role="status">
+          {purgeSuccess}
+        </p>
+      )}
+
+      {preview && (
+        <>
+          <div className={styles.statRow}>
+            <div className={styles.stat}>
+              <span className={styles.statLabel}>{p('candidateCountLabel')}</span>
+              <span className={styles.statValue}>{preview.candidateCount}</span>
+            </div>
+            <div className={styles.stat}>
+              <span className={styles.statLabel}>{p('excludedLabel')}</span>
+              <span className={styles.statValue}>{preview.excludedAdminOwnerCount}</span>
+            </div>
+          </div>
+
+          {preview.capped && (
+            <p className={styles.warning} role="alert">
+              {p('cappedWarning')}
+            </p>
+          )}
+
+          {preview.candidateCount === 0 ? (
+            <p className={styles.muted}>{p('noCandidates')}</p>
+          ) : (
+            <>
+              <div className={styles.tableWrap}>
+                <table className={styles.table} aria-label={p('title')}>
+                  <thead>
+                    <tr>
+                      <th scope="col">{p('table.uid')}</th>
+                      <th scope="col">{p('table.createdAt')}</th>
+                      <th scope="col">{p('table.hasUserPrivate')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.candidates.map((candidate) => (
+                      <tr key={candidate.uid}>
+                        <td className={styles.uidCell}>{candidate.uid}</td>
+                        <td>{formatDateTime(candidate.createdAt)}</td>
+                        <td>{candidate.hasUserPrivate ? p('yes') : p('no')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className={styles.buttonRow}>
+                <label className={styles.statLabel} htmlFor="purge-confirm">
+                  {p('confirmLabel')}
+                </label>
+                <input
+                  id="purge-confirm"
+                  className={styles.confirmInput}
+                  type="text"
+                  autoComplete="off"
+                  placeholder={p('confirmPlaceholder')}
+                  value={confirmText}
+                  onChange={(event) => setConfirmText(event.target.value)}
+                  disabled={busy}
+                />
+                <button
+                  type="button"
+                  className={styles.dangerButton}
+                  onClick={() => void handlePurge()}
+                  disabled={!canDelete}
+                >
+                  {purging
+                    ? p('deletePending')
+                    : `${p('deleteButton')} (${preview.candidateCount})`}
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 export default function AccountDeletionsPage() {
@@ -226,6 +412,8 @@ export default function AccountDeletionsPage() {
           </table>
         </div>
       )}
+
+      <NeverOnboardedPurgeSection />
     </div>
   );
 }

@@ -45,6 +45,7 @@ import {
 } from 'firebase/firestore';
 
 import { ApiError } from '../../lib/errors';
+import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
 
 export { ApiError };
@@ -237,5 +238,63 @@ export async function markAccountDeletionProcessed(uid: string): Promise<MarkPro
     }
     transaction.update(ref, { status: 'processed', processedAt: serverTimestamp() });
     return { userId: uid, status: 'processed' as const, alreadyProcessed: false };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Never-onboarded purge (one-off maintenance — admin.purgeNeverOnboarded)
+// ---------------------------------------------------------------------------
+
+/**
+ * The sentinel a REAL purge must carry (mirrors PURGE_CONFIRM_TOKEN in
+ * functions/src/admin/purgeNeverOnboarded-core.ts). The maintenance UI requires
+ * the operator to type this before the delete button is enabled.
+ */
+export const NEVER_ONBOARDED_CONFIRM_TOKEN = 'PURGE';
+
+/** One dry-run candidate — non-sensitive identifiers only (never name/email). */
+export interface NeverOnboardedCandidate {
+  uid: string;
+  createdAt: string | null;
+  hasUserPrivate: boolean;
+}
+
+export interface NeverOnboardedPreview {
+  dryRun: true;
+  candidateCount: number;
+  candidates: NeverOnboardedCandidate[];
+  excludedAdminOwnerCount: number;
+  capped: boolean;
+}
+
+export interface NeverOnboardedPurgeResult {
+  dryRun: false;
+  purgedCount: number;
+  purgedUids: string[];
+  failures: { uid: string; error: string }[];
+  excludedAdminOwnerCount: number;
+  capped: boolean;
+}
+
+/**
+ * PREVIEW (dryRun) the never-onboarded cleanup — deletes NOTHING, returns the
+ * candidate count and per-candidate non-sensitive identifiers, plus the number
+ * of admin/owner accounts excluded (so the operator can confirm their own
+ * account was protected).
+ */
+export function previewNeverOnboardedPurge(): Promise<NeverOnboardedPreview> {
+  return callAdmin<NeverOnboardedPreview>('admin-purgeNeverOnboarded', { dryRun: true });
+}
+
+/**
+ * RUN the real never-onboarded purge. Requires the confirm sentinel — the
+ * backend refuses (failed-precondition) if it does not match. Deletes each
+ * selected account via the existing account-deletion cascade and writes an
+ * adminAuditEvents record.
+ */
+export function runNeverOnboardedPurge(confirmToken: string): Promise<NeverOnboardedPurgeResult> {
+  return callAdmin<NeverOnboardedPurgeResult>('admin-purgeNeverOnboarded', {
+    dryRun: false,
+    confirmToken,
   });
 }

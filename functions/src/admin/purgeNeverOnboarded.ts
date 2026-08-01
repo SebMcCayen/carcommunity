@@ -1,0 +1,247 @@
+/**
+ * admin.purgeNeverOnboarded — admin-only, DRY-RUN-FIRST one-off cleanup.
+ *
+ * Deployed via the `admin` export group as `admin-purgeNeverOnboarded`.
+ *
+ * Deletes the batch of NEVER-ONBOARDED accounts left behind by the historical
+ * display-name leak (their Google real name sits in the world-readable
+ * `users/{uid}.displayName`). See purgeNeverOnboarded-core.ts for the full
+ * rationale and the exact selection predicate.
+ *
+ * ## Safety design
+ *
+ * - Admin/owner only (requireAdminActor), admin instance tier.
+ * - Selection is conservative and role-guarded: never onboarded AND not an
+ *   admin/owner AND not safelisted (classifyAccount). An admin/owner account
+ *   is excluded on ROLE grounds even if its onboarding flag were null.
+ * - `dryRun: true` deletes NOTHING and returns only NON-SENSITIVE identifiers
+ *   (uid, createdAt, whether a userPrivate doc exists) — never the leaked
+ *   displayName or email, which would just re-expose the data being removed.
+ * - `dryRun: false` REFUSES unless `confirmToken === 'PURGE'` (PURGE_CONFIRM_
+ *   TOKEN), so a real purge can never happen by accident or default.
+ * - The real purge REUSES the existing account-deletion cascade
+ *   (account/scheduled.ts `purgeUserData`) per account — Auth user + every
+ *   Firestore mirror — so no orphan is left. It is idempotent per account
+ *   (already-deleted → the cascade's own no-op), so a re-run is safe.
+ * - A real purge writes ONE `adminAuditEvents` record (action
+ *   `purge_never_onboarded`) naming the actor, the count, and the purged uids
+ *   (uids only — no names) as the accountability record.
+ */
+
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { logger } from 'firebase-functions';
+import { db } from '../firebase';
+import { requireAdminActor } from './actorContext';
+import { buildAdminAuditEvent } from './claims-core';
+import {
+  PURGE_MAX_BATCH,
+  PURGE_MAX_SCAN,
+  classifyAccount,
+  isConfirmed,
+  parsePurgeInput,
+} from './purgeNeverOnboarded-core';
+import { purgeUserData } from '../account/scheduled';
+import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+
+/** A dry-run candidate — NON-SENSITIVE identifiers only (never name/email). */
+export interface PurgeCandidate {
+  uid: string;
+  /** ISO string of the account's createdAt, or null when unset/malformed. */
+  createdAt: string | null;
+  /** Whether a `userPrivate/{uid}` document exists (a rough "how real" hint). */
+  hasUserPrivate: boolean;
+}
+
+export interface PurgeDryRunResponse {
+  dryRun: true;
+  candidateCount: number;
+  candidates: PurgeCandidate[];
+  /** Accounts skipped because their role is admin/owner — Seb's own protection. */
+  excludedAdminOwnerCount: number;
+  /** True if the scan hit PURGE_MAX_SCAN (collection larger than expected). */
+  capped: boolean;
+}
+
+export interface PurgeRealResponse {
+  dryRun: false;
+  purgedCount: number;
+  purgedUids: string[];
+  failures: { uid: string; error: string }[];
+  excludedAdminOwnerCount: number;
+  /** True if more than PURGE_MAX_BATCH candidates existed — re-run for the rest. */
+  capped: boolean;
+}
+
+export type PurgeNeverOnboardedResponse = PurgeDryRunResponse | PurgeRealResponse;
+
+function toIso(value: unknown): string | null {
+  return value instanceof Timestamp ? value.toDate().toISOString() : null;
+}
+
+/**
+ * Scans the (small) `users` collection once, up to PURGE_MAX_SCAN docs, and
+ * partitions it via classifyAccount. Returns the selected candidate uids, the
+ * admin/owner-excluded count, and whether the scan hit the cap.
+ *
+ * Ordered by `createdAt` DESCENDING (newest first). The target collection is
+ * tiny (~20 docs), so in production the whole collection is scanned regardless
+ * of order and the direction is immaterial. The ordering matters only when the
+ * cap is hit: if there were ever more than PURGE_MAX_SCAN accounts, a single
+ * pass sees the NEWEST PURGE_MAX_SCAN and a re-run (idempotent) drains the
+ * older remainder — so no candidate is permanently missed, it is merely
+ * reached on a later run. It also makes the scan DETERMINISTIC, which the
+ * emulator test relies on (its freshly-created accounts are the newest, so
+ * they are always in range). Uses the automatic single-field `createdAt` index
+ * — no composite index to deploy.
+ *
+ * Note: Firestore `orderBy` excludes documents that lack the ordered field, so
+ * a `users` doc without `createdAt` is not scanned. Every account provisioned
+ * by auth.onUserCreate writes `createdAt` (buildUserProfileDocument), so no
+ * leaked account is missed; a doc without it is not a normally-provisioned
+ * account and is deliberately left untouched — the safe direction for a
+ * deletion.
+ */
+async function scanCandidates(): Promise<{
+  candidateUids: string[];
+  excludedAdminOwnerCount: number;
+  capped: boolean;
+}> {
+  const snap = await db
+    .collection('users')
+    .orderBy('createdAt', 'desc')
+    .limit(PURGE_MAX_SCAN)
+    .get();
+  const candidateUids: string[] = [];
+  let excludedAdminOwnerCount = 0;
+  for (const docSnap of snap.docs) {
+    const decision = classifyAccount(docSnap.id, docSnap.data());
+    if (decision.selected) {
+      candidateUids.push(docSnap.id);
+    } else if (decision.reason === 'admin_or_owner') {
+      excludedAdminOwnerCount += 1;
+    }
+  }
+  const capped = snap.size >= PURGE_MAX_SCAN;
+  if (capped) {
+    logger.warn('purgeNeverOnboarded scan hit PURGE_MAX_SCAN — result may be partial', {
+      scanned: snap.size,
+      cap: PURGE_MAX_SCAN,
+    });
+  }
+  return { candidateUids, excludedAdminOwnerCount, capped };
+}
+
+export const purgeNeverOnboarded = onCall(
+  {
+    region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_ADMIN,
+    memory: '512MiB',
+    timeoutSeconds: 540,
+    enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+  },
+  async (request): Promise<PurgeNeverOnboardedResponse> => {
+    const actor = await requireAdminActor(request);
+
+    const parsed = parsePurgeInput(request.data);
+    if (!parsed.ok) {
+      throw new HttpsError('invalid-argument', parsed.message);
+    }
+    const { dryRun, confirmToken } = parsed.input;
+
+    const { candidateUids, excludedAdminOwnerCount, capped } = await scanCandidates();
+
+    // ---- DRY RUN: delete nothing, return non-sensitive identifiers only. ----
+    if (dryRun) {
+      const candidates: PurgeCandidate[] = [];
+      for (const uid of candidateUids) {
+        // Read the user doc (for createdAt) and probe userPrivate existence.
+        // Deliberately NOT returned: displayName / email — returning them would
+        // re-expose the very data this cleanup removes. A uid is enough for Seb.
+        const [userSnap, privateSnap] = await Promise.all([
+          db.collection('users').doc(uid).get(),
+          db.collection('userPrivate').doc(uid).get(),
+        ]);
+        candidates.push({
+          uid,
+          createdAt: toIso(userSnap.data()?.createdAt),
+          hasUserPrivate: privateSnap.exists,
+        });
+      }
+      return {
+        dryRun: true,
+        candidateCount: candidates.length,
+        candidates,
+        excludedAdminOwnerCount,
+        capped,
+      };
+    }
+
+    // ---- REAL PURGE: require the confirm sentinel; never happens by default. --
+    if (!isConfirmed(confirmToken)) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Confirmation required: pass confirmToken "PURGE" to run the real purge.',
+      );
+    }
+
+    // Bound the batch so one call cannot run the cascade over an unbounded set
+    // and blow the timeout; a remainder is drained by a (idempotent) re-run.
+    const batch = candidateUids.slice(0, PURGE_MAX_BATCH);
+    const batchCapped = capped || candidateUids.length > PURGE_MAX_BATCH;
+
+    const purgedUids: string[] = [];
+    const failures: { uid: string; error: string }[] = [];
+    for (const uid of batch) {
+      try {
+        // REUSE the existing deletion cascade — Auth user + all Firestore
+        // mirrors. Idempotent per account (already-deleted → cascade no-op).
+        await purgeUserData(uid);
+        purgedUids.push(uid);
+      } catch (error) {
+        logger.error('purgeNeverOnboarded: account purge failed', {
+          uid,
+          error: String(error),
+        });
+        failures.push({ uid, error: String(error) });
+      }
+    }
+
+    // ONE audit record for the whole operation — the accountability trail.
+    // uids only, never names, per the reason this cleanup exists.
+    await db
+      .collection('adminAuditEvents')
+      .doc()
+      .set(
+        buildAdminAuditEvent(
+          {
+            adminId: actor.uid,
+            action: 'purge_never_onboarded',
+            targetType: 'account_batch',
+            targetId: 'never_onboarded',
+            reason: 'One-off cleanup of never-onboarded accounts (display-name leak remediation).',
+            details: {
+              purgedCount: purgedUids.length,
+              purgedUids,
+              failureCount: failures.length,
+            },
+          },
+          () => FieldValue.serverTimestamp(),
+        ),
+      );
+
+    logger.info('purgeNeverOnboarded complete', {
+      purgedCount: purgedUids.length,
+      failureCount: failures.length,
+    });
+
+    return {
+      dryRun: false,
+      purgedCount: purgedUids.length,
+      purgedUids,
+      failures,
+      excludedAdminOwnerCount,
+      capped: batchCapped,
+    };
+  },
+);

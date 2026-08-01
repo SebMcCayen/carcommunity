@@ -739,6 +739,15 @@
       "source": "docs/migration/backend-domain-mapping.md (documented as setAdminRole)"
     },
     {
+      "name": "admin.purgeNeverOnboarded",
+      "domain": "admin",
+      "description": "One-off, dry-run-first cleanup of never-onboarded accounts left by the historical display-name leak (their Google real name sits in the world-readable users/{uid}.displayName). Input { dryRun: boolean, confirmToken?: string }. Selects users/{uid} docs where onboardingCompletedAt is null/absent, HARD-EXCLUDING any admin/owner role (Seb's operator account is never selected even if its onboarding flag were null) and any uid in an empty-by-default safelist. dryRun:true deletes nothing and returns non-sensitive identifiers only (uid, createdAt, whether a userPrivate doc exists) plus the count and the admin/owner-excluded count — never the leaked displayName or email. dryRun:false REFUSES unless confirmToken === 'PURGE', then reuses the existing account-deletion cascade (account/scheduled.ts purgeUserData — Auth user + all Firestore mirrors) per account (idempotent), writes ONE adminAuditEvents record (action purge_never_onboarded, count + purged uids only, no names), and returns the count plus any failures. Deployed via grouped export as admin-purgeNeverOnboarded (functions/src/admin/purgeNeverOnboarded.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/native-firebase-migration-plan.md (display-name leak remediation)"
+    },
+    {
       "name": "friend.sendRequest",
       "domain": "friend",
       "description": "Sends a friend request to a user resolved by nickname (displayName, NOT unique) or by a resolved toUid. Nickname resolution: 0 matches → not-found, 1 → proceed, >1 → failed-precondition with reason AMBIGUOUS_NICKNAME and a candidates:[{uid,displayName,avatarPath}] list in the error details, so the client re-calls with { toUid }. Rejects self (invalid-argument), already-friends and an existing pending outgoing request (already-exists), and either-way blocks (failed-precondition NOT_ADDABLE, neutral so the block direction is never revealed). If the target already has a PENDING request to the caller, the two are befriended immediately (returns status 'friends'). Writes friendRequests/{requestId} where requestId is a collision-resistant length-prefixed SHA-256 over the ordered (fromUid, toUid) pair. Deployed via grouped export as friend-sendRequest (functions/src/friends/manageFriends.ts).",
