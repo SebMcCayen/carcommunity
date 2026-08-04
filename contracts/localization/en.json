@@ -1419,7 +1419,15 @@
     "savedPlacesPickerTitle": "Saved places",
     "savedPlacesPickerEmpty": "No saved places yet",
     "selectedLocationPin": "Selected location",
-    "sharedLocationName": "Shared location"
+    "sharedLocationName": "Shared location",
+    "saveLocationTitle": "Save location",
+    "saveLocationNameLabel": "Name (optional)",
+    "saveLocationSave": "Save",
+    "saveLocationShare": "Share",
+    "saveLocationCancel": "Cancel",
+    "locationShared": "Location shared with %1$s",
+    "locationSharedFriendFallback": "your friend",
+    "locationShareFailed": "Couldn't share the location. Try again."
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",
@@ -1466,6 +1474,7 @@
     "emptyAction": "Add your first place",
     "moreActions": "Options for %1$s",
     "rename": "Rename",
+    "share": "Share",
     "changeAddress": "Change address",
     "delete": "Delete",
     "renameTitle": "Rename place",
@@ -1476,6 +1485,13 @@
     "deleteMessage": "%1$s will be removed from your saved places. Your recent searches aren't affected.",
     "deleteConfirm": "Delete",
     "deviceLocalNote": "Saved places are stored on this device only and don't sync to other devices."
+  },
+  "shareLocation": {
+    "title": "Share location",
+    "subtitle": "Choose a friend to share %1$s with",
+    "empty": "You haven't added any friends yet. Add friends to share locations with them.",
+    "error": "Couldn't load your friends. Try again.",
+    "unnamedFriend": "Friend"
   },
   "turnByTurn": {
     "start": "Start",

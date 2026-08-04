@@ -33,9 +33,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
@@ -49,6 +58,7 @@ import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
@@ -99,6 +109,10 @@ fun ChatScreen(
     onBlock: ((String) -> Unit)? = null,
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
     onBlockDismiss: () -> Unit = {},
+    // A shared `geo:` link in a message becomes a tappable "show on map" chip that
+    // calls this. Null (no map to move) leaves such links as plain text — the same
+    // rule the group channels use.
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     // Held by message ID (Saveable, so the sheet survives rotation) and resolved
@@ -142,6 +156,7 @@ fun ChatScreen(
                     isLoadingOlder = isLoadingOlder,
                     onLoadOlder = onLoadOlder,
                     onRetry = onRetry,
+                    onShowLocationOnMap = onShowLocationOnMap,
                     // Long-press opens the moderation sheet — never on your own
                     // message, and never when the thread has no resolvable other
                     // member to act on.
@@ -245,6 +260,7 @@ private fun MessageList(
     onLoadOlder: () -> Unit,
     onRetry: (DmMessage) -> Unit,
     onMessageLongPress: (DmMessage) -> Unit,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
@@ -309,6 +325,7 @@ private fun MessageList(
                         // block nor report yourself.
                         onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
                         onRetry = { onRetry(message) },
+                        onShowLocationOnMap = onShowLocationOnMap,
                     )
                 }
             }
@@ -324,6 +341,7 @@ private fun MessageBubble(
     dates: ChatDateContext,
     onLongPress: (() -> Unit)?,
     onRetry: () -> Unit,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -332,6 +350,17 @@ private fun MessageBubble(
             MaterialTheme.colorScheme.onPrimary
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    // A shared `geo:` link renders as a single tappable "show on map" chip —
+    // coloured against the bubble and underlined so it reads as tappable. Detection
+    // is keyed on WHETHER a map-move handler exists (not the lambda identity) so the
+    // AnnotatedString is not rebuilt every recompose. Mirrors the group channels.
+    val linkColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+    val linkLabel = stringResource(R.string.channel_locationLink)
+    val canShowLocation = onShowLocationOnMap != null
+    val body =
+        remember(message.text, linkColor, linkLabel, canShowLocation) {
+            annotateGeoLinks(message.text, linkColor, linkLabel, onShowLocationOnMap)
         }
     // The time sits on the line ABOVE the bubble, aligned to the bubble's own
     // edge (right for your messages, left for theirs) — the same placement the
@@ -361,7 +390,7 @@ private fun MessageBubble(
                     ),
         ) {
             Text(
-                text = message.text,
+                text = body,
                 style = MaterialTheme.typography.bodyMedium,
                 color = textColor,
                 textAlign = TextAlign.Start,
@@ -408,6 +437,55 @@ private fun MessageBubble(
                 DmDeliveryState.Sent -> Unit
             }
         }
+    }
+}
+
+/**
+ * Replaces each `geo:lat,lng` token in [text] with a single tappable [linkLabel]
+ * chip that moves the app's map to the point, leaving the rest of the message as
+ * plain text. Uses the SAME [GeoLinks.findAll] parser as the clipboard writer and
+ * the group channels, so a shared location reads identically everywhere and a
+ * malformed/out-of-range token is never linkified. When [onShowLocationOnMap] is
+ * null (no map to move) the raw text is returned untouched. DMs carry no mentions,
+ * so — unlike the channels' annotateMessageBody — only geo links are handled.
+ */
+private fun annotateGeoLinks(
+    text: String,
+    linkColor: Color,
+    linkLabel: String,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+): AnnotatedString {
+    val matches = if (onShowLocationOnMap != null) GeoLinks.findAll(text) else emptyList()
+    if (matches.isEmpty()) return AnnotatedString(text)
+
+    val linkStyles =
+        TextLinkStyles(
+            style =
+                SpanStyle(
+                    color = linkColor,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                ),
+        )
+    return buildAnnotatedString {
+        var index = 0
+        for (match in matches) {
+            if (match.range.first > index) append(text.substring(index, match.range.first))
+            val link = match.link
+            withLink(
+                LinkAnnotation.Clickable(
+                    tag = "geo",
+                    styles = linkStyles,
+                    linkInteractionListener = {
+                        onShowLocationOnMap?.invoke(link.latitude, link.longitude)
+                    },
+                ),
+            ) {
+                append(linkLabel)
+            }
+            index = match.range.last + 1
+        }
+        if (index < text.length) append(text.substring(index))
     }
 }
 

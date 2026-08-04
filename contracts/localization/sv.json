@@ -1419,7 +1419,15 @@
     "savedPlacesPickerTitle": "Sparade platser",
     "savedPlacesPickerEmpty": "Inga sparade platser än",
     "selectedLocationPin": "Vald plats",
-    "sharedLocationName": "Delad plats"
+    "sharedLocationName": "Delad plats",
+    "saveLocationTitle": "Spara plats",
+    "saveLocationNameLabel": "Namn (valfritt)",
+    "saveLocationSave": "Spara",
+    "saveLocationShare": "Dela",
+    "saveLocationCancel": "Avbryt",
+    "locationShared": "Platsen delades med %1$s",
+    "locationSharedFriendFallback": "din vän",
+    "locationShareFailed": "Det gick inte att dela platsen. Försök igen."
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",
@@ -1466,6 +1474,7 @@
     "emptyAction": "Lägg till din första plats",
     "moreActions": "Alternativ för %1$s",
     "rename": "Byt namn",
+    "share": "Dela",
     "changeAddress": "Byt adress",
     "delete": "Ta bort",
     "renameTitle": "Byt namn på plats",
@@ -1476,6 +1485,13 @@
     "deleteMessage": "%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.",
     "deleteConfirm": "Ta bort",
     "deviceLocalNote": "Sparade platser lagras endast på den här enheten och synkas inte till andra enheter."
+  },
+  "shareLocation": {
+    "title": "Dela plats",
+    "subtitle": "Välj en vän att dela %1$s med",
+    "empty": "Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.",
+    "error": "Det gick inte att läsa in dina vänner. Försök igen.",
+    "unnamedFriend": "Vän"
   },
   "turnByTurn": {
     "start": "Starta",

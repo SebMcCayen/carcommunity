@@ -103,6 +103,7 @@ fun ChatRoute(
     otherName: String?,
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
@@ -196,5 +197,6 @@ fun ChatRoute(
             },
         blockStatus = blockStatus,
         onBlockDismiss = { blockingCoordinator?.reset() },
+        onShowLocationOnMap = onShowLocationOnMap,
     )
 }

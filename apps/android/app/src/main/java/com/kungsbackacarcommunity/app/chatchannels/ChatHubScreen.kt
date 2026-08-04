@@ -646,6 +646,7 @@ private fun ChatHubContent(
                                     otherName = dmOtherName,
                                     onViewProfile = onViewProfile,
                                     blockingRepository = blockingRepository,
+                                    onShowLocationOnMap = onShowLocationOnMap,
                                 )
                             } else {
                                 ConversationListRoute(

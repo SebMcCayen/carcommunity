@@ -1323,6 +1323,14 @@
     <string name="shell_savedPlacesPickerEmpty">No saved places yet</string>
     <string name="shell_selectedLocationPin">Selected location</string>
     <string name="shell_sharedLocationName">Shared location</string>
+    <string name="shell_saveLocationTitle">Save location</string>
+    <string name="shell_saveLocationNameLabel">Name (optional)</string>
+    <string name="shell_saveLocationSave">Save</string>
+    <string name="shell_saveLocationShare">Share</string>
+    <string name="shell_saveLocationCancel">Cancel</string>
+    <string name="shell_locationShared">Location shared with %1$s</string>
+    <string name="shell_locationSharedFriendFallback">your friend</string>
+    <string name="shell_locationShareFailed">Couldn\'t share the location. Try again.</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
@@ -1365,6 +1373,7 @@
     <string name="savedPlaces_emptyAction">Add your first place</string>
     <string name="savedPlaces_moreActions">Options for %1$s</string>
     <string name="savedPlaces_rename">Rename</string>
+    <string name="savedPlaces_share">Share</string>
     <string name="savedPlaces_changeAddress">Change address</string>
     <string name="savedPlaces_delete">Delete</string>
     <string name="savedPlaces_renameTitle">Rename place</string>
@@ -1375,6 +1384,11 @@
     <string name="savedPlaces_deleteMessage">%1$s will be removed from your saved places. Your recent searches aren\'t affected.</string>
     <string name="savedPlaces_deleteConfirm">Delete</string>
     <string name="savedPlaces_deviceLocalNote">Saved places are stored on this device only and don\'t sync to other devices.</string>
+    <string name="shareLocation_title">Share location</string>
+    <string name="shareLocation_subtitle">Choose a friend to share %1$s with</string>
+    <string name="shareLocation_empty">You haven\'t added any friends yet. Add friends to share locations with them.</string>
+    <string name="shareLocation_error">Couldn\'t load your friends. Try again.</string>
+    <string name="shareLocation_unnamedFriend">Friend</string>
     <string name="turnByTurn_start">Start</string>
     <string name="turnByTurn_exit">Exit navigation</string>
     <string name="turnByTurn_recenter">Recenter</string>
