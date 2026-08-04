@@ -26,7 +26,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +39,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
@@ -260,30 +260,17 @@ private fun MessageList(
             )
         }
     val listState = rememberLazyListState()
-    // The optional "load older" row is a single item prepended before the
-    // messages, so every message's LazyColumn index is shifted by +1 while it is
-    // present. Track that offset so the auto-scroll targets the real last item.
-    val headerOffset = if (canLoadOlder || isLoadingOlder) 1 else 0
-    // Auto-scroll to the newest message only when it won't fight the reader:
-    // either the new message is the user's OWN send (always follow your own
-    // message), or the user is already at/near the bottom. If they've scrolled
-    // up to read older messages and an incoming message arrives, leave them put.
-    LaunchedEffect(messages.lastOrNull()?.id) {
-        val newest = messages.lastOrNull() ?: return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val totalItems = layoutInfo.totalItemsCount
-        // Not laid out yet (first load) → scroll; otherwise near the bottom.
-        val nearBottom = totalItems == 0 || lastVisibleIndex >= totalItems - 2
-        val isOwnSend = newest.senderUid == currentUid
-        if (isOwnSend || nearBottom) {
-            // Index into the LAZY COLUMN, whose rows are the TIMELINE (messages
-            // interleaved with day separators), not the raw message list — plus
-            // the optional "load older" header. Using messages.lastIndex here
-            // would land short by one row per separator.
-            listState.animateScrollToItem(timeline.lastIndex + headerOffset)
-        }
-    }
+    // On open, JUMP straight to the newest message; thereafter follow new messages
+    // down to the bottom, but only when it won't fight a reader scrolled up into
+    // history. Targets the LazyColumn's last item directly (totalItemsCount - 1),
+    // so day separators and the optional "load older" header need no offset
+    // bookkeeping here. Shared with the group channels and event chat.
+    val newest = messages.lastOrNull()
+    KeepPinnedToNewest(
+        listState = listState,
+        newestMessageId = newest?.id,
+        isOwnNewestMessage = newest?.senderUid == currentUid,
+    )
 
     // Keyboard just came up: the viewport shrank from the bottom, so re-pin the
     // newest message — shared with the group channels and event chat so the three

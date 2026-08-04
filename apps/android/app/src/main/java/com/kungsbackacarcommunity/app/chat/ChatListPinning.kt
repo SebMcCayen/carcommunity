@@ -7,8 +7,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.flow.first
 
 /**
  * The one keyboard/scroll interaction shared by every chat surface — the group
@@ -47,6 +52,102 @@ object ChatListPinning {
         // Nothing to scroll to.
         if (totalItemsCount <= 0) return false
         return lastVisibleIndex >= totalItemsCount - 2
+    }
+
+    /**
+     * Should the list follow a newly-arrived message down to the newest item?
+     *
+     * Yes when it is the reader's OWN send (always follow your own message down),
+     * or when they are already sitting at/near the bottom — the last row or the one
+     * before it, the same near-bottom tolerance as [shouldRepinToNewest]. A reader
+     * who has scrolled UP into history is left exactly where they are, so an
+     * incoming message never yanks them away from what they were reading.
+     *
+     * This is the FOLLOW decision only; the one-time jump-to-bottom on OPEN is owned
+     * by [KeepPinnedToNewest]'s open effect, which is why this can assume the list is
+     * already laid out and does not special-case a not-yet-measured (totalItemsCount
+     * 0) list into "scroll".
+     *
+     * @param lastVisibleIndex index of the last visible item, or -1 when the list
+     *   has not been laid out yet.
+     * @param totalItemsCount the LazyColumn's item count.
+     * @param isOwnMessage whether the newly-arrived newest message is the caller's
+     *   own send.
+     */
+    fun shouldFollowNewest(
+        lastVisibleIndex: Int,
+        totalItemsCount: Int,
+        isOwnMessage: Boolean,
+    ): Boolean {
+        if (totalItemsCount <= 0) return false
+        if (isOwnMessage) return true
+        return shouldRepinToNewest(lastVisibleIndex, totalItemsCount)
+    }
+}
+
+/**
+ * Positions [listState] at the newest message and keeps it there, the "open lands
+ * at the bottom" behaviour shared by every chat surface (group channels, DM
+ * threads, event chat) so the three cannot drift into subtly different scroll
+ * behaviours.
+ *
+ * Two distinct jobs, deliberately split so the initial open cannot fight the
+ * new-message follow:
+ *
+ *  1. ON OPEN — a ONE-TIME, NON-ANIMATED jump to the last row, run only once the
+ *     `LazyColumn` has actually measured at least one item. Folding this into the
+ *     new-message effect (as all three surfaces used to) meant it fired while the
+ *     list was still un-laid-out (`totalItemsCount == 0`) and animated a long
+ *     scroll that settled SHORT of the bottom as rows finished measuring — the
+ *     "chat opens in the middle" complaint. Waiting for the first real layout and
+ *     jumping (no animation) lands straight at the newest message every time.
+ *
+ *  2. ON A NEW MESSAGE — an animated follow to the bottom, but only when it won't
+ *     fight the reader ([ChatListPinning.shouldFollowNewest]). Deferred until the
+ *     open jump has happened so the two never race on the first frame.
+ *
+ * @param newestMessageId id of the newest message, or null when the list is empty.
+ *   Keys the follow effect, so it re-runs exactly once per newly-arrived message.
+ * @param isOwnNewestMessage whether that newest message is the caller's own send.
+ */
+@Composable
+fun KeepPinnedToNewest(
+    listState: LazyListState,
+    newestMessageId: String?,
+    isOwnNewestMessage: Boolean,
+) {
+    // Saveable, sharing the SAME lifetime as rememberLazyListState's own saved
+    // scroll position: both are restored together across a configuration change
+    // (rotation) or process death, and both start fresh on a genuinely new open.
+    // A plain remember here would reset to false on rotation while the list's saved
+    // scroll offset came back intact, re-firing the open jump and yanking a reader
+    // who had scrolled up into history back down to the bottom.
+    var didInitialJump by rememberSaveable { mutableStateOf(false) }
+
+    // ON OPEN: wait for the first real layout, then JUMP (no animation) to the last
+    // row — once. snapshotFlow.first { it > 0 } is the fix for the async-load race:
+    // the effect suspends until the LazyColumn has measured something, instead of
+    // firing a no-op scroll against an empty layout and never correcting it. Gated
+    // on !didInitialJump so a rotation (which hands us a fresh LazyListState instance
+    // but a RESTORED scroll position) doesn't re-jump a scrolled-up reader.
+    LaunchedEffect(listState) {
+        if (didInitialJump) return@LaunchedEffect
+        snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
+        listState.scrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+        didInitialJump = true
+    }
+
+    // ON A NEW MESSAGE: follow to the bottom, but only after the open jump owns the
+    // first positioning, and only when the reader is at/near the bottom or it's
+    // their own send. Scrolled up reading history, they are left put.
+    LaunchedEffect(newestMessageId) {
+        if (newestMessageId == null || !didInitialJump) return@LaunchedEffect
+        val layoutInfo = listState.layoutInfo
+        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+        val totalItems = layoutInfo.totalItemsCount
+        if (ChatListPinning.shouldFollowNewest(lastVisibleIndex, totalItems, isOwnNewestMessage)) {
+            listState.animateScrollToItem(totalItems - 1)
+        }
     }
 }
 

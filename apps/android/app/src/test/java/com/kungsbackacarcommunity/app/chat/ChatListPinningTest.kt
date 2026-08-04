@@ -59,4 +59,80 @@ class ChatListPinningTest {
         assertFalse(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = -1, totalItemsCount = 2))
         assertFalse(ChatListPinning.shouldRepinToNewest(lastVisibleIndex = -1, totalItemsCount = 20))
     }
+
+    // --- shouldFollowNewest: the new-message follow decision. The open-on-newest
+    // JUMP is owned by KeepPinnedToNewest's layout-gated effect and is not part of
+    // this pure decision, so every case below assumes an already-laid-out list. ---
+
+    @Test
+    fun followsOwnSendEvenFromDeepInHistory() {
+        // Always follow your OWN message down, wherever you were reading.
+        assertTrue(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 0,
+                totalItemsCount = 20,
+                isOwnMessage = true,
+            ),
+        )
+    }
+
+    @Test
+    fun followsAnIncomingMessageWhenTheReaderIsAtTheBottom() {
+        assertTrue(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 19,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+            ),
+        )
+        // One row off the bottom still counts, matching the repin tolerance.
+        assertTrue(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 18,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+            ),
+        )
+    }
+
+    @Test
+    fun doesNotFollowAnIncomingMessageWhenScrolledUpReadingHistory() {
+        // THE guard for the reported bug's sibling: an incoming message must not
+        // yank a reader who has scrolled up. (Their own send still would — covered
+        // above — but someone else's must not.)
+        assertFalse(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 17,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+            ),
+        )
+        assertFalse(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 3,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+            ),
+        )
+    }
+
+    @Test
+    fun neverFollowsAnEmptyList() {
+        // animateScrollToItem(totalItems - 1) would be index -1 — nothing to do,
+        // even for an "own" send that hasn't been laid out yet.
+        assertFalse(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = -1,
+                totalItemsCount = 0,
+                isOwnMessage = false,
+            ),
+        )
+        assertFalse(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = -1,
+                totalItemsCount = 0,
+                isOwnMessage = true,
+            ),
+        )
+    }
 }
