@@ -1299,6 +1299,10 @@
     <string name="shell_layersIncidents">Traffic alerts</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_layersZoomTitle">Map focus distance</string>
+    <string name="shell_layersZoomHelp">How close the map sits when you\'re using it as usual.</string>
+    <string name="shell_layersZoomFar">Farther</string>
+    <string name="shell_layersZoomNear">Closer</string>
     <string name="shell_compassNorthUp">North up</string>
     <string name="shell_compassCourseUp">Follow your direction</string>
     <string name="shell_searchExpand">Search</string>

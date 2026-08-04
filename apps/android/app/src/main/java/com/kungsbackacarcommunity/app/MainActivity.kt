@@ -13,6 +13,8 @@ import com.kungsbackacarcommunity.app.design.KccLightColors
 import com.kungsbackacarcommunity.app.design.ThemeController
 import com.kungsbackacarcommunity.app.design.ThemePreference
 import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
+import com.kungsbackacarcommunity.app.map.MapZoomController
+import com.kungsbackacarcommunity.app.map.MapZoomPreferenceStore
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -104,6 +106,12 @@ class MainActivity : ComponentActivity() {
     // survives process death; collected in setContent so a change re-themes the
     // running app with no restart.
     private val themePreferenceStore by lazy { ThemePreferenceStore(applicationContext) }
+
+    // The user's resting map-zoom choice ("how far away the focus is", map-layers
+    // popup). Device-local SharedPreferences for the same reasons as the theme
+    // store above: available before sign-in, survives process death, collected in
+    // setContent so a change applies to the running map with no restart.
+    private val mapZoomPreferenceStore by lazy { MapZoomPreferenceStore(applicationContext) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -284,6 +292,23 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+            // Resting map-zoom preference, exposed to the map-layers popup the same
+            // way as the theme: collected here so a change re-applies live, and
+            // handed down through LocalMapZoomController rather than threaded through
+            // AuthenticatedApp/MapHome. Re-created when the value changes so
+            // `browsingZoom` reports the current one.
+            val mapBrowsingZoom by mapZoomPreferenceStore.browsingZoom.collectAsState()
+            val mapZoomController =
+                remember(mapBrowsingZoom) {
+                    object : MapZoomController {
+                        override val browsingZoom = mapBrowsingZoom
+
+                        override fun setBrowsingZoom(zoom: Double) {
+                            mapZoomPreferenceStore.set(zoom)
+                        }
+                    }
+                }
+
             // Tear down a single-session drive recording when the signed-in user
             // goes away. The recording is process-scoped ON PURPOSE (its lifetime
             // is the live session's, which outlives the Activity — see
@@ -349,6 +374,7 @@ class MainActivity : ComponentActivity() {
                 signInStatus = signInStatus,
                 darkTheme = appDark,
                 themeController = themeController,
+                mapZoomController = mapZoomController,
                 onSignInClick = {
                     signInCoordinator?.let { coordinator ->
                         lifecycleScope.launch { coordinator.signIn() }

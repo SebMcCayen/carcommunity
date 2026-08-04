@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.map.MapZoomPreference
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -718,6 +719,20 @@ interface MapSurface : MapProjection {
     fun set3dEnabled(enabled: Boolean)
 
     /**
+     * Set the RESTING/browsing zoom — "how far away the focus is" when the map is
+     * used as usual (see
+     * [com.kungsbackacarcommunity.app.map.MapZoomPreference]). The real surface
+     * applies it as the zoom the camera opens on the user at and re-centres to
+     * while browsing (first fix + `easeToUser`), and — when neither a route
+     * preview nor a convoy fit owns the camera — eases the current camera to it so
+     * a slider drag reads live. It deliberately does NOT touch the active
+     * drive-follow framing (following a moving puck only re-centres, leaving the
+     * zoom the user is at). No visible effect on the stub, which records the value
+     * for tests.
+     */
+    fun setBrowsingZoom(zoom: Double)
+
+    /**
      * Draw (or clear, with null) a destination marker + route line and fit the
      * camera to it. A no-op beyond storing the value on the stub.
      */
@@ -1066,6 +1081,19 @@ class StubMapSurface(
 
     override fun set3dEnabled(enabled: Boolean) {
         is3dFlow.value = enabled
+    }
+
+    /**
+     * The last resting zoom pushed via [setBrowsingZoom] — the stub has no camera
+     * to move, so it records the value for tests asserting the shell wires the
+     * slider through. Starts at the preference default (the app's original resting
+     * zoom), matching an untouched slider.
+     */
+    var browsingZoom: Double = MapZoomPreference.DEFAULT_ZOOM
+        private set
+
+    override fun setBrowsingZoom(zoom: Double) {
+        browsingZoom = zoom
     }
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {

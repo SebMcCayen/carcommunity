@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -55,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -94,6 +96,8 @@ import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
+import com.kungsbackacarcommunity.app.map.LocalMapZoomController
+import com.kungsbackacarcommunity.app.map.MapZoomPreference
 import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
@@ -269,6 +273,20 @@ fun MapHome(
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
     val is3d by mapSurface.is3d.collectAsState()
     val bearing by mapSurface.bearing.collectAsState()
+
+    // The user's resting-zoom preference ("how far away the focus is"), persisted
+    // device-locally and read/written through the same CompositionLocal pattern as
+    // the theme setting (see LocalMapZoomController). Ambient rather than threaded
+    // through this composable's already very wide parameter list.
+    val mapZoomController = LocalMapZoomController.current
+
+    // Push the resting zoom to the surface so the map opens / re-centres at it.
+    // Keyed on mapSurface too so it is re-applied if the surface instance is
+    // swapped (StubMapSurface -> a real Mapbox-backed surface starts at the
+    // default), mirroring the marker/day-night effects below.
+    LaunchedEffect(mapSurface, mapZoomController.browsingZoom) {
+        mapSurface.setBrowsingZoom(mapZoomController.browsingZoom)
+    }
 
     // Keep the surface's marker in sync with the live-share state + display name.
     // Keyed on mapSurface too so the marker is re-pushed if the surface instance
@@ -769,6 +787,11 @@ fun MapHome(
                     mapSurface.setMapMode(mode)
                 },
                 on3dChange = { mapSurface.set3dEnabled(it) },
+                // Resting-zoom preference: the popup shows the current value and
+                // commits a new one on release, which persists it and applies it to
+                // the map (the LaunchedEffect above pushes it to the surface).
+                browsingZoom = mapZoomController.browsingZoom,
+                onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
                 onDismiss = { layersOpen = false },
             )
         }
@@ -840,6 +863,11 @@ internal fun MapLayersPopup(
     onTrafficChange: (Boolean) -> Unit,
     onNightModeChange: (Boolean) -> Unit,
     on3dChange: (Boolean) -> Unit,
+    // The user's resting-zoom preference ("how far away the focus is") and a
+    // callback to change it. A discrete slider section below the layer toggles —
+    // see [LayerZoomSlider] and [com.kungsbackacarcommunity.app.map.MapZoomPreference].
+    browsingZoom: Double,
+    onBrowsingZoomChange: (Double) -> Unit,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -914,6 +942,13 @@ internal fun MapLayersPopup(
                     checked = is3d,
                     onCheckedChange = on3dChange,
                 )
+                // Resting-zoom preference: "how far away the focus is" when using the
+                // map as usual. A discrete section of its own so a sibling change to
+                // this same popup stays out of its way.
+                LayerZoomSlider(
+                    browsingZoom = browsingZoom,
+                    onBrowsingZoomChange = onBrowsingZoomChange,
+                )
                 // Attribution for the Trafikverket-sourced incidents drawn on the
                 // map layer (product-owner requirement: credit Trafikverket wherever
                 // we show their open data). Shown only while the incidents layer is
@@ -957,6 +992,65 @@ private fun LayerToggleRow(
             onCheckedChange = onCheckedChange,
             modifier = if (switchTestTag != null) Modifier.testTag(switchTestTag) else Modifier,
         )
+    }
+}
+
+/** Test tag on the resting-zoom ("focus distance") slider in the layers popup. */
+const val MAP_HOME_LAYERS_ZOOM_TAG = "map_home_layers_zoom"
+
+/**
+ * The "focus distance" section of the map-layers popup: a slider setting the
+ * RESTING map zoom the map opens on the user at and re-centres to while browsing
+ * — "how far away you want the focus to be at when using the map as usual". Left
+ * is farther out, right is closer in; the valid spread and step come from
+ * [com.kungsbackacarcommunity.app.map.MapZoomPreference].
+ *
+ * The thumb tracks the finger locally as it drags; the choice is COMMITTED
+ * (persisted + applied to the map) on release ([Slider.onValueChangeFinished]),
+ * not on every delta, so a drag is one write and one camera ease rather than a
+ * flood of them. Seeded from [browsingZoom] and re-seeded if it changes underneath
+ * (`remember(browsingZoom)`), so an external change is reflected.
+ */
+@Composable
+private fun LayerZoomSlider(
+    browsingZoom: Double,
+    onBrowsingZoomChange: (Double) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(
+            text = stringResource(R.string.shell_layersZoomTitle),
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(R.string.shell_layersZoomHelp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        var sliderZoom by remember(browsingZoom) { mutableFloatStateOf(browsingZoom.toFloat()) }
+        Slider(
+            value = sliderZoom,
+            onValueChange = { sliderZoom = it },
+            onValueChangeFinished = { onBrowsingZoomChange(sliderZoom.toDouble()) },
+            valueRange = MapZoomPreference.MIN_ZOOM.toFloat()..MapZoomPreference.MAX_ZOOM.toFloat(),
+            steps = MapZoomPreference.sliderSteps,
+            modifier = Modifier.fillMaxWidth().testTag(MAP_HOME_LAYERS_ZOOM_TAG),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.shell_layersZoomFar),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.shell_layersZoomNear),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
