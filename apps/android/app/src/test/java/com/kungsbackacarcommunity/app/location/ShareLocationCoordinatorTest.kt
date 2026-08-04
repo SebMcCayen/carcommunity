@@ -33,6 +33,8 @@ class ShareLocationCoordinatorTest {
     private class FakeDm(private val result: DmSendResult) : DmRepository {
         var lastToUid: String? = null
         var lastText: String? = null
+        var lastClientId: String? = null
+        val clientIds = mutableListOf<String?>()
         var sendCalls = 0
 
         override fun observeConversations(uid: String): Flow<DmConversationsState> = emptyFlow()
@@ -43,6 +45,8 @@ class ShareLocationCoordinatorTest {
             sendCalls++
             lastToUid = toUid
             lastText = text
+            lastClientId = clientId
+            clientIds += clientId
             return result
         }
 
@@ -89,8 +93,37 @@ class ShareLocationCoordinatorTest {
         assertEquals("u1", dm.lastToUid)
         assertTrue(dm.lastText!!.contains("geo:57.49102,12.07660"))
         assertTrue(dm.lastText!!.startsWith("Mamma"))
+        // Sent with an idempotency key matching the callable's clientId charset.
+        assertTrue(dm.lastClientId!!.matches(Regex("^[A-Za-z0-9_-]{1,64}$")))
         // The in-flight marker is cleared once the send resolves.
         assertNull(coordinator.sending.value)
+    }
+
+    @Test
+    fun `a retry of a failed share reuses the same clientId, but a new share does not`() = runTest {
+        // First send FAILS, so its clientId must be retained for an idempotent retry.
+        val dm = FakeDm(DmSendResult.Failed(DmSendError.Generic))
+        val coordinator = ShareLocationCoordinator({ FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList())) }, dm)
+
+        assertFalse(coordinator.share(friend("u1", "Anna"), location))
+        val firstId = dm.lastClientId
+        // Manual retry to the SAME friend reuses the key (dedups a landed send).
+        assertFalse(coordinator.share(friend("u1", "Anna"), location))
+        assertEquals(firstId, dm.lastClientId)
+        assertEquals(2, dm.sendCalls)
+    }
+
+    @Test
+    fun `a confirmed share retires its clientId so a later re-share is a new message`() = runTest {
+        val dm = FakeDm(DmSendResult.Sent("c", "m"))
+        val coordinator = ShareLocationCoordinator({ FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList())) }, dm)
+
+        assertTrue(coordinator.share(friend("u1", "Anna"), location))
+        val firstId = dm.lastClientId
+        // A deliberate second share to the same friend after success is a NEW send.
+        assertTrue(coordinator.share(friend("u1", "Anna"), location))
+        assertTrue(dm.lastClientId != firstId)
+        assertEquals(listOf(firstId, dm.lastClientId), dm.clientIds)
     }
 
     @Test

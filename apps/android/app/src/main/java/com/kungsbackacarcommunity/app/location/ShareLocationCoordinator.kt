@@ -59,6 +59,13 @@ class ShareLocationCoordinator(
     private val sendingFlow = MutableStateFlow<String?>(null)
     val sending: StateFlow<String?> = sendingFlow.asStateFlow()
 
+    // Idempotency keys for shares that are in flight or have failed, keyed by the
+    // target uid. A manual retry of a FAILED share to the same friend reuses the
+    // same key, so `dm-sendMessage` (which uses clientId verbatim as the message
+    // doc id) dedups a send that actually landed server-side but whose ack the
+    // client never saw — no duplicate location DM. Cleared once a send is confirmed.
+    private val pendingClientIds = mutableMapOf<String, String>()
+
     /** Loads (or reloads, on retry) the eligible friends. */
     suspend fun load() {
         stateFlow.value = ShareLocationState.Loading
@@ -76,10 +83,20 @@ class ShareLocationCoordinator(
     suspend fun share(friend: FriendSummary, location: ShareableLocation): Boolean {
         if (sendingFlow.value != null) return false
         sendingFlow.value = friend.uid
+        // Reuse a prior key for a retry to this friend; mint one otherwise. UUID
+        // hex + dashes satisfies the callable's clientId charset ([A-Za-z0-9_-]).
+        val clientId = pendingClientIds.getOrPut(friend.uid) { java.util.UUID.randomUUID().toString() }
         return try {
             val text = LocationShare.messageText(location.name, location.point)
-            when (dmRepository.sendMessage(friend.uid, text)) {
-                is DmSendResult.Sent -> true
+            when (dmRepository.sendMessage(friend.uid, text, clientId)) {
+                is DmSendResult.Sent -> {
+                    // Confirmed: retire the key so a fresh, deliberate re-share to
+                    // the same friend is a NEW message, not a deduped repeat.
+                    pendingClientIds.remove(friend.uid)
+                    true
+                }
+                // Keep the key so a manual retry is idempotent against a send that
+                // may have landed server-side.
                 is DmSendResult.Failed -> false
             }
         } finally {
