@@ -1401,7 +1401,7 @@
     "layersZoomFar": "Farther",
     "layersZoomNear": "Closer",
     "layersAlertAgeTitle": "Alert age",
-    "layersAlertAgeHelp": "Hide Trafikverket alerts older than this. Your own reports always show.",
+    "layersAlertAgeHelp": "Hide Trafikverket alerts older than this. Member reports are never hidden.",
     "layersAlertAgeNewest": "Newest",
     "layersAlertAgeAll": "All",
     "layersAlertAge6h": "6 hours",

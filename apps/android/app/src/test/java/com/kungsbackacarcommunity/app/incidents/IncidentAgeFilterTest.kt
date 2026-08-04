@@ -121,19 +121,18 @@ class IncidentAgeFilterTest {
     }
 
     @Test
-    fun `fromStoredOrdinal maps unset and out-of-range values to the default`() {
-        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredOrdinal(null))
-        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredOrdinal(-1))
-        assertEquals(
-            IncidentAgeFilter.DEFAULT,
-            IncidentAgeFilter.fromStoredOrdinal(IncidentAgeOption.entries.size),
-        )
+    fun `fromStoredName maps unset and unrecognised values to the default`() {
+        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredName(null))
+        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredName(""))
+        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredName("NOT_AN_OPTION"))
+        // An ordinal-as-string is not a name, so it must NOT be reinterpreted.
+        assertEquals(IncidentAgeFilter.DEFAULT, IncidentAgeFilter.fromStoredName("0"))
     }
 
     @Test
-    fun `a stored ordinal round-trips back to its option`() {
+    fun `a stored name round-trips back to its option`() {
         for (option in IncidentAgeOption.entries) {
-            assertEquals(option, IncidentAgeFilter.fromStoredOrdinal(option.ordinal))
+            assertEquals(option, IncidentAgeFilter.fromStoredName(option.name))
         }
     }
 

@@ -1304,7 +1304,7 @@
     <string name="shell_layersZoomFar">Längre bort</string>
     <string name="shell_layersZoomNear">Närmare</string>
     <string name="shell_layersAlertAgeTitle">Varningarnas ålder</string>
-    <string name="shell_layersAlertAgeHelp">Dölj Trafikverkets varningar som är äldre än detta. Dina egna rapporter visas alltid.</string>
+    <string name="shell_layersAlertAgeHelp">Dölj Trafikverkets varningar som är äldre än detta. Medlemmars rapporter döljs aldrig.</string>
     <string name="shell_layersAlertAgeNewest">Nyaste</string>
     <string name="shell_layersAlertAgeAll">Alla</string>
     <string name="shell_layersAlertAge6h">6 timmar</string>

@@ -1304,7 +1304,7 @@
     <string name="shell_layersZoomFar">Farther</string>
     <string name="shell_layersZoomNear">Closer</string>
     <string name="shell_layersAlertAgeTitle">Alert age</string>
-    <string name="shell_layersAlertAgeHelp">Hide Trafikverket alerts older than this. Your own reports always show.</string>
+    <string name="shell_layersAlertAgeHelp">Hide Trafikverket alerts older than this. Member reports are never hidden.</string>
     <string name="shell_layersAlertAgeNewest">Newest</string>
     <string name="shell_layersAlertAgeAll">All</string>
     <string name="shell_layersAlertAge6h">6 hours</string>

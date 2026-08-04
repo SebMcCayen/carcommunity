@@ -77,14 +77,16 @@ object IncidentAgeFilter {
     val sliderSteps: Int = (orderedOptions.size - 2).coerceAtLeast(0)
 
     /**
-     * Decodes a persisted ordinal into an option. A null (nothing stored yet) or an
-     * out-of-range value (a corrupt/hand-edited pref, or an option removed in a
-     * later build) falls back to [DEFAULT] rather than throwing. This is the ONE
-     * place "unset means show everything" lives, kept pure so it is unit-testable
-     * without a `SharedPreferences`.
+     * Decodes a persisted enum NAME into an option. A null (nothing stored yet) or
+     * an unrecognised name (a corrupt/hand-edited pref, or an option renamed/removed
+     * in a later build) falls back to [DEFAULT] rather than throwing. Names, not
+     * ordinals, so reordering or inserting options never silently reinterprets a
+     * stored choice — the same robust scheme `ThemePreference.fromStoredName` uses.
+     * This is the ONE place "unset means show everything" lives, kept pure so it is
+     * unit-testable without a `SharedPreferences`.
      */
-    fun fromStoredOrdinal(raw: Int?): IncidentAgeOption =
-        raw?.let { IncidentAgeOption.entries.getOrNull(it) } ?: DEFAULT
+    fun fromStoredName(name: String?): IncidentAgeOption =
+        IncidentAgeOption.entries.find { it.name == name } ?: DEFAULT
 
     /**
      * Whether [incident] should be DRAWN given the selected [option] and the current
@@ -164,22 +166,16 @@ class IncidentAgeFilterPreferenceStore(context: Context) {
 
     /** Records the user's choice and applies it to collectors. */
     fun set(option: IncidentAgeOption) {
-        prefs.edit().putInt(KEY_MAX_AGE, option.ordinal).apply()
+        prefs.edit().putString(KEY_MAX_AGE, option.name).apply()
         state.value = option
     }
 
-    private fun readStored(): IncidentAgeOption {
-        val raw = if (prefs.contains(KEY_MAX_AGE)) prefs.getInt(KEY_MAX_AGE, DEFAULT_RAW) else null
-        return IncidentAgeFilter.fromStoredOrdinal(raw)
-    }
+    private fun readStored(): IncidentAgeOption =
+        IncidentAgeFilter.fromStoredName(prefs.getString(KEY_MAX_AGE, null))
 
     private companion object {
         const val PREFS_NAME = "app_incident_age_filter"
-        const val KEY_MAX_AGE = "max_age_ordinal"
-
-        // Only reached when the key is present, so its exact value is never used;
-        // getInt still demands a default argument.
-        const val DEFAULT_RAW = 0
+        const val KEY_MAX_AGE = "max_age"
     }
 }
 

@@ -932,9 +932,13 @@ fun AuthenticatedApp(
             // Trafikverket alerts older than the chosen age are dropped BEFORE
             // markers/attribution are built, so the age-out is invisible downstream.
             // Member reports and alerts with no usable posted-time are never dropped
-            // (see IncidentAgeFilter). `now` is snapped per recompute; between the
-            // 15 s polls an alert right at the boundary can linger one interval,
-            // which is immaterial for a stale-backlog display filter.
+            // (see IncidentAgeFilter). `now` is snapped when this recomputes, i.e.
+            // whenever the setting changes OR the incident list does (each live poll
+            // replaces it) — it does NOT advance on its own while both sit still. So
+            // an alert can cross the boundary a little before the next list change
+            // re-evaluates it. That imprecision is immaterial at these thresholds
+            // (6 h … 30 days): deliberately no ticking-clock recomposition is wired
+            // just to age a display filter out to the second.
             val visibleIncidents =
                 remember(nearbyIncidents, incidentMaxAge) {
                     IncidentAgeFilter.visible(

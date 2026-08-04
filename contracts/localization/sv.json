@@ -1401,7 +1401,7 @@
     "layersZoomFar": "Längre bort",
     "layersZoomNear": "Närmare",
     "layersAlertAgeTitle": "Varningarnas ålder",
-    "layersAlertAgeHelp": "Dölj Trafikverkets varningar som är äldre än detta. Dina egna rapporter visas alltid.",
+    "layersAlertAgeHelp": "Dölj Trafikverkets varningar som är äldre än detta. Medlemmars rapporter döljs aldrig.",
     "layersAlertAgeNewest": "Nyaste",
     "layersAlertAgeAll": "Alla",
     "layersAlertAge6h": "6 timmar",
