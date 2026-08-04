@@ -13,7 +13,8 @@
   },
   "map": {
     "dragHint": "Drag the pin or click the map to set the location. You can also type exact coordinates below.",
-    "unavailable": "Map unavailable — no map is configured. Enter the coordinates manually below."
+    "unavailable": "Map unavailable — no map is configured. Enter the coordinates manually below.",
+    "loadError": "Map unavailable — it failed to load (check the Mapbox token and network). Enter the coordinates manually below."
   },
   "announcements": {
     "title": "Announcements",

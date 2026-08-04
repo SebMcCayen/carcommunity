@@ -30,6 +30,9 @@ const gl = vi.hoisted(() => ({
   mapOpts: [] as Array<{ center: [number, number]; zoom: number }>,
   addedControls: [] as string[],
   navControlCount: 0,
+  // Captured map event handlers, keyed by event type, so a test can drive the
+  // 'error'/'load' lifecycle the real GL runtime would emit.
+  handlers: {} as Record<string, Array<(ev?: unknown) => void>>,
 }));
 
 // Hermetic stub for the proprietary Mapbox GL JS runtime (no WebGL in jsdom).
@@ -56,7 +59,9 @@ vi.mock('mapbox-gl', () => {
     constructor(opts: { center: [number, number]; zoom: number }) {
       gl.mapOpts.push({ center: opts.center, zoom: opts.zoom });
     }
-    on() {}
+    on(type: string, listener: (ev?: unknown) => void) {
+      (gl.handlers[type] ??= []).push(listener);
+    }
     addSource() {}
     getSource() {}
     removeSource() {}
@@ -93,6 +98,7 @@ beforeEach(() => {
   gl.mapOpts.length = 0;
   gl.addedControls.length = 0;
   gl.navControlCount = 0;
+  gl.handlers = {};
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -263,5 +269,35 @@ describe('MapLocationPicker (map path — camera + zoom controls)', () => {
 
     expect(gl.navControlCount).toBe(1);
     expect(gl.addedControls).toContain('top-right');
+  });
+
+  it('surfaces the load-error notice when GL errors before the style loads (blank-tiles case)', async () => {
+    await renderWithMap(
+      <MapLocationPicker
+        latitude=""
+        longitude=""
+        onChange={() => {}}
+        labelLat="Latitude"
+        labelLng="Longitude"
+        unavailableText="No token configured"
+        loadErrorText="Map failed to load"
+      />,
+    );
+
+    // The map canvas mounted (token present) and no error yet.
+    expect(container.querySelector('[data-testid="map-canvas"]')).toBeTruthy();
+
+    // Simulate a GL 'error' arriving BEFORE 'load' — i.e. the style/tile
+    // requests were blocked (CSP) or rejected (401). This is exactly the
+    // "controls + logo render but the canvas stays blank" failure.
+    act(() => {
+      for (const fn of gl.handlers.error ?? []) fn();
+    });
+
+    // The blank box is replaced by the distinct load-error notice (not the
+    // no-token "unavailable" copy), so the failure is diagnosable.
+    expect(container.querySelector('[data-testid="map-canvas"]')).toBeNull();
+    expect(container.textContent).toContain('Map failed to load');
+    expect(container.textContent).not.toContain('No token configured');
   });
 });

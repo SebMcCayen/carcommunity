@@ -421,6 +421,7 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, submi
         labelLng={t('events.form.longitudeLabel')}
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
+        loadErrorText={t('map.loadError')}
         disabled={isSubmitting}
         error={
           [clientErrors.latitude, clientErrors.longitude]
