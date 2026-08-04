@@ -1388,6 +1388,7 @@
     <string name="shareLocation_subtitle">Välj en vän att dela %1$s med</string>
     <string name="shareLocation_empty">Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.</string>
     <string name="shareLocation_error">Det gick inte att läsa in dina vänner. Försök igen.</string>
+    <string name="shareLocation_retry">Försök igen</string>
     <string name="shareLocation_unnamedFriend">Vän</string>
     <string name="turnByTurn_start">Starta</string>
     <string name="turnByTurn_exit">Avsluta navigering</string>

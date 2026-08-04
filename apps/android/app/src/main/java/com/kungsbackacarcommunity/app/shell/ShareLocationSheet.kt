@@ -44,6 +44,7 @@ import kotlinx.coroutines.launch
 const val SHARE_LOCATION_SHEET_TEST_TAG = "share_location_sheet"
 const val SHARE_LOCATION_EMPTY_TEST_TAG = "share_location_empty"
 const val SHARE_LOCATION_ERROR_TEST_TAG = "share_location_error"
+const val SHARE_LOCATION_RETRY_TEST_TAG = "share_location_retry"
 
 /** Test-tag prefix for one friend row (suffixed with the friend uid). */
 fun shareLocationFriendRowTestTag(uid: String): String = "share_location_friend_$uid"
@@ -123,15 +124,23 @@ fun ShareLocationSheet(
                     }
 
                 ShareLocationState.Error ->
-                    Text(
-                        text = stringResource(R.string.shareLocation_error),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier =
-                            Modifier
-                                .padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s3)
-                                .testTag(SHARE_LOCATION_ERROR_TEST_TAG),
-                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = KccSpacing.s2, vertical = KccSpacing.s3),
+                        verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.shareLocation_error),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.testTag(SHARE_LOCATION_ERROR_TEST_TAG),
+                        )
+                        TextButton(
+                            onClick = { scope.launch { coordinator.load() } },
+                            modifier = Modifier.testTag(SHARE_LOCATION_RETRY_TEST_TAG),
+                        ) {
+                            Text(stringResource(R.string.shareLocation_retry))
+                        }
+                    }
 
                 is ShareLocationState.Ready ->
                     if (current.friends.isEmpty()) {
@@ -149,6 +158,11 @@ fun ShareLocationSheet(
                             FriendRow(
                                 friend = friend,
                                 sending = sendingUid == friend.uid,
+                                // Disable EVERY row while any send is in flight, so a
+                                // second tap can't reach the coordinator's busy guard
+                                // and be misread as a send failure. Only the sending
+                                // row shows the spinner.
+                                enabled = sendingUid == null,
                                 onClick = {
                                     scope.launch {
                                         val ok = coordinator.share(friend, location)
@@ -172,6 +186,7 @@ fun ShareLocationSheet(
 private fun FriendRow(
     friend: FriendSummary,
     sending: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     val name =
@@ -179,7 +194,7 @@ private fun FriendRow(
             ?: stringResource(R.string.shareLocation_unnamedFriend)
     TextButton(
         onClick = onClick,
-        enabled = !sending,
+        enabled = enabled,
         modifier = Modifier.fillMaxWidth().testTag(shareLocationFriendRowTestTag(friend.uid)),
     ) {
         Row(

@@ -1491,6 +1491,7 @@
     "subtitle": "Choose a friend to share %1$s with",
     "empty": "You haven't added any friends yet. Add friends to share locations with them.",
     "error": "Couldn't load your friends. Try again.",
+    "retry": "Try again",
     "unnamedFriend": "Friend"
   },
   "turnByTurn": {

@@ -11,8 +11,11 @@ import com.kungsbackacarcommunity.app.friends.FriendSummary
 import com.kungsbackacarcommunity.app.friends.FriendsData
 import com.kungsbackacarcommunity.app.friends.FriendsResult
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -96,6 +99,49 @@ class ShareLocationCoordinatorTest {
         val coordinator = ShareLocationCoordinator({ FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList())) }, dm)
 
         assertFalse(coordinator.share(friend("u1", "Anna"), location))
+        assertEquals(1, dm.sendCalls)
+    }
+
+    /** A DM fake whose send suspends until [gate] completes, to model an in-flight send. */
+    private class GatedDm(private val gate: CompletableDeferred<Unit>) : DmRepository {
+        var sendCalls = 0
+
+        override fun observeConversations(uid: String): Flow<DmConversationsState> = emptyFlow()
+
+        override fun observeThread(conversationId: String): Flow<DmThreadState> = emptyFlow()
+
+        override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult {
+            sendCalls++
+            gate.await()
+            return DmSendResult.Sent("c", "m")
+        }
+
+        override suspend fun loadOlder(conversationId: String, before: String): DmOlderResult =
+            DmOlderResult.Failed
+
+        override suspend fun markRead(conversationId: String) = Unit
+    }
+
+    @Test
+    fun `a second share while one is in flight is ignored, not a duplicate send`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val dm = GatedDm(gate)
+        val coordinator = ShareLocationCoordinator({ FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList())) }, dm)
+
+        // Start a first share that parks inside sendMessage (gate not yet completed).
+        val first = launch { coordinator.share(friend("u1", "Anna"), location) }
+        runCurrent()
+        assertEquals("u1", coordinator.sending.value)
+
+        // A second tap while the first is in flight must be ignored (returns false)
+        // WITHOUT reaching sendMessage — so the UI never mistakes it for a failure.
+        assertFalse(coordinator.share(friend("u2", "Bo"), location))
+        assertEquals(1, dm.sendCalls)
+
+        // Let the first send finish; the busy marker clears.
+        gate.complete(Unit)
+        first.join()
+        assertNull(coordinator.sending.value)
         assertEquals(1, dm.sendCalls)
     }
 }

@@ -1388,6 +1388,7 @@
     <string name="shareLocation_subtitle">Choose a friend to share %1$s with</string>
     <string name="shareLocation_empty">You haven\'t added any friends yet. Add friends to share locations with them.</string>
     <string name="shareLocation_error">Couldn\'t load your friends. Try again.</string>
+    <string name="shareLocation_retry">Try again</string>
     <string name="shareLocation_unnamedFriend">Friend</string>
     <string name="turnByTurn_start">Start</string>
     <string name="turnByTurn_exit">Exit navigation</string>

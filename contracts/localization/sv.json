@@ -1491,6 +1491,7 @@
     "subtitle": "Välj en vän att dela %1$s med",
     "empty": "Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.",
     "error": "Det gick inte att läsa in dina vänner. Försök igen.",
+    "retry": "Försök igen",
     "unnamedFriend": "Vän"
   },
   "turnByTurn": {
