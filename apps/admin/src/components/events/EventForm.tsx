@@ -80,7 +80,7 @@ function toFormData(event?: AdminEventDetail): EventFormData {
     description: event.description ?? '',
     startsAt: toLocalDateTimeValue(event.startsAt),
     endsAt: toLocalDateTimeValue(event.endsAt),
-    approximateArea: event.approximateArea,
+    approximateArea: event.approximateArea ?? '',
     locationName: event.locationName ?? '',
     address: event.address ?? '',
     latitude: event.latitude != null ? String(event.latitude) : '',

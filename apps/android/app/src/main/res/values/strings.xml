@@ -302,11 +302,8 @@
     <string name="events_createSubtitle">Dela en träff eller ett event med communityt.</string>
     <string name="events_createLiveNotice">Din träff publiceras direkt när du skapar den — ingen väntan på godkännande. Administratörerna håller koll i efterhand och kan ta bort en träff som bryter mot reglerna.</string>
     <string name="events_createFieldTitle">Titel</string>
-    <string name="events_createFieldArea">Ungefärligt område</string>
-    <string name="events_createFieldSummary">Kort sammanfattning (valfritt)</string>
-    <string name="events_createFieldDescription">Beskrivning (valfritt)</string>
-    <string name="events_createFieldLocationName">Platsnamn (valfritt)</string>
-    <string name="events_createFieldAddress">Adress (valfritt)</string>
+    <string name="events_createFieldDescription">Beskrivning</string>
+    <string name="events_createFieldAddress">Adress</string>
     <string name="events_createLocationNone">Ingen kartnål utsatt än. Evenemang med en nål syns på kartan för alla.</string>
     <string name="events_createLocationSet">Kartnål satt vid %1$s. Den visas på kartan för alla.</string>
     <string name="events_createLocationPick">Sätt ut på kartan</string>
@@ -328,7 +325,7 @@
     <string name="events_createCancel">Avbryt</string>
     <string name="events_createError">Det gick inte att skapa träffen. Försök igen.</string>
     <string name="events_createSuccess">Träffen har skapats — den är publicerad nu.</string>
-    <string name="events_createValidation">Lägg till en titel, ett ungefärligt område och en starttid.</string>
+    <string name="events_createValidation">Lägg till en titel och en starttid.</string>
     <string name="events_createDialogNext">Nästa</string>
     <string name="events_createDialogConfirm">OK</string>
     <string name="events_createRateLimited">Du kan skapa %1$d träffar per dygn. Du har nått gränsen — försök igen senare.</string>

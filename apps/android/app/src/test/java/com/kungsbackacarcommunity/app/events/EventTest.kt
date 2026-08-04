@@ -64,7 +64,11 @@ class EventTest {
         val ok = createInput()
         assertTrue(Events.isValidForCreate(ok))
         assertFalse(Events.isValidForCreate(ok.copy(title = "   ")))
-        assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "")))
+        // approximateArea is optional now (the create form dropped its input):
+        // a null or blank area is valid, but an over-length one is still rejected.
+        assertTrue(Events.isValidForCreate(ok.copy(approximateArea = null)))
+        assertTrue(Events.isValidForCreate(ok.copy(approximateArea = "")))
+        assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(title = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis - 1)))
         assertTrue(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis + 1)))
@@ -92,6 +96,25 @@ class EventTest {
         assertEquals("hi", payload["summary"]) // trimmed
         assertFalse(payload.containsKey("description")) // blank dropped
         assertTrue(payload.containsKey("endsAt"))
+        assertFalse(payload.containsKey("locationName"))
+    }
+
+    @Test
+    fun `trimmed create form builds a valid payload without area, summary or location-name`() {
+        // The create form no longer collects "Approximate area", "Short summary"
+        // or "Location name" — all three are optional server-side, so the form
+        // omits them entirely. This pins that the trimmed input is still valid for
+        // create and that none of the three keys leak into the callable payload.
+        val input =
+            CreateEventInput(
+                title = "Cars & Coffee",
+                startsAtMillis = 1_783_794_600_000L,
+            )
+        assertTrue(Events.isValidForCreate(input))
+        val payload = Events.createPayload(input)
+        assertEquals("Cars & Coffee", payload["title"])
+        assertFalse(payload.containsKey("approximateArea"))
+        assertFalse(payload.containsKey("summary"))
         assertFalse(payload.containsKey("locationName"))
     }
 

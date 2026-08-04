@@ -61,10 +61,7 @@ fun CreateEventScreen(
     modifier: Modifier = Modifier,
 ) {
     var title by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable { mutableStateOf("") }
-    var summary by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
-    var locationName by rememberSaveable { mutableStateOf("") }
     var address by rememberSaveable { mutableStateOf("") }
     var startsAtMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     // Map-pin coordinates captured by the location picker (both set or both null).
@@ -127,14 +124,6 @@ fun CreateEventScreen(
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
-        OutlinedTextField(
-            value = area,
-            onValueChange = { area = it },
-            label = { Text(text = stringResource(R.string.events_createFieldArea)) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
         // Start date/time.
         Text(
             text =
@@ -149,22 +138,9 @@ fun CreateEventScreen(
         }
 
         OutlinedTextField(
-            value = summary,
-            onValueChange = { summary = it },
-            label = { Text(text = stringResource(R.string.events_createFieldSummary)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
             value = description,
             onValueChange = { description = it },
             label = { Text(text = stringResource(R.string.events_createFieldDescription)) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = locationName,
-            onValueChange = { locationName = it },
-            label = { Text(text = stringResource(R.string.events_createFieldLocationName)) },
-            singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedTextField(
@@ -247,13 +223,13 @@ fun CreateEventScreen(
             onClick = {
                 val input =
                     startsAt?.let {
+                        // "Approximate area", "Short summary" and "Location name"
+                        // inputs were removed from this form (2026-08); they are
+                        // optional server-side, so we omit them entirely.
                         CreateEventInput(
                             title = title,
-                            approximateArea = area,
                             startsAtMillis = it,
-                            summary = summary.ifBlank { null },
                             description = description.ifBlank { null },
-                            locationName = locationName.ifBlank { null },
                             address = address.ifBlank { null },
                             latitude = latitude,
                             longitude = longitude,

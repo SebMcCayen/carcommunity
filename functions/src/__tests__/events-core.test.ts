@@ -73,8 +73,18 @@ describe('events-core input parsing', () => {
     expect(result.ok).toBe(true);
   });
 
+  it('accepts a createEventRequest without approximateArea (optional since 2026-08)', () => {
+    // The member create form dropped its "Approximate area" input, so the
+    // callable must accept a payload that omits it entirely.
+    expect(parseCreateEventInput({ title: 'No area', startsAt: validCreate.startsAt }).ok).toBe(
+      true,
+    );
+  });
+
   it('rejects create input missing required fields', () => {
-    expect(parseCreateEventInput({ title: 'No area or start' }).ok).toBe(false);
+    // title + startsAt remain required; approximateArea does not.
+    expect(parseCreateEventInput({ title: 'No start time' }).ok).toBe(false);
+    expect(parseCreateEventInput({ startsAt: validCreate.startsAt }).ok).toBe(false);
     expect(parseCreateEventInput(undefined).ok).toBe(false);
   });
 
@@ -148,14 +158,15 @@ describe('events-core business guards', () => {
     expect(guardUpdatableStatus('completed').ok).toBe(false);
   });
 
-  it('publishes only future-starting drafts with required fields', () => {
+  it('publishes only future-starting drafts with a title', () => {
     const now = new Date('2027-01-01T00:00:00Z');
     const base = {
       status: 'draft' as const,
       title: 'T',
-      approximateArea: 'A',
       startsAt: new Date('2027-06-01T18:00:00Z'),
     };
+    // A draft with no approximateArea is publishable — the field is optional
+    // since 2026-08 (the create form dropped its input).
     expect(guardPublishable(base, now).ok).toBe(true);
     expect(guardPublishable({ ...base, status: 'published' }, now).ok).toBe(false);
     expect(guardPublishable({ ...base, title: '' }, now).ok).toBe(false);
@@ -268,6 +279,16 @@ describe('events-core document builders', () => {
     expect(privateDoc).not.toHaveProperty('locationName');
     expect(privateDoc).not.toHaveProperty('latitude');
     expect(privateDoc).not.toHaveProperty('longitude');
+  });
+
+  it('stores approximateArea as null when the create request omits it', () => {
+    // The member create form no longer collects an area; the field is optional
+    // and the stored teaser doc keeps the key present (null) so its shape stays
+    // stable.
+    const parsed = parseCreateEventInput({ title: 'No area', startsAt: validCreate.startsAt });
+    if (!parsed.ok) throw new Error('expected ok');
+    const { eventDoc } = buildEventDocuments(parsed.input, 'admin-1', serverTimestamp);
+    expect(eventDoc.approximateArea).toBeNull();
   });
 
   it('routes partial updates to the correct document and tracks changedFields', () => {

@@ -303,7 +303,7 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
         summary = getString("summary"),
         startsAtMillis = getTimestamp("startsAt")?.toDate()?.time,
         endsAtMillis = getTimestamp("endsAt")?.toDate()?.time,
-        approximateArea = getString("approximateArea") ?: "",
+        approximateArea = getString("approximateArea"),
         // Public map location (2026-07): read off the teaser so the map can pin
         // every published event without the member gate.
         locationName = getString("locationName"),

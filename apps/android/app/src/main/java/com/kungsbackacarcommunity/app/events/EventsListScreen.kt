@@ -196,11 +196,13 @@ private fun EventCard(event: EventSummary, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = event.approximateArea,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
+                Text(
+                    text = area,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }

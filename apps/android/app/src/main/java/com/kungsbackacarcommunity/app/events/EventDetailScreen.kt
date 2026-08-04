@@ -121,11 +121,13 @@ fun EventDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Text(
-                text = event.approximateArea,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onBackground,
-            )
+            event.approximateArea?.takeIf { it.isNotBlank() }?.let { area ->
+                Text(
+                    text = area,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
             // PUBLIC place name (teaser data since the 2026-07 open-up — it is
             // what the map pin is labelled with), so it sits OUTSIDE the member
             // gate below: a non-member who taps a pin must still see where the

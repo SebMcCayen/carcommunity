@@ -302,11 +302,8 @@
     <string name="events_createSubtitle">Share a meet or gathering with the community.</string>
     <string name="events_createLiveNotice">Your event goes live as soon as you create it — there\'s no approval wait. Admins keep an eye on things afterwards and can take an event down if it breaks the rules.</string>
     <string name="events_createFieldTitle">Title</string>
-    <string name="events_createFieldArea">Approximate area</string>
-    <string name="events_createFieldSummary">Short summary (optional)</string>
-    <string name="events_createFieldDescription">Description (optional)</string>
-    <string name="events_createFieldLocationName">Location name (optional)</string>
-    <string name="events_createFieldAddress">Address (optional)</string>
+    <string name="events_createFieldDescription">Description</string>
+    <string name="events_createFieldAddress">Address</string>
     <string name="events_createLocationNone">No map pin placed yet. Events with a pin show up on the map for everyone.</string>
     <string name="events_createLocationSet">Map pin placed at %1$s. It\'s shown on the map for everyone.</string>
     <string name="events_createLocationPick">Place on map</string>
@@ -328,7 +325,7 @@
     <string name="events_createCancel">Cancel</string>
     <string name="events_createError">Could not create the event. Please try again.</string>
     <string name="events_createSuccess">Event created — it\'s live now.</string>
-    <string name="events_createValidation">Add a title, an approximate area and a start time.</string>
+    <string name="events_createValidation">Add a title and a start time.</string>
     <string name="events_createDialogNext">Next</string>
     <string name="events_createDialogConfirm">OK</string>
     <string name="events_createRateLimited">You can create %1$d events per day. You\'ve reached that limit — please try again later.</string>

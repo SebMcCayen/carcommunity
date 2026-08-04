@@ -94,7 +94,6 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
       {
         status: 'draft',
         title: input.title,
-        approximateArea: input.approximateArea,
         startsAt: new Date(input.startsAt),
       },
       new Date(),
