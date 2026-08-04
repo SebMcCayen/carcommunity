@@ -64,6 +64,10 @@ fun TurnByTurnNavScreen(
     onExit: () -> Unit,
     @Suppress("UNUSED_PARAMETER") onReportIncident: (IncidentType, ReportLocation) -> Unit,
     modifier: Modifier = Modifier,
+    // Signature parity with the real src/nav screen (the host wires the back-key
+    // confirm through here). Routed through BACK below so the stub behaves the
+    // same way, though a token-less build never reaches a live route to guard.
+    onBackPressed: () -> Unit = onExit,
     // Present ONLY to keep this stub's signature identical to the real src/nav
     // implementation, so the single host call site compiles in both builds.
     // Unused: this screen renders an "unavailable" panel and owns no map.
@@ -85,7 +89,7 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
-    BackHandler { onExit() }
+    BackHandler { onBackPressed() }
     Box(
         modifier = modifier.fillMaxSize().padding(KccSpacing.s4),
         contentAlignment = Alignment.Center,
