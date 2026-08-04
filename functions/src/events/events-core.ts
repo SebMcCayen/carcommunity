@@ -57,7 +57,10 @@ const createEventInputSchema = z
     description: eventFieldsSchema.description.optional(),
     startsAt: eventFieldsSchema.startsAt,
     endsAt: eventFieldsSchema.endsAt.optional(),
-    approximateArea: eventFieldsSchema.approximateArea,
+    // Optional since 2026-08: the member create form dropped its "Approximate
+    // area" input. Still bounded (min 1 / max 200) WHEN supplied by an
+    // admin/programmatic caller; simply omitted otherwise.
+    approximateArea: eventFieldsSchema.approximateArea.optional(),
     locationName: eventFieldsSchema.locationName.optional(),
     address: eventFieldsSchema.address.optional(),
     latitude: eventFieldsSchema.latitude.optional(),
@@ -110,7 +113,7 @@ export function parseCreateEventInput(data: unknown): ParseResult<CreateEventInp
   return parse(
     createEventInputSchema,
     data,
-    'Expected createEventRequest (contracts/schemas/events.schema.json): { title, startsAt, approximateArea, ...optional fields }.',
+    'Expected createEventRequest (contracts/schemas/events.schema.json): { title, startsAt, ...optional fields }.',
   );
 }
 
@@ -276,19 +279,24 @@ export function guardUpdatableStatus(status: EventStatus): GuardResult {
   return { ok: true };
 }
 
-/** Only future-starting drafts with title + approximateArea can be published. */
+/**
+ * Only future-starting drafts with a title can be published. `approximateArea`
+ * is optional since 2026-08 (the create form dropped its input), so it is no
+ * longer a publish precondition; a member-created event — which runs through
+ * this same guard in `manageEvent` — may carry none.
+ */
 export function guardPublishable(
-  event: { status: EventStatus; title: string; approximateArea: string; startsAt: Date },
+  event: { status: EventStatus; title: string; startsAt: Date },
   now: Date,
 ): GuardResult {
   if (event.status !== 'draft') {
     return { ok: false, code: 'failed-precondition', message: 'Only draft events can be published.' };
   }
-  if (!event.title || !event.approximateArea) {
+  if (!event.title) {
     return {
       ok: false,
       code: 'failed-precondition',
-      message: 'Event must have title and approximateArea before publishing.',
+      message: 'Event must have a title before publishing.',
     };
   }
   if (event.startsAt.getTime() < now.getTime()) {
@@ -532,7 +540,9 @@ export function buildEventDocuments(
       // When no explicit end is given, an event runs until the end of its
       // Europe/Stockholm start day (23:59:59.999 local).
       endsAt: new Date(effectiveEndsAt(input.startsAt, input.endsAt)),
-      approximateArea: input.approximateArea,
+      // Optional since 2026-08 (create form dropped its input) — stored null when
+      // the caller supplies none.
+      approximateArea: input.approximateArea ?? null,
       // Public map location (see the file header): the place name and the
       // coordinate pair live on the teaser so every signed-in user sees the pin.
       locationName: input.locationName ?? null,

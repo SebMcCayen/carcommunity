@@ -25,7 +25,7 @@ export interface AdminEventSummary {
   isOfficial: boolean;
   startsAt: string;
   endsAt: string | null;
-  approximateArea: string;
+  approximateArea: string | null;
   rsvpCounts: EventRsvpSummary;
   cancelledAt: string | null;
   createdAt: string;
@@ -44,7 +44,7 @@ export interface AdminEventDetail {
   status: EventStatus;
   startsAt: string;
   endsAt: string | null;
-  approximateArea: string;
+  approximateArea: string | null;
   locationName: string | null;
   address: string | null;
   latitude: number | null;
@@ -90,7 +90,7 @@ export interface CreateEventRequest {
   description?: string | null;
   startsAt: string;
   endsAt?: string | null;
-  approximateArea: string;
+  approximateArea?: string;
   locationName?: string | null;
   address?: string | null;
   latitude?: number | null;

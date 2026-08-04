@@ -64,7 +64,11 @@ class EventTest {
         val ok = createInput()
         assertTrue(Events.isValidForCreate(ok))
         assertFalse(Events.isValidForCreate(ok.copy(title = "   ")))
-        assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "")))
+        // approximateArea is optional now (the create form dropped its input):
+        // a null or blank area is valid, but an over-length one is still rejected.
+        assertTrue(Events.isValidForCreate(ok.copy(approximateArea = null)))
+        assertTrue(Events.isValidForCreate(ok.copy(approximateArea = "")))
+        assertFalse(Events.isValidForCreate(ok.copy(approximateArea = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(title = "x".repeat(201))))
         assertFalse(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis - 1)))
         assertTrue(Events.isValidForCreate(ok.copy(endsAtMillis = ok.startsAtMillis + 1)))
@@ -96,24 +100,20 @@ class EventTest {
     }
 
     @Test
-    fun `create form default builds a valid payload without area, summary or location-name inputs`() {
+    fun `trimmed create form builds a valid payload without area, summary or location-name`() {
         // The create form no longer collects "Approximate area", "Short summary"
-        // or "Location name". It stamps DEFAULT_APPROXIMATE_AREA (which the
-        // backend still requires) and leaves summary/locationName null. This pins
-        // that the trimmed form still produces a create request the callable
-        // accepts, and that the two dropped optionals are absent from the payload.
-        assertTrue(Events.DEFAULT_APPROXIMATE_AREA.isNotBlank())
+        // or "Location name" — all three are optional server-side, so the form
+        // omits them entirely. This pins that the trimmed input is still valid for
+        // create and that none of the three keys leak into the callable payload.
         val input =
             CreateEventInput(
                 title = "Cars & Coffee",
-                approximateArea = Events.DEFAULT_APPROXIMATE_AREA,
                 startsAtMillis = 1_783_794_600_000L,
-                summary = null,
-                locationName = null,
             )
         assertTrue(Events.isValidForCreate(input))
         val payload = Events.createPayload(input)
-        assertEquals(Events.DEFAULT_APPROXIMATE_AREA, payload["approximateArea"])
+        assertEquals("Cars & Coffee", payload["title"])
+        assertFalse(payload.containsKey("approximateArea"))
         assertFalse(payload.containsKey("summary"))
         assertFalse(payload.containsKey("locationName"))
     }

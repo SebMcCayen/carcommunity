@@ -212,7 +212,6 @@ export const publish = onCall(CALLABLE_OPTS, async (request): Promise<EventIdRes
         {
           status: event.status,
           title: event.title,
-          approximateArea: event.approximateArea,
           startsAt: event.startsAt.toDate(),
         },
         new Date(),

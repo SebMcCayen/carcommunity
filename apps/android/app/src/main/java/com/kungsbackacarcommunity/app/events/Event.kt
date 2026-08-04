@@ -68,7 +68,11 @@ data class EventSummary(
     val summary: String?,
     val startsAtMillis: Long?,
     val endsAtMillis: Long?,
-    val approximateArea: String,
+    // Coarse area label. Null when the organiser gave none — the "Approximate
+    // area" input was removed from the member create form (2026-08), so events
+    // created since carry no area. Older events keep the value they were created
+    // with. Displayed only when present.
+    val approximateArea: String?,
     // Public map location; null when the organiser positioned no pin. Defaulted so
     // fixtures without a location stay terse — the repository sets them from the
     // teaser, and the map layer only pins events where both coordinates are set.
@@ -92,10 +96,10 @@ data class EventDetail(
 
 /**
  * Client input for creating an event — mirrors the backend `createEventRequest`
- * (contracts/schemas/events.schema.json): required `title`, `startsAt`,
- * `approximateArea`, plus the optional teaser/detail fields a user-facing form
- * exposes. Times are carried as epoch millis and serialized to ISO-8601 UTC by
- * the repository ([Events.toIsoUtc]).
+ * (contracts/schemas/events.schema.json): required `title` and `startsAt`, plus
+ * the optional teaser/detail fields a user-facing form exposes (`approximateArea`
+ * among them since the create form dropped its input). Times are carried as epoch
+ * millis and serialized to ISO-8601 UTC by the repository ([Events.toIsoUtc]).
  *
  * A caller who passes the member gate may drive `events-create` themselves
  * (that is any signed-in, non-suspended user while member gating is disabled):
@@ -108,8 +112,12 @@ data class EventDetail(
  */
 data class CreateEventInput(
     val title: String,
-    val approximateArea: String,
     val startsAtMillis: Long,
+    // Optional coarse area. The member create form no longer collects it (2026-08)
+    // so it is normally null; the backend `createEventRequest` treats it as
+    // optional. Kept as an input field so an admin/programmatic caller can still
+    // supply one.
+    val approximateArea: String? = null,
     val summary: String? = null,
     val description: String? = null,
     val endsAtMillis: Long? = null,
@@ -226,17 +234,6 @@ object Events {
             compareBy(nullsLast(reverseOrder<Long>())) { it.startsAtMillis },
         )
 
-    /**
-     * Default coarse area stamped on member-created events. The user-facing
-     * "Approximate area" input was removed from the create form (2026-08); the
-     * backend's `createEventRequest` still requires a non-empty `approximateArea`
-     * (events-core.ts / contracts events.schema.json), so the form supplies this
-     * community-scoped default instead of collecting one. This is a Kungsbacka
-     * Car Community app — the coarse area is effectively always Kungsbacka — so
-     * the value is a sensible, honest default rather than a placeholder.
-     */
-    const val DEFAULT_APPROXIMATE_AREA = "Kungsbacka"
-
     /** Backend field limits (events-core.ts eventFieldsSchema). */
     const val TITLE_MAX = 200
     const val AREA_MAX = 200
@@ -247,15 +244,14 @@ object Events {
 
     /**
      * Whether a [CreateEventInput] satisfies the backend's required-field and
-     * length rules — a title and area that are non-blank and within bounds, and
-     * (when present) an end no earlier than the start. Pure so the form and the
-     * coordinator can gate submission without Firebase.
+     * length rules — a non-blank title within bounds, an optional area within
+     * bounds when present, and (when present) an end no earlier than the start.
+     * Pure so the form and the coordinator can gate submission without Firebase.
      */
     fun isValidForCreate(input: CreateEventInput): Boolean {
         val title = input.title.trim()
-        val area = input.approximateArea.trim()
         if (title.isEmpty() || title.length > TITLE_MAX) return false
-        if (area.isEmpty() || area.length > AREA_MAX) return false
+        if ((input.approximateArea?.trim()?.length ?: 0) > AREA_MAX) return false
         if ((input.summary?.length ?: 0) > SUMMARY_MAX) return false
         if ((input.description?.length ?: 0) > DESCRIPTION_MAX) return false
         if ((input.locationName?.length ?: 0) > LOCATION_NAME_MAX) return false
@@ -303,9 +299,9 @@ object Events {
     fun createPayload(input: CreateEventInput): Map<String, Any> {
         val payload = mutableMapOf<String, Any>(
             "title" to input.title.trim(),
-            "approximateArea" to input.approximateArea.trim(),
             "startsAt" to toIsoUtc(input.startsAtMillis),
         )
+        input.approximateArea?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["approximateArea"] = it }
         input.endsAtMillis?.let { payload["endsAt"] = toIsoUtc(it) }
         input.summary?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["summary"] = it }
         input.description?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["description"] = it }

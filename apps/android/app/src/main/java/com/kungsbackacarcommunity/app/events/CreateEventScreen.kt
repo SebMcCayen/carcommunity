@@ -223,13 +223,11 @@ fun CreateEventScreen(
             onClick = {
                 val input =
                     startsAt?.let {
+                        // "Approximate area", "Short summary" and "Location name"
+                        // inputs were removed from this form (2026-08); they are
+                        // optional server-side, so we omit them entirely.
                         CreateEventInput(
                             title = title,
-                            // The "Approximate area" input was removed from this form;
-                            // this is a Kungsbacka-local community so every member event
-                            // is stamped with the community's default coarse area, which
-                            // the backend still requires (events.schema createEventRequest).
-                            approximateArea = Events.DEFAULT_APPROXIMATE_AREA,
                             startsAtMillis = it,
                             description = description.ifBlank { null },
                             address = address.ifBlank { null },
