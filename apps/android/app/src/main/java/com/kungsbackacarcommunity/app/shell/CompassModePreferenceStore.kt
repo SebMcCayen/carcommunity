@@ -29,15 +29,28 @@ class CompassModePreferenceStore(context: Context) {
     private val prefs =
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    // The mode currently on disk, cached so [write] can skip a redundant put.
+    // Seeded from disk on construction: the stored pick, or the course-up
+    // default when unset.
+    private var current: MapCompassMode = MapCompassMode.fromStoredName(prefs.getString(KEY_MODE, null))
+
     /**
      * The stored mode, or [MapCompassMode.DEFAULT] (course-up) when the user has
      * never chosen one. Crash-safe on an unknown/corrupt value via
      * [MapCompassMode.fromStoredName].
      */
-    fun read(): MapCompassMode = MapCompassMode.fromStoredName(prefs.getString(KEY_MODE, null))
+    fun read(): MapCompassMode = current
 
-    /** Records the user's chosen mode so it survives a restart. */
+    /**
+     * Records the user's chosen mode so it survives a restart. A no-op when the
+     * mode is unchanged, so seeding the shell's state from [read] and writing it
+     * straight back on the first composition costs no disk I/O — only a genuine
+     * toggle touches SharedPreferences. (Mirrors the "re-pushing the same mode is
+     * a no-op" guard on the surface's setCompassMode.)
+     */
     fun write(mode: MapCompassMode) {
+        if (mode == current) return
+        current = mode
         prefs.edit().putString(KEY_MODE, mode.name).apply()
     }
 
