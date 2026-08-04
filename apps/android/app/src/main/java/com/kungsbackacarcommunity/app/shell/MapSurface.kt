@@ -52,23 +52,59 @@ enum class MapMode {
  * How the map is ORIENTED while it follows the user — toggled by the floating
  * compass control.
  *
- * - [NorthUp] (default): the camera bearing stays at 0 so true north is always
- *   at the top of the screen, exactly as the map has always behaved. Following
- *   the user's POSITION continues; only the rotation is pinned.
- * - [CourseUp]: the camera rotates so the user's travel direction (the puck's
- *   COURSE bearing) points up — a "follow your direction" driving view. Position
- *   following is unchanged; only the bearing now tracks the heading.
+ * - [CourseUp] (default): the camera rotates so the user's travel direction (the
+ *   puck's COURSE bearing) points up — a "follow your direction" driving view.
+ *   Position following is unchanged; only the bearing tracks the heading. This is
+ *   the default a user gets on first run (they can switch to [NorthUp] via the
+ *   compass control, and that choice then persists — see
+ *   [CompassModePreferenceStore]).
+ * - [NorthUp]: the camera bearing stays at 0 so true north is always at the top
+ *   of the screen. Following the user's POSITION continues; only the rotation is
+ *   pinned.
  *
  * This is a first-class part of the [MapSurface] seam (like [MapMode]) so the
  * shell can drive it and the real surface can feed the chosen bearing into its
  * SINGLE follow path rather than spinning up a second, competing camera loop.
  */
 enum class MapCompassMode {
-    /** North stays at the top (default); the camera follows position only. */
+    /** North stays at the top; the camera follows position only. */
     NorthUp,
 
-    /** The map rotates to keep the user's heading pointing up (course-up). */
+    /** The map rotates to keep the user's heading pointing up (course-up, default). */
     CourseUp,
+    ;
+
+    /**
+     * The OTHER mode — the pure toggle the compass control applies on each tap
+     * (north-up ⇄ course-up). Extracted so the "a tap flips to the opposite mode"
+     * contract is unit-testable without composing the button (see
+     * [com.kungsbackacarcommunity.app.shell.CompassModePreferenceTest]).
+     */
+    fun toggled(): MapCompassMode =
+        when (this) {
+            NorthUp -> CourseUp
+            CourseUp -> NorthUp
+        }
+
+    companion object {
+        /**
+         * The default orientation when the user has never chosen one (first run /
+         * unset preference): COURSE-UP, so the map rotates with the direction of
+         * travel out of the box. A stored choice overrides this — see
+         * [fromStoredName].
+         */
+        val DEFAULT: MapCompassMode = CourseUp
+
+        /**
+         * Parses a persisted mode name. Unknown / absent / corrupt names fall back
+         * to [DEFAULT] rather than throwing the way `valueOf` would: this is read
+         * during map start-up, so a throw here would be a launch crash after an
+         * enum rename or a hand-edited prefs file. (Same defensive parse as
+         * [com.kungsbackacarcommunity.app.design.ThemePreference.fromStoredName].)
+         */
+        fun fromStoredName(name: String?): MapCompassMode =
+            entries.find { it.name == name } ?: DEFAULT
+    }
 }
 
 /**
