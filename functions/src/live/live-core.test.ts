@@ -52,6 +52,12 @@ describe('buildSession expiry clamping', () => {
     expect(Date.parse(session.expiresAt) - now.getTime()).toBe(4 * HOUR_MS);
   });
 
+  it('sets a 6h session to exactly the 6h cap (the current client default)', () => {
+    const session = buildSession('id1b', '6h', now, 'Sam', null);
+    expect(Date.parse(session.expiresAt) - now.getTime()).toBe(6 * HOUR_MS);
+    expect(Date.parse(session.expiresAt) - now.getTime()).toBe(LIVE_SESSION_MAX_MS);
+  });
+
   it('never mints an expiry beyond the 6h cap', () => {
     const session = buildSession('id2', '1h', now, 'Sam', null);
     expect(Date.parse(session.expiresAt) - now.getTime()).toBeLessThanOrEqual(LIVE_SESSION_MAX_MS);

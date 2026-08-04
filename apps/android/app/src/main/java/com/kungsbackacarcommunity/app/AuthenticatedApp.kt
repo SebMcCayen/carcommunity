@@ -2288,9 +2288,10 @@ fun AuthenticatedApp(
 
             // Start the Single session IMMEDIATELY — no time/duration choice is
             // shown. When a start is actually possible we begin sharing at once
-            // for the default window; otherwise fall back to the live screen /
-            // unavailable snackbar (same gate as the toggle). Users can Extend
-            // before expiry and Stop anytime, so a fixed default is fine.
+            // for the 6h default window; otherwise fall back to the live screen /
+            // unavailable snackbar (same gate as the toggle). The session
+            // auto-stops at 6h with no prolong prompt, and Stop is always
+            // available, so a fixed default is fine.
             fun requestStartSingleSession() {
                 if (liveLocationCoordinator != null && canShareLive) {
                     startSingleSession(LiveLocation.DEFAULT_SESSION_DURATION)
@@ -5518,12 +5519,6 @@ private fun RouteHost(
                 onStop = {
                     liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
                     BackgroundLocationController.stop(context)
-                },
-                onExtend = {
-                    // Keep sharing: a fresh capped window (never past 6h). The
-                    // foreground service and drive recording continue untouched —
-                    // only the session's expiry is pushed forward server-side.
-                    liveLocationCoordinator?.let { c -> scope.launch { c.extend() } }
                 },
                 onHideMeNow = {
                     liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }

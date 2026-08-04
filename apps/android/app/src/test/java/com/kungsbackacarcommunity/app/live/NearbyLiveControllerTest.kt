@@ -25,7 +25,6 @@ class NearbyLiveControllerTest {
         override suspend fun startSession(duration: LiveSessionDuration) = Unit
         override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
         override suspend fun stopSession() = Unit
-        override suspend fun extendSession() = Unit
         override suspend fun hideMeNow() = Unit
         override fun observeOwnSession(uid: String): Flow<LiveSessionInfo?> = flowOf(null)
         override fun observeLatest(uid: String): Flow<LiveMarker?> = flowOf(null)

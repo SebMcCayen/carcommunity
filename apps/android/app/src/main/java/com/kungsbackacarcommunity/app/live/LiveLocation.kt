@@ -14,6 +14,15 @@ enum class LiveSessionDuration(val key: String, val hours: Int) {
     ONE_HOUR("1h", 1),
     TWO_HOURS("2h", 2),
     FOUR_HOURS("4h", 4),
+
+    /**
+     * The window every session now starts with (single AND convoy): 6 hours, i.e.
+     * the hard cap ([LIVE_SESSION_MAX_MS]). A session simply runs to 6h and
+     * auto-stops — nothing prompts the user to prolong it. The shorter keys above
+     * are kept only for backward compatibility (sessions/older clients that still
+     * carry them); mirror of the backend LIVE_SESSION_DURATIONS map.
+     */
+    SIX_HOURS("6h", 6),
     ;
 
     companion object {
@@ -53,13 +62,14 @@ object LiveLocation {
      * The window a Single (solo) live session starts with. Starting a Single
      * session is IMMEDIATE — the user is no longer asked to pick a time — so this
      * fixed default is the single source of truth for every Single-session start
-     * (the shell's start path AND [LiveLocationScreen]). It preserves the picker's
-     * former pre-selected default. The backend `live-startSession` callable still
-     * requires a `duration`; this key is passed through unchanged. Users can still
-     * Extend before expiry and Stop anytime. Convoy sessions are unaffected —
-     * their per-member window is chosen server-side.
+     * (the shell's start path AND [LiveLocationScreen]). It is the 6h hard cap
+     * ([LIVE_SESSION_MAX_MS]): the session runs for 6 hours and then auto-stops,
+     * with nothing asking the user to prolong it. The user can Stop (or Hide me
+     * now) at any time. The backend `live-startSession` callable still requires a
+     * `duration`; this `6h` key is passed through unchanged. Convoy sessions match
+     * this — their window is the same 6h cap, chosen server-side.
      */
-    val DEFAULT_SESSION_DURATION: LiveSessionDuration = LiveSessionDuration.ONE_HOUR
+    val DEFAULT_SESSION_DURATION: LiveSessionDuration = LiveSessionDuration.SIX_HOURS
 
     /**
      * Absolute hard cap on any one live-sharing window (single AND convoy — a
@@ -73,14 +83,6 @@ object LiveLocation {
     const val LIVE_SESSION_MAX_MS: Long = 6 * 60 * 60 * 1000L // 6 hours
 
     /**
-     * How long before `expiresAt` the client shows the "still sharing? continue?"
-     * extend prompt. Mirror of the server's `LIVE_SESSION_EXTEND_PROMPT_MS`. 15
-     * min before a 6h window is the "5h45" checkpoint; before a shorter chosen
-     * window it is simply 15 min before that window's end.
-     */
-    const val LIVE_SESSION_EXTEND_PROMPT_MS: Long = 15 * 60 * 1000L // 15 minutes
-
-    /**
      * Whether the caller is currently sharing: an active session that has not
      * passed its expiry. Mirrors the backend isSessionActive check. A null
      * (unparseable) expiry does not hide an active session.
@@ -89,23 +91,6 @@ object LiveLocation {
         session != null &&
             session.status == LiveSessionStatus.ACTIVE &&
             (session.expiresAtMillis == null || session.expiresAtMillis > nowMillis)
-
-    /**
-     * Whether the session is inside its final [LIVE_SESSION_EXTEND_PROMPT_MS]
-     * before expiry — the window in which the app asks the user to extend.
-     *
-     * Requires a currently-sharing session with a PARSEABLE expiry: an
-     * unparseable/absent expiry has no known deadline to count down to, so there
-     * is nothing to prompt about (the hard-ceiling backstop handles that case).
-     * Already-expired sessions return false — the moment to extend has passed and
-     * the stop path takes over.
-     */
-    fun isExpiringSoon(session: LiveSessionInfo?, nowMillis: Long): Boolean {
-        if (!isSharing(session, nowMillis)) return false
-        val expires = session?.expiresAtMillis ?: return false
-        val remaining = expires - nowMillis
-        return remaining in 1..LIVE_SESSION_EXTEND_PROMPT_MS
-    }
 
     /** Whole seconds remaining until expiry, floored at 0; null if unknown. */
     fun remainingSeconds(session: LiveSessionInfo?, nowMillis: Long): Long? {

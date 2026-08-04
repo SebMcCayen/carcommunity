@@ -1078,10 +1078,10 @@ internal fun EventMarkerInfoPopup(
  *   and "More options" were removed from it.
  * - While sharing WITHOUT [onStop] (turn-by-turn navigation): no Stop, but the
  *   never-gated Hide-me-now and the "More options" audience entry, unchanged.
- * - Not sharing and [canShareLive]: a single "start sharing" action. The 1h/2h/4h
- *   duration choice is NOT here — [onStart] hands off to the single-session start
- *   flow (shared with the "+" Create → Single session), which is where the
- *   duration is picked.
+ * - Not sharing and [canShareLive]: a single "start sharing" action. No duration
+ *   is chosen anywhere — [onStart] hands off to the single-session start flow
+ *   (shared with the "+" Create → Single session), which starts a fixed 6h window
+ *   that auto-stops at the cap with no prompt to prolong it.
  * - Not sharing and not [canShareLive]: an "unavailable" notice (starting is
  *   FLAG-gated by LIVE_LOCATION, NOT member-gated — sharing your own position is
  *   free); Hide stays reachable in the sharing state.
@@ -1217,9 +1217,9 @@ internal fun LiveSharePopup(
                     }
                 }
                 if (rows.showStart) {
-                    // One-tap start: the 1h/2h/4h duration choice has moved to
-                    // the single-session start flow (raised by the host), so this
-                    // control no longer picks a duration inline.
+                    // One-tap start: no duration is chosen inline (or anywhere) —
+                    // the single-session start flow (raised by the host) begins a
+                    // fixed 6h window that auto-stops at the cap.
                     Button(
                         onClick = {
                             onStart()

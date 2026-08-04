@@ -75,11 +75,15 @@ const discoveryRef = (uid: string) => db.collection('liveSessions').doc(uid);
 
 /**
  * The live-session duration a convoy-auto session is started with. A convoy has
- * no fixed length, so the longest supported duration is used; the session is
- * stopped explicitly when the user leaves/ends the convoy (stopConvoyAutoSession)
- * and, as a backstop, expires via the TTL sweep after this window regardless.
+ * no fixed length, so the 6h hard-cap window (LIVE_SESSION_MAX_MS) is used — the
+ * same maximum a single session gets, and the longest any one window may run. The
+ * session is stopped explicitly when the user leaves/ends the convoy
+ * (stopConvoyAutoSession) and, as a backstop, its expiresAt lands at the 6h mark
+ * and the scheduled TTL sweep reaps it at or shortly after that, when the sweep
+ * next runs. There is deliberately no prolong/extend prompt: the window simply
+ * ends at 6h.
  */
-export const CONVOY_AUTO_SESSION_DURATION: LiveSessionDuration = '4h';
+export const CONVOY_AUTO_SESSION_DURATION: LiveSessionDuration = '6h';
 
 export interface SessionResponse {
   sessionId: string;

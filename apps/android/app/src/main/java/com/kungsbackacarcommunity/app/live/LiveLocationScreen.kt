@@ -42,13 +42,11 @@ fun LiveLocationScreen(
     canShare: Boolean,
     onStart: (LiveSessionDuration) -> Unit,
     onStop: () -> Unit,
-    onExtend: () -> Unit,
     onHideMeNow: () -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
 ) {
     val sharing = LiveLocation.isSharing(session, nowMillis)
-    val expiringSoon = LiveLocation.isExpiringSoon(session, nowMillis)
     val busy = actionStatus == LiveActionStatus.Working
 
     AeroPage(title = stringResource(R.string.liveLocation_screenTitle), modifier = modifier) {
@@ -74,22 +72,6 @@ fun LiveLocationScreen(
         }
 
         if (sharing) {
-            // Within the final 15 min before expiry: offer to extend right here
-            // (the in-app surface of the same prompt the background notification
-            // shows). Extending grants a fresh capped window, never past 6h.
-            if (expiringSoon) {
-                InfoCard(
-                    title = stringResource(R.string.liveLocation_extendInAppTitle),
-                    body = stringResource(R.string.liveLocation_extendInAppBody),
-                )
-                Button(
-                    onClick = onExtend,
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = stringResource(R.string.liveLocation_extendInAppExtend))
-                }
-            }
             // Stopping an active session is authenticated-gated (not
             // member-gated) on the backend, so ALWAYS offer Stop while
             // sharing — even if membership/flag state has lapsed since the
@@ -103,9 +85,10 @@ fun LiveLocationScreen(
             }
         } else if (canShare) {
             // Starting is IMMEDIATE — no time/duration is chosen. Start shares at
-            // once for the default window; the user can Extend before expiry and
-            // Stop anytime. The backend callable still takes a duration, so the
-            // fixed default key is passed through unchanged.
+            // once for the 6h default window; it auto-stops at 6h with no prompt to
+            // prolong, and the user can Stop anytime. The backend callable still
+            // takes a duration, so the fixed 6h default key is passed through
+            // unchanged.
             Button(
                 onClick = { onStart(LiveLocation.DEFAULT_SESSION_DURATION) },
                 enabled = !busy,
@@ -197,7 +180,6 @@ private fun LiveLocationPreview() {
             canShare = true,
             onStart = {},
             onStop = {},
-            onExtend = {},
             onHideMeNow = {},
         )
     }
@@ -214,7 +196,6 @@ private fun LiveLocationGatedPreview() {
             canShare = false,
             onStart = {},
             onStop = {},
-            onExtend = {},
             onHideMeNow = {},
         )
     }

@@ -43,33 +43,51 @@ import { z } from 'zod';
 
 import { MIN_MODEL_YEAR, maxModelYear } from '../garage/garage-core';
 
-export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4 } as const;
+// '6h' is the live-session window every CURRENT client starts with (single AND
+// convoy) — it equals LIVE_SESSION_MAX_MS, so a session simply runs to the 6h
+// hard cap and auto-stops, with no "prolong/extend" prompt in between. The
+// shorter 1h/2h/4h keys are retained for BACKWARD COMPATIBILITY: sessions
+// already stored in RTDB by older app builds carry them, and an older client
+// still in the wild may pass one to live.startSession. Every key is bounded by
+// the same 6h cap (clampExpiryToCap in buildSession), so accepting them is safe.
+export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4, '6h': 6 } as const;
 export type LiveSessionDuration = keyof typeof LIVE_SESSION_DURATIONS;
 
 /**
- * Cost/data control constants for live-location sessions — the SERVER copies of
- * the shared timeframes. The Android client keeps its own copies
- * (`LiveLocation.LIVE_SESSION_MAX_MS` / `LIVE_SESSION_EXTEND_PROMPT_MS` and the
- * `location/` service constants); the two boundaries cannot literally share a
+ * The accepted duration keys, derived from {@link LIVE_SESSION_DURATIONS} so the
+ * start-session schema and the map cannot drift: add or remove a key in ONE place
+ * and both the numeric window and the accepted input follow. Typed as a non-empty
+ * tuple because that is the shape `z.enum` requires.
+ */
+export const LIVE_SESSION_DURATION_KEYS = Object.keys(LIVE_SESSION_DURATIONS) as [
+  LiveSessionDuration,
+  ...LiveSessionDuration[],
+];
+
+/**
+ * Cost/data control constant for live-location sessions — the SERVER copy of the
+ * 6h cap. The Android client keeps its own copy (`LiveLocation.LIVE_SESSION_MAX_MS`
+ * plus the `location/` service constants); the two cannot literally share a
  * constant across the TS/Kotlin line, so each side documents the other and the
  * agreement is asserted by tests (functions/src/live/live-core.test.ts here,
- * `LiveLocationTest` on the client). Seb-approved values, kept as named
- * constants so they stay retunable in one place.
+ * `LiveLocationTest` on the client). Seb-approved value, kept as a named constant
+ * so it stays retunable in one place.
  *
  * LIVE_SESSION_MAX_MS is the ABSOLUTE ceiling on any one sharing window (single
- * AND convoy — a convoy member shares through the very same session node). No
- * `expiresAt` this backend ever writes — at start OR on extend — may be more
- * than this far past `now`. A forgotten phone therefore always stops within one
- * window; continuing past it requires a deliberate human "yes" (see
- * `extendSession`), which grants a fresh capped window.
+ * AND convoy — a convoy member shares through the very same session node), and is
+ * also the window every current client starts with: a session simply runs to 6h
+ * and auto-stops, with no prompt to prolong it. No `expiresAt` this backend ever
+ * writes — at start OR on the retained backward-compatible extend — may be more
+ * than this far past `now`, so a forgotten phone always stops within one window.
  */
 export const LIVE_SESSION_MAX_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
- * How long before `expiresAt` the client shows the "still sharing? continue?"
- * extend prompt. Server-side only in that the server documents it and the client
- * mirrors it; the prompt itself is a client concern. 15 min before a 6h window
- * is the "5h45" checkpoint Seb specified.
+ * Legacy: how long before `expiresAt` an OLDER client used to show the "still
+ * sharing? continue?" extend prompt. The current client no longer prompts to
+ * prolong — a session just runs to the 6h cap and auto-stops — so this is retained
+ * only to document the window the still-deployed backward-compatible
+ * `extendSession` callable serves. Not read by the current app.
  */
 export const LIVE_SESSION_EXTEND_PROMPT_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -127,7 +145,7 @@ const coordinateSchema = z
   .strict();
 
 const startSessionInputSchema = z
-  .object({ duration: z.enum(['1h', '2h', '4h']) })
+  .object({ duration: z.enum(LIVE_SESSION_DURATION_KEYS) })
   .strict();
 
 const updatePositionInputSchema = z.object({ coordinate: coordinateSchema }).strict();
@@ -158,7 +176,11 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 }
 
 export const parseStartSessionInput = (d: unknown) =>
-  parse(startSessionInputSchema, d, 'Expected { duration: 1h|2h|4h }.');
+  parse(
+    startSessionInputSchema,
+    d,
+    `Expected { duration: ${LIVE_SESSION_DURATION_KEYS.join('|')} }.`,
+  );
 export const parseUpdatePositionInput = (d: unknown) =>
   parse(
     updatePositionInputSchema,
@@ -313,10 +335,11 @@ export function buildSession(
   displayName: string | null,
   mainCar: LiveMainCar | null = null,
 ): LiveSession {
-  // The chosen 1h/2h/4h window, clamped to the 6h hard cap. Today every pickable
-  // duration is already under the cap, so this is a no-op for real inputs, but it
-  // keeps the invariant "no expiresAt is ever more than LIVE_SESSION_MAX_MS past
-  // now" true at the one place expiries are minted — matching extendSession.
+  // The chosen window, clamped to the 6h hard cap. The current client always
+  // passes '6h', which equals the cap, so clampExpiryToCap is exactly the
+  // identity there; the retained shorter keys sit under it. Either way this keeps
+  // the invariant "no expiresAt is ever more than LIVE_SESSION_MAX_MS past now"
+  // true at the one place expiries are minted — matching extendSession.
   const expires = new Date(
     clampExpiryToCap(now.getTime(), now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000),
   );

@@ -26,7 +26,7 @@ enum class LiveSharingStopReason {
     /** No signed-in user (sign-out, or the signed-in uid changed). */
     SIGNED_OUT,
 
-    /** The session passed its 1h/2h/4h expiry. */
+    /** The session passed its 6h expiry. */
     EXPIRED,
 
     /** The session node says stopped/expired — a manual stop or a remote end. */
@@ -42,7 +42,7 @@ enum class LiveSharingStopReason {
  * The ceiling has to be anchored to the SESSION, not to the service instance:
  * anchoring it to the instance means a process kill (LMK, OEM task killer, a
  * crash) resets it, and `START_REDELIVER_INTENT` then restarts the service with
- * a fresh 4h05m budget. With an unparseable expiry — the one case the ceiling
+ * a fresh 6h05m budget. With an unparseable expiry — the one case the ceiling
  * exists for, since [LiveLocation.isSharing] treats a null expiry as still
  * sharing — repeated restarts would let background location sharing run
  * unbounded, which is exactly the outcome the ceiling was written to prevent.
@@ -157,11 +157,12 @@ class LiveSharingLifecycle(
 
         // Hard ceiling — the BACKSTOP for a session with no usable expiry.
         //
-        // When the expiry parses (the normal case, INCLUDING a session that was
-        // extended: extendSession just pushes expiresAt forward to a fresh capped
-        // window ≤ 6h out), the expiry check below is the real bound and this
-        // ceiling must NOT fire — otherwise a legitimately-extended session would
-        // be force-stopped at the old runtime limit despite a valid future expiry.
+        // When the expiry parses (the normal case: every session starts a 6h
+        // window, so expiresAt is ≤ 6h out), the expiry check below is the real
+        // bound and this ceiling must NOT fire — otherwise a session with a valid
+        // future expiry would be force-stopped early. (An older client that still
+        // extends via live-extendSession likewise only ever pushes expiresAt to a
+        // fresh ≤ 6h window, so the same reasoning holds.)
         //
         // When the expiry is null/unparseable, [LiveLocation.isSharing] treats the
         // session as still sharing, so nothing else would ever stop it. The ceiling
@@ -213,7 +214,7 @@ class LiveSharingLifecycle(
      * indistinguishable from an erased node, and that is precisely why the
      * absent path has a grace window rather than stopping outright. Clearing on
      * it would let a restart within the same `sessionId` re-anchor a fresh
-     * 4h05m, in exactly the unparseable-expiry case the ceiling bounds.
+     * 6h05m, in exactly the unparseable-expiry case the ceiling bounds.
      *
      * [LiveSharingStopReason.SIGNED_OUT] is treated the same way, which is
      * stricter than it strictly needs to be: the session can still be ACTIVE

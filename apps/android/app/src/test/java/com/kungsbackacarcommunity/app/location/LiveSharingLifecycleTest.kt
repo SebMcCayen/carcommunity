@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.location
 
+import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionInfo
 import com.kungsbackacarcommunity.app.live.LiveSessionStatus
@@ -179,20 +180,34 @@ class LiveSharingLifecycleTest {
     }
 
     @Test
-    fun `a parseable session extended past the old ceiling keeps sharing to its new expiry`() {
-        // Regression for the extend flow: a session whose expiry was pushed forward
-        // by extendSession (parseable, up to 6h out) must NOT be force-stopped at
-        // the old 4h05m runtime ceiling. Parseable expiry is the ONLY bound.
+    fun `the standard 6h session keeps sharing before 6h and stops at the cap`() {
+        // The cap decision for the normal (parseable-expiry) case: every session
+        // now starts a 6h window (expiry = startedAt + LIVE_SESSION_MAX_MS), runs
+        // to the full 6h, and then auto-stops on expiry — no prompt, no ceiling
+        // override. "Should it still be running?" is true before 6h, false at/after.
         val lifecycle = LiveSharingLifecycle()
-        val extended = session(expiresAtMillis = now + 6 * ONE_HOUR)
-        lifecycle.onObservation(true, extended, now)
+        val sixHourSession = session(expiresAtMillis = now + LiveLocation.LIVE_SESSION_MAX_MS)
+        lifecycle.onObservation(true, sixHourSession, now)
 
-        // 5h in — past the old ceiling, still inside the (extended) expiry.
-        assertContinue(lifecycle.onTick(true, now + 5 * ONE_HOUR))
-        // At the new expiry it stops on expiry, as normal.
+        // Just before the 6h mark: still sharing.
+        assertContinue(lifecycle.onTick(true, now + LiveLocation.LIVE_SESSION_MAX_MS - 1))
+        // Exactly at 6h: stops on expiry (isSharing is false at expiry).
         assertStopped(
             LiveSharingStopReason.EXPIRED,
-            lifecycle.onTick(true, now + 6 * ONE_HOUR),
+            lifecycle.onTick(true, now + LiveLocation.LIVE_SESSION_MAX_MS),
+        )
+    }
+
+    @Test
+    fun `a restart observing a session already past its 6h expiry stops immediately`() {
+        // Process death + START_REDELIVER_INTENT: the restarted service re-reads the
+        // session and, if the 6h window has already elapsed (expiry now in the past),
+        // must stop at once rather than resurrect an out-of-budget session.
+        val lifecycle = LiveSharingLifecycle()
+        val startedOverSixHoursAgo = session(expiresAtMillis = now - 1)
+        assertStopped(
+            LiveSharingStopReason.EXPIRED,
+            lifecycle.onObservation(true, startedOverSixHoursAgo, now),
         )
     }
 
