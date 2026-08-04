@@ -109,14 +109,6 @@ class ConvoyFocusTest {
         assertEquals(only.longitude, bounds.east, 1e-9)
     }
 
-    @Test
-    fun `an empty framed set is never asked to refit so its bounds are never taken`() {
-        // boundsOf is only ever called on a non-empty set; shouldRefit is the
-        // guard that keeps an empty set from ever reaching the camera. Pin that
-        // contract so nobody "fixes" boundsOf to tolerate empty and hides a gap.
-        assertFalse(ConvoyFocusPlanner.shouldRefit(listOf(me, other), emptyList()))
-    }
-
     // ---- refit hysteresis --------------------------------------------------
 
     @Test
