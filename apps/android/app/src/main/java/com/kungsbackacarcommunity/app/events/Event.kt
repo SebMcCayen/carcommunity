@@ -226,6 +226,17 @@ object Events {
             compareBy(nullsLast(reverseOrder<Long>())) { it.startsAtMillis },
         )
 
+    /**
+     * Default coarse area stamped on member-created events. The user-facing
+     * "Approximate area" input was removed from the create form (2026-08); the
+     * backend's `createEventRequest` still requires a non-empty `approximateArea`
+     * (events-core.ts / contracts events.schema.json), so the form supplies this
+     * community-scoped default instead of collecting one. This is a Kungsbacka
+     * Car Community app — the coarse area is effectively always Kungsbacka — so
+     * the value is a sensible, honest default rather than a placeholder.
+     */
+    const val DEFAULT_APPROXIMATE_AREA = "Kungsbacka"
+
     /** Backend field limits (events-core.ts eventFieldsSchema). */
     const val TITLE_MAX = 200
     const val AREA_MAX = 200

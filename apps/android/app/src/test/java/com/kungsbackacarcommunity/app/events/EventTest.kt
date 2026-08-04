@@ -96,6 +96,29 @@ class EventTest {
     }
 
     @Test
+    fun `create form default builds a valid payload without area, summary or location-name inputs`() {
+        // The create form no longer collects "Approximate area", "Short summary"
+        // or "Location name". It stamps DEFAULT_APPROXIMATE_AREA (which the
+        // backend still requires) and leaves summary/locationName null. This pins
+        // that the trimmed form still produces a create request the callable
+        // accepts, and that the two dropped optionals are absent from the payload.
+        assertTrue(Events.DEFAULT_APPROXIMATE_AREA.isNotBlank())
+        val input =
+            CreateEventInput(
+                title = "Cars & Coffee",
+                approximateArea = Events.DEFAULT_APPROXIMATE_AREA,
+                startsAtMillis = 1_783_794_600_000L,
+                summary = null,
+                locationName = null,
+            )
+        assertTrue(Events.isValidForCreate(input))
+        val payload = Events.createPayload(input)
+        assertEquals(Events.DEFAULT_APPROXIMATE_AREA, payload["approximateArea"])
+        assertFalse(payload.containsKey("summary"))
+        assertFalse(payload.containsKey("locationName"))
+    }
+
+    @Test
     fun `past list is most recent first`() {
         val sorted =
             Events.sortedForPastList(
