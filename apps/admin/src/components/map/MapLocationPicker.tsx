@@ -252,7 +252,28 @@ export function MapLocationPicker({
         // leaving a silently empty map. Errors AFTER a successful load are
         // ignored: transient per-tile fetch hiccups must not kill a live map.
         map.on('error', () => {
-          if (!cancelled && !loaded) setMapError(true);
+          if (cancelled || loaded) return;
+          // Tear the GL instance down HERE, not just in the effect cleanup:
+          // tripping mapError rerenders and unmounts the container, but the
+          // effect's cleanup only runs on unmount / a [mapReady, token,
+          // disabled] change — mapError is not a dependency — so without an
+          // explicit teardown a live WebGL map would keep running against a
+          // detached node (a leak + background errors). Removal is guarded by
+          // nulling the refs so the later cleanup can't double-remove.
+          try {
+            markerRef.current?.remove();
+          } catch {
+            // Already removed / mid-teardown — non-fatal.
+          }
+          markerRef.current = null;
+          try {
+            mapRef.current?.remove();
+          } catch {
+            // Already removed / mid-teardown — non-fatal.
+          }
+          mapRef.current = null;
+          map = null;
+          setMapError(true);
         });
 
         const marker = new mapboxgl.Marker({

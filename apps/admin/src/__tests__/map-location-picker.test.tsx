@@ -33,6 +33,8 @@ const gl = vi.hoisted(() => ({
   // Captured map event handlers, keyed by event type, so a test can drive the
   // 'error'/'load' lifecycle the real GL runtime would emit.
   handlers: {} as Record<string, Array<(ev?: unknown) => void>>,
+  // Times the map instance's remove() was called, to assert explicit teardown.
+  mapRemoveCount: 0,
 }));
 
 // Hermetic stub for the proprietary Mapbox GL JS runtime (no WebGL in jsdom).
@@ -76,7 +78,9 @@ vi.mock('mapbox-gl', () => {
     addControl(_control: unknown, position?: string) {
       gl.addedControls.push(position ?? '');
     }
-    remove() {}
+    remove() {
+      gl.mapRemoveCount += 1;
+    }
     resize() {}
   }
   const api = {
@@ -99,6 +103,7 @@ beforeEach(() => {
   gl.addedControls.length = 0;
   gl.navControlCount = 0;
   gl.handlers = {};
+  gl.mapRemoveCount = 0;
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -299,5 +304,11 @@ describe('MapLocationPicker (map path — camera + zoom controls)', () => {
     expect(container.querySelector('[data-testid="map-canvas"]')).toBeNull();
     expect(container.textContent).toContain('Map failed to load');
     expect(container.textContent).not.toContain('No token configured');
+
+    // The live GL instance is torn down at the error (not leaked against a
+    // detached node), and unmounting afterwards must NOT double-remove it.
+    expect(gl.mapRemoveCount).toBe(1);
+    act(() => root.unmount());
+    expect(gl.mapRemoveCount).toBe(1);
   });
 });
