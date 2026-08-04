@@ -1894,7 +1894,11 @@ fun AuthenticatedApp(
             val positionSavedText = stringResource(R.string.shell_placeSaved)
             val sharedLocationName = stringResource(R.string.shell_sharedLocationName)
             // Share-to-friend confirmation copy, resolved in composition (the send
-            // callback fires off the UI thread and cannot call stringResource).
+            // callback fires off the UI thread and cannot call stringResource). The
+            // "shared" line keeps its %1$s placeholder and is String.format-ed with
+            // the friend name at callback time — a plain-string format, so no
+            // LocalContext resource lookup happens off-composition.
+            val locationSharedTemplate = stringResource(R.string.shell_locationShared)
             val sharedLocationFriendFallback =
                 stringResource(R.string.shell_locationSharedFriendFallback)
             val locationShareFailedText = stringResource(R.string.shell_locationShareFailed)
@@ -1994,7 +1998,7 @@ fun AuthenticatedApp(
                             val name = friendName?.takeIf { it.isNotBlank() } ?: sharedLocationFriendFallback
                             scope.launch {
                                 snackbarHostState.showSnackbar(
-                                    context.getString(R.string.shell_locationShared, name),
+                                    String.format(locationSharedTemplate, name),
                                 )
                             }
                         },

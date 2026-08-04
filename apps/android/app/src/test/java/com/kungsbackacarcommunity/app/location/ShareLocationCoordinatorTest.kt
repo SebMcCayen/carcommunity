@@ -30,7 +30,7 @@ class ShareLocationCoordinatorTest {
     private fun friend(uid: String, name: String?) =
         FriendSummary(uid = uid, displayName = name, avatarPath = null, friendsSince = null)
 
-    private class FakeDm(private val result: DmSendResult) : DmRepository {
+    private class FakeDm(var result: DmSendResult) : DmRepository {
         var lastToUid: String? = null
         var lastText: String? = null
         var lastClientId: String? = null
@@ -111,6 +111,22 @@ class ShareLocationCoordinatorTest {
         assertFalse(coordinator.share(friend("u1", "Anna"), location))
         assertEquals(firstId, dm.lastClientId)
         assertEquals(2, dm.sendCalls)
+    }
+
+    @Test
+    fun `a different location to the same friend after a failure is delivered with a new clientId`() = runTest {
+        // First share (location "Mamma") FAILS and retains its key.
+        val dm = FakeDm(DmSendResult.Failed(DmSendError.Generic))
+        val coordinator = ShareLocationCoordinator({ FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList())) }, dm)
+        assertFalse(coordinator.share(friend("u1", "Anna"), location))
+        val idA = dm.lastClientId
+
+        // A DIFFERENT location to the SAME friend must mint a fresh clientId — else
+        // the backend's first-write-wins would silently drop it as a duplicate.
+        dm.result = DmSendResult.Sent("c", "m")
+        val locationB = ShareableLocation(name = "Workshop", point = LatLng(longitude = 11.0, latitude = 56.0))
+        assertTrue(coordinator.share(friend("u1", "Anna"), locationB))
+        assertTrue("expected a new clientId for a different location", dm.lastClientId != idA)
     }
 
     @Test

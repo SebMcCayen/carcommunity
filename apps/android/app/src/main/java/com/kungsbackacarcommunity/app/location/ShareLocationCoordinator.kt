@@ -60,10 +60,14 @@ class ShareLocationCoordinator(
     val sending: StateFlow<String?> = sendingFlow.asStateFlow()
 
     // Idempotency keys for shares that are in flight or have failed, keyed by the
-    // target uid. A manual retry of a FAILED share to the same friend reuses the
-    // same key, so `dm-sendMessage` (which uses clientId verbatim as the message
-    // doc id) dedups a send that actually landed server-side but whose ack the
-    // client never saw — no duplicate location DM. Cleared once a send is confirmed.
+    // target uid AND the exact message body. A manual retry of a FAILED share (same
+    // friend, same location text) reuses the key, so `dm-sendMessage` — which uses
+    // clientId verbatim as the message doc id, first-write-wins — dedups a send that
+    // landed server-side but whose ack the client never saw. Keying on the MESSAGE
+    // (not just the uid) is essential: a DIFFERENT location to the same friend must
+    // mint a fresh key, or first-write-wins would silently DROP it as a "duplicate".
+    // Serialized by the send guard below (one share in flight at a time), so this
+    // plain map needs no extra synchronization. Cleared once a send is confirmed.
     private val pendingClientIds = mutableMapOf<String, String>()
 
     /** Loads (or reloads, on retry) the eligible friends. */
@@ -81,18 +85,24 @@ class ShareLocationCoordinator(
      * A second tap while a send is already in flight is ignored (returns false).
      */
     suspend fun share(friend: FriendSummary, location: ShareableLocation): Boolean {
-        if (sendingFlow.value != null) return false
-        sendingFlow.value = friend.uid
-        // Reuse a prior key for a retry to this friend; mint one otherwise. UUID
-        // hex + dashes satisfies the callable's clientId charset ([A-Za-z0-9_-]).
-        val clientId = pendingClientIds.getOrPut(friend.uid) { java.util.UUID.randomUUID().toString() }
+        // Atomic claim: two rapid taps can otherwise both read null before either
+        // writes, firing two sends (with different clientIds, so clientId dedup
+        // would NOT save us). compareAndSet makes the busy check-and-set one step;
+        // a loser gets the ignored/busy path (false), never a spurious failure.
+        if (!sendingFlow.compareAndSet(expect = null, update = friend.uid)) return false
+        val text = LocationShare.messageText(location.name, location.point)
+        // Key on uid + the exact message: a retry of the SAME share reuses its
+        // clientId (idempotent); a different location mints a fresh one so it is
+        // not dropped as a first-write-wins duplicate. UUID hex + dashes satisfy
+        // the callable's clientId charset ([A-Za-z0-9_-]).
+        val key = "${friend.uid}\n$text"
+        val clientId = pendingClientIds.getOrPut(key) { java.util.UUID.randomUUID().toString() }
         return try {
-            val text = LocationShare.messageText(location.name, location.point)
             when (dmRepository.sendMessage(friend.uid, text, clientId)) {
                 is DmSendResult.Sent -> {
-                    // Confirmed: retire the key so a fresh, deliberate re-share to
-                    // the same friend is a NEW message, not a deduped repeat.
-                    pendingClientIds.remove(friend.uid)
+                    // Confirmed: retire the key so a deliberate re-share of the same
+                    // location later is a NEW message, not a deduped repeat.
+                    pendingClientIds.remove(key)
                     true
                 }
                 // Keep the key so a manual retry is idempotent against a send that
@@ -100,7 +110,8 @@ class ShareLocationCoordinator(
                 is DmSendResult.Failed -> false
             }
         } finally {
-            sendingFlow.value = null
+            // Clear only our own marker (a no-op if something else already reset it).
+            sendingFlow.compareAndSet(expect = friend.uid, update = null)
         }
     }
 
