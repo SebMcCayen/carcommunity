@@ -561,15 +561,19 @@ class MapboxMapSurface : MapSurface {
         // In both cases we only remember the value for when that owner releases the
         // camera. The active drive-follow step is untouched either way — it re-centres
         // on later fixes without setting a zoom, so it simply keeps this new one.
-        val clamped = com.kungsbackacarcommunity.app.map.MapZoomPreference.clamp(zoom)
-        val unchanged = clamped == browsingZoom
-        browsingZoom = clamped
+        // Snap (clamp + round to the 0.5 notch) so the surface holds the same
+        // discrete values the store/slider produce — a direct or off-notch call
+        // can't leave the field on a fraction, and the `==` guard below then can't
+        // ease repeatedly on sub-notch float drift.
+        val snapped = com.kungsbackacarcommunity.app.map.MapZoomPreference.snap(zoom)
+        val unchanged = snapped == browsingZoom
+        browsingZoom = snapped
         if (unchanged) return
         val map = mapViewRef ?: return
         if (routeOverlayFlow.value != null || convoyFitPoints != null) return
         runCatching {
             map.camera.easeTo(
-                cameraOptions { zoom(clamped) },
+                cameraOptions { zoom(snapped) },
                 mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
             )
         }

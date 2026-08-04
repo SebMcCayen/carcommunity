@@ -25,9 +25,14 @@ import kotlinx.coroutines.flow.asStateFlow
  * Those paths are left alone; only the resting/browsing zoom is a preference.
  *
  * Higher = CLOSER (more zoomed in), lower = FARTHER away, matching how the slider
- * reads left (farther) to right (closer). Pure Kotlin — no Android or Mapbox
- * imports on the maths — so [clamp]/[snap]/[fromStored] are JVM-unit-testable and
- * the value can be reasoned about off-device.
+ * reads left (farther) to right (closer).
+ *
+ * This object is pure Kotlin — no Android or Mapbox types touch [clamp] / [snap] /
+ * [fromStored] or the constants — so the maths is JVM-unit-testable and can be
+ * reasoned about off-device. (The [MapZoomPreferenceStore] and [MapZoomController]
+ * declared lower in this file ARE Android-bound — a `SharedPreferences` and a
+ * Compose `CompositionLocal` — mirroring how `ThemePreference.kt` co-locates its
+ * pure enum with its Android store.)
  */
 object MapZoomPreference {
     /**
