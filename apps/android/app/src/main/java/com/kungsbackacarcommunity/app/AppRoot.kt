@@ -12,6 +12,8 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.design.LocalThemeController
 import com.kungsbackacarcommunity.app.design.ThemeController
 import com.kungsbackacarcommunity.app.home.HomeScreen
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterController
+import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomController
 
@@ -57,6 +59,11 @@ fun AppRoot(
     // already the app's ambient-preference boundary; null (the default, previews
     // and UI tests) leaves the no-op controller from LocalMapZoomController in place.
     mapZoomController: MapZoomController? = null,
+    // Read/write access to the Trafikverket alert max-age filter for the map-layers
+    // popup, wired alongside the zoom controller for the same reason. Null (previews
+    // and UI tests) leaves the no-op "show everything" default from
+    // LocalIncidentAgeFilterController in place.
+    incidentAgeFilterController: IncidentAgeFilterController? = null,
 ) {
     val content: @Composable () -> Unit = {
         KccTheme(darkTheme = darkTheme) {
@@ -81,10 +88,19 @@ fun AppRoot(
         } else {
             { CompositionLocalProvider(LocalThemeController provides themeController, content = content) }
         }
-    if (mapZoomController == null) {
-        themed()
+    val zoomed: @Composable () -> Unit =
+        if (mapZoomController == null) {
+            themed
+        } else {
+            { CompositionLocalProvider(LocalMapZoomController provides mapZoomController, content = themed) }
+        }
+    if (incidentAgeFilterController == null) {
+        zoomed()
     } else {
-        CompositionLocalProvider(LocalMapZoomController provides mapZoomController, content = themed)
+        CompositionLocalProvider(
+            LocalIncidentAgeFilterController provides incidentAgeFilterController,
+            content = zoomed,
+        )
     }
 }
 

@@ -92,13 +92,17 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.design.LocalKccStatusColors
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationChoiceDialog
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomPreference
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlin.math.roundToInt
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
@@ -295,6 +299,13 @@ fun MapHome(
     // the theme setting (see LocalMapZoomController). Ambient rather than threaded
     // through this composable's already very wide parameter list.
     val mapZoomController = LocalMapZoomController.current
+
+    // The user's Trafikverket alert max-age filter, read from the same ambient
+    // CompositionLocal the marker builder in AuthenticatedApp reads to actually
+    // hide the aged-out alerts — so the popup control and the map agree on one
+    // value. Ambient rather than threaded through this composable's wide parameter
+    // list, mirroring the resting-zoom controller above.
+    val incidentAgeFilterController = LocalIncidentAgeFilterController.current
 
     // Push the resting zoom to the surface so the map opens / re-centres at it.
     // Keyed on mapSurface too so it is re-applied if the surface instance is
@@ -816,6 +827,11 @@ fun MapHome(
                 // the map (the LaunchedEffect above pushes it to the surface).
                 browsingZoom = mapZoomController.browsingZoom,
                 onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
+                // Trafikverket alert max-age filter: the popup shows the current
+                // choice and commits a new one, which persists it and re-filters the
+                // drawn alerts live (the marker builder reads the same controller).
+                incidentMaxAge = incidentAgeFilterController.maxAge,
+                onIncidentMaxAgeChange = { incidentAgeFilterController.setMaxAge(it) },
                 onDismiss = { layersOpen = false },
             )
         }
@@ -892,6 +908,11 @@ internal fun MapLayersPopup(
     // see [LayerZoomSlider] and [com.kungsbackacarcommunity.app.map.MapZoomPreference].
     browsingZoom: Double,
     onBrowsingZoomChange: (Double) -> Unit,
+    // The Trafikverket alert max-age filter and a callback to change it. A discrete
+    // slider in the Traffic-alerts area — see [LayerAlertAgeSlider] and
+    // [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
+    incidentMaxAge: IncidentAgeOption,
+    onIncidentMaxAgeChange: (IncidentAgeOption) -> Unit,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -950,6 +971,17 @@ internal fun MapLayersPopup(
                     onCheckedChange = onIncidentsChange,
                     switchTestTag = MAP_HOME_LAYERS_INCIDENTS_TAG,
                 )
+                // Max-age filter for the Trafikverket alerts drawn by the row above.
+                // In the Traffic-alerts area (directly under its toggle) and shown
+                // only while that layer is on — with it off there is nothing to age
+                // out. Hides Trafikverket alerts older than the chosen age; member
+                // reports are never filtered, and "All" imposes no limit.
+                if (incidentsOn) {
+                    LayerAlertAgeSlider(
+                        maxAge = incidentMaxAge,
+                        onMaxAgeChange = onIncidentMaxAgeChange,
+                    )
+                }
                 LayerToggleRow(
                     label = stringResource(R.string.shell_layersTraffic),
                     checked = trafficOn,
@@ -1071,6 +1103,99 @@ private fun LayerZoomSlider(
             )
             Text(
                 text = stringResource(R.string.shell_layersZoomNear),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** Test tag on the Trafikverket alert max-age slider in the layers popup. */
+const val MAP_HOME_LAYERS_ALERT_AGE_TAG = "map_home_layers_alert_age"
+
+/** Localized label for a single [IncidentAgeOption] (the current value + end caps). */
+@Composable
+private fun incidentAgeOptionLabel(option: IncidentAgeOption): String =
+    stringResource(
+        when (option) {
+            IncidentAgeOption.HOURS_6 -> R.string.shell_layersAlertAge6h
+            IncidentAgeOption.HOURS_12 -> R.string.shell_layersAlertAge12h
+            IncidentAgeOption.DAY_1 -> R.string.shell_layersAlertAge1d
+            IncidentAgeOption.DAYS_3 -> R.string.shell_layersAlertAge3d
+            IncidentAgeOption.WEEK_1 -> R.string.shell_layersAlertAge1w
+            IncidentAgeOption.DAYS_30 -> R.string.shell_layersAlertAge30d
+            IncidentAgeOption.ALL -> R.string.shell_layersAlertAgeAll
+        },
+    )
+
+/**
+ * The "alert age" section of the map-layers popup: a discrete slider choosing the
+ * MAX AGE of Trafikverket alerts drawn on the map — the fix for Trafikverket's
+ * long-lived backlog filling the map with stale notifications. Left is strictest
+ * (newest only), right is [IncidentAgeOption.ALL] (no limit); the ordered options
+ * and step count come from [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
+ *
+ * The slider value is an OPTION INDEX, so each notch is a named age rather than a
+ * raw duration. The thumb tracks the finger locally as it drags; the choice is
+ * COMMITTED (persisted + applied to the alert layer, which re-filters live) on
+ * release ([Slider.onValueChangeFinished]), not on every delta. Seeded from
+ * [maxAge] and re-seeded if it changes underneath (`remember(maxAge)`), so an
+ * external change is reflected. The currently-selected age is shown as text so the
+ * unlabelled notches are legible.
+ */
+@Composable
+private fun LayerAlertAgeSlider(
+    maxAge: IncidentAgeOption,
+    onMaxAgeChange: (IncidentAgeOption) -> Unit,
+) {
+    val options = IncidentAgeFilter.orderedOptions
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.shell_layersAlertAgeTitle),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            // The current choice, so the unlabelled notches read at a glance.
+            Text(
+                text = incidentAgeOptionLabel(maxAge),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            text = stringResource(R.string.shell_layersAlertAgeHelp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        var sliderIndex by
+            remember(maxAge) { mutableFloatStateOf(options.indexOf(maxAge).toFloat()) }
+        Slider(
+            value = sliderIndex,
+            onValueChange = { sliderIndex = it },
+            onValueChangeFinished = {
+                val idx = sliderIndex.roundToInt().coerceIn(0, options.lastIndex)
+                onMaxAgeChange(options[idx])
+            },
+            valueRange = 0f..options.lastIndex.toFloat(),
+            steps = IncidentAgeFilter.sliderSteps,
+            modifier = Modifier.fillMaxWidth().testTag(MAP_HOME_LAYERS_ALERT_AGE_TAG),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.shell_layersAlertAgeNewest),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = stringResource(R.string.shell_layersAlertAgeAll),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

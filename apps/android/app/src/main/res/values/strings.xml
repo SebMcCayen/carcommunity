@@ -1294,6 +1294,16 @@
     <string name="shell_layersZoomHelp">Hur nära kartan ligger när du använder den som vanligt.</string>
     <string name="shell_layersZoomFar">Längre bort</string>
     <string name="shell_layersZoomNear">Närmare</string>
+    <string name="shell_layersAlertAgeTitle">Varningarnas ålder</string>
+    <string name="shell_layersAlertAgeHelp">Dölj Trafikverkets varningar som är äldre än detta. Medlemmars rapporter döljs aldrig.</string>
+    <string name="shell_layersAlertAgeNewest">Nyaste</string>
+    <string name="shell_layersAlertAgeAll">Alla</string>
+    <string name="shell_layersAlertAge6h">6 timmar</string>
+    <string name="shell_layersAlertAge12h">12 timmar</string>
+    <string name="shell_layersAlertAge1d">1 dag</string>
+    <string name="shell_layersAlertAge3d">3 dagar</string>
+    <string name="shell_layersAlertAge1w">1 vecka</string>
+    <string name="shell_layersAlertAge30d">30 dagar</string>
     <string name="shell_compassNorthUp">Norr uppåt</string>
     <string name="shell_compassCourseUp">Följ din riktning</string>
     <string name="shell_searchExpand">Sök</string>
