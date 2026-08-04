@@ -297,6 +297,8 @@ import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.push.PushTarget
 import com.kungsbackacarcommunity.app.push.RequestPushPermissionEffect
 import com.kungsbackacarcommunity.app.shell.HubEntry
+import com.kungsbackacarcommunity.app.shell.CompassModePreferenceStore
+import com.kungsbackacarcommunity.app.shell.MapCompassMode
 import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
 import com.kungsbackacarcommunity.app.shell.sortedHubEntriesByLabel
@@ -717,6 +719,42 @@ fun AuthenticatedApp(
                         },
                     ),
                 ) { mutableStateOf<MapMode?>(null) }
+
+            // The map's compass orientation (course-up default vs north-up).
+            //
+            // Owned HERE for the SAME reason mapNightModeOverride is: opening a
+            // full-screen route disposes MapHome, so holding this only inside it
+            // would drop the user's pick on the way back. Unlike the day/night
+            // override — which is a session preference kept alive only by
+            // rememberSaveable — the compass choice is DURABLY persisted:
+            // [CompassModePreferenceStore] (device-local SharedPreferences) seeds
+            // the state on start-up and records every change, so a user who picks
+            // north-up keeps it across a cold restart, while a user who has never
+            // chosen gets the first-run default (course-up, MapCompassMode.DEFAULT).
+            val compassModeContext = LocalContext.current
+            val compassModeStore =
+                remember(compassModeContext) { CompassModePreferenceStore(compassModeContext) }
+            val mapCompassMode =
+                rememberSaveable(
+                    stateSaver = Saver(
+                        save = { it.name },
+                        // Crash-safe restore, matching the day/night saver above:
+                        // an unknown constant falls back to the default rather than
+                        // throwing the way valueOf would.
+                        restore = { saved -> MapCompassMode.fromStoredName(saved as? String) },
+                    ),
+                    // Seed from disk: the stored pick, or course-up when unset.
+                    // rememberSaveable restores its own bundle value across process
+                    // death; on a genuine cold start (bundle gone) this lambda runs
+                    // and reads the durable store instead.
+                ) { mutableStateOf(compassModeStore.read()) }
+
+            // Persist any change durably so it survives a cold restart / process
+            // kill. The first run writes the seed back (an idempotent same-value
+            // write), and every toggle records the user's new pick.
+            LaunchedEffect(mapCompassMode.value) {
+                compassModeStore.write(mapCompassMode.value)
+            }
 
             // Defensive migration: selectedTab is rememberSaveable, so a session
             // saved by an older app version (when Create was a real content
@@ -3899,6 +3937,11 @@ fun AuthenticatedApp(
                                     // Shell-owned so it survives route changes
                                     // (see the declaration for the bug this fixes).
                                     nightModeOverrideState = mapNightModeOverride,
+                                    // Shell-owned + store-backed so the compass
+                                    // pick survives route changes AND a cold
+                                    // restart; default is course-up (see the
+                                    // declaration above).
+                                    compassModeState = mapCompassMode,
                                     // Derived from the same [mapCover] that stands
                                     // the surface down: a map home that isn't the
                                     // page in front must not keep intercepting Back

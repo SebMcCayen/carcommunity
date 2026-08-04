@@ -229,6 +229,22 @@ fun MapHome(
      * getting an inert toggle.
      */
     nightModeOverrideState: MutableState<MapMode?>? = null,
+    /**
+     * The shell-owned holder for the compass orientation (north-up vs course-up).
+     *
+     * Supplied by the shell — seeded from [CompassModePreferenceStore] and
+     * written back on every change — for the SAME reason [nightModeOverrideState]
+     * is hoisted: opening a full-screen route disposes MapHome, so a choice held
+     * only in a local `rememberSaveable` here would be dropped on the way back
+     * (and, without a store, would not survive a cold restart at all). Hoisting it
+     * to the shell (which outlives the route switch) and backing it with the store
+     * makes the pick stick across navigation AND process death.
+     *
+     * When null (previews / UI tests that don't hoist) this falls back to a local
+     * `rememberSaveable` defaulting to [MapCompassMode.DEFAULT] (course-up), so the
+     * toggle still works in isolation and the first-run default is exercised.
+     */
+    compassModeState: MutableState<MapCompassMode>? = null,
     // Optional live-session bar, composed INSIDE the top search row between the
     // search control and the profile avatar (see [SearchBarRow]) while — and only
     // while — a live-sharing session is running. Compact (a clock + a distance),
@@ -347,29 +363,37 @@ fun MapHome(
         mapSurface.setMapMode(desiredMapMode ?: systemDefaultMode)
     }
 
-    // Compass orientation: north-up (default) vs course-up (the map follows the
-    // user's direction of travel). rememberSaveable so the choice survives
-    // recomposition AND activity recreation (rotation) for the session; a
+    // Compass orientation: course-up (default — the map follows the user's
+    // direction of travel) vs north-up. HOISTED to the shell via
+    // [compassModeState] when supplied, so the choice outlives a full-screen route
+    // AND survives a cold restart (the shell backs it with
+    // [CompassModePreferenceStore]); see the parameter doc for the disposal bug
+    // that hoisting fixes.
+    //
+    // When not hoisted (previews / UI tests) it falls back to a local
+    // rememberSaveable defaulting to [MapCompassMode.DEFAULT] (course-up), which
+    // survives recomposition AND activity recreation (rotation) for the session. A
     // name-based Saver keeps restore crash-safe if a future rename ever drops an
     // enum constant (MapCompassMode.valueOf would throw; entries.find returns null
-    // and we fall back to north-up).
-    var compassMode by rememberSaveable(
-        stateSaver =
-            Saver(
-                save = { it.name },
-                restore = { saved ->
-                    (saved as? String)?.let { name -> MapCompassMode.entries.find { it.name == name } }
-                        ?: MapCompassMode.NorthUp
-                },
-            ),
-    ) { mutableStateOf(MapCompassMode.NorthUp) }
+    // and fromStoredName / the fallback yield the default).
+    val compassModeStateResolved =
+        compassModeState
+            ?: rememberSaveable(
+                stateSaver =
+                    Saver(
+                        save = { it.name },
+                        restore = { saved -> MapCompassMode.fromStoredName(saved as? String) },
+                    ),
+            ) { mutableStateOf(MapCompassMode.DEFAULT) }
+    var compassMode by compassModeStateResolved
 
     // Keep the surface's follow orientation in sync with the chosen mode (mirrors
     // the day/night desiredMapMode effect). Keyed on mapSurface too so a surface
     // swap (Stub -> real Mapbox) re-applies the saved mode. setCompassMode is a
-    // no-op when the mode is unchanged, so this never forces a camera move on
-    // open — only a genuine change (a tap, or restoring course-up after a swap)
-    // eases the camera.
+    // no-op when the mode is unchanged; a fresh surface starts north-up, so on the
+    // course-up default this eases the camera into course-up on open (the intended
+    // first-run behaviour), and otherwise only a genuine change (a tap, or
+    // restoring the saved mode after a swap) moves the camera.
     LaunchedEffect(mapSurface, compassMode) {
         mapSurface.setCompassMode(compassMode)
     }
@@ -1442,14 +1466,9 @@ internal fun CompassCircleControl(
                     MapCompassMode.CourseUp -> R.string.shell_compassCourseUp
                 },
             ),
-        onClick = {
-            onModeChange(
-                when (compassMode) {
-                    MapCompassMode.NorthUp -> MapCompassMode.CourseUp
-                    MapCompassMode.CourseUp -> MapCompassMode.NorthUp
-                },
-            )
-        },
+        // A tap flips to the OTHER mode (the pure [MapCompassMode.toggled], so the
+        // "opposite mode" contract is unit-tested without composing this button).
+        onClick = { onModeChange(compassMode.toggled()) },
         // north-up: rotate the rose by the map bearing to keep it pointing north.
         // course-up: no rotation (heading is always screen-up).
         iconRotationDegrees =
