@@ -1320,6 +1320,14 @@
     <string name="shell_savedPlacesPickerEmpty">Inga sparade platser än</string>
     <string name="shell_selectedLocationPin">Vald plats</string>
     <string name="shell_sharedLocationName">Delad plats</string>
+    <string name="shell_saveLocationTitle">Spara plats</string>
+    <string name="shell_saveLocationNameLabel">Namn (valfritt)</string>
+    <string name="shell_saveLocationSave">Spara</string>
+    <string name="shell_saveLocationShare">Dela</string>
+    <string name="shell_saveLocationCancel">Avbryt</string>
+    <string name="shell_locationShared">Platsen delades med %1$s</string>
+    <string name="shell_locationSharedFriendFallback">din vän</string>
+    <string name="shell_locationShareFailed">Det gick inte att dela platsen. Försök igen.</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>
@@ -1362,6 +1370,7 @@
     <string name="savedPlaces_emptyAction">Lägg till din första plats</string>
     <string name="savedPlaces_moreActions">Alternativ för %1$s</string>
     <string name="savedPlaces_rename">Byt namn</string>
+    <string name="savedPlaces_share">Dela</string>
     <string name="savedPlaces_changeAddress">Byt adress</string>
     <string name="savedPlaces_delete">Ta bort</string>
     <string name="savedPlaces_renameTitle">Byt namn på plats</string>
@@ -1372,6 +1381,12 @@
     <string name="savedPlaces_deleteMessage">%1$s tas bort från dina sparade platser. Dina senaste sökningar påverkas inte.</string>
     <string name="savedPlaces_deleteConfirm">Ta bort</string>
     <string name="savedPlaces_deviceLocalNote">Sparade platser lagras endast på den här enheten och synkas inte till andra enheter.</string>
+    <string name="shareLocation_title">Dela plats</string>
+    <string name="shareLocation_subtitle">Välj en vän att dela %1$s med</string>
+    <string name="shareLocation_empty">Du har inte lagt till några vänner än. Lägg till vänner för att dela platser med dem.</string>
+    <string name="shareLocation_error">Det gick inte att läsa in dina vänner. Försök igen.</string>
+    <string name="shareLocation_retry">Försök igen</string>
+    <string name="shareLocation_unnamedFriend">Vän</string>
     <string name="turnByTurn_start">Starta</string>
     <string name="turnByTurn_exit">Avsluta navigering</string>
     <string name="turnByTurn_recenter">Centrera</string>

@@ -234,6 +234,8 @@ import com.kungsbackacarcommunity.app.location.CurrentSpeed
 import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.location.LocationAccess
 import com.kungsbackacarcommunity.app.location.LocationAccessPrompt
+import com.kungsbackacarcommunity.app.location.LocationShare
+import com.kungsbackacarcommunity.app.location.ShareableLocation
 import com.kungsbackacarcommunity.app.location.LocationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.currentLocationAccess
 import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
@@ -340,7 +342,9 @@ import com.kungsbackacarcommunity.app.shell.MapProjection
 import com.kungsbackacarcommunity.app.shell.MapQueryViewport
 import com.kungsbackacarcommunity.app.shell.MapSurface
 import com.kungsbackacarcommunity.app.shell.PlaceActionsSheet
+import com.kungsbackacarcommunity.app.shell.SaveLocationDialog
 import com.kungsbackacarcommunity.app.shell.SavedPlacesPickerSheet
+import com.kungsbackacarcommunity.app.shell.ShareLocationSheet
 import com.kungsbackacarcommunity.app.shell.ShellBackResult
 import com.kungsbackacarcommunity.app.shell.MapCover
 import com.kungsbackacarcommunity.app.shell.ShellNavigation
@@ -1870,6 +1874,14 @@ fun AuthenticatedApp(
             var placeMenuTarget by remember { mutableStateOf<MapPlaceRequest?>(null) }
             // The saved-locations picker the map's saved-places control opens.
             var savedPlacesPickerOpen by remember { mutableStateOf(false) }
+            // The point pending a NAME in the save-location popup ("Save this
+            // location"): naming it persists it as a favourite; sharing it instead
+            // opens the friend picker below via [shareLocationTarget].
+            var saveLocationTarget by remember { mutableStateOf<MapPlaceRequest?>(null) }
+            // A resolved location pending a friend to share it with — set by the
+            // save popup's Share, the Saved-places long-press Share, or any other
+            // share entry point, and consumed by the ShareLocationSheet below.
+            var shareLocationTarget by remember { mutableStateOf<ShareableLocation?>(null) }
             val pendingPlace by mapSurface.placeRequest.collectAsState()
             LaunchedEffect(pendingPlace) {
                 val requested = pendingPlace ?: return@LaunchedEffect
@@ -1881,6 +1893,15 @@ fun AuthenticatedApp(
             val positionCopiedText = stringResource(R.string.shell_placeCopied)
             val positionSavedText = stringResource(R.string.shell_placeSaved)
             val sharedLocationName = stringResource(R.string.shell_sharedLocationName)
+            // Share-to-friend confirmation copy, resolved in composition (the send
+            // callback fires off the UI thread and cannot call stringResource). The
+            // "shared" line keeps its %1$s placeholder and is String.format-ed with
+            // the friend name at callback time — a plain-string format, so no
+            // LocalContext resource lookup happens off-composition.
+            val locationSharedTemplate = stringResource(R.string.shell_locationShared)
+            val sharedLocationFriendFallback =
+                stringResource(R.string.shell_locationSharedFriendFallback)
+            val locationShareFailedText = stringResource(R.string.shell_locationShareFailed)
 
             // The long-press place-actions menu (+ its animated map pin, drawn by
             // MapHome from [placeMenuTarget]). Each action clears the menu.
@@ -1907,12 +1928,28 @@ fun AuthenticatedApp(
                         )
                         scope.launch { snackbarHostState.showSnackbar(positionCopiedText) }
                     },
+                    // "Save this location" now opens a naming popup (below) rather
+                    // than saving silently: the member names the point — or leaves
+                    // it blank for a coordinate name — or shares it with a friend.
                     onSave = {
-                        val point = target.point
+                        saveLocationTarget = target
                         placeMenuTarget = null
-                        val label =
-                            target.name?.takeIf { it.isNotBlank() }
-                                ?: GeoLinks.coordinateLabel(point.latitude, point.longitude)
+                    },
+                    onDismiss = { placeMenuTarget = null },
+                )
+            }
+
+            // The save-location naming popup raised by "Save this location". A blank
+            // name is filled from the GPS coordinate (LocationShare.resolveName), so
+            // a saved point is never nameless; Share hands off to the friend picker.
+            saveLocationTarget?.let { target ->
+                val latLng =
+                    LatLng(longitude = target.point.longitude, latitude = target.point.latitude)
+                SaveLocationDialog(
+                    initialName = target.name.orEmpty(),
+                    coordinateHint = LocationShare.coordinateName(latLng),
+                    onSave = { rawName ->
+                        val label = LocationShare.resolveName(rawName, latLng)
                         // Reuses the EXISTING saved-places store (the same instance
                         // the address search reads/writes) — no new store — so a
                         // saved pin round-trips into the search bar's saved list.
@@ -1924,15 +1961,53 @@ fun AuthenticatedApp(
                                         id = "",
                                         name = label,
                                         address = null,
-                                        point = LatLng(longitude = point.longitude, latitude = point.latitude),
+                                        point = latLng,
                                     ),
                                 label = label,
                             ),
                         )
+                        saveLocationTarget = null
                         scope.launch { snackbarHostState.showSnackbar(positionSavedText) }
                     },
-                    onDismiss = { placeMenuTarget = null },
+                    onShare = { rawName ->
+                        shareLocationTarget =
+                            ShareableLocation(LocationShare.resolveName(rawName, latLng), latLng)
+                        saveLocationTarget = null
+                    },
+                    onDismiss = { saveLocationTarget = null },
                 )
+            }
+
+            // The shared "share a location with a friend" picker, hosted once for
+            // every entry point (the save popup's Share, the Saved-places long-press
+            // Share). Delivery reuses the existing DM send path — no new backend.
+            // Guarded on both repositories (a config-less build wires neither).
+            val fRepo = friendsRepository
+            val dRepo = dmRepository
+            // Only render when both repositories are wired; a config-less build
+            // (neither) simply has no friends/DM features, so a stale target is
+            // inert — no state is written during composition to clear it.
+            if (fRepo != null && dRepo != null) {
+                shareLocationTarget?.let { location ->
+                    ShareLocationSheet(
+                        location = location,
+                        friendsRepository = fRepo,
+                        dmRepository = dRepo,
+                        onShared = { friendName ->
+                            shareLocationTarget = null
+                            val name = friendName?.takeIf { it.isNotBlank() } ?: sharedLocationFriendFallback
+                            scope.launch {
+                                snackbarHostState.showSnackbar(
+                                    String.format(locationSharedTemplate, name),
+                                )
+                            }
+                        },
+                        onSendFailed = {
+                            scope.launch { snackbarHostState.showSnackbar(locationShareFailedText) }
+                        },
+                        onDismiss = { shareLocationTarget = null },
+                    )
+                }
             }
 
             // The saved-locations picker: tapping a place moves the map to it via
@@ -3885,6 +3960,11 @@ fun AuthenticatedApp(
                             clearRoutes()
                             navSearchOpen = true
                         },
+                        // "Share" a saved place: hand its resolved name + point to
+                        // the shared friend picker hosted on the map screen.
+                        onShareLocation = { name, point ->
+                            shareLocationTarget = ShareableLocation(name, point)
+                        },
                     )
                 } else {
                     // The shell's page frame. Deliberately a Box + bottom bar
@@ -5424,6 +5504,7 @@ private fun RouteHost(
     savedPlacesStore: SavedPlacesStore,
     onOpenAddressSearch: () -> Unit,
     onChangeSavedPlaceAddress: (SavedPlace) -> Unit,
+    onShareLocation: (name: String, point: LatLng) -> Unit,
 ) {
     val context = LocalContext.current
     // The one guarded profile-navigation callback every member-bearing surface
@@ -6096,6 +6177,7 @@ private fun RouteHost(
                 // NavigationController.savePlace) rather than defaulting to a new
                 // Favourite — and, for a favourite, sweeps the stale row.
                 onChangeLocation = onChangeSavedPlaceAddress,
+                onShare = onShareLocation,
             )
 
         ShellRoute.Settings ->

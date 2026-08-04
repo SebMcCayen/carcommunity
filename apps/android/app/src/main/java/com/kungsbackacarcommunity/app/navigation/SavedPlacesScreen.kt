@@ -1,10 +1,13 @@
 package com.kungsbackacarcommunity.app.navigation
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,20 +17,24 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -36,9 +43,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -54,6 +64,12 @@ const val SAVED_PLACES_EMPTY_TEST_TAG = "saved_places_empty"
 
 /** Test tag on the list card holding the saved-place rows. */
 const val SAVED_PLACES_LIST_TEST_TAG = "saved_places_list"
+
+/** Test tag on the long-press actions bottom sheet (Rename / Share / Delete). */
+const val SAVED_PLACES_ACTIONS_SHEET_TEST_TAG = "saved_places_actions_sheet"
+
+/** Test-tag prefix for one saved-place row (suffixed with the place id). */
+fun savedPlaceRowTestTag(id: String): String = "saved_places_row_$id"
 
 /**
  * The standalone **Saved places** management screen, reached from Settings.
@@ -89,12 +105,16 @@ const val SAVED_PLACES_LIST_TEST_TAG = "saved_places_list"
  * @param onAddPlace open the address picker to save a brand-new place.
  * @param onChangeLocation open the address picker to re-point [SavedPlace] at a
  *   new address (carried so the host can pre-frame the picker if it chooses).
+ * @param onShare share a saved place with a friend — the host raises the friend
+ *   picker for the resolved name + coordinate. Reached from a row's overflow menu
+ *   and from long-pressing a row (the Rename / Share / Delete sheet).
  */
 @Composable
 fun SavedPlacesScreen(
     store: SavedPlacesStore,
     onAddPlace: () -> Unit,
     onChangeLocation: (SavedPlace) -> Unit,
+    onShare: (name: String, point: LatLng) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val manager = remember(store) { SavedPlacesManager(store) }
@@ -106,6 +126,8 @@ fun SavedPlacesScreen(
     // The place pending a rename / a delete confirmation, null when none is open.
     var renameTarget by remember { mutableStateOf<SavedPlace?>(null) }
     var deleteTarget by remember { mutableStateOf<SavedPlace?>(null) }
+    // The place whose long-press Rename / Share / Delete sheet is open, null when none.
+    var actionsTarget by remember { mutableStateOf<SavedPlace?>(null) }
 
     AeroPage(
         title = stringResource(R.string.savedPlaces_title),
@@ -125,6 +147,8 @@ fun SavedPlacesScreen(
                 onRename = { renameTarget = it },
                 onChangeAddress = onChangeLocation,
                 onDelete = { deleteTarget = it },
+                onShare = onShare,
+                onLongPress = { actionsTarget = it },
             )
             OutlinedButton(
                 onClick = onAddPlace,
@@ -172,6 +196,25 @@ fun SavedPlacesScreen(
             },
         )
     }
+
+    actionsTarget?.let { target ->
+        SavedPlaceActionsSheet(
+            place = target,
+            onRename = {
+                actionsTarget = null
+                renameTarget = target
+            },
+            onShare = { name ->
+                actionsTarget = null
+                onShare(name, target.place.point)
+            },
+            onDelete = {
+                actionsTarget = null
+                deleteTarget = target
+            },
+            onDismiss = { actionsTarget = null },
+        )
+    }
 }
 
 @Composable
@@ -180,6 +223,8 @@ private fun SavedPlacesList(
     onRename: (SavedPlace) -> Unit,
     onChangeAddress: (SavedPlace) -> Unit,
     onDelete: (SavedPlace) -> Unit,
+    onShare: (name: String, point: LatLng) -> Unit,
+    onLongPress: (SavedPlace) -> Unit,
 ) {
     Surface(
         shape = RoundedCornerShape(KccRadius.lg),
@@ -201,6 +246,8 @@ private fun SavedPlacesList(
                         onRename = { onRename(place) },
                         onChangeAddress = { onChangeAddress(place) },
                         onDelete = { onDelete(place) },
+                        onShare = onShare,
+                        onLongPress = { onLongPress(place) },
                     )
                 }
             }
@@ -208,17 +255,24 @@ private fun SavedPlacesList(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun SavedPlaceRow(
     place: SavedPlace,
     onRename: () -> Unit,
     onChangeAddress: () -> Unit,
     onDelete: () -> Unit,
+    onShare: (name: String, point: LatLng) -> Unit,
+    onLongPress: () -> Unit,
 ) {
     val label = place.displayLabel()
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Long-press raises the Rename / Share / Delete sheet. onClick is a
+            // deliberate no-op (a row has no tap action) but combinedClickable
+            // announces the long-press as an accessibility action.
+            .combinedClickable(onClick = {}, onLongClick = onLongPress)
             .padding(start = KccSpacing.s4, top = KccSpacing.s3, bottom = KccSpacing.s3),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
@@ -255,6 +309,7 @@ private fun SavedPlaceRow(
             onRename = onRename,
             onChangeAddress = onChangeAddress,
             onDelete = onDelete,
+            onShare = { onShare(label, place.place.point) },
         )
     }
 }
@@ -271,6 +326,7 @@ private fun RowActions(
     onRename: () -> Unit,
     onChangeAddress: () -> Unit,
     onDelete: () -> Unit,
+    onShare: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
@@ -294,6 +350,16 @@ private fun RowActions(
                     },
                 )
             }
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.savedPlaces_share)) },
+                leadingIcon = {
+                    Icon(imageVector = Icons.Filled.Share, contentDescription = null)
+                },
+                onClick = {
+                    expanded = false
+                    onShare()
+                },
+            )
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.savedPlaces_changeAddress)) },
                 leadingIcon = {
@@ -405,6 +471,85 @@ private fun RenameDialog(
             }
         },
     )
+}
+
+/**
+ * The bottom sheet a long-press on a saved place raises: Rename (favourites only,
+ * matching the row overflow — Home/Work render a localized name and ignore their
+ * stored label, so renaming them would edit hidden text), Share (hand the resolved
+ * name + coordinate to the friend picker), and Delete (behind the same confirm the
+ * row overflow uses). Mirrors the app's other action sheets (PlaceActionsSheet).
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SavedPlaceActionsSheet(
+    place: SavedPlace,
+    onRename: () -> Unit,
+    onShare: (name: String) -> Unit,
+    onDelete: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val label = place.displayLabel()
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.testTag(SAVED_PLACES_ACTIONS_SHEET_TEST_TAG),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = KccSpacing.s2),
+            )
+            if (place.kind == SavedPlaceKind.Favourite) {
+                SheetAction(
+                    icon = Icons.Filled.Edit,
+                    text = stringResource(R.string.savedPlaces_rename),
+                    onClick = onRename,
+                )
+            }
+            SheetAction(
+                icon = Icons.Filled.Share,
+                text = stringResource(R.string.savedPlaces_share),
+                onClick = { onShare(label) },
+            )
+            SheetAction(
+                icon = Icons.Filled.DeleteOutline,
+                text = stringResource(R.string.savedPlaces_delete),
+                tint = MaterialTheme.colorScheme.error,
+                onClick = onDelete,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SheetAction(
+    icon: ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    TextButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+        Icon(imageVector = icon, contentDescription = null, tint = tint)
+        Text(
+            text = text,
+            color = tint,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth().padding(start = KccSpacing.s3),
+        )
+    }
 }
 
 @Composable
