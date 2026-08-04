@@ -13,6 +13,9 @@ import com.kungsbackacarcommunity.app.design.KccLightColors
 import com.kungsbackacarcommunity.app.design.ThemeController
 import com.kungsbackacarcommunity.app.design.ThemePreference
 import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterController
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterPreferenceStore
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.map.MapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomPreferenceStore
 import androidx.compose.runtime.DisposableEffect
@@ -112,6 +115,13 @@ class MainActivity : ComponentActivity() {
     // store above: available before sign-in, survives process death, collected in
     // setContent so a change applies to the running map with no restart.
     private val mapZoomPreferenceStore by lazy { MapZoomPreferenceStore(applicationContext) }
+
+    // The user's Trafikverket alert max-age filter (map-layers popup). Device-local
+    // SharedPreferences for the same reasons as the stores above; collected in
+    // setContent so a change re-filters the running alert layer with no restart.
+    private val incidentAgeFilterPreferenceStore by lazy {
+        IncidentAgeFilterPreferenceStore(applicationContext)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -309,6 +319,21 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+            // Trafikverket alert max-age filter, exposed to the map-layers popup the
+            // same way as the zoom above: collected here so a change re-filters the
+            // drawn alerts live, handed down through LocalIncidentAgeFilterController.
+            val incidentMaxAge by incidentAgeFilterPreferenceStore.maxAge.collectAsState()
+            val incidentAgeFilterController =
+                remember(incidentMaxAge) {
+                    object : IncidentAgeFilterController {
+                        override val maxAge = incidentMaxAge
+
+                        override fun setMaxAge(option: IncidentAgeOption) {
+                            incidentAgeFilterPreferenceStore.set(option)
+                        }
+                    }
+                }
+
             // Tear down a single-session drive recording when the signed-in user
             // goes away. The recording is process-scoped ON PURPOSE (its lifetime
             // is the live session's, which outlives the Activity — see
@@ -375,6 +400,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = appDark,
                 themeController = themeController,
                 mapZoomController = mapZoomController,
+                incidentAgeFilterController = incidentAgeFilterController,
                 onSignInClick = {
                     signInCoordinator?.let { coordinator ->
                         lifecycleScope.launch { coordinator.signIn() }

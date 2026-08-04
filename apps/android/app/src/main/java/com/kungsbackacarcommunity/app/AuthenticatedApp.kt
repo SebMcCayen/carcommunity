@@ -307,6 +307,7 @@ import com.kungsbackacarcommunity.app.shell.LiveShareToggle
 import com.kungsbackacarcommunity.app.incidents.CameraRequeryDecision
 import com.kungsbackacarcommunity.app.incidents.ClearOutcome
 import com.kungsbackacarcommunity.app.incidents.Incident
+import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter
 import com.kungsbackacarcommunity.app.incidents.IncidentClearRejection
 import com.kungsbackacarcommunity.app.incidents.IncidentDetails
 import com.kungsbackacarcommunity.app.incidents.IncidentDetailsSheet
@@ -316,6 +317,7 @@ import com.kungsbackacarcommunity.app.incidents.ConfirmOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.QueryAnchor
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.incidents.ReportOutcome
@@ -921,9 +923,29 @@ fun AuthenticatedApp(
                     incidentController?.nearbyIncidents ?: MutableStateFlow(emptyList<Incident>())
                 }
             val nearbyIncidents by incidentsFlow.collectAsState()
+            // The user's Trafikverket alert max-age filter (device-local, ambient).
+            // A pure CLIENT-SIDE display filter — it changes nothing in Firestore or
+            // the sync; it only decides which of the already-loaded incidents get
+            // drawn. Reading it here (the same value the layers-popup slider writes)
+            // means changing the setting recomposes and re-filters the markers live.
+            val incidentMaxAge = LocalIncidentAgeFilterController.current.maxAge
+            // Trafikverket alerts older than the chosen age are dropped BEFORE
+            // markers/attribution are built, so the age-out is invisible downstream.
+            // Member reports and alerts with no usable posted-time are never dropped
+            // (see IncidentAgeFilter). `now` is snapped per recompute; between the
+            // 15 s polls an alert right at the boundary can linger one interval,
+            // which is immaterial for a stale-backlog display filter.
+            val visibleIncidents =
+                remember(nearbyIncidents, incidentMaxAge) {
+                    IncidentAgeFilter.visible(
+                        nearbyIncidents,
+                        System.currentTimeMillis(),
+                        incidentMaxAge,
+                    )
+                }
             val incidentMarkers =
-                remember(nearbyIncidents) {
-                    nearbyIncidents.map { incident ->
+                remember(visibleIncidents) {
+                    visibleIncidents.map { incident ->
                         // The host is where an IncidentType becomes the drawing
                         // primitives the map seam takes — the disc colour, the
                         // category glyph, and the glyph tint that keeps it
@@ -962,11 +984,13 @@ fun AuthenticatedApp(
                         )
                     }
                 }
-            // Whether the loaded incidents include any Trafikverket-imported row,
+            // Whether the VISIBLE incidents include any Trafikverket-imported row,
             // i.e. whether their open data is actually on screen. Gates the
-            // "Källa: Trafikverket" credit in the layers popup.
+            // "Källa: Trafikverket" credit in the layers popup — computed off the
+            // age-filtered list so the credit disappears when the filter hides every
+            // Trafikverket alert (nothing of theirs is on screen to attribute).
             val trafikverketDataShown =
-                remember(nearbyIncidents) { hasTrafikverketData(nearbyIncidents) }
+                remember(visibleIncidents) { hasTrafikverketData(visibleIncidents) }
             // Visibility of the "Traffic alerts" layer (Trafikverket + crowd-sourced
             // incidents) toggled from the map-layers popup. Defaults ON (the shared
             // road-info layer is visible to all users); persisted so the choice

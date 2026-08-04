@@ -73,6 +73,7 @@ import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
@@ -945,6 +946,10 @@ fun TurnByTurnNavScreen(
             // persists — so it is the same choice the map home shows afterwards,
             // exactly like the layer toggles above.
             val mapZoomController = LocalMapZoomController.current
+            // Same ambient Trafikverket alert max-age filter as the map home, for
+            // the same reason as the zoom above: a choice made while driving
+            // persists and is the same the map home shows afterwards.
+            val incidentAgeFilterController = LocalIncidentAgeFilterController.current
             MapLayersPopup(
                 incidentsOn = incidentsLayerEnabled,
                 onIncidentsChange = onIncidentsLayerEnabledChange,
@@ -960,6 +965,8 @@ fun TurnByTurnNavScreen(
                 on3dChange = on3dEnabledChange,
                 browsingZoom = mapZoomController.browsingZoom,
                 onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
+                incidentMaxAge = incidentAgeFilterController.maxAge,
+                onIncidentMaxAgeChange = { incidentAgeFilterController.setMaxAge(it) },
                 onDismiss = { layersOpen = false },
             )
         }
