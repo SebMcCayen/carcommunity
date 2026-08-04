@@ -12,6 +12,8 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.design.LocalThemeController
 import com.kungsbackacarcommunity.app.design.ThemeController
 import com.kungsbackacarcommunity.app.home.HomeScreen
+import com.kungsbackacarcommunity.app.map.LocalMapZoomController
+import com.kungsbackacarcommunity.app.map.MapZoomController
 
 /**
  * App shell (migration plan Phases 5–7, extended in Phase 12 slice 1).
@@ -49,6 +51,12 @@ fun AppRoot(
     // default, used by previews and UI tests) leaves the no-op controller from
     // LocalThemeController in place.
     themeController: ThemeController? = null,
+    // Read/write access to the resting map-zoom preference for the map-layers
+    // popup, which — like Settings for the theme — sits several levels down inside
+    // the shell. Provided here alongside the theme controller because this is
+    // already the app's ambient-preference boundary; null (the default, previews
+    // and UI tests) leaves the no-op controller from LocalMapZoomController in place.
+    mapZoomController: MapZoomController? = null,
 ) {
     val content: @Composable () -> Unit = {
         KccTheme(darkTheme = darkTheme) {
@@ -64,10 +72,19 @@ fun AppRoot(
             }
         }
     }
-    if (themeController == null) {
-        content()
+    // Provide whichever ambient preference controllers MainActivity wired; each is
+    // independent, so previews that pass neither still render with the no-op
+    // defaults. Applied outermost-first (order is irrelevant — different keys).
+    val themed: @Composable () -> Unit =
+        if (themeController == null) {
+            content
+        } else {
+            { CompositionLocalProvider(LocalThemeController provides themeController, content = content) }
+        }
+    if (mapZoomController == null) {
+        themed()
     } else {
-        CompositionLocalProvider(LocalThemeController provides themeController, content = content)
+        CompositionLocalProvider(LocalMapZoomController provides mapZoomController, content = themed)
     }
 }
 

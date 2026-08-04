@@ -74,6 +74,7 @@ import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
+import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.ChatCircleControl
@@ -949,6 +950,11 @@ fun TurnByTurnNavScreen(
         // the HOST's state, so a choice made while driving is the same choice the
         // map home shows afterwards.
         if (layersOpen) {
+            // Same ambient resting-zoom preference as the map home. Changing it
+            // while driving does not move the navigation SDK's own camera, but it
+            // persists — so it is the same choice the map home shows afterwards,
+            // exactly like the layer toggles above.
+            val mapZoomController = LocalMapZoomController.current
             MapLayersPopup(
                 incidentsOn = incidentsLayerEnabled,
                 onIncidentsChange = onIncidentsLayerEnabledChange,
@@ -962,6 +968,8 @@ fun TurnByTurnNavScreen(
                 onNightModeChange = onNightModeChange,
                 is3d = is3d,
                 on3dChange = on3dEnabledChange,
+                browsingZoom = mapZoomController.browsingZoom,
+                onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
                 onDismiss = { layersOpen = false },
             )
         }

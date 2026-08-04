@@ -492,6 +492,16 @@ class MapboxMapSurface : MapSurface {
     // and MapMarkers.FLAT_PITCH (2D) and recenter() to re-apply it at runtime.
     private var pitch: Double = MapMarkers.DEFAULT_PITCH
 
+    // The RESTING/browsing zoom — "how far away the focus is" when using the map
+    // as usual. Applied to the two sites that frame the user while browsing: the
+    // first-GPS-fix auto-centre and easeToUser() (my-location / compass /
+    // idle-return). Seeded to the app's original own-marker zoom so an untouched
+    // slider reproduces the old framing exactly; the shell pushes the persisted
+    // value via setBrowsingZoom(). Deliberately NOT read by the active
+    // drive-follow step (later fixes only re-centre, keeping whatever zoom the
+    // user is at) nor by the convoy-fit / route-preview cameras.
+    private var browsingZoom: Double = MapMarkers.OWN_MARKER_ZOOM
+
     override fun setUserMarker(marker: MapUserMarker?) {
         userMarkerFlow.value = marker
     }
@@ -537,6 +547,36 @@ class MapboxMapSurface : MapSurface {
         // composed (recenter guards on mapViewRef).
         pitch = if (enabled) MapMarkers.DEFAULT_PITCH else MapMarkers.FLAT_PITCH
         recenter()
+    }
+
+    override fun setBrowsingZoom(zoom: Double) {
+        // Store the resting zoom (clamped to the valid range) so the next first-fix
+        // / easeToUser frames the user at it. Also ease the CURRENT camera's zoom to
+        // it so a slider drag reads live rather than waiting for the next recenter —
+        // zoom only, leaving centre/bearing/pitch exactly as they are.
+        //
+        // Guarded so the live ease never fights a camera that something else owns:
+        // - a route preview owns the camera (its fit frames origin->destination), and
+        // - a convoy fit owns it (framing the whole group).
+        // In both cases we only remember the value for when that owner releases the
+        // camera. The active drive-follow step is untouched either way — it re-centres
+        // on later fixes without setting a zoom, so it simply keeps this new one.
+        // Snap (clamp + round to the 0.5 notch) so the surface holds the same
+        // discrete values the store/slider produce — a direct or off-notch call
+        // can't leave the field on a fraction, and the `==` guard below then can't
+        // ease repeatedly on sub-notch float drift.
+        val snapped = com.kungsbackacarcommunity.app.map.MapZoomPreference.snap(zoom)
+        val unchanged = snapped == browsingZoom
+        browsingZoom = snapped
+        if (unchanged) return
+        val map = mapViewRef ?: return
+        if (routeOverlayFlow.value != null || convoyFitPoints != null) return
+        runCatching {
+            map.camera.easeTo(
+                cameraOptions { zoom(snapped) },
+                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
+            )
+        }
     }
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {
@@ -983,7 +1023,11 @@ class MapboxMapSurface : MapSurface {
                 cameraOptions {
                     if (target != null) {
                         center(target)
-                        zoom(MapMarkers.OWN_MARKER_ZOOM)
+                        // The RESTING/browsing zoom (the user's "focus distance"
+                        // preference), defaulting to the original own-marker zoom
+                        // when unset — this is the re-centre-on-the-user framing,
+                        // not the active drive-follow step.
+                        zoom(browsingZoom)
                     } else {
                         center(
                             Point.fromLngLat(
@@ -1207,13 +1251,18 @@ class MapboxMapSurface : MapSurface {
                         }
                         runCatching {
                             if (!centeredOnFirstFix) {
-                                // Open the FIRST fix close to the user, at the own-marker
-                                // zoom and 3D tilt (snap, so the map opens already framed).
+                                // Open the FIRST fix close to the user, at the
+                                // RESTING/browsing zoom (the user's "focus distance"
+                                // preference, defaulting to the original own-marker
+                                // zoom when unset) and 3D tilt (snap, so the map opens
+                                // already framed). This is the browsing open, not the
+                                // active drive-follow step below, which never re-sets
+                                // the zoom.
                                 centeredOnFirstFix = true
                                 map.mapboxMap.setCamera(
                                     cameraOptions {
                                         center(point)
-                                        zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                        zoom(browsingZoom)
                                         pitch(this@MapboxMapSurface.pitch)
                                         // Open already facing the direction of travel
                                         // when the user chose course-up; north-up
