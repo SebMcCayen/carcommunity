@@ -35,7 +35,8 @@
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "approximateArea": {
           "type": ["string", "null"],
-          "description": "Coarse area label (e.g. municipality) — the human-readable region, distinct from the exact pin below. Null when the organiser gave none: the member create form dropped its input (2026-08)."
+          "minLength": 1,
+          "description": "Coarse area label (e.g. municipality) — the human-readable region, distinct from the exact pin below. Null (never empty) when the organiser gave none: the member create form dropped its input (2026-08)."
         },
         "locationName": {
           "type": ["string", "null"],
@@ -139,7 +140,7 @@
         "isOfficial": { "type": "boolean" },
         "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "approximateArea": { "type": ["string", "null"] },
+        "approximateArea": { "type": ["string", "null"], "minLength": 1 },
         "rsvpCounts": { "$ref": "#/$defs/eventRsvpSummary" },
         "cancelledAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
@@ -171,7 +172,7 @@
         "status": { "$ref": "#/$defs/eventStatus" },
         "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "approximateArea": { "type": ["string", "null"] },
+        "approximateArea": { "type": ["string", "null"], "minLength": 1 },
         "locationName": { "type": ["string", "null"] },
         "address": { "type": ["string", "null"] },
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
