@@ -94,6 +94,12 @@ export interface MapLocationPickerProps {
   helpText?: string;
   /** Localised notice shown when no Mapbox token is configured. */
   unavailableText?: string;
+  /**
+   * Localised notice shown when a token IS configured but the map fails to
+   * load (e.g. an invalid token → 401, a CSP host block, or an unreachable
+   * style). Surfaces the failure instead of a silent blank box.
+   */
+  loadErrorText?: string;
   /** Optional geofence radius (metres) to visualise as a circle around the pin. */
   radiusMeters?: number;
   /** Viewport centre used before any coordinate is picked. */
@@ -136,6 +142,7 @@ export function MapLocationPicker({
   labelLng,
   helpText,
   unavailableText,
+  loadErrorText,
   radiusMeters,
   initialCenter,
   required,
@@ -221,14 +228,52 @@ export function MapLocationPicker({
           // map (scroll/drag zoom still work without the buttons).
         }
 
+        // Tracks whether the initial style + first render completed. Used to
+        // distinguish a fatal load failure (blank tiles) from harmless
+        // post-load tile hiccups, without tearing down a working map.
+        let loaded = false;
+
         map.on('load', () => {
           if (cancelled) return;
+          loaded = true;
           try {
             map?.setConfigProperty?.('basemap', 'lightPreset', 'day');
           } catch {
             // setConfigProperty is Standard-only; ignore on other styles.
           }
           setStyleLoaded(true);
+        });
+
+        // A GL error BEFORE the style/tiles finish loading means the map will
+        // never render (an invalid token → 401 on the style + tile requests, a
+        // CSP host block, or an unreachable style URL) — exactly the "controls
+        // and logo show but the canvas is a blank dark box" failure mode. Trip
+        // the error state so the fallback notice explains it, instead of
+        // leaving a silently empty map. Errors AFTER a successful load are
+        // ignored: transient per-tile fetch hiccups must not kill a live map.
+        map.on('error', () => {
+          if (cancelled || loaded) return;
+          // Tear the GL instance down HERE, not just in the effect cleanup:
+          // tripping mapError rerenders and unmounts the container, but the
+          // effect's cleanup only runs on unmount / a [mapReady, token,
+          // disabled] change — mapError is not a dependency — so without an
+          // explicit teardown a live WebGL map would keep running against a
+          // detached node (a leak + background errors). Removal is guarded by
+          // nulling the refs so the later cleanup can't double-remove.
+          try {
+            markerRef.current?.remove();
+          } catch {
+            // Already removed / mid-teardown — non-fatal.
+          }
+          markerRef.current = null;
+          try {
+            mapRef.current?.remove();
+          } catch {
+            // Already removed / mid-teardown — non-fatal.
+          }
+          mapRef.current = null;
+          map = null;
+          setMapError(true);
         });
 
         const marker = new mapboxgl.Marker({
@@ -347,8 +392,11 @@ export function MapLocationPicker({
         />
       ) : (
         <p className={styles.unavailable} role="note">
-          {unavailableText ??
-            'Map unavailable — enter the coordinates manually below.'}
+          {mapError
+            ? (loadErrorText ??
+              'Map unavailable — it failed to load. Enter the coordinates manually below.')
+            : (unavailableText ??
+              'Map unavailable — enter the coordinates manually below.')}
         </p>
       )}
 

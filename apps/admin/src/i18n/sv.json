@@ -13,7 +13,8 @@
   },
   "map": {
     "dragHint": "Dra nålen eller klicka på kartan för att välja platsen. Du kan även skriva exakta koordinater nedan.",
-    "unavailable": "Kartan är inte tillgänglig — ingen karta är konfigurerad. Ange koordinaterna manuellt nedan."
+    "unavailable": "Kartan är inte tillgänglig — ingen karta är konfigurerad. Ange koordinaterna manuellt nedan.",
+    "loadError": "Kartan är inte tillgänglig — den kunde inte laddas (kontrollera Mapbox-token och nätverket). Ange koordinaterna manuellt nedan."
   },
   "announcements": {
     "title": "Meddelanden",

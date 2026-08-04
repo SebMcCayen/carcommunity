@@ -235,6 +235,7 @@ const CompanyForm = ({ initial, onSave, onCancel, isSaving, saveError }: Company
         labelLng={t('partners.formLongitudeLabel')}
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
+        loadErrorText={t('map.loadError')}
         required
         labelClassName={styles.label}
         inputClassName={styles.input}

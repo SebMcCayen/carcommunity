@@ -178,6 +178,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         labelLng={t('crownHunt.formLongitudeLabel')}
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
+        loadErrorText={t('map.loadError')}
         radiusMeters={Number.parseInt(form.geofenceRadiusMeters, 10) || undefined}
         required
         labelClassName={styles.label}
@@ -547,6 +548,7 @@ const AddAreaForm = ({ onApprove, onCancel }: AddAreaFormProps) => {
         labelLng={t('crownHunt.formLongitudeLabel')}
         helpText={t('crownHunt.spawnCellPickLabel')}
         unavailableText={t('map.unavailable')}
+        loadErrorText={t('map.loadError')}
         required
         labelClassName={styles.label}
         inputClassName={styles.input}

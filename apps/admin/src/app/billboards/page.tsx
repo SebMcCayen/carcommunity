@@ -229,6 +229,7 @@ const BillboardForm = ({ initial, isEdit, onSave, onCancel, isSaving, saveError 
         labelLng={t('billboards.formLongitudeLabel')}
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
+        loadErrorText={t('map.loadError')}
         required
         labelClassName={styles.label}
         inputClassName={styles.input}
