@@ -1473,7 +1473,15 @@
     "permissionNeeded": "Location access is required to navigate.",
     "rerouting": "Rerouting…",
     "speedLimit": "Speed limit %1$d km/h",
-    "currentSpeed": "Current speed %1$d km/h"
+    "currentSpeed": "Current speed %1$d km/h",
+    "exitConfirmTitle": "Exit navigation?",
+    "exitConfirmBody": "Navigation will stop and your route will be cleared.",
+    "exitConfirmConfirm": "Exit",
+    "exitConfirmCancel": "Keep navigating",
+    "resumeTitle": "Continue navigation?",
+    "resumeBody": "You were navigating to %1$s. Continue where you left off?",
+    "resumeConfirm": "Continue",
+    "resumeDismiss": "Dismiss"
   },
   "incidents": {
     "reportButton": "Report incident",

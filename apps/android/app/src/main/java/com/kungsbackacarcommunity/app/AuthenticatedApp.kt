@@ -258,10 +258,13 @@ import com.kungsbackacarcommunity.app.media.MediaUploader
 import com.kungsbackacarcommunity.app.media.PickedImage
 import com.kungsbackacarcommunity.app.media.rememberImagePickLauncher
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.navigation.ActiveNavigation
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.NavResumePolicy
+import com.kungsbackacarcommunity.app.navigation.NavResumeStore
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
 import com.kungsbackacarcommunity.app.navigation.PlaceSuggestion
 import com.kungsbackacarcommunity.app.navigation.PrefsRecentSearchesStore
@@ -443,6 +446,21 @@ private const val FEATURE_DRIVE_SAVE = "drives.saveDrive"
  * the same register as the map's own short camera eases.
  */
 private const val SHELL_TAB_FADE_MILLIS = 200
+
+/**
+ * Carries the turn-by-turn destination through activity recreation (rotation,
+ * theme change, or a reclaim-and-rebuild while backgrounded), so a stray
+ * interruption no longer ends navigation. Saved as [longitude, latitude] — the
+ * two Bundle-safe doubles a [LatLng] is — and restored only from a well-formed
+ * pair, so a corrupt bundle degrades to "no destination" rather than crashing.
+ */
+private val navLatLngSaver: Saver<LatLng?, DoubleArray> =
+    Saver(
+        save = { it?.let { p -> doubleArrayOf(p.longitude, p.latitude) } },
+        restore = { arr ->
+            if (arr.size == 2) LatLng(longitude = arr[0], latitude = arr[1]) else null
+        },
+    )
 
 /**
  * The signed-in experience: observes the profile document to gate onboarding,
@@ -1707,10 +1725,26 @@ fun AuthenticatedApp(
             var navSearchOpen by rememberSaveable { mutableStateOf(false) }
             // Turn-by-turn navigation target. Non-null → the full-screen nav view
             // is shown (over the search overlay). The origin is left to the nav
-            // view, which navigates from the live GPS fix. Transient by design (a
-            // process-death restart drops you back to the map, not mid-navigation).
-            var navDestination by remember { mutableStateOf<LatLng?>(null) }
-            var navDestinationLabel by remember { mutableStateOf("") }
+            // view, which navigates from the live GPS fix.
+            //
+            // rememberSaveable, not remember: a backgrounded app whose activity is
+            // recreated (config change, or the system reclaiming and rebuilding it
+            // while the user was off replying to a text) used to lose this and end
+            // navigation the moment they returned. Carrying it in saved instance
+            // state keeps the nav view up across that recreation. Full process
+            // death is handled separately by the durable [NavResumeStore] + the
+            // "continue last navigation?" prompt below.
+            var navDestination by rememberSaveable(stateSaver = navLatLngSaver) {
+                mutableStateOf<LatLng?>(null)
+            }
+            var navDestinationLabel by rememberSaveable { mutableStateOf("") }
+            // Durable record of the in-progress navigation, for the resume prompt
+            // after a cold start. Written on start, cleared on a confirmed exit.
+            val navResumeStore = remember(context) { NavResumeStore(context) }
+            // Raised by the BACK key while navigating → "exit navigation?" confirm.
+            var showExitNavConfirm by remember { mutableStateOf(false) }
+            // A persisted navigation eligible to resume on this launch, or null.
+            var navResumeCandidate by remember { mutableStateOf<ActiveNavigation?>(null) }
             val mapboxToken = stringResource(R.string.mapbox_access_token)
             val searchLanguage = remember { java.util.Locale.getDefault().language }
             val searchClient =
@@ -2513,6 +2547,19 @@ fun AuthenticatedApp(
                     if (BuildConfig.NAV_SDK_ENABLED) {
                         navDestinationLabel = label
                         navDestination = dest
+                        // Durably record the in-progress navigation so a process
+                        // death can offer to resume it. Refreshed each start, so
+                        // the staleness clock tracks the latest session. Only the
+                        // in-app SDK path persists — the external-maps handoff owns
+                        // no session of ours to resume.
+                        navResumeCandidate = null
+                        navResumeStore.save(
+                            ActiveNavigation(
+                                destination = dest,
+                                label = label,
+                                startedAtMillis = System.currentTimeMillis(),
+                            ),
+                        )
                     } else {
                         ExternalNavigation.launch(
                             context = context,
@@ -3271,6 +3318,115 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // The one true way out of navigation: tears down the nav view AND
+                // forgets the persisted record, so a user-confirmed exit can never
+                // later resurface as a "continue navigation?" prompt. Shared by the
+                // back-key confirm and by every other exit affordance.
+                val performNavExit: () -> Unit = {
+                    navDestination = null
+                    navDestinationLabel = ""
+                    navResumeStore.clear()
+                    showExitNavConfirm = false
+                    mapSurface.setRouteOverlay(null)
+                    navSearchOpen = false
+                    // Closing the underlying picker: drop any change-address
+                    // context so the next open starts uncontextualized.
+                    navSearchInitialEdit = null
+                }
+
+                // One-shot on entry: if a previous session was navigating and was
+                // interrupted (process death / cold start) rather than exited, and
+                // the record is fresh and not already running, stand up the resume
+                // offer. A stale or malformed leftover is cleared instead of shown.
+                //
+                // Only on an in-app-SDK build: resume re-enters in-app navigation
+                // (startNavigationTo's NAV_SDK path), and only that path persists a
+                // record in the first place. On the token-less noNav build we never
+                // offer — a leftover record from a previous SDK-enabled install
+                // stays untouched rather than surfacing a "continue" the external-
+                // maps handoff could neither fulfil nor clear.
+                LaunchedEffect(Unit) {
+                    if (!BuildConfig.NAV_SDK_ENABLED) return@LaunchedEffect
+                    val saved = navResumeStore.read()
+                    val now = System.currentTimeMillis()
+                    when {
+                        NavResumePolicy.shouldOfferResume(
+                            persisted = saved,
+                            nowMillis = now,
+                            currentlyNavigating = navDestination != null,
+                        ) -> navResumeCandidate = saved
+                        saved != null && navDestination == null -> navResumeStore.clear()
+                    }
+                }
+
+                // BACK-key exit confirm. Shown over the live nav view; a stray back
+                // press lands here instead of ending navigation. Cancel keeps
+                // driving; Exit runs the shared teardown (which also forgets the
+                // resume record, so a confirmed exit never re-offers).
+                if (showExitNavConfirm && navDestination != null) {
+                    AlertDialog(
+                        onDismissRequest = { showExitNavConfirm = false },
+                        title = { Text(stringResource(R.string.turnByTurn_exitConfirmTitle)) },
+                        text = { Text(stringResource(R.string.turnByTurn_exitConfirmBody)) },
+                        confirmButton = {
+                            TextButton(onClick = performNavExit) {
+                                Text(stringResource(R.string.turnByTurn_exitConfirmConfirm))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showExitNavConfirm = false }) {
+                                Text(stringResource(R.string.turnByTurn_exitConfirmCancel))
+                            }
+                        },
+                    )
+                }
+
+                // Resume-last-navigation offer. Only when we are NOT already
+                // navigating. Continue re-enters navigation to the saved
+                // destination (which re-persists a fresh record); Dismiss forgets
+                // it so it is asked once, not on every launch.
+                val resumeCandidate = navResumeCandidate
+                if (resumeCandidate != null && navDestination == null) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            navResumeCandidate = null
+                            navResumeStore.clear()
+                        },
+                        title = { Text(stringResource(R.string.turnByTurn_resumeTitle)) },
+                        text = {
+                            Text(
+                                stringResource(
+                                    R.string.turnByTurn_resumeBody,
+                                    resumeCandidate.label,
+                                ),
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    navResumeCandidate = null
+                                    startNavigationTo(
+                                        resumeCandidate.destination,
+                                        resumeCandidate.label,
+                                    )
+                                },
+                            ) {
+                                Text(stringResource(R.string.turnByTurn_resumeConfirm))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    navResumeCandidate = null
+                                    navResumeStore.clear()
+                                },
+                            ) {
+                                Text(stringResource(R.string.turnByTurn_resumeDismiss))
+                            }
+                        },
+                    )
+                }
+
                 if (navDestination != null) {
                     // Full-screen turn-by-turn navigation, entered from the route
                     // preview's "Start" button. Owns its own Back handling and map
@@ -3285,14 +3441,12 @@ fun AuthenticatedApp(
                         origin = null,
                         destination = navDestination!!,
                         destinationLabel = navDestinationLabel,
-                        onExit = {
-                            navDestination = null
-                            mapSurface.setRouteOverlay(null)
-                            navSearchOpen = false
-                            // Closing the underlying picker: drop any change-address
-                            // context so the next open starts uncontextualized.
-                            navSearchInitialEdit = null
-                        },
+                        onExit = performNavExit,
+                        // BACK while driving asks first — a stray back press (or the
+                        // muscle-memory swipe on the way back from a text) must not
+                        // silently end navigation. The confirm dialog is rendered
+                        // below, in this main module, so it stays locally testable.
+                        onBackPressed = { showExitNavConfirm = true },
                         onReportIncident = reportIncident,
                         modifier = Modifier.fillMaxSize(),
                         incidentReportingEnabled = incidentReportingEnabled,

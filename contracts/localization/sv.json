@@ -1473,7 +1473,15 @@
     "permissionNeeded": "Platsåtkomst krävs för att navigera.",
     "rerouting": "Söker ny väg…",
     "speedLimit": "Hastighetsgräns %1$d km/h",
-    "currentSpeed": "Aktuell hastighet %1$d km/h"
+    "currentSpeed": "Aktuell hastighet %1$d km/h",
+    "exitConfirmTitle": "Avsluta navigeringen?",
+    "exitConfirmBody": "Navigeringen avslutas och din rutt tas bort.",
+    "exitConfirmConfirm": "Avsluta",
+    "exitConfirmCancel": "Fortsätt navigera",
+    "resumeTitle": "Fortsätt navigeringen?",
+    "resumeBody": "Du navigerade till %1$s. Vill du fortsätta där du var?",
+    "resumeConfirm": "Fortsätt",
+    "resumeDismiss": "Avvisa"
   },
   "incidents": {
     "reportButton": "Rapportera händelse",

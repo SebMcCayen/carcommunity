@@ -336,6 +336,12 @@ fun TurnByTurnNavScreen(
     onExit: () -> Unit,
     onReportIncident: (IncidentType, ReportLocation) -> Unit,
     modifier: Modifier = Modifier,
+    // The Android BACK key while driving. Defaults to a straight [onExit] so
+    // existing callers/tests keep the old behaviour; the app wires it to raise
+    // an "exit navigation?" confirm instead, so a stray back press cannot drop a
+    // driver out of navigation. Kept a host callback (not an in-screen dialog)
+    // so the confirm lives in the locally-compilable main module.
+    onBackPressed: () -> Unit = onExit,
     incidentReportingEnabled: Boolean = false,
     // The layers popup's four rows, mirroring MapHome's own parameter list one
     // for one. All defaulted so callers/tests that don't wire layers still
@@ -684,7 +690,11 @@ fun TurnByTurnNavScreen(
     // Idempotent, so this never forces a camera move on open.
     LaunchedEffect(engine, compassMode) { engine.setCompassMode(compassMode) }
 
-    BackHandler { onExit() }
+    // BACK while the live nav view is up routes through the host, which raises
+    // the "exit navigation?" confirm rather than leaving immediately. The error/
+    // permission NavMessagePanel states keep their direct onExit — there is no
+    // active route there to guard.
+    BackHandler { onBackPressed() }
 
     Box(modifier = modifier.fillMaxSize().testTag(TURN_BY_TURN_TEST_TAG)) {
         // Mounted only once the veil is opaque (see [NavHandoffPhase.mapMounted]).
