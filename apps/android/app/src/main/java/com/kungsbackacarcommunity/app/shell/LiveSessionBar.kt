@@ -308,14 +308,23 @@ private fun MetricSeparator() {
  * only steps down when its share of the width forces it, never below the
  * legibility floor. The auto-size is purely visual — the spoken
  * [contentDescription] the bar merges is unaffected.
+ *
+ * `remember`ed on the resolved max size so it is a stable instance across the
+ * bar's once-a-second ticks: the config never changes as the clock advances, so
+ * re-allocating it every recomposition would be pure churn for the length of a
+ * drive.
  */
 @Composable
-private fun liveMetricAutoSize(): TextAutoSize =
-    TextAutoSize.StepBased(
-        minFontSize = LIVE_METRIC_MIN_FONT_SIZE,
-        maxFontSize = MaterialTheme.typography.titleSmall.fontSize.takeOrElse { 16.sp },
-        stepSize = LIVE_METRIC_FONT_STEP,
-    )
+private fun liveMetricAutoSize(): TextAutoSize {
+    val maxFontSize = MaterialTheme.typography.titleSmall.fontSize.takeOrElse { 16.sp }
+    return remember(maxFontSize) {
+        TextAutoSize.StepBased(
+            minFontSize = LIVE_METRIC_MIN_FONT_SIZE,
+            maxFontSize = maxFontSize,
+            stepSize = LIVE_METRIC_FONT_STEP,
+        )
+    }
+}
 
 /**
  * The speed readout: speedometer glyph + a whole number of km/h WITH its unit,
