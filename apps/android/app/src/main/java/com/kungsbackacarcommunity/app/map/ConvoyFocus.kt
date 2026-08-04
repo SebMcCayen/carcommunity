@@ -24,6 +24,13 @@ enum class ConvoyFocusMode {
 /** A coordinate, free of Mapbox types so the planner stays unit-testable. */
 data class ConvoyLatLng(val latitude: Double, val longitude: Double)
 
+/**
+ * The camera orientation a convoy fit is COMPUTED at — fed to the map SDK's
+ * fit-to-coordinates call — as opposed to the orientation the final camera is
+ * then SHOWN at. Mapbox-free so the flat-fit decision stays unit-testable.
+ */
+data class ConvoyFitContext(val bearingDegrees: Double, val pitchDegrees: Double)
+
 /** What the camera should be doing this frame. */
 sealed interface ConvoyCameraPlan {
     /** Normal follow-the-puck. The pre-existing behaviour, unmodified. */
@@ -148,6 +155,41 @@ object ConvoyFocusPlanner {
      * any real spreading or bunching of the group does.
      */
     const val REFIT_EPSILON_DEGREES: Double = 0.0002
+
+    /**
+     * The pitch a convoy fit is COMPUTED at: dead flat, always, regardless of
+     * how tilted the map the user is looking at happens to be. See
+     * [fitComputationContext].
+     */
+    const val FLAT_FIT_PITCH_DEGREES: Double = 0.0
+
+    /**
+     * The camera orientation to COMPUTE a convoy fit at.
+     *
+     * The current [currentBearingDegrees] is kept — course-up framing rotates
+     * the fit with the direction of travel — but the pitch is forced FLAT.
+     *
+     * ## Why flat, and why this is the bug fix
+     * The map runs tilted (3D, ~45°). Fitting a set of coordinates on a TILTED
+     * view is where the SDK's fit-to-coordinates call goes wrong: a tilted
+     * camera sees a trapezoid of ground that reaches toward the horizon, so the
+     * call over-estimates how much fits and hands back a too-tight (too-high)
+     * zoom. Applied, that framed only the middle of the group and pushed the
+     * members nearest the screen edges off-screen — precisely the "I press the
+     * focus button and still don't see everyone" the button exists to prevent.
+     *
+     * Computing the fit FLAT gives an honest zoom that contains every point, and
+     * the caller re-applies the user's real tilt only to the FINAL camera.
+     * Tilting up from a flat fit reveals MORE ground rather than less, so a
+     * group that is framed flat stays framed once tilted — the same approach the
+     * route-overlay fit has always used (it computes flat and frames the whole
+     * route). The bearing is safe to feed in as-is; only the pitch has to go.
+     */
+    fun fitComputationContext(currentBearingDegrees: Double): ConvoyFitContext =
+        ConvoyFitContext(
+            bearingDegrees = currentBearingDegrees,
+            pitchDegrees = FLAT_FIT_PITCH_DEGREES,
+        )
 
     /**
      * Plan the camera for one update.

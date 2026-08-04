@@ -703,6 +703,18 @@ class MapboxMapSurface : MapSurface {
         // seasick and pointless when the framing is unchanged.
         if (!ConvoyFocusPlanner.shouldRefit(appliedConvoyFit, asLatLng)) return
 
+        // Keep the user's bearing so course-up framing rotates with travel, but
+        // compute the fit on a FLAT view. cameraForCoordinates over-estimates how
+        // much a tilted 3D view covers and returns a too-tight zoom, which framed
+        // only the middle of the group and dropped the members nearest the screen
+        // edges — the "I press focus and still don't see everyone" bug. The real
+        // tilt is re-applied to the FINAL camera below; tilting up from a flat fit
+        // only reveals more ground, so everyone framed flat stays framed once
+        // tilted. See ConvoyFocusPlanner.fitComputationContext; this is also why
+        // the route-overlay fit (which has always framed the whole route) computes
+        // flat.
+        val currentBearing = map.mapboxMap.cameraState.bearing
+        val fitContext = ConvoyFocusPlanner.fitComputationContext(currentBearing)
         runCatching {
             // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
             // display density exactly as the route-overlay fit does. Passing the
@@ -715,11 +727,8 @@ class MapboxMapSurface : MapSurface {
                     coordinates = points.map { Point.fromLngLat(it.longitude, it.latitude) },
                     camera =
                         cameraOptions {
-                            // Keep the user's own bearing and tilt: a convoy fit
-                            // reframes WHAT is shown, it does not spin the map
-                            // out from under a driver who is using it course-up.
-                            bearing(map.mapboxMap.cameraState.bearing)
-                            pitch(this@MapboxMapSurface.pitch)
+                            bearing(fitContext.bearingDegrees)
+                            pitch(fitContext.pitchDegrees)
                         },
                     coordinatesPadding =
                         EdgeInsets(
@@ -728,13 +737,17 @@ class MapboxMapSurface : MapSurface {
                             CONVOY_FIT_PAD_SIDE * density,
                             CONVOY_FIT_PAD_SIDE * density,
                         ),
-                    maxZoom = null,
+                    // Cap the zoom INSIDE the SDK so the centre it returns matches
+                    // the capped zoom. Clamping the zoom afterwards while keeping a
+                    // centre computed for a DIFFERENT zoom is what let a bunched-up
+                    // group frame off-centre. Too far in and the group would fill
+                    // the screen at building level; the floor below guards the
+                    // other end (too far out and the convoy is dots on a country
+                    // map), which the SDK takes no argument for and only bites on a
+                    // >100 km spread.
+                    maxZoom = MAX_CONVOY_FIT_ZOOM,
                     offset = null,
                 )
-            // Clamp both ends. Too far out and the convoy becomes dots on a
-            // country map with no usable road detail; too far in and a bunched-up
-            // group fills the screen at building level. cameraForCoordinates
-            // happily returns either for a degenerate spread.
             val zoom =
                 (fitted.zoom ?: MapMarkers.OWN_MARKER_ZOOM)
                     .coerceIn(MIN_CONVOY_FIT_ZOOM, MAX_CONVOY_FIT_ZOOM)
@@ -742,6 +755,11 @@ class MapboxMapSurface : MapSurface {
                 cameraOptions {
                     center(fitted.center)
                     zoom(zoom)
+                    // Fit centre/zoom come from the flat computation; the user's
+                    // own bearing and tilt are re-applied here so a convoy fit
+                    // reframes WHAT is shown without spinning or flattening the map
+                    // out from under a driver using it course-up in 3D.
+                    bearing(currentBearing)
                     pitch(this@MapboxMapSurface.pitch)
                 },
                 mapAnimationOptions { duration(CONVOY_FIT_ANIMATION_MS) },
