@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  LIVE_SESSION_DURATIONS,
   buildLatestNode,
   buildSession,
   guardPositionFreshness,
@@ -24,6 +25,12 @@ describe('live-core inputs', () => {
     // '6h' is the window the current client always starts (the 6h hard cap).
     expect(parseStartSessionInput({ duration: '6h' }).ok).toBe(true);
     expect(parseStartSessionInput({ duration: '8h' }).ok).toBe(false);
+    // The start schema's accepted keys are DERIVED from LIVE_SESSION_DURATIONS
+    // (single source of truth), so every map key must parse and nothing else.
+    for (const key of Object.keys(LIVE_SESSION_DURATIONS)) {
+      expect(parseStartSessionInput({ duration: key }).ok).toBe(true);
+    }
+    expect(parseStartSessionInput({ duration: '3h' }).ok).toBe(false);
     expect(
       parseUpdatePositionInput({
         coordinate: { latitude: 59.33, longitude: 18.07, recordedAt: NOW.toISOString() },

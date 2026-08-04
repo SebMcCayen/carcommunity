@@ -54,6 +54,17 @@ export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4, '6h': 6 } as 
 export type LiveSessionDuration = keyof typeof LIVE_SESSION_DURATIONS;
 
 /**
+ * The accepted duration keys, derived from {@link LIVE_SESSION_DURATIONS} so the
+ * start-session schema and the map cannot drift: add or remove a key in ONE place
+ * and both the numeric window and the accepted input follow. Typed as a non-empty
+ * tuple because that is the shape `z.enum` requires.
+ */
+export const LIVE_SESSION_DURATION_KEYS = Object.keys(LIVE_SESSION_DURATIONS) as [
+  LiveSessionDuration,
+  ...LiveSessionDuration[],
+];
+
+/**
  * Cost/data control constants for live-location sessions — the SERVER copies of
  * the shared timeframes. The Android client keeps its own copies
  * (`LiveLocation.LIVE_SESSION_MAX_MS` / `LIVE_SESSION_EXTEND_PROMPT_MS` and the
@@ -134,7 +145,7 @@ const coordinateSchema = z
   .strict();
 
 const startSessionInputSchema = z
-  .object({ duration: z.enum(['1h', '2h', '4h', '6h']) })
+  .object({ duration: z.enum(LIVE_SESSION_DURATION_KEYS) })
   .strict();
 
 const updatePositionInputSchema = z.object({ coordinate: coordinateSchema }).strict();
@@ -165,7 +176,11 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 }
 
 export const parseStartSessionInput = (d: unknown) =>
-  parse(startSessionInputSchema, d, 'Expected { duration: 1h|2h|4h|6h }.');
+  parse(
+    startSessionInputSchema,
+    d,
+    `Expected { duration: ${LIVE_SESSION_DURATION_KEYS.join('|')} }.`,
+  );
 export const parseUpdatePositionInput = (d: unknown) =>
   parse(
     updatePositionInputSchema,
