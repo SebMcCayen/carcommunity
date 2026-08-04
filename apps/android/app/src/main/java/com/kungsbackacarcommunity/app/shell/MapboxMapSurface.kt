@@ -274,6 +274,16 @@ class MapboxMapSurface : MapSurface {
     // fresh map goes back to the plain dot until it has its own heading.
     private var puckBearingArrowShown: Boolean = false
 
+    // Re-entrancy latch for the two location-indicator callbacks (position +
+    // bearing). Both of them mutate native map state (setCamera / a posted
+    // updateSettings), and a native settings re-init can synchronously re-fire an
+    // indicator listener while one is already on the stack. This latch makes any
+    // such nested indicator callback a no-op, so an indicator body can never
+    // re-enter map mutation from inside itself — defence in depth alongside the
+    // set-before-apply guard on [showPuckBearingArrow]. Set on entry, cleared in a
+    // finally on exit, so a normal (non-nested) fix always runs in full.
+    private var handlingIndicator: Boolean = false
+
     // The private "past ~1 km" breadcrumb tail of the user's OWN travel, drawn
     // only while THIS user is live-sharing (see [BreadcrumbTrail] for the rolling
     // window / jitter / jump rules). Fed from the device puck's position fixes
@@ -788,20 +798,69 @@ class MapboxMapSurface : MapSurface {
      * last reported course when the car stops rather than swinging on the spot.
      *
      * Idempotent and cheap: the guard means a fix arriving every second does not
-     * re-apply the location-component settings. Wrapped defensively like every
-     * other native call, and the flag is only raised once the swap actually
-     * LANDED — a no-op before the map exists, or a call that throws, simply
-     * leaves the next heading to try again rather than stranding the dot without
-     * its arrow for the rest of the session.
+     * re-apply the location-component settings.
+     *
+     * ### Set the flag BEFORE the swap, not after (re-entrancy)
+     * The flag is raised BEFORE [updateSettings][com.mapbox.maps.plugin.locationcomponent.LocationComponentPlugin]
+     * runs, and only cleared again if the swap FAILS. This ordering is load-bearing,
+     * not cosmetic. `updateSettings { locationPuck = ... }` re-initialises the
+     * location component SYNCHRONOUSLY, and that re-init synchronously RE-FIRES the
+     * position and bearing indicator listeners — including the bearing listener that
+     * called this method. If the flag were only raised AFTER the swap returned (the
+     * old `.onSuccess` ordering), that re-fired bearing listener would find the flag
+     * still `false`, call `showPuckBearingArrow()` again, apply `updateSettings`
+     * again, re-fire again… recursing without bound. That unbounded recursion is the
+     * "Input dispatching timed out" ANR, and the re-entrant `setCamera` the position
+     * listener runs during the storm corrupts native camera state into the
+     * `libmapbox-maps.so` SIGSEGV/SIGABRT family. Raising the flag first makes the
+     * synchronous re-entry a no-op, so the swap runs exactly once. Clearing it only
+     * on failure keeps the original retry behaviour: a swap that genuinely throws
+     * leaves the next heading to try again rather than stranding the plain dot.
+     *
+     * ### Apply OFF the indicator callback
+     * The swap is [posted][android.view.View.post] onto the map view rather than run
+     * inline, so the settings write (and any listener re-fire it triggers) happens
+     * after the current indicator callback has unwound instead of nested inside it —
+     * keeping native re-entrancy off the call stack entirely. The map ref is
+     * re-checked inside the post in case the surface was released before it runs.
+     * The set-before-apply guard above still guarantees the swap runs exactly once
+     * even if several fixes post before the first post executes.
      */
     private fun showPuckBearingArrow() {
         if (puckBearingArrowShown) return
         val map = mapViewRef ?: return
-        runCatching {
-            map.location.updateSettings {
-                locationPuck = createDefault2DPuck(withBearing = true)
-            }
-        }.onSuccess { puckBearingArrowShown = true }
+        map.post {
+            val liveMap = mapViewRef ?: return@post
+            applyPuckBearingArrowOnce(
+                isShown = { puckBearingArrowShown },
+                markShown = { puckBearingArrowShown = true },
+                markNotShown = { puckBearingArrowShown = false },
+                applySwap = {
+                    liveMap.location.updateSettings {
+                        locationPuck = createDefault2DPuck(withBearing = true)
+                    }
+                },
+            )
+        }
+    }
+
+    /**
+     * Run an indicator-listener body under the [handlingIndicator] latch: if a
+     * callback is already on the stack this is a no-op, otherwise the flag is held
+     * for the duration of [block] and always released afterwards (finally). Keeps
+     * any native re-init that re-fires an indicator listener from re-entering map
+     * mutation from inside another indicator callback. Inline so the existing
+     * `return@OnIndicator…ChangedListener` early-returns inside [block] still work
+     * (and still run the finally).
+     */
+    private inline fun guardIndicator(block: () -> Unit) {
+        if (handlingIndicator) return
+        handlingIndicator = true
+        try {
+            block()
+        } finally {
+            handlingIndicator = false
+        }
     }
 
     override fun setActive(active: Boolean) {
@@ -1097,95 +1156,101 @@ class MapboxMapSurface : MapSurface {
         val positionListener =
             remember {
                 OnIndicatorPositionChangedListener { point ->
-                    lastPoint = point
-                    // Private breadcrumb tail: record the user's OWN path while —
-                    // and only while — they are live-sharing. Done BEFORE the
-                    // camera-follow gate below so the tail keeps growing even when
-                    // the user has panned away and follow is suppressed. The buffer
-                    // drops jitter/duplicate fixes itself and only reports a change
-                    // when the tail actually moved, so a stationary puck emitting a
-                    // fix every frame triggers no redraw. Local-only: nothing here
-                    // crosses the seam or is written anywhere shared.
-                    if (userMarkerFlow.value?.isLiveSharing == true) {
-                        val changed =
-                            breadcrumbTrail.add(
-                                MapPoint(longitude = point.longitude(), latitude = point.latitude()),
-                            )
-                        if (changed) runCatching { redrawBreadcrumb() }
-                    }
-                    // "Camera follows me": while following (and no route overlay
-                    // owns the camera), keep the camera centred on the puck as the
-                    // user moves. Suppressed once the user pans/zooms/rotates —
-                    // the 10s idle timer resumes it — and while a route preview is
-                    // shown, so follow never fights an explicit camera move.
-                    if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
-                        return@OnIndicatorPositionChangedListener
-                    }
-                    val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
-                    // "Keep the whole convoy in view" replaces the follow TARGET,
-                    // not the follow MACHINERY: same gate above, same listener,
-                    // just a different thing to frame. Own movement still drives
-                    // it, because the user is one of the points being framed.
-                    if (convoyFitPoints != null) {
-                        centeredOnFirstFix = true
-                        applyConvoyFit()
-                        return@OnIndicatorPositionChangedListener
-                    }
-                    runCatching {
-                        if (!centeredOnFirstFix) {
-                            // Open the FIRST fix close to the user, at the own-marker
-                            // zoom and 3D tilt (snap, so the map opens already framed).
+                    // Under the shared re-entrancy latch: a native re-init that
+                    // re-fires this listener while a callback is already on the
+                    // stack is dropped, so the follow setCamera below can never be
+                    // re-entered from inside itself (see [guardIndicator]).
+                    guardIndicator {
+                        lastPoint = point
+                        // Private breadcrumb tail: record the user's OWN path while —
+                        // and only while — they are live-sharing. Done BEFORE the
+                        // camera-follow gate below so the tail keeps growing even when
+                        // the user has panned away and follow is suppressed. The buffer
+                        // drops jitter/duplicate fixes itself and only reports a change
+                        // when the tail actually moved, so a stationary puck emitting a
+                        // fix every frame triggers no redraw. Local-only: nothing here
+                        // crosses the seam or is written anywhere shared.
+                        if (userMarkerFlow.value?.isLiveSharing == true) {
+                            val changed =
+                                breadcrumbTrail.add(
+                                    MapPoint(longitude = point.longitude(), latitude = point.latitude()),
+                                )
+                            if (changed) runCatching { redrawBreadcrumb() }
+                        }
+                        // "Camera follows me": while following (and no route overlay
+                        // owns the camera), keep the camera centred on the puck as the
+                        // user moves. Suppressed once the user pans/zooms/rotates —
+                        // the 10s idle timer resumes it — and while a route preview is
+                        // shown, so follow never fights an explicit camera move.
+                        if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                            return@OnIndicatorPositionChangedListener
+                        }
+                        val map = mapViewRef ?: return@OnIndicatorPositionChangedListener
+                        // "Keep the whole convoy in view" replaces the follow TARGET,
+                        // not the follow MACHINERY: same gate above, same listener,
+                        // just a different thing to frame. Own movement still drives
+                        // it, because the user is one of the points being framed.
+                        if (convoyFitPoints != null) {
                             centeredOnFirstFix = true
-                            map.mapboxMap.setCamera(
-                                cameraOptions {
-                                    center(point)
-                                    zoom(MapMarkers.OWN_MARKER_ZOOM)
-                                    pitch(this@MapboxMapSurface.pitch)
-                                    // Open already facing the direction of travel
-                                    // when the user chose course-up; north-up
-                                    // leaves the bearing at 0.
-                                    if (compassMode == MapCompassMode.CourseUp) {
-                                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
-                                    }
-                                },
-                            )
-                        } else {
-                            // Later fixes: snap the CENTRE straight onto the puck
-                            // (leave zoom/pitch/bearing untouched) so the screen
-                            // actually keeps up with the user while driving.
-                            //
-                            // This deliberately does NOT ease. This callback fires
-                            // for every INTERPOLATED frame of the location
-                            // component's own puck animation (many per second, not
-                            // once per GPS fix), and those frames are already
-                            // smooth. The previous code started a ~700ms easeTo on
-                            // each of them; because a fresh ease supersedes the
-                            // in-flight one every frame, the camera only ever
-                            // travelled a sliver of each 700ms glide before being
-                            // restarted — so at driving speed it fell ever further
-                            // behind and the map appeared frozen while the puck
-                            // drove off the edge. Matching the camera centre to the
-                            // (already-smoothed) puck position every frame keeps the
-                            // puck pinned with no queue of competing animations and
-                            // no animator cost — the pattern Mapbox documents for
-                            // simple location tracking. A programmatic setCamera
-                            // does not trigger the gesture listeners, so this never
-                            // disables follow; a manual pan still breaks follow via
-                            // the gesture hooks and the idle-return timer restores it.
-                            //
-                            // In course-up the bearing rides along with the centre
-                            // so the map stays rotated to the direction of travel as
-                            // the user moves (the bearing listener also rotates it in
-                            // place while turning). north-up sets only the centre,
-                            // leaving the bearing untouched (0, or a manual rotation).
-                            map.mapboxMap.setCamera(
-                                cameraOptions {
-                                    center(point)
-                                    if (compassMode == MapCompassMode.CourseUp) {
-                                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
-                                    }
-                                },
-                            )
+                            applyConvoyFit()
+                            return@OnIndicatorPositionChangedListener
+                        }
+                        runCatching {
+                            if (!centeredOnFirstFix) {
+                                // Open the FIRST fix close to the user, at the own-marker
+                                // zoom and 3D tilt (snap, so the map opens already framed).
+                                centeredOnFirstFix = true
+                                map.mapboxMap.setCamera(
+                                    cameraOptions {
+                                        center(point)
+                                        zoom(MapMarkers.OWN_MARKER_ZOOM)
+                                        pitch(this@MapboxMapSurface.pitch)
+                                        // Open already facing the direction of travel
+                                        // when the user chose course-up; north-up
+                                        // leaves the bearing at 0.
+                                        if (compassMode == MapCompassMode.CourseUp) {
+                                            bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                                        }
+                                    },
+                                )
+                            } else {
+                                // Later fixes: snap the CENTRE straight onto the puck
+                                // (leave zoom/pitch/bearing untouched) so the screen
+                                // actually keeps up with the user while driving.
+                                //
+                                // This deliberately does NOT ease. This callback fires
+                                // for every INTERPOLATED frame of the location
+                                // component's own puck animation (many per second, not
+                                // once per GPS fix), and those frames are already
+                                // smooth. The previous code started a ~700ms easeTo on
+                                // each of them; because a fresh ease supersedes the
+                                // in-flight one every frame, the camera only ever
+                                // travelled a sliver of each 700ms glide before being
+                                // restarted — so at driving speed it fell ever further
+                                // behind and the map appeared frozen while the puck
+                                // drove off the edge. Matching the camera centre to the
+                                // (already-smoothed) puck position every frame keeps the
+                                // puck pinned with no queue of competing animations and
+                                // no animator cost — the pattern Mapbox documents for
+                                // simple location tracking. A programmatic setCamera
+                                // does not trigger the gesture listeners, so this never
+                                // disables follow; a manual pan still breaks follow via
+                                // the gesture hooks and the idle-return timer restores it.
+                                //
+                                // In course-up the bearing rides along with the centre
+                                // so the map stays rotated to the direction of travel as
+                                // the user moves (the bearing listener also rotates it in
+                                // place while turning). north-up sets only the centre,
+                                // leaving the bearing untouched (0, or a manual rotation).
+                                map.mapboxMap.setCamera(
+                                    cameraOptions {
+                                        center(point)
+                                        if (compassMode == MapCompassMode.CourseUp) {
+                                            bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -1200,42 +1265,48 @@ class MapboxMapSurface : MapSurface {
         val bearingListener =
             remember {
                 OnIndicatorBearingChangedListener { heading ->
-                    lastBearing = heading
-                    // First real heading of this map: give the dot its arrow.
-                    //
-                    // This listener only fires for a fix that actually CARRIES a
-                    // bearing — the location provider maps the platform fix's
-                    // bearing and drops the sample when there is none — so
-                    // reaching here is the proof that "which way am I pointing?"
-                    // has an answer. Guarded, so it is one settings update per
-                    // map, not one per fix.
-                    showPuckBearingArrow()
-                    // north-up ignores the heading entirely (the map stays at 0).
-                    if (compassMode != MapCompassMode.CourseUp) {
-                        return@OnIndicatorBearingChangedListener
-                    }
-                    // Same follow gate as the position listener: a manual gesture
-                    // (or a route preview) owns the camera, so a heading update
-                    // must not fight it — the idle-return timer resumes course-up
-                    // rotation once the user stops interacting.
-                    if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
-                        return@OnIndicatorBearingChangedListener
-                    }
-                    // A convoy fit deliberately keeps the user's current bearing
-                    // while framing the group (see applyConvoyFit), so don't spin
-                    // the map out from under it here.
-                    if (convoyFitPoints != null) return@OnIndicatorBearingChangedListener
-                    val map = mapViewRef ?: return@OnIndicatorBearingChangedListener
-                    // Rotate in place: only the bearing is set, so centre/zoom/
-                    // pitch stay exactly as the position listener maintains them.
-                    // A programmatic setCamera does not fire the gesture listeners,
-                    // so this never disables follow.
-                    runCatching {
-                        map.mapboxMap.setCamera(
-                            cameraOptions {
-                                bearing(CompassCamera.followBearing(compassMode, heading))
-                            },
-                        )
+                    // Same shared re-entrancy latch as the position listener: the
+                    // arrow swap and the rotate-in-place setCamera below both mutate
+                    // native state, so a re-fired bearing callback stacked on top of
+                    // one already running is dropped (see [guardIndicator]).
+                    guardIndicator {
+                        lastBearing = heading
+                        // First real heading of this map: give the dot its arrow.
+                        //
+                        // This listener only fires for a fix that actually CARRIES a
+                        // bearing — the location provider maps the platform fix's
+                        // bearing and drops the sample when there is none — so
+                        // reaching here is the proof that "which way am I pointing?"
+                        // has an answer. Guarded, so it is one settings update per
+                        // map, not one per fix.
+                        showPuckBearingArrow()
+                        // north-up ignores the heading entirely (the map stays at 0).
+                        if (compassMode != MapCompassMode.CourseUp) {
+                            return@OnIndicatorBearingChangedListener
+                        }
+                        // Same follow gate as the position listener: a manual gesture
+                        // (or a route preview) owns the camera, so a heading update
+                        // must not fight it — the idle-return timer resumes course-up
+                        // rotation once the user stops interacting.
+                        if (!followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                            return@OnIndicatorBearingChangedListener
+                        }
+                        // A convoy fit deliberately keeps the user's current bearing
+                        // while framing the group (see applyConvoyFit), so don't spin
+                        // the map out from under it here.
+                        if (convoyFitPoints != null) return@OnIndicatorBearingChangedListener
+                        val map = mapViewRef ?: return@OnIndicatorBearingChangedListener
+                        // Rotate in place: only the bearing is set, so centre/zoom/
+                        // pitch stay exactly as the position listener maintains them.
+                        // A programmatic setCamera does not fire the gesture listeners,
+                        // so this never disables follow.
+                        runCatching {
+                            map.mapboxMap.setCamera(
+                                cameraOptions {
+                                    bearing(CompassCamera.followBearing(compassMode, heading))
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -2722,4 +2793,31 @@ fun rememberMapSurface(): MapSurface {
     return remember(token) {
         if (token.isNotBlank()) MapboxMapSurface() else StubMapSurface()
     }
+}
+
+/**
+ * The set-before-apply guard ordering behind [MapboxMapSurface.showPuckBearingArrow].
+ *
+ * Extracted as a pure, Mapbox-free function so the ordering that fixes the puck
+ * re-entrancy ANR/native-crash can be unit-tested without a `MapView`: the guard
+ * flag is passed as [isShown]/[markShown]/[markNotShown] and the native settings
+ * write as [applySwap].
+ *
+ * Contract:
+ * 1. If the flag is already set, do nothing (idempotent — one swap per map).
+ * 2. Otherwise set the flag BEFORE running [applySwap]. [applySwap] may re-enter
+ *    this function synchronously (a real `updateSettings` re-fires the indicator
+ *    listeners while it runs); because the flag is already set that re-entry hits
+ *    rule 1 and is a no-op, so [applySwap] runs EXACTLY ONCE instead of recursing.
+ * 3. If [applySwap] throws, clear the flag again so the next call retries.
+ */
+internal fun applyPuckBearingArrowOnce(
+    isShown: () -> Boolean,
+    markShown: () -> Unit,
+    markNotShown: () -> Unit,
+    applySwap: () -> Unit,
+) {
+    if (isShown()) return
+    markShown()
+    runCatching { applySwap() }.onFailure { markNotShown() }
 }
