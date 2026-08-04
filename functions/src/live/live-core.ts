@@ -65,29 +65,29 @@ export const LIVE_SESSION_DURATION_KEYS = Object.keys(LIVE_SESSION_DURATIONS) as
 ];
 
 /**
- * Cost/data control constants for live-location sessions — the SERVER copies of
- * the shared timeframes. The Android client keeps its own copies
- * (`LiveLocation.LIVE_SESSION_MAX_MS` / `LIVE_SESSION_EXTEND_PROMPT_MS` and the
- * `location/` service constants); the two boundaries cannot literally share a
+ * Cost/data control constant for live-location sessions — the SERVER copy of the
+ * 6h cap. The Android client keeps its own copy (`LiveLocation.LIVE_SESSION_MAX_MS`
+ * plus the `location/` service constants); the two cannot literally share a
  * constant across the TS/Kotlin line, so each side documents the other and the
  * agreement is asserted by tests (functions/src/live/live-core.test.ts here,
- * `LiveLocationTest` on the client). Seb-approved values, kept as named
- * constants so they stay retunable in one place.
+ * `LiveLocationTest` on the client). Seb-approved value, kept as a named constant
+ * so it stays retunable in one place.
  *
  * LIVE_SESSION_MAX_MS is the ABSOLUTE ceiling on any one sharing window (single
- * AND convoy — a convoy member shares through the very same session node). No
- * `expiresAt` this backend ever writes — at start OR on extend — may be more
- * than this far past `now`. A forgotten phone therefore always stops within one
- * window; continuing past it requires a deliberate human "yes" (see
- * `extendSession`), which grants a fresh capped window.
+ * AND convoy — a convoy member shares through the very same session node), and is
+ * also the window every current client starts with: a session simply runs to 6h
+ * and auto-stops, with no prompt to prolong it. No `expiresAt` this backend ever
+ * writes — at start OR on the retained backward-compatible extend — may be more
+ * than this far past `now`, so a forgotten phone always stops within one window.
  */
 export const LIVE_SESSION_MAX_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 /**
- * How long before `expiresAt` the client shows the "still sharing? continue?"
- * extend prompt. Server-side only in that the server documents it and the client
- * mirrors it; the prompt itself is a client concern. 15 min before a 6h window
- * is the "5h45" checkpoint Seb specified.
+ * Legacy: how long before `expiresAt` an OLDER client used to show the "still
+ * sharing? continue?" extend prompt. The current client no longer prompts to
+ * prolong — a session just runs to the 6h cap and auto-stops — so this is retained
+ * only to document the window the still-deployed backward-compatible
+ * `extendSession` callable serves. Not read by the current app.
  */
 export const LIVE_SESSION_EXTEND_PROMPT_MS = 15 * 60 * 1000; // 15 minutes
 

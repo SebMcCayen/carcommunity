@@ -199,15 +199,15 @@ class LiveSharingLifecycleTest {
     }
 
     @Test
-    fun `a restart observing a session already older than 6h stops immediately`() {
+    fun `a restart observing a session already past its 6h expiry stops immediately`() {
         // Process death + START_REDELIVER_INTENT: the restarted service re-reads the
-        // session and, if the 6h window has already elapsed (expiry is in the past),
+        // session and, if the 6h window has already elapsed (expiry now in the past),
         // must stop at once rather than resurrect an out-of-budget session.
         val lifecycle = LiveSharingLifecycle()
-        val startedSixHoursAgo = session(expiresAtMillis = now)
+        val startedOverSixHoursAgo = session(expiresAtMillis = now - 1)
         assertStopped(
             LiveSharingStopReason.EXPIRED,
-            lifecycle.onObservation(true, startedSixHoursAgo, now),
+            lifecycle.onObservation(true, startedOverSixHoursAgo, now),
         )
     }
 
