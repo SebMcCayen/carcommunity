@@ -61,6 +61,62 @@ class ConvoyFocusTest {
         assertTrue(plan.points.contains(me))
     }
 
+    // ---- the flat-fit computation (the "don't see everyone" bug) -----------
+
+    @Test
+    fun `a convoy fit is computed dead flat so a tilted 3D view cannot over-zoom`() {
+        // The bug: feeding the map's live ~45 degree tilt into the SDK fit made
+        // it over-estimate coverage and return a too-tight zoom, dropping the
+        // members nearest the screen edges. The fit must always be computed flat.
+        assertEquals(0.0, ConvoyFocusPlanner.fitComputationContext(0.0).pitchDegrees, 1e-9)
+        assertEquals(0.0, ConvoyFocusPlanner.fitComputationContext(45.0).pitchDegrees, 1e-9)
+        assertEquals(0.0, ConvoyFocusPlanner.fitComputationContext(200.0).pitchDegrees, 1e-9)
+    }
+
+    @Test
+    fun `a convoy fit keeps the current bearing so course-up framing survives`() {
+        // Bearing is safe to feed into the fit and must be preserved so the fit
+        // rotates with the direction of travel; only the pitch is flattened.
+        assertEquals(0.0, ConvoyFocusPlanner.fitComputationContext(0.0).bearingDegrees, 1e-9)
+        assertEquals(137.5, ConvoyFocusPlanner.fitComputationContext(137.5).bearingDegrees, 1e-9)
+    }
+
+    @Test
+    fun `the framed set's bounds contain every member spread out across the map`() {
+        // The points the camera is asked to frame (self + all known members)
+        // must genuinely enclose everyone — a bounding box that contains the
+        // whole group is the precondition for the camera fit to show them all.
+        val self = ConvoyLatLng(57.00, 12.00)
+        val a = ConvoyLatLng(57.50, 12.80)
+        val b = ConvoyLatLng(56.70, 11.40)
+        val fit =
+            ConvoyFocusPlanner.plan(ConvoyFocusMode.Convoy, self, listOf(a, b))
+                as ConvoyCameraPlan.FitConvoy
+        val bounds = ConvoyFocusPlanner.boundsOf(fit.points)
+        for (p in listOf(self, a, b)) {
+            assertTrue("latitude framed", p.latitude in bounds.south..bounds.north)
+            assertTrue("longitude framed", p.longitude in bounds.west..bounds.east)
+        }
+    }
+
+    @Test
+    fun `a single-point set yields degenerate but valid bounds and does not crash`() {
+        val only = ConvoyLatLng(57.0, 12.0)
+        val bounds = ConvoyFocusPlanner.boundsOf(listOf(only))
+        assertEquals(only.latitude, bounds.south, 1e-9)
+        assertEquals(only.latitude, bounds.north, 1e-9)
+        assertEquals(only.longitude, bounds.west, 1e-9)
+        assertEquals(only.longitude, bounds.east, 1e-9)
+    }
+
+    @Test
+    fun `an empty framed set is never asked to refit so its bounds are never taken`() {
+        // boundsOf is only ever called on a non-empty set; shouldRefit is the
+        // guard that keeps an empty set from ever reaching the camera. Pin that
+        // contract so nobody "fixes" boundsOf to tolerate empty and hides a gap.
+        assertFalse(ConvoyFocusPlanner.shouldRefit(listOf(me, other), emptyList()))
+    }
+
     // ---- refit hysteresis --------------------------------------------------
 
     @Test
