@@ -24,6 +24,7 @@ class NavResumeStore(context: Context) {
     fun read(): ActiveNavigation? {
         if (!prefs.contains(KEY_LNG) ||
             !prefs.contains(KEY_LAT) ||
+            !prefs.contains(KEY_LABEL) ||
             !prefs.contains(KEY_STARTED_AT)
         ) {
             return null

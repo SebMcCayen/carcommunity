@@ -3337,7 +3337,15 @@ fun AuthenticatedApp(
                 // interrupted (process death / cold start) rather than exited, and
                 // the record is fresh and not already running, stand up the resume
                 // offer. A stale or malformed leftover is cleared instead of shown.
+                //
+                // Only on an in-app-SDK build: resume re-enters in-app navigation
+                // (startNavigationTo's NAV_SDK path), and only that path persists a
+                // record in the first place. On the token-less noNav build we never
+                // offer — a leftover record from a previous SDK-enabled install
+                // stays untouched rather than surfacing a "continue" the external-
+                // maps handoff could neither fulfil nor clear.
                 LaunchedEffect(Unit) {
+                    if (!BuildConfig.NAV_SDK_ENABLED) return@LaunchedEffect
                     val saved = navResumeStore.read()
                     val now = System.currentTimeMillis()
                     when {
