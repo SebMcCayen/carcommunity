@@ -9,6 +9,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalDensity
@@ -63,9 +64,9 @@ object ChatListPinning {
      * incoming message never yanks them away from what they were reading.
      *
      * This is the FOLLOW decision only; the one-time jump-to-bottom on OPEN is owned
-     * by [ScrollToNewestOnOpen], which is why this can assume the list is already
-     * laid out and does not special-case a not-yet-measured (totalItemsCount 0)
-     * list into "scroll".
+     * by [KeepPinnedToNewest]'s open effect, which is why this can assume the list is
+     * already laid out and does not special-case a not-yet-measured (totalItemsCount
+     * 0) list into "scroll".
      *
      * @param lastVisibleIndex index of the last visible item, or -1 when the list
      *   has not been laid out yet.
@@ -115,15 +116,22 @@ fun KeepPinnedToNewest(
     newestMessageId: String?,
     isOwnNewestMessage: Boolean,
 ) {
-    // Reset with the list itself (a fresh thread gets a fresh state), so re-opening
-    // a chat jumps to the bottom again rather than trusting a stale flag.
-    var didInitialJump by remember(listState) { mutableStateOf(false) }
+    // Saveable, sharing the SAME lifetime as rememberLazyListState's own saved
+    // scroll position: both are restored together across a configuration change
+    // (rotation) or process death, and both start fresh on a genuinely new open.
+    // A plain remember here would reset to false on rotation while the list's saved
+    // scroll offset came back intact, re-firing the open jump and yanking a reader
+    // who had scrolled up into history back down to the bottom.
+    var didInitialJump by rememberSaveable { mutableStateOf(false) }
 
     // ON OPEN: wait for the first real layout, then JUMP (no animation) to the last
-    // row. snapshotFlow.first { it > 0 } is the fix for the async-load race — the
-    // effect suspends until the LazyColumn has measured something, instead of firing
-    // a no-op scroll against an empty layout and never correcting it.
+    // row — once. snapshotFlow.first { it > 0 } is the fix for the async-load race:
+    // the effect suspends until the LazyColumn has measured something, instead of
+    // firing a no-op scroll against an empty layout and never correcting it. Gated
+    // on !didInitialJump so a rotation (which hands us a fresh LazyListState instance
+    // but a RESTORED scroll position) doesn't re-jump a scrolled-up reader.
     LaunchedEffect(listState) {
+        if (didInitialJump) return@LaunchedEffect
         snapshotFlow { listState.layoutInfo.totalItemsCount }.first { it > 0 }
         listState.scrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
         didInitialJump = true
