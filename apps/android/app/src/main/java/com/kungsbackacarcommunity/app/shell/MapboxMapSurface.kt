@@ -821,22 +821,32 @@ class MapboxMapSurface : MapSurface {
      * The swap is [posted][android.view.View.post] onto the map view rather than run
      * inline, so the settings write (and any listener re-fire it triggers) happens
      * after the current indicator callback has unwound instead of nested inside it —
-     * keeping native re-entrancy off the call stack entirely. The map ref is
-     * re-checked inside the post in case the surface was released before it runs.
-     * The set-before-apply guard above still guarantees the swap runs exactly once
-     * even if several fixes post before the first post executes.
+     * keeping native re-entrancy off the call stack entirely. The posted runnable
+     * applies to the CAPTURED map and only while it is still the live surface
+     * (`mapViewRef === map`): a post can outlive its MapView across a tab round-trip
+     * recreate, so it must never mutate a freshly composed replacement map. The
+     * set-before-apply guard above still guarantees the swap runs exactly once even
+     * if several fixes post before the first post executes.
      */
     private fun showPuckBearingArrow() {
         if (puckBearingArrowShown) return
         val map = mapViewRef ?: return
         map.post {
-            val liveMap = mapViewRef ?: return@post
+            // Apply to the CAPTURED map, and only while it is STILL the live
+            // surface. A View.post runnable sits on the main looper and can run
+            // even after its MapView is detached, so a fix posted just before a
+            // tab round-trip recreated the surface must not mutate the NEW map.
+            // If the ref has moved on, the captured map is gone; the freshly
+            // composed one gets its own arrow through its own first-heading
+            // callback (onRelease clears puckBearingArrowShown, so the flag never
+            // carries across the swap and never sets this map's flag either).
+            if (mapViewRef !== map) return@post
             applyPuckBearingArrowOnce(
                 isShown = { puckBearingArrowShown },
                 markShown = { puckBearingArrowShown = true },
                 markNotShown = { puckBearingArrowShown = false },
                 applySwap = {
-                    liveMap.location.updateSettings {
+                    map.location.updateSettings {
                         locationPuck = createDefault2DPuck(withBearing = true)
                     }
                 },
