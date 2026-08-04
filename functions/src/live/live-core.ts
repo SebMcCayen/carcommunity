@@ -43,7 +43,14 @@ import { z } from 'zod';
 
 import { MIN_MODEL_YEAR, maxModelYear } from '../garage/garage-core';
 
-export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4 } as const;
+// '6h' is the live-session window every CURRENT client starts with (single AND
+// convoy) — it equals LIVE_SESSION_MAX_MS, so a session simply runs to the 6h
+// hard cap and auto-stops, with no "prolong/extend" prompt in between. The
+// shorter 1h/2h/4h keys are retained for BACKWARD COMPATIBILITY: sessions
+// already stored in RTDB by older app builds carry them, and an older client
+// still in the wild may pass one to live.startSession. Every key is bounded by
+// the same 6h cap (clampExpiryToCap in buildSession), so accepting them is safe.
+export const LIVE_SESSION_DURATIONS = { '1h': 1, '2h': 2, '4h': 4, '6h': 6 } as const;
 export type LiveSessionDuration = keyof typeof LIVE_SESSION_DURATIONS;
 
 /**
@@ -127,7 +134,7 @@ const coordinateSchema = z
   .strict();
 
 const startSessionInputSchema = z
-  .object({ duration: z.enum(['1h', '2h', '4h']) })
+  .object({ duration: z.enum(['1h', '2h', '4h', '6h']) })
   .strict();
 
 const updatePositionInputSchema = z.object({ coordinate: coordinateSchema }).strict();
@@ -158,7 +165,7 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
 }
 
 export const parseStartSessionInput = (d: unknown) =>
-  parse(startSessionInputSchema, d, 'Expected { duration: 1h|2h|4h }.');
+  parse(startSessionInputSchema, d, 'Expected { duration: 1h|2h|4h|6h }.');
 export const parseUpdatePositionInput = (d: unknown) =>
   parse(
     updatePositionInputSchema,
@@ -313,10 +320,11 @@ export function buildSession(
   displayName: string | null,
   mainCar: LiveMainCar | null = null,
 ): LiveSession {
-  // The chosen 1h/2h/4h window, clamped to the 6h hard cap. Today every pickable
-  // duration is already under the cap, so this is a no-op for real inputs, but it
-  // keeps the invariant "no expiresAt is ever more than LIVE_SESSION_MAX_MS past
-  // now" true at the one place expiries are minted — matching extendSession.
+  // The chosen window, clamped to the 6h hard cap. The current client always
+  // passes '6h', which equals the cap, so clampExpiryToCap is exactly the
+  // identity there; the retained shorter keys sit under it. Either way this keeps
+  // the invariant "no expiresAt is ever more than LIVE_SESSION_MAX_MS past now"
+  // true at the one place expiries are minted — matching extendSession.
   const expires = new Date(
     clampExpiryToCap(now.getTime(), now.getTime() + LIVE_SESSION_DURATIONS[duration] * 60 * 60 * 1000),
   );

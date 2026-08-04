@@ -123,14 +123,6 @@ interface LiveLocationRepository {
     /** live.stopSession — stops sharing and removes the marker immediately. */
     suspend fun stopSession()
 
-    /**
-     * live.extendSession — the user's "yes, keep sharing" answer to the pre-expiry
-     * prompt. Pushes the active session's expiry to a fresh server-capped window
-     * (never past the 6h cap). No-op-shaped for the caller: it either succeeds or
-     * throws (e.g. the session already expired, in which case the stop path wins).
-     */
-    suspend fun extendSession()
-
     /** live.hideMeNow — privacy stop; always available, even while suspended. */
     suspend fun hideMeNow()
 

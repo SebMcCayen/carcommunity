@@ -16,13 +16,28 @@ class LiveLocationTest {
         assertEquals(2, LiveSessionDuration.TWO_HOURS.hours)
         assertEquals("4h", LiveSessionDuration.FOUR_HOURS.key)
         assertEquals(4, LiveSessionDuration.FOUR_HOURS.hours)
+        assertEquals("6h", LiveSessionDuration.SIX_HOURS.key)
+        assertEquals(6, LiveSessionDuration.SIX_HOURS.hours)
     }
 
     @Test
     fun `duration fromKey round-trips and rejects unknown`() {
         assertEquals(LiveSessionDuration.TWO_HOURS, LiveSessionDuration.fromKey("2h"))
+        assertEquals(LiveSessionDuration.SIX_HOURS, LiveSessionDuration.fromKey("6h"))
         assertNull(LiveSessionDuration.fromKey("3h"))
         assertNull(LiveSessionDuration.fromKey(null))
+    }
+
+    @Test
+    fun `the default session duration is the 6h hard-cap window`() {
+        // Every session (single and convoy) now runs the full 6h maximum and
+        // auto-stops, with no prompt to prolong it.
+        assertEquals(LiveSessionDuration.SIX_HOURS, LiveLocation.DEFAULT_SESSION_DURATION)
+        assertEquals(6L * 60 * 60 * 1000, LiveLocation.LIVE_SESSION_MAX_MS)
+        assertEquals(
+            LiveLocation.DEFAULT_SESSION_DURATION.hours * 60L * 60 * 1000,
+            LiveLocation.LIVE_SESSION_MAX_MS,
+        )
     }
 
     @Test
@@ -60,37 +75,11 @@ class LiveLocationTest {
     }
 
     @Test
-    fun `session cap and extend-prompt constants match the server`() {
-        // The Kotlin copies MUST equal the server's LIVE_SESSION_MAX_MS (6h) and
-        // LIVE_SESSION_EXTEND_PROMPT_MS (15 min) — see functions/src/live/live-core.ts
-        // and its live-core.test.ts. Retune BOTH sides together.
+    fun `session cap constant matches the server`() {
+        // The Kotlin copy MUST equal the server's LIVE_SESSION_MAX_MS (6h) — see
+        // functions/src/live/live-core.ts and its live-core.test.ts. Retune BOTH
+        // sides together.
         assertEquals(6 * 60 * 60 * 1000L, LiveLocation.LIVE_SESSION_MAX_MS)
-        assertEquals(15 * 60 * 1000L, LiveLocation.LIVE_SESSION_EXTEND_PROMPT_MS)
-    }
-
-    @Test
-    fun `isExpiringSoon is true only within the final prompt window before expiry`() {
-        val now = 1_000_000L
-        val prompt = LiveLocation.LIVE_SESSION_EXTEND_PROMPT_MS
-        // Comfortably before the window: not yet.
-        assertFalse(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, now + prompt + 1), now))
-        // Exactly at the window edge: prompt.
-        assertTrue(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, now + prompt), now))
-        // Deep inside the window: prompt.
-        assertTrue(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, now + 60_000L), now))
-    }
-
-    @Test
-    fun `isExpiringSoon is false at or past expiry, and when nothing to count down to`() {
-        val now = 1_000_000L
-        // Already expired → the stop path owns it, not the extend prompt.
-        assertFalse(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, now), now))
-        assertFalse(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, now - 1), now))
-        // Unparseable/absent expiry → no known deadline → no prompt.
-        assertFalse(LiveLocation.isExpiringSoon(session(LiveSessionStatus.ACTIVE, null), now))
-        // Not sharing → no prompt.
-        assertFalse(LiveLocation.isExpiringSoon(session(LiveSessionStatus.STOPPED, now + 60_000L), now))
-        assertFalse(LiveLocation.isExpiringSoon(null, now))
     }
 
     @Test

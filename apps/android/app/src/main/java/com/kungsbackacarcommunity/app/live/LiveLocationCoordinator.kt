@@ -61,9 +61,6 @@ class LiveLocationCoordinator(
 
     suspend fun stop() = execute { repository.stopSession() }
 
-    /** Extends the active session by a fresh capped window (the "keep sharing" reply). */
-    suspend fun extend() = execute { repository.extendSession() }
-
     /** Privacy stop — always offered to the user (works while suspended too). */
     suspend fun hideMeNow() = execute { repository.hideMeNow() }
 

@@ -105,16 +105,7 @@
     <string name="liveLocation_backgroundNotificationChannelDescription">Visas medan du delar din position, så att du alltid vet att delningen är på.</string>
     <string name="liveLocation_backgroundNotificationTitle">Du delar din position</string>
     <string name="liveLocation_backgroundNotificationBody">Livedelning pågår. Tryck för att öppna appen.</string>
-    <string name="liveLocation_backgroundNotificationBodyRemaining">Livedelning pågår · %1$d min kvar. Tryck för att öppna appen.</string>
     <string name="liveLocation_backgroundNotificationStop">Stoppa delning</string>
-    <string name="liveLocation_extendPromptTitle">Delar du fortfarande din position?</string>
-    <string name="liveLocation_extendPromptBody">Din delningssession håller på att avslutas. Vill du fortsätta dela?</string>
-    <string name="liveLocation_extendPromptBodyRemaining">Din delningssession avslutas om %1$d min. Vill du fortsätta dela?</string>
-    <string name="liveLocation_extendAction">Fortsätt dela</string>
-    <string name="liveLocation_extendInAppTitle">Fortsätt dela din position?</string>
-    <string name="liveLocation_extendInAppBody">Din delningssession håller på att avslutas. Du kan fortsätta en period till, eller låta den avslutas.</string>
-    <string name="liveLocation_extendInAppExtend">Fortsätt dela</string>
-    <string name="liveLocation_extendInAppLetStop">Låt den avslutas</string>
     <string name="liveLocation_stationaryPromptTitle">Delar du fortfarande din position?</string>
     <string name="liveLocation_stationaryPromptBody">Du har stått på samma plats en stund. Om du är klar avslutas delningen automatiskt strax. Tryck för att fortsätta dela.</string>
     <string name="liveLocation_stillSharingAction">Ja, jag delar fortfarande</string>

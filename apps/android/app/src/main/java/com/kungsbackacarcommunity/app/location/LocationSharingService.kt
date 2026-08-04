@@ -29,9 +29,7 @@ import com.kungsbackacarcommunity.app.diagnostics.CrashKeys
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseCrashTelemetry
 import com.kungsbackacarcommunity.app.live.FirebaseLiveLocationRepository
-import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
-import com.kungsbackacarcommunity.app.live.LiveSessionInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -106,7 +104,7 @@ class LocationSharingService : Service() {
     /**
      * The ceiling anchor is persisted, so a process kill plus the
      * START_REDELIVER_INTENT restart cannot hand a restarted service a fresh
-     * 4h05m budget. See [SharingAnchorStore].
+     * ~6h budget. See [SharingAnchorStore].
      */
     private val lifecycle by lazy {
         LiveSharingLifecycle(anchorStore = PersistedSharingAnchorStore(applicationContext))
@@ -158,9 +156,6 @@ class LocationSharingService : Service() {
         FirebaseClientErrorReporter.createIfAvailable(applicationContext)
     }
 
-    /** Minutes currently rendered in the notification; -1 = nothing posted yet. */
-    private var shownRemainingMinutes: Long = -1L
-
     /**
      * Detects "parked for a while" from the raw fix stream to drive the
      * stationary prompt / auto-stop. Pure state machine; guarded by
@@ -169,15 +164,6 @@ class LocationSharingService : Service() {
      */
     private val stationaryMonitor = StationarySharingMonitor()
     private val stationaryLock = Any()
-
-    /**
-     * Last observed session, kept so the IO ticker can compute
-     * [LiveLocation.isExpiringSoon] without reaching into the private
-     * [LiveSharingLifecycle] state. Volatile: written on the observer coroutine,
-     * read on the ticker coroutine.
-     */
-    @Volatile
-    private var lastSession: LiveSessionInfo? = null
 
     /** Which prompt (if any) the ongoing notification is currently offering. */
     private var promptMode: SharingPromptMode = SharingPromptMode.NORMAL
@@ -432,18 +418,12 @@ class LocationSharingService : Service() {
 
         val alreadyRunning = ownerUid == uid && sessionJob?.isActive == true
 
-        // Non-terminal replies to a notification prompt (Extend / "still sharing").
-        // Handled ONLY on the already-running instance: a fresh instance means the
-        // process died and this is a stale/redelivered intent, so we must NOT
-        // re-perform the side effect (a crash-loop re-firing ACTION_EXTEND could
-        // otherwise keep re-extending past the cap). In that case we fall through
-        // and simply resume normal sharing, bounded by the session's own expiry.
-        if (intent?.action == ACTION_EXTEND_SHARING) {
-            if (alreadyRunning) {
-                handleExtend(uid)
-                return START_REDELIVER_INTENT
-            }
-        } else if (intent?.action == ACTION_STILL_SHARING) {
+        // Non-terminal reply to the stationary "still sharing?" prompt. Handled
+        // ONLY on the already-running instance: a fresh instance means the process
+        // died and this is a stale/redelivered intent, so we must NOT re-perform
+        // the side effect. In that case we fall through and simply resume normal
+        // sharing, bounded by the session's own 6h expiry.
+        if (intent?.action == ACTION_STILL_SHARING) {
             if (alreadyRunning) {
                 handleStillSharing()
                 return START_REDELIVER_INTENT
@@ -482,15 +462,13 @@ class LocationSharingService : Service() {
         lastObservedLongitude = null
         lastObservedAtMillis = null
         rejectionLog.reset()
-        shownRemainingMinutes = -1L
-        lastSession = null
         promptMode = SharingPromptMode.NORMAL
         shownPromptMode = null
         synchronized(stationaryLock) { stationaryMonitor.reset() }
 
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
-        postNotification(remainingSeconds = null, foreground = true)
+        postNotification(foreground = true)
 
         if (!startLocationUpdates()) return START_NOT_STICKY
 
@@ -523,7 +501,7 @@ class LocationSharingService : Service() {
                 // Driving needs true GPS: the convoy arrows and focus mode point
                 // at a heading, and a network-derived fix is too coarse and too
                 // laggy to aim with. The battery cost is bounded by the session's
-                // own 1/2/4-hour expiry and by the publish throttle below.
+                // own 6-hour expiry and by the publish throttle below.
                 Priority.PRIORITY_HIGH_ACCURACY,
                 BackgroundLocation.UPDATE_INTERVAL_MS,
             )
@@ -553,8 +531,8 @@ class LocationSharingService : Service() {
 
     /**
      * Observes the owner's session node and ticks the clock, folding both into
-     * [LiveSharingLifecycle]. The tick is what enforces expiry while offline and
-     * what keeps the notification's countdown honest.
+     * [LiveSharingLifecycle]. The tick is what enforces the 6h expiry while
+     * offline — the session simply stops when the window closes, with no prompt.
      */
     private fun observeSession(repo: LiveLocationRepository, uid: String) {
         sessionJob?.cancel()
@@ -574,7 +552,6 @@ class LocationSharingService : Service() {
                 }
                 try {
                     repo.observeOwnSession(uid).collectLatest { session ->
-                        lastSession = session
                         decideAndApply {
                             lifecycle.onObservation(
                                 signedIn = isStillSignedIn(uid),
@@ -616,7 +593,7 @@ class LocationSharingService : Service() {
      * `Dispatchers.IO`, which is multi-threaded, so without this they run
      * genuinely concurrently against the same mutable [LiveSharingLifecycle]
      * (`lastSession`, `firstAbsentAtMillis`, the anchor) and the same
-     * notification state (`shownRemainingMinutes`). Neither is thread-safe, and
+     * notification state (`shownPromptMode`). Neither is thread-safe, and
      * the fields are not volatile, so a tick could evaluate expiry against a
      * session the observer had already replaced — deciding stop-or-continue for
      * background location sharing on a stale read.
@@ -630,7 +607,11 @@ class LocationSharingService : Service() {
 
     private fun apply(decision: LiveSharingDecision) {
         when (decision) {
-            is LiveSharingDecision.Continue -> postNotification(decision.remainingSeconds)
+            // The notification deliberately shows NO countdown — a session simply
+            // runs to its 6h cap and auto-stops — so [LiveSharingDecision.Continue]'s
+            // remainingSeconds (still computed by the pure lifecycle for its own
+            // expiry decision and tests) is intentionally not rendered here.
+            is LiveSharingDecision.Continue -> postNotification()
             is LiveSharingDecision.Stop -> stopSharingLocally()
         }
     }
@@ -641,10 +622,10 @@ class LocationSharingService : Service() {
      * auto-stopped — the caller then skips the ordinary lifecycle tick, there being
      * nothing left to tick.
      *
-     * Prompt precedence: a pending STATIONARY prompt (privacy) outranks the EXTEND
-     * prompt; with neither pending the notification returns to NORMAL. The
-     * resulting [promptMode] is read by the [decideAndApply] that runs right after
-     * this in the ticker, which posts the notification.
+     * A pending STATIONARY prompt (privacy) sets the prompt; otherwise the
+     * notification is NORMAL. The resulting [promptMode] is read by the
+     * [decideAndApply] that runs right after this in the ticker, which posts the
+     * notification.
      */
     private suspend fun evaluateStationary(nowMillis: Long): Boolean {
         val decision = synchronized(stationaryLock) { stationaryMonitor.decide(nowMillis) }
@@ -659,43 +640,9 @@ class LocationSharingService : Service() {
                 synchronized(stationaryLock) { stationaryMonitor.isPromptOutstanding() }
         lifecycleMutex.withLock {
             promptMode =
-                when {
-                    stationaryPending -> SharingPromptMode.STATIONARY
-                    LiveLocation.isExpiringSoon(lastSession, nowMillis) -> SharingPromptMode.EXTEND
-                    else -> SharingPromptMode.NORMAL
-                }
+                if (stationaryPending) SharingPromptMode.STATIONARY else SharingPromptMode.NORMAL
         }
         return false
-    }
-
-    /**
-     * The notification's "Keep sharing" (Extend) action: pushes the session's
-     * expiry forward server-side and clears the extend prompt. Non-terminal — the
-     * service keeps running. The callable rides [stopScope] so it survives a
-     * near-simultaneous teardown, exactly like the stop action.
-     */
-    private fun handleExtend(uid: String) {
-        if (!isStillSignedIn(uid)) return
-        val repo =
-            repository ?: FirebaseLiveLocationRepository.createIfAvailable(applicationContext) ?: return
-        stopScope.launch {
-            try {
-                repo.extendSession()
-            } catch (c: CancellationException) {
-                throw c
-            } catch (_: Exception) {
-                // A failed extend leaves the session on its existing expiry; the
-                // pre-expiry prompt will simply re-appear on the next tick.
-            }
-        }
-        // Optimistically clear the prompt for instant feedback; the pushed expiry
-        // makes isExpiringSoon false once the session node update arrives.
-        scope.launch {
-            lifecycleMutex.withLock {
-                promptMode = SharingPromptMode.NORMAL
-                postNotification(LiveLocation.remainingSeconds(lastSession, System.currentTimeMillis()))
-            }
-        }
     }
 
     /**
@@ -709,7 +656,7 @@ class LocationSharingService : Service() {
         scope.launch {
             lifecycleMutex.withLock {
                 promptMode = SharingPromptMode.NORMAL
-                postNotification(LiveLocation.remainingSeconds(lastSession, now))
+                postNotification()
             }
         }
     }
@@ -805,33 +752,23 @@ class LocationSharingService : Service() {
     }
 
     /**
-     * Posts (or refreshes) the ongoing notification. Refreshes are suppressed
-     * unless the displayed minute OR the active prompt mode actually changed, so a
-     * 4-hour session re-posts ~240 times rather than once per tick, while a
-     * prompt appearing/clearing always refreshes immediately.
+     * Posts (or refreshes) the ongoing notification. The notification carries NO
+     * time-remaining countdown — sharing is active or it is not — so its content
+     * changes only with [promptMode]. Refreshes are therefore suppressed unless the
+     * prompt mode actually changed (or this is the initial foreground post), so a
+     * 6-hour session posts once and re-posts only when the stationary prompt
+     * appears or clears.
      */
-    private fun postNotification(remainingSeconds: Long?, foreground: Boolean = false) {
-        val minutes = remainingSeconds?.let { (it + 59) / 60 } ?: -1L
-        if (!foreground && minutes == shownRemainingMinutes && promptMode == shownPromptMode) return
-        shownRemainingMinutes = minutes
+    private fun postNotification(foreground: Boolean = false) {
+        if (!foreground && promptMode == shownPromptMode) return
         shownPromptMode = promptMode
 
         val body =
             when (promptMode) {
                 SharingPromptMode.STATIONARY ->
                     getString(R.string.liveLocation_stationaryPromptBody)
-                SharingPromptMode.EXTEND ->
-                    if (minutes > 0) {
-                        getString(R.string.liveLocation_extendPromptBodyRemaining, minutes)
-                    } else {
-                        getString(R.string.liveLocation_extendPromptBody)
-                    }
                 SharingPromptMode.NORMAL ->
-                    if (minutes > 0) {
-                        getString(R.string.liveLocation_backgroundNotificationBodyRemaining, minutes)
-                    } else {
-                        getString(R.string.liveLocation_backgroundNotificationBody)
-                    }
+                    getString(R.string.liveLocation_backgroundNotificationBody)
             }
 
         val notification = buildNotification(body)
@@ -859,8 +796,6 @@ class LocationSharingService : Service() {
                 when (promptMode) {
                     SharingPromptMode.STATIONARY ->
                         getString(R.string.liveLocation_stationaryPromptTitle)
-                    SharingPromptMode.EXTEND ->
-                        getString(R.string.liveLocation_extendPromptTitle)
                     SharingPromptMode.NORMAL ->
                         getString(R.string.liveLocation_backgroundNotificationTitle)
                 },
@@ -871,14 +806,8 @@ class LocationSharingService : Service() {
             .setContentIntent(openAppIntent())
             .apply {
                 // The affirmative reply comes FIRST so it sits nearest the body,
-                // then the always-present Stop. Only one prompt is ever active.
+                // then the always-present Stop.
                 when (promptMode) {
-                    SharingPromptMode.EXTEND ->
-                        addAction(
-                            R.drawable.ic_notification,
-                            getString(R.string.liveLocation_extendAction),
-                            extendSharingIntent(),
-                        )
                     SharingPromptMode.STATIONARY ->
                         addAction(
                             R.drawable.ic_notification,
@@ -966,26 +895,12 @@ class LocationSharingService : Service() {
     }
 
     /**
-     * The extend prompt's "Keep sharing" action. Same getService rationale as
-     * [stopSharingIntent], but NON-terminal: the handler pushes the session's
-     * expiry forward and the service keeps running. Carries [EXTRA_UID] so a stale
-     * tap after a sign-out/kill is ignored rather than acting on the wrong account.
+     * The stationary prompt's "Yes, still sharing" action. Same getService
+     * rationale as [stopSharingIntent], but NON-terminal: the handler restarts the
+     * stationary clock and the service keeps running. Carries [EXTRA_UID] so a
+     * stale tap after a sign-out/kill is ignored rather than acting on the wrong
+     * account.
      */
-    private fun extendSharingIntent(): PendingIntent {
-        val intent =
-            Intent(this, LocationSharingService::class.java).apply {
-                action = ACTION_EXTEND_SHARING
-                putExtra(EXTRA_UID, ownerUid)
-            }
-        return PendingIntent.getService(
-            this,
-            REQUEST_EXTEND_SHARING,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-    }
-
-    /** The stationary prompt's "Yes, still sharing" action. Non-terminal — see [extendSharingIntent]. */
     private fun stillSharingIntent(): PendingIntent {
         val intent =
             Intent(this, LocationSharingService::class.java).apply {
@@ -1017,9 +932,6 @@ class LocationSharingService : Service() {
     companion object {
         const val ACTION_STOP_SHARING = "com.kungsbackacarcommunity.app.action.STOP_LIVE_SHARING"
 
-        /** The extend prompt's "Keep sharing" notification action. Non-terminal. */
-        const val ACTION_EXTEND_SHARING = "com.kungsbackacarcommunity.app.action.EXTEND_LIVE_SHARING"
-
         /** The stationary prompt's "Yes, still sharing" notification action. Non-terminal. */
         const val ACTION_STILL_SHARING = "com.kungsbackacarcommunity.app.action.STILL_LIVE_SHARING"
 
@@ -1039,18 +951,14 @@ class LocationSharingService : Service() {
         private const val NOTIFICATION_ID = 4201
         private const val REQUEST_OPEN_APP = 4202
         private const val REQUEST_STOP_SHARING = 4203
-        private const val REQUEST_EXTEND_SHARING = 4204
         private const val REQUEST_STILL_SHARING = 4205
     }
 }
 
-/** Which cost/safety prompt (if any) the ongoing notification is offering. */
+/** Which safety prompt (if any) the ongoing notification is offering. */
 private enum class SharingPromptMode {
     /** Just the ongoing "you are sharing" notice + Stop. */
     NORMAL,
-
-    /** 15 min before expiry: "keep sharing?" with an Extend action. */
-    EXTEND,
 
     /** Parked a while: "still sharing?" with a "Yes, still sharing" action. */
     STATIONARY,

@@ -14,7 +14,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * cancels the service scope, so a `stopSession()` launched on that scope is
  * cancelled before it is even dispatched: measured at 199 cancellations out of
  * 200 launches. The user's "Stop sharing" tap would then stop the local service
- * while leaving the session ACTIVE server-side until its 1/2/4-hour expiry —
+ * while leaving the session ACTIVE server-side until its 6-hour expiry —
  * i.e. still broadcasting the last published position to viewers.
  *
  * The stop therefore runs on a process-lifetime scope that `onDestroy()` cannot
