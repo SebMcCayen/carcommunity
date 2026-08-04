@@ -1980,8 +1980,11 @@ fun AuthenticatedApp(
             // Guarded on both repositories (a config-less build wires neither).
             val fRepo = friendsRepository
             val dRepo = dmRepository
-            shareLocationTarget?.let { location ->
-                if (fRepo != null && dRepo != null) {
+            // Only render when both repositories are wired; a config-less build
+            // (neither) simply has no friends/DM features, so a stale target is
+            // inert — no state is written during composition to clear it.
+            if (fRepo != null && dRepo != null) {
+                shareLocationTarget?.let { location ->
                     ShareLocationSheet(
                         location = location,
                         friendsRepository = fRepo,
@@ -2000,8 +2003,6 @@ fun AuthenticatedApp(
                         },
                         onDismiss = { shareLocationTarget = null },
                     )
-                } else {
-                    shareLocationTarget = null
                 }
             }
 
