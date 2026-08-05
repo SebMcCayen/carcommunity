@@ -269,6 +269,30 @@ class EventTest {
         )
     }
 
+    @Test
+    fun `isSameCenter treats a sub-threshold delta as the same point, else different`() {
+        // Identical centres → same, so the late-fix recentre skips the no-op move.
+        assertTrue(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874, 12.0757))
+        // A delta below the epsilon on both axes is still "same".
+        val tiny = EventLocationPicker.CENTER_EPSILON_DEG / 2
+        assertTrue(
+            EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874 + tiny, 12.0757 - tiny),
+        )
+        // A real move (either axis past the epsilon) is different → recentre runs.
+        val big = EventLocationPicker.CENTER_EPSILON_DEG * 10
+        assertFalse(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874 + big, 12.0757))
+        assertFalse(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874, 12.0757 + big))
+        // The user's location vs the Kungsbacka default is clearly different.
+        assertFalse(
+            EventLocationPicker.isSameCenter(
+                59.33,
+                18.06,
+                EventLocationPicker.DEFAULT_LATITUDE,
+                EventLocationPicker.DEFAULT_LONGITUDE,
+            ),
+        )
+    }
+
     // ---- Create payload carries a complete pin ------------------------------
 
     @Test
