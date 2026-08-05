@@ -486,6 +486,28 @@ Auto-spawning removes the human from `activatePoint`'s `safeLocationConfirmed` g
 
 </details>
 
+### 4.8 Safe-stop placement — OpenStreetMap POIs
+
+> **STATUS: BUILT for the MARKED-AREA pass.** The single-cell `runCrownSpawnPass` is unchanged (still random-in-cell); only the area pass (`runCrownAreaSpawnPass`, `crownSpawnAreas`) is POI-anchored.
+
+Gate 3 (§4.7) narrows placement *within* an approved area, but only by a proxy: a random in-shape point can still land on a through-road that simply never scored activity. The marked-area pass now closes that at the source — a crown is placed **at a real safe stop**, not a random point inside the shape.
+
+**The safe stops come from OpenStreetMap**, via the free [Overpass API](https://overpass-api.de/api/interpreter) (no key). For each active, safe-confirmed area we query its bounding box for three amenity classes — `amenity=parking`, `amenity=fuel`, `amenity=charging_station` (plus `man_made=charge_point` for chargers tagged that way), nodes and way centroids (`out center;`) — normalise each to `{ lat, lon, category }`, keep only the ones **inside the drawn shape** (not merely its bbox, reusing the §4-area point-in-shape helpers), and cache them at `crownSpawnAreaPois/{areaId}/pois/{poiId}` with `poiId = SHA-256('crownpoi', [areaId, lat, lon])`. The area document carries a `poiCount` and `poisRefreshedAt`, and `crownHunt.listSpawnAreas` surfaces `poiCount` so the admin UI can show "N safe spots found in this area".
+
+| Piece | Where |
+|---|---|
+| Overpass query + parse/normalise + in-shape filter + POI-anchored sampler (pure) | `osm-poi-core.ts` (+ `osm-poi-core.test.ts`) |
+| Overpass HTTP fetch, cache reconcile, ingest trigger, weekly refresh | `poiIngestion.ts` |
+| POI-anchored placement in the area pass | `runCrownAreaSpawnPass` (`spawnScheduled.ts`) |
+
+**Ingestion is gentle and resilient.** One Overpass query per area per refresh, a bounded timeout, and the endpoint is a configurable param (`OVERPASS_ENDPOINT`, default the public interpreter — **no secret, no key**). It runs when an area is created active / activated / re-drawn (`onSpawnAreaWrittenIngestPois`, guarded against re-firing on its own `poiCount` write) and on a **weekly** scheduled refresh (`refreshAreaPois` — POIs rarely move). If Overpass fails or times out, the last cache is kept and `poisRefreshedAt` is left stale; ingestion failure **never** breaks the spawn pass, which only reads the cache.
+
+**Placement (`samplePoiPlacement`)** walks the in-cell POIs in a seeded-random order and places the crown at the first one that clears the 150 m separation from every live crown, optionally jittered ≤ ~5 m (the jittered point is re-checked against the shape and cell, falling back to the exact POI point otherwise). Every other guard is preserved unchanged: in-shape, 150 m separation across **both** spawn sources, per-cell `targetCrownCount`, rarity/TTL, `collectMode`, and `areaId` tagging for draining. The 150 m rule also means two crowns can never stack on one POI, so placement spreads across distinct stops for free.
+
+**SAFETY-FIRST fallback:** an area with **no cached POIs spawns nothing** (logged; counted as `areasWithoutPois`) rather than reverting to random placement — the entire point is that a crown only ever appears at a real place a member can stop.
+
+**Attribution.** OSM data is ODbL, so **"© OpenStreetMap contributors"** must be shown wherever this data is surfaced — the admin area map's "N safe spots" and any app surface that names a crown's source. The credit lives in `contracts/localization` (`crownHunt.safeSpotAttribution`) and as `OSM_ATTRIBUTION` in `packages/shared`, mirroring the Trafikverket "Källa: Trafikverket" precedent (owed wherever the data is on screen, and only there).
+
 ---
 
 ## 5. Points economy (Kronpoäng, KP)

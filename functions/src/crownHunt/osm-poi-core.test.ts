@@ -1,0 +1,236 @@
+/**
+ * Unit tests for the Kronjakt OpenStreetMap safe-stop placement core.
+ * Pure — no emulator, no network. Colocated sibling of osm-poi-core.ts.
+ */
+
+import { describe, expect, it } from 'vitest';
+import {
+  OSM_ATTRIBUTION,
+  OVERPASS_ENDPOINT_DEFAULT,
+  POI_CATEGORIES,
+  POI_JITTER_METERS,
+  buildOverpassQuery,
+  classifyPoiCategory,
+  crownPoiDocId,
+  filterPoisInShape,
+  jitterPosition,
+  parseOverpassResponse,
+  samplePoiPlacement,
+  type NormalizedPoi,
+  type OverpassResponse,
+} from './osm-poi-core';
+import {
+  MIN_CROWN_SEPARATION_METERS,
+  createSeededRng,
+  crownCellKey,
+  isFarEnoughFromAll,
+  type CrownPosition,
+} from './crown-spawn-core';
+import { isPointInShape, shapeBoundingBox, type CrownSpawnAreaShape } from './crown-area-core';
+import { haversineDistanceMeters } from './crown-hunt-geo';
+
+// A circle centred near Alingsås (~57.9°N, 12.5°E), 300 m radius.
+const CENTER = { lat: 57.9, lon: 12.5 };
+const CIRCLE: CrownSpawnAreaShape = { type: 'circle', center: CENTER, radiusMeters: 300 };
+
+describe('constants', () => {
+  it('exposes the ODbL attribution and the public endpoint default', () => {
+    expect(OSM_ATTRIBUTION).toBe('© OpenStreetMap contributors');
+    expect(OVERPASS_ENDPOINT_DEFAULT).toBe('https://overpass-api.de/api/interpreter');
+    expect(POI_CATEGORIES).toEqual(['parking', 'fuel', 'charging']);
+  });
+});
+
+describe('classifyPoiCategory', () => {
+  it('maps the amenity tags to categories', () => {
+    expect(classifyPoiCategory({ amenity: 'parking' })).toBe('parking');
+    expect(classifyPoiCategory({ amenity: 'fuel' })).toBe('fuel');
+    expect(classifyPoiCategory({ amenity: 'charging_station' })).toBe('charging');
+  });
+
+  it('treats man_made=charge_point as a charger', () => {
+    expect(classifyPoiCategory({ man_made: 'charge_point' })).toBe('charging');
+  });
+
+  it('returns null for irrelevant or absent tags', () => {
+    expect(classifyPoiCategory({ amenity: 'restaurant' })).toBeNull();
+    expect(classifyPoiCategory({ highway: 'motorway' })).toBeNull();
+    expect(classifyPoiCategory({})).toBeNull();
+    expect(classifyPoiCategory(undefined)).toBeNull();
+    expect(classifyPoiCategory(null)).toBeNull();
+  });
+});
+
+describe('buildOverpassQuery', () => {
+  it('emits a bbox query in (south,west,north,east) order for all three categories', () => {
+    const box = shapeBoundingBox(CIRCLE);
+    const q = buildOverpassQuery(box, 25);
+    const bbox = `${box.south},${box.west},${box.north},${box.east}`;
+    expect(q).toContain('[out:json][timeout:25];');
+    expect(q).toContain(`node["amenity"="parking"](${bbox});`);
+    expect(q).toContain(`way["amenity"="parking"](${bbox});`);
+    expect(q).toContain(`node["amenity"="fuel"](${bbox});`);
+    expect(q).toContain(`node["amenity"="charging_station"](${bbox});`);
+    expect(q).toContain(`node["man_made"="charge_point"](${bbox});`);
+    expect(q).toContain('out center;');
+  });
+});
+
+describe('parseOverpassResponse', () => {
+  it('normalises nodes (own coords) and ways (center) with categories', () => {
+    const response: OverpassResponse = {
+      elements: [
+        { type: 'node', id: 1, lat: 57.9, lon: 12.5, tags: { amenity: 'parking' } },
+        {
+          type: 'way',
+          id: 2,
+          center: { lat: 57.901, lon: 12.501 },
+          tags: { amenity: 'fuel' },
+        },
+        { type: 'node', id: 3, lat: 57.902, lon: 12.502, tags: { man_made: 'charge_point' } },
+      ],
+    };
+    const pois = parseOverpassResponse(response);
+    expect(pois).toHaveLength(3);
+    expect(pois[0]).toEqual({ lat: 57.9, lon: 12.5, category: 'parking' });
+    expect(pois[1]).toEqual({ lat: 57.901, lon: 12.501, category: 'fuel' });
+    expect(pois[2]).toEqual({ lat: 57.902, lon: 12.502, category: 'charging' });
+  });
+
+  it('drops elements without a classifiable tag, without coords, or out of range', () => {
+    const response: OverpassResponse = {
+      elements: [
+        { type: 'node', id: 1, lat: 57.9, lon: 12.5, tags: { amenity: 'cafe' } },
+        { type: 'way', id: 2, tags: { amenity: 'parking' } }, // no center
+        { type: 'node', id: 3, lat: 200, lon: 12.5, tags: { amenity: 'fuel' } }, // bad lat
+        { type: 'node', id: 4, lat: 57.9, lon: 12.5, tags: undefined }, // no tags
+      ],
+    };
+    expect(parseOverpassResponse(response)).toHaveLength(0);
+  });
+
+  it('de-dupes on (lat, lon, category)', () => {
+    const response: OverpassResponse = {
+      elements: [
+        { type: 'node', id: 1, lat: 57.9, lon: 12.5, tags: { amenity: 'parking' } },
+        { type: 'node', id: 2, lat: 57.9, lon: 12.5, tags: { amenity: 'parking' } },
+      ],
+    };
+    expect(parseOverpassResponse(response)).toHaveLength(1);
+  });
+
+  it('tolerates an empty / missing elements array', () => {
+    expect(parseOverpassResponse({})).toEqual([]);
+    expect(parseOverpassResponse({ elements: [] })).toEqual([]);
+  });
+});
+
+describe('filterPoisInShape', () => {
+  it('keeps only POIs inside the drawn shape, not merely its bbox', () => {
+    const box = shapeBoundingBox(CIRCLE);
+    // A corner of the bounding box is outside the inscribed circle.
+    const corner: NormalizedPoi = { lat: box.north, lon: box.east, category: 'parking' };
+    const inside: NormalizedPoi = { lat: CENTER.lat, lon: CENTER.lon, category: 'fuel' };
+    expect(isPointInShape(corner.lat, corner.lon, CIRCLE)).toBe(false);
+    const kept = filterPoisInShape([corner, inside], CIRCLE);
+    expect(kept).toEqual([inside]);
+  });
+});
+
+describe('crownPoiDocId', () => {
+  it('is deterministic and coordinate-injective, hex, per area', () => {
+    const a = crownPoiDocId('area1', 57.9, 12.5);
+    const b = crownPoiDocId('area1', 57.9, 12.5);
+    const c = crownPoiDocId('area1', 57.9, 12.500001);
+    const d = crownPoiDocId('area2', 57.9, 12.5);
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+    expect(a).not.toBe(d);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe('jitterPosition', () => {
+  it('stays within the jitter radius', () => {
+    const rng = createSeededRng(42);
+    const base: CrownPosition = { latitude: CENTER.lat, longitude: CENTER.lon };
+    for (let i = 0; i < 200; i += 1) {
+      const p = jitterPosition(base, rng, POI_JITTER_METERS);
+      const d = haversineDistanceMeters(base.latitude, base.longitude, p.latitude, p.longitude);
+      expect(d).toBeLessThanOrEqual(POI_JITTER_METERS + 1e-6);
+    }
+  });
+
+  it('returns the base unchanged when jitter is 0', () => {
+    const base: CrownPosition = { latitude: 1, longitude: 2 };
+    expect(jitterPosition(base, createSeededRng(1), 0)).toEqual(base);
+  });
+});
+
+describe('samplePoiPlacement', () => {
+  // Three POIs inside the 300 m circle and pairwise >150 m apart (~200-310 m):
+  // one at the centre, one ~200 m north, one ~237 m east.
+  const POIS: NormalizedPoi[] = [
+    { lat: 57.9, lon: 12.5, category: 'parking' },
+    { lat: 57.9018, lon: 12.5, category: 'fuel' },
+    { lat: 57.9, lon: 12.504, category: 'charging' },
+  ];
+
+  it('snaps a placement to (or within jitter of) a POI, inside the shape', () => {
+    const rng = createSeededRng(7);
+    const pos = samplePoiPlacement(POIS, [], rng, {
+      accept: (p) => isPointInShape(p.latitude, p.longitude, CIRCLE),
+      jitterMeters: POI_JITTER_METERS,
+    })!;
+    expect(pos).not.toBeNull();
+    expect(isPointInShape(pos.latitude, pos.longitude, CIRCLE)).toBe(true);
+    // Within jitter of SOME POI.
+    const nearest = Math.min(
+      ...POIS.map((poi) => haversineDistanceMeters(poi.lat, poi.lon, pos.latitude, pos.longitude)),
+    );
+    expect(nearest).toBeLessThanOrEqual(POI_JITTER_METERS + 1e-6);
+  });
+
+  it('respects the 150 m separation from occupied crowns', () => {
+    const rng = createSeededRng(11);
+    const occupied: CrownPosition[] = [];
+    // Place all it can; each returned position must clear separation from the rest.
+    for (let i = 0; i < POIS.length; i += 1) {
+      const pos = samplePoiPlacement(POIS, occupied, rng, {
+        minSeparationMeters: MIN_CROWN_SEPARATION_METERS,
+      });
+      if (!pos) break;
+      expect(isFarEnoughFromAll(pos, occupied, MIN_CROWN_SEPARATION_METERS)).toBe(true);
+      occupied.push(pos);
+    }
+    // The three POIs are >150 m apart, so all three are placeable.
+    expect(occupied).toHaveLength(3);
+  });
+
+  it('does not stack a second crown on the same POI', () => {
+    const single: NormalizedPoi[] = [{ lat: 57.9, lon: 12.5, category: 'parking' }];
+    const rng = createSeededRng(3);
+    const first = samplePoiPlacement(single, [], rng, {})!;
+    expect(first).not.toBeNull();
+    const second = samplePoiPlacement(single, [first], rng, {});
+    // The only POI is <150 m from the first crown → nothing to place.
+    expect(second).toBeNull();
+  });
+
+  it('returns null for an empty POI list', () => {
+    expect(samplePoiPlacement([], [], createSeededRng(1), {})).toBeNull();
+  });
+
+  it('keeps a jittered candidate inside its cell (falls back to the POI point)', () => {
+    // A POI exactly on a cell boundary: jitter could cross into the neighbour
+    // cell, but the sampler must keep the returned point in the POI's own cell.
+    const poi: NormalizedPoi = { lat: 57.9, lon: 12.5, category: 'parking' };
+    const cellKey = crownCellKey(poi.lat, poi.lon);
+    const rng = createSeededRng(99);
+    for (let i = 0; i < 50; i += 1) {
+      const pos = samplePoiPlacement([poi], [], rng, { cellKey, jitterMeters: POI_JITTER_METERS });
+      expect(pos).not.toBeNull();
+      expect(crownCellKey(pos!.latitude, pos!.longitude)).toBe(cellKey);
+    }
+  });
+});

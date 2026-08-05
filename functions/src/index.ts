@@ -78,6 +78,7 @@ import {
   updateSpawnArea,
 } from './crownHunt/spawnAreas';
 import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
+import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIngestion';
 import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
 import { reviewApplication, submitApplication } from './partners/applications';
@@ -439,7 +440,9 @@ export const points = {
  * `crownHunt-setSpawnCellApproval`, the marked-area CRUD
  * `crownHunt-createSpawnArea`, `crownHunt-updateSpawnArea`,
  * `crownHunt-deleteSpawnArea`, `crownHunt-listSpawnAreas`, and the scheduled
- * `crownHunt-spawnCrowns` and `crownHunt-sweepSpawns`).
+ * `crownHunt-spawnCrowns` and `crownHunt-sweepSpawns`, and the OSM safe-stop POI
+ * ingestion `crownHunt-onSpawnAreaWrittenIngestPois` and
+ * `crownHunt-refreshAreaPois`).
  *
  * Crown Hunt geographic point hunt (contracts/functions/functions.json). It has
  * TWO sources of crowns:
@@ -476,6 +479,14 @@ export const crownHunt = {
   listSpawnAreas,
   spawnCrowns,
   sweepSpawns,
+  // OpenStreetMap safe-stop POI ingestion for AREA spawning. The area spawn pass
+  // above anchors crowns to cached parking/fuel/charging POIs inside a marked
+  // area (crownSpawnAreaPois), never random points. Deployed as
+  // crownHunt-onSpawnAreaWrittenIngestPois (Firestore trigger: ingest POIs when
+  // an area is created active / activated / re-drawn) and crownHunt-refreshAreaPois
+  // (weekly scheduled refresh). Overpass API, no key/secret required.
+  onSpawnAreaWrittenIngestPois,
+  refreshAreaPois,
   // Stats + leaderboard (this slice). Firestore triggers that maintain the
   // leaderboard/stat aggregates on collection, plus the daily season-rollover
   // aggregator. Deployed as crownHunt-onCrownLedgerEntryForStats,

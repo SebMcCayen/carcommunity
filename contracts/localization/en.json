@@ -1091,7 +1091,8 @@
     "spawnResultFeatureDisabled": "Crown Hunt is not available right now.",
     "spawnResultNotEligible": "You need an active Crown Hunt membership to take part.",
     "spawnErrorClaim": "Something went wrong. Please try again.",
-    "spawnMarkerLabel": "Crown Hunt crowns"
+    "spawnMarkerLabel": "Crown Hunt crowns",
+    "safeSpotAttribution": "© OpenStreetMap contributors"
   },
   "partners": {
     "screenTitle": "KCC Business Partners",

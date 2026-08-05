@@ -1091,7 +1091,8 @@
     "spawnResultFeatureDisabled": "Kronjakt är inte tillgängligt just nu.",
     "spawnResultNotEligible": "Du behöver ett aktivt Kronjakt-medlemskap för att delta.",
     "spawnErrorClaim": "Något gick fel. Försök igen.",
-    "spawnMarkerLabel": "Kronjakt-kronor"
+    "spawnMarkerLabel": "Kronjakt-kronor",
+    "safeSpotAttribution": "© OpenStreetMap contributors"
   },
   "partners": {
     "screenTitle": "KCC Företagspartner",

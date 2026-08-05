@@ -51,6 +51,7 @@ import {
   CROWN_SPAWN_FLAG_KEY,
   activityScore,
   buildCrownSpawnFields,
+  crownCellKey,
   crownExpiresAt,
   neighbourCrownCells,
   pickCrownRarity,
@@ -65,6 +66,7 @@ import {
   shapeBoundingBox,
   type CrownSpawnAreaShape,
 } from './crown-area-core';
+import { POI_JITTER_METERS, samplePoiPlacement, type NormalizedPoi } from './osm-poi-core';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 // ---------------------------------------------------------------------------
@@ -357,6 +359,13 @@ const MAX_AREA_CELLS_PER_RUN = 60;
 /** Crowns created per area run, across all areas — the hard write budget. */
 const MAX_AREA_SPAWNS_PER_RUN = 100;
 
+/**
+ * Cached safe-stop POIs loaded per area for anchoring placement. Matches the
+ * ingestion cap ({@link MAX_POIS_PER_AREA}) so the whole cache is available; the
+ * per-cell density budget and 150 m separation bound how many are ever used.
+ */
+const MAX_AREA_POIS_LOADED = 5000;
+
 export interface CrownAreaSpawnLimits {
   maxAreas: number;
   maxCells: number;
@@ -386,6 +395,14 @@ export interface CrownAreaSpawnResult {
    * operation; a non-zero value means a malformed area wants cleaning up.
    */
   areasSkippedOversize: number;
+  /**
+   * Areas skipped because they have NO cached safe-stop POIs. SAFETY-FIRST: an
+   * area with no parking/fuel/charging POIs spawns NOTHING (rather than falling
+   * back to random placement), so this counts every active area whose POI cache
+   * is empty — a freshly-marked area whose ingestion has not landed yet, or a
+   * genuinely POI-less region an admin should re-draw.
+   */
+  areasWithoutPois: number;
   /** True when the run stopped on {@link MAX_AREA_SPAWNS_PER_RUN}. */
   capped: boolean;
   /** True when the feature flag was off and nothing ran. */
@@ -399,12 +416,20 @@ export interface CrownAreaSpawnResult {
  * (`crownSpawnAreas`) rather than hand-approved single cells (`crownSpawnCells`).
  * It reuses every property of the single-cell engine unchanged — the per-cell
  * activity score `A`, `targetCrownCount`, the 3×3 neighbourhood separation, the
- * rarity table and TTL — and adds exactly one thing: a candidate position is
- * accepted only when it is actually INSIDE the drawn shape, not merely inside
- * the grid cell that clips it (`pointInShapeAccept`). The two engines share the
- * `crownSpawns` collection and its neighbourhood read, so separation holds
- * ACROSS both sources and a cell covered by both a manual approval and an area
- * cannot exceed its per-cell target.
+ * rarity table and TTL — but its PLACEMENT is SAFE-STOP-ANCHORED rather than
+ * random: instead of drawing a uniform-random in-shape point, a crown is placed
+ * AT a cached OpenStreetMap safe-stop POI (a parking lot, fuel station, or
+ * charging station) that lies inside the area — optionally jittered ≤ ~5 m — via
+ * {@link samplePoiPlacement}. The POIs are ingested per area into
+ * `crownSpawnAreaPois/{areaId}/pois` (poiIngestion.ts) and are already filtered
+ * to the drawn shape at ingestion, so every anchor is genuinely inside the area.
+ *
+ * SAFETY-FIRST: an area with NO cached POIs spawns NOTHING (logged), rather than
+ * falling back to random placement — the entire point is that crowns appear only
+ * at real safe stops. Everything else is preserved: the two engines share the
+ * `crownSpawns` collection and its neighbourhood read, so 150 m separation holds
+ * ACROSS both sources (and stops two crowns stacking on one POI), and a cell
+ * covered by both a manual approval and an area cannot exceed its per-cell target.
  *
  * The gates are identical in spirit to the single-cell path: the `crownHuntSpawn`
  * flag (this returns `skipped` while off), the admin allow-list (here the
@@ -459,6 +484,7 @@ export async function runCrownAreaSpawnPass(
     separationOrShapeRejections: 0,
     areasDeactivatedMidPass: 0,
     areasSkippedOversize: 0,
+    areasWithoutPois: 0,
     capped: false,
     skipped: false,
   };
@@ -535,6 +561,48 @@ export async function runCrownAreaSpawnPass(
       continue;
     }
 
+    // SAFE-STOP ANCHORS. Load this area's cached OpenStreetMap POIs (parking /
+    // fuel / charging), already filtered to the drawn shape at ingestion, and
+    // group them by grid cell. SAFETY-FIRST: an area with no cached POIs spawns
+    // NOTHING — the whole point is real safe stops, so we do not fall back to
+    // random placement. (A freshly-marked area whose ingestion has not landed yet
+    // lands here too, and simply gets its crowns on the next pass once its POIs
+    // are cached.)
+    const poiSnap = await db
+      .collection('crownSpawnAreaPois')
+      .doc(areaDoc.id)
+      .collection('pois')
+      .limit(MAX_AREA_POIS_LOADED)
+      .get();
+    if (poiSnap.empty) {
+      result.areasWithoutPois += 1;
+      logger.warn('Crown area spawn skipped: area has no safe POIs; skipping', {
+        areaId: areaDoc.id,
+      });
+      await advanceAreaCursor(areaDoc.ref, { lastSpawnPassAt: nowTs });
+      continue;
+    }
+    const poisByCell = new Map<string, NormalizedPoi[]>();
+    for (const doc of poiSnap.docs) {
+      const data = doc.data();
+      const lat = data.lat;
+      const lon = data.lon;
+      const category = data.category;
+      if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+      const key =
+        typeof data.cellKey === 'string' && data.cellKey.length > 0
+          ? data.cellKey
+          : crownCellKey(lat, lon);
+      const bucket = poisByCell.get(key);
+      const poi: NormalizedPoi = {
+        lat,
+        lon,
+        category: category === 'fuel' || category === 'charging' ? category : 'parking',
+      };
+      if (bucket) bucket.push(poi);
+      else poisByCell.set(key, [poi]);
+    }
+
     const accept = pointInShapeAccept(shape);
     const startOffset = ((nextCellOffset % cells.length) + cells.length) % cells.length;
     let processed = 0;
@@ -550,6 +618,12 @@ export async function runCrownAreaSpawnPass(
 
       const neighbours = neighbourCrownCells(cellKey);
       if (neighbours.length === 0) continue; // enumerated keys always parse; defensive.
+
+      // No safe-stop POI in this cell → nothing to anchor to, so skip BEFORE the
+      // activity/neighbourhood reads. Most cells of a big area's bounding box have
+      // no POI, so this keeps the pass cheap.
+      const cellPois = poisByCell.get(cellKey);
+      if (!cellPois || cellPois.length === 0) continue;
 
       const recentUsers = await db
         .collection('crownCellActivity')
@@ -594,8 +668,17 @@ export async function runCrownAreaSpawnPass(
 
       const pending: { ref: FirebaseFirestore.DocumentReference; data: DocumentData }[] = [];
       for (let i = 0; i < deficit; i += 1) {
-        // The ONE addition over the cell path: accept only IN-SHAPE candidates.
-        const position = sampleCrownPosition(cellKey, occupied, rng, { accept });
+        // POI-ANCHORED: place at a cached safe-stop POI inside this cell (already
+        // in-shape at ingestion), jittered ≤ ~5 m, that clears 150 m from every
+        // live crown. Null when every in-cell POI is too close to an existing
+        // crown — leave the cell short, the next pass tries again. `accept`
+        // re-checks the shape after jitter; `cellKey` keeps a jittered point in
+        // its own cell (falling back to the exact POI point otherwise).
+        const position = samplePoiPlacement(cellPois, occupied, rng, {
+          cellKey,
+          accept,
+          jitterMeters: POI_JITTER_METERS,
+        });
         if (!position) {
           result.separationOrShapeRejections += 1;
           break;
