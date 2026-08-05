@@ -93,7 +93,27 @@ async function finalizeConvoyRides(
       if (created) written += 1;
       // Mark finalized ONLY after the ride is reconciled, so a throw above leaves
       // the session unflagged and it is retried on the next sweep.
-      await adminRtdb.ref(`liveLocation/${uid}/session/convoyRideFinalized`).set(true);
+      //
+      // GUARDED so the flag can only ever land on the SESSION WE FINALIZED: the
+      // sweep read its snapshot earlier, and the user may have started a BRAND
+      // NEW session in between (startSession / a new convoy auto-start replace the
+      // node with a fresh id). A blind set on the `session` path would then flag
+      // that new session and silently suppress ITS future finalize — the exact
+      // lost-run bug this feature exists to prevent. The transaction only writes
+      // when the node still carries the same session id; a replacement (different
+      // id) aborts and is left untouched (the old session is already gone, so
+      // there is nothing to flag). Mirrors stopConvoyAutoSession's null-vs-abort
+      // convention: null re-runs against the server value, undefined aborts.
+      await adminRtdb.ref(`liveLocation/${uid}/session`).transaction((current) => {
+        const s = current as (LiveSession & { convoyRideFinalized?: boolean }) | null;
+        if (s === null) {
+          return null;
+        }
+        if (s.id !== sessionId) {
+          return; // a new session replaced the one we finalized — do not flag it
+        }
+        return { ...s, convoyRideFinalized: true };
+      });
     } catch (error) {
       logger.warn('convoy ride finalize failed', { uid, sessionId, error: String(error) });
     }

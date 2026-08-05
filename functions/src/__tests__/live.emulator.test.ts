@@ -390,6 +390,11 @@ describe('convoy run finalize (server-side member-run backstop)', () => {
   // Ended long enough ago that the client's grace window has elapsed.
   const endedLongAgoMs = 10 * 60_000;
 
+  // A unique suffix (time + random) shared by a test's uid AND sessionId, so two
+  // tests running in the same millisecond (or in parallel) cannot collide on the
+  // shared emulator Firestore.
+  const uniqueSuffix = () => `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+
   // A stopped convoy-auto session node, keyed by a unique uid so it does not
   // collide with the shared-Firestore other tests. sessionId is the ride key.
   async function writeEndedConvoySession(
@@ -418,8 +423,9 @@ describe('convoy run finalize (server-side member-run backstop)', () => {
 
   it('writes a summary-only ride for a member whose app did not save it, and flags the session', async () => {
     const now = new Date();
-    const uid = `convoyfin-unsaved-${Date.now()}`;
-    const sessionId = `sess-${Date.now()}`;
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-unsaved-${suffix}`;
+    const sessionId = `sess-${suffix}`;
     await writeEndedConvoySession(uid, sessionId, now);
 
     const result = await runLiveCleanup(now);
@@ -441,8 +447,9 @@ describe('convoy run finalize (server-side member-run backstop)', () => {
 
   it('does NOT overwrite a ride the client already saved (dedupe by session id)', async () => {
     const now = new Date();
-    const uid = `convoyfin-client-${Date.now()}`;
-    const sessionId = `sess-${Date.now()}`;
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-client-${suffix}`;
+    const sessionId = `sess-${suffix}`;
     // The client's richer save landed first, on the SAME ride id.
     await adminDb.collection('rides').doc(`${uid}_${sessionId}`).set({
       userId: uid,
@@ -467,8 +474,9 @@ describe('convoy run finalize (server-side member-run backstop)', () => {
 
   it('holds off within the grace window (a live client gets to save the rich drive)', async () => {
     const now = new Date();
-    const uid = `convoyfin-grace-${Date.now()}`;
-    const sessionId = `sess-${Date.now()}`;
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-grace-${suffix}`;
+    const sessionId = `sess-${suffix}`;
     // Ended just now — inside the grace window.
     await writeEndedConvoySession(uid, sessionId, now, {
       stoppedAt: new Date(now.getTime() - 1000).toISOString(),
