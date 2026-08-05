@@ -93,8 +93,15 @@ fun CreateEventScreen(
     // existing one-shot source; it adds no new permission flow. If the fix lands
     // after the picker is already showing, the picker recentres to it.
     val context = LocalContext.current
-    var userLatitude by remember { mutableStateOf<Double?>(null) }
-    var userLongitude by remember { mutableStateOf<Double?>(null) }
+    // All three persist together (rememberSaveable) so the "already fetched" flag
+    // and the coords it produced stay CONSISTENT across a config change / process
+    // recreation: after a rotation the flag restores as true AND the coords
+    // restore alongside it, so the picker still opens on the user's location. If
+    // the flag were saveable but the coords were not, a recreation would restore
+    // the flag true with null coords and the one-shot fetch — gated on the flag —
+    // would never run again, stranding the picker on the Kungsbacka fallback.
+    var userLatitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var userLongitude by rememberSaveable { mutableStateOf<Double?>(null) }
     var userLocationRequested by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(showLocationPicker) {
         if (showLocationPicker && !userLocationRequested) {
