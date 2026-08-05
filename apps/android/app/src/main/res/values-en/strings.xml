@@ -1015,6 +1015,7 @@
     <string name="crownHunt_spawnResultNotEligible">You need an active Crown Hunt membership to take part.</string>
     <string name="crownHunt_spawnErrorClaim">Something went wrong. Please try again.</string>
     <string name="crownHunt_spawnMarkerLabel">Crown Hunt crowns</string>
+    <string name="crownHunt_safeSpotAttribution">© OpenStreetMap contributors</string>
     <string name="partners_screenTitle">KCC Business Partners</string>
     <string name="partners_statusLabel">Partner</string>
     <string name="partners_markerLabel">Partner</string>

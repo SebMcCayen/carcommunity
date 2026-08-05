@@ -51,6 +51,8 @@ import {
   spawnCollectorDocId,
 } from '../crownHunt/crown-spawn-core';
 import { isPointInShape, type CrownSpawnAreaShape } from '../crownHunt/crown-area-core';
+import { POI_JITTER_METERS, crownPoiDocId } from '../crownHunt/osm-poi-core';
+import { haversineDistanceMeters } from '../crownHunt/crown-hunt-geo';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -133,6 +135,48 @@ const AREA_CIRCLE: CrownSpawnAreaShape = {
   center: { lat: CELL_LAT, lon: CELL_LON },
   radiusMeters: 300,
 };
+
+// Safe-stop POIs INSIDE the circle (and the rectangle), all in CELL_KEY where
+// activity is seeded, pairwise >150 m apart so several can be placed. Placement
+// is now POI-anchored, so a test that wants spawns must seed these first — an
+// area with no cached POIs deliberately spawns nothing.
+const AREA_POIS: { lat: number; lon: number; category: 'parking' | 'fuel' | 'charging' }[] = [
+  { lat: CELL_LAT, lon: CELL_LON, category: 'parking' },
+  { lat: CELL_LAT + 0.0018, lon: CELL_LON, category: 'fuel' }, // ~200 m north
+  { lat: CELL_LAT, lon: CELL_LON + 0.0035, category: 'charging' }, // ~200 m east
+];
+
+/** Seeds the cached POIs for an area (what the spawner anchors crowns to). */
+async function seedAreaPois(
+  areaId: string,
+  pois: { lat: number; lon: number; category: string }[] = AREA_POIS,
+): Promise<void> {
+  const poisRef = adminDb.collection('crownSpawnAreaPois').doc(areaId).collection('pois');
+  const batch = adminDb.batch();
+  for (const poi of pois) {
+    batch.set(poisRef.doc(crownPoiDocId(areaId, poi.lat, poi.lon)), {
+      lat: poi.lat,
+      lon: poi.lon,
+      category: poi.category,
+      cellKey: crownCellKey(poi.lat, poi.lon),
+      refreshedAt: Timestamp.fromDate(new Date()),
+    });
+  }
+  await batch.commit();
+  await adminDb
+    .collection('crownSpawnAreas')
+    .doc(areaId)
+    .set({ poiCount: pois.length, poisRefreshedAt: Timestamp.fromDate(new Date()) }, { merge: true });
+}
+
+/** Smallest ground distance from `position` to any of the seeded POIs. */
+function nearestPoiMeters(position: { latitude: number; longitude: number }): number {
+  return Math.min(
+    ...AREA_POIS.map((poi) =>
+      haversineDistanceMeters(poi.lat, poi.lon, position.latitude, position.longitude),
+    ),
+  );
+}
 
 async function setSpawnFlag(enabled: boolean): Promise<void> {
   await adminDb
@@ -334,6 +378,7 @@ describe('marked-area spawner', () => {
 
     const now = new Date();
     await seedActivity(CELL_KEY, 12, now);
+    await seedAreaPois(created.areaId);
 
     const result = await runCrownAreaSpawnPass(
       now,
@@ -351,6 +396,11 @@ describe('marked-area spawner', () => {
       const d = doc.data();
       // Every crown sits inside the CIRCLE, not merely inside the grid cell.
       expect(isPointInShape(d.latitude as number, d.longitude as number, AREA_CIRCLE)).toBe(true);
+      // And it is anchored AT a cached safe-stop POI (within the ~5 m jitter),
+      // not a random in-shape point.
+      expect(
+        nearestPoiMeters({ latitude: d.latitude as number, longitude: d.longitude as number }),
+      ).toBeLessThanOrEqual(POI_JITTER_METERS + 1);
       expect(d.areaId).toBe(created.areaId);
       expect(d.approvedCellBy).toBe(adminUser.uid);
       expect(d.source).toBe('auto');
@@ -390,6 +440,7 @@ describe('marked-area spawner', () => {
 
     const now = new Date();
     await seedActivity(CELL_KEY, 12, now);
+    await seedAreaPois(created.areaId);
     await runCrownAreaSpawnPass(
       now,
       { maxAreas: 10, maxCells: 60, maxSpawns: 50 },

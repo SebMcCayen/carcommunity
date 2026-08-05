@@ -1207,6 +1207,27 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // crownSpawnAreaPois – cached OpenStreetMap safe-stop POIs per marked area
+    // BACKEND-ONLY, both directions. Per marked area, a `pois/{poiId}` sub-
+    // collection of the parking / fuel / charging POIs (from the free Overpass
+    // API, ODbL) that fall INSIDE the drawn shape — the anchor points the area
+    // spawner places crowns at, instead of random in-shape points. Written only
+    // by the Admin SDK (poiIngestion.ts: on area create/activate, plus a weekly
+    // refresh). Denied to every client: it is an operational artefact of the
+    // safety model, no client consumes it, and a member who could read it could
+    // predict exactly where crowns are about to appear (POIs are the anchors).
+    // The area's own poiCount (on crownSpawnAreas, admin-read) is what the admin
+    // UI shows as "N safe spots found".
+    // -------------------------------------------------------------------------
+    match /crownSpawnAreaPois/{areaId} {
+      allow read, write: if false;
+
+      match /pois/{poiId} {
+        allow read, write: if false;
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // crownSpawnCollectors – per-(crown, user) pickup records for SHARED crowns
     // Backend-only. A deterministic document (ID = SHA-256 of the crown id and
     // the uid) that crownHunt.claimSpawn creates INSIDE the award transaction so

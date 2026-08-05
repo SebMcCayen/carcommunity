@@ -1015,6 +1015,7 @@
     <string name="crownHunt_spawnResultNotEligible">Du behöver ett aktivt Kronjakt-medlemskap för att delta.</string>
     <string name="crownHunt_spawnErrorClaim">Något gick fel. Försök igen.</string>
     <string name="crownHunt_spawnMarkerLabel">Kronjakt-kronor</string>
+    <string name="crownHunt_safeSpotAttribution">© OpenStreetMap contributors</string>
     <string name="partners_screenTitle">KCC Företagspartner</string>
     <string name="partners_statusLabel">Samarbetspartner</string>
     <string name="partners_markerLabel">Samarbetspartner</string>

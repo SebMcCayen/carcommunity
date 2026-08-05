@@ -80,6 +80,16 @@ export interface SpawnAreaSummary {
   updatedAt: string | null;
   approvedByUserId: string | null;
   approvedAt: string | null;
+  /**
+   * Count of cached OpenStreetMap safe-stop POIs (parking / fuel / charging)
+   * found inside this area — what the spawner anchors crowns to. 0 until the
+   * area's POI ingestion has run (poiIngestion.ts). The admin UI surfaces this
+   * as "N safe spots found in this area" and MUST show the OSM attribution
+   * (© OpenStreetMap contributors) alongside it.
+   */
+  poiCount: number;
+  /** When the POI cache was last refreshed, or null if it never has been. */
+  poisRefreshedAt: string | null;
 }
 
 export interface ListSpawnAreasResponse {
@@ -138,6 +148,8 @@ function toSummary(id: string, data: DocumentData): SpawnAreaSummary {
     updatedAt: toIso(data.updatedAt),
     approvedByUserId: (data.approvedByUserId as string | null) ?? null,
     approvedAt: toIso(data.approvedAt),
+    poiCount: typeof data.poiCount === 'number' ? data.poiCount : 0,
+    poisRefreshedAt: toIso(data.poisRefreshedAt),
   };
 }
 

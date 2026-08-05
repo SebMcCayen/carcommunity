@@ -473,7 +473,16 @@
         "createdAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "approvedByUserId": { "type": ["string", "null"] },
-        "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+        "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "poiCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Count of cached OpenStreetMap safe-stop POIs (parking/fuel/charging) inside this area — the anchor points the spawner places crowns at instead of random in-shape points. 0 until the area's POI ingestion has run. Surfaced by crownHunt.listSpawnAreas so the admin UI can show 'N safe spots found in this area'; whenever it is shown the OSM attribution '© OpenStreetMap contributors' (ODbL) must appear alongside. Absent on documents created before this field; listSpawnAreas returns it as 0."
+        },
+        "poisRefreshedAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "When the POI cache was last refreshed, or null if it never has been (a just-created area before ingestion, or after an Overpass failure that kept the previous cache)."
+        }
       },
       "required": [
         "areaId",
@@ -485,7 +494,9 @@
         "createdAt",
         "updatedAt",
         "approvedByUserId",
-        "approvedAt"
+        "approvedAt",
+        "poiCount",
+        "poisRefreshedAt"
       ],
       "additionalProperties": true
     },

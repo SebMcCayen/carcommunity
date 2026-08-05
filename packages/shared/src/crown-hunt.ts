@@ -526,7 +526,29 @@ export interface AdminCrownSpawnArea {
   updatedAt: string | null;
   approvedByUserId: string | null;
   approvedAt: string | null;
+  /**
+   * Count of cached OpenStreetMap safe-stop POIs (parking / fuel / charging)
+   * inside this area — the anchor points the spawner places crowns at. 0 until
+   * the area's POI ingestion has run. Show it as "N safe spots found in this
+   * area", and whenever it is surfaced show {@link OSM_ATTRIBUTION} alongside.
+   */
+  poiCount: number;
+  /** When the POI cache was last refreshed (ISO 8601), or null if never. */
+  poisRefreshedAt: string | null;
 }
+
+/** A safe-stop POI category the area spawner anchors crowns to. */
+export const CROWN_SPAWN_POI_CATEGORIES = ['parking', 'fuel', 'charging'] as const;
+export type CrownSpawnPoiCategory = (typeof CROWN_SPAWN_POI_CATEGORIES)[number];
+
+/**
+ * ODbL attribution required wherever OpenStreetMap-derived data (the safe-stop
+ * POIs behind area spawning, and an area's `poiCount`) is shown. Conventionally
+ * kept in English in every locale; mirrored in contracts/localization under
+ * `crownHunt.safeSpotAttribution`. Mirrors the Trafikverket "Källa: Trafikverket"
+ * precedent — the credit is owed wherever the data is on screen, and only there.
+ */
+export const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 
 /** Input for crownHunt.createSpawnArea (admin). `active` requires `safeAreaConfirmed: true`. */
 export interface AdminCreateCrownSpawnAreaRequest {
