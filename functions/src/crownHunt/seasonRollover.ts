@@ -88,8 +88,9 @@ async function readScopeEntries(scope: string): Promise<LeaderboardCounter[]> {
   const snap = await db
     .collection(CROWN_LEADERBOARD_COLLECTION)
     .where('scope', '==', scope)
-    // Only these three fields feed the ranking — project them so a large
-    // season's board is not read in full on the monthly rollover.
+    // Only these three fields feed the ranking — project them to minimize
+    // the per-document payload on the monthly rollover. (Every scope doc is
+    // still read; a season's board is small enough to scan in one pass.)
     .select('uid', 'points', 'crownsCollected')
     .get();
   const entries: LeaderboardCounter[] = [];
