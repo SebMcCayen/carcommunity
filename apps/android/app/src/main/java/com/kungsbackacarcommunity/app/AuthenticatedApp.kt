@@ -147,22 +147,30 @@ import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
 import com.kungsbackacarcommunity.app.convoy.invitableSelection
 import com.kungsbackacarcommunity.app.convoy.messageRes
 import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationRepository
+import com.kungsbackacarcommunity.app.crownhunt.ClaimCoordinate
 import com.kungsbackacarcommunity.app.crownhunt.CrownClaimStatus
 import com.kungsbackacarcommunity.app.crownhunt.CrownCollectGate
 import com.kungsbackacarcommunity.app.crownhunt.CrownFix
 import com.kungsbackacarcommunity.app.crownhunt.CrownFixTracker
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntClaimStatus
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntCoordinator
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntPoint
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntPointsState
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
+import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
+import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnController
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
+import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
+import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
@@ -1556,15 +1564,31 @@ fun AuthenticatedApp(
             // faster poll has nothing to find and would only cost battery.
             val crownSpawnController =
                 remember(context) { CrownSpawnController.createIfAvailable(context) }
-            // BOTH flags. `crownHunt` is the feature as a whole; `crownHuntSpawn`
-            // (contract default OFF) is the automatic half specifically, because an
-            // auto-placed crown carries no admin's confirmation that its spot is
-            // safe to stop at. With either off this is false, and false here means
-            // the poll effect below returns immediately: no `crownSpawns` query is
-            // ever issued, not a hidden layer that still costs reads.
+            // The member's own opt-in. Default is participating (unset → true);
+            // when they opt OUT the whole game comes off THIS screen — every crown
+            // marker (admin points AND spawns) and every crown popup — without
+            // touching the backend. Read from the CompositionLocal the activity
+            // provides, which re-provides a fresh controller on change, so flipping
+            // the toggle recomposes this and shows/hides live.
+            val crownHuntParticipating = LocalCrownHuntParticipationController.current.participating
+            val crownHuntFeatureEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT)
+            // Curated admin points (`crownHuntPoints`) need only the feature flag,
+            // NOT the spawn flag: each carries an admin's own safe-location
+            // confirmation, so it is safe to draw even with the auto-spawn engine
+            // dark. Gated additionally by participation.
+            val adminCrownsVisible =
+                CrownPointMarkers.crownsVisible(crownHuntFeatureEnabled, crownHuntParticipating)
+            // BOTH flags AND participation. `crownHunt` is the feature as a whole;
+            // `crownHuntSpawn` (contract default OFF) is the automatic half
+            // specifically, because an auto-placed crown carries no admin's
+            // confirmation that its spot is safe to stop at. With any off this is
+            // false, and false here means the poll effect below returns
+            // immediately: no `crownSpawns` query is ever issued, not a hidden
+            // layer that still costs reads.
             val crownSpawnEnabled =
-                flags.isEnabled(FeatureFlag.CROWN_HUNT) &&
-                    flags.isEnabled(FeatureFlag.CROWN_HUNT_SPAWN)
+                crownHuntFeatureEnabled &&
+                    flags.isEnabled(FeatureFlag.CROWN_HUNT_SPAWN) &&
+                    crownHuntParticipating
             val crownSpawnsFlow =
                 remember(crownSpawnController) {
                     crownSpawnController?.nearbySpawns
@@ -1679,8 +1703,44 @@ fun AuthenticatedApp(
                         }
                     }
                 }
-            LaunchedEffect(mapSurface, crownMarkers) {
-                mapSurface.setCrownMarkers(crownMarkers)
+            // ── Kronjakt crown layer (the HAND-PLACED admin half) ───────────
+            //
+            // The gap Seb hit: an admin creates and activates a Kronjakt point
+            // and NOTHING appears on the user map. Active `crownHuntPoints` were
+            // always readable "for map display" (the security rule says so) and
+            // the listener + index already existed for the hub list — but nothing
+            // ever turned those points into markers. This is that missing step.
+            //
+            // Listener gated on visibility: with the feature off or the member
+            // opted out we subscribe to nothing, matching the spawn layer's "off
+            // means no reads" posture. The bounded query
+            // ([CrownHunt.ACTIVE_POINTS_QUERY_LIMIT], the existing composite
+            // index) is the same one the hub already runs, so no new index.
+            val crownPointsFlow =
+                remember(crownHuntRepository, adminCrownsVisible) {
+                    if (crownHuntRepository != null && adminCrownsVisible) {
+                        crownHuntRepository.observeActivePoints()
+                    } else {
+                        flowOf(CrownHuntPointsState.Loaded(emptyList<CrownHuntPoint>()))
+                    }
+                }
+            val crownPointsState by
+                crownPointsFlow.collectAsState(initial = CrownHuntPointsState.Loading)
+            val crownPointGlyph = crownPointGlyphRes()
+            val crownPointMarkers =
+                remember(crownPointsState, adminCrownsVisible, crownPointGlyph) {
+                    val points =
+                        (crownPointsState as? CrownHuntPointsState.Loaded)?.points ?: emptyList()
+                    CrownPointMarkers.markers(points, adminCrownsVisible, crownPointGlyph)
+                }
+            // Both crown sources share the ONE surface layer: the admin points and
+            // the auto-spawns are drawn together (each already empty when its own
+            // gate is off), so a member sees every crown that is meant for them
+            // regardless of which pipeline placed it.
+            val allCrownMarkers =
+                remember(crownMarkers, crownPointMarkers) { crownPointMarkers + crownMarkers }
+            LaunchedEffect(mapSurface, allCrownMarkers) {
+                mapSurface.setCrownMarkers(allCrownMarkers)
             }
             // The crown the user tapped. LATCHED, in deliberate contrast to
             // [tappedIncident] just below, which is derived from the live list so a
@@ -1786,6 +1846,45 @@ fun AuthenticatedApp(
             // second attempt against the daily cap.
             val crownIdempotencyKey =
                 remember(tappedCrownId) { java.util.UUID.randomUUID().toString() }
+
+            // ── Tapped HAND-PLACED admin point ──────────────────────────────
+            //
+            // The SAME crown-tap channel carries a tap on either source, so the id
+            // is resolved against the admin points too. Spawn ids and point ids are
+            // both Firestore auto-ids (globally unique), so exactly one of the two
+            // slots fills. Latched like [openCrown], so a refresh that changes the
+            // active-points set does not yank a popup the member is reading.
+            val openCrownPointSlot =
+                remember(tappedCrownId) { mutableStateOf<CrownHuntPoint?>(null) }
+            LaunchedEffect(tappedCrownId, crownPointsState) {
+                val id = tappedCrownId ?: return@LaunchedEffect
+                if (openCrownPointSlot.value == null) {
+                    val points =
+                        (crownPointsState as? CrownHuntPointsState.Loaded)?.points ?: emptyList()
+                    openCrownPointSlot.value = points.firstOrNull { it.id == id }
+                }
+            }
+            val openCrownPoint =
+                if (tappedCrownId != null && adminCrownsVisible) openCrownPointSlot.value else null
+            val crownPointClaimFlow =
+                remember(crownHuntCoordinator) {
+                    crownHuntCoordinator?.status
+                        ?: MutableStateFlow<CrownHuntClaimStatus>(CrownHuntClaimStatus.Idle)
+                }
+            val crownPointClaimStatus by crownPointClaimFlow.collectAsState()
+            // When the game goes off screen with a crown popup still OPEN — the
+            // member opts out, or the feature flag flips — consume the pending tap
+            // and clear both claim controllers. Without this the tap latch survives
+            // the hide, so opting back in would resurrect the old popup and a
+            // lingering "someone got there first" could greet the next crown.
+            val anyCrownLayerVisible = crownSpawnEnabled || adminCrownsVisible
+            LaunchedEffect(anyCrownLayerVisible) {
+                if (!anyCrownLayerVisible && tappedCrownId != null) {
+                    mapSurface.consumeCrownTap()
+                    crownSpawnController?.resetClaim()
+                    crownHuntCoordinator?.reset()
+                }
+            }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
@@ -4389,6 +4488,62 @@ fun AuthenticatedApp(
                                             // first" left behind would greet the next
                                             // crown the user opened.
                                             crownSpawnController?.resetClaim()
+                                            mapSurface.consumeCrownTap()
+                                        },
+                                    )
+                                }
+                                // Tapping a HAND-PLACED admin Kronjakt point opens
+                                // its own popup: name, reward, and a Collect button
+                                // whose eligibility (geofence, cooldown, daily cap)
+                                // the backend owns. A single fresh fix is fetched at
+                                // tap-collect time — an admin point needs no dwell
+                                // proof — and the localized result is shown in place.
+                                val pointForPopup = openCrownPoint
+                                if (pointForPopup != null && adminCrownsVisible) {
+                                    CrownPointPopup(
+                                        point = pointForPopup,
+                                        status = crownPointClaimStatus,
+                                        onCollect = {
+                                            crownHuntCoordinator?.let { coordinator ->
+                                                scope.launch {
+                                                    val fix =
+                                                        CrownLocation.currentFix(
+                                                            context.applicationContext,
+                                                        )
+                                                    val coordinate =
+                                                        fix?.let {
+                                                            ClaimCoordinate(
+                                                                latitude = it.latitude,
+                                                                longitude = it.longitude,
+                                                                recordedAtIso =
+                                                                    java.time.Instant
+                                                                        .ofEpochMilli(
+                                                                            it.recordedAtMillis,
+                                                                        )
+                                                                        .toString(),
+                                                                speedMetersPerSecond =
+                                                                    it.speedMetersPerSecond,
+                                                                accuracyMeters = it.accuracyMeters,
+                                                            )
+                                                        }
+                                                    coordinator.claim(
+                                                        pointForPopup.id,
+                                                        coordinate,
+                                                        // Same key across retries on
+                                                        // this point: the backend
+                                                        // de-duplicates, so a retry
+                                                        // costs one attempt, not two.
+                                                        crownIdempotencyKey,
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onDismiss = {
+                                            // Clear the shared coordinator result as
+                                            // well as the tap, so an outcome left
+                                            // behind cannot greet the next point (or
+                                            // the hub screen) the member opens.
+                                            crownHuntCoordinator?.reset()
                                             mapSurface.consumeCrownTap()
                                         },
                                     )

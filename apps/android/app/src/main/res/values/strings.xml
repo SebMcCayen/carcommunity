@@ -942,6 +942,7 @@
     <string name="crownHunt_collectButton">Samla in</string>
     <string name="crownHunt_claiming">Samlar in...</string>
     <string name="crownHunt_rewardLabel">Belöning: {points} KP</string>
+    <string name="crownHunt_pointCollectHint">Samla in kronan när du står på dess plats.</string>
     <string name="crownHunt_safetyStop">Stanna säkert innan du samlar in belöningen.</string>
     <string name="crownHunt_safetySlowOnly">Kronjakt kan endast användas när du står stilla eller rör dig mycket långsamt.</string>
     <string name="crownHunt_movingTooFast">Du rör dig för snabbt för att samla in.</string>
@@ -1287,6 +1288,8 @@
     <string name="shell_layersIncidents">Trafikvarningar</string>
     <string name="shell_layersNightMode">Nattläge</string>
     <string name="shell_layers3d">3D-byggnader</string>
+    <string name="shell_layersCrownHunt">Kronjakt</string>
+    <string name="shell_layersCrownHuntHelp">Visa spelet Kronjakt – kronor att samla in på kartan. Stäng av för att dölja det.</string>
     <string name="shell_layersZoomTitle">Kartans fokusavstånd</string>
     <string name="shell_layersZoomHelp">Hur nära kartan ligger när du använder den som vanligt.</string>
     <string name="shell_layersZoomFar">Längre bort</string>

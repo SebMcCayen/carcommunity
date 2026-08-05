@@ -8,6 +8,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.kungsbackacarcommunity.app.auth.AuthState
 import com.kungsbackacarcommunity.app.auth.SignInScreen
 import com.kungsbackacarcommunity.app.auth.SignInStatus
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationController
+import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.design.LocalThemeController
 import com.kungsbackacarcommunity.app.design.ThemeController
@@ -59,6 +61,11 @@ fun AppRoot(
     // already the app's ambient-preference boundary; null (the default, previews
     // and UI tests) leaves the no-op controller from LocalMapZoomController in place.
     mapZoomController: MapZoomController? = null,
+    // Read/write access to the Kronjakt participation preference for the map-layers
+    // popup, wired alongside the zoom controller for the same reason. Null (previews
+    // and UI tests) leaves the no-op "participating" default from
+    // LocalCrownHuntParticipationController in place.
+    crownHuntParticipationController: CrownHuntParticipationController? = null,
     // Read/write access to the Trafikverket alert max-age filter for the map-layers
     // popup, wired alongside the zoom controller for the same reason. Null (previews
     // and UI tests) leaves the no-op "show everything" default from
@@ -94,12 +101,23 @@ fun AppRoot(
         } else {
             { CompositionLocalProvider(LocalMapZoomController provides mapZoomController, content = themed) }
         }
+    val crowned: @Composable () -> Unit =
+        if (crownHuntParticipationController == null) {
+            zoomed
+        } else {
+            {
+                CompositionLocalProvider(
+                    LocalCrownHuntParticipationController provides crownHuntParticipationController,
+                    content = zoomed,
+                )
+            }
+        }
     if (incidentAgeFilterController == null) {
-        zoomed()
+        crowned()
     } else {
         CompositionLocalProvider(
             LocalIncidentAgeFilterController provides incidentAgeFilterController,
-            content = zoomed,
+            content = crowned,
         )
     }
 }

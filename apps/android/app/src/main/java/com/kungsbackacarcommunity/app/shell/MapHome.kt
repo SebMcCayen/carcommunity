@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -70,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -97,6 +100,7 @@ import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.incidents.IncidentLocationPickerDialog
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
+import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
@@ -306,6 +310,13 @@ fun MapHome(
     // value. Ambient rather than threaded through this composable's wide parameter
     // list, mirroring the resting-zoom controller above.
     val incidentAgeFilterController = LocalIncidentAgeFilterController.current
+
+    // The member's Kronjakt participation, read from the same ambient
+    // CompositionLocal the crown layers in AuthenticatedApp read to actually
+    // show/hide the game — so the popup control and the map agree on one value.
+    // Ambient rather than threaded through this composable's wide parameter list,
+    // mirroring the controllers above.
+    val crownHuntParticipationController = LocalCrownHuntParticipationController.current
 
     // Push the resting zoom to the surface so the map opens / re-centres at it.
     // Keyed on mapSurface too so it is re-applied if the surface instance is
@@ -832,6 +843,13 @@ fun MapHome(
                 // drawn alerts live (the marker builder reads the same controller).
                 incidentMaxAge = incidentAgeFilterController.maxAge,
                 onIncidentMaxAgeChange = { incidentAgeFilterController.setMaxAge(it) },
+                // Kronjakt participation: the popup shows whether the member is
+                // taking part and commits a change, which persists it and shows/hides
+                // the crown layer + UI live (the crown layers read the same controller).
+                crownHuntParticipating = crownHuntParticipationController.participating,
+                onCrownHuntParticipatingChange = {
+                    crownHuntParticipationController.setParticipating(it)
+                },
                 onDismiss = { layersOpen = false },
             )
         }
@@ -867,6 +885,9 @@ const val MAP_HOME_LAYERS_INCIDENTS_TAG = "map_home_layers_incidents"
 
 /** Test tag on the map day/night ("Night mode") layer toggle switch. */
 const val MAP_HOME_LAYERS_NIGHT_TAG = "map_home_layers_night"
+
+/** Test tag on the Kronjakt ("Crown Hunt") participation toggle switch. */
+const val MAP_HOME_LAYERS_CROWN_HUNT_TAG = "map_home_layers_crown_hunt"
 
 /** Test tag on the live-location manage-sheet popup card (raised by the centre
  *  live control while sharing; also reused by turn-by-turn navigation). */
@@ -913,6 +934,11 @@ internal fun MapLayersPopup(
     // [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
     incidentMaxAge: IncidentAgeOption,
     onIncidentMaxAgeChange: (IncidentAgeOption) -> Unit,
+    // Whether the member takes part in Kronjakt (Crown Hunt) and a callback to
+    // change it. A plain toggle row — see
+    // [com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipation].
+    crownHuntParticipating: Boolean,
+    onCrownHuntParticipatingChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -935,8 +961,18 @@ internal fun MapLayersPopup(
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
+            // Capped to 80% of the screen and scrollable: the layer list has grown
+            // past a short screen (toggles + two sliders + the participation row and
+            // its help), and a fixed Column would push the bottom-most item (the
+            // Trafikverket attribution) off-screen. The cap keeps the popup on
+            // screen; the scroll keeps every row reachable.
+            val maxPopupHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier =
+                    Modifier
+                        .heightIn(max = maxPopupHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(
@@ -997,6 +1033,22 @@ internal fun MapLayersPopup(
                     label = stringResource(R.string.shell_layers3d),
                     checked = is3d,
                     onCheckedChange = on3dChange,
+                )
+                // Kronjakt participation. On (default) draws the crown layer + its
+                // popups; off takes the whole game off this member's screen. Help
+                // text under the row so "where did the crowns go?" is answered in
+                // place. A device-local viewing choice, not an account change.
+                LayerToggleRow(
+                    label = stringResource(R.string.shell_layersCrownHunt),
+                    checked = crownHuntParticipating,
+                    onCheckedChange = onCrownHuntParticipatingChange,
+                    switchTestTag = MAP_HOME_LAYERS_CROWN_HUNT_TAG,
+                )
+                Text(
+                    text = stringResource(R.string.shell_layersCrownHuntHelp),
+                    modifier = Modifier.padding(top = KccSpacing.s1),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 // Resting-zoom preference: "how far away the focus is" when using the
                 // map as usual. A discrete section of its own so a sibling change to

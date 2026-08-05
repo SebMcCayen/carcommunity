@@ -104,6 +104,36 @@ object CrownMarkerStyle {
         }
 
     /**
+     * Disc colour for a HAND-PLACED admin Kronjakt point (`crownHuntPoints`), as
+     * opposed to an auto-spawned crown.
+     *
+     * These are the curated, safety-approved, permanent reward points an admin
+     * creates in the portal — a different SOURCE from the rarity-tiered spawns,
+     * so they get their OWN disc rather than borrowing a tier's: a member must be
+     * able to tell "an official reward point an admin placed here" from "an
+     * ephemeral pickup the engine dropped". A deep royal magenta, distinct in
+     * L*a*b* from all four rarity discs under normal vision and under simulated
+     * protanopia/deuteranopia/tritanopia (measured in `CrownMarkerStyleTest`),
+     * carrying the ROYAL silhouette and no glow (the glow stays reserved for the
+     * legendary spawn tier).
+     */
+    const val ADMIN_POINT_DISC: Int = 0xFFB0136A.toInt()
+
+    /**
+     * The glyph colour for the admin-point disc — whichever of
+     * [IncidentMarkerStyle.GLYPH_LIGHT] / [IncidentMarkerStyle.GLYPH_DARK]
+     * contrasts better, chosen the same computed way as [glyphColorArgb] so a
+     * retune of [ADMIN_POINT_DISC] cannot leave an unreadable glyph behind.
+     */
+    fun adminPointGlyphColorArgb(): Int {
+        val light =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_LIGHT, ADMIN_POINT_DISC)
+        val dark =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_DARK, ADMIN_POINT_DISC)
+        return if (light >= dark) IncidentMarkerStyle.GLYPH_LIGHT else IncidentMarkerStyle.GLYPH_DARK
+    }
+
+    /**
      * The glyph colour for [rarity] — whichever of
      * [IncidentMarkerStyle.GLYPH_LIGHT] / [IncidentMarkerStyle.GLYPH_DARK]
      * contrasts better with that tier's disc.

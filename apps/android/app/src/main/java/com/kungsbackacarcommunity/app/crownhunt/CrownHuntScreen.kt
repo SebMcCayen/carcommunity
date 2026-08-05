@@ -211,21 +211,9 @@ private fun ClaimStatusBanner(status: CrownHuntClaimStatus) {
 
 @Composable
 private fun claimResultMessage(result: CrownHuntClaimResult): String =
-    stringResource(
-        when (result) {
-            CrownHuntClaimResult.AWARDED -> R.string.crownHunt_resultAwarded
-            CrownHuntClaimResult.ALREADY_CLAIMED -> R.string.crownHunt_resultAlreadyClaimed
-            CrownHuntClaimResult.OUTSIDE_GEOFENCE -> R.string.crownHunt_resultOutsideGeofence
-            CrownHuntClaimResult.MOVING_TOO_FAST -> R.string.crownHunt_resultMovingTooFast
-            CrownHuntClaimResult.POSITION_TOO_OLD -> R.string.crownHunt_resultPositionTooOld
-            CrownHuntClaimResult.POINT_INACTIVE -> R.string.crownHunt_resultPointInactive
-            CrownHuntClaimResult.COOLDOWN_ACTIVE -> R.string.crownHunt_resultCooldownActive
-            CrownHuntClaimResult.DAILY_LIMIT_REACHED -> R.string.crownHunt_resultDailyLimit
-            CrownHuntClaimResult.RISK_REVIEW -> R.string.crownHunt_resultRiskReview
-            CrownHuntClaimResult.FEATURE_DISABLED -> R.string.crownHunt_resultFeatureDisabled
-            CrownHuntClaimResult.NOT_ELIGIBLE -> R.string.crownHunt_resultNotEligible
-        },
-    )
+    // ONE mapping, shared with the map's CrownPointPopup, so a new result code
+    // cannot be localized in one place and forgotten in the other.
+    stringResource(crownHuntClaimResultRes(result))
 
 @Composable
 private fun PointCard(point: CrownHuntPoint, collectEnabled: Boolean, onCollect: () -> Unit) {

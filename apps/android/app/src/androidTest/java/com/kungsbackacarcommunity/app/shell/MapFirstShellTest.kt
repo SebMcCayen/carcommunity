@@ -16,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.test.swipeDown
@@ -546,6 +547,10 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.shell_layersTraffic)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layersNightMode)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.shell_layers3d)).assertIsDisplayed()
+        // ...and the Kronjakt participation toggle. assertExists rather than
+        // scroll-into-view so the header's close button (asserted next) stays put:
+        // the popup is a plain verticalScroll Column, so every row is composed.
+        composeTestRule.onNodeWithText(str(R.string.shell_layersCrownHunt)).assertExists()
         // Closing dismisses the popup.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_layersClose)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_POPUP_TAG).assertDoesNotExist()
@@ -759,12 +764,16 @@ class MapFirstShellTest {
         // The incidents layer defaults ON and Trafikverket-sourced incidents are
         // loaded, so we owe (and show) the "Källa: Trafikverket" credit.
         composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).assertIsDisplayed()
+        // The popup scrolls now (the layer list outgrew a short screen), so scroll
+        // the bottom-most attribution into view before asserting it shows.
         composeTestRule
             .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
+            .performScrollTo()
             .assertIsDisplayed()
         // Turning the incidents layer off removes the attribution (no Trafikverket
         // data is on screen to credit) — the conditional wiring this test guards.
-        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).performClick()
+        // Scroll the toggle back into view first (we scrolled to the bottom above).
+        composeTestRule.onNodeWithTag(MAP_HOME_LAYERS_INCIDENTS_TAG).performScrollTo().performClick()
         composeTestRule
             .onNodeWithText(str(R.string.incidents_sourceTrafikverket))
             .assertDoesNotExist()

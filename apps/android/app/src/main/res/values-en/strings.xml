@@ -942,6 +942,7 @@
     <string name="crownHunt_collectButton">Collect</string>
     <string name="crownHunt_claiming">Collecting...</string>
     <string name="crownHunt_rewardLabel">Reward: {points} KP</string>
+    <string name="crownHunt_pointCollectHint">Collect this crown when you are standing at its spot.</string>
     <string name="crownHunt_safetyStop">Stop safely before collecting the reward.</string>
     <string name="crownHunt_safetySlowOnly">Crown Hunt may only be used when you are stationary or moving very slowly.</string>
     <string name="crownHunt_movingTooFast">You are moving too fast to collect.</string>
@@ -1287,6 +1288,8 @@
     <string name="shell_layersIncidents">Traffic alerts</string>
     <string name="shell_layersNightMode">Night mode</string>
     <string name="shell_layers3d">3D buildings</string>
+    <string name="shell_layersCrownHunt">Crown Hunt</string>
+    <string name="shell_layersCrownHuntHelp">Show the Crown Hunt game — crowns to collect on the map. Turn off to hide it.</string>
     <string name="shell_layersZoomTitle">Map focus distance</string>
     <string name="shell_layersZoomHelp">How close the map sits when you\'re using it as usual.</string>
     <string name="shell_layersZoomFar">Farther</string>
