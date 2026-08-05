@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
@@ -70,6 +72,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -958,8 +961,18 @@ internal fun MapLayersPopup(
             tonalElevation = 6.dp,
             shadowElevation = 6.dp,
         ) {
+            // Capped to 80% of the screen and scrollable: the layer list has grown
+            // past a short screen (toggles + two sliders + the participation row and
+            // its help), and a fixed Column would push the bottom-most item (the
+            // Trafikverket attribution) off-screen. The cap keeps the popup on
+            // screen; the scroll keeps every row reachable.
+            val maxPopupHeight = (LocalConfiguration.current.screenHeightDp * 0.8f).dp
             Column(
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                modifier =
+                    Modifier
+                        .heightIn(max = maxPopupHeight)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(
