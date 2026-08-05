@@ -69,11 +69,12 @@ export type CrownHuntClaimResult = (typeof CROWN_HUNT_CLAIM_RESULTS)[number];
  *
  * New points always start as `draft`.
  * Activation is a separate action requiring safety confirmation.
+ *
+ * A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled document, so
+ * it carries no title or description — `rewardPoints` is chosen from a rarity
+ * tier (Common/Rare/Epic/Legendary) in the admin UI.
  */
 export interface AdminCreateCrownHuntPointRequest {
-  /** Optional — a Crown Hunt point is just a collectable on the map. */
-  title?: string;
-  description?: string | null;
   latitude: number;
   longitude: number;
   geofenceRadiusMeters: number;
@@ -91,11 +92,10 @@ export interface AdminCreateCrownHuntPointRequest {
  * Request body for PATCH /v1/admin/crown-hunt/points/:pointId.
  *
  * Only draft or paused points may be edited.
- * All fields are optional.
+ * All fields are optional. Crowns carry no title/description (see the create
+ * request).
  */
 export interface AdminUpdateCrownHuntPointRequest {
-  title?: string;
-  description?: string | null;
   latitude?: number;
   longitude?: number;
   geofenceRadiusMeters?: number;

@@ -119,7 +119,6 @@ async function createActivePoint(overrides: Record<string, unknown> = {}): Promi
   await signInAs(adminUser);
   const created = (
     await call('crownHunt-createPoint', {
-      title: 'Kronan vid torget',
       latitude: POINT_LAT,
       longitude: POINT_LON,
       geofenceRadiusMeters: 50,
@@ -163,7 +162,6 @@ describe('crownHunt admin point lifecycle', () => {
     await signInAs(adminUser);
     const created = (
       await call('crownHunt-createPoint', {
-        title: 'Lifecycle point',
         latitude: POINT_LAT,
         longitude: POINT_LON,
         geofenceRadiusMeters: 30,
@@ -172,6 +170,16 @@ describe('crownHunt admin point lifecycle', () => {
       })
     ).data as { pointId: string; status: string };
     expect(created.status).toBe('draft');
+
+    // A Crown is a textless collectable: create accepts no title/description,
+    // and the stored doc carries title '' / description null for reader
+    // back-compat while still storing the reward.
+    const draftDoc = (
+      await adminDb.collection('crownHuntPoints').doc(created.pointId).get()
+    ).data()!;
+    expect(draftDoc.title).toBe('');
+    expect(draftDoc.description).toBeNull();
+    expect(draftDoc.rewardPoints).toBe(10);
 
     // Activation without the safety confirmation is invalid input.
     expect(
@@ -210,7 +218,6 @@ describe('crownHunt admin point lifecycle', () => {
     expect(
       await callableErrorCode(
         call('crownHunt-createPoint', {
-          title: 'Nope',
           latitude: 0,
           longitude: 0,
           geofenceRadiusMeters: 30,
