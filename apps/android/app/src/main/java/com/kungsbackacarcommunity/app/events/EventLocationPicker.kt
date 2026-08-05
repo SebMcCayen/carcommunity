@@ -30,6 +30,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
 import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.android.gestures.RotateGestureDetector
+import com.mapbox.android.gestures.ShoveGestureDetector
+import com.mapbox.android.gestures.StandardScaleGestureDetector
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
 import com.mapbox.maps.MapView
@@ -38,6 +41,9 @@ import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
 import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.OnRotateListener
+import com.mapbox.maps.plugin.gestures.OnScaleListener
+import com.mapbox.maps.plugin.gestures.OnShoveListener
 import com.mapbox.maps.plugin.gestures.gestures
 
 /**
@@ -162,14 +168,16 @@ fun EventLocationPickerScreen(
     // GL/rendering resources each time — same teardown MapScreen and
     // MapboxMapSurface do.
     val cameraListenerHolder = remember { arrayOfNulls<OnCameraChangeListener>(1) }
-    // The user-pan listener, held for the same teardown; flips [userMovedCamera]
-    // so a late location fix never yanks the camera once the user has taken over.
-    val moveListenerHolder = remember { arrayOfNulls<OnMoveListener>(1) }
+    // Detaches the user-gesture listeners (pan/zoom/rotate/tilt), held for the
+    // same teardown as the camera listener. They flip [userMovedCamera] so a late
+    // location fix never yanks the camera once the user has taken over.
+    val gestureDetachHolder = remember { arrayOfNulls<() -> Unit>(1) }
     // The live MapView, published from the factory so a late-arriving location
     // fix can recentre its camera (the factory runs once and cannot see later
     // state changes on its own).
     var mapView by remember { mutableStateOf<MapView?>(null) }
-    // Set the moment the user pans/zooms the map; guards the recentre effect.
+    // Set the moment the user pans/zooms/rotates/tilts the map; guards the
+    // recentre effect.
     var userMovedCamera by remember { mutableStateOf(false) }
 
     // A last-known fix that lands AFTER the map is already showing (the user
@@ -181,6 +189,9 @@ fun EventLocationPickerScreen(
     LaunchedEffect(mapView, startLat, startLng) {
         val view = mapView ?: return@LaunchedEffect
         if (userMovedCamera) return@LaunchedEffect
+        // Only adopt the new centre as the captured coordinate if the camera
+        // actually moved there; a thrown setCamera (teardown/race) leaves the
+        // captured pair on the last real camera position rather than desyncing it.
         runCatching {
             view.mapboxMap.setCamera(
                 cameraOptions {
@@ -188,9 +199,10 @@ fun EventLocationPickerScreen(
                     zoom(EventLocationPicker.START_ZOOM)
                 },
             )
+        }.onSuccess {
+            centerLat = startLat
+            centerLng = startLng
         }
-        centerLat = startLat
-        centerLng = startLng
     }
 
     Box(modifier = modifier.fillMaxSize()) {
@@ -224,20 +236,62 @@ fun EventLocationPickerScreen(
                             }
                         cameraListenerHolder[0] = listener
                         mapboxMap.addOnCameraChangeListener(listener)
-                        // A user pan/zoom takes ownership of the camera: after the
-                        // first gesture, a late location fix must not recentre.
+                        // ANY user camera gesture — pan, pinch-zoom, rotate or
+                        // tilt — takes ownership of the camera: after the first one
+                        // a late location fix must not recentre (or reset the zoom).
+                        // Same set of gestures MapboxMapSurface treats as "the user
+                        // took over"; the *Begin callbacks are the earliest signal.
+                        val markMoved = { userMovedCamera = true }
                         val moveListener =
                             object : OnMoveListener {
                                 override fun onMoveBegin(detector: MoveGestureDetector) {
-                                    userMovedCamera = true
+                                    markMoved()
                                 }
 
                                 override fun onMove(detector: MoveGestureDetector): Boolean = false
 
                                 override fun onMoveEnd(detector: MoveGestureDetector) = Unit
                             }
-                        moveListenerHolder[0] = moveListener
+                        val scaleListener =
+                            object : OnScaleListener {
+                                override fun onScaleBegin(detector: StandardScaleGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onScale(detector: StandardScaleGestureDetector) = Unit
+
+                                override fun onScaleEnd(detector: StandardScaleGestureDetector) = Unit
+                            }
+                        val rotateListener =
+                            object : OnRotateListener {
+                                override fun onRotateBegin(detector: RotateGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onRotate(detector: RotateGestureDetector) = Unit
+
+                                override fun onRotateEnd(detector: RotateGestureDetector) = Unit
+                            }
+                        val shoveListener =
+                            object : OnShoveListener {
+                                override fun onShoveBegin(detector: ShoveGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onShove(detector: ShoveGestureDetector) = Unit
+
+                                override fun onShoveEnd(detector: ShoveGestureDetector) = Unit
+                            }
                         gestures.addOnMoveListener(moveListener)
+                        gestures.addOnScaleListener(scaleListener)
+                        gestures.addOnRotateListener(rotateListener)
+                        gestures.addOnShoveListener(shoveListener)
+                        gestureDetachHolder[0] = {
+                            runCatching { gestures.removeOnMoveListener(moveListener) }
+                            runCatching { gestures.removeOnScaleListener(scaleListener) }
+                            runCatching { gestures.removeOnRotateListener(rotateListener) }
+                            runCatching { gestures.removeOnShoveListener(shoveListener) }
+                        }
                     }.also { view -> mapView = view }
                 },
                 onRelease = { view ->
@@ -247,10 +301,8 @@ fun EventLocationPickerScreen(
                         runCatching { view.mapboxMap.removeOnCameraChangeListener(listener) }
                     }
                     cameraListenerHolder[0] = null
-                    moveListenerHolder[0]?.let { listener ->
-                        runCatching { view.gestures.removeOnMoveListener(listener) }
-                    }
-                    moveListenerHolder[0] = null
+                    gestureDetachHolder[0]?.invoke()
+                    gestureDetachHolder[0] = null
                     mapView = null
                     runCatching { view.onDestroy() }
                 },

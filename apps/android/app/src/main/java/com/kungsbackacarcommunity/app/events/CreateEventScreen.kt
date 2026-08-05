@@ -82,20 +82,27 @@ fun CreateEventScreen(
     val startsAt = startsAtMillis
     val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
 
-    // The user's OWN location, prefetched once up front so the map picker opens
-    // centred on where they are rather than a fixed town. It is only a camera
-    // HINT — never submitted unless the user confirms a pin — so a null result
-    // (permission denied / location unavailable / CI) simply leaves the picker
-    // on its Kungsbacka fallback. lastKnown is instant when a cached fix exists
-    // and degrades to null (never throws) without the location permission,
-    // reusing the app's existing one-shot source; it adds no new permission flow.
+    // The user's OWN location, used to open the map picker centred on where they
+    // are rather than a fixed town. It is only a camera HINT — never submitted
+    // unless the user confirms a pin — so a null result (permission denied /
+    // location unavailable / CI) simply leaves the picker on its Kungsbacka
+    // fallback. Fetched the FIRST time the picker opens (not on form entry), so a
+    // member who never picks a map point is never located; then cached for
+    // re-opens. lastKnown is instant when a cached fix exists and degrades to
+    // null (never throws) without the location permission, reusing the app's
+    // existing one-shot source; it adds no new permission flow. If the fix lands
+    // after the picker is already showing, the picker recentres to it.
     val context = LocalContext.current
     var userLatitude by remember { mutableStateOf<Double?>(null) }
     var userLongitude by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(Unit) {
-        CurrentLocation.lastKnown(context)?.let { fix ->
-            userLatitude = fix.latitude
-            userLongitude = fix.longitude
+    var userLocationRequested by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(showLocationPicker) {
+        if (showLocationPicker && !userLocationRequested) {
+            userLocationRequested = true
+            CurrentLocation.lastKnown(context)?.let { fix ->
+                userLatitude = fix.latitude
+                userLongitude = fix.longitude
+            }
         }
     }
 
