@@ -34,7 +34,11 @@
       "type": "object",
       "description": "Firestore `crownHuntPoints/{pointId}`. Active members read active points; all writes via admin crownHunt.* callables.",
       "properties": {
-        "title": { "type": "string", "maxLength": 100, "description": "Optional label; empty string when the point has no title." },
+        "title": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Optional label; empty string when the point has no title."
+        },
         "description": { "type": ["string", "null"], "maxLength": 500 },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
@@ -155,13 +159,7 @@
         "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
       },
-      "required": [
-        "latitude",
-        "longitude",
-        "geofenceRadiusMeters",
-        "rewardPoints",
-        "repeatRule"
-      ],
+      "required": ["latitude", "longitude", "geofenceRadiusMeters", "rewardPoints", "repeatRule"],
       "additionalProperties": false
     },
     "activatePointRequest": {
@@ -175,7 +173,6 @@
       "required": ["pointId", "safeLocationConfirmed", "approvalNote"],
       "additionalProperties": false
     },
-
     "crownHuntRarity": {
       "type": "string",
       "enum": ["common", "uncommon", "rare", "legendary"],
@@ -251,9 +248,21 @@
         "streakCurrent": { "type": "integer", "minimum": 0 },
         "streakBest": { "type": "integer", "minimum": 0 },
         "lastCollectionAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
-        "seasonsWon": { "type": "integer", "minimum": 0, "description": "Lifetime first-place season finishes; grows every win." }
+        "seasonsWon": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Lifetime first-place season finishes; grows every win."
+        }
       },
-      "required": ["uid", "allTime", "currentSeason", "byRarity", "streakCurrent", "streakBest", "seasonsWon"],
+      "required": [
+        "uid",
+        "allTime",
+        "currentSeason",
+        "byRarity",
+        "streakCurrent",
+        "streakBest",
+        "seasonsWon"
+      ],
       "additionalProperties": false
     },
     "crownHuntAdminStats": {
@@ -269,7 +278,16 @@
         "activePlayers7d": { "type": "integer", "minimum": 0 },
         "activePlayers30d": { "type": "integer", "minimum": 0 }
       },
-      "required": ["scope", "spawnedTotal", "collectedTotal", "collectionRate", "spawnedByRarity", "collectedByRarity", "activePlayers7d", "activePlayers30d"],
+      "required": [
+        "scope",
+        "spawnedTotal",
+        "collectedTotal",
+        "collectionRate",
+        "spawnedByRarity",
+        "collectedByRarity",
+        "activePlayers7d",
+        "activePlayers30d"
+      ],
       "additionalProperties": false
     },
     "crownHuntCellStat": {
@@ -330,6 +348,210 @@
         "topStandings": { "type": "array", "items": { "$ref": "#/$defs/crownHuntSeasonStanding" } }
       },
       "required": ["seasonId", "period", "status", "startAt", "endAt"],
+      "additionalProperties": false
+    },
+    "crownSpawnRarity": {
+      "type": "string",
+      "enum": ["common", "uncommon", "rare", "legendary"],
+      "description": "Auto-spawn rarity. Rewards 10/25/100/500 KP; TTL 6/12/24/48 h."
+    },
+    "crownCollectMode": {
+      "type": "string",
+      "enum": ["shared", "exclusive"],
+      "description": "How a spawned crown is collected. 'shared': many distinct members may each collect it once and it persists to its TTL. 'exclusive': the first taker removes it for everyone. Derived from rarity by the backend (common/uncommon/rare shared, legendary exclusive today). Clients may render exclusive crowns specially."
+    },
+    "crownSpawnClaimResult": {
+      "type": "string",
+      "enum": [
+        "awarded",
+        "already_taken",
+        "already_collected",
+        "outside_radius",
+        "must_be_stationary",
+        "position_too_old",
+        "crown_expired",
+        "daily_limit_reached",
+        "risk_review",
+        "feature_disabled",
+        "not_eligible"
+      ],
+      "description": "Result codes for crownHunt.claimSpawn. 'already_taken' = an EXCLUSIVE crown someone else already collected; 'already_collected' = a SHARED crown THIS member already collected (it stays on the map for others). Eligibility failures are codes with Swedish messages, not errors."
+    },
+    "crownSpawnView": {
+      "type": "object",
+      "description": "Member-facing view of a live auto-spawned crown (crownSpawns/{spawnId}). Backend-only fields (cellKey, areaId, approvedCellBy, safeLocationConfirmed, claim/risk metadata) are excluded — the client needs only where the crown is, what it is worth, how it is collected, and when it disappears. Members read live, unexpired crowns directly; all writes are backend-only.",
+      "properties": {
+        "spawnId": { "type": "string", "minLength": 1 },
+        "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
+        "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
+        "rarity": { "$ref": "#/$defs/crownSpawnRarity" },
+        "collectMode": { "$ref": "#/$defs/crownCollectMode" },
+        "rewardPoints": { "type": "integer", "minimum": 1 },
+        "collectRadiusMeters": { "type": "number", "minimum": 1 },
+        "expiresAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": [
+        "spawnId",
+        "latitude",
+        "longitude",
+        "rarity",
+        "collectMode",
+        "rewardPoints",
+        "collectRadiusMeters",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "crownSpawnAreaVertex": {
+      "type": "object",
+      "description": "A WGS-84 vertex. 'lon' (not 'lng') to match the rest of these contracts.",
+      "properties": {
+        "lat": { "type": "number", "minimum": -90, "maximum": 90 },
+        "lon": { "type": "number", "minimum": -180, "maximum": 180 }
+      },
+      "required": ["lat", "lon"],
+      "additionalProperties": false
+    },
+    "crownSpawnAreaShape": {
+      "description": "The shape an admin drew for a marked spawn area — a discriminated union on 'type'. This schema enforces only the field-level constraints below (types, ranges, and the polygon vertex count 4..500). The following CROSS-FIELD rules are NOT expressible in JSON Schema and are enforced SERVER-SIDE by the crownHunt.createSpawnArea / updateSpawnArea callables, so a document that validates against this schema may still be rejected by the backend: the polygon ring must be CLOSED (first vertex equals last) with at least 3 DISTINCT vertices; a rectangle's bounds must satisfy north > south AND east > west (no antimeridian wrap); and any shape whose bounding box would span more than 20000 grid cells is rejected. Do not rely on this schema alone to accept a shape as spawnable.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "polygon" },
+            "vertices": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 500,
+              "items": { "$ref": "#/$defs/crownSpawnAreaVertex" }
+            }
+          },
+          "required": ["type", "vertices"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "circle" },
+            "center": { "$ref": "#/$defs/crownSpawnAreaVertex" },
+            "radiusMeters": { "type": "number", "minimum": 10, "maximum": 50000 }
+          },
+          "required": ["type", "center", "radiusMeters"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": { "const": "rectangle" },
+            "bounds": {
+              "type": "object",
+              "properties": {
+                "north": { "type": "number", "minimum": -90, "maximum": 90 },
+                "south": { "type": "number", "minimum": -90, "maximum": 90 },
+                "east": { "type": "number", "minimum": -180, "maximum": 180 },
+                "west": { "type": "number", "minimum": -180, "maximum": 180 }
+              },
+              "required": ["north", "south", "east", "west"],
+              "additionalProperties": false
+            }
+          },
+          "required": ["type", "bounds"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "crownSpawnArea": {
+      "type": "object",
+      "description": "Admin view of a marked spawn area (crownSpawnAreas/{areaId}). NOT member-readable — an operational safety artefact, admin-read + client-write-denied in firestore.rules; all writes via the audited crownHunt.createSpawnArea/updateSpawnArea/deleteSpawnArea callables. The spawner places crowns at random points INSIDE the shape only while active AND safeAreaConfirmed are both true; ACTIVATING requires the safety confirmation in the same request. additionalProperties is TRUE here (unlike the strict create/update REQUEST schemas): the persisted Firestore document ALSO carries server-managed runtime fields not part of this client contract — the round-robin cursors lastSpawnPassAt and nextCellOffset, and the deactivation audit trio deactivatedByUserId / deactivatedAt / deactivationReason — so a consumer validating a directly-read area document is not tripped up by them. The crownHunt.listSpawnAreas response returns exactly the curated fields below.",
+      "properties": {
+        "areaId": { "type": "string", "minLength": 1 },
+        "name": { "type": ["string", "null"], "maxLength": 120 },
+        "shape": { "$ref": "#/$defs/crownSpawnAreaShape" },
+        "active": { "type": "boolean" },
+        "safeAreaConfirmed": { "type": "boolean" },
+        "createdByUserId": { "$ref": "common.schema.json#/$defs/uid" },
+        "createdAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "approvedByUserId": { "type": ["string", "null"] },
+        "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": [
+        "areaId",
+        "name",
+        "shape",
+        "active",
+        "safeAreaConfirmed",
+        "createdByUserId",
+        "createdAt",
+        "updatedAt",
+        "approvedByUserId",
+        "approvedAt"
+      ],
+      "additionalProperties": true
+    },
+    "createSpawnAreaRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.createSpawnArea (admin). Setting active:true REQUIRES safeAreaConfirmed:true in the same request.",
+      "properties": {
+        "shape": { "$ref": "#/$defs/crownSpawnAreaShape" },
+        "name": { "type": ["string", "null"], "maxLength": 120 },
+        "active": { "type": "boolean" },
+        "safeAreaConfirmed": { "type": "boolean" }
+      },
+      "required": ["shape"],
+      "additionalProperties": false
+    },
+    "updateSpawnAreaRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.updateSpawnArea (admin). At least one of shape/name/active/safeAreaConfirmed must be present; setting active:true REQUIRES safeAreaConfirmed:true in the same request. Re-drawing the shape or deactivating drains the area's live crowns.",
+      "properties": {
+        "areaId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "shape": { "$ref": "#/$defs/crownSpawnAreaShape" },
+        "name": { "type": ["string", "null"], "maxLength": 120 },
+        "active": { "type": "boolean" },
+        "safeAreaConfirmed": { "type": "boolean" }
+      },
+      "required": ["areaId"],
+      "additionalProperties": false
+    },
+    "deleteSpawnAreaRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.deleteSpawnArea (admin). Drains the area's live crowns, then removes the document.",
+      "properties": {
+        "areaId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "reason": { "type": "string", "maxLength": 500 }
+      },
+      "required": ["areaId"],
+      "additionalProperties": false
+    },
+    "spawnAreaMutationResponse": {
+      "type": "object",
+      "description": "Response of crownHunt.createSpawnArea/updateSpawnArea/deleteSpawnArea.",
+      "properties": {
+        "areaId": { "type": "string" },
+        "active": { "type": "boolean" },
+        "safeAreaConfirmed": { "type": "boolean" },
+        "removedCrowns": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["areaId", "active", "safeAreaConfirmed", "removedCrowns"],
+      "additionalProperties": false
+    },
+    "listSpawnAreasRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.listSpawnAreas (admin). Both fields optional: activeOnly filters to currently-active areas; limit bounds the page (1..500, default 200).",
+      "properties": {
+        "activeOnly": { "type": "boolean" },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 500 }
+      },
+      "additionalProperties": false
+    },
+    "listSpawnAreasResponse": {
+      "type": "object",
+      "description": "Response of crownHunt.listSpawnAreas (admin).",
+      "properties": {
+        "areas": { "type": "array", "items": { "$ref": "#/$defs/crownSpawnArea" } }
+      },
+      "required": ["areas"],
       "additionalProperties": false
     }
   }

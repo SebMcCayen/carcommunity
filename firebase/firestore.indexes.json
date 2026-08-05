@@ -641,11 +641,43 @@
       ]
     },
     {
+      "collectionGroup": "crownSpawns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "areaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crownSpawnCells",
       "queryScope": "COLLECTION",
       "fields": [
         {
           "fieldPath": "approved",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "lastSpawnPassAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "crownSpawnAreas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "active",
           "order": "ASCENDING"
         },
         {

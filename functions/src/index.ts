@@ -71,11 +71,14 @@ import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
 import { setSpawnCellApproval } from './crownHunt/spawnCells';
-import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
 import {
-  onCrownLedgerEntryForStats,
-  onCrownSpawnStatsWritten,
-} from './crownHunt/statsTriggers';
+  createSpawnArea,
+  deleteSpawnArea,
+  listSpawnAreas,
+  updateSpawnArea,
+} from './crownHunt/spawnAreas';
+import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
+import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
@@ -433,8 +436,10 @@ export const points = {
  * Kronjakt domain (grouped export → deployed as `crownHunt-submitClaim`,
  * `crownHunt-createPoint`, `crownHunt-updatePoint`, `crownHunt-activatePoint`,
  * `crownHunt-pausePoint`, `crownHunt-claimSpawn`,
- * `crownHunt-setSpawnCellApproval`, and the scheduled `crownHunt-spawnCrowns`
- * and `crownHunt-sweepSpawns`).
+ * `crownHunt-setSpawnCellApproval`, the marked-area CRUD
+ * `crownHunt-createSpawnArea`, `crownHunt-updateSpawnArea`,
+ * `crownHunt-deleteSpawnArea`, `crownHunt-listSpawnAreas`, and the scheduled
+ * `crownHunt-spawnCrowns` and `crownHunt-sweepSpawns`).
  *
  * Crown Hunt geographic point hunt (contracts/functions/functions.json). It has
  * TWO sources of crowns:
@@ -465,6 +470,10 @@ export const crownHunt = {
   pausePoint,
   claimSpawn,
   setSpawnCellApproval,
+  createSpawnArea,
+  updateSpawnArea,
+  deleteSpawnArea,
+  listSpawnAreas,
   spawnCrowns,
   sweepSpawns,
   // Stats + leaderboard (this slice). Firestore triggers that maintain the

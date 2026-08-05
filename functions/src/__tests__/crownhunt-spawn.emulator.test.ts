@@ -421,12 +421,15 @@ describe('scheduled spawner', () => {
     // used to throw, taking every other approved cell down with one bad row.
     const badKeys = ['not-a-cell-key', '99999_0'];
     for (const bad of badKeys) {
-      await adminDb.collection('crownSpawnCells').doc(bad).set({
-        cellKey: bad,
-        approved: true,
-        approvedByUserId: adminUser.uid,
-        lastSpawnPassAt: Timestamp.fromMillis(0),
-      });
+      await adminDb
+        .collection('crownSpawnCells')
+        .doc(bad)
+        .set({
+          cellKey: bad,
+          approved: true,
+          approvedByUserId: adminUser.uid,
+          lastSpawnPassAt: Timestamp.fromMillis(0),
+        });
     }
 
     try {
@@ -475,7 +478,11 @@ describe('scheduled spawner', () => {
     const now = new Date();
     await seedActivity(CELL_KEY, 12, now);
 
-    const first = await runCrownSpawnPass(now, { maxCells: 50, maxSpawns: 50 }, createSeededRng(42));
+    const first = await runCrownSpawnPass(
+      now,
+      { maxCells: 50, maxSpawns: 50 },
+      createSeededRng(42),
+    );
     expect(first.spawned).toBeGreaterThan(0);
 
     const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
@@ -510,14 +517,16 @@ describe('scheduled spawner', () => {
 
 describe('crownHunt.claimSpawn', () => {
   it('awards a stationary claim through the Kronpoäng ledger', async () => {
-    const spawnId = await placeCrown({ rewardPoints: 25, rarity: 'uncommon' });
+    // Legendary = EXCLUSIVE: claimed and removed on the first pickup, which is
+    // what this test's crown-leaves-the-map assertions below check.
+    const spawnId = await placeCrown({ rewardPoints: 500, rarity: 'legendary' });
     await signInAs(hunter);
     const response = (await call('crownHunt-claimSpawn', claimInput({ spawnId })))
       .data as ClaimResponse;
 
     expect(response.result).toBe('awarded');
-    expect(response.pointsAwarded).toBe(25);
-    expect(response.rarity).toBe('uncommon');
+    expect(response.pointsAwarded).toBe(500);
+    expect(response.rarity).toBe('legendary');
 
     // The crown leaves the map immediately: claimed AND expired at the instant.
     const crown = (await adminDb.collection('crownSpawns').doc(spawnId).get()).data()!;
@@ -556,7 +565,10 @@ describe('crownHunt.claimSpawn', () => {
   });
 
   it('is claimable ONCE GLOBALLY — the second member is told it is taken', async () => {
-    const spawnId = await placeCrown();
+    // EXCLUSIVE crown (legendary): the first taker removes it for everyone. A
+    // SHARED crown would let the rival collect too — that path is covered in the
+    // shared/exclusive suite in crownhunt-area-spawn.emulator.test.ts.
+    const spawnId = await placeCrown({ rarity: 'legendary', rewardPoints: 500 });
     await signInAs(hunter);
     const mine = (await call('crownHunt-claimSpawn', claimInput({ spawnId })))
       .data as ClaimResponse;
@@ -744,9 +756,7 @@ describe('revoking an area', () => {
           claimedByUid: null,
           claimedAt: null,
           createdAt: Timestamp.fromDate(now),
-          expiresAt: Timestamp.fromMillis(
-            now.getTime() + (expired ? -60_000 : 6 * 60 * 60 * 1000),
-          ),
+          expiresAt: Timestamp.fromMillis(now.getTime() + (expired ? -60_000 : 6 * 60 * 60 * 1000)),
         });
       }
       await batch.commit();
@@ -856,7 +866,9 @@ describe('scheduled sweeper', () => {
 
   it('sweeps a claimed crown, whose expiry was set to the claim instant', async () => {
     await clearSpawns();
-    const spawnId = await placeCrown();
+    // Exclusive crown so the claim flips it to expired-at-the-instant, which is
+    // exactly what the sweep below reaps.
+    const spawnId = await placeCrown({ rarity: 'legendary', rewardPoints: 500 });
     await signInAs(hunter);
     const claimed = (await call('crownHunt-claimSpawn', claimInput({ spawnId })))
       .data as ClaimResponse;
