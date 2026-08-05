@@ -44,8 +44,10 @@ import { db } from '../firebase';
 import { writeInAppNotification } from '../notifications/deliver';
 import {
   EVENT_CREATED_TITLE,
+  type EventCreatedFanOutSummary,
   eventCreatedNotificationId,
   eventCreatedPreview,
+  fanOutEventCreated,
   isEventPublishedTransition,
 } from './eventCreatedNotification-core';
 import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
@@ -71,26 +73,6 @@ const MAX_RECIPIENTS = 10_000;
  */
 const FANOUT_CONCURRENCY = 15;
 
-export interface EventCreatedFanOutSummary {
-  /** In-app notifications actually written across the audience. */
-  delivered: number;
-  /**
-   * Recipients writeInAppNotification DECLINED (opted out / suspended / deleted /
-   * a deterministic-id duplicate).
-   */
-  skipped: number;
-  /**
-   * Recipients whose delivery THREW (a rejected settled result). Counted so the
-   * MAX_RECIPIENTS cap is enforced on ATTEMPTS, not just successes — otherwise a
-   * systemic delivery failure (every write throwing) would advance neither
-   * delivered nor skipped and the run would scan the whole active-users
-   * collection before the cap could bind.
-   */
-  failed: number;
-  /** True when MAX_RECIPIENTS bound the scan. */
-  capped: boolean;
-}
-
 /**
  * Injectable I/O — production uses the real notification writer; a test can pass
  * a stub. Same test-seam intent as the reminder sweep's deps.
@@ -100,11 +82,43 @@ export interface EventCreatedFanOutDeps {
 }
 
 /**
+ * Lazily pages the active-member uids (users/{uid}.activeMember == true) with a
+ * documentId cursor — the SAME single-equality query notifications.adminSend's
+ * `members` audience uses, so NO composite index. Yielded page-by-page so the
+ * fan-out's attempts cap can stop the scan without ever loading the whole
+ * collection.
+ */
+async function* activeMemberPages(pageSize: number): AsyncGenerator<string[]> {
+  let cursor: string | null = null;
+  for (;;) {
+    let query = db
+      .collection('users')
+      .where('activeMember', '==', true)
+      .orderBy(FieldPath.documentId())
+      .limit(pageSize);
+    if (cursor !== null) {
+      query = query.startAfter(cursor);
+    }
+    const page = await query.get();
+    if (page.empty) {
+      return;
+    }
+    yield page.docs.map((doc) => doc.id);
+    if (page.size < pageSize) {
+      return;
+    }
+    cursor = page.docs[page.docs.length - 1]!.id;
+  }
+}
+
+/**
  * Fans the "new event" notice out to every active member (bar the creator) for
  * one just-published event. Exported so the emulator test can drive it directly
  * against seeded users + an event doc — the same test seam as the reminder
  * sweep's runEventReminders, so the untested surface stays just the onDocumentWritten
- * glue below.
+ * glue below. The cap / failure-counting / creator-exclusion loop lives in the
+ * pure fanOutEventCreated (eventCreatedNotification-core.ts) and is unit-tested
+ * there without the emulator; this function is only the Firestore I/O around it.
  *
  * Reads the event doc itself (title, createdByUserId) and re-checks status is
  * still `published` — a defensive re-derivation against the fresh document, so a
@@ -114,17 +128,17 @@ export async function runEventCreatedFanOut(
   eventId: string,
   deps: EventCreatedFanOutDeps = { deliver: writeInAppNotification },
 ): Promise<EventCreatedFanOutSummary> {
-  const summary: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
+  const empty: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
 
   const eventSnap = await db.collection('events').doc(eventId).get();
   if (!eventSnap.exists) {
-    return summary;
+    return empty;
   }
   // Re-check against the FRESH document, not the trigger's stale after-snapshot:
   // a cancel/complete landing between the publish and this read must abort the
   // announcement (the guard is cheap and prevents "new event!" for a dead one).
   if (eventSnap.get('status') !== 'published') {
-    return summary;
+    return empty;
   }
   const title = String(eventSnap.get('title') ?? '');
   // The creator is excluded from the broadcast, so a trustworthy creator uid is a
@@ -137,95 +151,37 @@ export async function runEventCreatedFanOut(
   const rawCreator = eventSnap.get('createdByUserId');
   if (typeof rawCreator !== 'string' || rawCreator.length === 0) {
     logger.error('Event-created fan-out aborted: event has no valid createdByUserId', { eventId });
-    return summary;
+    return empty;
   }
   const creatorUid = rawCreator;
   const notificationId = eventCreatedNotificationId(eventId);
   const previewText = eventCreatedPreview(title);
 
-  // How many recipients we have ATTEMPTED (delivered + declined + threw). The cap
-  // is on attempts, so a systemic failure cannot walk the whole collection.
-  const processed = () => summary.delivered + summary.skipped + summary.failed;
-
-  let cursor: string | null = null;
-  for (;;) {
-    const remaining = MAX_RECIPIENTS - processed();
-    if (remaining <= 0) {
-      summary.capped = true;
-      break;
-    }
-    let query = db
-      .collection('users')
-      .where('activeMember', '==', true)
-      .orderBy(FieldPath.documentId())
-      .limit(PAGE_SIZE);
-    if (cursor !== null) {
-      query = query.startAfter(cursor);
-    }
-    const page = await query.get();
-    if (page.empty) {
-      break;
-    }
-
-    // Skip the creator (they already know about their own event), then cap the
-    // page to the REMAINING budget so a run can never overshoot MAX_RECIPIENTS
-    // mid-page — even when every delivery is failing.
-    const allRecipients = page.docs
-      .map((doc) => doc.id)
-      .filter((uid) => uid !== creatorUid);
-    const recipients = allRecipients.slice(0, remaining);
-    if (recipients.length < allRecipients.length) {
-      summary.capped = true;
-    }
-
-    for (let i = 0; i < recipients.length; i += FANOUT_CONCURRENCY) {
-      const chunk = recipients.slice(i, i + FANOUT_CONCURRENCY);
-      const results = await Promise.allSettled(
-        chunk.map((uid) =>
-          deps.deliver(
-            uid,
-            {
-              category: 'event_created',
-              title: EVENT_CREATED_TITLE,
-              previewText,
-              actionType: 'open_event',
-              relatedEntityId: eventId,
-            },
-            notificationId,
-          ),
-        ),
-      );
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          if (result.value.delivered) {
-            summary.delivered += 1;
-          } else {
-            summary.skipped += 1;
-          }
-        } else {
-          // A per-member delivery failure must not abort the fan-out, but IS
-          // counted so the attempts cap can bind under a systemic failure.
-          // Logged PII-free: the member's position in the page, not their uid.
-          summary.failed += 1;
-          logger.error('Event-created notification delivery failed for a member', {
-            eventId,
-            memberIndex: i + index,
-            error: String(result.reason),
-          });
-        }
+  const summary = await fanOutEventCreated(activeMemberPages(PAGE_SIZE), {
+    creatorUid,
+    maxRecipients: MAX_RECIPIENTS,
+    concurrency: FANOUT_CONCURRENCY,
+    deliverOne: (uid) =>
+      deps.deliver(
+        uid,
+        {
+          category: 'event_created',
+          title: EVENT_CREATED_TITLE,
+          previewText,
+          actionType: 'open_event',
+          relatedEntityId: eventId,
+        },
+        notificationId,
+      ),
+    // PII-free: the member's position in the run, not their uid.
+    onFailure: (memberIndex, error) => {
+      logger.error('Event-created notification delivery failed for a member', {
+        eventId,
+        memberIndex,
+        error: String(error),
       });
-    }
-
-    // A mid-page truncation (the budget ran out inside this page) means the run
-    // is at the cap — stop rather than fetch another page.
-    if (summary.capped) {
-      break;
-    }
-    if (page.size < PAGE_SIZE) {
-      break;
-    }
-    cursor = page.docs[page.docs.length - 1]!.id;
-  }
+    },
+  });
 
   if (summary.capped) {
     logger.warn('Event-created fan-out hit the recipient cap; later members not notified', {

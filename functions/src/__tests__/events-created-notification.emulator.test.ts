@@ -201,32 +201,14 @@ describe('event-created fan-out (runEventCreatedFanOut)', () => {
   it('aborts (notifies nobody) when the event has no valid createdByUserId', async () => {
     const member = await seedUser('ec-nocreator-member');
     // A corrupt event doc missing createdByUserId: broadcasting would notify the
-    // community with a broken creator-exclusion, so the fan-out must abort.
+    // community with a broken creator-exclusion, so the fan-out must abort BEFORE
+    // any member is queried (the cheap guard — the cap/failure/exclusion accounting
+    // itself is unit-tested against fanOutEventCreated without the emulator).
     const eventId = await seedPublishedEvent(null);
 
     const summary = await runEventCreatedFanOut(eventId);
 
     expect(summary.delivered).toBe(0);
-    expect(await createdItem(member, eventId)).toBeNull();
-  });
-
-  it('counts failed deliveries so the attempt cap can bind under a systemic failure', async () => {
-    const creator = await seedUser('ec-fail-creator');
-    const member = await seedUser('ec-fail-member');
-    const eventId = await seedPublishedEvent(creator);
-
-    // Every delivery throws — nothing is delivered, but each attempt is counted
-    // as `failed` (the fix: without it the MAX_RECIPIENTS cap, computed from
-    // delivered + skipped + failed, could never bind).
-    const summary = await runEventCreatedFanOut(eventId, {
-      deliver: async () => {
-        throw new Error('boom');
-      },
-    });
-
-    expect(summary.delivered).toBe(0);
-    // At least our own seeded member was attempted and counted as a failure.
-    expect(summary.failed).toBeGreaterThanOrEqual(1);
     expect(await createdItem(member, eventId)).toBeNull();
   });
 });
