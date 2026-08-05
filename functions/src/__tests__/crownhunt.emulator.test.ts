@@ -654,6 +654,38 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(await collectAs(other, pointId)).toBe('point_inactive');
   });
 
+  it('consumes a slot only on AWARD, never on a failed attempt', async () => {
+    // A slot is tied to a distinct AWARDED collector, computed from the award
+    // transaction's own reads — not to attempts. A failed (non-awarding)
+    // attempt must not move collectorCount, and the same user then succeeding
+    // must take exactly one slot.
+    const pointId = await createActivePoint({ maxCollectors: 2 });
+    const a = await createFreshMember('ch-slot-a');
+    const b = await createFreshMember('ch-slot-b');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+
+    // b misses the geofence — no award, so no slot is consumed.
+    await signInAs(b);
+    const outside = (
+      await call('crownHunt-submitClaim', claimInput({ pointId, latitude: POINT_LAT + 0.01 }))
+    ).data as { result: string };
+    expect(outside.result).toBe('outside_geofence');
+    const mid = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(mid.collectorCount).toBe(1);
+    expect(mid.status).toBe('active');
+
+    // b now collects properly → exactly one new slot, filling the cap.
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    const after = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(after.collectorCount).toBe(2);
+    expect(after.status).toBe('ended');
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(2);
+  });
+
   it('back-compat: a point with no maxCollectors field behaves as unlimited', async () => {
     // Simulate a pre-existing point created before this feature: activate a
     // point, then strip the maxCollectors/collectorCount fields to mimic the

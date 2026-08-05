@@ -608,6 +608,16 @@ export const submitClaim = onCall(
           // the live point INSIDE the transaction so a full crown cannot be
           // over-collected by a concurrent burst.
           if (maxCollectors !== null) {
+            // creditPoints runs this whole callback again on each Firestore
+            // retry (contention on the point counter is expected at a busy
+            // event), so RESET the collector-slot state every attempt and
+            // derive it ONLY from this attempt's reads below. Never let a value
+            // computed in a previous, aborted attempt leak into the write phase
+            // (e.g. a stale isNewCollector would double-create the marker /
+            // re-increment the count on a retry where the marker now exists).
+            isNewCollector = false;
+            nextCollectorCount = 0;
+            capReached = false;
             const [markerSnap, pointTxSnap] = await Promise.all([
               tx.get(collectorMarkerRef),
               tx.get(pointRef),
