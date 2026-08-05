@@ -195,7 +195,7 @@ class EventTest {
             57.5 to 12.1,
             EventLocationPicker.startCenter(latitude = 57.5, longitude = 12.1),
         )
-        // No pin → default.
+        // No pin and no user location → the last-resort default.
         assertEquals(
             EventLocationPicker.DEFAULT_LATITUDE to EventLocationPicker.DEFAULT_LONGITUDE,
             EventLocationPicker.startCenter(latitude = null, longitude = null),
@@ -204,6 +204,92 @@ class EventTest {
         assertEquals(
             EventLocationPicker.DEFAULT_LATITUDE to EventLocationPicker.DEFAULT_LONGITUDE,
             EventLocationPicker.startCenter(latitude = 57.5, longitude = null),
+        )
+    }
+
+    @Test
+    fun `location picker prefers the user's own location over the default`() {
+        // Primary default is the user's current location, NOT the fixed town.
+        assertEquals(
+            59.33 to 18.06,
+            EventLocationPicker.startCenter(
+                latitude = null,
+                longitude = null,
+                userLatitude = 59.33,
+                userLongitude = 18.06,
+            ),
+        )
+    }
+
+    @Test
+    fun `an existing pin overrides the user's own location`() {
+        // A point the user has already placed always wins over the location fix.
+        assertEquals(
+            57.5 to 12.1,
+            EventLocationPicker.startCenter(
+                latitude = 57.5,
+                longitude = 12.1,
+                userLatitude = 59.33,
+                userLongitude = 18.06,
+            ),
+        )
+    }
+
+    @Test
+    fun `user location is skipped when absent or invalid, falling back to the default`() {
+        // Permission denied / no fix available → user location null → default.
+        assertEquals(
+            EventLocationPicker.DEFAULT_LATITUDE to EventLocationPicker.DEFAULT_LONGITUDE,
+            EventLocationPicker.startCenter(
+                latitude = null,
+                longitude = null,
+                userLatitude = null,
+                userLongitude = null,
+            ),
+        )
+        // A half-set fix is treated as absent, not a bogus centre.
+        assertEquals(
+            EventLocationPicker.DEFAULT_LATITUDE to EventLocationPicker.DEFAULT_LONGITUDE,
+            EventLocationPicker.startCenter(
+                latitude = null,
+                longitude = null,
+                userLatitude = 59.33,
+                userLongitude = null,
+            ),
+        )
+        // An out-of-range fix is rejected and falls back to the default.
+        assertEquals(
+            EventLocationPicker.DEFAULT_LATITUDE to EventLocationPicker.DEFAULT_LONGITUDE,
+            EventLocationPicker.startCenter(
+                latitude = null,
+                longitude = null,
+                userLatitude = 999.0,
+                userLongitude = 18.06,
+            ),
+        )
+    }
+
+    @Test
+    fun `isSameCenter treats a sub-threshold delta as the same point, else different`() {
+        // Identical centres → same, so the late-fix recentre skips the no-op move.
+        assertTrue(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874, 12.0757))
+        // A delta below the epsilon on both axes is still "same".
+        val tiny = EventLocationPicker.CENTER_EPSILON_DEG / 2
+        assertTrue(
+            EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874 + tiny, 12.0757 - tiny),
+        )
+        // A real move (either axis past the epsilon) is different → recentre runs.
+        val big = EventLocationPicker.CENTER_EPSILON_DEG * 10
+        assertFalse(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874 + big, 12.0757))
+        assertFalse(EventLocationPicker.isSameCenter(57.4874, 12.0757, 57.4874, 12.0757 + big))
+        // The user's location vs the Kungsbacka default is clearly different.
+        assertFalse(
+            EventLocationPicker.isSameCenter(
+                59.33,
+                18.06,
+                EventLocationPicker.DEFAULT_LATITUDE,
+                EventLocationPicker.DEFAULT_LONGITUDE,
+            ),
         )
     }
 

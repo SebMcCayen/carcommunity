@@ -17,6 +17,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -28,6 +29,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kungsbackacarcommunity.app.R
+import com.mapbox.android.gestures.MoveGestureDetector
+import com.mapbox.android.gestures.RotateGestureDetector
+import com.mapbox.android.gestures.ShoveGestureDetector
+import com.mapbox.android.gestures.StandardScaleGestureDetector
 import com.mapbox.common.MapboxOptions
 import com.mapbox.geojson.Point
 import com.mapbox.maps.MapView
@@ -35,6 +40,11 @@ import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
+import com.mapbox.maps.plugin.gestures.OnMoveListener
+import com.mapbox.maps.plugin.gestures.OnRotateListener
+import com.mapbox.maps.plugin.gestures.OnScaleListener
+import com.mapbox.maps.plugin.gestures.OnShoveListener
+import com.mapbox.maps.plugin.gestures.gestures
 
 /**
  * Pure helpers for the event location picker, kept Android-free so the "where
@@ -52,9 +62,16 @@ import com.mapbox.maps.plugin.delegates.listeners.OnCameraChangeListener
  */
 object EventLocationPicker {
     /**
-     * The default map centre when the event has no pin yet: Kungsbacka, the town
-     * the app serves (same coordinates the main map's default camera uses —
-     * map/MapMarkers.DEFAULT_CAMERA). Longitude then latitude.
+     * Last-resort map centre used only when neither the event's own pin nor the
+     * user's current location is available: Kungsbacka, the town the app serves
+     * (same coordinates the main map's default camera uses —
+     * map/MapMarkers.DEFAULT_CAMERA). This is a FALLBACK only; the primary
+     * default is the user's own location (see [startCenter]).
+     *
+     * These are two independent named constants, not an ordered pair —
+     * [startCenter] returns (latitude, longitude), while the constants are fed to
+     * Mapbox's `Point.fromLngLat` in (longitude, latitude) order at the call
+     * site; always pass each one by name so the order can't be transposed.
      */
     const val DEFAULT_LONGITUDE = 12.0757
     const val DEFAULT_LATITUDE = 57.4874
@@ -63,21 +80,62 @@ object EventLocationPicker {
     const val START_ZOOM = 13.0
 
     /**
-     * Where the pin should start: the event's existing coordinates when it
-     * already has a (valid, complete) pin, otherwise the Kungsbacka default. A
-     * half-set or out-of-range pair is treated as "no pin" and falls back to the
-     * default rather than starting the camera at a bogus point. Returns
-     * (latitude, longitude).
+     * Where the pin should start, in priority order:
+     *  1. the event's existing pin, when it already has a valid, complete one —
+     *     a user-placed point (editing / re-opening the picker) always wins;
+     *  2. otherwise the user's OWN current location, when available and valid —
+     *     the primary default, so a member creating an event starts where they
+     *     are rather than at a fixed town;
+     *  3. otherwise the Kungsbacka fallback, for the permission-denied /
+     *     location-unavailable / token-less-CI cases.
+     *
+     * A half-set or out-of-range pair (for either the pin or the user fix) is
+     * treated as absent and skipped rather than starting the camera at a bogus
+     * point. Returns (latitude, longitude).
      */
-    fun startCenter(latitude: Double?, longitude: Double?): Pair<Double, Double> =
+    fun startCenter(
+        latitude: Double?,
+        longitude: Double?,
+        userLatitude: Double? = null,
+        userLongitude: Double? = null,
+    ): Pair<Double, Double> {
         if (latitude != null &&
             longitude != null &&
             Events.isValidCoordinatePair(latitude, longitude)
         ) {
-            latitude to longitude
-        } else {
-            DEFAULT_LATITUDE to DEFAULT_LONGITUDE
+            return latitude to longitude
         }
+        if (userLatitude != null &&
+            userLongitude != null &&
+            Events.isValidCoordinatePair(userLatitude, userLongitude)
+        ) {
+            return userLatitude to userLongitude
+        }
+        return DEFAULT_LATITUDE to DEFAULT_LONGITUDE
+    }
+
+    /**
+     * Below this per-axis degree delta a recentre would move the camera an
+     * imperceptible distance (~0.1 m at these latitudes), so it is treated as
+     * "already there".
+     */
+    const val CENTER_EPSILON_DEG = 1e-6
+
+    /**
+     * Whether two centres are effectively the same point — within
+     * [CENTER_EPSILON_DEG] on both axes. The late-fix recentre uses it to skip a
+     * no-op move when the camera already sits on the resolved start centre (e.g.
+     * the very first effect run, right after the factory seeded that same centre),
+     * so a camera that is already where it wants to be is never disturbed.
+     */
+    fun isSameCenter(
+        lat1: Double,
+        lng1: Double,
+        lat2: Double,
+        lng2: Double,
+    ): Boolean =
+        kotlin.math.abs(lat1 - lat2) < CENTER_EPSILON_DEG &&
+            kotlin.math.abs(lng1 - lng2) < CENTER_EPSILON_DEG
 }
 
 /**
@@ -92,6 +150,13 @@ object EventLocationPicker {
  * stays free of the navigation/geocoding stack (a manual name field, retained on
  * purpose; see the slice notes).
  *
+ * The camera OPENS on the user's own location ([userLatitude]/[userLongitude],
+ * a last-known fix the caller reads up front) when the event has no pin yet, so
+ * a member starts where they are and pins from there; it falls back to the
+ * Kungsbacka default only when no pin and no location are available. If the fix
+ * lands after the map is already showing, the camera slides to it once — unless
+ * the user has already started panning (see the recentre effect).
+ *
  * On-device only: the Mapbox [MapView] renders and pans only on a
  * token-provisioned device, so the map itself is verified on device. Without a
  * token ([hasToken] false — CI / no-Firebase) the map area shows a neutral
@@ -102,14 +167,21 @@ object EventLocationPicker {
 fun EventLocationPickerScreen(
     initialLatitude: Double?,
     initialLongitude: Double?,
+    userLatitude: Double?,
+    userLongitude: Double?,
     hasToken: Boolean,
     onConfirm: (latitude: Double, longitude: Double) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val (startLat, startLng) =
-        remember(initialLatitude, initialLongitude) {
-            EventLocationPicker.startCenter(initialLatitude, initialLongitude)
+        remember(initialLatitude, initialLongitude, userLatitude, userLongitude) {
+            EventLocationPicker.startCenter(
+                latitude = initialLatitude,
+                longitude = initialLongitude,
+                userLatitude = userLatitude,
+                userLongitude = userLongitude,
+            )
         }
 
     // The live camera centre, updated as the user pans; seeded to the start
@@ -124,6 +196,65 @@ fun EventLocationPickerScreen(
     // GL/rendering resources each time — same teardown MapScreen and
     // MapboxMapSurface do.
     val cameraListenerHolder = remember { arrayOfNulls<OnCameraChangeListener>(1) }
+    // Detaches the user-gesture listeners (pan/zoom/rotate/tilt), held for the
+    // same teardown as the camera listener. They flip [userMovedCamera] so a late
+    // location fix never yanks the camera once the user has taken over.
+    val gestureDetachHolder = remember { arrayOfNulls<() -> Unit>(1) }
+    // The live MapView, published from the factory so a late-arriving location
+    // fix can recentre its camera (the factory runs once and cannot see later
+    // state changes on its own).
+    var mapView by remember { mutableStateOf<MapView?>(null) }
+    // Set the moment the user pans/zooms/rotates/tilts the map; guards the
+    // recentre effect.
+    var userMovedCamera by remember { mutableStateOf(false) }
+
+    // A last-known fix that lands AFTER the map is already showing (the user
+    // opened the picker faster than the one-shot location read resolved): slide
+    // the camera to the freshly resolved centre and re-seed the captured centre.
+    // Keyed on the resolved centre, so it fires when the user's location first
+    // arrives (the pair changes) and NOT on a plain pan (which leaves startLat/
+    // startLng unchanged). Skipped once the user has moved the map themselves —
+    // [userMovedCamera] is a key too, so the moment it flips true the effect
+    // restarts and the guard below returns, making the skip deterministic even if
+    // the user starts panning in the same frame the fix lands.
+    LaunchedEffect(mapView, startLat, startLng, userMovedCamera) {
+        val view = mapView ?: return@LaunchedEffect
+        if (userMovedCamera) return@LaunchedEffect
+        // No-op recentre guard: if the camera already sits on the resolved centre
+        // (e.g. this is the first run, right after the factory seeded that same
+        // point), there is nothing to move — never disturb a camera already there.
+        val current = runCatching { view.mapboxMap.cameraState.center }.getOrNull()
+        if (current != null &&
+            EventLocationPicker.isSameCenter(
+                current.latitude(), current.longitude(), startLat, startLng,
+            )
+        ) {
+            return@LaunchedEffect
+        }
+        // Re-check ownership RIGHT before touching the camera: the top guard ran a
+        // frame ago and a gesture flips [userMovedCamera] but cannot cancel this
+        // non-suspending body once it is running, so a user who grabbed the map in
+        // between would otherwise still get yanked. Bail without moving if so.
+        if (userMovedCamera) return@LaunchedEffect
+        // Only adopt the new centre as the captured coordinate if the camera
+        // actually moved there; a thrown setCamera (teardown/race) leaves the
+        // captured pair on the last real camera position rather than desyncing it.
+        val moved =
+            runCatching {
+                view.mapboxMap.setCamera(
+                    cameraOptions {
+                        center(Point.fromLngLat(startLng, startLat))
+                        zoom(EventLocationPicker.START_ZOOM)
+                    },
+                )
+            }.isSuccess
+        // And re-check AFTER: only claim the recentred point as the captured
+        // coordinate if the user still has not taken over in the meantime.
+        if (moved && !userMovedCamera) {
+            centerLat = startLat
+            centerLng = startLng
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (hasToken) {
@@ -156,16 +287,75 @@ fun EventLocationPickerScreen(
                             }
                         cameraListenerHolder[0] = listener
                         mapboxMap.addOnCameraChangeListener(listener)
-                    }
+                        // ANY user camera gesture — pan, pinch-zoom, rotate or
+                        // tilt — takes ownership of the camera: after the first one
+                        // a late location fix must not recentre (or reset the zoom).
+                        // Same set of gestures MapboxMapSurface treats as "the user
+                        // took over"; the *Begin callbacks are the earliest signal.
+                        val markMoved = { userMovedCamera = true }
+                        val moveListener =
+                            object : OnMoveListener {
+                                override fun onMoveBegin(detector: MoveGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onMove(detector: MoveGestureDetector): Boolean = false
+
+                                override fun onMoveEnd(detector: MoveGestureDetector) = Unit
+                            }
+                        val scaleListener =
+                            object : OnScaleListener {
+                                override fun onScaleBegin(detector: StandardScaleGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onScale(detector: StandardScaleGestureDetector) = Unit
+
+                                override fun onScaleEnd(detector: StandardScaleGestureDetector) = Unit
+                            }
+                        val rotateListener =
+                            object : OnRotateListener {
+                                override fun onRotateBegin(detector: RotateGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onRotate(detector: RotateGestureDetector) = Unit
+
+                                override fun onRotateEnd(detector: RotateGestureDetector) = Unit
+                            }
+                        val shoveListener =
+                            object : OnShoveListener {
+                                override fun onShoveBegin(detector: ShoveGestureDetector) {
+                                    markMoved()
+                                }
+
+                                override fun onShove(detector: ShoveGestureDetector) = Unit
+
+                                override fun onShoveEnd(detector: ShoveGestureDetector) = Unit
+                            }
+                        gestures.addOnMoveListener(moveListener)
+                        gestures.addOnScaleListener(scaleListener)
+                        gestures.addOnRotateListener(rotateListener)
+                        gestures.addOnShoveListener(shoveListener)
+                        gestureDetachHolder[0] = {
+                            runCatching { gestures.removeOnMoveListener(moveListener) }
+                            runCatching { gestures.removeOnScaleListener(scaleListener) }
+                            runCatching { gestures.removeOnRotateListener(rotateListener) }
+                            runCatching { gestures.removeOnShoveListener(shoveListener) }
+                        }
+                    }.also { view -> mapView = view }
                 },
-                onRelease = { mapView ->
+                onRelease = { view ->
                     // Detach before destroying so a torn-down map can never write
                     // back into the (gone) composition state.
                     cameraListenerHolder[0]?.let { listener ->
-                        runCatching { mapView.mapboxMap.removeOnCameraChangeListener(listener) }
+                        runCatching { view.mapboxMap.removeOnCameraChangeListener(listener) }
                     }
                     cameraListenerHolder[0] = null
-                    runCatching { mapView.onDestroy() }
+                    gestureDetachHolder[0]?.invoke()
+                    gestureDetachHolder[0] = null
+                    mapView = null
+                    runCatching { view.onDestroy() }
                 },
             )
         } else {
