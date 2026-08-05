@@ -126,6 +126,12 @@ function numberInputs(): HTMLInputElement[] {
   return [...container.querySelectorAll('input[type="number"]')] as HTMLInputElement[];
 }
 
+/** The rarity tier toggle buttons (aria-pressed group inside the form). */
+function tierButtons(): HTMLButtonElement[] {
+  const form = container.querySelector('form')!;
+  return [...form.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[];
+}
+
 async function fillCoordinates() {
   const [lat, lng] = numberInputs();
   await act(async () => {
@@ -171,21 +177,30 @@ describe('Kronjakt point form — collectable redesign', () => {
     await openCreateForm();
 
     const form = container.querySelector('form')!;
-    // No free-text fields at all: the only textareas in this surface belonged
-    // to Title/Description, which are gone.
+    // No free-text fields at all. A reintroduced Title/Description would appear
+    // as a <textarea> or a text/free-form <input>, so assert BOTH are absent —
+    // the map picker's lat/lng are type="number" and don't count. (The only
+    // text-like control left is the availability datepicker, which is not a
+    // free-text field.)
     expect(form.querySelector('textarea')).toBeNull();
+    expect(form.querySelector('input[type="text"]')).toBeNull();
+    const freeTextInputs = [...form.querySelectorAll('input')].filter((el) => {
+      const type = (el.getAttribute('type') ?? 'text').toLowerCase();
+      return ['text', 'search', 'email', 'url', 'tel'].includes(type);
+    });
+    expect(freeTextInputs).toHaveLength(0);
     expect(form.textContent).not.toContain(t('crownHunt.formTitleLabel')); // 'Titel'
     expect(form.textContent).not.toContain(t('crownHunt.formDescriptionLabel')); // 'Beskrivning'
 
-    // Rarity tier selector: four colour-coded options, Common..Legendary.
-    const radios = [...form.querySelectorAll('[role="radio"]')];
-    expect(radios).toHaveLength(4);
-    const labels = radios.map((r) => r.textContent);
+    // Rarity tier selector: four colour-coded toggle buttons, Common..Legendary.
+    const tiers = tierButtons();
+    expect(tiers).toHaveLength(4);
+    const labels = tiers.map((r) => r.textContent);
     for (const key of ['tier_common', 'tier_rare', 'tier_epic', 'tier_legendary']) {
       expect(labels.some((l) => l?.includes(t(`crownHunt.${key}`)))).toBe(true);
     }
-    // Default tier is Common.
-    expect(radios.find((r) => r.getAttribute('aria-checked') === 'true')?.textContent).toContain(
+    // Default tier is Common (aria-pressed toggle group).
+    expect(tiers.find((r) => r.getAttribute('aria-pressed') === 'true')?.textContent).toContain(
       t('crownHunt.tier_common'),
     );
   });
@@ -211,9 +226,9 @@ describe('Kronjakt point form — collectable redesign', () => {
     await openCreateForm();
     await fillCoordinates();
 
-    const legendary = [...container.querySelectorAll('[role="radio"]')].find((r) =>
+    const legendary = tierButtons().find((r) =>
       r.textContent?.includes(t('crownHunt.tier_legendary')),
-    ) as HTMLButtonElement;
+    )!;
     await act(async () => {
       legendary.click();
     });
@@ -232,10 +247,8 @@ describe('Kronjakt point form — collectable redesign', () => {
       buttonByText(t('crownHunt.editPoint')).click();
     });
 
-    const checked = [...container.querySelectorAll('[role="radio"]')].find(
-      (r) => r.getAttribute('aria-checked') === 'true',
-    );
-    expect(checked?.textContent).toContain(t('crownHunt.tier_rare'));
+    const pressed = tierButtons().find((r) => r.getAttribute('aria-pressed') === 'true');
+    expect(pressed?.textContent).toContain(t('crownHunt.tier_rare'));
   });
 
   it('keeps the safe-location confirmation REQUIRED to activate a draft', async () => {

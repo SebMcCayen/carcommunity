@@ -200,7 +200,11 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
 
       <fieldset className={styles.tierFieldset}>
         <legend className={styles.label}>{t('crownHunt.formTierLabel')}</legend>
-        <div className={styles.tierGrid} role="radiogroup" aria-label={t('crownHunt.formTierLabel')}>
+        {/* Toggle-button group: the <fieldset>/<legend> labels the set and each
+            button reports its state via aria-pressed. This deliberately avoids
+            role="radiogroup"/"radio", which would also require roving-tabindex
+            + arrow-key navigation to be a faithful ARIA radio pattern. */}
+        <div className={styles.tierGrid}>
           {CROWN_TIER_ORDER.map((tier) => {
             const spec = CROWN_TIER_TABLE[tier];
             const selected = form.tier === tier;
@@ -208,8 +212,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
               <button
                 type="button"
                 key={tier}
-                role="radio"
-                aria-checked={selected}
+                aria-pressed={selected}
                 className={`${styles.tierOption} ${selected ? styles.tierOptionSelected : ''}`}
                 style={{ ['--tier-color' as string]: spec.color }}
                 onClick={() => set('tier', tier)}
