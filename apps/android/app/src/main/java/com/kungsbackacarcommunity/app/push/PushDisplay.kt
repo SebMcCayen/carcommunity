@@ -78,6 +78,7 @@ object PushDisplay {
     /** Channel for a category (unknown categories already fall back to SYSTEM_NOTICE). */
     fun channelFor(category: NotificationCategory): PushChannel =
         when (category) {
+            NotificationCategory.EVENT_CREATED,
             NotificationCategory.EVENT_REMINDER,
             NotificationCategory.EVENT_UPDATED,
             NotificationCategory.EVENT_CANCELLED,

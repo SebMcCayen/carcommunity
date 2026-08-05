@@ -39,6 +39,7 @@
  * These may be sent to users and appear in preference settings.
  */
 export const ACTIVE_NOTIFICATION_CATEGORIES = [
+  'event_created',
   'event_reminder',
   'event_updated',
   'event_cancelled',

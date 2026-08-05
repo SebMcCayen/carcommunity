@@ -159,6 +159,9 @@ fun ChatHubRoute(
     // Lets the Notifications tab's convoy rows resolve their convoy's state and
     // open it. Forwarded untouched; see [NotificationsRoute].
     convoyLink: ConvoyNotificationLink? = null,
+    // Opens an event's detail from an event notification tap in the inbox tab.
+    // Forwarded untouched; see [NotificationsRoute].
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
@@ -180,6 +183,7 @@ fun ChatHubRoute(
             blockingRepository = blockingRepository,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
+            onOpenEvent = onOpenEvent,
         )
     }
 }
@@ -239,6 +243,9 @@ fun ChatHubPopup(
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
     convoyLink: ConvoyNotificationLink? = null,
+    // Opens an event's detail from an event notification tap in the inbox tab.
+    // Forwarded untouched; see [NotificationsRoute].
+    onOpenEvent: ((String) -> Unit)? = null,
     // Set when the hub was opened by an affordance that names WHERE it should
     // land, rather than by the plain chat bubble: today the map shell's convoy bar
     // chat icon, which passes a CONVOY_CHAT link for the convoy it badges so the
@@ -280,6 +287,7 @@ fun ChatHubPopup(
             blockingRepository = blockingRepository,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
+            onOpenEvent = onOpenEvent,
         )
     }
 }
@@ -341,6 +349,7 @@ private fun ChatHubContent(
     blockingRepository: BlockingRepository?,
     pushDeepLink: PushDeepLink? = null,
     convoyLink: ConvoyNotificationLink? = null,
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     // Seeded from any push deep-link so the hub OPENS on the linked tab (and the
     // pager below opens on the matching page with no scroll animation). Absent a
@@ -680,6 +689,7 @@ private fun ChatHubContent(
                                 // closing routes through the hub's close.
                                 onBack = onClose,
                                 convoyLink = convoyLink,
+                                onOpenEvent = onOpenEvent,
                                 // The Notifications TAB above already says where
                                 // the member is; a "Notifications" header under it
                                 // would only repeat it.

@@ -8,6 +8,7 @@ class NotificationTest {
 
     @Test
     fun `category parses wire values and defaults to system notice`() {
+        assertEquals(NotificationCategory.EVENT_CREATED, NotificationCategory.fromWire("event_created"))
         assertEquals(NotificationCategory.EVENT_REMINDER, NotificationCategory.fromWire("event_reminder"))
         assertEquals(NotificationCategory.ACCOUNT_SUSPENSION, NotificationCategory.fromWire("account_suspension"))
         assertEquals(NotificationCategory.SYSTEM_NOTICE, NotificationCategory.fromWire("mystery"))

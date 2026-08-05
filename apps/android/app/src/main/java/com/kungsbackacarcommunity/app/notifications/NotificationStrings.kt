@@ -7,6 +7,7 @@ import com.kungsbackacarcommunity.app.R
 @StringRes
 fun NotificationCategory.labelRes(): Int =
     when (this) {
+        NotificationCategory.EVENT_CREATED -> R.string.notifications_categoryEventCreated
         NotificationCategory.EVENT_REMINDER -> R.string.notifications_categoryEventReminder
         NotificationCategory.EVENT_UPDATED -> R.string.notifications_categoryEventUpdated
         NotificationCategory.EVENT_CANCELLED -> R.string.notifications_categoryEventCancelled

@@ -153,6 +153,10 @@ fun NotificationsScreen(
     deleteError: NotificationDeleteError? = null,
     onDismissDeleteError: () -> Unit = {},
     convoyLink: ConvoyNotificationLink? = null,
+    // Opens an event's detail from an event notification tap (event_created and
+    // the other event categories). Null when the host cannot navigate — the row
+    // then keeps its old mark-read-only behaviour. See [EventNotifications].
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     var confirmDeleteAll by remember { mutableStateOf(false) }
     // Zone, locale and the device's 12/24-hour setting, resolved ONCE for the
@@ -263,6 +267,19 @@ fun NotificationsScreen(
                                     convoyLink?.facts.orEmpty(),
                                 )
                             val tapAction = ConvoyNotifications.tapAction(item, convoyState)
+                            // An event notification opens that event's detail; a
+                            // convoy invite opens the convoy list. The two are
+                            // disjoint categories, so at most one applies.
+                            val eventId = EventNotifications.eventId(item)
+                            val onOpen: (() -> Unit)? =
+                                when {
+                                    eventId != null && onOpenEvent != null ->
+                                        ({ onOpenEvent(eventId) })
+                                    convoyLink != null &&
+                                        ConvoyNotifications.navigates(tapAction) ->
+                                        ({ convoyLink.onOpen(tapAction) })
+                                    else -> null
+                                }
                             SwipeToDeleteRow(onDelete = { onDeleteNotification(item.id) }) {
                                 NotificationCard(
                                     item = item,
@@ -278,10 +295,7 @@ fun NotificationsScreen(
                                     // Null when there is nowhere to go: the card
                                     // then keeps its old behaviour (clickable
                                     // only while unread, to mark read).
-                                    onOpen =
-                                        convoyLink
-                                            ?.takeIf { ConvoyNotifications.navigates(tapAction) }
-                                            ?.let { link -> { link.onOpen(tapAction) } },
+                                    onOpen = onOpen,
                                 )
                             }
                         }

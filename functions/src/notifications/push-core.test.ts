@@ -122,6 +122,7 @@ const PASS_THROUGH_CATEGORIES = [
   'convoy_invite',
   'convoy_update',
   'friend_request',
+  'event_created',
   'event_reminder',
   'event_updated',
   'event_cancelled',

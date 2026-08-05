@@ -83,6 +83,39 @@ class NotificationsScreenTest {
     }
 
     @Test
+    fun tappingAnEventNotification_opensThatEventAndMarksRead() {
+        var markedRead: String? = null
+        var openedEventId: String? = null
+        val eventItem =
+            AppNotification(
+                id = "ev-notif",
+                category = NotificationCategory.EVENT_CREATED,
+                title = "New event added",
+                previewText = "\"Cars & Coffee\" har lagts till.",
+                body = null,
+                isRead = false,
+                createdAtMillis = 0L,
+                actionType = NotificationActionType.NONE,
+                relatedEntityId = "event-42",
+            )
+        composeTestRule.setContent {
+            KccTheme {
+                NotificationsScreen(
+                    state = NotificationsState.Loaded(listOf(eventItem)),
+                    onMarkRead = { markedRead = it },
+                    onMarkAllRead = {},
+                    onBack = {},
+                    onOpenEvent = { openedEventId = it },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText("New event added").performScrollTo().performClick()
+        // Tapping an event row both marks it read AND deep-links to the event.
+        assertEquals("ev-notif", markedRead)
+        assertEquals("event-42", openedEventId)
+    }
+
+    @Test
     fun allRead_hidesMarkAllRead() {
         composeTestRule.setContent {
             KccTheme {
