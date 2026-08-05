@@ -47,6 +47,7 @@ import {
   CROWN_CELL_STATS_COLLECTION,
   CROWN_LEADERBOARD_COLLECTION,
   CROWN_SPAWN_STATS_COLLECTION,
+  CROWN_STATS_RARITIES,
   CROWN_STAT_LEDGER_FOLDS_COLLECTION,
   CROWN_STAT_SPAWN_FOLDS_COLLECTION,
   CROWN_USER_STATS_COLLECTION,
@@ -160,6 +161,13 @@ export const onCrownLedgerEntryForStats = onDocumentCreated(
           previousLast instanceof Timestamp && previousLast.toMillis() >= collectedAt.getTime();
         const patch: Record<string, unknown> = {
           uid,
+          // Contract-completeness: initialise the fields the crownSpawns trigger
+          // owns so a member who ONLY collects hand-placed crowns (ledger-only
+          // path — no crownSpawns document ever fires for them) still gets a
+          // stats doc with `byRarity` and `seasonsWon` present. Both are no-ops
+          // (increment 0) on any value the other writers set.
+          byRarity: rarityInitZeros(),
+          seasonsWon: FieldValue.increment(0),
           updatedAt: FieldValue.serverTimestamp(),
         };
         if (!keepExistingLast) {
@@ -192,6 +200,21 @@ function cellStatsRef(cellKey: string): FirebaseFirestore.DocumentReference {
 
 function rarityField(base: string, rarity: CrownStatsRarity | null): Record<string, unknown> {
   return rarity ? { [base]: { [rarity]: FieldValue.increment(1) } } : {};
+}
+
+/**
+ * All four rarity buckets as `increment(0)` — makes a `byRarity` map a PRESENT,
+ * full four-key map without changing any count. Used so `crownHuntUserStats`
+ * always satisfies the read contract (`byRarity` present) whichever trigger
+ * writes the document first; `increment(0)` is a no-op on any bucket that
+ * already has a real count.
+ */
+function rarityInitZeros(): Record<string, FirebaseFirestore.FieldValue> {
+  const out: Record<string, FirebaseFirestore.FieldValue> = {};
+  for (const r of CROWN_STATS_RARITIES) {
+    out[r] = FieldValue.increment(0);
+  }
+  return out;
 }
 
 /**
@@ -321,7 +344,13 @@ export const onCrownSpawnStatsWritten = onDocumentWritten(
           const incumbent: CrownStatsRarity | null = isCrownStatsRarity(current) ? current : null;
           const patch: Record<string, unknown> = {
             uid: claimedByUid,
-            byRarity: { [rarity]: FieldValue.increment(1) },
+            // Full four-key map (target +1, the rest +0) plus a seasonsWon
+            // initialiser, so if this trigger is the FIRST writer of the stats
+            // doc (trigger ordering is not guaranteed) it is already
+            // contract-complete rather than missing seasonsWon until the ledger
+            // trigger catches up.
+            byRarity: { ...rarityInitZeros(), [rarity]: FieldValue.increment(1) },
+            seasonsWon: FieldValue.increment(0),
             updatedAt: FieldValue.serverTimestamp(),
           };
           if (rarerThan(rarity, incumbent)) {

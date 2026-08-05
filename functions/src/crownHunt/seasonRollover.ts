@@ -87,6 +87,9 @@ async function readScopeEntries(scope: string): Promise<LeaderboardCounter[]> {
   const snap = await db
     .collection(CROWN_LEADERBOARD_COLLECTION)
     .where('scope', '==', scope)
+    // Only these three fields feed the ranking — project them so a large
+    // season's board is not read in full on the monthly rollover.
+    .select('uid', 'points', 'crownsCollected')
     .get();
   const entries: LeaderboardCounter[] = [];
   for (const doc of snap.docs) {
@@ -190,16 +193,16 @@ export async function finalizeSeason(seasonId: string): Promise<void> {
   const ranked = rankLeaderboard(await readScopeEntries(seasonId));
   const topRanked = ranked.slice(0, SEASON_STANDINGS_LIMIT);
   const podium = ranked.slice(0, 3);
-  const winners: SeasonWinner[] = [];
-  for (const row of podium) {
-    winners.push({
+  // The three podium name lookups are independent — resolve them in parallel.
+  const winners: SeasonWinner[] = await Promise.all(
+    podium.map(async (row) => ({
       rank: row.rank,
       uid: row.uid,
       points: row.points,
       crownsCollected: row.crownsCollected,
       displayName: await resolveDisplayName(row.uid),
-    });
-  }
+    })),
+  );
 
   // Flip active -> ended and store standings in one transaction; the transition
   // is the idempotency guard.

@@ -221,6 +221,63 @@ describe('leaderboard aggregation (ledger trigger)', () => {
   });
 });
 
+describe('userStats is contract-complete regardless of which trigger fires first', () => {
+  const RARITIES = ['common', 'uncommon', 'rare', 'legendary'] as const;
+
+  it('the ledger-only (hand-placed) path still writes byRarity + seasonsWon', async () => {
+    const uid = await provisionUser(`${TAG}-ledgeronly`);
+    // A hand-placed collection: a crown_hunt ledger entry with NO crownSpawns
+    // document, so the crownSpawns trigger never fires for this member.
+    await writeCrownLedgerEntry(uid, `${TAG}-lo1`, 25, new Date());
+    const s = await pollUntil(async () => {
+      const st = await userStats(uid);
+      return st && st.seasonsWon !== undefined && st.byRarity !== undefined ? st : undefined;
+    });
+    expect(s.seasonsWon).toBe(0);
+    // byRarity present as a full four-key map, all zero (no spawned crowns).
+    for (const r of RARITIES) {
+      expect(s.byRarity?.[r]).toBe(0);
+    }
+  });
+
+  it('the collect-first path writes seasonsWon even before any ledger entry', async () => {
+    // A collection whose crownSpawns trigger writes the stats doc BEFORE (or
+    // without) the ledger trigger. seasonsWon must still be present.
+    const uid = await provisionUser(`${TAG}-collectfirst`);
+    const spawnId = `${TAG}-cf-spawn`;
+    const now = new Date();
+    await adminDb
+      .collection('crownSpawns')
+      .doc(spawnId)
+      .set({
+        status: 'live',
+        rarity: 'legendary',
+        cellKey: `${TAG}cfcell`,
+        rewardPoints: 500,
+        latitude: 59.3,
+        longitude: 18.0,
+        createdAt: Timestamp.fromDate(now),
+        expiresAt: Timestamp.fromDate(new Date(now.getTime() + 3_600_000)),
+      });
+    await adminDb
+      .collection('crownSpawns')
+      .doc(spawnId)
+      .set(
+        { status: 'claimed', claimedByUid: uid, claimedAt: Timestamp.fromDate(now) },
+        { merge: true },
+      );
+    const s = await pollUntil(async () => {
+      const st = await userStats(uid);
+      return st && st.byRarity?.legendary === 1 ? st : undefined;
+    });
+    expect(s.seasonsWon).toBe(0);
+    // The other rarity buckets are present and zero (full map).
+    for (const r of ['common', 'uncommon', 'rare'] as const) {
+      expect(s.byRarity?.[r]).toBe(0);
+    }
+  });
+});
+
 describe('spawn stats (crownSpawns trigger)', () => {
   it('records rarity, the per-cell heat-map and rarest crown on spawn and collect', async () => {
     const now = new Date();

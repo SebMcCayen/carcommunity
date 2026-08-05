@@ -231,8 +231,16 @@ export interface PaginatedAdminCrownHuntClaimsResponse {
 export const CROWN_HUNT_RARITIES = ['common', 'uncommon', 'rare', 'legendary'] as const;
 export type CrownHuntRarity = (typeof CROWN_HUNT_RARITIES)[number];
 
-/** A per-rarity histogram. */
-export type CrownHuntRarityCounts = Record<CrownHuntRarity, number>;
+/**
+ * A per-rarity histogram. `Partial` because writers update buckets SPARSELY
+ * (e.g. a cell's `spawnedByRarity` only carries the rarities that spawned there)
+ * and the JSON schema lists every key as optional — a consumer must read an
+ * ABSENT key as 0, never assume the key is present. (The per-user `byRarity` on
+ * `crownHuntUserStats` is additionally initialised to a full four-key map by the
+ * collection triggers, but the type stays permissive for the sparse maps that
+ * share it.)
+ */
+export type CrownHuntRarityCounts = Partial<Record<CrownHuntRarity, number>>;
 
 /** Which board a leaderboard read is scoped to. */
 export type CrownHuntLeaderboardScope = 'alltime' | 'season';
