@@ -255,9 +255,10 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
     setShape(area.shape);
   };
 
-  const focusCenter = editingAreaId
-    ? shapeCenter(areas.find((a) => a.areaId === editingAreaId)?.shape ?? { type: 'circle', center: { lat: 0, lon: 0 }, radiusMeters: 10 })
-    : null;
+  // Frame the map on the area being edited. When the id isn't in the current
+  // list (stale/deleted), leave focusCenter null rather than jumping to (0,0).
+  const editingArea = editingAreaId ? areas.find((a) => a.areaId === editingAreaId) : null;
+  const focusCenter = editingArea ? shapeCenter(editingArea.shape) : null;
 
   return (
     <section>

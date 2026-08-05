@@ -178,7 +178,7 @@ export function toCellStat(id: string, data: DocumentData): CrownHuntCellStat {
   };
 }
 
-/** The [minLon, minLat, maxLon, maxLat] box a `latIdx_lonIdx` cell key covers. */
+/** The centre `{lat, lon}` of a `latIdx_lonIdx` grid cell key (null if malformed). */
 export function cellKeyCenter(cellKey: string): { lat: number; lon: number } | null {
   const m = /^(-?\d{1,6})_(-?\d{1,6})$/.exec(cellKey.trim());
   if (!m) return null;
