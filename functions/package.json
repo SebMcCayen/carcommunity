@@ -14,7 +14,7 @@
     "test:watch": "vitest",
     "test:emulator": "vitest run --config vitest.emulator.config.ts",
     "emulators:start": "firebase emulators:start --config ../firebase.json",
-    "emulators:test": "pnpm build && firebase emulators:exec --only auth,functions,firestore,database,storage --project demo-test --config ../firebase.json 'pnpm test:emulator'",
+    "emulators:test": "pnpm build && node scripts/run-emulator-tests.mjs",
     "backfill:display-name-lower": "node scripts/backfill-display-name-lower.mjs",
     "backfill:block-visibility": "node scripts/backfill-block-visibility.mjs",
     "set-first-admin": "node scripts/set-first-admin.mjs",
