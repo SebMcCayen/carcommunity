@@ -21,16 +21,20 @@ import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.time.Instant
@@ -78,6 +82,23 @@ fun CreateEventScreen(
     val startsAt = startsAtMillis
     val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
 
+    // The user's OWN location, prefetched once up front so the map picker opens
+    // centred on where they are rather than a fixed town. It is only a camera
+    // HINT — never submitted unless the user confirms a pin — so a null result
+    // (permission denied / location unavailable / CI) simply leaves the picker
+    // on its Kungsbacka fallback. lastKnown is instant when a cached fix exists
+    // and degrades to null (never throws) without the location permission,
+    // reusing the app's existing one-shot source; it adds no new permission flow.
+    val context = LocalContext.current
+    var userLatitude by remember { mutableStateOf<Double?>(null) }
+    var userLongitude by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(Unit) {
+        CurrentLocation.lastKnown(context)?.let { fix ->
+            userLatitude = fix.latitude
+            userLongitude = fix.longitude
+        }
+    }
+
     // System/gesture Back while the picker is open closes it rather than leaving
     // the create flow (the route's own Back handles the form-level exit).
     BackHandler(enabled = showLocationPicker) { showLocationPicker = false }
@@ -88,6 +109,8 @@ fun CreateEventScreen(
         EventLocationPickerScreen(
             initialLatitude = latitude,
             initialLongitude = longitude,
+            userLatitude = userLatitude,
+            userLongitude = userLongitude,
             hasToken = hasMapToken,
             onConfirm = { lat, lng ->
                 latitude = lat
