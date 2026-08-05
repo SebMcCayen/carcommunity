@@ -862,6 +862,9 @@
     <string name="badges_badgeNames_helpful_member">Hjälpsam medlem</string>
     <string name="badges_badgeNames_early_member">Tidig medlem</string>
     <string name="badges_badgeNames_garage_created">Garageprofil skapad</string>
+    <string name="badges_badgeNames_sasong_guld">Säsongspodium Guld</string>
+    <string name="badges_badgeNames_sasong_silver">Säsongspodium Silver</string>
+    <string name="badges_badgeNames_sasong_brons">Säsongspodium Brons</string>
     <string name="badges_badgeNames_kronjagare_brons">Kronjägare Brons</string>
     <string name="badges_badgeNames_kronjagare_silver">Kronjägare Silver</string>
     <string name="badges_badgeNames_kronjagare_guld">Kronjägare Guld</string>
@@ -884,6 +887,10 @@
     <string name="badges_badgeNames_samlare_brons">Samlare Brons</string>
     <string name="badges_badgeNames_samlare_silver">Samlare Silver</string>
     <string name="badges_badgeNames_samlare_guld">Samlare Guld</string>
+    <string name="badges_badgeNames_sasongsmastare_brons">Säsongsmästare Brons</string>
+    <string name="badges_badgeNames_sasongsmastare_silver">Säsongsmästare Silver</string>
+    <string name="badges_badgeNames_sasongsmastare_guld">Säsongsmästare Guld</string>
+    <string name="badges_badgeNames_sasongsmastare_platina">Säsongsmästare Platina</string>
     <string name="badgeShowcase_title">Mina utmärkelser</string>
     <string name="badgeShowcase_subtitle">%1$d av %2$d upplåsta</string>
     <string name="badgeShowcase_emptyTitle">Din samling börjar här</string>

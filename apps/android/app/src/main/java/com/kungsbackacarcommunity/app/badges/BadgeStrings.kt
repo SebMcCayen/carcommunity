@@ -22,6 +22,9 @@ fun badgeNameRes(key: String): Int? =
         "helpful_member" -> R.string.badges_badgeNames_helpful_member
         "early_member" -> R.string.badges_badgeNames_early_member
         "garage_created" -> R.string.badges_badgeNames_garage_created
+        "sasong_guld" -> R.string.badges_badgeNames_sasong_guld
+        "sasong_silver" -> R.string.badges_badgeNames_sasong_silver
+        "sasong_brons" -> R.string.badges_badgeNames_sasong_brons
         "kronjagare_brons" -> R.string.badges_badgeNames_kronjagare_brons
         "kronjagare_silver" -> R.string.badges_badgeNames_kronjagare_silver
         "kronjagare_guld" -> R.string.badges_badgeNames_kronjagare_guld
@@ -44,6 +47,10 @@ fun badgeNameRes(key: String): Int? =
         "samlare_brons" -> R.string.badges_badgeNames_samlare_brons
         "samlare_silver" -> R.string.badges_badgeNames_samlare_silver
         "samlare_guld" -> R.string.badges_badgeNames_samlare_guld
+        "sasongsmastare_brons" -> R.string.badges_badgeNames_sasongsmastare_brons
+        "sasongsmastare_silver" -> R.string.badges_badgeNames_sasongsmastare_silver
+        "sasongsmastare_guld" -> R.string.badges_badgeNames_sasongsmastare_guld
+        "sasongsmastare_platina" -> R.string.badges_badgeNames_sasongsmastare_platina
         else -> null
     }
 

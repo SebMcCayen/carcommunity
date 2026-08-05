@@ -924,6 +924,9 @@
       "helpful_member": "Hjälpsam medlem",
       "early_member": "Tidig medlem",
       "garage_created": "Garageprofil skapad",
+      "sasong_guld": "Säsongspodium Guld",
+      "sasong_silver": "Säsongspodium Silver",
+      "sasong_brons": "Säsongspodium Brons",
       "kronjagare_brons": "Kronjägare Brons",
       "kronjagare_silver": "Kronjägare Silver",
       "kronjagare_guld": "Kronjägare Guld",
@@ -945,7 +948,11 @@
       "konvojledare_platina": "Konvojledare Platina",
       "samlare_brons": "Samlare Brons",
       "samlare_silver": "Samlare Silver",
-      "samlare_guld": "Samlare Guld"
+      "samlare_guld": "Samlare Guld",
+      "sasongsmastare_brons": "Säsongsmästare Brons",
+      "sasongsmastare_silver": "Säsongsmästare Silver",
+      "sasongsmastare_guld": "Säsongsmästare Guld",
+      "sasongsmastare_platina": "Säsongsmästare Platina"
     }
   },
   "badgeShowcase": {

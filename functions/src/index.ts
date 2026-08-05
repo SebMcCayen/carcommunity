@@ -72,6 +72,11 @@ import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
 import { setSpawnCellApproval } from './crownHunt/spawnCells';
 import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
+import {
+  onCrownLedgerEntryForStats,
+  onCrownSpawnStatsWritten,
+} from './crownHunt/statsTriggers';
+import { rolloverSeason } from './crownHunt/seasonRollover';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
@@ -462,6 +467,13 @@ export const crownHunt = {
   setSpawnCellApproval,
   spawnCrowns,
   sweepSpawns,
+  // Stats + leaderboard (this slice). Firestore triggers that maintain the
+  // leaderboard/stat aggregates on collection, plus the daily season-rollover
+  // aggregator. Deployed as crownHunt-onCrownLedgerEntryForStats,
+  // crownHunt-onCrownSpawnStatsWritten and crownHunt-rolloverSeason.
+  onCrownLedgerEntryForStats,
+  onCrownSpawnStatsWritten,
+  rolloverSeason,
 };
 
 /**

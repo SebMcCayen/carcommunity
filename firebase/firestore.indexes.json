@@ -1,6 +1,25 @@
 {
   "indexes": [
     {
+      "//": "Kronjakt leaderboard — ranked read of crownHuntLeaderboardEntries filtered by scope ('alltime' | seasonId), ordered by Kronpoäng then crowns as a deterministic tiebreak. The same index also serves the per-member rank count (scope== AND points > mine).",
+      "collectionGroup": "crownHuntLeaderboardEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "scope",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "points",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "crownsCollected",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "rides",
       "queryScope": "COLLECTION",
       "fields": [

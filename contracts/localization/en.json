@@ -924,6 +924,9 @@
       "helpful_member": "Helpful member",
       "early_member": "Early member",
       "garage_created": "Garage profile created",
+      "sasong_guld": "Season Podium Gold",
+      "sasong_silver": "Season Podium Silver",
+      "sasong_brons": "Season Podium Bronze",
       "kronjagare_brons": "Crown Hunter Bronze",
       "kronjagare_silver": "Crown Hunter Silver",
       "kronjagare_guld": "Crown Hunter Gold",
@@ -945,7 +948,11 @@
       "konvojledare_platina": "Convoy Leader Platinum",
       "samlare_brons": "Collector Bronze",
       "samlare_silver": "Collector Silver",
-      "samlare_guld": "Collector Gold"
+      "samlare_guld": "Collector Gold",
+      "sasongsmastare_brons": "Season Champion Bronze",
+      "sasongsmastare_silver": "Season Champion Silver",
+      "sasongsmastare_guld": "Season Champion Gold",
+      "sasongsmastare_platina": "Season Champion Platinum"
     }
   },
   "badgeShowcase": {
