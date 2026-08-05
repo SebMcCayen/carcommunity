@@ -340,12 +340,52 @@ class FriendsCoordinatorTest {
 
         val first = launch { coordinator.cancel("u2") }
         runCurrent()
-        assertTrue("u2" in coordinator.busyRows.value)
+        assertTrue(FriendsCoordinator.cancelBusyKey("u2") in coordinator.busyRows.value)
         coordinator.cancel("u2")
         assertEquals(1, repo.cancelCalls)
 
         gate.complete(Unit)
         first.join()
+        assertTrue(coordinator.busyRows.value.isEmpty())
+    }
+
+    @Test
+    fun `busyRows keys are namespaced so cancel and remove of the same id never collide`() = runTest {
+        // A friend uid and the recipient uid of a pending request can be the SAME
+        // string. Without namespacing, removing friend "x" would mark a pending
+        // cancel row for "x" busy (and vice versa). The prefixes make that
+        // impossible: only the acting row is busy.
+        val gate = CompletableDeferred<Unit>()
+        val repo =
+            object : FriendsRepository {
+                override suspend fun list(): FriendsResult =
+                    FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList()))
+
+                override suspend fun sendRequestByNickname(nickname: String) = SendRequestResult.Requested
+
+                override suspend fun sendRequestToUid(toUid: String) = SendRequestResult.Requested
+
+                override suspend fun respond(requestId: String, accept: Boolean) = RespondResult.Accepted
+
+                override suspend fun cancelRequest(toUid: String) = CancelResult.Cancelled
+
+                override suspend fun remove(friendUid: String): RemoveResult {
+                    gate.await()
+                    return RemoveResult.Removed
+                }
+            }
+        val coordinator = FriendsCoordinator(repo)
+
+        val removing = launch { coordinator.remove("x") }
+        runCurrent()
+
+        // Only the remove row for "x" is busy...
+        assertTrue(FriendsCoordinator.removeBusyKey("x") in coordinator.busyRows.value)
+        // ...a cancel row for the SAME raw id "x" is NOT dragged into a busy state.
+        assertTrue(FriendsCoordinator.cancelBusyKey("x") !in coordinator.busyRows.value)
+
+        gate.complete(Unit)
+        removing.join()
         assertTrue(coordinator.busyRows.value.isEmpty())
     }
 
@@ -381,7 +421,7 @@ class FriendsCoordinatorTest {
         // Let the launched coroutine run up to its gate suspension.
         runCurrent()
         // The first call is now parked on the gate and marked in flight.
-        assertTrue("f1" in coordinator.busyRows.value)
+        assertTrue(FriendsCoordinator.removeBusyKey("f1") in coordinator.busyRows.value)
         // A second call for the same uid must be dropped, not started.
         coordinator.remove("f1")
         assertEquals(1, repo.removeCalls)

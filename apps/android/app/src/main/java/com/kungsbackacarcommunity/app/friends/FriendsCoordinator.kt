@@ -108,9 +108,17 @@ class FriendsCoordinator(
     private val rowError = MutableStateFlow<FriendActionError?>(null)
     val actionError: StateFlow<FriendActionError?> = rowError.asStateFlow()
 
-    // Keys (requestId / friendUid) of rows whose accept/decline/remove callable
-    // is currently in flight. Guards against overlapping invocations from rapid
-    // taps and lets the UI disable that row's action buttons while it runs.
+    // Keys of rows whose accept/decline/cancel/remove callable is currently in
+    // flight. Guards against overlapping invocations from rapid taps and lets the
+    // UI disable that row's action buttons while it runs.
+    //
+    // Every key is NAMESPACED by action ([respondBusyKey] / [cancelBusyKey] /
+    // [removeBusyKey]): the ids come from three different spaces — a requestId
+    // (accept/decline), a recipient uid (cancel) and a friend uid (remove) — and
+    // as bare strings in one Set they could be equal and mark the wrong row busy
+    // (e.g. a friend uid colliding with the recipient uid of a pending request to
+    // the same person). The prefix makes a cross-type collision impossible. The
+    // screen builds its lookup keys with the SAME helpers, so the two never drift.
     private val inFlightRows = MutableStateFlow<Set<String>>(emptySet())
     val busyRows: StateFlow<Set<String>> = inFlightRows.asStateFlow()
 
@@ -180,9 +188,10 @@ class FriendsCoordinator(
     suspend fun decline(requestId: String) = respond(requestId, accept = false)
 
     private suspend fun respond(requestId: String, accept: Boolean) {
+        val key = respondBusyKey(requestId)
         // Ignore a second tap on a row whose accept/decline is already running.
-        if (requestId in inFlightRows.value) return
-        inFlightRows.update { it + requestId }
+        if (key in inFlightRows.value) return
+        inFlightRows.update { it + key }
         rowError.value = null
         try {
             when (val result = repository.respond(requestId, accept)) {
@@ -201,7 +210,7 @@ class FriendsCoordinator(
             rowError.value = FriendActionError.Generic
             reportIfFault("respondRequest", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
-            inFlightRows.update { it - requestId }
+            inFlightRows.update { it - key }
         }
     }
 
@@ -222,8 +231,9 @@ class FriendsCoordinator(
      * outgoing row is left untouched and the next [load] reconciles it.
      */
     suspend fun cancel(toUid: String) {
-        if (toUid in inFlightRows.value) return
-        inFlightRows.update { it + toUid }
+        val key = cancelBusyKey(toUid)
+        if (key in inFlightRows.value) return
+        inFlightRows.update { it + key }
         rowError.value = null
         try {
             when (val result = repository.cancelRequest(toUid)) {
@@ -242,14 +252,15 @@ class FriendsCoordinator(
             rowError.value = FriendActionError.Generic
             reportIfFault("cancelRequest", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
-            inFlightRows.update { it - toUid }
+            inFlightRows.update { it - key }
         }
     }
 
     suspend fun remove(friendUid: String) {
+        val key = removeBusyKey(friendUid)
         // Ignore a second tap on a friend whose removal is already running.
-        if (friendUid in inFlightRows.value) return
-        inFlightRows.update { it + friendUid }
+        if (key in inFlightRows.value) return
+        inFlightRows.update { it + key }
         rowError.value = null
         try {
             when (val result = repository.remove(friendUid)) {
@@ -265,7 +276,7 @@ class FriendsCoordinator(
             rowError.value = FriendActionError.Generic
             reportIfFault("remove", FriendActionError.Generic, error::class.java.simpleName)
         } finally {
-            inFlightRows.update { it - friendUid }
+            inFlightRows.update { it - key }
         }
     }
 
@@ -276,5 +287,20 @@ class FriendsCoordinator(
 
     fun clearActionError() {
         rowError.value = null
+    }
+
+    /**
+     * [busyRows] key namespacing. Accept/decline are keyed by requestId, cancel
+     * by the recipient uid, remove by the friend uid — three DIFFERENT id spaces
+     * that must not collide in the single [busyRows] Set. The screen builds its
+     * lookup keys with these same helpers so a row is marked busy iff its own
+     * action is in flight. `internal` so [FriendsScreen] can share them.
+     */
+    companion object {
+        internal fun respondBusyKey(requestId: String): String = "respond:$requestId"
+
+        internal fun cancelBusyKey(toUid: String): String = "cancel:$toUid"
+
+        internal fun removeBusyKey(friendUid: String): String = "remove:$friendUid"
     }
 }

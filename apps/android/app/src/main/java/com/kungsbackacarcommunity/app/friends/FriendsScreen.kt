@@ -153,7 +153,8 @@ fun FriendsScreen(
                         items(status.incoming, key = { "incoming-${it.requestId}" }) { request ->
                             IncomingRequestRow(
                                 request = request,
-                                working = request.requestId in busyRows,
+                                working =
+                                    FriendsCoordinator.respondBusyKey(request.requestId) in busyRows,
                                 onAccept = { onAccept(request.requestId) },
                                 onDecline = { onDecline(request.requestId) },
                             )
@@ -169,8 +170,10 @@ fun FriendsScreen(
                                 request = request,
                                 // The cancel row is keyed in the coordinator by the
                                 // recipient uid (cancelRequest is addressed by
-                                // RECIPIENT), so its in-flight guard is too.
-                                working = request.toUid in busyRows,
+                                // RECIPIENT), namespaced so it can't collide with a
+                                // requestId/friend-uid busy key.
+                                working =
+                                    FriendsCoordinator.cancelBusyKey(request.toUid) in busyRows,
                                 onCancel = { onCancel(request.toUid) },
                             )
                         }
@@ -204,7 +207,7 @@ fun FriendsScreen(
                         items(sortedFriends, key = { "friend-${it.uid}" }) { friend ->
                             FriendRow(
                                 friend = friend,
-                                working = friend.uid in busyRows,
+                                working = FriendsCoordinator.removeBusyKey(friend.uid) in busyRows,
                                 onViewProfile = { onViewProfile(friend) },
                                 onMessage = { onMessageFriend(friend) },
                                 onRemove = { removeTarget = friend },
