@@ -47,6 +47,8 @@ import {
 } from '@/features/crown-hunt';
 import { DateTimePicker } from '@/components/ui/DateTimePicker';
 import { MapLocationPicker } from '@/components/map/MapLocationPicker';
+import { AreasTab } from './AreasTab';
+import { StatsTab } from './StatsTab';
 import { translate } from '@/i18n';
 import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
 import { formatDateOnly } from '@/lib/format';
@@ -982,7 +984,7 @@ const SpawnCellsTab = ({
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'points' | 'claims' | 'spawnCells';
+type Tab = 'points' | 'claims' | 'spawnCells' | 'areas' | 'stats';
 
 export default function KronjaktPage() {
   const mountedRef = useRef(true);
@@ -1279,6 +1281,22 @@ export default function KronjaktPage() {
         >
           {t('crownHunt.spawnCellsTab')}
         </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'areas'}
+          className={activeTab === 'areas' ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab('areas')}
+        >
+          {t('crownHunt.areasTab')}
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === 'stats'}
+          className={activeTab === 'stats' ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab('stats')}
+        >
+          {t('crownHunt.statsTab')}
+        </button>
       </div>
 
       {/* Point create/edit form */}
@@ -1355,6 +1373,10 @@ export default function KronjaktPage() {
           }}
         />
       )}
+
+      {activeTab === 'areas' && <AreasTab onFlash={showSuccess} />}
+
+      {activeTab === 'stats' && <StatsTab />}
 
       {/* Spawn cell approve confirmation modal */}
       {approveTarget !== null && (
