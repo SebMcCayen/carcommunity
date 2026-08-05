@@ -112,16 +112,40 @@ export function previousSeasonId(seasonId: string): string {
   return `${String(y).padStart(4, '0')}-${String(m).padStart(2, '0')}`;
 }
 
+const wallClockFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: CROWN_STATS_TIME_ZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
 /**
- * The zone offset (ms east of UTC) at an instant, via the standard "format the
- * same instant in the zone and in UTC and difference the wall clocks" trick.
- * Used only to place month boundaries; it is never used for bucketing (that is
- * `seasonIdForInstant`).
+ * The Europe/Stockholm zone offset (ms east of UTC) at an instant, derived from
+ * `Intl.formatToParts` — the same approach as `stockholmOffsetMinutes` in
+ * `functions/src/events/events-core.ts` and the day-key helpers in
+ * `functions/src/points/points-economy-core.ts`, so the DST transition dates
+ * stay correct without a bundled tz database and without brittle Date-string
+ * parsing. Used only to place month boundaries; bucketing is
+ * `seasonIdForInstant`.
  */
 function stockholmOffsetMs(instant: Date): number {
-  const inZone = new Date(instant.toLocaleString('en-US', { timeZone: CROWN_STATS_TIME_ZONE }));
-  const inUtc = new Date(instant.toLocaleString('en-US', { timeZone: 'UTC' }));
-  return inZone.getTime() - inUtc.getTime();
+  const field: Record<string, number> = {};
+  for (const p of wallClockFormatter.formatToParts(instant)) {
+    if (p.type !== 'literal') field[p.type] = Number(p.value);
+  }
+  const asIfUtc = Date.UTC(
+    field.year ?? 0,
+    (field.month ?? 1) - 1,
+    field.day ?? 1,
+    field.hour ?? 0,
+    field.minute ?? 0,
+    field.second ?? 0,
+  );
+  return asIfUtc - instant.getTime();
 }
 
 /** The UTC instant of Swedish local midnight on the first of `seasonId`. */
@@ -288,10 +312,14 @@ export function rankLeaderboard(entries: readonly LeaderboardCounter[]): RankedL
 }
 
 /**
- * The rank a member holds given how many OTHER members strictly outrank them
- * (more points, or equal points and more crowns). This is what a client derives
- * from an aggregation `count()` query, so the definition lives here to keep the
- * client and the server in agreement.
+ * The rank a member holds given how many OTHER members STRICTLY OUTRANK them.
+ * "Strictly better" is the full three-key order `rankLeaderboard` sorts by:
+ * B outranks A iff B.points > A.points, OR (points equal AND
+ * B.crownsCollected > A.crownsCollected), OR (both equal AND B.uid < A.uid).
+ * Rank = betterCount + 1. The caller is responsible for counting with that full
+ * predicate — a bare `points > mine` Firestore count is only a lower bound at a
+ * points tie (Firestore has no OR), so an exact rank is read by paging the
+ * ordered board. The definition lives here so client and server agree.
  */
 export function rankFromBetterCount(betterCount: number): number {
   return Math.max(0, betterCount) + 1;

@@ -68,6 +68,7 @@ fun ladderNameRes(id: BadgeLadderId): Int =
         BadgeLadderId.TROGEN -> R.string.badgeShowcase_ladderNames_trogen
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderNames_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderNames_samlare
+        BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderNames_sasongsmastare
     }
 
 /** One-line "what this ladder measures" caption. */
@@ -80,6 +81,7 @@ fun ladderTaglineRes(id: BadgeLadderId): Int =
         BadgeLadderId.TROGEN -> R.string.badgeShowcase_ladderTaglines_trogen
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderTaglines_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderTaglines_samlare
+        BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderTaglines_sasongsmastare
     }
 
 /** Requirement sentence with a single `%1$s` threshold placeholder. */
@@ -92,6 +94,7 @@ fun ladderRequirementRes(id: BadgeLadderId): Int =
         BadgeLadderId.TROGEN -> R.string.badgeShowcase_ladderRequirements_trogen
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderRequirements_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderRequirements_samlare
+        BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderRequirements_sasongsmastare
     }
 
 @StringRes

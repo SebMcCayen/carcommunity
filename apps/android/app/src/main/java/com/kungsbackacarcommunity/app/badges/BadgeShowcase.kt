@@ -72,6 +72,9 @@ data class BadgeCounters(
             BadgeLadderId.TRAFFRAV,
             BadgeLadderId.TROGEN,
             BadgeLadderId.KONVOJLEDARE,
+            // seasonsWon lives on crownHuntUserStats, not in these garage/drive
+            // counters, so the showcase cannot observe it here (like the others).
+            BadgeLadderId.SASONGSMASTARE,
             -> null
         }
 

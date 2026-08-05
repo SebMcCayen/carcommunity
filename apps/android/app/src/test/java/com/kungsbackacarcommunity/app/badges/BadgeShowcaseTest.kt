@@ -28,12 +28,14 @@ class BadgeShowcaseTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun `catalog is 5 milestones plus 22 ladder rungs`() {
-        assertEquals(5, BADGE_MILESTONE_KEYS.size)
-        // 22, not 24: Trogen and Samlare have three rungs each (no Platina) —
+    fun `catalog is 8 milestones plus 26 ladder rungs`() {
+        // 8 standalone: the five original milestones + the three season PODIUM
+        // badges (sasong_guld/silver/brons), awarded by rank, not a ladder.
+        assertEquals(8, BADGE_MILESTONE_KEYS.size)
+        // 26, not 28: Trogen and Samlare have three rungs each (no Platina) —
         // see BadgeLadderCatalogParityTest, which pins this to badge-core.ts.
-        assertEquals(22, BADGE_LADDERS.sumOf { it.rungs.size })
-        assertEquals(27, BADGE_TOTAL_COUNT)
+        assertEquals(26, BADGE_LADDERS.sumOf { it.rungs.size })
+        assertEquals(34, BADGE_TOTAL_COUNT)
     }
 
     @Test
@@ -70,7 +72,7 @@ class BadgeShowcaseTest {
 
         assertFalse(showcase.hasAnyBadge)
         assertEquals(0, showcase.earnedCount)
-        assertEquals(27, showcase.totalCount)
+        assertEquals(34, showcase.totalCount)
         assertTrue(showcase.milestones.isEmpty())
         // All six ladders are still rendered — an empty wall is a menu of goals,
         // never a gap.
@@ -89,13 +91,15 @@ class BadgeShowcaseTest {
 
     @Test
     fun `an unobservable ladder offers a goal but never a bar`() {
-        // Crowns, meets, streak and convoys have no honest client-side counter.
+        // Crowns, meets, streak, convoys and season wins have no honest
+        // client-side counter.
         val showcase = BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters.NONE)
         for (id in listOf(
             BadgeLadderId.KRONJAGARE,
             BadgeLadderId.TRAFFRAV,
             BadgeLadderId.TROGEN,
             BadgeLadderId.KONVOJLEDARE,
+            BadgeLadderId.SASONGSMASTARE,
         )) {
             val progress = ladderOf(showcase, id)
             assertNull(progress.observedValue)
@@ -274,6 +278,7 @@ class BadgeShowcaseTest {
                 BadgeLadderId.TRAFFRAV,
                 BadgeLadderId.TROGEN,
                 BadgeLadderId.KONVOJLEDARE,
+                BadgeLadderId.SASONGSMASTARE,
             ),
             order.drop(2),
         )
@@ -314,7 +319,7 @@ class BadgeShowcaseTest {
             )
 
         // Four earned, fewer than the cap → the strip shows all four, so its size
-        // equals the "x of 27" numerator. This is the reported bug fixed.
+        // equals the "x of 34" numerator. This is the reported bug fixed.
         assertEquals(4, showcase.earnedCount)
         assertEquals(showcase.earnedCount, showcase.recentAwards.size)
 

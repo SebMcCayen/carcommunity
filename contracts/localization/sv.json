@@ -987,7 +987,8 @@
       "traffrav": "Träffräv",
       "trogen": "Trogen",
       "konvojledare": "Konvojledare",
-      "samlare": "Samlare"
+      "samlare": "Samlare",
+      "sasongsmastare": "Säsongsmästare"
     },
     "ladderRequirements": {
       "kronjagare": "Samla %1$s kronor i Kronjakten.",
@@ -995,7 +996,8 @@
       "traffrav": "Delta i %1$s träffar.",
       "trogen": "Öppna appen %1$s dagar i rad.",
       "konvojledare": "Led %1$s konvojer.",
-      "samlare": "Ha %1$s fordon i ditt garage."
+      "samlare": "Ha %1$s fordon i ditt garage.",
+      "sasongsmastare": "Vinn %1$s säsonger av Kronjakten."
     },
     "ladderTaglines": {
       "kronjagare": "Kronor du plockat på kartan.",
@@ -1003,7 +1005,8 @@
       "traffrav": "Träffar du varit med på.",
       "trogen": "Dagar i rad i appen.",
       "konvojledare": "Konvojer du lett.",
-      "samlare": "Fordon i ditt garage."
+      "samlare": "Fordon i ditt garage.",
+      "sasongsmastare": "Säsonger du vunnit."
     }
   },
   "points": {

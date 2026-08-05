@@ -203,8 +203,15 @@ export interface PaginatedAdminCrownHuntClaimsResponse {
 //
 //   crownHuntLeaderboardEntries/{scope}__{uid}   { scope, uid, points, crownsCollected }
 //       scope = 'alltime' | seasonId ('YYYY-MM'). Member-readable. Read ranked
-//       via `where scope==X orderBy points desc, crownsCollected desc`; a
-//       member's own rank via `where scope==X and points > mine` count()+1.
+//       via `where scope==X orderBy points desc, crownsCollected desc` (uid is
+//       the final, implicit tiebreak). RANK ORDERING is "strictly better": B
+//       outranks A iff B.points > A.points, OR (points equal AND
+//       B.crownsCollected > A.crownsCollected), OR (both equal AND B.uid <
+//       A.uid). A member's rank = (count of strictly-better members) + 1.
+//       Firestore has no OR, so a bare `points > mine` count is only a lower
+//       bound at a points tie; a client wanting the exact rank pages the ordered
+//       board and reads its own position (same three-key order). The server's
+//       authoritative ranking (rankLeaderboard) applies exactly this ordering.
 //   crownHuntUserStats/{uid}                      personal rich stats. Owner + admin.
 //   crownHuntSeasons/{seasonId}                   season metadata + finalized standings. Member-readable.
 //   crownHuntSpawnStats/{scope}                   admin totals (spawned/collected). Admin only.
@@ -339,9 +346,13 @@ export interface CrownHuntSeasonStanding {
 }
 
 /**
- * Season metadata. `winners` and `topStandings` are populated only once the
- * season is `ended` (by the scheduled rollover), so the social screen can show
- * "last month's champions".
+ * Season metadata. An ACTIVE season carries only the lifecycle fields; the
+ * finalized fields below (`finalizedAt`, `participantCount`, `winners`,
+ * `topStandings`) are written ONLY when the scheduled rollover flips the season
+ * to `ended`. They are therefore optional — a consumer reading an active season
+ * must not assume `winners`/`topStandings` are present. Use `status === 'ended'`
+ * as the presence guard (the social screen shows "last month's champions" only
+ * for ended seasons).
  */
 export interface CrownHuntSeason {
   seasonId: string;
@@ -349,8 +360,8 @@ export interface CrownHuntSeason {
   status: CrownHuntSeasonStatus;
   startAt: string;
   endAt: string;
-  finalizedAt: string | null;
-  participantCount: number | null;
-  winners: CrownHuntSeasonWinner[];
-  topStandings: CrownHuntSeasonStanding[];
+  finalizedAt?: string | null;
+  participantCount?: number | null;
+  winners?: CrownHuntSeasonWinner[];
+  topStandings?: CrownHuntSeasonStanding[];
 }

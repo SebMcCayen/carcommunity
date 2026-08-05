@@ -105,7 +105,7 @@ class PublicBadgeWallTest {
 
         assertTrue(wall.hasAnyBadge)
         assertEquals(3, wall.earnedCount)
-        assertEquals(27, wall.totalCount)
+        assertEquals(34, wall.totalCount)
         assertEquals(
             listOf(BadgeLadderId.KRONJAGARE, BadgeLadderId.SAMLARE),
             wall.ladders.map { it.ladder.id },
@@ -187,7 +187,7 @@ class PublicBadgeWallTest {
         // The owner sees the climb; the public wall has no climb to see.
         assertEquals(BadgeTier.GULD, ownerVagfarare.nextRung?.tier)
         assertEquals(900_000L, ownerVagfarare.observedValue)
-        assertEquals(6, owner.ladders.size)
+        assertEquals(7, owner.ladders.size)
         assertEquals(1, public.ladders.size)
     }
 }

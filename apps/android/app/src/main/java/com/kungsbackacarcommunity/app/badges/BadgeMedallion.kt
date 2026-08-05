@@ -286,6 +286,10 @@ private fun DrawScope.drawGlyph(glyph: BadgeGlyph, box: Rect, ink: Color, field:
                 BadgeLadderId.TROGEN -> drawFlameGlyph(box, ink, field)
                 BadgeLadderId.KONVOJLEDARE -> drawConvoyGlyph(box, ink)
                 BadgeLadderId.SAMLARE -> drawArchGlyph(box, ink)
+                // Säsongsmästare is a crown of victory; it reuses the crown
+                // silhouette and is told apart by its tier ring. A dedicated
+                // laurel-wreath glyph is a later polish for the social screen.
+                BadgeLadderId.SASONGSMASTARE -> drawCrownGlyph(box, ink)
             }
 
         is BadgeGlyph.Milestone ->

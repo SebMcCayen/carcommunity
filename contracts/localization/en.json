@@ -987,7 +987,8 @@
       "traffrav": "Träffräv",
       "trogen": "Trogen",
       "konvojledare": "Konvojledare",
-      "samlare": "Samlare"
+      "samlare": "Samlare",
+      "sasongsmastare": "Säsongsmästare"
     },
     "ladderRequirements": {
       "kronjagare": "Collect %1$s crowns in Kronjakten.",
@@ -995,7 +996,8 @@
       "traffrav": "Attend %1$s meets.",
       "trogen": "Open the app %1$s days in a row.",
       "konvojledare": "Lead %1$s convoys.",
-      "samlare": "Keep %1$s vehicles in your garage."
+      "samlare": "Keep %1$s vehicles in your garage.",
+      "sasongsmastare": "Win %1$s Kronjakt seasons."
     },
     "ladderTaglines": {
       "kronjagare": "Crowns you have picked up on the map.",
@@ -1003,7 +1005,8 @@
       "traffrav": "Meets you have taken part in.",
       "trogen": "Days in a row in the app.",
       "konvojledare": "Convoys you have led.",
-      "samlare": "Vehicles in your garage."
+      "samlare": "Vehicles in your garage.",
+      "sasongsmastare": "Seasons you have won."
     }
   },
   "points": {

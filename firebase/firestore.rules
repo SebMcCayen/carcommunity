@@ -1238,12 +1238,12 @@ service cloud.firestore {
     // that is the whole security surface of this slice:
     //
     //  - crownHuntLeaderboardEntries/{scope}__{uid} — the public leaderboard, a
-    //    flat collection with a `scope` field ('alltime' | seasonId). Any
-    //    authenticated member may read it (leaderboards are public within the
-    //    app). The client filters by scope, orders by points, and resolves
-    //    display names from the public user profiles it can already read. Ranks
-    //    are global; a blocked member is not filtered out — their standing is a
-    //    fact.
+    //    flat collection with a `scope` field ('alltime' | seasonId). Any ACTIVE
+    //    (signed-in, non-suspended) member may read it — leaderboards are public
+    //    within the app, but suspension still overrides access. The client
+    //    filters by scope, orders by points, and resolves display names from the
+    //    public user profiles it can already read. Ranks are global; a blocked
+    //    member is not filtered out — their standing is a fact.
     //  - crownHuntUserStats/{uid} — a member's own rich stats (streak, rarity
     //    breakdown, rarest crown, seasonsWon). Readable ONLY by that member and
     //    admins: it is the one place per-user activity detail lives.
@@ -1254,7 +1254,10 @@ service cloud.firestore {
     //    per-cell map to members would tell a client where to wait for spawns.
     // -------------------------------------------------------------------------
     match /crownHuntLeaderboardEntries/{entryId} {
-      allow read: if isAuthenticated();
+      // isActiveMember() (not bare isAuthenticated) so suspension overrides
+      // access, matching every other member-facing read in this ruleset. While
+      // member gating is disabled it resolves to signed-in AND not suspended.
+      allow read: if isActiveMember();
       allow write: if false;
     }
 
@@ -1264,7 +1267,7 @@ service cloud.firestore {
     }
 
     match /crownHuntSeasons/{seasonId} {
-      allow read: if isAuthenticated();
+      allow read: if isActiveMember();
       allow write: if false;
     }
 

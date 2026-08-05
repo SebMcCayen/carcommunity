@@ -542,6 +542,14 @@ describe('Firestore – Kronjakt stats + leaderboard + seasons', () => {
     await assertSucceeds(getDoc(doc(memberFs, 'crownHuntSeasons', '2000-01')));
   });
 
+  it('a suspended member cannot read the leaderboard or seasons (suspension overrides)', async () => {
+    const suspFs = testEnv
+      .authenticatedContext('chs-susp', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspFs, 'crownHuntLeaderboardEntries', `alltime__${MEMBER}`)));
+    await assertFails(getDoc(doc(suspFs, 'crownHuntSeasons', '2000-01')));
+  });
+
   it('personal stats are owner-only (and admin); another member is denied', async () => {
     const ownerFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
     await assertSucceeds(getDoc(doc(ownerFs, 'crownHuntUserStats', MEMBER)));
