@@ -44,9 +44,11 @@ import {
   OVERPASS_ENDPOINT_DEFAULT,
   OVERPASS_QUERY_TIMEOUT_SECONDS,
   buildOverpassQuery,
+  buildOverpassRequestInit,
   crownPoiDocId,
   filterPoisInShape,
   parseOverpassResponse,
+  shouldIngestOnAreaWrite,
   type NormalizedPoi,
   type OverpassResponse,
 } from './osm-poi-core';
@@ -98,9 +100,7 @@ export type OverpassFetcher = (query: string, endpoint: string) => Promise<Overp
  */
 export const httpFetcher: OverpassFetcher = async (query, endpoint) => {
   const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-    body: query,
+    ...buildOverpassRequestInit(query),
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) {
@@ -241,29 +241,6 @@ export async function runAreaPoiIngestion(
 // Trigger: ingest on area create / activate / reshape
 // ---------------------------------------------------------------------------
 
-/**
- * Whether an area write should trigger POI ingestion — pure so the loop guard is
- * unit-testable without the emulator.
- *
- * Ingests only when the area is ACTIVE and safe-confirmed AND something relevant
- * changed: it was just activated (or created active), its shape changed, or it
- * has never been ingested. Crucially this returns FALSE for ingestion's OWN
- * `poiCount`/`poisRefreshedAt` write (active+shape unchanged, refresh stamp now
- * present), so the trigger cannot loop on itself.
- */
-export function shouldIngestOnAreaWrite(
-  before: DocumentData | undefined,
-  after: DocumentData | undefined,
-): boolean {
-  if (!after) return false;
-  if (after.active !== true || after.safeAreaConfirmed !== true) return false;
-  if (!after.shape) return false;
-  const activatedNow = !before || before.active !== true;
-  const shapeChanged = !before || JSON.stringify(before.shape) !== JSON.stringify(after.shape);
-  const neverIngested = after.poisRefreshedAt === undefined || after.poisRefreshedAt === null;
-  return activatedNow || shapeChanged || neverIngested;
-}
-
 export const onSpawnAreaWrittenIngestPois = onDocumentWritten(
   {
     region: 'europe-west1',
@@ -276,10 +253,23 @@ export const onSpawnAreaWrittenIngestPois = onDocumentWritten(
     concurrency: 1,
   },
   withServerErrorReporting('crownHunt.ingestAreaPois', async (event) => {
+    // NEVER make a live Overpass call from the emulator. The whole test suite
+    // writes crownSpawnAreas (every area-creating test in every file), and this
+    // trigger firing a real network request on each of those writes is what
+    // turned a ~10-minute emulator run into 54 minutes. Ingestion is exercised
+    // in tests by calling runAreaPoiIngestion DIRECTLY with a mocked fetcher
+    // (crownhunt-osm-poi.emulator.test.ts) — the only place a (mocked) fetch
+    // happens — so the trigger itself is inert under FUNCTIONS_EMULATOR.
+    if (process.env.FUNCTIONS_EMULATOR === 'true') return;
+
     const afterSnap = event.data?.after;
     const beforeSnap = event.data?.before;
     const after = afterSnap?.exists ? (afterSnap.data() as DocumentData) : undefined;
     const before = beforeSnap?.exists ? (beforeSnap.data() as DocumentData) : undefined;
+    // Ingest only on activation or a shape change — NOT on the round-robin cursor
+    // advances or ingestion's own poiCount write-back (shouldIngestOnAreaWrite,
+    // which also makes a single create/activate cause at most one ingestion and
+    // cannot loop on itself).
     if (!shouldIngestOnAreaWrite(before, after)) return;
 
     await runAreaPoiIngestion(

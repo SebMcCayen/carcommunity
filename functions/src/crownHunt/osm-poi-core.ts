@@ -45,10 +45,22 @@ export const OSM_ATTRIBUTION = '© OpenStreetMap contributors';
 
 /**
  * The public Overpass endpoint. No API key. Overridable at deploy time via the
- * `OVERPASS_ENDPOINT` string param (poiIngestion.ts) so a self-hosted or mirror
- * instance can be pointed at without a code change; this is the default.
+ * `OVERPASS_ENDPOINT` environment variable (poiIngestion.ts) so a self-hosted or
+ * mirror instance can be pointed at without a code change; this is the default.
  */
 export const OVERPASS_ENDPOINT_DEFAULT = 'https://overpass-api.de/api/interpreter';
+
+/**
+ * User-Agent sent with every Overpass request.
+ *
+ * REQUIRED, not cosmetic: overpass-api.de answers `406 Not Acceptable` (with an
+ * HTML error page) to requests it cannot attribute to a client — bots, or the
+ * empty/default UA that Node's `fetch` (undici) sends. That 406 is exactly why
+ * the first cut of this importer failed. A descriptive UA with a contact URL is
+ * also the courtesy the Overpass usage policy asks for.
+ */
+export const OSM_USER_AGENT =
+  'KungsbackaCarCommunity/1.0 (Kronjakt safe-stop POI ingestion; +https://github.com/SebMcCayen/carcommunity)';
 
 // ---------------------------------------------------------------------------
 // POI categories
@@ -127,6 +139,32 @@ export function buildOverpassQuery(
     ');',
     'out center;',
   ].join('');
+}
+
+/**
+ * Builds the `fetch` RequestInit for an Overpass QL query — the DOCUMENTED POST
+ * form, and the shape a unit test can assert without any network.
+ *
+ * POST `application/x-www-form-urlencoded` with the query URL-encoded under the
+ * `data` key (the Overpass interpreter's documented POST body), an explicit
+ * `Accept: application/json` (the query already asks for JSON via `[out:json]`),
+ * and the required {@link OSM_USER_AGENT} — without which overpass-api.de returns
+ * 406. Pure: no `fetch`, no clock; `signal` is attached by the caller.
+ */
+export function buildOverpassRequestInit(query: string): {
+  method: 'POST';
+  headers: Record<string, string>;
+  body: string;
+} {
+  return {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json',
+      'User-Agent': OSM_USER_AGENT,
+    },
+    body: `data=${encodeURIComponent(query)}`,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -256,6 +294,46 @@ export function jitterPosition(
   const dLat = (distance * Math.cos(angle)) / METERS_PER_DEGREE_LAT;
   const dLon = (distance * Math.sin(angle)) / (METERS_PER_DEGREE_LAT * cosLat);
   return { latitude: base.latitude + dLat, longitude: base.longitude + dLon };
+}
+
+// ---------------------------------------------------------------------------
+// Ingestion trigger guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether an area write should trigger POI ingestion — PURE so the guard is
+ * unit-testable, and colocated here (not in the I/O module) so it never pulls in
+ * the Admin SDK.
+ *
+ * Ingests on exactly TWO events, and nothing else: the area was just ACTIVATED
+ * (created active, or flipped active/safe on), or its SHAPE changed while active.
+ * This is deliberately NARROW to solve two failures at once:
+ *
+ *  - RE-ENTRANCY: ingestion writes `poiCount`/`poisRefreshedAt` back onto the
+ *    area doc, which re-fires the `onDocumentWritten` trigger. That write leaves
+ *    `active`/`safeAreaConfirmed`/`shape` untouched, so it is neither an
+ *    activation nor a reshape → this returns false → no loop.
+ *  - RUNAWAY RETRIES: the scheduled spawn pass advances a round-robin cursor
+ *    (`lastSpawnPassAt`/`nextCellOffset`) on the area doc every run. Those writes
+ *    also leave active/safe/shape untouched → false. (An earlier version keyed
+ *    off "never ingested", which re-fired a live Overpass call on EVERY cursor
+ *    advance whenever ingestion had failed — the cause of a 54-minute CI run.)
+ *
+ * A create-time ingestion that fails (Overpass down) is NOT retried here; the
+ * weekly {@link runAreaPoiRefresh} picks it up, and re-saving the area
+ * (updateSpawnArea) re-activates/reshapes and so re-ingests.
+ */
+export function shouldIngestOnAreaWrite(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined,
+): boolean {
+  if (!after) return false;
+  if (after.active !== true || after.safeAreaConfirmed !== true) return false;
+  if (!after.shape) return false;
+  const wasActiveAndSafe = !!before && before.active === true && before.safeAreaConfirmed === true;
+  const activatedNow = !wasActiveAndSafe;
+  const shapeChanged = !!before && JSON.stringify(before.shape) !== JSON.stringify(after.shape);
+  return activatedNow || shapeChanged;
 }
 
 /** Fisher–Yates shuffle of [0..n) driven by `rng`, so POI selection order is

@@ -6,16 +6,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   OSM_ATTRIBUTION,
+  OSM_USER_AGENT,
   OVERPASS_ENDPOINT_DEFAULT,
   POI_CATEGORIES,
   POI_JITTER_METERS,
   buildOverpassQuery,
+  buildOverpassRequestInit,
   classifyPoiCategory,
   crownPoiDocId,
   filterPoisInShape,
   jitterPosition,
   parseOverpassResponse,
   samplePoiPlacement,
+  shouldIngestOnAreaWrite,
   type NormalizedPoi,
   type OverpassResponse,
 } from './osm-poi-core';
@@ -73,6 +76,89 @@ describe('buildOverpassQuery', () => {
     expect(q).toContain(`node["amenity"="charging_station"](${bbox});`);
     expect(q).toContain(`node["man_made"="charge_point"](${bbox});`);
     expect(q).toContain('out center;');
+  });
+});
+
+describe('buildOverpassRequestInit', () => {
+  it('POSTs form-encoded data= with an Accept and the required User-Agent', () => {
+    const query = '[out:json][timeout:25];node["amenity"="fuel"](55,13,56,14);out center;';
+    const init = buildOverpassRequestInit(query);
+    expect(init.method).toBe('POST');
+    // The documented Overpass POST form: application/x-www-form-urlencoded body
+    // `data=<url-encoded query>`.
+    expect(init.headers['Content-Type']).toBe('application/x-www-form-urlencoded');
+    expect(init.body).toBe(`data=${encodeURIComponent(query)}`);
+    // A descriptive User-Agent is REQUIRED — overpass-api.de 406s requests
+    // without one (the original defect). Accept asks for JSON.
+    expect(init.headers['User-Agent']).toBe(OSM_USER_AGENT);
+    expect(init.headers['User-Agent']).toMatch(/carcommunity/);
+    expect(init.headers.Accept).toBe('application/json');
+  });
+});
+
+describe('shouldIngestOnAreaWrite', () => {
+  const CIRCLE_A: CrownSpawnAreaShape = { type: 'circle', center: CENTER, radiusMeters: 300 };
+  const CIRCLE_B: CrownSpawnAreaShape = { type: 'circle', center: CENTER, radiusMeters: 500 };
+  const active = (shape: CrownSpawnAreaShape, extra: Record<string, unknown> = {}) => ({
+    active: true,
+    safeAreaConfirmed: true,
+    shape,
+    ...extra,
+  });
+
+  it('ingests when an area is CREATED active (no before doc)', () => {
+    expect(shouldIngestOnAreaWrite(undefined, active(CIRCLE_A))).toBe(true);
+  });
+
+  it('ingests when an inactive area is ACTIVATED', () => {
+    const before = { active: false, safeAreaConfirmed: true, shape: CIRCLE_A };
+    expect(shouldIngestOnAreaWrite(before, active(CIRCLE_A))).toBe(true);
+  });
+
+  it('ingests when the SHAPE changes while active', () => {
+    expect(shouldIngestOnAreaWrite(active(CIRCLE_A), active(CIRCLE_B))).toBe(true);
+  });
+
+  it('does NOT ingest on a round-robin cursor advance (active/safe/shape unchanged)', () => {
+    const before = active(CIRCLE_A, { lastSpawnPassAt: 1, nextCellOffset: 0 });
+    const after = active(CIRCLE_A, { lastSpawnPassAt: 2, nextCellOffset: 5 });
+    expect(shouldIngestOnAreaWrite(before, after)).toBe(false);
+  });
+
+  it('does NOT ingest on its OWN poiCount / poisRefreshedAt write-back (no re-entrant loop)', () => {
+    const before = active(CIRCLE_A);
+    const after = active(CIRCLE_A, { poiCount: 12, poisRefreshedAt: 'ts' });
+    expect(shouldIngestOnAreaWrite(before, after)).toBe(false);
+    // And a SECOND identical bookkeeping write is still inert — the loop cannot start.
+    expect(shouldIngestOnAreaWrite(after, after)).toBe(false);
+  });
+
+  it('does NOT re-ingest just because it was never ingested (would re-fire on every write)', () => {
+    // active, safe, no poisRefreshedAt yet, but nothing relevant changed.
+    const before = active(CIRCLE_A);
+    const after = active(CIRCLE_A, { name: 'renamed' });
+    expect(shouldIngestOnAreaWrite(before, after)).toBe(false);
+  });
+
+  it('does NOT ingest for an inactive or unconfirmed area', () => {
+    expect(
+      shouldIngestOnAreaWrite(undefined, {
+        active: false,
+        safeAreaConfirmed: true,
+        shape: CIRCLE_A,
+      }),
+    ).toBe(false);
+    expect(
+      shouldIngestOnAreaWrite(undefined, {
+        active: true,
+        safeAreaConfirmed: false,
+        shape: CIRCLE_A,
+      }),
+    ).toBe(false);
+    expect(shouldIngestOnAreaWrite(undefined, { active: true, safeAreaConfirmed: true })).toBe(
+      false,
+    );
+    expect(shouldIngestOnAreaWrite(undefined, undefined)).toBe(false);
   });
 });
 
