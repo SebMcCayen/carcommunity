@@ -25,6 +25,7 @@ import {
   parseActivatePointInput,
   parseCreatePointInput,
   parseSubmitClaimInput,
+  parseUpdatePointInput,
   repeatRuleWindowStart,
   scopeClaimIdempotencyKey,
   startOfUtcDay,
@@ -248,7 +249,6 @@ describe('crownhunt-core inputs and helpers', () => {
 
   it('validates point fields per the legacy limits', () => {
     const valid = {
-      title: 'Kronan vid torget',
       latitude: 59.33,
       longitude: 18.07,
       geofenceRadiusMeters: 50,
@@ -260,10 +260,12 @@ describe('crownhunt-core inputs and helpers', () => {
     expect(parseCreatePointInput({ ...valid, geofenceRadiusMeters: 151 }).ok).toBe(false);
     expect(parseCreatePointInput({ ...valid, rewardPoints: 0 }).ok).toBe(false);
     expect(parseCreatePointInput({ ...valid, rewardPoints: 1001 }).ok).toBe(false);
-    expect(parseCreatePointInput({ ...valid, title: 'x'.repeat(101) }).ok).toBe(false);
-    // Title is optional — a Crown point is just a collectable on the map.
-    expect(parseCreatePointInput({ ...valid, title: undefined }).ok).toBe(true);
-    expect(parseCreatePointInput({ ...valid, title: '' }).ok).toBe(true);
+    // A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled document:
+    // title/description are gone from the create contract and the strict schema
+    // rejects them outright.
+    expect(parseCreatePointInput({ ...valid, title: 'Kronan vid torget' }).ok).toBe(false);
+    expect(parseCreatePointInput({ ...valid, description: 'Beskrivning' }).ok).toBe(false);
+    expect(parseUpdatePointInput({ pointId: 'p1', title: 'x' }).ok).toBe(false);
     expect(parseCreatePointInput({ ...valid, repeatRule: 'hourly' }).ok).toBe(false);
     expect(
       guardPointFields({

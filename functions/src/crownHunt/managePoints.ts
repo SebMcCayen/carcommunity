@@ -5,9 +5,11 @@
  * Deployed via the `crownHunt` export group. Requires an active admin via
  * requireAdminActor. Legacy crown-hunt-service parity:
  *
- * - Points are created as drafts; strict field validation (title <=100,
- *   description <=500, geofence 20-150 m, reward 1-1000 KP, repeat rule
- *   enum, availability-window ordering).
+ * - Points are created as drafts; strict field validation (geofence 20-150 m,
+ *   reward 1-1000 KP, repeat rule enum, availability-window ordering). A Crown
+ *   is a map collectable, not a titled document — no title/description is
+ *   accepted; the stored doc carries title '' / description null for reader
+ *   back-compat.
  * - Only draft or paused points may be edited.
  * - Activation is a SAFETY GATE: it requires an explicit
  *   safeLocationConfirmed flag and an approval note (>=3 chars) that lands
@@ -65,10 +67,12 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
   const serverTimestamp = () => FieldValue.serverTimestamp();
   const batch = db.batch();
   batch.set(pointRef, {
-    // Title is optional (a Crown is just a map collectable); store '' when
-    // absent so the field is always a string and never `undefined` in Firestore.
-    title: input.title ?? '',
-    description: input.description ?? null,
+    // A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled document,
+    // so create accepts no title/description. The stored doc still carries both
+    // fields for reader back-compat (e.g. the map crown popup): title is always
+    // '' and description always null.
+    title: '',
+    description: null,
     latitude: input.latitude,
     longitude: input.longitude,
     geofenceRadiusMeters: input.geofenceRadiusMeters,
@@ -92,7 +96,7 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
         targetType: 'crownHuntPoint',
         targetId: pointRef.id,
         reason: 'Point created (draft).',
-        details: { title: input.title ?? '' },
+        details: { rewardPoints: input.rewardPoints, geofenceRadiusMeters: input.geofenceRadiusMeters },
       },
       serverTimestamp,
     ),
@@ -150,8 +154,6 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
     }
 
     const update: Record<string, unknown> = { updatedAt: serverTimestamp() };
-    if (input.title !== undefined) update.title = input.title;
-    if (input.description !== undefined) update.description = input.description;
     if (input.latitude !== undefined) update.latitude = input.latitude;
     if (input.longitude !== undefined) update.longitude = input.longitude;
     if (input.geofenceRadiusMeters !== undefined)

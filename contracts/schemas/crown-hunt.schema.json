@@ -130,10 +130,8 @@
     },
     "createPointRequest": {
       "type": "object",
-      "description": "Input for crownHunt.createPoint (admin). Points are created as drafts.",
+      "description": "Input for crownHunt.createPoint (admin). Points are created as drafts. A Crown is a map collectable (Pokémon GO–style), not a titled document — no title/description is accepted; rewardPoints comes from a rarity tier chosen in the admin UI. The stored crownHuntPoint still carries title ('') and description (null) for reader back-compat.",
       "properties": {
-        "title": { "type": "string", "maxLength": 100, "description": "Optional — a Crown Hunt point is just a collectable on the map." },
-        "description": { "type": ["string", "null"], "maxLength": 500 },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
         "geofenceRadiusMeters": { "type": "number", "minimum": 20, "maximum": 150 },

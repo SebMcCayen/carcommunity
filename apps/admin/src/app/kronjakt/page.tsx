@@ -79,28 +79,100 @@ function statusLabel(status: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Crown rarity tiers
+//
+// A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled document. Its
+// reward is chosen from a rarity TIER preset rather than a free-typed number.
+// This is a FRONTEND-ONLY concept: the backend point model only stores
+// `rewardPoints` (+ a collect radius via geofenceRadiusMeters), so a tier
+// resolves to its preset numbers on submit. The KP values, the fixed 75 m
+// collect radius and the per-tier lifespans are the canonical figures from the
+// gamification spec's CROWN_RARITY_TABLE (docs/gamification-system.md).
+// ---------------------------------------------------------------------------
+
+type CrownTier = 'common' | 'rare' | 'epic' | 'legendary';
+
+interface CrownTierSpec {
+  /** Kronpoäng reward the tier resolves to. */
+  points: number;
+  /**
+   * Spec lifespan in hours from the gamification doc's CROWN_RARITY_TABLE.
+   * Informational only here: the BACKEND owns crown TTL; hand-placed admin
+   * points expose availability via the optional availableFrom/until window, so
+   * nothing on this form reads ttlHours.
+   */
+  ttlHours: number;
+  /** Distinct colour cue so rarity reads at a glance (rare vs legendary). */
+  color: string;
+}
+
+const CROWN_TIER_ORDER: readonly CrownTier[] = ['common', 'rare', 'epic', 'legendary'];
+
+const CROWN_TIER_TABLE: Record<CrownTier, CrownTierSpec> = {
+  common: { points: 10, ttlHours: 6, color: '#9aa0a6' },
+  rare: { points: 25, ttlHours: 12, color: '#3b82f6' },
+  epic: { points: 100, ttlHours: 24, color: '#a855f7' },
+  legendary: { points: 500, ttlHours: 48, color: '#f5b301' },
+};
+
+const DEFAULT_CROWN_TIER: CrownTier = 'common';
+
+/** Fixed collect radius for every Crown (spec COLLECT_RADIUS_METERS). */
+const CROWN_COLLECT_RADIUS_METERS = 75;
+
+function tierLabel(tier: CrownTier): string {
+  return t(`crownHunt.tier_${tier}`);
+}
+
+/**
+ * The tier whose preset reward EXACTLY equals `points`, or null when it matches
+ * none (a legacy/custom reward from the old free-number UI, which allowed
+ * 1–1000 KP). Returning null — rather than defaulting to Common — is what stops
+ * an edit from silently rewriting a custom reward down to 10 KP.
+ */
+function matchTier(points: number): CrownTier | null {
+  return CROWN_TIER_ORDER.find((tier) => CROWN_TIER_TABLE[tier].points === points) ?? null;
+}
+
+/** Display label + colour for any stored reward, incl. legacy custom values. */
+function tierDisplay(points: number): { label: string; color: string } {
+  const tier = matchTier(points);
+  if (tier) return { label: tierLabel(tier), color: CROWN_TIER_TABLE[tier].color };
+  return { label: t('crownHunt.tier_custom'), color: 'var(--text-secondary)' };
+}
+
+// ---------------------------------------------------------------------------
 // Point form
 // ---------------------------------------------------------------------------
 
 interface PointFormState {
-  title: string;
-  description: string;
   latitude: string;
   longitude: string;
-  geofenceRadiusMeters: string;
-  rewardPoints: string;
+  /**
+   * The tier the admin has selected, or 'custom' when editing a legacy point
+   * whose stored reward maps to no tier. `rewardPoints` is the source of truth
+   * that is actually saved; picking a tier button overwrites it with the
+   * preset. While 'custom' is held the original reward is preserved untouched.
+   */
+  tier: CrownTier | 'custom';
+  rewardPoints: number;
+  /**
+   * The collect radius that will be saved. New crowns default to the fixed
+   * 75 m; editing an existing point keeps its stored radius verbatim (the form
+   * has no geofence control, so an unrelated edit must not change it).
+   */
+  geofenceRadiusMeters: number;
   repeatRule: 'once' | 'daily' | 'weekly';
   availableFrom: string;
   availableUntil: string;
 }
 
 const EMPTY_FORM: PointFormState = {
-  title: '',
-  description: '',
   latitude: '',
   longitude: '',
-  geofenceRadiusMeters: '100',
-  rewardPoints: '10',
+  tier: DEFAULT_CROWN_TIER,
+  rewardPoints: CROWN_TIER_TABLE[DEFAULT_CROWN_TIER].points,
+  geofenceRadiusMeters: CROWN_COLLECT_RADIUS_METERS,
   repeatRule: 'once',
   availableFrom: '',
   availableUntil: '',
@@ -108,12 +180,15 @@ const EMPTY_FORM: PointFormState = {
 
 function pointToForm(point: AdminCrownHuntPointSummary): PointFormState {
   return {
-    title: point.title,
-    description: point.description ?? '',
     latitude: String(point.latitude),
     longitude: String(point.longitude),
-    geofenceRadiusMeters: String(point.geofenceRadiusMeters),
-    rewardPoints: String(point.rewardPoints),
+    // Keep the stored reward verbatim; only mark it 'custom' when it maps to no
+    // tier so saving without touching the selector never changes it.
+    tier: matchTier(point.rewardPoints) ?? 'custom',
+    rewardPoints: point.rewardPoints,
+    // Preserve the existing collect radius (there is no geofence UI to change
+    // it) so an edit never silently rewrites it to the 75 m new-point default.
+    geofenceRadiusMeters: point.geofenceRadiusMeters,
     repeatRule: point.repeatRule,
     availableFrom: toLocalDateTimeValue(point.availableFrom),
     availableUntil: toLocalDateTimeValue(point.availableUntil),
@@ -134,6 +209,11 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
   const set = (field: keyof PointFormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  // Picking a tier leaves any 'custom' state and overwrites the saved reward
+  // with that tier's preset — the only path that changes rewardPoints.
+  const selectTier = (tier: CrownTier) =>
+    setForm((prev) => ({ ...prev, tier, rewardPoints: CROWN_TIER_TABLE[tier].points }));
+
   return (
     <form
       onSubmit={(e) => {
@@ -142,30 +222,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
       }}
       className={styles.form}
     >
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          {t('crownHunt.formTitleLabel')}
-          <input
-            className={styles.input}
-            value={form.title}
-            onChange={(e) => set('title', e.target.value)}
-            maxLength={100}
-          />
-        </label>
-      </div>
-
-      <div className={styles.formRow}>
-        <label className={styles.label}>
-          {t('crownHunt.formDescriptionLabel')}
-          <textarea
-            className={styles.input}
-            value={form.description}
-            onChange={(e) => set('description', e.target.value)}
-            maxLength={500}
-            rows={3}
-          />
-        </label>
-      </div>
+      <p className={styles.introText}>{t('crownHunt.formCollectableHint')}</p>
 
       <MapLocationPicker
         latitude={form.latitude}
@@ -178,50 +235,61 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
         loadErrorText={t('map.loadError')}
-        radiusMeters={Number.parseInt(form.geofenceRadiusMeters, 10) || undefined}
+        radiusMeters={form.geofenceRadiusMeters}
         required
         labelClassName={styles.label}
         inputClassName={styles.input}
       />
 
-      <div className={styles.formRowGrid}>
-        <label className={styles.label}>
-          {t('crownHunt.formGeofenceLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            min="20"
-            max="150"
-            value={form.geofenceRadiusMeters}
-            onChange={(e) => set('geofenceRadiusMeters', e.target.value)}
-            required
-          />
-        </label>
-        <label className={styles.label}>
-          {t('crownHunt.formRewardLabel')} *
-          <input
-            className={styles.input}
-            type="number"
-            min="1"
-            max="1000"
-            value={form.rewardPoints}
-            onChange={(e) => set('rewardPoints', e.target.value)}
-            required
-          />
-        </label>
-      </div>
+      <fieldset className={styles.tierFieldset}>
+        <legend className={styles.label}>{t('crownHunt.formTierLabel')}</legend>
+        {/* Toggle-button group: the <fieldset>/<legend> labels the set and each
+            button reports its state via aria-pressed. This deliberately avoids
+            role="radiogroup"/"radio", which would also require roving-tabindex
+            + arrow-key navigation to be a faithful ARIA radio pattern. */}
+        <div className={styles.tierGrid}>
+          {CROWN_TIER_ORDER.map((tier) => {
+            const spec = CROWN_TIER_TABLE[tier];
+            const selected = form.tier === tier;
+            return (
+              <button
+                type="button"
+                key={tier}
+                aria-pressed={selected}
+                className={`${styles.tierOption} ${selected ? styles.tierOptionSelected : ''}`}
+                style={{ ['--tier-color' as string]: spec.color }}
+                onClick={() => selectTier(tier)}
+              >
+                <span className={styles.tierCrown} style={{ color: spec.color }} aria-hidden="true">
+                  ♛
+                </span>
+                <span className={styles.tierName}>{tierLabel(tier)}</span>
+                <span className={styles.tierPoints}>{spec.points} KP</span>
+              </button>
+            );
+          })}
+        </div>
+        {/* Legacy point whose stored reward maps to no tier: show the real value
+            read-only so saving without picking a tier keeps it (no silent
+            coercion to Common). Picking any tier above replaces it. */}
+        {form.tier === 'custom' && (
+          <p className={styles.introText}>
+            {t('crownHunt.tierCustomNotice').replace('{points}', String(form.rewardPoints))}
+          </p>
+        )}
+      </fieldset>
 
       <div className={styles.formRow}>
         <label className={styles.label}>
-          {t('crownHunt.formRepeatRuleLabel')} *
+          {t('crownHunt.formRepeatRuleLabel')}
           <select
             className={styles.input}
             value={form.repeatRule}
             onChange={(e) => set('repeatRule', e.target.value as PointFormState['repeatRule'])}
           >
-            <option value="once">once</option>
-            <option value="daily">daily</option>
-            <option value="weekly">weekly</option>
+            <option value="once">{t('crownHunt.repeatOnce')}</option>
+            <option value="daily">{t('crownHunt.repeatDaily')}</option>
+            <option value="weekly">{t('crownHunt.repeatWeekly')}</option>
           </select>
         </label>
       </div>
@@ -264,22 +332,30 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
 // ---------------------------------------------------------------------------
 
 interface ActivateModalProps {
-  pointTitle: string;
+  point: AdminCrownHuntPointSummary;
   onConfirm: (note: string) => Promise<void>;
   onCancel: () => void;
   isConfirming: boolean;
   error: string | null;
 }
 
-const ActivateModal = ({ pointTitle, onConfirm, onCancel, isConfirming, error }: ActivateModalProps) => {
+const ActivateModal = ({ point, onConfirm, onCancel, isConfirming, error }: ActivateModalProps) => {
   const [safetyNote, setSafetyNote] = useState('');
   const [checked, setChecked] = useState(false);
+  const display = tierDisplay(point.rewardPoints);
 
   return (
     <div className={styles.modalOverlay} role="dialog" aria-modal="true">
       <div className={styles.modal}>
         <h2 className={styles.modalTitle}>{t('crownHunt.activateConfirmTitle')}</h2>
-        <p className={styles.modalBody}>{pointTitle}</p>
+        {/* A Crown is a textless collectable — identify it by rarity + reward,
+            not a title. */}
+        <p className={styles.modalBody}>
+          <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
+            ♛
+          </span>{' '}
+          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+        </p>
         <p className={styles.safetyWarning}>⚠️ {t('crownHunt.safetyWarning')}</p>
 
         <label className={styles.label}>
@@ -372,7 +448,7 @@ const PointsTab = ({
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>{t('crownHunt.columnTitle')}</th>
+            <th>{t('crownHunt.columnRarity')}</th>
             <th>{t('crownHunt.columnStatus')}</th>
             <th>{t('crownHunt.columnReward')}</th>
             <th>{t('crownHunt.columnRepeatRule')}</th>
@@ -381,9 +457,21 @@ const PointsTab = ({
           </tr>
         </thead>
         <tbody>
-          {points.map((point) => (
+          {points.map((point) => {
+            const display = tierDisplay(point.rewardPoints);
+            return (
             <tr key={point.pointId}>
-              <td>{point.title}</td>
+              <td>
+                <span
+                  className={styles.tierChip}
+                  style={{ ['--tier-color' as string]: display.color }}
+                >
+                  <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
+                    ♛
+                  </span>
+                  {display.label}
+                </span>
+              </td>
               <td>
                 <span className={`${styles.badge} ${styles[`badge_${point.status}`] ?? ''}`}>
                   {statusLabel(point.status)}
@@ -410,7 +498,8 @@ const PointsTab = ({
                 )}
               </td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     )}
@@ -941,16 +1030,15 @@ export default function KronjaktPage() {
       setSaveError(null);
       try {
         const base = {
-          // A Crown point is just a collectable on the map — a title is
-          // optional. Send the trimmed value (possibly '') on every save so an
-          // emptied box also clears an existing title on edit; the backend
-          // stores '' as "no title".
-          title: form.title.trim(),
-          description: form.description || undefined,
+          // A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled
+          // document — no title/description is sent. rewardPoints is the source
+          // of truth: a tier button sets it to that tier's preset, while a
+          // legacy 'custom' reward is preserved verbatim so an edit never
+          // silently coerces it. The 75 m collect radius is fixed.
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
-          geofenceRadiusMeters: parseInt(form.geofenceRadiusMeters, 10),
-          rewardPoints: parseInt(form.rewardPoints, 10),
+          geofenceRadiusMeters: form.geofenceRadiusMeters,
+          rewardPoints: form.rewardPoints,
           repeatRule: form.repeatRule,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
           availableUntil: localToIso(form.availableUntil) ?? undefined,
@@ -1212,7 +1300,7 @@ export default function KronjaktPage() {
       {/* Activate confirmation modal */}
       {activatingPoint !== null && (
         <ActivateModal
-          pointTitle={activatingPoint.title}
+          point={activatingPoint}
           onConfirm={handleActivateConfirm}
           onCancel={() => {
             setActivatingPoint(null);
