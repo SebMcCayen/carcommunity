@@ -65,8 +65,13 @@ object EventLocationPicker {
      * Last-resort map centre used only when neither the event's own pin nor the
      * user's current location is available: Kungsbacka, the town the app serves
      * (same coordinates the main map's default camera uses —
-     * map/MapMarkers.DEFAULT_CAMERA). Longitude then latitude. This is a FALLBACK
-     * only; the primary default is the user's own location (see [startCenter]).
+     * map/MapMarkers.DEFAULT_CAMERA). This is a FALLBACK only; the primary
+     * default is the user's own location (see [startCenter]).
+     *
+     * These are two independent named constants, not an ordered pair —
+     * [startCenter] returns (latitude, longitude), while the constants are fed to
+     * Mapbox's `Point.fromLngLat` in (longitude, latitude) order at the call
+     * site; always pass each one by name so the order can't be transposed.
      */
     const val DEFAULT_LONGITUDE = 12.0757
     const val DEFAULT_LATITUDE = 57.4874
@@ -185,8 +190,11 @@ fun EventLocationPickerScreen(
     // the camera to the freshly resolved centre and re-seed the captured centre.
     // Keyed on the resolved centre, so it fires when the user's location first
     // arrives (the pair changes) and NOT on a plain pan (which leaves startLat/
-    // startLng unchanged). Skipped once the user has moved the map themselves.
-    LaunchedEffect(mapView, startLat, startLng) {
+    // startLng unchanged). Skipped once the user has moved the map themselves —
+    // [userMovedCamera] is a key too, so the moment it flips true the effect
+    // restarts and the guard below returns, making the skip deterministic even if
+    // the user starts panning in the same frame the fix lands.
+    LaunchedEffect(mapView, startLat, startLng, userMovedCamera) {
         val view = mapView ?: return@LaunchedEffect
         if (userMovedCamera) return@LaunchedEffect
         // Only adopt the new centre as the captured coordinate if the camera
