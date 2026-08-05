@@ -76,6 +76,7 @@ fun FriendsScreen(
     onDismissAdd: () -> Unit,
     onAccept: (String) -> Unit,
     onDecline: (String) -> Unit,
+    onCancel: (String) -> Unit,
     onRemove: (String) -> Unit,
     onClearActionError: () -> Unit,
     onMessageFriend: (FriendSummary) -> Unit,
@@ -164,7 +165,14 @@ fun FriendsScreen(
                             SectionHeader(stringResource(R.string.friends_outgoingTitle))
                         }
                         items(status.outgoing, key = { "outgoing-${it.requestId}" }) { request ->
-                            OutgoingRequestRow(request)
+                            OutgoingRequestRow(
+                                request = request,
+                                // The cancel row is keyed in the coordinator by the
+                                // recipient uid (cancelRequest is addressed by
+                                // RECIPIENT), so its in-flight guard is too.
+                                working = request.toUid in busyRows,
+                                onCancel = { onCancel(request.toUid) },
+                            )
                         }
                     }
 
@@ -352,19 +360,36 @@ private fun IncomingRequestRow(
 }
 
 @Composable
-private fun OutgoingRequestRow(request: FriendRequestSummary) {
+private fun OutgoingRequestRow(
+    request: FriendRequestSummary,
+    working: Boolean,
+    onCancel: () -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Row(
+        Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            MemberHeader(user = request.otherUser, modifier = Modifier.padding(end = KccSpacing.s3))
-            Text(
-                text = stringResource(R.string.friends_outgoingPendingLabel),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                MemberHeader(
+                    user = request.otherUser,
+                    modifier = Modifier.padding(end = KccSpacing.s3),
+                )
+                Text(
+                    text = stringResource(R.string.friends_outgoingPendingLabel),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            // Withdraws a request sent by mistake. Disabled while the cancel
+            // callable is in flight so rapid taps can't overlap.
+            OutlinedButton(onClick = onCancel, enabled = !working) {
+                Text(stringResource(R.string.friends_cancelRequestAction))
+            }
         }
     }
 }

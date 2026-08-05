@@ -440,7 +440,8 @@
     <string name="friends_outgoingTitle">Pending requests</string>
     <string name="friends_listTitle">Your friends</string>
     <string name="friends_emptyFriends">You haven\'t added any friends yet.</string>
-    <string name="friends_outgoingPendingLabel">Waiting for a reply</string>
+    <string name="friends_outgoingPendingLabel">Waiting for confirmation</string>
+    <string name="friends_cancelRequestAction">Cancel request</string>
     <string name="friends_accept">Accept</string>
     <string name="friends_decline">Decline</string>
     <string name="friends_remove">Unfriend</string>

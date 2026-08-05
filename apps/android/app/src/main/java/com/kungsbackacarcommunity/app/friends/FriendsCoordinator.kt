@@ -205,6 +205,43 @@ class FriendsCoordinator(
         }
     }
 
+    /**
+     * Withdraws the caller's OWN pending outgoing request to [toUid] (the "Cancel
+     * request" affordance on an outgoing row — a request sent by mistake). Keyed
+     * in [inFlightRows] by the recipient uid, matching how the outgoing row is
+     * identified; a second tap while the callable is running is dropped.
+     *
+     * The callable is idempotent: whether it deletes a live request or answers a
+     * silent no-op, the post-state is "I no longer have a pending request to this
+     * member", so success always resyncs the snapshot — the row disappears. A
+     * thrown/failed cancel surfaces the mapped error AND resyncs, so a request
+     * already handled server-side does not linger in the list.
+     */
+    suspend fun cancel(toUid: String) {
+        if (toUid in inFlightRows.value) return
+        inFlightRows.update { it + toUid }
+        rowError.value = null
+        try {
+            when (val result = repository.cancelRequest(toUid)) {
+                CancelResult.Cancelled -> load()
+                is CancelResult.Failed -> {
+                    rowError.value = result.error
+                    reportIfFault("cancelRequest", result.error, result.diagnostic)
+                    // The request may be gone/handled server-side — resync so the
+                    // stale outgoing row disappears rather than lingering.
+                    load()
+                }
+            }
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Exception) {
+            rowError.value = FriendActionError.Generic
+            reportIfFault("cancelRequest", FriendActionError.Generic, error::class.java.simpleName)
+        } finally {
+            inFlightRows.update { it - toUid }
+        }
+    }
+
     suspend fun remove(friendUid: String) {
         // Ignore a second tap on a friend whose removal is already running.
         if (friendUid in inFlightRows.value) return

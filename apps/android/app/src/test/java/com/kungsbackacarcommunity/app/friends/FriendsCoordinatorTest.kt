@@ -17,10 +17,13 @@ class FriendsCoordinatorTest {
         var sendResult: SendRequestResult = SendRequestResult.Requested
         var sendToUidResult: SendRequestResult = SendRequestResult.Requested
         var respondResult: RespondResult = RespondResult.Accepted
+        var cancelResult: CancelResult = CancelResult.Cancelled
         var removeResult: RemoveResult = RemoveResult.Removed
 
         var lastNickname: String? = null
         var lastToUid: String? = null
+        var lastCancelToUid: String? = null
+        var cancelCalls = 0
         var listCalls = 0
 
         override suspend fun list(): FriendsResult {
@@ -40,7 +43,11 @@ class FriendsCoordinatorTest {
 
         override suspend fun respond(requestId: String, accept: Boolean): RespondResult = respondResult
 
-        override suspend fun cancelRequest(toUid: String): CancelResult = CancelResult.Cancelled
+        override suspend fun cancelRequest(toUid: String): CancelResult {
+            cancelCalls++
+            lastCancelToUid = toUid
+            return cancelResult
+        }
 
         override suspend fun remove(friendUid: String): RemoveResult = removeResult
     }
@@ -241,6 +248,105 @@ class FriendsCoordinatorTest {
         val coordinator = FriendsCoordinator(repo)
         coordinator.remove("f1")
         assertEquals(FriendActionError.Generic, coordinator.actionError.value)
+    }
+
+    // --- cancel an outgoing (sent-by-me) pending request ----------------------
+    // "Cancel request" withdraws a request I sent by mistake. It is addressed by
+    // the RECIPIENT uid (cancelRequest(toUid)); success resyncs so the outgoing
+    // row disappears.
+
+    private fun outgoing(toUid: String) =
+        FriendRequestSummary(
+            requestId = "req-$toUid",
+            fromUid = "me",
+            toUid = toUid,
+            direction = FriendRequestDirection.Outgoing,
+            otherUser = FriendUser(toUid, "Pending Pal", null),
+            createdAt = null,
+        )
+
+    @Test
+    fun `cancel withdraws the outgoing request by recipient uid and reloads`() = runTest {
+        val repo =
+            FakeRepo().apply {
+                listResult = FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), listOf(outgoing("u2"))))
+            }
+        val coordinator = FriendsCoordinator(repo)
+        coordinator.load()
+        assertEquals(1, (coordinator.status.value as FriendsStatus.Loaded).outgoing.size)
+
+        // After the cancel, the backend no longer returns that pending request.
+        repo.listResult = FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList()))
+        val before = repo.listCalls
+        coordinator.cancel("u2")
+
+        assertEquals("u2", repo.lastCancelToUid)
+        assertEquals(1, repo.cancelCalls)
+        assertTrue(repo.listCalls > before)
+        assertEquals(emptyList<FriendRequestSummary>(), (coordinator.status.value as FriendsStatus.Loaded).outgoing)
+        assertNull(coordinator.actionError.value)
+    }
+
+    @Test
+    fun `cancel failure surfaces action error and still resyncs`() = runTest {
+        val repo =
+            FakeRepo().apply { cancelResult = CancelResult.Failed(FriendActionError.RequestGone) }
+        val coordinator = FriendsCoordinator(repo)
+        val before = repo.listCalls
+        coordinator.cancel("u2")
+        assertEquals(FriendActionError.RequestGone, coordinator.actionError.value)
+        // A request already handled server-side must not linger — resync anyway.
+        assertTrue(repo.listCalls > before)
+    }
+
+    @Test
+    fun `an unclassified cancel failure is reported with its raw code`() = runTest {
+        val reporter = FakeReporter()
+        val repo =
+            FakeRepo().apply { cancelResult = CancelResult.Failed(FriendActionError.Generic, "INTERNAL") }
+        FriendsCoordinator(repo, reporter).cancel("u2")
+
+        assertEquals(1, reporter.reports.size)
+        val report = reporter.reports.single()
+        assertEquals("friends.cancelRequest", report.feature)
+        assertEquals("INTERNAL", report.code)
+    }
+
+    @Test
+    fun `a second cancel for the same uid is ignored while one is in flight`() = runTest {
+        val gate = CompletableDeferred<Unit>()
+        val repo =
+            object : FriendsRepository {
+                var cancelCalls = 0
+
+                override suspend fun list(): FriendsResult =
+                    FriendsResult.Loaded(FriendsData(emptyList(), emptyList(), emptyList()))
+
+                override suspend fun sendRequestByNickname(nickname: String) = SendRequestResult.Requested
+
+                override suspend fun sendRequestToUid(toUid: String) = SendRequestResult.Requested
+
+                override suspend fun respond(requestId: String, accept: Boolean) = RespondResult.Accepted
+
+                override suspend fun cancelRequest(toUid: String): CancelResult {
+                    cancelCalls++
+                    gate.await()
+                    return CancelResult.Cancelled
+                }
+
+                override suspend fun remove(friendUid: String) = RemoveResult.Removed
+            }
+        val coordinator = FriendsCoordinator(repo)
+
+        val first = launch { coordinator.cancel("u2") }
+        runCurrent()
+        assertTrue("u2" in coordinator.busyRows.value)
+        coordinator.cancel("u2")
+        assertEquals(1, repo.cancelCalls)
+
+        gate.complete(Unit)
+        first.join()
+        assertTrue(coordinator.busyRows.value.isEmpty())
     }
 
     @Test
