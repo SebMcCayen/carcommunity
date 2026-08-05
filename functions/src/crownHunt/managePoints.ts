@@ -140,6 +140,32 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       );
     }
 
+    // Unlimited → limited is only safe BEFORE anyone has collected. Unlimited
+    // crowns never track distinct collectors (no crownHuntPointCollectors
+    // markers, and collectorCount stays 0), so a cap added AFTER awards exist
+    // could not count the prior collectors — the first N *new* collectors would
+    // each still be admitted, letting far more than N distinct users collect
+    // overall. That transition is unenforceable, so reject it (a backfill is out
+    // of scope for MVP). Limited → limited (change N) and limited → unlimited
+    // stay allowed. Read the awarded-claim probe INSIDE the transaction, before
+    // any write.
+    const wasUnlimited = (existing.maxCollectors as number | null | undefined) == null;
+    if (input.maxCollectors != null && wasUnlimited) {
+      const awarded = await tx.get(
+        db
+          .collection('crownHuntClaims')
+          .where('pointId', '==', input.pointId)
+          .where('result', '==', 'awarded')
+          .limit(1),
+      );
+      if (!awarded.empty) {
+        throw new HttpsError(
+          'invalid-argument',
+          'This crown has already been collected, so a collector limit cannot be added now — unlimited crowns do not track collectors. Create a new limited crown instead.',
+        );
+      }
+    }
+
     // Merge incoming over existing, then validate the merged result
     // (legacy adminUpdatePoint semantics).
     const merged = {

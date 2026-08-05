@@ -781,6 +781,51 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(await collectAs(c, pointId)).toBe('point_inactive');
   });
 
+  it('rejects enabling a collector limit on a previously-unlimited crown that has already been collected', async () => {
+    // Unlimited crowns never counted distinct collectors (no markers,
+    // collectorCount stays 0), so a cap added AFTER awards exist would be
+    // unenforceable — reject the unlimited→limited transition.
+    const pointId = await createActivePoint(); // unlimited (maxCollectors null)
+    const a = await createFreshMember('ch-enable-a');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBeNull();
+    expect(doc.collectorCount).toBe(0); // unlimited never tracked collectors
+
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Vill lägga till ett tak.' });
+    // Adding a cap now is rejected as invalid.
+    expect(
+      await callableErrorCode(call('crownHunt-updatePoint', { pointId, maxCollectors: 5 })),
+    ).toBe('functions/invalid-argument');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBeNull(); // unchanged
+
+    // Other edits (that keep it unlimited) still work.
+    await call('crownHunt-updatePoint', { pointId, rewardPoints: 100 });
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.rewardPoints).toBe(100);
+    expect(doc.maxCollectors).toBeNull();
+  });
+
+  it('allows changing N (limited -> limited) on an already-collected limited crown', async () => {
+    // Only the unenforceable unlimited→limited transition is blocked; raising or
+    // lowering N on a crown that was ALWAYS limited (and thus tracked
+    // collectors) stays allowed.
+    const pointId = await createActivePoint({ maxCollectors: 5 });
+    const a = await createFreshMember('ch-changeN-a');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(1);
+
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Justerar N.' });
+    await call('crownHunt-updatePoint', { pointId, maxCollectors: 10 });
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBe(10);
+    expect(doc.status).toBe('paused'); // still above the collector count, not retired
+  });
+
   it('back-compat: a point with no maxCollectors field behaves as unlimited', async () => {
     // Simulate a pre-existing point created before this feature: activate a
     // point, then strip the maxCollectors/collectorCount fields to mimic the
