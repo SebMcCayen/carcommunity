@@ -308,6 +308,14 @@ export interface LiveSession {
    */
   convoyId?: string;
   /**
+   * Set once the scheduled sweep has FINALIZED this convoy-auto session into a
+   * saved ride (or confirmed the client already saved one) — see
+   * decideConvoyRideFinalize and live.cleanupExpired. It is the idempotency
+   * marker that stops the every-5-minute sweep from re-processing the same
+   * stopped session forever. Absent/false means "not yet considered".
+   */
+  convoyRideFinalized?: boolean;
+  /**
    * Throttle state for the Firestore nearby-discovery doc (see
    * shouldRefreshDiscovery in nearby-core.ts). Written by updatePosition when it
    * refreshes the discovery doc; absent until the first refresh. Not a session
@@ -362,6 +370,89 @@ export function isSessionActive(
   return (
     !!session && session.status === 'active' && Date.parse(session.expiresAt) > now.getTime()
   );
+}
+
+/**
+ * How long the scheduled sweep WAITS after a convoy-auto session ends before it
+ * writes the server-side baseline ride. This grace window is what makes the
+ * finalize race-free: a member whose app is alive at session end saves the RICH
+ * route drive within seconds (keyed on the same session id), and only if that
+ * has NOT happened by the time this window elapses does the server write the
+ * duration-only fallback — so the common foreground case is never downgraded.
+ * Comfortably larger than a client save's round-trip, and well inside the
+ * 5-minute sweep cadence.
+ */
+export const CONVOY_RIDE_FINALIZE_GRACE_MS = 3 * 60 * 1000;
+
+/** Why a session was (not) chosen for a server-side convoy-ride finalize. */
+export type ConvoyRideFinalizeSkip =
+  | 'not-convoy-auto'
+  | 'already-finalized'
+  | 'not-ended'
+  | 'missing-times'
+  | 'nonpositive-duration'
+  | 'within-grace';
+
+export interface ConvoyRideFinalizeDecision {
+  finalize: boolean;
+  /** Present only when finalize is false. */
+  skip?: ConvoyRideFinalizeSkip;
+  /** The ride's startedAt/endedAt (ISO), present only when finalize is true. */
+  startedAt?: string;
+  endedAt?: string;
+}
+
+/**
+ * Decides whether the scheduled sweep should FINALIZE a live session into a
+ * server-side "convoy run" ride — the reliability backstop for issue "members'
+ * runs are not saved when the host stops the convoy".
+ *
+ * The member's own client only saves the drive while its Compose UI is alive to
+ * observe the session stop; a member whose app is backgrounded-and-destroyed or
+ * killed while driving therefore loses the run entirely. This decision lets the
+ * server persist a duration-only baseline for exactly those sessions, WITHOUT
+ * duplicating or downgrading the client's richer save:
+ *  - only convoy-AUTO sessions (a manual solo session is ended by the user IN
+ *    the app, so their client is alive to save it);
+ *  - only ENDED ones (stopped by convoy.end / convoy.leave, or expired by the
+ *    TTL sweep) with a real positive duration;
+ *  - only after CONVOY_RIDE_FINALIZE_GRACE_MS, so a live client's save (keyed on
+ *    the SAME session id → same ride doc) lands first and the server write
+ *    becomes an idempotent no-op;
+ *  - never twice (the convoyRideFinalized marker).
+ *
+ * Pure so the policy is unit-tested off the scheduler. The caller still checks
+ * Firestore for an existing ride before writing — this only gates WHICH sessions
+ * are even considered.
+ */
+export function decideConvoyRideFinalize(
+  session: LiveSession | null | undefined,
+  now: Date,
+  graceMs: number = CONVOY_RIDE_FINALIZE_GRACE_MS,
+): ConvoyRideFinalizeDecision {
+  if (!session || session.convoyAutoStarted !== true) {
+    return { finalize: false, skip: 'not-convoy-auto' };
+  }
+  if (session.convoyRideFinalized === true) {
+    return { finalize: false, skip: 'already-finalized' };
+  }
+  // 'stopped' (convoy.end / convoy.leave) or 'expired' (6h TTL sweep) — an
+  // 'active' session is still being driven and has nothing to finalize yet.
+  if (session.status !== 'stopped' && session.status !== 'expired') {
+    return { finalize: false, skip: 'not-ended' };
+  }
+  const startedMs = Date.parse(session.startedAt);
+  const endedMs = session.stoppedAt ? Date.parse(session.stoppedAt) : NaN;
+  if (!Number.isFinite(startedMs) || !Number.isFinite(endedMs)) {
+    return { finalize: false, skip: 'missing-times' };
+  }
+  if (endedMs <= startedMs) {
+    return { finalize: false, skip: 'nonpositive-duration' };
+  }
+  if (now.getTime() - endedMs < graceMs) {
+    return { finalize: false, skip: 'within-grace' };
+  }
+  return { finalize: true, startedAt: session.startedAt, endedAt: session.stoppedAt! };
 }
 
 /** liveLocation/{uid}/latest node — lean, marker-complete. */

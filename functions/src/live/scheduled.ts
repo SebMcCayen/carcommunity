@@ -20,14 +20,86 @@
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { logger } from 'firebase-functions';
-import { Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { adminRtdb, db } from '../firebase';
-import { isLatestStale, isSessionActive, type LiveSession } from './live-core';
+import {
+  decideConvoyRideFinalize,
+  isLatestStale,
+  isSessionActive,
+  type LiveSession,
+} from './live-core';
+import {
+  buildRideDocument,
+  computeDriveStats,
+  type SaveDriveInput,
+} from '../drives/drives-core';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Max discovery docs deleted per sweep (bounded; the 5-min cadence catches up). */
 const DISCOVERY_SWEEP_LIMIT = 400;
+
+/**
+ * Max convoy-auto sessions finalized into a ride per sweep. Bounds the extra
+ * Firestore work one run can fan out to; anything over the cap is caught by the
+ * next 5-minute run (an un-finalized session is not lost — it simply waits).
+ */
+const CONVOY_RIDE_FINALIZE_LIMIT = 200;
+
+/**
+ * Writes the server-side baseline "convoy run" ride for a member whose app did
+ * NOT save it client-side (backgrounded/killed at session end), then marks the
+ * session finalized so it is never processed again. Returns how many rides were
+ * newly written (an existing ride — the client already saved — counts as 0 but
+ * is still flagged).
+ *
+ * The ride is keyed `rides/{uid}_{sessionId}`, the SAME id the client's
+ * live-session save uses (SingleSessionRecording), so this and the client save
+ * DEDUPE: a transaction only creates the doc when it is absent, so a client save
+ * that already landed is preserved untouched (its richer route + stats stay) and
+ * this becomes a flag-only no-op. Summary-only (no route points): duration comes
+ * from the session's startedAt→stoppedAt, distance/speed are null — exactly a
+ * duration-only client save.
+ *
+ * Best-effort per session: one failure is logged and skipped so a single bad
+ * session cannot fail the whole sweep. The finalize flag is only written on a
+ * successful ride reconcile, so a failed session is retried next run.
+ */
+async function finalizeConvoyRides(
+  candidates: { uid: string; sessionId: string; startedAt: string; endedAt: string }[],
+): Promise<number> {
+  let written = 0;
+  for (const { uid, sessionId, startedAt, endedAt } of candidates) {
+    try {
+      const rideRef = db.collection('rides').doc(`${uid}_${sessionId}`);
+      const created = await db.runTransaction(async (tx) => {
+        const existing = await tx.get(rideRef);
+        if (existing.exists) {
+          return false;
+        }
+        // Summary-only: no routePoints, so computeDriveStats derives duration
+        // from the times and leaves distance/speed null (drives-core).
+        const input: SaveDriveInput = { startedAt, endedAt, sourceSessionId: sessionId };
+        tx.set(
+          rideRef,
+          buildRideDocument(
+            input,
+            { userId: uid, rideId: rideRef.id, stats: computeDriveStats(input), routeThumbnail: null },
+            () => FieldValue.serverTimestamp(),
+          ),
+        );
+        return true;
+      });
+      if (created) written += 1;
+      // Mark finalized ONLY after the ride is reconciled, so a throw above leaves
+      // the session unflagged and it is retried on the next sweep.
+      await adminRtdb.ref(`liveLocation/${uid}/session/convoyRideFinalized`).set(true);
+    } catch (error) {
+      logger.warn('convoy ride finalize failed', { uid, sessionId, error: String(error) });
+    }
+  }
+  return written;
+}
 
 /**
  * Deletes nearby-discovery docs (liveSessions) whose expiresAt has passed, plus
@@ -87,9 +159,12 @@ interface LiveUserNode {
   latest?: { recordedAt?: string };
 }
 
-export async function runLiveCleanup(
-  now: Date,
-): Promise<{ expiredSessions: number; removedMarkers: number; removedDiscoveryDocs: number }> {
+export async function runLiveCleanup(now: Date): Promise<{
+  expiredSessions: number;
+  removedMarkers: number;
+  removedDiscoveryDocs: number;
+  finalizedConvoyRides: number;
+}> {
   const snapshot = await adminRtdb.ref('liveLocation').get();
   const users = (snapshot.val() ?? {}) as Record<string, LiveUserNode>;
 
@@ -100,6 +175,10 @@ export async function runLiveCleanup(
   // too, even if its own expiresAt has not been reached yet (a session that
   // expired on duration before the discovery TTL window elapsed).
   const removedUids = new Set<string>();
+  // Convoy-auto sessions this sweep should back-stop into a saved ride (member
+  // whose app may not have saved it client-side). Capped per run.
+  const rideCandidates: { uid: string; sessionId: string; startedAt: string; endedAt: string }[] =
+    [];
 
   for (const [uid, node] of Object.entries(users)) {
     const session = node.session;
@@ -112,6 +191,10 @@ export async function runLiveCleanup(
         removedMarkers += 1;
       }
       removedUids.add(uid);
+      // A session expired THIS run has stoppedAt = now, so it is within grace and
+      // decideConvoyRideFinalize skips it; the NEXT sweep (after grace) finalizes
+      // it. So no need to consider it here — fall through to the ended-session
+      // check below only for sessions that were already stopped/expired.
       continue;
     }
     // Numeric comparison — producers may emit non-canonical ISO strings.
@@ -120,6 +203,19 @@ export async function runLiveCleanup(
       removedMarkers += 1;
       removedUids.add(uid);
     }
+    // Back-stop the member's run: an already-ended convoy-auto session, past its
+    // grace window and not yet finalized, is a candidate for a server-side ride.
+    if (session && rideCandidates.length < CONVOY_RIDE_FINALIZE_LIMIT) {
+      const decision = decideConvoyRideFinalize(session, now);
+      if (decision.finalize) {
+        rideCandidates.push({
+          uid,
+          sessionId: session.id,
+          startedAt: decision.startedAt!,
+          endedAt: decision.endedAt!,
+        });
+      }
+    }
   }
 
   if (Object.keys(updates).length > 0) {
@@ -127,13 +223,15 @@ export async function runLiveCleanup(
   }
 
   const removedDiscoveryDocs = await sweepDiscoveryDocs(now, removedUids);
+  const finalizedConvoyRides = await finalizeConvoyRides(rideCandidates);
 
   logger.info('Live location cleanup complete', {
     expiredSessions,
     removedMarkers,
     removedDiscoveryDocs,
+    finalizedConvoyRides,
   });
-  return { expiredSessions, removedMarkers, removedDiscoveryDocs };
+  return { expiredSessions, removedMarkers, removedDiscoveryDocs, finalizedConvoyRides };
 }
 
 /** 5-minute TTL sweep (mapping cadence). */

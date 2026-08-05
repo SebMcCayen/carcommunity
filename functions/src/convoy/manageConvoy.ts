@@ -740,10 +740,14 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
   }
   const ref = convoyRef(parsed.input.convoyId);
 
-  // Captured inside the transaction so the notification fan-out below describes
-  // the roster the end actually applied to (and re-captured on a retry).
+  // Captured inside the transaction so the post-commit fan-outs describe the
+  // roster the end actually applied to (and re-capture on a retry). `endedData`
+  // is the exact ended document we wrote, used to build the response WITHOUT a
+  // second read — see below.
   let endedFor: string[] = [];
+  let acceptedUids: string[] = [];
   let enderName: string | null = null;
+  let endedData: Record<string, unknown> = {};
 
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -764,33 +768,45 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
     const endedAt = Timestamp.fromDate(new Date());
     const summary = computeConvoySummary(data, endedAt.toDate(), toDate);
     tx.set(ref, { status: 'ended', endedAt, summary }, { merge: true });
-    endedFor = acceptedMemberUids(data).filter((uid) => uid !== actor.uid);
+    // The accepted set does not change on end (members remain in the doc), so the
+    // set captured here is the same one a post-commit re-read would yield — but
+    // without the extra Firestore round-trip that used to sit on this hot path.
+    acceptedUids = acceptedMemberUids(data);
+    endedFor = acceptedUids.filter((uid) => uid !== actor.uid);
     enderName = memberDisplayName(data, actor.uid);
+    // The exact ended document, assembled from what we just merged, so the
+    // response summary is built from memory instead of a second read.
+    endedData = { ...data, status: 'ended', endedAt, summary };
   });
 
-  const fresh = await ref.get();
-
+  // Both post-commit fan-outs are INDEPENDENT and each is already an internal
+  // Promise.all, so run them CONCURRENTLY rather than serially — the caller was
+  // previously blocked on (stop N sessions) THEN (notify N members) end to end,
+  // which is exactly the tail latency that made stopping feel slow. Neither can
+  // fail the end (both swallow their own errors), so Promise.all cannot reject.
+  //
   // ITEM 2 lifecycle: ending the convoy stops the live session it auto-started
   // for each member — but ONLY that session (stopConvoyAutoSession matches the
   // convoyAutoStarted flag + this convoyId), so a member's own MANUAL live
-  // session keeps running. Members remain in the doc after end, so the accepted
-  // set is still readable here.
-  await forEachAutoSession(acceptedMemberUids(fresh.data() ?? {}), (uid) =>
-    stopConvoyAutoSession(uid, parsed.input.convoyId),
-  );
+  // session keeps running.
+  //
+  // notify: tell the other members their drive is over. Their bar disappears
+  // either way (the live convoy listener sees status 'ended'), but a group
+  // surface that silently vanishes reads as a bug — and someone whose app was
+  // backgrounded gets no signal at all without this.
+  await Promise.all([
+    forEachAutoSession(acceptedUids, (uid) =>
+      stopConvoyAutoSession(uid, parsed.input.convoyId),
+    ),
+    notifyConvoyMembers(
+      endedFor,
+      parsed.input.convoyId,
+      'Konvojen har avslutats',
+      `${enderName ?? UNKNOWN_MEMBER_NAME} har avslutat konvojen.`,
+    ),
+  ]);
 
-  // Tell the other members their drive is over. Their bar disappears either way
-  // (the live convoy listener sees status 'ended'), but a group surface that
-  // silently vanishes reads as a bug — and someone whose app was backgrounded
-  // gets no signal at all without this.
-  await notifyConvoyMembers(
-    endedFor,
-    parsed.input.convoyId,
-    'Konvojen har avslutats',
-    `${enderName ?? UNKNOWN_MEMBER_NAME} har avslutat konvojen.`,
-  );
-
-  return { convoy: toConvoySummary(parsed.input.convoyId, fresh.data() ?? {}, actor.uid, toIso) };
+  return { convoy: toConvoySummary(parsed.input.convoyId, endedData, actor.uid, toIso) };
 });
 
 // ---------------------------------------------------------------------------

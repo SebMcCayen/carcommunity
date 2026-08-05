@@ -133,7 +133,15 @@ class ConvoyCoordinatorTest {
 
         override suspend fun start(convoyId: String): ConvoyMutationResult = startResult
 
-        override suspend fun end(convoyId: String): ConvoyMutationResult = endResult
+        // When set, end() suspends here until the test completes it — lets a test
+        // observe the coordinator's OPTIMISTIC state between the tap and the call
+        // returning.
+        var endGate: CompletableDeferred<Unit>? = null
+
+        override suspend fun end(convoyId: String): ConvoyMutationResult {
+            endGate?.await()
+            return endResult
+        }
 
         companion object {
             /**
@@ -512,6 +520,67 @@ class ConvoyCoordinatorTest {
         coordinator.end("c1")
         assertEquals(ConvoyActionError.AlreadyEnded, coordinator.actionError.value)
     }
+
+    @Test
+    fun `end optimistically clears the active convoy before the call settles`() =
+        runTest(UnconfinedTestDispatcher()) {
+            // The convoy is active and the caller is the accepted owner, so the bar
+            // shows it (ConvoyBar.activeConvoy != null) before the end.
+            val active = convoy("c1", status = ConvoyStatus.Active)
+            val repo =
+                FakeRepo().apply {
+                    listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+                    // Hold the end callable open so we can observe the state BETWEEN
+                    // the tap and the call returning — the window that used to leave
+                    // the bar greyed for a whole round-trip.
+                    endGate = CompletableDeferred()
+                }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+            assertEquals("c1", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+
+            val ending = launch { coordinator.end("c1") }
+            advanceUntilIdle()
+            // Optimistic: the convoy reads as ended and the bar is already gone,
+            // even though the callable has NOT returned yet.
+            assertEquals(
+                ConvoyStatus.Ended,
+                (coordinator.status.value as ConvoyListStatus.Loaded).convoy("c1")?.status,
+            )
+            assertNull(ConvoyBar.activeConvoy(coordinator.status.value))
+
+            repo.endGate?.complete(Unit)
+            ending.join()
+            // No error on the happy path, and the resync ran.
+            assertNull(coordinator.actionError.value)
+        }
+
+    @Test
+    fun `end failure revives the convoy via the resync and surfaces the error`() =
+        runTest(UnconfinedTestDispatcher()) {
+            val active = convoy("c1", status = ConvoyStatus.Active)
+            val repo =
+                FakeRepo().apply {
+                    // The list still reports the convoy ACTIVE (the end did not take
+                    // on the server), so the reconciling load() must bring it back.
+                    listResult = ConvoyListResult.Loaded(listOf(active), emptyList())
+                    endResult = ConvoyMutationResult.Failed(ConvoyActionError.Generic)
+                }
+            val coordinator = ConvoyCoordinator(repo)
+            coordinator.load()
+
+            coordinator.end("c1")
+            advanceUntilIdle()
+
+            // The optimistic end was undone by the resync: the convoy is active
+            // again and the bar is back, with the error surfaced.
+            assertEquals(
+                ConvoyStatus.Active,
+                (coordinator.status.value as ConvoyListStatus.Loaded).convoy("c1")?.status,
+            )
+            assertEquals("c1", ConvoyBar.activeConvoy(coordinator.status.value)?.convoyId)
+            assertEquals(ConvoyActionError.Generic, coordinator.actionError.value)
+        }
 
     @Test
     fun `observeActiveConvoy watches the active convoy with the viewer uid`() =
