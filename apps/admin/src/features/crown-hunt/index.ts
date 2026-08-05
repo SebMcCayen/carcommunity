@@ -84,6 +84,81 @@ export type {
   LatLng as SpawnCellLatLng,
 } from './spawn-cells';
 
+// Auto-spawn AREAS (spawn-areas.ts) — the wider half of the auto-spawn safety
+// model: admin-drawn polygon/circle/rectangle shapes + the safety-gated
+// create/update/delete/list callable wrappers, plus the pure draw→contract
+// conversion + validation used by the Areas tab.
+export {
+  MIN_POLYGON_VERTICES,
+  MAX_POLYGON_VERTICES,
+  MIN_DISTINCT_VERTICES,
+  MIN_AREA_RADIUS_METERS,
+  MAX_AREA_RADIUS_METERS,
+  MAX_AREA_CELLS,
+  CROWN_AREA_CELL_DEGREES,
+  AREA_NAME_MAX_LENGTH,
+  validateAreaShape,
+  shapeBoundingBox,
+  boundingBoxCellSpan,
+  ringToPolygonShape,
+  ringToRectangleShape,
+  circleToShape,
+  shapeToGeoJson,
+  describeShape,
+  shapeCenter,
+  buildActivateAreaRequest,
+  buildDeactivateAreaRequest,
+  buildCreateAreaRequest,
+  areaPoiCount,
+  adminListSpawnAreas,
+  adminCreateSpawnArea,
+  adminUpdateSpawnArea,
+  adminDeleteSpawnArea,
+} from './spawn-areas';
+export type {
+  AdminCrownSpawnArea,
+  AdminCrownSpawnAreaMutationResponse,
+  AdminCreateCrownSpawnAreaRequest,
+  AdminUpdateCrownSpawnAreaRequest,
+  AdminDeleteCrownSpawnAreaRequest,
+  CrownSpawnAreaShape,
+  CrownSpawnAreaVertex,
+  AreaValidationCode,
+  AreaValidationResult,
+  GeoJsonPosition,
+  GeoJsonPolygonFeature,
+} from './spawn-areas';
+
+// STATISTICS + LEADERBOARD + SEASONS (stats.ts) — admin read layer over the
+// #710 aggregates (spawn/collect totals, per-cell heat-map, ranked leaderboard,
+// season winners), all direct rules-gated Firestore reads.
+export {
+  CROWN_STATS_CELL_DEGREES,
+  ALL_TIME_SCOPE,
+  RARITY_TIERS,
+  currentSeasonId,
+  toRarityCounts,
+  sumRarityCounts,
+  toAdminSpawnStatsView,
+  toCellStat,
+  cellKeyCenter,
+  toSeason,
+  rankLeaderboardCounters,
+  toLeaderboardCounter,
+  adminGetSpawnStats,
+  adminListCellStats,
+  adminListLeaderboard,
+  adminListSeasons,
+} from './stats';
+export type {
+  AdminSpawnStatsView,
+  LeaderboardCounter,
+  CrownHuntCellStat,
+  CrownHuntLeaderboardEntry,
+  CrownHuntSeason,
+  CrownHuntSeasonWinner,
+} from './stats';
+
 const DEFAULT_PAGE_SIZE = 20;
 
 /** Firestore Timestamp | Date | null → ISO string (or null). */

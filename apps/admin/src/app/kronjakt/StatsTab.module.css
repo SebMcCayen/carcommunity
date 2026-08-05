@@ -1,0 +1,103 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 12px 0 24px;
+}
+
+.card {
+  border: 1px solid var(--color-border, #d0d5dd);
+  border-radius: 10px;
+  padding: 16px;
+  background: var(--color-surface, #fff);
+}
+
+.cardTitle {
+  margin: 0 0 12px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #667085);
+}
+
+.statRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 4px 0;
+}
+
+.statLabel {
+  font-size: 0.875rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.statValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--color-text, #101828);
+}
+
+.statValueSmall {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text, #101828);
+}
+
+.sectionTitle {
+  margin: 24px 0 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text, #101828);
+}
+
+.toggleRow {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.championBadge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.podium {
+  border: 1px solid var(--color-border, #d0d5dd);
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+}
+
+.podiumHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+
+.podiumSeason {
+  font-weight: 700;
+  color: var(--color-text, #101828);
+}
+
+.podiumMeta {
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.podiumList {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.mapWrap {
+  margin-top: 8px;
+}
