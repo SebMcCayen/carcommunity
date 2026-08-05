@@ -214,8 +214,12 @@ class FriendsCoordinator(
      * The callable is idempotent: whether it deletes a live request or answers a
      * silent no-op, the post-state is "I no longer have a pending request to this
      * member", so success always resyncs the snapshot — the row disappears. A
-     * thrown/failed cancel surfaces the mapped error AND resyncs, so a request
-     * already handled server-side does not linger in the list.
+     * mapped [CancelResult.Failed] (the callable answered with an error code)
+     * also resyncs, so a request already handled server-side does not linger. A
+     * thrown exception — the callable never returned a mapped result (network
+     * drop, App Check failure) — only surfaces the generic error without a
+     * reload, matching [respond]/[remove]: the call did not complete, so the
+     * outgoing row is left untouched and the next [load] reconciles it.
      */
     suspend fun cancel(toUid: String) {
         if (toUid in inFlightRows.value) return
