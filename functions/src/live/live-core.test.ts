@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CONVOY_RIDE_FINALIZE_GRACE_MS,
   LIVE_SESSION_EXTEND_PROMPT_MS,
   LIVE_SESSION_MAX_MS,
   buildSession,
   clampExpiryToCap,
+  decideConvoyRideFinalize,
   extendedExpiryIso,
   isSessionActive,
   parseExtendSessionInput,
+  type LiveSession,
 } from './live-core';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -111,5 +114,88 @@ describe('parseExtendSessionInput', () => {
   it('rejects stray fields — the client cannot smuggle a longer window', () => {
     const result = parseExtendSessionInput({ expiresAt: '2099-01-01T00:00:00.000Z' });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('decideConvoyRideFinalize (server-side member-run backstop)', () => {
+  const start = Date.parse('2026-08-05T10:00:00.000Z');
+  // A stopped convoy-auto session ended 30 min into the drive.
+  const endedAtIso = new Date(start + 30 * 60 * 1000).toISOString();
+
+  function endedConvoySession(overrides: Partial<LiveSession> = {}): LiveSession {
+    return {
+      ...buildSession('sess1', '6h', new Date(start), 'Driver', null),
+      status: 'stopped',
+      stoppedAt: endedAtIso,
+      convoyAutoStarted: true,
+      convoyId: 'c1',
+      ...overrides,
+    };
+  }
+
+  // Well past the grace window so the client has had its chance to save.
+  const afterGrace = new Date(Date.parse(endedAtIso) + CONVOY_RIDE_FINALIZE_GRACE_MS + 1000);
+
+  it('finalizes a stopped convoy-auto session past its grace window', () => {
+    const decision = decideConvoyRideFinalize(endedConvoySession(), afterGrace);
+    expect(decision.finalize).toBe(true);
+    expect(decision.startedAt).toBe(new Date(start).toISOString());
+    expect(decision.endedAt).toBe(endedAtIso);
+  });
+
+  it('also finalizes an EXPIRED convoy-auto session (6h TTL sweep)', () => {
+    const decision = decideConvoyRideFinalize(
+      endedConvoySession({ status: 'expired' }),
+      afterGrace,
+    );
+    expect(decision.finalize).toBe(true);
+  });
+
+  it('does NOT finalize a manual (non-convoy) session — the user is in-app to save it', () => {
+    const decision = decideConvoyRideFinalize(
+      endedConvoySession({ convoyAutoStarted: undefined }),
+      afterGrace,
+    );
+    expect(decision).toEqual({ finalize: false, skip: 'not-convoy-auto' });
+  });
+
+  it('does NOT finalize twice — the convoyRideFinalized marker gates it', () => {
+    const decision = decideConvoyRideFinalize(
+      endedConvoySession({ convoyRideFinalized: true }),
+      afterGrace,
+    );
+    expect(decision).toEqual({ finalize: false, skip: 'already-finalized' });
+  });
+
+  it('does NOT finalize a still-active session (nothing has ended yet)', () => {
+    const active = { ...endedConvoySession(), status: 'active' as const, stoppedAt: null };
+    expect(decideConvoyRideFinalize(active, afterGrace)).toEqual({
+      finalize: false,
+      skip: 'not-ended',
+    });
+  });
+
+  it('holds off WITHIN the grace window so a live client saves the rich drive first', () => {
+    const justEnded = new Date(Date.parse(endedAtIso) + 1000);
+    expect(decideConvoyRideFinalize(endedConvoySession(), justEnded)).toEqual({
+      finalize: false,
+      skip: 'within-grace',
+    });
+  });
+
+  it('skips a zero/negative-duration session (nothing worth saving)', () => {
+    const decision = decideConvoyRideFinalize(
+      endedConvoySession({ stoppedAt: new Date(start).toISOString() }),
+      afterGrace,
+    );
+    expect(decision).toEqual({ finalize: false, skip: 'nonpositive-duration' });
+  });
+
+  it('skips a session with no stoppedAt to derive an end time from', () => {
+    const decision = decideConvoyRideFinalize(
+      endedConvoySession({ stoppedAt: null }),
+      afterGrace,
+    );
+    expect(decision).toEqual({ finalize: false, skip: 'missing-times' });
   });
 });

@@ -210,6 +210,39 @@ fun mergeConvoyUpdate(
 }
 
 /**
+ * Marks the convoy [convoyId] as [ConvoyStatus.Ended] in an existing list
+ * [status], wherever it appears. Everything else — ordering, the other convoys,
+ * the rest of each summary — is preserved.
+ *
+ * This is the OPTIMISTIC half of the leader's "end convoy": an ended convoy is
+ * filtered out of [ConvoyBar.activeConvoy] (it requires `status != Ended`), so
+ * folding this in the instant the leader confirms clears the convoy bar/list at
+ * once, without waiting for the `convoy-end` callable and the follow-up
+ * re-fetch to round-trip. The real end still runs behind it and the resync
+ * reconciles the true state (and revives the convoy if the call actually
+ * failed) — see [ConvoyCoordinator.end].
+ *
+ * Pure (no coroutines, no Firebase) so it is unit-testable. A non-[Loaded]
+ * status, or a [convoyId] not present, is returned unchanged.
+ */
+fun endConvoyLocally(
+    status: ConvoyListStatus,
+    convoyId: String,
+): ConvoyListStatus {
+    if (status !is ConvoyListStatus.Loaded) return status
+    fun end(convoy: ConvoySummary): ConvoySummary =
+        if (convoy.convoyId == convoyId && convoy.status != ConvoyStatus.Ended) {
+            convoy.copy(status = ConvoyStatus.Ended)
+        } else {
+            convoy
+        }
+    return ConvoyListStatus.Loaded(
+        convoys = status.convoys.map(::end),
+        pendingInvites = status.pendingInvites.map(::end),
+    )
+}
+
+/**
  * Replaces each roster entry's DENORMALIZED profile with that member's current
  * one, where a live profile was loaded.
  *

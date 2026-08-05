@@ -397,6 +397,21 @@ class ConvoyCoordinator(
      * ([ConvoyBar.exitChoice]).
      */
     suspend fun end(convoyId: String) {
+        // OPTIMISTIC STOP. Ending is the leader's destructive exit and its only
+        // visible outcome is the convoy bar/list clearing — there is nothing to
+        // confirm to the user on success. So fold the ended status in LOCALLY
+        // first (endConvoyLocally → ConvoyBar.activeConvoy drops it → the bar
+        // disappears at once), instead of leaving it greyed for the whole
+        // `convoy-end` callable + re-fetch round-trip, which is what made
+        // stopping feel slow. The real call still runs through runRowAction
+        // below and its resync reconciles the true state — reviving the convoy
+        // and surfacing the error if the end actually failed.
+        //
+        // Detaching the live listener as a side effect is intended: with the
+        // convoy no longer active, observeActiveConvoy's derived id goes null and
+        // its Firestore listener detaches, so no in-flight snapshot can flip the
+        // bar back to 'active' before the server write lands (no flicker).
+        statusState.update { endConvoyLocally(it, convoyId) }
         runRowAction(convoyId) { repository.end(convoyId).errorOrNull() }
     }
 

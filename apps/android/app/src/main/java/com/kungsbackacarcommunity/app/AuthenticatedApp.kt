@@ -2291,7 +2291,18 @@ fun AuthenticatedApp(
                         // Owned by this uid: signing out (or switching account)
                         // tears the recording down — see clearIfNotOwnedBy,
                         // driven from MainActivity's auth state.
-                        SingleSessionRecording.start(uid, drivesRepository, routeUploadRunner) {
+                        SingleSessionRecording.start(
+                            uid,
+                            drivesRepository,
+                            routeUploadRunner,
+                            // Key the ride on the LIVE-SESSION id so this client
+                            // save and the server-side convoy finalize dedupe onto
+                            // one `rides/{uid}_{sessionId}` document (see
+                            // SingleSessionRecording.start / functions
+                            // live.cleanupExpired). isSharing is true here BECAUSE
+                            // this session is active, so its id is present.
+                            sessionId = liveSession?.sessionId,
+                        ) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way
                             // no fixes can arrive and the session yields an

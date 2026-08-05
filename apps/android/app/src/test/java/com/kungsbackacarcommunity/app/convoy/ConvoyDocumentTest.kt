@@ -211,4 +211,44 @@ class ConvoyDocumentTest {
         val merged = mergeConvoyUpdate(status, summary("p", "P2")) as ConvoyListStatus.Loaded
         assertTrue(merged.pendingInvites.all { it.title == "P2" })
     }
+
+    // ---- endConvoyLocally --------------------------------------------------
+
+    @Test
+    fun `endConvoyLocally marks only the matching convoy ended and preserves order`() {
+        val status =
+            ConvoyListStatus.Loaded(
+                convoys = listOf(summary("a", "A"), summary("b", "B"), summary("c", "C")),
+                pendingInvites = emptyList(),
+            )
+        val ended = endConvoyLocally(status, "b") as ConvoyListStatus.Loaded
+        assertEquals(listOf("a", "b", "c"), ended.convoys.map { it.convoyId })
+        assertEquals(ConvoyStatus.Ended, ended.convoy("b")?.status)
+        assertEquals(ConvoyStatus.Active, ended.convoy("a")?.status)
+        assertEquals(ConvoyStatus.Active, ended.convoy("c")?.status)
+    }
+
+    @Test
+    fun `endConvoyLocally hides the convoy from the active-bar selector`() {
+        val status =
+            ConvoyListStatus.Loaded(convoys = listOf(summary("a", "A")), pendingInvites = emptyList())
+        // Before: the accepted, active convoy is what the bar shows.
+        assertEquals("a", ConvoyBar.activeConvoy(status)?.convoyId)
+        // After: nothing active is left, so the bar renders nothing.
+        assertNull(ConvoyBar.activeConvoy(endConvoyLocally(status, "a")))
+    }
+
+    @Test
+    fun `endConvoyLocally on a non-loaded status returns it unchanged`() {
+        val status = ConvoyListStatus.Loading
+        assertSame(status, endConvoyLocally(status, "a"))
+    }
+
+    @Test
+    fun `endConvoyLocally for an absent convoy leaves every status untouched`() {
+        val status =
+            ConvoyListStatus.Loaded(convoys = listOf(summary("a", "A")), pendingInvites = emptyList())
+        val result = endConvoyLocally(status, "missing") as ConvoyListStatus.Loaded
+        assertEquals(ConvoyStatus.Active, result.convoy("a")?.status)
+    }
 }

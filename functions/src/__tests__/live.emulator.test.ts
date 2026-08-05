@@ -386,6 +386,111 @@ describe('live TTL sweep', () => {
   });
 });
 
+describe('convoy run finalize (server-side member-run backstop)', () => {
+  // Ended long enough ago that the client's grace window has elapsed.
+  const endedLongAgoMs = 10 * 60_000;
+
+  // A unique suffix (time + random) shared by a test's uid AND sessionId, so two
+  // tests running in the same millisecond (or in parallel) cannot collide on the
+  // shared emulator Firestore.
+  const uniqueSuffix = () => `${Date.now()}-${Math.floor(Math.random() * 1e9)}`;
+
+  // A stopped convoy-auto session node, keyed by a unique uid so it does not
+  // collide with the shared-Firestore other tests. sessionId is the ride key.
+  async function writeEndedConvoySession(
+    uid: string,
+    sessionId: string,
+    now: Date,
+    overrides: Record<string, unknown> = {},
+  ): Promise<void> {
+    await adminRtdb.ref(`liveLocation/${uid}`).set({
+      session: {
+        id: sessionId,
+        status: 'stopped',
+        duration: '6h',
+        startedAt: new Date(now.getTime() - endedLongAgoMs - 30 * 60_000).toISOString(),
+        expiresAt: new Date(now.getTime() + 5 * 3600_000).toISOString(),
+        stoppedAt: new Date(now.getTime() - endedLongAgoMs).toISOString(),
+        stopReason: 'user_stop',
+        convoyAutoStarted: true,
+        convoyId: 'conv-fin',
+        displayName: 'ConvoyFinDriver',
+        mainCar: null,
+        ...overrides,
+      },
+    });
+  }
+
+  it('writes a summary-only ride for a member whose app did not save it, and flags the session', async () => {
+    const now = new Date();
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-unsaved-${suffix}`;
+    const sessionId = `sess-${suffix}`;
+    await writeEndedConvoySession(uid, sessionId, now);
+
+    const result = await runLiveCleanup(now);
+    expect(result.finalizedConvoyRides).toBeGreaterThanOrEqual(1);
+
+    const ride = await adminDb.collection('rides').doc(`${uid}_${sessionId}`).get();
+    expect(ride.exists).toBe(true);
+    const data = ride.data()!;
+    expect(data.userId).toBe(uid);
+    expect(data.sourceSessionId).toBe(sessionId);
+    // Summary-only: a real positive duration, distance/speed left null (no route).
+    expect(data.durationSeconds).toBe(30 * 60);
+    expect(data.distanceMeters).toBeNull();
+    // The session is marked so the every-5-minute sweep never re-processes it.
+    expect(
+      (await adminRtdb.ref(`liveLocation/${uid}/session/convoyRideFinalized`).get()).val(),
+    ).toBe(true);
+  });
+
+  it('does NOT overwrite a ride the client already saved (dedupe by session id)', async () => {
+    const now = new Date();
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-client-${suffix}`;
+    const sessionId = `sess-${suffix}`;
+    // The client's richer save landed first, on the SAME ride id.
+    await adminDb.collection('rides').doc(`${uid}_${sessionId}`).set({
+      userId: uid,
+      sourceSessionId: sessionId,
+      distanceMeters: 12_345,
+      durationSeconds: 1800,
+      title: 'Client saved',
+    });
+    await writeEndedConvoySession(uid, sessionId, now);
+
+    await runLiveCleanup(now);
+
+    const data = (await adminDb.collection('rides').doc(`${uid}_${sessionId}`).get()).data()!;
+    // Untouched — the client's route-derived distance and title survive.
+    expect(data.distanceMeters).toBe(12_345);
+    expect(data.title).toBe('Client saved');
+    // Still flagged, so the sweep stops re-checking Firestore for it every run.
+    expect(
+      (await adminRtdb.ref(`liveLocation/${uid}/session/convoyRideFinalized`).get()).val(),
+    ).toBe(true);
+  });
+
+  it('holds off within the grace window (a live client gets to save the rich drive)', async () => {
+    const now = new Date();
+    const suffix = uniqueSuffix();
+    const uid = `convoyfin-grace-${suffix}`;
+    const sessionId = `sess-${suffix}`;
+    // Ended just now — inside the grace window.
+    await writeEndedConvoySession(uid, sessionId, now, {
+      stoppedAt: new Date(now.getTime() - 1000).toISOString(),
+    });
+
+    await runLiveCleanup(now);
+
+    expect((await adminDb.collection('rides').doc(`${uid}_${sessionId}`).get()).exists).toBe(false);
+    expect(
+      (await adminRtdb.ref(`liveLocation/${uid}/session/convoyRideFinalized`).get()).exists(),
+    ).toBe(false);
+  });
+});
+
 describe('live-location block mirror (blocking-onBlockWrite)', () => {
   it('mirrors a block into liveLocationBlocks and removes it on unblock', async () => {
     const target = await createProvisionedUser('live-block-target');

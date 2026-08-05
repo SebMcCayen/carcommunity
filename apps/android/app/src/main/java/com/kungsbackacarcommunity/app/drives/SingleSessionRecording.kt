@@ -107,11 +107,23 @@ object SingleSessionRecording {
      * [routeUploadRunner] uploads the recorded `route.bin` after the save
      * succeeds (null in a config-less build — the drive saves without a route
      * file). Passed through to the coordinator, which runs it in the background.
+     *
+     * [sessionId] is the LIVE-SESSION id (liveLocation/{uid}/session.id) this
+     * recording belongs to, used as the drive's `sourceSessionId`. Keying the
+     * ride on it (rather than a throwaway UUID) is what lets the server-side
+     * convoy finalize (functions live.cleanupExpired) and this client save
+     * DEDUPE onto the SAME ride document `rides/{uid}_{sessionId}`: whoever saves
+     * first wins, and the other is an idempotent no-op. So a convoy member whose
+     * app is alive at session end still gets the RICH route drive, while a member
+     * whose app was backgrounded/killed gets the server's duration-only baseline
+     * instead of losing the run entirely. Null (no live session id to hand) falls
+     * back to a random id — no cross-save dedupe, but never a crash.
      */
     fun start(
         uid: String,
         repository: DrivesRepository,
         routeUploadRunner: RouteUploadRunner? = null,
+        sessionId: String? = null,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
@@ -130,7 +142,10 @@ object SingleSessionRecording {
         val coordinator =
             DriveRecordingCoordinator(
                 repository,
-                "single-" + UUID.randomUUID().toString(),
+                // The live-session id keys the ride so a server finalize and this
+                // client save land on ONE document; only fall back to a random id
+                // when there is no session id to key on.
+                sessionId ?: ("single-" + UUID.randomUUID().toString()),
                 routeUploadRunner = routeUploadRunner,
                 uploadScope = scope,
             )
