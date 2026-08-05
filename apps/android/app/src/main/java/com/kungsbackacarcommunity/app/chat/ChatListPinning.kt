@@ -5,14 +5,13 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 
 /**
@@ -83,6 +82,51 @@ object ChatListPinning {
         if (isOwnMessage) return true
         return shouldRepinToNewest(lastVisibleIndex, totalItemsCount)
     }
+
+    /**
+     * Should the list stay pinned to its newest item on THIS frame of the IME
+     * open animation?
+     *
+     * The keyboard does not appear instantly: `WindowInsets.ime` animates from 0
+     * up to the full keyboard height over ~250ms, and the composer's ime padding
+     * shrinks the message list's viewport from the bottom in lockstep. A
+     * `LazyColumn` holds its scroll OFFSET, not its bottom edge, so across that
+     * animation the newest message slides down under the composer unless it is
+     * re-pinned on every frame the inset grows — a SINGLE re-pin on the rising edge
+     * (when the inset is still ~0 and nothing has shrunk yet) settles against the
+     * full-height layout and is undone the moment the inset actually grows.
+     *
+     * The follow is committed ONCE, on the first growing frame, from where the
+     * reader was parked ([atBottom]); thereafter [alreadyFollowing] holds it for the
+     * rest of the rise, so a mid-animation frame where the newest row has already
+     * slipped a little under the composer — and so momentarily reads as "not at the
+     * bottom" — does not abandon the follow half-way. A reader scrolled up into
+     * history never starts a follow, so tapping the input while reading old messages
+     * still leaves them put.
+     *
+     * @param previousBottomPx the IME bottom inset (px) on the previous frame.
+     * @param currentBottomPx the IME bottom inset (px) on this frame.
+     * @param alreadyFollowing whether a follow was already committed earlier in this
+     *   same rise (this function's own previous-frame result).
+     * @param atBottom whether the reader is parked at/near the newest message
+     *   ([shouldRepinToNewest]); consulted only to START a follow.
+     * @return whether to keep the list pinned to the newest item this frame; also
+     *   the next frame's [alreadyFollowing].
+     */
+    fun shouldKeepPinnedDuringImeRise(
+        previousBottomPx: Int,
+        currentBottomPx: Int,
+        alreadyFollowing: Boolean,
+        atBottom: Boolean,
+    ): Boolean {
+        // Only while the keyboard is GROWING. A settled (fully-open) or shrinking
+        // (closing) inset ends the follow: the growing-back viewport re-reveals the
+        // bottom on its own, so a closing keyboard needs no scroll and the reader
+        // gets scrolling back.
+        val rising = currentBottomPx > previousBottomPx
+        if (!rising) return false
+        return alreadyFollowing || atBottom
+    }
 }
 
 /**
@@ -152,41 +196,53 @@ fun KeepPinnedToNewest(
 }
 
 /**
- * Is the soft keyboard up? Read as a plain inset rather than the experimental
- * `WindowInsets.isImeVisible`.
+ * Keeps [listState] pinned to its newest item for the WHOLE time the soft keyboard
+ * is animating open, subject to [ChatListPinning.shouldKeepPinnedDuringImeRise].
  *
- * `derivedStateOf` so the per-frame inset animation doesn't recompose the caller
- * 60 times a second — only the two transitions (up / down) propagate, which is
- * what makes [RepinToNewestOnImeRise] a rising-EDGE trigger rather than something
- * that fires continuously while the keyboard is open.
- */
-@Composable
-fun rememberImeVisible(): Boolean {
-    val density = LocalDensity.current
-    val imeInsets = WindowInsets.ime
-    val visible by remember(imeInsets, density) {
-        derivedStateOf { imeInsets.getBottom(density) > 0 }
-    }
-    return visible
-}
-
-/**
- * Re-pins [listState] to its newest item on the keyboard's RISING edge, subject
- * to [ChatListPinning.shouldRepinToNewest].
+ * `WindowInsets.ime` animates from 0 to the full keyboard height over ~250ms, and
+ * the composer's ime padding shrinks this list's viewport from the bottom in
+ * lockstep. Because a `LazyColumn` holds its scroll OFFSET rather than its bottom
+ * edge, the newest message slides down under the composer across that animation
+ * unless it is re-pinned on every frame the inset grows — a single re-pin on the
+ * rising edge (inset still ~0, nothing shrunk yet) settles against the full-height
+ * layout and is undone the instant the inset actually grows.
  *
- * Keyed on the boolean, so closing the keyboard — which grows the viewport back
- * on its own — moves nothing.
+ * So this observes the animated inset directly via [snapshotFlow] and re-snaps the
+ * list to the last item on each growing frame — an instant, non-animated
+ * `scrollToItem`, which in lockstep with the per-frame padding growth reads as the
+ * list gliding up with the keyboard. The follow is committed once, from where the
+ * reader was parked, and released when the inset settles (fully open) or shrinks
+ * (closing), where the growing-back viewport re-reveals the bottom on its own.
  */
 @Composable
 fun RepinToNewestOnImeRise(listState: LazyListState) {
-    val imeVisible = rememberImeVisible()
-    LaunchedEffect(imeVisible) {
-        if (!imeVisible) return@LaunchedEffect
-        val layoutInfo = listState.layoutInfo
-        val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        val totalItems = layoutInfo.totalItemsCount
-        if (ChatListPinning.shouldRepinToNewest(lastVisibleIndex, totalItems)) {
-            listState.animateScrollToItem(totalItems - 1)
+    val density = LocalDensity.current
+    val imeInsets = WindowInsets.ime
+    LaunchedEffect(listState, imeInsets, density) {
+        // Seeded from the current inset so a list composed with the keyboard
+        // ALREADY up (e.g. after a rotation) sees no rise and does not scroll —
+        // the restore is KeepPinnedToNewest's job, not this effect's.
+        var previousBottom = imeInsets.getBottom(density)
+        var following = false
+        // snapshotFlow's first emission is the current value (== previousBottom),
+        // so the first frame is never a rise and never scrolls.
+        snapshotFlow { imeInsets.getBottom(density) }.collect { currentBottom ->
+            val layoutInfo = listState.layoutInfo
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+            val atBottom =
+                ChatListPinning.shouldRepinToNewest(lastVisibleIndex, layoutInfo.totalItemsCount)
+            following =
+                ChatListPinning.shouldKeepPinnedDuringImeRise(
+                    previousBottomPx = previousBottom,
+                    currentBottomPx = currentBottom,
+                    alreadyFollowing = following,
+                    atBottom = atBottom,
+                )
+            previousBottom = currentBottom
+            if (following) {
+                val totalItems = layoutInfo.totalItemsCount
+                if (totalItems > 0) listState.scrollToItem(totalItems - 1)
+            }
         }
     }
 }

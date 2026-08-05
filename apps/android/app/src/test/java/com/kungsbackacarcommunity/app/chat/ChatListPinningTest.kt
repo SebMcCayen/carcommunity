@@ -135,4 +135,82 @@ class ChatListPinningTest {
             ),
         )
     }
+
+    // --- shouldKeepPinnedDuringImeRise: the per-frame follow decision across the
+    // keyboard's open animation. THIS is the fix for "the newest message is behind
+    // the keyboard": the newest row must stay pinned to the bottom on every frame
+    // the IME inset grows, not just once on the rising edge. ---
+
+    @Test
+    fun startsFollowingOnTheFirstGrowingFrameWhenAtTheBottom() {
+        // Inset grew (keyboard opening) and the reader was parked at the newest
+        // message: commit to the follow.
+        assertTrue(
+            ChatListPinning.shouldKeepPinnedDuringImeRise(
+                previousBottomPx = 0,
+                currentBottomPx = 40,
+                alreadyFollowing = false,
+                atBottom = true,
+            ),
+        )
+    }
+
+    @Test
+    fun doesNotStartFollowingAReaderScrolledUpIntoHistory() {
+        // THE guard: tapping the composer while reading old messages must not yank
+        // the reader down, even as the keyboard rises.
+        assertFalse(
+            ChatListPinning.shouldKeepPinnedDuringImeRise(
+                previousBottomPx = 0,
+                currentBottomPx = 40,
+                alreadyFollowing = false,
+                atBottom = false,
+            ),
+        )
+    }
+
+    @Test
+    fun keepsFollowingMidRiseEvenIfTheNewestRowMomentarilyReadsOffTheBottom() {
+        // The core of the fix. Once committed, a mid-animation frame where the
+        // newest row has slipped a little under the composer — so atBottom now reads
+        // false — must NOT abandon the follow, or the message settles half-hidden.
+        assertTrue(
+            ChatListPinning.shouldKeepPinnedDuringImeRise(
+                previousBottomPx = 120,
+                currentBottomPx = 200,
+                alreadyFollowing = true,
+                atBottom = false,
+            ),
+        )
+    }
+
+    @Test
+    fun stopsFollowingOnceTheInsetSettlesFullyOpen() {
+        // Inset unchanged (keyboard fully open): the follow is released so the
+        // reader can scroll freely, even though it was following a frame ago.
+        assertFalse(
+            ChatListPinning.shouldKeepPinnedDuringImeRise(
+                previousBottomPx = 300,
+                currentBottomPx = 300,
+                alreadyFollowing = true,
+                atBottom = true,
+            ),
+        )
+    }
+
+    @Test
+    fun stopsFollowingWhileTheKeyboardIsClosing() {
+        // Inset shrinking (keyboard closing): no scroll — the growing-back viewport
+        // re-reveals the bottom on its own, and the reader gets scrolling back. This
+        // is what returns the newest message to the bottom of the full window when
+        // the keyboard is dismissed.
+        assertFalse(
+            ChatListPinning.shouldKeepPinnedDuringImeRise(
+                previousBottomPx = 300,
+                currentBottomPx = 180,
+                alreadyFollowing = true,
+                atBottom = true,
+            ),
+        )
+    }
 }
