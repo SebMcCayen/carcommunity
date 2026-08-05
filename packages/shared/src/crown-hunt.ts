@@ -294,13 +294,24 @@ export interface CrownHuntPersonalStats {
   };
   /** Auto-spawned crowns collected, by rarity. */
   byRarity: CrownHuntRarityCounts;
-  /** The rarest auto-spawned crown ever collected, or null. */
-  rarestRarity: CrownHuntRarity | null;
-  rarestAt: string | null;
+  /**
+   * The rarest auto-spawned crown ever collected. OPTIONAL to match the schema
+   * and Firestore reality: a member who has only collected hand-placed crowns
+   * (the ledger-only path never writes these) has no rarest crown, so the
+   * fields are absent — a consumer must treat absent as "none yet", not assume
+   * they are present.
+   */
+  rarestRarity?: CrownHuntRarity | null;
+  rarestAt?: string | null;
   /** Consecutive-day collection streak (Europe/Stockholm days). */
   streakCurrent: number;
   streakBest: number;
-  lastCollectionAt: string | null;
+  /**
+   * Time of the last collection. OPTIONAL: the crownSpawns collect trigger can
+   * create the stats doc before the ledger trigger (which owns this field)
+   * runs, so it may be absent on a just-created doc.
+   */
+  lastCollectionAt?: string | null;
   /** Lifetime season victories (first-place finishes) — grows every win. */
   seasonsWon: number;
 }
@@ -321,15 +332,22 @@ export interface CrownHuntAdminStats {
   activePlayers30d: number;
 }
 
-/** One grid cell's spawn/collect counts, for the admin heat/points map. */
+/**
+ * One grid cell's spawn/collect counts, for the admin heat/points map. This
+ * maps the raw `crownHuntCellStats/{cellKey}` document, whose triggers write
+ * fields sparsely: only `cellKey`/`spawned`/`collected` are guaranteed (the
+ * schema's required set). The rarity maps and last-event timestamps are OPTIONAL
+ * — a cell that has spawned but never been collected has no `collected*` fields
+ * yet, and a rarity map only carries the rarities that actually occurred there.
+ */
 export interface CrownHuntCellStat {
   cellKey: string;
   spawned: number;
   collected: number;
-  spawnedByRarity: CrownHuntRarityCounts;
-  collectedByRarity: CrownHuntRarityCounts;
-  lastSpawnAt: string | null;
-  lastCollectAt: string | null;
+  spawnedByRarity?: CrownHuntRarityCounts;
+  collectedByRarity?: CrownHuntRarityCounts;
+  lastSpawnAt?: string | null;
+  lastCollectAt?: string | null;
 }
 
 // --- Seasons ---------------------------------------------------------------

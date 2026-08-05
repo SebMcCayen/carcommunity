@@ -21,9 +21,10 @@
  *     finalization runs twice.
  *
  * NON-DESTRUCTIVE. Nothing here wipes points, crowns or the ledger. The season
- * board is a separate `crownHuntLeaderboard/{seasonId}/entries` bucket that
- * simply stops being written once the season ends; the new month starts
- * accumulating in its own bucket from zero. The all-time board is never touched.
+ * board is a separate set of `crownHuntLeaderboardEntries` documents scoped by
+ * the season id (`{scope}__{uid}`, `scope` field == seasonId) that simply stop
+ * being written once the season ends; the new month accumulates under its own
+ * scope from zero. The all-time board (scope `alltime`) is never touched.
  *
  * BADGES (two distinct achievements, by explicit product decision):
  *  - PODIUM (`sasong_guld` / `sasong_silver` / `sasong_brons`): a single
