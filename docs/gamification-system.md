@@ -763,6 +763,21 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 *Icon design:* A roller garage door raised to two-thirds, with the noses of cars visible in the darkness behind it. Tier is the number of visible noses (1/2/3 — abstracted, not literal counts). Warm interior light spilling from under the door; this is the "home" badge of the set and should feel like it.
 
+#### Säsongsmästare · *Season Champion*
+
+| Tier | Requirement |
+|---|---|
+| Brons | 1 season won |
+| Silver | 3 seasons won |
+| Guld | 5 seasons won |
+| Platina | 10 seasons won |
+
+*How to earn:* Finish **first** in a Kronjakt season (a calendar month). The counter is a LIFETIME tally of first-place finishes maintained by the season-rollover finalizer (`functions/src/crownHunt/seasonRollover.ts`), which is the authoritative server writer — never a client number. It only ever grows, so the badge is permanent even after a season resets.
+
+*This is the SCALING championship ladder, and it is distinct from the per-season podium badges.* The podium badges (`sasong_guld` / `sasong_silver` / `sasong_brons`) mark a single season's top three and are awarded by rank; Säsongsmästare instead counts how many times a member has WON, so a repeat champion visibly climbs Brons → Platina. The exact number of championships is also surfaced verbatim (`seasonsWon`) in the Kronjakt read contract (`packages/shared/src/crown-hunt.ts`), so the profile and the leaderboard can show "N-time champion" at a glance while the badge shows the nearest tier.
+
+*Icon design:* A five-point crown resting inside an open laurel wreath — the Kronjägare crown silhouette cradled by two curved laurel branches meeting at the base. The wreath is what distinguishes a championship from a mere collection count. Tier is the ring treatment as usual; no speed imagery, ever.
+
 ### 7.3 The five existing badges
 
 `first_event`, `five_events`, `helpful_member`, `early_member`, `garage_created` are **retained unchanged.** Badge award documents use the badge key as their document ID (`users/{uid}/badges/{badgeKey}`) and already exist on real accounts; removing a key orphans a member's award history for no gain.

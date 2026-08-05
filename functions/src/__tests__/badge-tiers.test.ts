@@ -171,6 +171,7 @@ describe('ladder definitions', () => {
       trogen: [7, 30, 100],
       konvojledare: [1, 5, 25, 100],
       samlare: [1, 3, 5],
+      sasongsmastare: [1, 3, 5, 10],
     });
   });
 
@@ -811,6 +812,7 @@ describe('agrees with docs/gamification-system.md §7.2', () => {
     Trogen: 'trogen',
     Konvojledare: 'konvojledare',
     Samlare: 'samlare',
+    Säsongsmästare: 'sasongsmastare',
   };
   const TIER_BY_HEADING: Record<string, string> = {
     Brons: 'brons',

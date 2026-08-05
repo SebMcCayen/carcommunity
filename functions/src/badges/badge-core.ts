@@ -68,6 +68,24 @@ export const LEGACY_BADGE_KEYS = [
 export type LegacyBadgeKey = (typeof LEGACY_BADGE_KEYS)[number];
 
 /**
+ * Kronjakt season PODIUM badges — one per finishing position in a single
+ * season (Säsongspodium Guld / Silver / Brons for 1st / 2nd / 3rd). Standalone,
+ * NOT a ladder: they are awarded by the season-rollover finalizer by RANK, not
+ * by crossing a monotonic threshold, so they do not belong to the tier
+ * evaluator. The one-doc-per-key award model is create-if-absent, so a member
+ * who podiums in several seasons keeps ONE badge per rank ("reached the
+ * podium"); which seasons is recorded in each season's stored standings.
+ *
+ * Rank-specific (three keys) rather than a single "top 3" badge with the rank
+ * stored on the document: the award write is create-if-absent and never rewrites
+ * the document, so a single badge would freeze whichever rank was earned FIRST
+ * and could never upgrade when the member later finishes higher. Three keys let
+ * each podium position be earned independently and permanently.
+ */
+export const SEASON_PODIUM_BADGE_KEYS = ['sasong_guld', 'sasong_silver', 'sasong_brons'] as const;
+export type SeasonPodiumBadgeKey = (typeof SEASON_PODIUM_BADGE_KEYS)[number];
+
+/**
  * Tiered ladder keys. One key per tier so a member can display the EXACT tier
  * they reached, and so the award path stays the same create-if-absent write as
  * the flat badges (document ID == badge key).
@@ -98,10 +116,23 @@ export const TIER_BADGE_KEYS = [
   'samlare_brons',
   'samlare_silver',
   'samlare_guld',
+  // Säsongsmästare — the SCALING lifetime-championship ladder. Measures
+  // `seasonsWon` (first-place season finishes), so the badge grows with the
+  // number of championships; the exact count (×N) is carried in the Kronjakt
+  // read contract for an at-a-glance "N-time champion". Distinct from the
+  // per-season podium badges above, which mark a single season's top three.
+  'sasongsmastare_brons',
+  'sasongsmastare_silver',
+  'sasongsmastare_guld',
+  'sasongsmastare_platina',
 ] as const;
 export type TierBadgeKey = (typeof TIER_BADGE_KEYS)[number];
 
-export const BADGE_KEYS = [...LEGACY_BADGE_KEYS, ...TIER_BADGE_KEYS] as const;
+export const BADGE_KEYS = [
+  ...LEGACY_BADGE_KEYS,
+  ...SEASON_PODIUM_BADGE_KEYS,
+  ...TIER_BADGE_KEYS,
+] as const;
 export type BadgeKey = (typeof BADGE_KEYS)[number];
 
 // ---------------------------------------------------------------------------
@@ -118,6 +149,7 @@ export const BADGE_LADDER_KEYS = [
   'trogen',
   'konvojledare',
   'samlare',
+  'sasongsmastare',
 ] as const;
 export type BadgeLadderKey = (typeof BADGE_LADDER_KEYS)[number];
 
@@ -133,6 +165,7 @@ export const BADGE_METRICS = [
   'bestDayStreak',
   'convoysLed',
   'vehiclesInGarage',
+  'seasonsWon',
 ] as const;
 export type BadgeMetric = (typeof BADGE_METRICS)[number];
 
@@ -320,6 +353,28 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
       { tier: 'brons', key: 'samlare_brons', threshold: 1 },
       { tier: 'silver', key: 'samlare_silver', threshold: 3 },
       { tier: 'guld', key: 'samlare_guld', threshold: 5 },
+    ],
+  },
+  {
+    ladder: 'sasongsmastare',
+    name: 'Säsongsmästare',
+    nameEn: 'Season Champion',
+    metric: 'seasonsWon',
+    descriptionTemplate: 'Vann {n} säsonger av Kronjakten.',
+    descriptionTemplateOne: 'Vann {n} säsong av Kronjakten.',
+    formatThreshold: (n) => String(n),
+    // NO SPEED IMAGERY (standing rule): a laurel/crown of victory, never a
+    // podium-with-motion or a finish line.
+    glyphBrief:
+      'A five-point crown resting inside an open laurel wreath: the same wide, ' +
+      'flat-bottomed crown silhouette as Kronjägare, but cradled by two curved ' +
+      'laurel branches meeting at the base. The wreath is what marks it as a ' +
+      'championship rather than a collection count.',
+    tiers: [
+      { tier: 'brons', key: 'sasongsmastare_brons', threshold: 1 },
+      { tier: 'silver', key: 'sasongsmastare_silver', threshold: 3 },
+      { tier: 'guld', key: 'sasongsmastare_guld', threshold: 5 },
+      { tier: 'platina', key: 'sasongsmastare_platina', threshold: 10 },
     ],
   },
 ];
@@ -517,6 +572,64 @@ const LEGACY_CATALOG: Readonly<Record<LegacyBadgeKey, BadgeDefinition>> = {
   },
 };
 
+/** Podium glyph, shared by the three rank badges; the ring conveys the rank. */
+const SEASON_PODIUM_GLYPH =
+  'A three-step winner\'s podium seen head-on — a tall centre block flanked by ' +
+  'a slightly lower left and lower-still right block — with a small five-point ' +
+  'crown centred above the tall block. Blocky, symmetric silhouette shared by ' +
+  'all three podium badges; the tier ring is what says which step was reached.';
+
+const SEASON_PODIUM_CATALOG: Readonly<Record<SeasonPodiumBadgeKey, BadgeDefinition>> = {
+  sasong_guld: {
+    key: 'sasong_guld',
+    name: 'Säsongspodium Guld',
+    nameEn: 'Season Podium Gold',
+    description: 'Slutade etta i en säsong av Kronjakten.',
+    iconIdentifier: 'badge_sasong_guld',
+    isAutomatic: true,
+    ladder: null,
+    tier: 'guld',
+    metric: null,
+    threshold: null,
+    pointsReward: 0,
+    iconDesign: `${SEASON_PODIUM_GLYPH} ${TIER_RING_TREATMENT.guld}`,
+    isLegacy: false,
+    supersededBy: null,
+  },
+  sasong_silver: {
+    key: 'sasong_silver',
+    name: 'Säsongspodium Silver',
+    nameEn: 'Season Podium Silver',
+    description: 'Slutade tvåa i en säsong av Kronjakten.',
+    iconIdentifier: 'badge_sasong_silver',
+    isAutomatic: true,
+    ladder: null,
+    tier: 'silver',
+    metric: null,
+    threshold: null,
+    pointsReward: 0,
+    iconDesign: `${SEASON_PODIUM_GLYPH} ${TIER_RING_TREATMENT.silver}`,
+    isLegacy: false,
+    supersededBy: null,
+  },
+  sasong_brons: {
+    key: 'sasong_brons',
+    name: 'Säsongspodium Brons',
+    nameEn: 'Season Podium Bronze',
+    description: 'Slutade trea i en säsong av Kronjakten.',
+    iconIdentifier: 'badge_sasong_brons',
+    isAutomatic: true,
+    ladder: null,
+    tier: 'brons',
+    metric: null,
+    threshold: null,
+    pointsReward: 0,
+    iconDesign: `${SEASON_PODIUM_GLYPH} ${TIER_RING_TREATMENT.brons}`,
+    isLegacy: false,
+    supersededBy: null,
+  },
+};
+
 function buildTierDefinition(
   ladder: BadgeLadderDefinition,
   spec: BadgeLadderTierSpec,
@@ -550,6 +663,7 @@ const TIER_CATALOG = Object.fromEntries(
 
 export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
   ...LEGACY_CATALOG,
+  ...SEASON_PODIUM_CATALOG,
   ...TIER_CATALOG,
 };
 
@@ -560,6 +674,7 @@ export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
  */
 export const BADGE_CATALOG_ORDER: readonly BadgeKey[] = [
   ...LEGACY_BADGE_KEYS,
+  ...SEASON_PODIUM_BADGE_KEYS,
   ...BADGE_LADDERS.flatMap((ladder) => ladder.tiers.map((spec) => spec.key)),
 ];
 

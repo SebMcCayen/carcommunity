@@ -52,6 +52,7 @@ export const ZERO_BADGE_COUNTERS: BadgeCounters = {
   bestDayStreak: 0,
   convoysLed: 0,
   vehiclesInGarage: 0,
+  seasonsWon: 0,
 };
 
 /**
@@ -81,6 +82,10 @@ export function readBadgeCounters(data: Record<string, unknown> | undefined): Ba
     bestDayStreak: toCounter(data?.bestDayStreak),
     convoysLed: toCounter(data?.convoysLed),
     vehiclesInGarage: toCounter(data?.vehiclesInGarage),
+    // Lifetime Kronjakt season victories (first-place finishes). Maintained by
+    // the season-rollover finalizer (crownHunt/seasonRollover.ts), which is the
+    // authoritative server writer — never a client number.
+    seasonsWon: toCounter(data?.seasonsWon),
   };
 }
 
@@ -95,6 +100,7 @@ export const BADGE_METRIC_FIELD: Readonly<Record<BadgeMetric, string>> = {
   bestDayStreak: 'bestDayStreak',
   convoysLed: 'convoysLed',
   vehiclesInGarage: 'vehiclesInGarage',
+  seasonsWon: 'seasonsWon',
 };
 
 // ---------------------------------------------------------------------------

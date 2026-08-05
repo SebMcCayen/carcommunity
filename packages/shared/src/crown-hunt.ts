@@ -191,3 +191,203 @@ export interface PaginatedAdminCrownHuntClaimsResponse {
     hasNext: boolean;
   };
 }
+
+// ===========================================================================
+// STATISTICS + LEADERBOARD + SEASONS (read contracts)
+// ===========================================================================
+//
+// The backend maintains these aggregates incrementally on every crown
+// collection (Firestore triggers) and closes each season with a scheduled
+// rollover. The admin dashboard and the Android social screen READ them; no
+// client ever writes them. Backing Firestore collections:
+//
+//   crownHuntLeaderboardEntries/{scope}__{uid}   { scope, uid, points, crownsCollected }
+//       scope = 'alltime' | seasonId ('YYYY-MM'). Member-readable. Read ranked
+//       via `where scope==X orderBy points desc, crownsCollected desc` (uid is
+//       the final, implicit tiebreak). RANK ORDERING is "strictly better": B
+//       outranks A iff B.points > A.points, OR (points equal AND
+//       B.crownsCollected > A.crownsCollected), OR (both equal AND B.uid <
+//       A.uid). A member's rank = (count of strictly-better members) + 1.
+//       Firestore has no OR, so a bare `points > mine` count is only a lower
+//       bound at a points tie; a client wanting the exact rank pages the ordered
+//       board and reads its own position (same three-key order). The server's
+//       authoritative ranking (rankLeaderboard) applies exactly this ordering.
+//   crownHuntUserStats/{uid}                      personal rich stats. Owner + admin.
+//   crownHuntSeasons/{seasonId}                   season metadata + finalized standings. Member-readable.
+//   crownHuntSpawnStats/{scope}                   admin totals (spawned/collected). Admin only.
+//   crownHuntCellStats/{cellKey}                  per-cell heat-map counts. Admin only.
+//
+// AUTHORITY SPLIT: points / crowns / rank / streak come from the Kronpoäng
+// ledger (both hand-placed and auto-spawned crowns count). The rarity
+// breakdown and the heat-map come from the auto-spawned crown documents (the
+// only ones carrying a rarity and a grid cell), so they cover auto-spawned
+// crowns only; `crownsCollected - sum(byRarity)` is the hand-placed remainder.
+//
+// PRIVACY: the leaderboard is public within the app. Ranks are global — a
+// member the viewer has blocked is NOT removed from the ranking (their standing
+// is a fact), and no special block filtering is applied to the board.
+
+/** Crown rarity tiers, ascending. Auto-spawned crowns only. */
+export const CROWN_HUNT_RARITIES = ['common', 'uncommon', 'rare', 'legendary'] as const;
+export type CrownHuntRarity = (typeof CROWN_HUNT_RARITIES)[number];
+
+/**
+ * A per-rarity histogram. `Partial` because writers update buckets SPARSELY
+ * (e.g. a cell's `spawnedByRarity` only carries the rarities that spawned there)
+ * and the JSON schema lists every key as optional — a consumer must read an
+ * ABSENT key as 0, never assume the key is present. (The per-user `byRarity` on
+ * `crownHuntUserStats` is additionally initialised to a full four-key map by the
+ * collection triggers, but the type stays permissive for the sparse maps that
+ * share it.)
+ */
+export type CrownHuntRarityCounts = Partial<Record<CrownHuntRarity, number>>;
+
+/** Which board a leaderboard read is scoped to. */
+export type CrownHuntLeaderboardScope = 'alltime' | 'season';
+
+/** The reserved scope id for the never-resetting all-time board. */
+export const CROWN_HUNT_ALL_TIME_SCOPE = 'alltime';
+
+/** The Kronjakt grid cell size in degrees (0.01° lat × 0.01° lon), so the admin
+ * heat-map can derive a cell's bounds/centre from its `cellKey` (`latIdx_lonIdx`). */
+export const CROWN_HUNT_CELL_DEGREES = 0.01;
+
+/**
+ * One ranked row of a leaderboard. `displayName` is resolved from the public
+ * user profile at read time (respecting the same read rules as any profile);
+ * `seasonsWon` is the reader's lifetime championship count, for "N-time
+ * champion" display next to their name.
+ */
+export interface CrownHuntLeaderboardEntry {
+  rank: number;
+  uid: string;
+  displayName: string;
+  points: number;
+  crownsCollected: number;
+  seasonsWon: number;
+}
+
+/** A leaderboard page for one scope, plus the viewer's own standing. */
+export interface CrownHuntLeaderboardView {
+  scope: CrownHuntLeaderboardScope;
+  /** Present when `scope === 'season'`: the season this board is for. */
+  seasonId: string | null;
+  entries: CrownHuntLeaderboardEntry[];
+  /** The viewer's rank in this scope, or null if they have never collected. */
+  viewerRank: number | null;
+}
+
+/** A member's own Kronjakt statistics (readable by that member and admins). */
+export interface CrownHuntPersonalStats {
+  uid: string;
+  allTime: {
+    points: number;
+    crownsCollected: number;
+    /** Global rank on the all-time board, or null if never collected. */
+    rank: number | null;
+  };
+  currentSeason: {
+    seasonId: string;
+    points: number;
+    crownsCollected: number;
+    rank: number | null;
+  };
+  /** Auto-spawned crowns collected, by rarity. */
+  byRarity: CrownHuntRarityCounts;
+  /**
+   * The rarest auto-spawned crown ever collected. OPTIONAL to match the schema
+   * and Firestore reality: a member who has only collected hand-placed crowns
+   * (the ledger-only path never writes these) has no rarest crown, so the
+   * fields are absent — a consumer must treat absent as "none yet", not assume
+   * they are present.
+   */
+  rarestRarity?: CrownHuntRarity | null;
+  rarestAt?: string | null;
+  /** Consecutive-day collection streak (Europe/Stockholm days). */
+  streakCurrent: number;
+  streakBest: number;
+  /**
+   * Time of the last collection. OPTIONAL: the crownSpawns collect trigger can
+   * create the stats doc before the ledger trigger (which owns this field)
+   * runs, so it may be absent on a just-created doc.
+   */
+  lastCollectionAt?: string | null;
+  /** Lifetime season victories (first-place finishes) — grows every win. */
+  seasonsWon: number;
+}
+
+// --- Admin aggregates ------------------------------------------------------
+
+/** Dashboard totals for one scope (all-time or a season). */
+export interface CrownHuntAdminStats {
+  scope: string;
+  spawnedTotal: number;
+  collectedTotal: number;
+  /** collectedTotal / spawnedTotal, 0..1; 0 when nothing has spawned. */
+  collectionRate: number;
+  spawnedByRarity: CrownHuntRarityCounts;
+  collectedByRarity: CrownHuntRarityCounts;
+  /** Distinct members who collected a crown in the last 7 / 30 days. */
+  activePlayers7d: number;
+  activePlayers30d: number;
+}
+
+/**
+ * One grid cell's spawn/collect counts, for the admin heat/points map. This
+ * maps the raw `crownHuntCellStats/{cellKey}` document, whose triggers write
+ * fields sparsely: only `cellKey`/`spawned`/`collected` are guaranteed (the
+ * schema's required set). The rarity maps and last-event timestamps are OPTIONAL
+ * — a cell that has spawned but never been collected has no `collected*` fields
+ * yet, and a rarity map only carries the rarities that actually occurred there.
+ */
+export interface CrownHuntCellStat {
+  cellKey: string;
+  spawned: number;
+  collected: number;
+  spawnedByRarity?: CrownHuntRarityCounts;
+  collectedByRarity?: CrownHuntRarityCounts;
+  lastSpawnAt?: string | null;
+  lastCollectAt?: string | null;
+}
+
+// --- Seasons ---------------------------------------------------------------
+
+export type CrownHuntSeasonStatus = 'active' | 'ended';
+
+/** A finalized podium finisher (top 3), with a name snapshot for the app. */
+export interface CrownHuntSeasonWinner {
+  rank: number;
+  uid: string;
+  displayName: string;
+  points: number;
+  crownsCollected: number;
+}
+
+/** A ranked standing on a finalized season (no name; resolved by the client). */
+export interface CrownHuntSeasonStanding {
+  rank: number;
+  uid: string;
+  points: number;
+  crownsCollected: number;
+}
+
+/**
+ * Season metadata. An ACTIVE season carries only the lifecycle fields; the
+ * finalized fields below (`finalizedAt`, `participantCount`, `winners`,
+ * `topStandings`) are written ONLY when the scheduled rollover flips the season
+ * to `ended`. They are therefore optional — a consumer reading an active season
+ * must not assume `winners`/`topStandings` are present. Use `status === 'ended'`
+ * as the presence guard (the social screen shows "last month's champions" only
+ * for ended seasons).
+ */
+export interface CrownHuntSeason {
+  seasonId: string;
+  period: 'month';
+  status: CrownHuntSeasonStatus;
+  startAt: string;
+  endAt: string;
+  finalizedAt?: string | null;
+  participantCount?: number | null;
+  winners?: CrownHuntSeasonWinner[];
+  topStandings?: CrownHuntSeasonStanding[];
+}

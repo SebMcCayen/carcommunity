@@ -64,6 +64,7 @@ enum class BadgeLadderId(val key: String) {
     TROGEN("trogen"),
     KONVOJLEDARE("konvojledare"),
     SAMLARE("samlare"),
+    SASONGSMASTARE("sasongsmastare"),
     ;
 
     companion object {
@@ -84,7 +85,7 @@ data class BadgeLadder(
 
 private const val METRES_PER_KM = 1_000L
 
-/** The six ladders, in the catalog's display order. */
+/** The seven ladders, in the catalog's display order. */
 val BADGE_LADDERS: List<BadgeLadder> =
     listOf(
         BadgeLadder(
@@ -158,11 +159,39 @@ val BADGE_LADDERS: List<BadgeLadder> =
                     BadgeRung(BadgeTier.GULD, "samlare_guld", 5),
                 ),
         ),
+        // Säsongsmästare — the SCALING lifetime-championship ladder (metric
+        // seasonsWon, first-place season finishes). Four rungs 1/3/5/10, matching
+        // the backend catalog. Distinct from the per-season podium badges
+        // (sasong_guld/silver/brons), which are standalone milestones below.
+        BadgeLadder(
+            id = BadgeLadderId.SASONGSMASTARE,
+            unit = BadgeLadderUnit.COUNT,
+            rungs =
+                listOf(
+                    BadgeRung(BadgeTier.BRONS, "sasongsmastare_brons", 1),
+                    BadgeRung(BadgeTier.SILVER, "sasongsmastare_silver", 3),
+                    BadgeRung(BadgeTier.GULD, "sasongsmastare_guld", 5),
+                    BadgeRung(BadgeTier.PLATINA, "sasongsmastare_platina", 10),
+                ),
+        ),
     )
 
-/** The five standalone (non-tiered) badges, in catalog order. */
+/**
+ * The standalone (non-tiered) badges, in catalog order: the five original
+ * milestones plus the three season PODIUM badges (a single season's top three,
+ * awarded by rank — not a ladder). Matches the backend catalog's standalone set.
+ */
 val BADGE_MILESTONE_KEYS: List<String> =
-    listOf("first_event", "five_events", "helpful_member", "early_member", "garage_created")
+    listOf(
+        "first_event",
+        "five_events",
+        "helpful_member",
+        "early_member",
+        "garage_created",
+        "sasong_guld",
+        "sasong_silver",
+        "sasong_brons",
+    )
 
 /** Kronpoäng credited once, the first time a rung is reached (TIER_POINTS_REWARD). */
 val BADGE_TIER_POINTS: Map<BadgeTier, Int> =

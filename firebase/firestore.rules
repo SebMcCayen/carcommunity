@@ -1230,6 +1230,71 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // Kronjakt STATISTICS + LEADERBOARD + SEASONS (read-optimised aggregates)
+    //
+    // Every collection below is maintained EXCLUSIVELY by backend triggers and
+    // the scheduled season rollover (Admin SDK). No client ever writes them, so
+    // every write rule is `false`. The READ audience differs by collection and
+    // that is the whole security surface of this slice:
+    //
+    //  - crownHuntLeaderboardEntries/{scope}__{uid} — the public leaderboard, a
+    //    flat collection with a `scope` field ('alltime' | seasonId). Any ACTIVE
+    //    (signed-in, non-suspended) member may read it — leaderboards are public
+    //    within the app, but suspension still overrides access. The client
+    //    filters by scope, orders by points, and resolves display names from the
+    //    public user profiles it can already read. Ranks are global; a blocked
+    //    member is not filtered out — their standing is a fact.
+    //  - crownHuntUserStats/{uid} — a member's own rich stats (streak, rarity
+    //    breakdown, rarest crown, seasonsWon). Readable ONLY by that member and
+    //    admins: it is the one place per-user activity detail lives.
+    //  - crownHuntSeasons/{seasonId} — season metadata + finalized standings and
+    //    winners. Member-readable so the social screen can show past champions.
+    //  - crownHuntSpawnStats / crownHuntCellStats — admin dashboard aggregates
+    //    including WHERE crowns spawn (the heat-map). Admin-only: publishing the
+    //    per-cell map to members would tell a client where to wait for spawns.
+    // -------------------------------------------------------------------------
+    match /crownHuntLeaderboardEntries/{entryId} {
+      // isActiveMember() (not bare isAuthenticated) so suspension overrides
+      // access, matching every other member-facing read in this ruleset. While
+      // member gating is disabled it resolves to signed-in AND not suspended.
+      allow read: if isActiveMember();
+      allow write: if false;
+    }
+
+    match /crownHuntUserStats/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    match /crownHuntSeasons/{seasonId} {
+      allow read: if isActiveMember();
+      allow write: if false;
+    }
+
+    match /crownHuntSpawnStats/{scope} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /crownHuntCellStats/{cellKey} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Backend-only exactly-once markers for the stats triggers/rollover
+    // (crownHuntStatFolds, crownHuntSpawnFolds, crownHuntSeasonWinCredits).
+    // Never client-readable or client-writable.
+    match /crownHuntStatFolds/{foldId} {
+      allow read, write: if false;
+    }
+    match /crownHuntSpawnFolds/{foldId} {
+      allow read, write: if false;
+    }
+    match /crownHuntSeasonWinCredits/{seasonId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // pointsLedger – Kronpoäng balances and append-only ledger (Phase 9g)
     // ALL writes are backend transactions (creditPoints/debitPoints + the
     // points.admin* callables) — clients never calculate or write balances,

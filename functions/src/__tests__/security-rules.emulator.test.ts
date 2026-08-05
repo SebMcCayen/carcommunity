@@ -488,6 +488,103 @@ describe('Firestore – Kronjakt (Phase 9h)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: Kronjakt stats + leaderboard + seasons (read aggregates)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – Kronjakt stats + leaderboard + seasons', () => {
+  const MEMBER = 'chs-member';
+  const OTHER = 'chs-other';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      await setDoc(doc(firestore, 'crownHuntLeaderboardEntries', `alltime__${MEMBER}`), {
+        scope: 'alltime',
+        uid: MEMBER,
+        points: 120,
+        crownsCollected: 6,
+      });
+      await setDoc(doc(firestore, 'crownHuntUserStats', MEMBER), {
+        uid: MEMBER,
+        seasonsWon: 2,
+        collectionStreakCurrent: 3,
+      });
+      // A clearly-historical id so it never collides with a season the
+      // rollover integration test computes from the real clock (both files
+      // share one emulator Firestore).
+      await setDoc(doc(firestore, 'crownHuntSeasons', '2000-01'), {
+        seasonId: '2000-01',
+        period: 'month',
+        status: 'ended',
+      });
+      await setDoc(doc(firestore, 'crownHuntSpawnStats', 'alltime'), {
+        scope: 'alltime',
+        spawnedTotal: 10,
+        collectedTotal: 4,
+      });
+      await setDoc(doc(firestore, 'crownHuntCellStats', '5933_1807'), {
+        cellKey: '5933_1807',
+        spawned: 3,
+        collected: 1,
+      });
+    });
+  });
+
+  it('the leaderboard is public to any authenticated member', async () => {
+    const memberFs = testEnv.authenticatedContext(OTHER, { activeMember: true }).firestore();
+    await assertSucceeds(
+      getDoc(doc(memberFs, 'crownHuntLeaderboardEntries', `alltime__${MEMBER}`)),
+    );
+  });
+
+  it('seasons are member-readable so the app can show past champions', async () => {
+    const memberFs = testEnv.authenticatedContext(OTHER, { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'crownHuntSeasons', '2000-01')));
+  });
+
+  it('a suspended member cannot read the leaderboard or seasons (suspension overrides)', async () => {
+    const suspFs = testEnv
+      .authenticatedContext('chs-susp', { activeMember: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspFs, 'crownHuntLeaderboardEntries', `alltime__${MEMBER}`)));
+    await assertFails(getDoc(doc(suspFs, 'crownHuntSeasons', '2000-01')));
+  });
+
+  it('personal stats are owner-only (and admin); another member is denied', async () => {
+    const ownerFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(ownerFs, 'crownHuntUserStats', MEMBER)));
+    const otherFs = testEnv.authenticatedContext(OTHER, { activeMember: true }).firestore();
+    await assertFails(getDoc(doc(otherFs, 'crownHuntUserStats', MEMBER)));
+    const adminFs = testEnv.authenticatedContext('chs-admin', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'crownHuntUserStats', MEMBER)));
+  });
+
+  it('admin spawn/cell aggregates are admin-only (a member cannot read the heat-map)', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertFails(getDoc(doc(memberFs, 'crownHuntSpawnStats', 'alltime')));
+    await assertFails(getDoc(doc(memberFs, 'crownHuntCellStats', '5933_1807')));
+    const adminFs = testEnv.authenticatedContext('chs-admin', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'crownHuntSpawnStats', 'alltime')));
+    await assertSucceeds(getDoc(doc(adminFs, 'crownHuntCellStats', '5933_1807')));
+  });
+
+  it('no client may write any stat aggregate', async () => {
+    const memberFs = testEnv.authenticatedContext(MEMBER, { activeMember: true }).firestore();
+    await assertFails(
+      setDoc(doc(memberFs, 'crownHuntLeaderboardEntries', `alltime__${MEMBER}`), {
+        scope: 'alltime',
+        uid: MEMBER,
+        points: 999999,
+        crownsCollected: 999,
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(memberFs, 'crownHuntUserStats', MEMBER), { seasonsWon: 99 }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: partners (Phase 9i)
 // ---------------------------------------------------------------------------
 

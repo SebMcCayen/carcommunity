@@ -159,6 +159,163 @@
       },
       "required": ["pointId", "safeLocationConfirmed", "approvalNote"],
       "additionalProperties": false
+    },
+
+    "crownHuntRarity": {
+      "type": "string",
+      "enum": ["common", "uncommon", "rare", "legendary"],
+      "description": "Auto-spawned crown rarity, ascending. Hand-placed points have no rarity."
+    },
+    "crownHuntRarityCounts": {
+      "type": "object",
+      "description": "Per-rarity histogram. Absent keys read as 0.",
+      "properties": {
+        "common": { "type": "integer", "minimum": 0 },
+        "uncommon": { "type": "integer", "minimum": 0 },
+        "rare": { "type": "integer", "minimum": 0 },
+        "legendary": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "crownHuntLeaderboardEntry": {
+      "type": "object",
+      "description": "One ranked leaderboard row. displayName is resolved from the public user profile at read time; seasonsWon is the member's lifetime championship count for 'N-time champion' display.",
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1 },
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "displayName": { "type": "string" },
+        "points": { "type": "integer", "minimum": 0 },
+        "crownsCollected": { "type": "integer", "minimum": 0 },
+        "seasonsWon": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["rank", "uid", "displayName", "points", "crownsCollected", "seasonsWon"],
+      "additionalProperties": false
+    },
+    "crownHuntLeaderboardEntryDoc": {
+      "type": "object",
+      "description": "Firestore `crownHuntLeaderboardEntries/{scope}__{uid}` — the maintained per-scope counter (scope = 'alltime' | seasonId). Member-readable; ranks and names are composed by the reader.",
+      "properties": {
+        "scope": { "type": "string" },
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "points": { "type": "integer", "minimum": 0 },
+        "crownsCollected": { "type": "integer", "minimum": 0 },
+        "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
+      },
+      "required": ["scope", "uid", "points", "crownsCollected"],
+      "additionalProperties": false
+    },
+    "crownHuntPersonalStats": {
+      "type": "object",
+      "description": "A member's own Kronjakt statistics (readable by that member and admins). points/crowns/rank/streak derive from the Kronpoäng ledger (both crown kinds); byRarity/rarest cover auto-spawned crowns only.",
+      "properties": {
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "allTime": {
+          "type": "object",
+          "properties": {
+            "points": { "type": "integer", "minimum": 0 },
+            "crownsCollected": { "type": "integer", "minimum": 0 },
+            "rank": { "type": ["integer", "null"], "minimum": 1 }
+          },
+          "required": ["points", "crownsCollected", "rank"],
+          "additionalProperties": false
+        },
+        "currentSeason": {
+          "type": "object",
+          "properties": {
+            "seasonId": { "type": "string" },
+            "points": { "type": "integer", "minimum": 0 },
+            "crownsCollected": { "type": "integer", "minimum": 0 },
+            "rank": { "type": ["integer", "null"], "minimum": 1 }
+          },
+          "required": ["seasonId", "points", "crownsCollected", "rank"],
+          "additionalProperties": false
+        },
+        "byRarity": { "$ref": "#/$defs/crownHuntRarityCounts" },
+        "rarestRarity": { "oneOf": [{ "$ref": "#/$defs/crownHuntRarity" }, { "type": "null" }] },
+        "rarestAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "streakCurrent": { "type": "integer", "minimum": 0 },
+        "streakBest": { "type": "integer", "minimum": 0 },
+        "lastCollectionAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "seasonsWon": { "type": "integer", "minimum": 0, "description": "Lifetime first-place season finishes; grows every win." }
+      },
+      "required": ["uid", "allTime", "currentSeason", "byRarity", "streakCurrent", "streakBest", "seasonsWon"],
+      "additionalProperties": false
+    },
+    "crownHuntAdminStats": {
+      "type": "object",
+      "description": "Admin dashboard totals for one scope ('alltime' | seasonId). Admin-only read.",
+      "properties": {
+        "scope": { "type": "string" },
+        "spawnedTotal": { "type": "integer", "minimum": 0 },
+        "collectedTotal": { "type": "integer", "minimum": 0 },
+        "collectionRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "spawnedByRarity": { "$ref": "#/$defs/crownHuntRarityCounts" },
+        "collectedByRarity": { "$ref": "#/$defs/crownHuntRarityCounts" },
+        "activePlayers7d": { "type": "integer", "minimum": 0 },
+        "activePlayers30d": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["scope", "spawnedTotal", "collectedTotal", "collectionRate", "spawnedByRarity", "collectedByRarity", "activePlayers7d", "activePlayers30d"],
+      "additionalProperties": false
+    },
+    "crownHuntCellStat": {
+      "type": "object",
+      "description": "Firestore `crownHuntCellStats/{cellKey}` — one 0.01° grid cell's spawn/collect counts for the admin heat/points map. cellKey is 'latIdx_lonIdx'; the cell centre is (latIdx*0.01, lonIdx*0.01). Admin-only read.",
+      "properties": {
+        "cellKey": { "type": "string" },
+        "spawned": { "type": "integer", "minimum": 0 },
+        "collected": { "type": "integer", "minimum": 0 },
+        "spawnedByRarity": { "$ref": "#/$defs/crownHuntRarityCounts" },
+        "collectedByRarity": { "$ref": "#/$defs/crownHuntRarityCounts" },
+        "lastSpawnAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "lastCollectAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
+      },
+      "required": ["cellKey", "spawned", "collected"],
+      "additionalProperties": false
+    },
+    "crownHuntSeasonStatus": {
+      "type": "string",
+      "enum": ["active", "ended"]
+    },
+    "crownHuntSeasonWinner": {
+      "type": "object",
+      "description": "A finalized podium finisher (top 3), with a displayName snapshot for the social screen.",
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "displayName": { "type": "string" },
+        "points": { "type": "integer", "minimum": 0 },
+        "crownsCollected": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["rank", "uid", "displayName", "points", "crownsCollected"],
+      "additionalProperties": false
+    },
+    "crownHuntSeasonStanding": {
+      "type": "object",
+      "properties": {
+        "rank": { "type": "integer", "minimum": 1 },
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "points": { "type": "integer", "minimum": 0 },
+        "crownsCollected": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["rank", "uid", "points", "crownsCollected"],
+      "additionalProperties": false
+    },
+    "crownHuntSeason": {
+      "type": "object",
+      "description": "Firestore `crownHuntSeasons/{seasonId}` (seasonId = 'YYYY-MM', one Europe/Stockholm calendar month). Member-readable. winners/topStandings populate only once status is 'ended' (scheduled rollover), so the social screen can show 'last month's champions'.",
+      "properties": {
+        "seasonId": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$" },
+        "period": { "type": "string", "const": "month" },
+        "status": { "$ref": "#/$defs/crownHuntSeasonStatus" },
+        "startAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "endAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
+        "finalizedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "participantCount": { "type": ["integer", "null"], "minimum": 0 },
+        "winners": { "type": "array", "items": { "$ref": "#/$defs/crownHuntSeasonWinner" } },
+        "topStandings": { "type": "array", "items": { "$ref": "#/$defs/crownHuntSeasonStanding" } }
+      },
+      "required": ["seasonId", "period", "status", "startAt", "endAt"],
+      "additionalProperties": false
     }
   }
 }
