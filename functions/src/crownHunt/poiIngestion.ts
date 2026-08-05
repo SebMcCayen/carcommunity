@@ -36,7 +36,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { MAX_INSTANCES_SCHEDULED, MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 import { shapeBoundingBox, type CrownSpawnAreaShape } from './crown-area-core';
 import { crownCellKey } from './crown-spawn-core';
@@ -247,9 +247,16 @@ export const onSpawnAreaWrittenIngestPois = onDocumentWritten(
     document: 'crownSpawnAreas/{areaId}',
     memory: '256MiB',
     timeoutSeconds: 60,
-    maxInstances: MAX_INSTANCES_TRIGGER,
-    // Serialize per instance so two writes to the same area cannot ingest in
-    // parallel and race the cache diff.
+    // SERIALIZED GLOBALLY, on purpose. `concurrency: 1` alone only serializes
+    // WITHIN one instance — with several instances, two writes to the same area
+    // could still ingest in parallel and interleave the cache diff (read-old-set
+    // then delete-stale/set-new), leaving orphaned or missing POI docs. Pinning
+    // maxInstances to 1 as well means at most one execution of this trigger runs
+    // at a time across the whole project, so no two ingestions (same area or not)
+    // can ever race. That is ample here: area writes are rare and admin-driven,
+    // and each ingestion is a one-off per activation/reshape — throughput is not
+    // the constraint, correctness of the diff is.
+    maxInstances: 1,
     concurrency: 1,
   },
   withServerErrorReporting('crownHunt.ingestAreaPois', async (event) => {

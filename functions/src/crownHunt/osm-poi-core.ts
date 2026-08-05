@@ -389,15 +389,35 @@ export function samplePoiPlacement(
   const minSeparation = options.minSeparationMeters ?? MIN_CROWN_SEPARATION_METERS;
   const jitterMeters = options.jitterMeters ?? POI_JITTER_METERS;
 
+  // Passes BOTH guards: inside the target cell (when one is given) and inside the
+  // shape (when an accept predicate is given). Applied to the jittered candidate
+  // AND to the raw POI fallback — the caller's "already in-shape/in-cell" promise
+  // holds at ingestion time, but a stale cache entry (overlapping ingestions, a
+  // partial reconcile) could break it, and a placement must never violate the
+  // shape/cell guard on the strength of that promise alone.
+  const guardsPass = (p: CrownPosition): boolean => {
+    if (
+      options.cellKey !== undefined &&
+      crownCellKey(p.latitude, p.longitude) !== options.cellKey
+    ) {
+      return false;
+    }
+    return !options.accept || options.accept(p);
+  };
+
   for (const idx of shuffledIndices(pois.length, rng)) {
     const poi = pois[idx]!;
     const base: CrownPosition = { latitude: poi.lat, longitude: poi.lon };
-    let candidate = jitterPosition(base, rng, jitterMeters);
-    const inCell =
-      options.cellKey === undefined ||
-      crownCellKey(candidate.latitude, candidate.longitude) === options.cellKey;
-    const inShape = !options.accept || options.accept(candidate);
-    if (!inCell || !inShape) candidate = base;
+    // jitterPosition is called for every POI so the rng stream stays deterministic
+    // regardless of which candidate is chosen.
+    const jittered = jitterPosition(base, rng, jitterMeters);
+    // Prefer the jittered point; fall back to the exact POI point ONLY when it
+    // ALSO clears the guards. If neither clears them (a stale/out-of-shape POI),
+    // skip this POI entirely rather than place a crown outside the area/cell.
+    let candidate: CrownPosition | null = null;
+    if (guardsPass(jittered)) candidate = jittered;
+    else if (guardsPass(base)) candidate = base;
+    else continue;
     if (isFarEnoughFromAll(candidate, occupied, minSeparation)) return candidate;
   }
   return null;

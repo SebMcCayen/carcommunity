@@ -319,4 +319,34 @@ describe('samplePoiPlacement', () => {
       expect(crownCellKey(pos!.latitude, pos!.longitude)).toBe(cellKey);
     }
   });
+
+  it('SKIPS a stale POI whose OWN coordinate is out of shape (never falls back to it)', () => {
+    // A stale/out-of-shape cache entry: neither the jittered candidate nor the raw
+    // POI point clears the accept guard, so the POI must be skipped entirely — the
+    // sampler must NOT return the out-of-shape base as a fallback.
+    const stale: NormalizedPoi = { lat: 57.95, lon: 12.6, category: 'parking' }; // well outside CIRCLE
+    expect(isPointInShape(stale.lat, stale.lon, CIRCLE)).toBe(false);
+    const accept = (p: CrownPosition) => isPointInShape(p.latitude, p.longitude, CIRCLE);
+    // Only the stale POI → nothing placeable.
+    expect(samplePoiPlacement([stale], [], createSeededRng(4), { accept })).toBeNull();
+
+    // A stale POI mixed with a valid one → the valid one is chosen, the stale one
+    // is never returned. Run several seeds so shuffle order varies.
+    const valid: NormalizedPoi = { lat: 57.9, lon: 12.5, category: 'fuel' };
+    for (let seed = 0; seed < 20; seed += 1) {
+      const pos = samplePoiPlacement([stale, valid], [], createSeededRng(seed), { accept })!;
+      expect(pos).not.toBeNull();
+      expect(isPointInShape(pos.latitude, pos.longitude, CIRCLE)).toBe(true);
+      expect(
+        haversineDistanceMeters(valid.lat, valid.lon, pos.latitude, pos.longitude),
+      ).toBeLessThanOrEqual(POI_JITTER_METERS + 1e-6);
+    }
+  });
+
+  it('SKIPS a stale POI whose OWN coordinate is in the wrong cell (never falls back to it)', () => {
+    const cellKey = crownCellKey(57.9, 12.5);
+    const wrongCell: NormalizedPoi = { lat: 58.5, lon: 13.5, category: 'parking' };
+    expect(crownCellKey(wrongCell.lat, wrongCell.lon)).not.toBe(cellKey);
+    expect(samplePoiPlacement([wrongCell], [], createSeededRng(2), { cellKey })).toBeNull();
+  });
 });
