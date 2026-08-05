@@ -65,7 +65,9 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
   const serverTimestamp = () => FieldValue.serverTimestamp();
   const batch = db.batch();
   batch.set(pointRef, {
-    title: input.title,
+    // Title is optional (a Crown is just a map collectable); store '' when
+    // absent so the field is always a string and never `undefined` in Firestore.
+    title: input.title ?? '',
     description: input.description ?? null,
     latitude: input.latitude,
     longitude: input.longitude,
@@ -90,7 +92,7 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
         targetType: 'crownHuntPoint',
         targetId: pointRef.id,
         reason: 'Point created (draft).',
-        details: { title: input.title },
+        details: { title: input.title ?? '' },
       },
       serverTimestamp,
     ),

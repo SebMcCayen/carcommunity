@@ -161,7 +161,10 @@ const submitClaimInputSchema = z
 export type SubmitClaimInput = z.infer<typeof submitClaimInputSchema>;
 
 const pointFieldsSchema = z.object({
-  title: z.string().trim().min(1).max(MAX_TITLE_LENGTH),
+  // Optional: a Crown Hunt point is just a collectable on the map, so it can be
+  // created/saved with no title. When present it is still capped at
+  // MAX_TITLE_LENGTH; absent/empty stores as '' (see createPoint).
+  title: z.string().trim().max(MAX_TITLE_LENGTH).optional(),
   description: z.string().max(MAX_DESCRIPTION_LENGTH).nullable().optional(),
   latitude: z.number(),
   longitude: z.number(),
@@ -233,7 +236,7 @@ export function parseCreatePointInput(data: unknown): ParseResult<CreatePointInp
   return parse(
     createPointInputSchema,
     data,
-    'Expected createPointRequest: { title, latitude, longitude, geofenceRadiusMeters (20-150), rewardPoints (1-1000), repeatRule, description?, availableFrom?, availableUntil? }.',
+    'Expected createPointRequest: { latitude, longitude, geofenceRadiusMeters (20-150), rewardPoints (1-1000), repeatRule, title?, description?, availableFrom?, availableUntil? }.',
   );
 }
 

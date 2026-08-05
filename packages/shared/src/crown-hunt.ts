@@ -71,7 +71,8 @@ export type CrownHuntClaimResult = (typeof CROWN_HUNT_CLAIM_RESULTS)[number];
  * Activation is a separate action requiring safety confirmation.
  */
 export interface AdminCreateCrownHuntPointRequest {
-  title: string;
+  /** Optional — a Crown Hunt point is just a collectable on the map. */
+  title?: string;
   description?: string | null;
   latitude: number;
   longitude: number;

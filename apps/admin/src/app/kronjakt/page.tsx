@@ -45,7 +45,7 @@ import {
   cellKeyForCoords,
   formatCellCenter,
 } from '@/features/crown-hunt';
-import { DateTimeField } from '@/components/ui/DateTimeField';
+import { DateTimePicker } from '@/components/ui/DateTimePicker';
 import { MapLocationPicker } from '@/components/map/MapLocationPicker';
 import { translate } from '@/i18n';
 import { localToIso, toLocalDateTimeValue } from '@/lib/datetime';
@@ -144,13 +144,12 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
     >
       <div className={styles.formRow}>
         <label className={styles.label}>
-          {t('crownHunt.formTitleLabel')} *
+          {t('crownHunt.formTitleLabel')}
           <input
             className={styles.input}
             value={form.title}
             onChange={(e) => set('title', e.target.value)}
             maxLength={100}
-            required
           />
         </label>
       </div>
@@ -228,7 +227,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
       </div>
 
       <div className={styles.formRowGrid}>
-        <DateTimeField
+        <DateTimePicker
           id="ch-available-from"
           label={t('crownHunt.formAvailableFromLabel')}
           labelClassName={styles.label}
@@ -236,7 +235,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
           value={form.availableFrom}
           onChange={(next) => set('availableFrom', next)}
         />
-        <DateTimeField
+        <DateTimePicker
           id="ch-available-until"
           label={t('crownHunt.formAvailableUntilLabel')}
           labelClassName={styles.label}
@@ -942,7 +941,11 @@ export default function KronjaktPage() {
       setSaveError(null);
       try {
         const base = {
-          title: form.title,
+          // A Crown point is just a collectable on the map — a title is
+          // optional. Send the trimmed value (possibly '') on every save so an
+          // emptied box also clears an existing title on edit; the backend
+          // stores '' as "no title".
+          title: form.title.trim(),
           description: form.description || undefined,
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
