@@ -261,6 +261,9 @@ describe('crownhunt-core inputs and helpers', () => {
     expect(parseCreatePointInput({ ...valid, rewardPoints: 0 }).ok).toBe(false);
     expect(parseCreatePointInput({ ...valid, rewardPoints: 1001 }).ok).toBe(false);
     expect(parseCreatePointInput({ ...valid, title: 'x'.repeat(101) }).ok).toBe(false);
+    // Title is optional — a Crown point is just a collectable on the map.
+    expect(parseCreatePointInput({ ...valid, title: undefined }).ok).toBe(true);
+    expect(parseCreatePointInput({ ...valid, title: '' }).ok).toBe(true);
     expect(parseCreatePointInput({ ...valid, repeatRule: 'hourly' }).ok).toBe(false);
     expect(
       guardPointFields({

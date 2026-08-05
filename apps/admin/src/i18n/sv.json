@@ -3,7 +3,15 @@
     "dateLabel": "Datum",
     "timeLabel": "Tid",
     "dateFormatPlaceholder": "åååå-mm-dd",
-    "timeFormatPlaceholder": "tt:mm"
+    "timeFormatPlaceholder": "tt:mm",
+    "datePickerPlaceholder": "Välj datum",
+    "calendarLabel": "Kalender",
+    "previousMonth": "Föregående månad",
+    "nextMonth": "Nästa månad",
+    "hourLabel": "Timme",
+    "minuteLabel": "Minut",
+    "clear": "Rensa",
+    "done": "Klar"
   },
   "placeholder": {
     "plannedFunctionality": "Planerad funktionalitet",

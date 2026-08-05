@@ -3,7 +3,15 @@
     "dateLabel": "Date",
     "timeLabel": "Time",
     "dateFormatPlaceholder": "yyyy-mm-dd",
-    "timeFormatPlaceholder": "HH:mm"
+    "timeFormatPlaceholder": "HH:mm",
+    "datePickerPlaceholder": "Choose date",
+    "calendarLabel": "Calendar",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "hourLabel": "Hour",
+    "minuteLabel": "Minute",
+    "clear": "Clear",
+    "done": "Done"
   },
   "placeholder": {
     "plannedFunctionality": "Planned functionality",
