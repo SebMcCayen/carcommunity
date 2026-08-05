@@ -440,7 +440,8 @@
     <string name="friends_outgoingTitle">Väntande förfrågningar</string>
     <string name="friends_listTitle">Dina vänner</string>
     <string name="friends_emptyFriends">Du har inte lagt till några vänner än.</string>
-    <string name="friends_outgoingPendingLabel">Väntar på svar</string>
+    <string name="friends_outgoingPendingLabel">Väntar på bekräftelse</string>
+    <string name="friends_cancelRequestAction">Avbryt förfrågan</string>
     <string name="friends_accept">Acceptera</string>
     <string name="friends_decline">Avböj</string>
     <string name="friends_remove">Ta bort vän</string>

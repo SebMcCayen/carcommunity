@@ -50,6 +50,7 @@ fun FriendsRoute(
         onDismissAdd = { coordinator.resetAdd() },
         onAccept = { requestId -> scope.launch { coordinator.accept(requestId) } },
         onDecline = { requestId -> scope.launch { coordinator.decline(requestId) } },
+        onCancel = { toUid -> scope.launch { coordinator.cancel(toUid) } },
         onRemove = { friendUid -> scope.launch { coordinator.remove(friendUid) } },
         onClearActionError = { coordinator.clearActionError() },
         onMessageFriend = onMessageFriend,
