@@ -232,8 +232,9 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
 
   // Only meaningful in 'limited' mode: N must be an integer >= 1. Parse with
   // Number (not parseInt) so "1.5"/"2.9" are NOT truncated to a valid integer —
-  // Number.isInteger then rejects any decimal; empty → NaN → rejected. This
-  // blocks submit and shows an inline message; the backend re-validates.
+  // Number.isInteger then rejects any decimal; empty → 0, rejected by the >= 1
+  // check. This blocks submit and shows an inline message; the backend
+  // re-validates.
   const parsedMaxCollectors = Number(form.maxCollectors);
   const maxCollectorsInvalid =
     form.collectorMode === 'limited' &&

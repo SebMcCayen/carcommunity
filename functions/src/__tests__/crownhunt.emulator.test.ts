@@ -826,6 +826,28 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(doc.status).toBe('paused'); // still above the collector count, not retired
   });
 
+  it('does not award an UNLIMITED crown that is no longer active', async () => {
+    // The award transaction re-checks the point's status for ALL crowns, not
+    // just limited ones, so an unlimited point that is paused/ended is rejected
+    // point_inactive and awards nothing.
+    const pointId = await createActivePoint(); // unlimited
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Pausad före insamling.' });
+
+    const u = await createFreshMember('ch-inactive-a');
+    expect(await collectAs(u, pointId)).toBe('point_inactive');
+
+    // Nothing was awarded: no awarded claim and no Kronpoäng balance.
+    const awarded = await adminDb
+      .collection('crownHuntClaims')
+      .where('pointId', '==', pointId)
+      .where('result', '==', 'awarded')
+      .get();
+    expect(awarded.size).toBe(0);
+    const ledger = await adminDb.collection('pointsLedger').doc(u.uid).get();
+    expect(ledger.exists ? (ledger.data()!.balance as number) : 0).toBe(0);
+  });
+
   it('back-compat: a point with no maxCollectors field behaves as unlimited', async () => {
     // Simulate a pre-existing point created before this feature: activate a
     // point, then strip the maxCollectors/collectorCount fields to mimic the

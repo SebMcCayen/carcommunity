@@ -479,7 +479,7 @@ export const submitClaim = onCall(
     // Distinct-collector cap is read AUTHORITATIVELY from the in-transaction
     // point snapshot in the read guard below (not from the non-transactional
     // step-5 read), so an admin changing maxCollectors between the two cannot be
-    // enforced staply. null/absent = unlimited (the whole collector-slot path is
+    // enforced stably. null/absent = unlimited (the whole collector-slot path is
     // skipped); a positive integer caps DISTINCT collectors.
     const awardGuardRef = db
       .collection('crownHuntAwardGuards')
@@ -602,6 +602,13 @@ export const submitClaim = onCall(
             tx.get(dailyCounterRef),
             tx.get(pointRef),
           ]);
+          // Re-check the point INSIDE the transaction for BOTH unlimited and
+          // limited crowns: it may have been paused, ended, or deleted between
+          // the step-5 read and here, and an award must never land on an
+          // inactive point. (pointTxSnap is read in the same Promise.all.)
+          if (!pointTxSnap.exists || pointTxSnap.data()?.status !== 'active') {
+            throw new ClaimGuardRejection('point_inactive');
+          }
           if (guardSnap.exists) {
             throw new ClaimGuardRejection('already_claimed');
           }
@@ -626,11 +633,8 @@ export const submitClaim = onCall(
           const effectiveMaxCollectors =
             (pointTxSnap.data()?.maxCollectors as number | null | undefined) ?? null;
           if (effectiveMaxCollectors !== null) {
-            // A concurrent Nth collect may have already deactivated the crown
-            // between step 5 and now — reject as inactive so it is not awarded.
-            if (!pointTxSnap.exists || pointTxSnap.data()?.status !== 'active') {
-              throw new ClaimGuardRejection('point_inactive');
-            }
+            // (Active-status was already re-checked above for all crowns, incl.
+            // a concurrent Nth collect that just deactivated this one.)
             // Marker existence decides ONLY new-vs-repeat; the cap governs the
             // HEADCOUNT and must NOT override repeatRule. A marker-holder is an
             // EXISTING collector who already occupies a slot, so this claim
