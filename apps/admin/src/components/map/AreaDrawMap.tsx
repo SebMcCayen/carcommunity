@@ -351,19 +351,25 @@ export function AreaDrawMap({
   }, [mapReady, token]);
 
   // --- Switch the active draw tool -----------------------------------------
+  // Runs on a tool change AND once the style finishes loading (so the correct
+  // draw mode is entered as soon as the instance is ready). It clears any drawn
+  // features and enters the mode, but must NOT clear the CURRENT shape on the
+  // style-load pass: the edit flow seeds an existing area's shape before the map
+  // is ready, and wiping it here would leave "Save changes" disabled until the
+  // operator redrew the whole area. Clearing on an actual tool change is already
+  // done by the parent (which also resets circle state), so it is not repeated.
   useEffect(() => {
     const draw = drawRef.current;
     if (!draw) return;
     try {
       draw.deleteAll();
-      onShapeDrawn(null);
       if (tool === 'polygon') draw.changeMode('draw_polygon');
       else if (tool === 'rectangle') draw.changeMode('draw_rectangle');
       else draw.changeMode('simple_select');
     } catch {
       // Draw not ready yet; the next tool change re-attempts.
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [tool, styleLoaded]);
 
   // --- Circle overlay + emit shape -----------------------------------------

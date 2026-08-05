@@ -275,7 +275,7 @@ export async function adminGetSpawnStats(scope: string): Promise<AdminSpawnStats
   return toAdminSpawnStatsView(scope, snap.exists() ? snap.data() : undefined);
 }
 
-/** Read the per-cell heat-map counts (most-recently active first, capped). */
+/** Read the per-cell heat-map counts (most-collected cells first, capped). */
 export async function adminListCellStats(limitN = 500): Promise<CrownHuntCellStat[]> {
   const snapshot = await getDocs(
     query(
