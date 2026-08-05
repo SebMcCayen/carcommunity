@@ -179,6 +179,23 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       throw new HttpsError('invalid-argument', 'No point fields to update.');
     }
 
+    // "Full → done": if this edit leaves a LIMITED crown with as many (or more)
+    // distinct collectors as its cap, retire it now (status 'ended') — the same
+    // collected-out state submitClaim sets when the Nth collector is awarded.
+    // Otherwise an admin lowering maxCollectors below the live collectorCount
+    // would leave a draft/paused point that can still be re-activated yet is
+    // uncollectable (every new user hits "full"), which is confusing at an
+    // event. Draft/paused → ended is a valid retire, and activatePoint already
+    // refuses ended points.
+    const resultingMaxCollectors =
+      input.maxCollectors !== undefined
+        ? input.maxCollectors
+        : ((existing.maxCollectors as number | null | undefined) ?? null);
+    const currentCollectors = (existing.collectorCount as number | undefined) ?? 0;
+    if (resultingMaxCollectors !== null && currentCollectors >= resultingMaxCollectors) {
+      update.status = 'ended';
+    }
+
     tx.update(pointRef, update);
     tx.set(
       db.collection('adminAuditEvents').doc(),
@@ -188,13 +205,16 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
           action: 'crownHunt.updatePoint',
           targetType: 'crownHuntPoint',
           targetId: input.pointId,
-          reason: 'Point updated.',
+          reason:
+            update.status === 'ended'
+              ? 'Point updated; retired (collected out) as the cap is now at or below the collector count.'
+              : 'Point updated.',
           details: { changedFields: Object.keys(update).filter((k) => k !== 'updatedAt') },
         },
         serverTimestamp,
       ),
     );
-    return existing.status as CrownHuntPointStatus;
+    return (update.status as CrownHuntPointStatus | undefined) ?? (existing.status as CrownHuntPointStatus);
   });
 
   return { pointId: input.pointId, status };

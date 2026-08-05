@@ -243,6 +243,10 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        // Defense-in-depth: the submit button is disabled while the N is
+        // invalid, but Enter-key submit can bypass a disabled button, so guard
+        // here too (the backend re-validates regardless).
+        if (maxCollectorsInvalid) return;
         void onSave(form);
       }}
       className={styles.form}

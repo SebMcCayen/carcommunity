@@ -686,12 +686,12 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(markers.size).toBe(2);
   });
 
-  it('rejects NEW collectors (but not existing ones) when an admin lowers the cap below collectorCount and reactivates', async () => {
-    // Edge case: the cap can end up BELOW the live collectorCount if an admin
-    // lowers maxCollectors on a paused point and reactivates it. "Full" is
-    // evaluated independent of marker existence, so a fresh collector is then
-    // rejected as inactive; an existing collector re-claiming is idempotent
-    // (already_claimed), never re-awarded and never wrongly blocked as full.
+  it('retires a limited crown to ended when an admin lowers the cap to <= collectorCount', async () => {
+    // "Full → done": lowering maxCollectors at or below the live collectorCount
+    // must retire the crown (status 'ended') AT UPDATE TIME — the same
+    // collected-out state submitClaim sets when the Nth collector is awarded —
+    // rather than leaving a reactivatable point that renders active but is
+    // uncollectable (every new user would hit "full").
     const pointId = await createActivePoint({ maxCollectors: 3 });
     const a = await createFreshMember('ch-lower-a');
     const b = await createFreshMember('ch-lower-b');
@@ -701,24 +701,31 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(doc.collectorCount).toBe(2);
     expect(doc.status).toBe('active'); // cap 3 not yet reached
 
-    // Admin pauses, lowers the cap to 1 (below collectorCount 2), reactivates.
+    // Admin pauses, then lowers the cap to 1 (below collectorCount 2).
     await signInAs(adminUser);
     await call('crownHunt-pausePoint', { pointId, reason: 'Justerar antalet insamlare.' });
-    await call('crownHunt-updatePoint', { pointId, maxCollectors: 1 });
-    await call('crownHunt-activatePoint', {
-      pointId,
-      safeLocationConfirmed: true,
-      approvalNote: 'Sänkt tak, återaktiverad.',
-    });
-
-    // A brand-new collector is now rejected as full/inactive; count unchanged.
-    const c = await createFreshMember('ch-lower-c');
-    expect(await collectAs(c, pointId)).toBe('point_inactive');
+    const updated = (await call('crownHunt-updatePoint', { pointId, maxCollectors: 1 })).data as {
+      status: string;
+    };
+    // The update itself retires the now-full crown.
+    expect(updated.status).toBe('ended');
     doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.status).toBe('ended');
     expect(doc.collectorCount).toBe(2);
 
-    // An existing collector re-claiming is idempotent, not blocked as full.
-    expect(await collectAs(a, pointId)).toBe('already_claimed');
+    // It cannot be reactivated (ended points are terminal) and no longer
+    // collects — a fresh user gets point_inactive at the availability check.
+    expect(
+      await callableErrorCode(
+        call('crownHunt-activatePoint', {
+          pointId,
+          safeLocationConfirmed: true,
+          approvalNote: 'Försök att återaktivera.',
+        }),
+      ),
+    ).toBe('functions/failed-precondition');
+    const c = await createFreshMember('ch-lower-c');
+    expect(await collectAs(c, pointId)).toBe('point_inactive');
     doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
     expect(doc.collectorCount).toBe(2);
   });
