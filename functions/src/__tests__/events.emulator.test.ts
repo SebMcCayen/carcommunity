@@ -28,6 +28,17 @@ import {
   httpsCallable,
   type Functions,
 } from 'firebase/functions';
+import {
+  collection,
+  connectFirestoreEmulator,
+  getDocs,
+  getFirestore,
+  limit as fsLimit,
+  orderBy,
+  query,
+  where,
+  type Firestore,
+} from 'firebase/firestore';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
@@ -46,6 +57,7 @@ const adminDb = getAdminFirestore(adminApp);
 let app: FirebaseApp;
 let auth: Auth;
 let functions: Functions;
+let clientDb: Firestore;
 
 interface TestUser {
   uid: string;
@@ -136,6 +148,8 @@ beforeAll(async () => {
   connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
   functions = getFunctions(app, REGION);
   connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
+  clientDb = getFirestore(app);
+  connectFirestoreEmulator(clientDb, EMULATOR_HOST, 8080);
 
   adminUser = await createProvisionedUser('events-admin');
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
@@ -583,6 +597,67 @@ describe('events-complete – creator or admin', () => {
     expect(audit.size).toBe(1);
     // size asserted === 1 above, so docs[0] is present.
     expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
+  });
+});
+
+/**
+ * Regression guard for the "created event is invisible in the Events page and on
+ * the map" report (fix/created-event-not-visible). Since 2026-08 (#701) the
+ * member create form omits `approximateArea`, so a member-created event carries
+ * `approximateArea: null`. Both the Events list and the map read from the SAME
+ * rules-enforced client query the Android app runs —
+ * `where status == 'published' orderBy startsAt` on the `events` teaser
+ * collection — and the map builds a pin from the teaser's latitude/longitude.
+ *
+ * These assertions reproduce that exact read path through the security rules (as
+ * a member, not via the Admin SDK) and prove that a null-`approximateArea` event
+ * with a positioned pin (a) is RETURNED by the list/map query and (b) exposes
+ * its coordinates on the teaser so a marker can be placed — i.e. nothing
+ * downstream filters the event out for lacking `approximateArea`.
+ */
+describe('events list/map data source – null approximateArea + pin (client, rules-enforced)', () => {
+  it('returns a member-created pinned event with a null area from the published-events query, coordinates on the teaser', async () => {
+    const member = await createMemberUser('events-visible-member');
+    await signInAs(member);
+
+    // The exact Android member payload post-#701: NO approximateArea, a pin set.
+    const pinned = {
+      title: 'Pinned member meetup (no area)',
+      startsAt: futureStart,
+      description: 'Member-only long description',
+      address: 'Garagevägen 9',
+      latitude: 57.4874,
+      longitude: 12.0757,
+    };
+    const { eventId, status } = (await call('events-create', pinned)).data as {
+      eventId: string;
+      status: string;
+    };
+    expect(status).toBe('published');
+
+    // The events-list / map data source: the SAME rules-enforced query the app
+    // runs, executed here as the member (not the Admin SDK) so the read rule is
+    // actually exercised. A missing composite index or a rules gap would throw
+    // here rather than silently omit the event.
+    const snap = await getDocs(
+      query(
+        collection(clientDb, 'events'),
+        where('status', '==', 'published'),
+        orderBy('startsAt', 'asc'),
+        fsLimit(200),
+      ),
+    );
+    const hit = snap.docs.find((d) => d.id === eventId);
+
+    // (a) Events page: the newly-created event is in the published list.
+    expect(hit).toBeDefined();
+    const data = hit!.data();
+    expect(data.approximateArea).toBeNull();
+
+    // (b) Map marker: the pin coordinates live on the PUBLIC teaser (not the
+    // member-gated detail), so the map layer can place a marker at the pin.
+    expect(data.latitude).toBe(pinned.latitude);
+    expect(data.longitude).toBe(pinned.longitude);
   });
 });
 
