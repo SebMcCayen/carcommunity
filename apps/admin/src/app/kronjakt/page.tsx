@@ -163,6 +163,14 @@ interface PointFormState {
    */
   geofenceRadiusMeters: number;
   repeatRule: 'once' | 'daily' | 'weekly';
+  /**
+   * Headcount mode, INDEPENDENT of the rarity tier: 'everyone' = unlimited
+   * distinct collectors (default, best for events), 'limited' = only the first
+   * N distinct collectors, then the crown is done. `maxCollectors` holds the N
+   * input (as a string) and is read only while mode is 'limited'.
+   */
+  collectorMode: 'everyone' | 'limited';
+  maxCollectors: string;
   availableFrom: string;
   availableUntil: string;
 }
@@ -174,6 +182,8 @@ const EMPTY_FORM: PointFormState = {
   rewardPoints: CROWN_TIER_TABLE[DEFAULT_CROWN_TIER].points,
   geofenceRadiusMeters: CROWN_COLLECT_RADIUS_METERS,
   repeatRule: 'once',
+  collectorMode: 'everyone',
+  maxCollectors: '',
   availableFrom: '',
   availableUntil: '',
 };
@@ -190,6 +200,9 @@ function pointToForm(point: AdminCrownHuntPointSummary): PointFormState {
     // it) so an edit never silently rewrites it to the 75 m new-point default.
     geofenceRadiusMeters: point.geofenceRadiusMeters,
     repeatRule: point.repeatRule,
+    // null maxCollectors (incl. legacy points with no field) = unlimited.
+    collectorMode: point.maxCollectors != null ? 'limited' : 'everyone',
+    maxCollectors: point.maxCollectors != null ? String(point.maxCollectors) : '',
     availableFrom: toLocalDateTimeValue(point.availableFrom),
     availableUntil: toLocalDateTimeValue(point.availableUntil),
   };
@@ -214,10 +227,27 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
   const selectTier = (tier: CrownTier) =>
     setForm((prev) => ({ ...prev, tier, rewardPoints: CROWN_TIER_TABLE[tier].points }));
 
+  const selectCollectorMode = (collectorMode: PointFormState['collectorMode']) =>
+    setForm((prev) => ({ ...prev, collectorMode }));
+
+  // Only meaningful in 'limited' mode: N must be an integer >= 1. Parse with
+  // Number (not parseInt) so "1.5"/"2.9" are NOT truncated to a valid integer —
+  // Number.isInteger then rejects any decimal; empty → 0, rejected by the >= 1
+  // check. This blocks submit and shows an inline message; the backend
+  // re-validates.
+  const parsedMaxCollectors = Number(form.maxCollectors);
+  const maxCollectorsInvalid =
+    form.collectorMode === 'limited' &&
+    !(Number.isInteger(parsedMaxCollectors) && parsedMaxCollectors >= 1);
+
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
+        // Defense-in-depth: the submit button is disabled while the N is
+        // invalid, but Enter-key submit can bypass a disabled button, so guard
+        // here too (the backend re-validates regardless).
+        if (maxCollectorsInvalid) return;
         void onSave(form);
       }}
       className={styles.form}
@@ -279,6 +309,51 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         )}
       </fieldset>
 
+      <fieldset className={styles.tierFieldset}>
+        <legend className={styles.label}>{t('crownHunt.formCollectorsLabel')}</legend>
+        {/* Same toggle-button a11y pattern as the tier selector: the
+            <fieldset>/<legend> labels the set, each button reports aria-pressed.
+            Headcount is INDEPENDENT of the rarity tier above. */}
+        <div className={styles.collectorModeGrid}>
+          <button
+            type="button"
+            aria-pressed={form.collectorMode === 'everyone'}
+            className={`${styles.collectorOption} ${form.collectorMode === 'everyone' ? styles.collectorOptionSelected : ''}`}
+            onClick={() => selectCollectorMode('everyone')}
+          >
+            <span className={styles.collectorOptionName}>{t('crownHunt.collectorsEveryone')}</span>
+            <span className={styles.collectorOptionDesc}>{t('crownHunt.collectorsEveryoneHint')}</span>
+          </button>
+          <button
+            type="button"
+            aria-pressed={form.collectorMode === 'limited'}
+            className={`${styles.collectorOption} ${form.collectorMode === 'limited' ? styles.collectorOptionSelected : ''}`}
+            onClick={() => selectCollectorMode('limited')}
+          >
+            <span className={styles.collectorOptionName}>{t('crownHunt.collectorsLimited')}</span>
+            <span className={styles.collectorOptionDesc}>{t('crownHunt.collectorsLimitedHint')}</span>
+          </button>
+        </div>
+        {form.collectorMode === 'limited' && (
+          <label className={`${styles.label} ${styles.collectorLimitRow}`}>
+            {t('crownHunt.collectorsLimitLabel')}
+            <input
+              className={styles.input}
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={form.maxCollectors}
+              onChange={(e) => set('maxCollectors', e.target.value)}
+              aria-invalid={maxCollectorsInvalid}
+            />
+            {maxCollectorsInvalid && (
+              <span className={styles.errorText}>{t('crownHunt.collectorsLimitInvalid')}</span>
+            )}
+          </label>
+        )}
+      </fieldset>
+
       <div className={styles.formRow}>
         <label className={styles.label}>
           {t('crownHunt.formRepeatRuleLabel')}
@@ -319,7 +394,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         <button type="button" className={styles.btnSecondary} onClick={onCancel} disabled={isSaving}>
           {t('crownHunt.cancel')}
         </button>
-        <button type="submit" className={styles.btnPrimary} disabled={isSaving}>
+        <button type="submit" className={styles.btnPrimary} disabled={isSaving || maxCollectorsInvalid}>
           {isSaving ? t('crownHunt.loading') : t('crownHunt.savePoint')}
         </button>
       </div>
@@ -451,6 +526,7 @@ const PointsTab = ({
             <th>{t('crownHunt.columnRarity')}</th>
             <th>{t('crownHunt.columnStatus')}</th>
             <th>{t('crownHunt.columnReward')}</th>
+            <th>{t('crownHunt.columnCollectors')}</th>
             <th>{t('crownHunt.columnRepeatRule')}</th>
             <th>{t('crownHunt.columnCreatedAt')}</th>
             <th>{t('crownHunt.columnActions')}</th>
@@ -478,6 +554,11 @@ const PointsTab = ({
                 </span>
               </td>
               <td>{point.rewardPoints}</td>
+              <td>
+                {point.maxCollectors == null
+                  ? t('crownHunt.collectorsEveryone')
+                  : `${point.collectorCount} / ${point.maxCollectors}`}
+              </td>
               <td>{point.repeatRule}</td>
               <td>{formatDate(point.createdAt)}</td>
               <td className={styles.actions}>
@@ -1040,6 +1121,12 @@ export default function KronjaktPage() {
           geofenceRadiusMeters: form.geofenceRadiusMeters,
           rewardPoints: form.rewardPoints,
           repeatRule: form.repeatRule,
+          // Headcount is independent of the rarity tier: 'everyone' → null
+          // (unlimited); 'limited' → the entered N (validated >= 1 in the form,
+          // re-validated server-side). Sending null on edit reverts a limited
+          // crown to unlimited.
+          maxCollectors:
+            form.collectorMode === 'limited' ? Number(form.maxCollectors) : null,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
           availableUntil: localToIso(form.availableUntil) ?? undefined,
         };

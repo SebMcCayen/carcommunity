@@ -50,6 +50,7 @@ import {
   getClaimMessage,
   isPointCurrentlyAvailable,
   parseSubmitClaimInput,
+  pointCollectorDocId,
   repeatRuleWindowStart,
   scopeClaimIdempotencyKey,
   startOfUtcDay,
@@ -65,7 +66,12 @@ import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
  * daily cap. Carries the authoritative result code the caller replies with.
  */
 class ClaimGuardRejection extends Error {
-  constructor(readonly result: Extract<CrownHuntClaimResult, 'already_claimed' | 'daily_limit_reached'>) {
+  constructor(
+    readonly result: Extract<
+      CrownHuntClaimResult,
+      'already_claimed' | 'daily_limit_reached' | 'point_inactive'
+    >,
+  ) {
     super(result);
     this.name = 'ClaimGuardRejection';
   }
@@ -79,7 +85,10 @@ class ClaimGuardRejection extends Error {
  */
 function classifyClaimGuardRejection(
   error: unknown,
-): Extract<CrownHuntClaimResult, 'already_claimed' | 'daily_limit_reached'> | null {
+): Extract<
+  CrownHuntClaimResult,
+  'already_claimed' | 'daily_limit_reached' | 'point_inactive'
+> | null {
   if (error instanceof ClaimGuardRejection) {
     return error.result;
   }
@@ -467,16 +476,35 @@ export const submitClaim = onCall(
     //     and incremented here, so the daily cap holds under concurrency.
     const rewardPoints = point!.rewardPoints as number;
     const repeatRule = point!.repeatRule as CrownHuntRepeatRule;
+    // Distinct-collector cap is read AUTHORITATIVELY from the in-transaction
+    // point snapshot in the read guard below (not from the non-transactional
+    // step-5 read), so an admin changing maxCollectors between the two cannot be
+    // enforced stably. null/absent = unlimited (the whole collector-slot path is
+    // skipped); a positive integer caps DISTINCT collectors.
     const awardGuardRef = db
       .collection('crownHuntAwardGuards')
       .doc(awardGuardDocId(uid, input.pointId, repeatRule, now));
     const dailyCounterRef = db
       .collection('crownHuntDailyClaims')
       .doc(dailyClaimCounterDocId(uid, now));
+    // Per-(point,user) distinct-collector marker + the point doc itself, used
+    // only for limited crowns. The point's `collectorCount` is the
+    // authoritative tally, read and bumped INSIDE the award transaction so a
+    // burst of concurrent collects (e.g. at an event) can never exceed the cap.
+    const collectorMarkerRef = db
+      .collection('crownHuntPointCollectors')
+      .doc(pointCollectorDocId(input.pointId, uid));
+    const pointRef = db.collection('crownHuntPoints').doc(input.pointId);
     // Computed in the read guard, written absolutely in the write phase so the
     // counter self-heals from the authoritative awarded-claims count when its
     // document is missing (mid-day deploy / deleted counter).
     let nextDailyCount = priorAwardedToday + 1;
+    // Collector-slot bookkeeping resolved in the read guard, applied in the
+    // write phase. `isNewCollector` is true only when this user has no marker
+    // yet (so a daily/weekly re-collect does not consume a second slot).
+    let isNewCollector = false;
+    let nextCollectorCount = 0;
+    let capReached = false;
 
     try {
       const ledgerResult = await creditPoints(
@@ -534,14 +562,53 @@ export const submitClaim = onCall(
               createdAt: FieldValue.serverTimestamp(),
             });
           }
+          // Limited crown: this is a NEW distinct collector (isNewCollector is
+          // only set inside the read guard's effectiveMaxCollectors!==null path,
+          // so it already reflects the authoritative in-transaction cap) —
+          // record the marker and bump the tally. When it reaches the cap the
+          // crown is done: deactivate it (status 'ended') so no one else can
+          // collect and it stops rendering on the map (members read only active
+          // points). pointRef was read in the read guard, so this update is safe.
+          if (isNewCollector) {
+            tx.create(collectorMarkerRef, {
+              pointId: input.pointId,
+              userId: uid,
+              collectedAt: Timestamp.fromDate(now),
+              createdAt: FieldValue.serverTimestamp(),
+            });
+            const pointUpdate: Record<string, unknown> = {
+              collectorCount: nextCollectorCount,
+              updatedAt: FieldValue.serverTimestamp(),
+            };
+            if (capReached) {
+              pointUpdate.status = 'ended';
+            }
+            tx.update(pointRef, pointUpdate);
+          }
         },
         // Read phase (runs before the writes above): reject a duplicate or an
         // over-cap claim from inside the transaction. Reads only.
         async (tx) => {
-          const [guardSnap, counterSnap] = await Promise.all([
+          // creditPoints re-runs this whole callback on each Firestore retry
+          // (contention on the point counter is expected at a busy event), so
+          // RESET the collector-slot state every attempt and derive it ONLY from
+          // this attempt's reads below — never let a value from a previous,
+          // aborted attempt leak into the write phase.
+          isNewCollector = false;
+          nextCollectorCount = 0;
+          capReached = false;
+          const [guardSnap, counterSnap, pointTxSnap] = await Promise.all([
             tx.get(awardGuardRef),
             tx.get(dailyCounterRef),
+            tx.get(pointRef),
           ]);
+          // Re-check the point INSIDE the transaction for BOTH unlimited and
+          // limited crowns: it may have been paused, ended, or deleted between
+          // the step-5 read and here, and an award must never land on an
+          // inactive point. (pointTxSnap is read in the same Promise.all.)
+          if (!pointTxSnap.exists || pointTxSnap.data()?.status !== 'active') {
+            throw new ClaimGuardRejection('point_inactive');
+          }
           if (guardSnap.exists) {
             throw new ClaimGuardRejection('already_claimed');
           }
@@ -555,6 +622,43 @@ export const submitClaim = onCall(
             throw new ClaimGuardRejection('daily_limit_reached');
           }
           nextDailyCount = currentDaily + 1;
+
+          // Distinct-collector cap — AUTHORITATIVE from the in-transaction point
+          // snapshot (pointTxSnap read above), NOT the non-transactional step-5
+          // read: an admin may have changed maxCollectors (or cleared it to
+          // unlimited) in between, and the same value must drive both this guard
+          // and the writes above. (updatePoint additionally forbids turning an
+          // already-collected unlimited crown limited, so a stale-null fast path
+          // cannot under-enforce a newly-added cap.)
+          const effectiveMaxCollectors =
+            (pointTxSnap.data()?.maxCollectors as number | null | undefined) ?? null;
+          if (effectiveMaxCollectors !== null) {
+            // (Active-status was already re-checked above for all crowns, incl.
+            // a concurrent Nth collect that just deactivated this one.)
+            // Marker existence decides ONLY new-vs-repeat; the cap governs the
+            // HEADCOUNT and must NOT override repeatRule. A marker-holder is an
+            // EXISTING collector who already occupies a slot, so this claim
+            // consumes none (isNewCollector stays false → no marker/count write)
+            // and proceeds — the award guard above already enforced the repeat
+            // window ('once'/too-soon re-collects rejected there; a daily/weekly
+            // limited crown still lets an existing collector re-collect in a NEW
+            // window). Only a NEW collector is subject to the cap.
+            const markerSnap = await tx.get(collectorMarkerRef);
+            if (!markerSnap.exists) {
+              // New distinct collector. The crown is full when collectorCount
+              // has reached the cap — including the edge case where an admin
+              // lowered maxCollectors below collectorCount. Reject new
+              // collectors once full.
+              const currentCollectors =
+                (pointTxSnap.data()?.collectorCount as number | undefined) ?? 0;
+              if (currentCollectors >= effectiveMaxCollectors) {
+                throw new ClaimGuardRejection('point_inactive');
+              }
+              isNewCollector = true;
+              nextCollectorCount = currentCollectors + 1;
+              capReached = nextCollectorCount >= effectiveMaxCollectors;
+            }
+          }
         },
       );
 

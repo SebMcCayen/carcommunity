@@ -28,8 +28,10 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { pointCollectorDocId } from '../crownHunt/crownhunt-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -528,5 +530,361 @@ describe('crownHunt-submitClaim', () => {
     } finally {
       await adminDb.collection('config').doc('featureFlags').set({ crownHunt: true });
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// maxCollectors — per-crown distinct-collector cap (manual crowns)
+// ---------------------------------------------------------------------------
+
+describe('crownHunt maxCollectors (distinct-collector cap)', () => {
+  /** A fresh active member who is NOT reused across tests, so distinct-collector
+   *  counts are deterministic even though the emulator shares one Firestore. */
+  async function createFreshMember(prefix: string): Promise<TestUser> {
+    const user = await createProvisionedUser(prefix);
+    await adminDb.collection('users').doc(user.uid).set({ activeMember: true }, { merge: true });
+    return user;
+  }
+
+  async function collectAs(user: TestUser, pointId: string): Promise<string> {
+    await signInAs(user);
+    const response = (await call('crownHunt-submitClaim', claimInput({ pointId }))).data as {
+      result: string;
+    };
+    return response.result;
+  }
+
+  it('validates N: maxCollectors must be an integer >= 1', async () => {
+    await signInAs(adminUser);
+    for (const bad of [0, -1, 1.5]) {
+      expect(
+        await callableErrorCode(
+          call('crownHunt-createPoint', {
+            latitude: POINT_LAT,
+            longitude: POINT_LON,
+            geofenceRadiusMeters: 50,
+            rewardPoints: 25,
+            repeatRule: 'once',
+            maxCollectors: bad,
+          }),
+        ),
+      ).toBe('functions/invalid-argument');
+    }
+  });
+
+  it('stores maxCollectors=null (unlimited) by default and lets many distinct users collect', async () => {
+    // Default create sends no maxCollectors → stored null (unlimited). Two
+    // distinct users both collect; the same user collecting twice is rejected;
+    // the point stays active and is not headcount-tracked.
+    const pointId = await createActivePoint();
+    const stored = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(stored.maxCollectors).toBeNull();
+    expect(stored.collectorCount).toBe(0);
+
+    const a = await createFreshMember('ch-unl-a');
+    const b = await createFreshMember('ch-unl-b');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    expect(await collectAs(b, pointId)).toBe('awarded');
+
+    // Same user again (once rule) → already_claimed, no cap involvement.
+    await signInAs(a);
+    expect(
+      ((await call('crownHunt-submitClaim', claimInput({ pointId }))).data as { result: string })
+        .result,
+    ).toBe('already_claimed');
+
+    // Unlimited crowns are never deactivated by collection and never write
+    // collector markers.
+    const after = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(after.status).toBe('active');
+    expect(after.collectorCount).toBe(0);
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(0);
+  });
+
+  it('Limited-to-2: first two distinct users collect, third is rejected, crown deactivates', async () => {
+    const pointId = await createActivePoint({ maxCollectors: 2 });
+    const created = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(created.maxCollectors).toBe(2);
+
+    const first = await createFreshMember('ch-lim-1');
+    const second = await createFreshMember('ch-lim-2');
+    const third = await createFreshMember('ch-lim-3');
+
+    expect(await collectAs(first, pointId)).toBe('awarded');
+    const afterFirst = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(afterFirst.collectorCount).toBe(1);
+    expect(afterFirst.status).toBe('active');
+
+    // Second distinct collector fills the cap → the crown is done.
+    expect(await collectAs(second, pointId)).toBe('awarded');
+    const afterSecond = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(afterSecond.collectorCount).toBe(2);
+    expect(afterSecond.status).toBe('ended');
+
+    // Third user is rejected — the point is inactive (collected out) and stops
+    // rendering (members read only active points).
+    expect(await collectAs(third, pointId)).toBe('point_inactive');
+    const afterThird = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(afterThird.collectorCount).toBe(2);
+
+    // Exactly two distinct-collector markers and two awarded claims.
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(2);
+    const awarded = await adminDb
+      .collection('crownHuntClaims')
+      .where('pointId', '==', pointId)
+      .where('result', '==', 'awarded')
+      .get();
+    expect(awarded.size).toBe(2);
+  });
+
+  it('Limited-to-1 is a single exclusive collector', async () => {
+    const pointId = await createActivePoint({ maxCollectors: 1 });
+    const only = await createFreshMember('ch-solo-1');
+    const other = await createFreshMember('ch-solo-2');
+    expect(await collectAs(only, pointId)).toBe('awarded');
+    const doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.status).toBe('ended');
+    expect(doc.collectorCount).toBe(1);
+    expect(await collectAs(other, pointId)).toBe('point_inactive');
+  });
+
+  it('consumes a slot only on AWARD, never on a failed attempt', async () => {
+    // A slot is tied to a distinct AWARDED collector, computed from the award
+    // transaction's own reads — not to attempts. A failed (non-awarding)
+    // attempt must not move collectorCount, and the same user then succeeding
+    // must take exactly one slot.
+    const pointId = await createActivePoint({ maxCollectors: 2 });
+    const a = await createFreshMember('ch-slot-a');
+    const b = await createFreshMember('ch-slot-b');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+
+    // b misses the geofence — no award, so no slot is consumed.
+    await signInAs(b);
+    const outside = (
+      await call('crownHunt-submitClaim', claimInput({ pointId, latitude: POINT_LAT + 0.01 }))
+    ).data as { result: string };
+    expect(outside.result).toBe('outside_geofence');
+    const mid = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(mid.collectorCount).toBe(1);
+    expect(mid.status).toBe('active');
+
+    // b now collects properly → exactly one new slot, filling the cap.
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    const after = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(after.collectorCount).toBe(2);
+    expect(after.status).toBe('ended');
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(2);
+  });
+
+  it('retires a limited crown to ended when an admin lowers the cap to <= collectorCount', async () => {
+    // "Full → done": lowering maxCollectors at or below the live collectorCount
+    // must retire the crown (status 'ended') AT UPDATE TIME — the same
+    // collected-out state submitClaim sets when the Nth collector is awarded —
+    // rather than leaving a reactivatable point that renders active but is
+    // uncollectable (every new user would hit "full").
+    const pointId = await createActivePoint({ maxCollectors: 3 });
+    const a = await createFreshMember('ch-lower-a');
+    const b = await createFreshMember('ch-lower-b');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(2);
+    expect(doc.status).toBe('active'); // cap 3 not yet reached
+
+    // Admin pauses, then lowers the cap to 1 (below collectorCount 2).
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Justerar antalet insamlare.' });
+    const updated = (await call('crownHunt-updatePoint', { pointId, maxCollectors: 1 })).data as {
+      status: string;
+    };
+    // The update itself retires the now-full crown.
+    expect(updated.status).toBe('ended');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.status).toBe('ended');
+    expect(doc.collectorCount).toBe(2);
+
+    // It cannot be reactivated (ended points are terminal) and no longer
+    // collects — a fresh user gets point_inactive at the availability check.
+    expect(
+      await callableErrorCode(
+        call('crownHunt-activatePoint', {
+          pointId,
+          safeLocationConfirmed: true,
+          approvalNote: 'Försök att återaktivera.',
+        }),
+      ),
+    ).toBe('functions/failed-precondition');
+    const c = await createFreshMember('ch-lower-c');
+    expect(await collectAs(c, pointId)).toBe('point_inactive');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(2);
+  });
+
+  it('daily limited crown: an existing collector re-collects in a new window without taking a slot; new collectors still capped', async () => {
+    // maxCollectors caps the HEADCOUNT; it must NOT turn a daily/weekly crown
+    // into a one-shot. An existing collector re-collecting in a fresh window is
+    // allowed (award guard governs the window) and consumes NO new slot, while
+    // NEW distinct collectors are still capped.
+    const pointId = await createActivePoint({ maxCollectors: 2, repeatRule: 'daily' });
+    const a = await createFreshMember('ch-daily-a');
+
+    // Simulate A having collected in a PRIOR daily window: an awarded claim
+    // dated yesterday (so today's repeat-window query passes), the distinct-
+    // collector marker, and collectorCount = 1. No award guard for TODAY, so
+    // today's claim reaches the collector block with the marker already present.
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await adminDb.collection('crownHuntClaims').doc(`seed-daily-${a.uid}`).set({
+      userId: a.uid,
+      pointId,
+      result: 'awarded',
+      claimedAt: yesterday,
+      createdAt: yesterday,
+    });
+    await adminDb
+      .collection('crownHuntPointCollectors')
+      .doc(pointCollectorDocId(pointId, a.uid))
+      .set({ pointId, userId: a.uid, collectedAt: yesterday, createdAt: yesterday });
+    await adminDb.collection('crownHuntPoints').doc(pointId).update({ collectorCount: 1 });
+
+    // A re-collects TODAY (new award-guard window): allowed, no new slot.
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(1); // unchanged — existing collector
+    expect(doc.status).toBe('active');
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(1); // still just A's marker
+
+    // A NEW distinct collector consumes the 2nd slot and fills the cap → ended.
+    const b = await createFreshMember('ch-daily-b');
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(2);
+    expect(doc.status).toBe('ended');
+
+    // A third new user is rejected — the crown is done.
+    const c = await createFreshMember('ch-daily-c');
+    expect(await collectAs(c, pointId)).toBe('point_inactive');
+  });
+
+  it('rejects enabling a collector limit on a previously-unlimited crown that has already been collected', async () => {
+    // Unlimited crowns never counted distinct collectors (no markers,
+    // collectorCount stays 0), so a cap added AFTER awards exist would be
+    // unenforceable — reject the unlimited→limited transition.
+    const pointId = await createActivePoint(); // unlimited (maxCollectors null)
+    const a = await createFreshMember('ch-enable-a');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBeNull();
+    expect(doc.collectorCount).toBe(0); // unlimited never tracked collectors
+
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Vill lägga till ett tak.' });
+    // Adding a cap now is rejected as invalid.
+    expect(
+      await callableErrorCode(call('crownHunt-updatePoint', { pointId, maxCollectors: 5 })),
+    ).toBe('functions/invalid-argument');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBeNull(); // unchanged
+
+    // Other edits (that keep it unlimited) still work.
+    await call('crownHunt-updatePoint', { pointId, rewardPoints: 100 });
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.rewardPoints).toBe(100);
+    expect(doc.maxCollectors).toBeNull();
+  });
+
+  it('allows changing N (limited -> limited) on an already-collected limited crown', async () => {
+    // Only the unenforceable unlimited→limited transition is blocked; raising or
+    // lowering N on a crown that was ALWAYS limited (and thus tracked
+    // collectors) stays allowed.
+    const pointId = await createActivePoint({ maxCollectors: 5 });
+    const a = await createFreshMember('ch-changeN-a');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(1);
+
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Justerar N.' });
+    await call('crownHunt-updatePoint', { pointId, maxCollectors: 10 });
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.maxCollectors).toBe(10);
+    expect(doc.status).toBe('paused'); // still above the collector count, not retired
+  });
+
+  it('does not award an UNLIMITED crown that is no longer active', async () => {
+    // The award transaction re-checks the point's status for ALL crowns, not
+    // just limited ones, so an unlimited point that is paused/ended is rejected
+    // point_inactive and awards nothing.
+    const pointId = await createActivePoint(); // unlimited
+    await signInAs(adminUser);
+    await call('crownHunt-pausePoint', { pointId, reason: 'Pausad före insamling.' });
+
+    const u = await createFreshMember('ch-inactive-a');
+    expect(await collectAs(u, pointId)).toBe('point_inactive');
+
+    // Nothing was awarded: no awarded claim and no Kronpoäng balance.
+    const awarded = await adminDb
+      .collection('crownHuntClaims')
+      .where('pointId', '==', pointId)
+      .where('result', '==', 'awarded')
+      .get();
+    expect(awarded.size).toBe(0);
+    const ledger = await adminDb.collection('pointsLedger').doc(u.uid).get();
+    expect(ledger.exists ? (ledger.data()!.balance as number) : 0).toBe(0);
+  });
+
+  it('back-compat: a point with no maxCollectors field behaves as unlimited', async () => {
+    // Simulate a pre-existing point created before this feature: activate a
+    // point, then strip the maxCollectors/collectorCount fields to mimic the
+    // old document shape, and confirm distinct users still collect with no cap.
+    const pointId = await createActivePoint();
+    await adminDb.collection('crownHuntPoints').doc(pointId).update({
+      maxCollectors: FieldValue.delete(),
+      collectorCount: FieldValue.delete(),
+    });
+    const legacy = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(legacy.maxCollectors).toBeUndefined();
+
+    const a = await createFreshMember('ch-legacy-a');
+    const b = await createFreshMember('ch-legacy-b');
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    const after = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(after.status).toBe('active');
+  });
+
+  it('caps DISTINCT collectors across many users (event scenario)', async () => {
+    // maxCollectors=2 with 6 distinct users: exactly two awards, the rest
+    // rejected as inactive, and the crown ends. (A single Auth client holds one
+    // currentUser, so the users are driven back-to-back; the in-transaction
+    // collectorCount is the authoritative guard regardless of interleaving.)
+    const pointId = await createActivePoint({ maxCollectors: 2 });
+    const users = await Promise.all(
+      Array.from({ length: 6 }, (_unused, i) => createFreshMember(`ch-burst-${i}`)),
+    );
+    const results: string[] = [];
+    for (const u of users) {
+      results.push(await collectAs(u, pointId));
+    }
+    expect(results.filter((r) => r === 'awarded').length).toBe(2);
+    expect(results.filter((r) => r === 'point_inactive').length).toBe(4);
+    const doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(2);
+    expect(doc.status).toBe('ended');
   });
 });

@@ -78,6 +78,12 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
     geofenceRadiusMeters: input.geofenceRadiusMeters,
     rewardPoints: input.rewardPoints,
     repeatRule: input.repeatRule,
+    // Distinct-collector cap: null = unlimited (default, best for events); a
+    // positive integer caps the headcount. `collectorCount` is the running
+    // distinct-collector tally, maintained by submitClaim inside the award
+    // transaction and seeded to 0 here.
+    maxCollectors: input.maxCollectors ?? null,
+    collectorCount: 0,
     status: 'draft',
     availableFrom: toTimestampOrNull(input.availableFrom),
     availableUntil: toTimestampOrNull(input.availableUntil),
@@ -96,7 +102,11 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
         targetType: 'crownHuntPoint',
         targetId: pointRef.id,
         reason: 'Point created (draft).',
-        details: { rewardPoints: input.rewardPoints, geofenceRadiusMeters: input.geofenceRadiusMeters },
+        details: {
+          rewardPoints: input.rewardPoints,
+          geofenceRadiusMeters: input.geofenceRadiusMeters,
+          maxCollectors: input.maxCollectors ?? null,
+        },
       },
       serverTimestamp,
     ),
@@ -130,6 +140,32 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       );
     }
 
+    // Unlimited → limited is only safe BEFORE anyone has collected. Unlimited
+    // crowns never track distinct collectors (no crownHuntPointCollectors
+    // markers, and collectorCount stays 0), so a cap added AFTER awards exist
+    // could not count the prior collectors — the first N *new* collectors would
+    // each still be admitted, letting far more than N distinct users collect
+    // overall. That transition is unenforceable, so reject it (a backfill is out
+    // of scope for MVP). Limited → limited (change N) and limited → unlimited
+    // stay allowed. Read the awarded-claim probe INSIDE the transaction, before
+    // any write.
+    const wasUnlimited = (existing.maxCollectors as number | null | undefined) == null;
+    if (input.maxCollectors != null && wasUnlimited) {
+      const awarded = await tx.get(
+        db
+          .collection('crownHuntClaims')
+          .where('pointId', '==', input.pointId)
+          .where('result', '==', 'awarded')
+          .limit(1),
+      );
+      if (!awarded.empty) {
+        throw new HttpsError(
+          'invalid-argument',
+          'This crown has already been collected, so a collector limit cannot be added now — unlimited crowns do not track collectors. Create a new limited crown instead.',
+        );
+      }
+    }
+
     // Merge incoming over existing, then validate the merged result
     // (legacy adminUpdatePoint semantics).
     const merged = {
@@ -160,12 +196,30 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       update.geofenceRadiusMeters = input.geofenceRadiusMeters;
     if (input.rewardPoints !== undefined) update.rewardPoints = input.rewardPoints;
     if (input.repeatRule !== undefined) update.repeatRule = input.repeatRule;
+    if (input.maxCollectors !== undefined) update.maxCollectors = input.maxCollectors;
     if (input.availableFrom !== undefined)
       update.availableFrom = toTimestampOrNull(input.availableFrom);
     if (input.availableUntil !== undefined)
       update.availableUntil = toTimestampOrNull(input.availableUntil);
     if (Object.keys(update).length === 1) {
       throw new HttpsError('invalid-argument', 'No point fields to update.');
+    }
+
+    // "Full → done": if this edit leaves a LIMITED crown with as many (or more)
+    // distinct collectors as its cap, retire it now (status 'ended') — the same
+    // collected-out state submitClaim sets when the Nth collector is awarded.
+    // Otherwise an admin lowering maxCollectors below the live collectorCount
+    // would leave a draft/paused point that can still be re-activated yet is
+    // uncollectable (every new user hits "full"), which is confusing at an
+    // event. Draft/paused → ended is a valid retire, and activatePoint already
+    // refuses ended points.
+    const resultingMaxCollectors =
+      input.maxCollectors !== undefined
+        ? input.maxCollectors
+        : ((existing.maxCollectors as number | null | undefined) ?? null);
+    const currentCollectors = (existing.collectorCount as number | undefined) ?? 0;
+    if (resultingMaxCollectors !== null && currentCollectors >= resultingMaxCollectors) {
+      update.status = 'ended';
     }
 
     tx.update(pointRef, update);
@@ -177,13 +231,16 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
           action: 'crownHunt.updatePoint',
           targetType: 'crownHuntPoint',
           targetId: input.pointId,
-          reason: 'Point updated.',
+          reason:
+            update.status === 'ended'
+              ? 'Point updated; retired (collected out) as the cap is now at or below the collector count.'
+              : 'Point updated.',
           details: { changedFields: Object.keys(update).filter((k) => k !== 'updatedAt') },
         },
         serverTimestamp,
       ),
     );
-    return existing.status as CrownHuntPointStatus;
+    return (update.status as CrownHuntPointStatus | undefined) ?? (existing.status as CrownHuntPointStatus);
   });
 
   return { pointId: input.pointId, status };
