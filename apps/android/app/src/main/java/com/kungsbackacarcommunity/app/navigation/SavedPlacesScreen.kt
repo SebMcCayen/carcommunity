@@ -269,6 +269,7 @@ private fun SavedPlaceRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag(savedPlaceRowTestTag(place.id))
             // Long-press raises the Rename / Share / Delete sheet. onClick is a
             // deliberate no-op (a row has no tap action) but combinedClickable
             // announces the long-press as an accessibility action.
