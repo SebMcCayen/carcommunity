@@ -376,6 +376,8 @@
     "tier_rare": "Rare",
     "tier_epic": "Epic",
     "tier_legendary": "Legendary",
+    "tier_custom": "Custom",
+    "tierCustomNotice": "This crown has a custom reward ({points} KP) that matches no tier. It is kept if you save. Pick a tier above to change it.",
     "formRepeatRuleLabel": "Repeat",
     "repeatOnce": "Once",
     "repeatDaily": "Daily",

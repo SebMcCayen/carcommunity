@@ -376,6 +376,8 @@
     "tier_rare": "Sällsynt",
     "tier_epic": "Episk",
     "tier_legendary": "Legendarisk",
+    "tier_custom": "Anpassad",
+    "tierCustomNotice": "Den här kronan har en anpassad belöning ({points} KP) som inte matchar någon nivå. Den behålls om du sparar. Välj en nivå ovan för att ändra den.",
     "formRepeatRuleLabel": "Upprepa",
     "repeatOnce": "En gång",
     "repeatDaily": "Dagligen",

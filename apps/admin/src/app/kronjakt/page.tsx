@@ -95,7 +95,12 @@ type CrownTier = 'common' | 'rare' | 'epic' | 'legendary';
 interface CrownTierSpec {
   /** Kronpoäng reward the tier resolves to. */
   points: number;
-  /** Lifespan in hours (drives the default availability window). */
+  /**
+   * Spec lifespan in hours from the gamification doc's CROWN_RARITY_TABLE.
+   * Informational only here: the BACKEND owns crown TTL; hand-placed admin
+   * points expose availability via the optional availableFrom/until window, so
+   * nothing on this form reads ttlHours.
+   */
   ttlHours: number;
   /** Distinct colour cue so rarity reads at a glance (rare vs legendary). */
   color: string;
@@ -119,9 +124,21 @@ function tierLabel(tier: CrownTier): string {
   return t(`crownHunt.tier_${tier}`);
 }
 
-/** Reverse-maps a stored rewardPoints value to its tier (edit path). */
-function rewardPointsToTier(points: number): CrownTier {
-  return CROWN_TIER_ORDER.find((tier) => CROWN_TIER_TABLE[tier].points === points) ?? DEFAULT_CROWN_TIER;
+/**
+ * The tier whose preset reward EXACTLY equals `points`, or null when it matches
+ * none (a legacy/custom reward from the old free-number UI, which allowed
+ * 1–1000 KP). Returning null — rather than defaulting to Common — is what stops
+ * an edit from silently rewriting a custom reward down to 10 KP.
+ */
+function matchTier(points: number): CrownTier | null {
+  return CROWN_TIER_ORDER.find((tier) => CROWN_TIER_TABLE[tier].points === points) ?? null;
+}
+
+/** Display label + colour for any stored reward, incl. legacy custom values. */
+function tierDisplay(points: number): { label: string; color: string } {
+  const tier = matchTier(points);
+  if (tier) return { label: tierLabel(tier), color: CROWN_TIER_TABLE[tier].color };
+  return { label: t('crownHunt.tier_custom'), color: 'var(--text-secondary)' };
 }
 
 // ---------------------------------------------------------------------------
@@ -131,7 +148,14 @@ function rewardPointsToTier(points: number): CrownTier {
 interface PointFormState {
   latitude: string;
   longitude: string;
-  tier: CrownTier;
+  /**
+   * The tier the admin has selected, or 'custom' when editing a legacy point
+   * whose stored reward maps to no tier. `rewardPoints` is the source of truth
+   * that is actually saved; picking a tier button overwrites it with the
+   * preset. While 'custom' is held the original reward is preserved untouched.
+   */
+  tier: CrownTier | 'custom';
+  rewardPoints: number;
   repeatRule: 'once' | 'daily' | 'weekly';
   availableFrom: string;
   availableUntil: string;
@@ -141,6 +165,7 @@ const EMPTY_FORM: PointFormState = {
   latitude: '',
   longitude: '',
   tier: DEFAULT_CROWN_TIER,
+  rewardPoints: CROWN_TIER_TABLE[DEFAULT_CROWN_TIER].points,
   repeatRule: 'once',
   availableFrom: '',
   availableUntil: '',
@@ -150,7 +175,10 @@ function pointToForm(point: AdminCrownHuntPointSummary): PointFormState {
   return {
     latitude: String(point.latitude),
     longitude: String(point.longitude),
-    tier: rewardPointsToTier(point.rewardPoints),
+    // Keep the stored reward verbatim; only mark it 'custom' when it maps to no
+    // tier so saving without touching the selector never changes it.
+    tier: matchTier(point.rewardPoints) ?? 'custom',
+    rewardPoints: point.rewardPoints,
     repeatRule: point.repeatRule,
     availableFrom: toLocalDateTimeValue(point.availableFrom),
     availableUntil: toLocalDateTimeValue(point.availableUntil),
@@ -170,6 +198,11 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
 
   const set = (field: keyof PointFormState, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));
+
+  // Picking a tier leaves any 'custom' state and overwrites the saved reward
+  // with that tier's preset — the only path that changes rewardPoints.
+  const selectTier = (tier: CrownTier) =>
+    setForm((prev) => ({ ...prev, tier, rewardPoints: CROWN_TIER_TABLE[tier].points }));
 
   return (
     <form
@@ -215,7 +248,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
                 aria-pressed={selected}
                 className={`${styles.tierOption} ${selected ? styles.tierOptionSelected : ''}`}
                 style={{ ['--tier-color' as string]: spec.color }}
-                onClick={() => set('tier', tier)}
+                onClick={() => selectTier(tier)}
               >
                 <span className={styles.tierCrown} style={{ color: spec.color }} aria-hidden="true">
                   ♛
@@ -226,6 +259,14 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
             );
           })}
         </div>
+        {/* Legacy point whose stored reward maps to no tier: show the real value
+            read-only so saving without picking a tier keeps it (no silent
+            coercion to Common). Picking any tier above replaces it. */}
+        {form.tier === 'custom' && (
+          <p className={styles.introText}>
+            {t('crownHunt.tierCustomNotice').replace('{points}', String(form.rewardPoints))}
+          </p>
+        )}
       </fieldset>
 
       <div className={styles.formRow}>
@@ -291,7 +332,7 @@ interface ActivateModalProps {
 const ActivateModal = ({ point, onConfirm, onCancel, isConfirming, error }: ActivateModalProps) => {
   const [safetyNote, setSafetyNote] = useState('');
   const [checked, setChecked] = useState(false);
-  const tier = rewardPointsToTier(point.rewardPoints);
+  const display = tierDisplay(point.rewardPoints);
 
   return (
     <div className={styles.modalOverlay} role="dialog" aria-modal="true">
@@ -300,10 +341,10 @@ const ActivateModal = ({ point, onConfirm, onCancel, isConfirming, error }: Acti
         {/* A Crown is a textless collectable — identify it by rarity + reward,
             not a title. */}
         <p className={styles.modalBody}>
-          <span className={styles.tierCrown} style={{ color: CROWN_TIER_TABLE[tier].color }} aria-hidden="true">
+          <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
             ♛
           </span>{' '}
-          {tierLabel(tier)} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
         </p>
         <p className={styles.safetyWarning}>⚠️ {t('crownHunt.safetyWarning')}</p>
 
@@ -407,18 +448,18 @@ const PointsTab = ({
         </thead>
         <tbody>
           {points.map((point) => {
-            const tier = rewardPointsToTier(point.rewardPoints);
+            const display = tierDisplay(point.rewardPoints);
             return (
             <tr key={point.pointId}>
               <td>
                 <span
                   className={styles.tierChip}
-                  style={{ ['--tier-color' as string]: CROWN_TIER_TABLE[tier].color }}
+                  style={{ ['--tier-color' as string]: display.color }}
                 >
-                  <span className={styles.tierCrown} style={{ color: CROWN_TIER_TABLE[tier].color }} aria-hidden="true">
+                  <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
                     ♛
                   </span>
-                  {tierLabel(tier)}
+                  {display.label}
                 </span>
               </td>
               <td>
@@ -980,12 +1021,14 @@ export default function KronjaktPage() {
       try {
         const base = {
           // A Crown is a map COLLECTABLE (Pokémon GO–style), not a titled
-          // document — no title/description is sent. The rarity tier resolves
-          // to its preset reward and the fixed 75 m collect radius on submit.
+          // document — no title/description is sent. rewardPoints is the source
+          // of truth: a tier button sets it to that tier's preset, while a
+          // legacy 'custom' reward is preserved verbatim so an edit never
+          // silently coerces it. The 75 m collect radius is fixed.
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
           geofenceRadiusMeters: CROWN_COLLECT_RADIUS_METERS,
-          rewardPoints: CROWN_TIER_TABLE[form.tier].points,
+          rewardPoints: form.rewardPoints,
           repeatRule: form.repeatRule,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
           availableUntil: localToIso(form.availableUntil) ?? undefined,

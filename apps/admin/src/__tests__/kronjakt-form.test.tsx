@@ -251,6 +251,46 @@ describe('Kronjakt point form — collectable redesign', () => {
     expect(pressed?.textContent).toContain(t('crownHunt.tier_rare'));
   });
 
+  it('PRESERVES a legacy custom reward (250 KP) when editing + saving without picking a tier', async () => {
+    // Old UI allowed any 1–1000 KP reward. Editing such a point and saving
+    // without touching the tier selector must NOT silently coerce it to 10 KP.
+    mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ rewardPoints: 250 })]));
+    await render();
+
+    await act(async () => {
+      buttonByText(t('crownHunt.editPoint')).click();
+    });
+
+    // No tier is pressed (it maps to none) and the real value is surfaced.
+    const pressed = tierButtons().filter((r) => r.getAttribute('aria-pressed') === 'true');
+    expect(pressed).toHaveLength(0);
+    const form = container.querySelector('form')!;
+    expect(form.textContent).toContain('250');
+
+    await submitForm();
+
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    const payload = mocks.update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.rewardPoints).toBe(250);
+  });
+
+  it('lets the admin convert a custom-reward point to a tier preset on edit', async () => {
+    mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ rewardPoints: 250 })]));
+    await render();
+
+    await act(async () => {
+      buttonByText(t('crownHunt.editPoint')).click();
+    });
+    const epic = tierButtons().find((r) => r.textContent?.includes(t('crownHunt.tier_epic')))!;
+    await act(async () => {
+      epic.click();
+    });
+    await submitForm();
+
+    const payload = mocks.update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.rewardPoints).toBe(100);
+  });
+
   it('keeps the safe-location confirmation REQUIRED to activate a draft', async () => {
     mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ status: 'draft' })]));
     await render();
