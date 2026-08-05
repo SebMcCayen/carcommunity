@@ -51,7 +51,6 @@ import {
   CROWN_SPAWN_FLAG_KEY,
   activityScore,
   buildCrownSpawnFields,
-  crownCellKey,
   crownExpiresAt,
   neighbourCrownCells,
   pickCrownRarity,
@@ -360,11 +359,14 @@ const MAX_AREA_CELLS_PER_RUN = 60;
 const MAX_AREA_SPAWNS_PER_RUN = 100;
 
 /**
- * Cached safe-stop POIs loaded per area for anchoring placement. Matches the
- * ingestion cap ({@link MAX_POIS_PER_AREA}) so the whole cache is available; the
- * per-cell density budget and 150 m separation bound how many are ever used.
+ * Cached safe-stop POIs read for ONE grid cell when it has a spawn deficit to
+ * fill. A single ~1.1 km cell rarely holds more than a handful of parking/fuel/
+ * charging stops, and the per-cell density budget is at most 5 crowns with a
+ * 150 m separation, so a bounded page is ample; this caps the read so a
+ * pathologically POI-dense cell cannot blow up the pass. POIs are loaded per cell
+ * and only on a deficit, so an at-target area reads zero POI docs per tick.
  */
-const MAX_AREA_POIS_LOADED = 5000;
+const MAX_POIS_PER_CELL_READ = 200;
 
 export interface CrownAreaSpawnLimits {
   maxAreas: number;
@@ -467,6 +469,39 @@ async function advanceAreaCursor(
   }
 }
 
+/**
+ * Loads the cached safe-stop POIs for ONE grid cell of an area, bounded. The
+ * default reads `crownSpawnAreaPois/{areaId}/pois where cellKey == cellKey`,
+ * capped at {@link MAX_POIS_PER_CELL_READ}. Injectable so a test can assert the
+ * pass reads POIs ONLY for cells that actually have a spawn deficit (an idle tick
+ * must do zero POI reads).
+ */
+export type AreaCellPoiLoader = (areaId: string, cellKey: string) => Promise<NormalizedPoi[]>;
+
+const defaultCellPoiLoader: AreaCellPoiLoader = async (areaId, cellKey) => {
+  const snap = await db
+    .collection('crownSpawnAreaPois')
+    .doc(areaId)
+    .collection('pois')
+    .where('cellKey', '==', cellKey)
+    .limit(MAX_POIS_PER_CELL_READ)
+    .get();
+  const pois: NormalizedPoi[] = [];
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const lat = data.lat;
+    const lon = data.lon;
+    if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+    const category = data.category;
+    pois.push({
+      lat,
+      lon,
+      category: category === 'fuel' || category === 'charging' ? category : 'parking',
+    });
+  }
+  return pois;
+};
+
 export async function runCrownAreaSpawnPass(
   now: Date,
   limits: CrownAreaSpawnLimits = {
@@ -475,7 +510,9 @@ export async function runCrownAreaSpawnPass(
     maxSpawns: MAX_AREA_SPAWNS_PER_RUN,
   },
   rng: () => number = Math.random,
+  deps: { loadCellPois?: AreaCellPoiLoader } = {},
 ): Promise<CrownAreaSpawnResult> {
+  const loadCellPois = deps.loadCellPois ?? defaultCellPoiLoader;
   const result: CrownAreaSpawnResult = {
     areasScanned: 0,
     cellsScanned: 0,
@@ -561,46 +598,22 @@ export async function runCrownAreaSpawnPass(
       continue;
     }
 
-    // SAFE-STOP ANCHORS. Load this area's cached OpenStreetMap POIs (parking /
-    // fuel / charging), already filtered to the drawn shape at ingestion, and
-    // group them by grid cell. SAFETY-FIRST: an area with no cached POIs spawns
-    // NOTHING — the whole point is real safe stops, so we do not fall back to
-    // random placement. (A freshly-marked area whose ingestion has not landed yet
-    // lands here too, and simply gets its crowns on the next pass once its POIs
-    // are cached.)
-    const poiSnap = await db
-      .collection('crownSpawnAreaPois')
-      .doc(areaDoc.id)
-      .collection('pois')
-      .limit(MAX_AREA_POIS_LOADED)
-      .get();
-    if (poiSnap.empty) {
+    // SAFE-STOP GATE (cheap, no POI reads). SAFETY-FIRST: an area with no cached
+    // safe stops spawns NOTHING — the whole point is real stops, so we never fall
+    // back to random placement. We read this off the area's stored `poiCount`
+    // (stamped by ingestion, poiIngestion.ts) rather than loading POI docs, so a
+    // POI-less area (or one whose ingestion has not landed yet) costs zero POI
+    // reads. The actual POIs are loaded PER CELL, and only for a cell that has a
+    // real spawn deficit (below), so an idle tick over an at-target area reads no
+    // POI docs at all.
+    const poiCount = typeof areaData.poiCount === 'number' ? areaData.poiCount : 0;
+    if (poiCount <= 0) {
       result.areasWithoutPois += 1;
       logger.warn('Crown area spawn skipped: area has no safe POIs; skipping', {
         areaId: areaDoc.id,
       });
       await advanceAreaCursor(areaDoc.ref, { lastSpawnPassAt: nowTs });
       continue;
-    }
-    const poisByCell = new Map<string, NormalizedPoi[]>();
-    for (const doc of poiSnap.docs) {
-      const data = doc.data();
-      const lat = data.lat;
-      const lon = data.lon;
-      const category = data.category;
-      if (typeof lat !== 'number' || typeof lon !== 'number') continue;
-      const key =
-        typeof data.cellKey === 'string' && data.cellKey.length > 0
-          ? data.cellKey
-          : crownCellKey(lat, lon);
-      const bucket = poisByCell.get(key);
-      const poi: NormalizedPoi = {
-        lat,
-        lon,
-        category: category === 'fuel' || category === 'charging' ? category : 'parking',
-      };
-      if (bucket) bucket.push(poi);
-      else poisByCell.set(key, [poi]);
     }
 
     const accept = pointInShapeAccept(shape);
@@ -618,12 +631,6 @@ export async function runCrownAreaSpawnPass(
 
       const neighbours = neighbourCrownCells(cellKey);
       if (neighbours.length === 0) continue; // enumerated keys always parse; defensive.
-
-      // No safe-stop POI in this cell → nothing to anchor to, so skip BEFORE the
-      // activity/neighbourhood reads. Most cells of a big area's bounding box have
-      // no POI, so this keeps the pass cheap.
-      const cellPois = poisByCell.get(cellKey);
-      if (!cellPois || cellPois.length === 0) continue;
 
       const recentUsers = await db
         .collection('crownCellActivity')
@@ -665,6 +672,14 @@ export async function runCrownAreaSpawnPass(
 
       const deficit = Math.min(target - liveInCell, limits.maxSpawns - result.spawned);
       if (deficit <= 0) continue;
+
+      // ONLY NOW load this cell's cached safe-stop POIs — after we know there is a
+      // real deficit to fill. A cell already at target (the common case on a
+      // steady-state tick) reaches `continue` above and reads ZERO POI docs; the
+      // read is bounded to MAX_POIS_PER_CELL_READ. If the cell has no POIs (its
+      // area does, just not here) there is nothing to anchor to — skip it.
+      const cellPois = await loadCellPois(areaDoc.id, cellKey);
+      if (cellPois.length === 0) continue;
 
       const pending: { ref: FirebaseFirestore.DocumentReference; data: DocumentData }[] = [];
       for (let i = 0; i < deficit; i += 1) {

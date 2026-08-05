@@ -350,4 +350,57 @@ describe('POI-anchored spawn pass', () => {
 
     await clearActivity(CELL_KEY);
   });
+
+  it('reads POIs ONLY for cells with a spawn deficit — an at-target tick reads zero POI docs', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await clearAreas();
+    const areaId = await createArea();
+    const now = new Date();
+    // Low-ish activity so the per-cell target is small, and exactly enough POIs to
+    // reach it: 2 distinct users → A≈2 → target 2; two POIs >150 m apart.
+    await seedActivity(CELL_KEY, 2, now);
+    const twoPois = [
+      { lat: CELL_LAT, lon: CELL_LON, category: 'parking' as const },
+      { lat: CELL_LAT + 0.0018, lon: CELL_LON, category: 'fuel' as const }, // ~200 m north
+    ];
+    // The area-level gate reads the stored poiCount (not POI docs); set it so the
+    // area is served. The per-cell POIs come from the injected counting loader.
+    await adminDb
+      .collection('crownSpawnAreas')
+      .doc(areaId)
+      .set({ poiCount: twoPois.length }, { merge: true });
+
+    const poisFor: Record<string, typeof twoPois> = { [CELL_KEY]: twoPois };
+    let loaderCalls = 0;
+    const countingLoader = async (_areaId: string, cellKey: string) => {
+      loaderCalls += 1;
+      return poisFor[cellKey] ?? [];
+    };
+
+    // First tick: there IS a deficit, so the loader is invoked and crowns are placed.
+    const first = await runCrownAreaSpawnPass(
+      now,
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(1234),
+      { loadCellPois: countingLoader },
+    );
+    expect(first.spawned).toBe(2);
+    expect(loaderCalls).toBeGreaterThan(0);
+
+    // Second tick: the cell is now at target, so NO cell reaches the POI load — the
+    // loader must not be called at all (zero POI reads on an idle/at-target tick).
+    loaderCalls = 0;
+    const second = await runCrownAreaSpawnPass(
+      now,
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(1234),
+      { loadCellPois: countingLoader },
+    );
+    expect(second.spawned).toBe(0);
+    expect(loaderCalls).toBe(0);
+
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+  });
 });

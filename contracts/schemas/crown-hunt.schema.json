@@ -494,7 +494,9 @@
         "createdAt",
         "updatedAt",
         "approvedByUserId",
-        "approvedAt"
+        "approvedAt",
+        "poiCount",
+        "poisRefreshedAt"
       ],
       "additionalProperties": true
     },
