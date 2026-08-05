@@ -291,6 +291,32 @@ describe('Kronjakt point form — collectable redesign', () => {
     expect(payload.rewardPoints).toBe(100);
   });
 
+  it('PRESERVES an existing geofence radius (50 m) on edit — no silent overwrite to 75', async () => {
+    // The form has no geofence control; editing a legacy point must keep its
+    // stored radius. Only NEW points default to the fixed 75 m.
+    mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ geofenceRadiusMeters: 50 })]));
+    await render();
+
+    await act(async () => {
+      buttonByText(t('crownHunt.editPoint')).click();
+    });
+    await submitForm();
+
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    const payload = mocks.update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.geofenceRadiusMeters).toBe(50);
+  });
+
+  it('defaults a NEW point to the fixed 75 m collect radius', async () => {
+    await render();
+    await openCreateForm();
+    await fillCoordinates();
+    await submitForm();
+
+    const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.geofenceRadiusMeters).toBe(75);
+  });
+
   it('keeps the safe-location confirmation REQUIRED to activate a draft', async () => {
     mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ status: 'draft' })]));
     await render();

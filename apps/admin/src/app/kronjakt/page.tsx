@@ -156,6 +156,12 @@ interface PointFormState {
    */
   tier: CrownTier | 'custom';
   rewardPoints: number;
+  /**
+   * The collect radius that will be saved. New crowns default to the fixed
+   * 75 m; editing an existing point keeps its stored radius verbatim (the form
+   * has no geofence control, so an unrelated edit must not change it).
+   */
+  geofenceRadiusMeters: number;
   repeatRule: 'once' | 'daily' | 'weekly';
   availableFrom: string;
   availableUntil: string;
@@ -166,6 +172,7 @@ const EMPTY_FORM: PointFormState = {
   longitude: '',
   tier: DEFAULT_CROWN_TIER,
   rewardPoints: CROWN_TIER_TABLE[DEFAULT_CROWN_TIER].points,
+  geofenceRadiusMeters: CROWN_COLLECT_RADIUS_METERS,
   repeatRule: 'once',
   availableFrom: '',
   availableUntil: '',
@@ -179,6 +186,9 @@ function pointToForm(point: AdminCrownHuntPointSummary): PointFormState {
     // tier so saving without touching the selector never changes it.
     tier: matchTier(point.rewardPoints) ?? 'custom',
     rewardPoints: point.rewardPoints,
+    // Preserve the existing collect radius (there is no geofence UI to change
+    // it) so an edit never silently rewrites it to the 75 m new-point default.
+    geofenceRadiusMeters: point.geofenceRadiusMeters,
     repeatRule: point.repeatRule,
     availableFrom: toLocalDateTimeValue(point.availableFrom),
     availableUntil: toLocalDateTimeValue(point.availableUntil),
@@ -225,7 +235,7 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
         helpText={t('map.dragHint')}
         unavailableText={t('map.unavailable')}
         loadErrorText={t('map.loadError')}
-        radiusMeters={CROWN_COLLECT_RADIUS_METERS}
+        radiusMeters={form.geofenceRadiusMeters}
         required
         labelClassName={styles.label}
         inputClassName={styles.input}
@@ -1027,7 +1037,7 @@ export default function KronjaktPage() {
           // silently coerces it. The 75 m collect radius is fixed.
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
-          geofenceRadiusMeters: CROWN_COLLECT_RADIUS_METERS,
+          geofenceRadiusMeters: form.geofenceRadiusMeters,
           rewardPoints: form.rewardPoints,
           repeatRule: form.repeatRule,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
