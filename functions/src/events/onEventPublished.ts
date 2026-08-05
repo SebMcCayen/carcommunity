@@ -120,7 +120,13 @@ export async function runEventCreatedFanOut(
     return summary;
   }
   const title = String(eventSnap.get('title') ?? '');
-  const creatorUid = eventSnap.get('createdByUserId');
+  // Normalised to a string-or-null so the creator-exclusion filter below is a
+  // clean string comparison. events.create always writes createdByUserId as the
+  // actor uid (a string); if a malformed document carried a non-string here, the
+  // worst case is simply that no creator is excluded (a uid never equals null) —
+  // everyone active is notified, the safe degradation, never a wrong exclusion.
+  const rawCreator = eventSnap.get('createdByUserId');
+  const creatorUid = typeof rawCreator === 'string' ? rawCreator : null;
   const notificationId = eventCreatedNotificationId(eventId);
   const previewText = eventCreatedPreview(title);
 
