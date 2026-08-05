@@ -76,10 +76,17 @@ export interface EventCreatedFanOutSummary {
   delivered: number;
   /**
    * Recipients writeInAppNotification DECLINED (opted out / suspended / deleted /
-   * a deterministic-id duplicate). A delivery that THROWS is logged per member,
-   * not counted here.
+   * a deterministic-id duplicate).
    */
   skipped: number;
+  /**
+   * Recipients whose delivery THREW (a rejected settled result). Counted so the
+   * MAX_RECIPIENTS cap is enforced on ATTEMPTS, not just successes — otherwise a
+   * systemic delivery failure (every write throwing) would advance neither
+   * delivered nor skipped and the run would scan the whole active-users
+   * collection before the cap could bind.
+   */
+  failed: number;
   /** True when MAX_RECIPIENTS bound the scan. */
   capped: boolean;
 }
@@ -107,7 +114,7 @@ export async function runEventCreatedFanOut(
   eventId: string,
   deps: EventCreatedFanOutDeps = { deliver: writeInAppNotification },
 ): Promise<EventCreatedFanOutSummary> {
-  const summary: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, capped: false };
+  const summary: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
 
   const eventSnap = await db.collection('events').doc(eventId).get();
   if (!eventSnap.exists) {
@@ -120,19 +127,30 @@ export async function runEventCreatedFanOut(
     return summary;
   }
   const title = String(eventSnap.get('title') ?? '');
-  // Normalised to a string-or-null so the creator-exclusion filter below is a
-  // clean string comparison. events.create always writes createdByUserId as the
-  // actor uid (a string); if a malformed document carried a non-string here, the
-  // worst case is simply that no creator is excluded (a uid never equals null) —
-  // everyone active is notified, the safe degradation, never a wrong exclusion.
+  // The creator is excluded from the broadcast, so a trustworthy creator uid is a
+  // PRECONDITION of a correct fan-out: events.create always writes
+  // createdByUserId as the actor uid (a string; rules deny all client writes to
+  // events/{eventId}), so an absent/non-string value means a corrupt event
+  // document. Rather than broadcast to the whole community with a broken
+  // exclusion (which could notify the creator about their own event), ABORT and
+  // log — a data-integrity anomaly, not the normal path.
   const rawCreator = eventSnap.get('createdByUserId');
-  const creatorUid = typeof rawCreator === 'string' ? rawCreator : null;
+  if (typeof rawCreator !== 'string' || rawCreator.length === 0) {
+    logger.error('Event-created fan-out aborted: event has no valid createdByUserId', { eventId });
+    return summary;
+  }
+  const creatorUid = rawCreator;
   const notificationId = eventCreatedNotificationId(eventId);
   const previewText = eventCreatedPreview(title);
 
+  // How many recipients we have ATTEMPTED (delivered + declined + threw). The cap
+  // is on attempts, so a systemic failure cannot walk the whole collection.
+  const processed = () => summary.delivered + summary.skipped + summary.failed;
+
   let cursor: string | null = null;
   for (;;) {
-    if (summary.delivered + summary.skipped >= MAX_RECIPIENTS) {
+    const remaining = MAX_RECIPIENTS - processed();
+    if (remaining <= 0) {
       summary.capped = true;
       break;
     }
@@ -149,10 +167,16 @@ export async function runEventCreatedFanOut(
       break;
     }
 
-    // Skip the creator: they already know about their own event.
-    const recipients = page.docs
+    // Skip the creator (they already know about their own event), then cap the
+    // page to the REMAINING budget so a run can never overshoot MAX_RECIPIENTS
+    // mid-page — even when every delivery is failing.
+    const allRecipients = page.docs
       .map((doc) => doc.id)
       .filter((uid) => uid !== creatorUid);
+    const recipients = allRecipients.slice(0, remaining);
+    if (recipients.length < allRecipients.length) {
+      summary.capped = true;
+    }
 
     for (let i = 0; i < recipients.length; i += FANOUT_CONCURRENCY) {
       const chunk = recipients.slice(i, i + FANOUT_CONCURRENCY);
@@ -179,8 +203,10 @@ export async function runEventCreatedFanOut(
             summary.skipped += 1;
           }
         } else {
-          // A per-member delivery failure must not abort the fan-out. Logged
-          // PII-free: the member's position in the page, not their uid.
+          // A per-member delivery failure must not abort the fan-out, but IS
+          // counted so the attempts cap can bind under a systemic failure.
+          // Logged PII-free: the member's position in the page, not their uid.
+          summary.failed += 1;
           logger.error('Event-created notification delivery failed for a member', {
             eventId,
             memberIndex: i + index,
@@ -190,6 +216,11 @@ export async function runEventCreatedFanOut(
       });
     }
 
+    // A mid-page truncation (the budget ran out inside this page) means the run
+    // is at the cap — stop rather than fetch another page.
+    if (summary.capped) {
+      break;
+    }
     if (page.size < PAGE_SIZE) {
       break;
     }

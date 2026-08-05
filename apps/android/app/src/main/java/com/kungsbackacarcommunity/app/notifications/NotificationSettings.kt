@@ -43,6 +43,7 @@ object NotificationCategories {
      */
     val ACTIVE: List<String> =
         listOf(
+            "event_created",
             "event_reminder",
             "event_updated",
             "event_cancelled",

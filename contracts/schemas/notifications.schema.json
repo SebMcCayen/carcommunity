@@ -20,9 +20,10 @@
         "community_chat",
         "convoy_chat",
         "friend_request",
-        "convoy_invite"
+        "convoy_invite",
+        "convoy_update"
       ],
-      "description": "Active categories only. The legacy contract's future categories (partner_offer, event_chat, nearby_event) must not be sent without product and security review and are deliberately excluded. event_created is a producer-only community broadcast: the events-onEventPublished Firestore trigger fans it out to every active member (minus the creator) when an event becomes published, deep-linking to the event on tap; it is NOT admin-sendable. The social categories (direct_message, community_chat, convoy_chat, friend_request, convoy_invite) carry member-to-member activity for the chat/social features; they are all optional (never essential) so a user can always silence other members, and activating any of them as a delivery surface requires the same product/security review. Only convoy_invite has a producer today — the others are preference-only until their domains wire one up."
+      "description": "Every category the backend may DELIVER (a superset of adminSendableCategory). The legacy contract's future categories (partner_offer, event_chat, nearby_event) must not be sent without product and security review and are deliberately excluded. event_created is a producer-only community broadcast: the events-onEventPublished Firestore trigger fans it out to every active member (minus the creator) when an event becomes published, deep-linking to the event on tap; it is NOT admin-sendable. The social categories (direct_message, community_chat, convoy_chat, friend_request, convoy_invite, convoy_update) carry member-to-member activity for the chat/social features; they are all optional (never essential) so a user can always silence other members. Producers today: event_created (events-onEventPublished), convoy_invite + convoy_update (convoy manageConvoy), direct_message (dm), friend_request (friends), community_chat + convoy_chat (chat channels); the event_reminder/updated/cancelled + account/subscription/system categories are produced by their respective domains and admin broadcasts. Any remaining preference-only category exists so the opt-out is expressible ahead of its producer."
     },
     "adminSendableCategory": {
       "type": "string",

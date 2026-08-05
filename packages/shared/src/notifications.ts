@@ -35,11 +35,18 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Active notification categories supported in this MVP.
- * These may be sent to users and appear in preference settings.
+ * Categories an admin may broadcast + that appear in the admin send UI. This is
+ * the ADMIN-SENDABLE / operational set (it mirrors the backend
+ * ADMIN_SENDABLE_CATEGORIES), NOT every delivered category: producer-only
+ * categories — the social ones AND `event_created` (a system-generated community
+ * broadcast the backend fires on event publish) — are deliberately absent, so
+ * the admin "send notification" dropdown never offers a category
+ * notifications.adminSend would reject. Per-category opt-outs for the absent
+ * categories are still delivered/honoured backend-side and exposed in the app's
+ * own settings (Android NotificationCategories), which tracks the full backend
+ * NOTIFICATION_CATEGORIES set.
  */
 export const ACTIVE_NOTIFICATION_CATEGORIES = [
-  'event_created',
   'event_reminder',
   'event_updated',
   'event_cancelled',
