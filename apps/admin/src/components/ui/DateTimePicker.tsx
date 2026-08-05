@@ -35,6 +35,10 @@ const monthLabel = (year: number, month: number) =>
     new Date(year, month, 1),
   );
 
+// Full localized date (e.g. "onsdag 20 augusti 2026") for a day cell's
+// accessible name, so a screen reader announces the whole date, not just "20".
+const FULL_DATE_FORMAT = new Intl.DateTimeFormat(DISPLAY_LOCALE, { dateStyle: 'full' });
+
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'));
 const MINUTES = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, '0'));
 
@@ -262,9 +266,11 @@ export function DateTimePicker({
 
   return (
     <div className={[styles.wrapper, className].filter(Boolean).join(' ')} ref={wrapperRef}>
-      <span className={labelClassName} id={labelId}>
+      {/* A real <label> for the trigger button (a labelable element), so the
+          label is associated with the control and clickable to activate it. */}
+      <label className={labelClassName} id={labelId} htmlFor={id}>
         {label}
-      </span>
+      </label>
       <button
         type="button"
         ref={triggerRef}
@@ -336,6 +342,7 @@ export function DateTimePicker({
                   role="gridcell"
                   data-date={dIso}
                   tabIndex={isFocus ? 0 : -1}
+                  aria-label={FULL_DATE_FORMAT.format(d)}
                   aria-selected={isSelected}
                   aria-current={isToday ? 'date' : undefined}
                   className={[

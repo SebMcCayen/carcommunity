@@ -942,8 +942,10 @@ export default function KronjaktPage() {
       try {
         const base = {
           // A Crown point is just a collectable on the map — a title is
-          // optional, so an empty box is sent as "no title" rather than ''.
-          title: form.title.trim() || undefined,
+          // optional. Send the trimmed value (possibly '') on every save so an
+          // emptied box also clears an existing title on edit; the backend
+          // stores '' as "no title".
+          title: form.title.trim(),
           description: form.description || undefined,
           latitude: parseFloat(form.latitude),
           longitude: parseFloat(form.longitude),
