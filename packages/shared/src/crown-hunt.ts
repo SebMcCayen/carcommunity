@@ -391,3 +391,164 @@ export interface CrownHuntSeason {
   winners?: CrownHuntSeasonWinner[];
   topStandings?: CrownHuntSeasonStanding[];
 }
+
+// ===========================================================================
+// AUTO-SPAWN (Kronjakt) — ephemeral machine-placed crowns
+// ===========================================================================
+//
+// A SECOND source of crowns, distinct from the hand-placed `crownHuntPoints`
+// above: short-lived `crownSpawns` placed automatically near recent member
+// activity, inside admin-approved AREAS. Backend is behind the `crownHuntSpawn`
+// feature flag (contract default OFF). Everything below is the STABLE contract
+// the later admin-UI and Android slices consume — the backend types in
+// functions/src/crownHunt/* are the runtime authority and must stay in sync.
+
+// ---------------------------------------------------------------------------
+// Rarity, collection mode, and the member-facing crown read shape
+// ---------------------------------------------------------------------------
+
+const CROWN_SPAWN_RARITIES = ['common', 'uncommon', 'rare', 'legendary'] as const;
+export type CrownSpawnRarity = (typeof CROWN_SPAWN_RARITIES)[number];
+
+/**
+ * How a spawned crown is collected — stamped on the crown at spawn time:
+ *  - `shared`: many DISTINCT members may each collect it ONCE; it stays on the
+ *    map until its TTL. A member's second attempt is refused.
+ *  - `exclusive`: the FIRST member to collect it takes it and it is REMOVED
+ *    immediately, gone for everyone. The client may render exclusive crowns
+ *    specially ("first to catch").
+ *
+ * Derived from rarity by the backend (a single cutoff constant): today
+ * common/uncommon/rare are shared and legendary is exclusive.
+ */
+export const CROWN_COLLECT_MODES = ['shared', 'exclusive'] as const;
+export type CrownCollectMode = (typeof CROWN_COLLECT_MODES)[number];
+
+/**
+ * Member-facing view of a live auto-spawned crown (`crownSpawns/{spawnId}`).
+ * Excludes every backend-only field (cellKey, areaId, approvedCellBy,
+ * safeLocationConfirmed, claim/risk metadata) — the client needs only where the
+ * crown is, what it is worth, how it is collected, and when it disappears.
+ */
+export interface CrownSpawnView {
+  spawnId: string;
+  latitude: number;
+  longitude: number;
+  rarity: CrownSpawnRarity;
+  /** SHARED vs EXCLUSIVE — the client distinguishes exclusive crowns visually. */
+  collectMode: CrownCollectMode;
+  rewardPoints: number;
+  collectRadiusMeters: number;
+  /** ISO 8601. The crown is gone after this instant. */
+  expiresAt: string;
+}
+
+const CROWN_SPAWN_CLAIM_RESULTS = [
+  'awarded',
+  'already_taken',
+  'already_collected',
+  'outside_radius',
+  'must_be_stationary',
+  'position_too_old',
+  'crown_expired',
+  'daily_limit_reached',
+  'risk_review',
+  'feature_disabled',
+  'not_eligible',
+] as const;
+export type CrownSpawnClaimResult = (typeof CROWN_SPAWN_CLAIM_RESULTS)[number];
+
+// ---------------------------------------------------------------------------
+// Marked spawn areas — the admin-drawn shapes the spawner may place in
+// ---------------------------------------------------------------------------
+
+const CROWN_SPAWN_AREA_SHAPE_TYPES = ['polygon', 'circle', 'rectangle'] as const;
+export type CrownSpawnAreaShapeType = (typeof CROWN_SPAWN_AREA_SHAPE_TYPES)[number];
+
+/** A WGS-84 vertex. `lon`, not `lng`, to match the rest of these contracts. */
+export interface CrownSpawnAreaVertex {
+  lat: number;
+  lon: number;
+}
+
+/** A closed GeoJSON-style ring: first and last vertex equal, >= 3 distinct. */
+export interface CrownSpawnPolygonShape {
+  type: 'polygon';
+  vertices: CrownSpawnAreaVertex[];
+}
+
+export interface CrownSpawnCircleShape {
+  type: 'circle';
+  center: CrownSpawnAreaVertex;
+  /** Metres; backend bounds are 10 .. 50 000. */
+  radiusMeters: number;
+}
+
+/** Axis-aligned bounds; `north > south` and `east > west` (no antimeridian wrap). */
+export interface CrownSpawnRectangleShape {
+  type: 'rectangle';
+  bounds: { north: number; south: number; east: number; west: number };
+}
+
+export type CrownSpawnAreaShape =
+  CrownSpawnPolygonShape | CrownSpawnCircleShape | CrownSpawnRectangleShape;
+
+/**
+ * Admin view of a marked area (`crownSpawnAreas/{areaId}`). Not member-readable.
+ * An area only spawns while `active` AND `safeAreaConfirmed` are both true, and
+ * ACTIVATING it requires the safety confirmation in the same request.
+ */
+export interface AdminCrownSpawnArea {
+  areaId: string;
+  name: string | null;
+  shape: CrownSpawnAreaShape;
+  active: boolean;
+  safeAreaConfirmed: boolean;
+  createdByUserId: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+}
+
+/** Input for crownHunt.createSpawnArea (admin). `active` requires `safeAreaConfirmed: true`. */
+export interface AdminCreateCrownSpawnAreaRequest {
+  shape: CrownSpawnAreaShape;
+  name?: string | null;
+  active?: boolean;
+  safeAreaConfirmed?: boolean;
+}
+
+/** Input for crownHunt.updateSpawnArea (admin). Activating requires `safeAreaConfirmed: true`. */
+export interface AdminUpdateCrownSpawnAreaRequest {
+  areaId: string;
+  shape?: CrownSpawnAreaShape;
+  name?: string | null;
+  active?: boolean;
+  safeAreaConfirmed?: boolean;
+}
+
+/** Input for crownHunt.deleteSpawnArea (admin). Drains the area's live crowns. */
+export interface AdminDeleteCrownSpawnAreaRequest {
+  areaId: string;
+  reason?: string;
+}
+
+/** Response shape of the four area-mutation callables (create/update/delete). */
+export interface AdminCrownSpawnAreaMutationResponse {
+  areaId: string;
+  active: boolean;
+  safeAreaConfirmed: boolean;
+  /** Live crowns removed by a deactivation/deletion/reshape (0 otherwise). */
+  removedCrowns: number;
+}
+
+/** Input for crownHunt.listSpawnAreas (admin). */
+export interface AdminListCrownSpawnAreasRequest {
+  activeOnly?: boolean;
+  limit?: number;
+}
+
+export interface AdminListCrownSpawnAreasResponse {
+  areas: AdminCrownSpawnArea[];
+}

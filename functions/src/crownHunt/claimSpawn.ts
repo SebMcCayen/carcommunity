@@ -77,11 +77,15 @@ import {
   evaluateStationaryCollection,
   getSpawnClaimMessage,
   parseClaimSpawnInput,
+  resolveCollectMode,
   resolveCollectRadiusMeters,
   scopeSpawnClaimKey,
   spawnClaimLedgerIdempotencyKey,
+  spawnCollectorDocId,
   spawnDailyCounterDocId,
   utcDayKey,
+  type CrownCollectMode,
+  type CrownRarity,
   type CrownSpawnClaimResult,
 } from './crown-spawn-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
@@ -184,9 +188,11 @@ async function readLatestTrustedPosition(
 ): Promise<{ latitude: number; longitude: number; recordedAt: string } | null> {
   try {
     const snap = await adminRtdb.ref(`liveLocation/${uid}/latest`).get();
-    const value = snap.val() as
-      | { latitude?: unknown; longitude?: unknown; recordedAt?: unknown }
-      | null;
+    const value = snap.val() as {
+      latitude?: unknown;
+      longitude?: unknown;
+      recordedAt?: unknown;
+    } | null;
     if (
       value &&
       typeof value.latitude === 'number' &&
@@ -266,6 +272,25 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     return respond('crown_expired', rarity);
   }
 
+  // 4b. Collection mode. SHARED crowns are collectable ONCE PER DISTINCT MEMBER
+  // and stay on the map to their TTL; EXCLUSIVE crowns are first-come and
+  // removed on the first claim. The per-(crown, user) collector record is what
+  // makes "once per member" hold across a member's separate requests (each with
+  // a fresh idempotency key), so it is checked here as a fast path AND re-checked
+  // transactionally in the award below, where it is the authority — exactly as
+  // the crown's own status is the authority for an exclusive crown.
+  const rarityForMode = (spawn!.rarity as CrownRarity | undefined) ?? 'common';
+  const collectMode: CrownCollectMode = resolveCollectMode(spawn!.collectMode, rarityForMode);
+  const collectorRef = db
+    .collection('crownSpawnCollectors')
+    .doc(spawnCollectorDocId(input.spawnId, uid));
+  if (collectMode === 'shared') {
+    const alreadyCollected = await collectorRef.get();
+    if (alreadyCollected.exists) {
+      return respond('already_collected', rarity);
+    }
+  }
+
   // 5. Coordinate validation (malformed input is an ERROR, not a result code).
   if (
     !isValidCoordinate(input.latitude, input.longitude) ||
@@ -293,7 +318,9 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
       ...attemptBase,
       result: 'position_too_old',
     });
-    return existing ? replayStoredClaim(existing, input.spawnId) : respond('position_too_old', rarity);
+    return existing
+      ? replayStoredClaim(existing, input.spawnId)
+      : respond('position_too_old', rarity);
   }
 
   // 7. Server-computed distances. Every distance in this flow is computed here
@@ -307,7 +334,12 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // someone who was never there. Anything not a sane positive number falls back
   // to the 75 m default.
   const collectRadius = resolveCollectRadiusMeters(spawn!.collectRadiusMeters);
-  const distanceMeters = haversineDistanceMeters(input.latitude, input.longitude, crownLat, crownLon);
+  const distanceMeters = haversineDistanceMeters(
+    input.latitude,
+    input.longitude,
+    crownLat,
+    crownLon,
+  );
   const previousDistanceMeters = haversineDistanceMeters(
     input.previousFix.latitude,
     input.previousFix.longitude,
@@ -407,18 +439,28 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     return existing ? replayStoredClaim(existing, input.spawnId) : respond('risk_review', rarity);
   }
 
-  // 10. Award. The ONCE-GLOBALLY rule and the daily cap are enforced INSIDE the
-  // ledger transaction, on documents whose IDs do not derive from the client
-  // idempotency key: the crown document itself (read in the guard, flipped to
-  // `claimed` in the writes) and the per-day counter. Two members tapping the
-  // same crown at the same instant therefore serialize on the crown document,
-  // and exactly one of them wins — the pre-transaction status read in step 4 is
-  // only a fast path, never the authority.
+  // 10. Award. The daily cap and the crown's collection rule are enforced INSIDE
+  // the ledger transaction, on documents whose IDs do not derive from the client
+  // idempotency key: the per-day counter, and — depending on mode — the crown
+  // document itself (EXCLUSIVE: read in the guard, flipped to `claimed` in the
+  // writes, so two members tapping the same jackpot serialize on it and exactly
+  // one wins) or the per-(crown, user) collector record (SHARED: created in the
+  // writes so the SAME member cannot double-collect, while two DIFFERENT members
+  // touch different collector docs and so never contend). The pre-transaction
+  // reads in step 4/4b are only fast paths, never the authority.
   const rewardPoints = spawn!.rewardPoints as number;
   const dailyCounterRef = db
     .collection('crownSpawnDailyClaims')
     .doc(spawnDailyCounterDocId(uid, now));
   let nextDailyCount = 1;
+  // The AUTHORITATIVE collection mode, resolved from the crown READ INSIDE the
+  // transaction's read phase (below) — the `collectMode` computed pre-transaction
+  // in step 4b is only a fast path. Every write-phase branch (shared once-per-
+  // member vs exclusive remove-on-first-claim) reads THIS, so a transaction retry
+  // re-derives it from that attempt's own read rather than trusting a value read
+  // before the transaction began. Seeded with the fast-path value only so the
+  // type is non-null; the read phase always overwrites it before any write runs.
+  let txCollectMode: CrownCollectMode = collectMode;
 
   try {
     const ledgerResult = await creditPoints(
@@ -433,17 +475,43 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
         relatedEntityId: input.spawnId,
       },
       (tx, mutation) => {
-        // Write phase.
-        tx.update(spawnRef, {
-          status: 'claimed',
-          claimedByUid: uid,
-          claimedAt: Timestamp.fromDate(now),
-          // Expire it AT the claim instant so the existing sweep reaps it on the
-          // next pass and the client read rule (status live + unexpired) hides
-          // it immediately — a claimed crown must leave the map at once, not
-          // linger until its rarity TTL would have run out.
-          expiresAt: Timestamp.fromDate(now),
-        });
+        // Write phase. Branches on txCollectMode (resolved from the in-transaction
+        // crown read below), never the pre-transaction collectMode.
+        if (txCollectMode === 'exclusive') {
+          // EXCLUSIVE: the first taker removes it for everyone. Flip to claimed
+          // and expire AT the claim instant so the existing sweep reaps it and
+          // the client read rule (status live + unexpired) hides it immediately —
+          // a claimed jackpot must leave the map at once, not linger to its TTL.
+          tx.update(spawnRef, {
+            status: 'claimed',
+            claimedByUid: uid,
+            claimedAt: Timestamp.fromDate(now),
+            expiresAt: Timestamp.fromDate(now),
+          });
+        } else {
+          // SHARED: the crown is UNTOUCHED — it stays live on the map until its
+          // TTL for the next member. This member's one pickup is recorded by the
+          // collector doc, which the read guard proved absent and which its
+          // create makes present, so a repeat (any future request) is refused.
+          tx.set(collectorRef, {
+            spawnId: input.spawnId,
+            userId: uid,
+            // rarityForMode, not the raw nullable `rarity`: it is the
+            // resolveCollectMode-normalised value (a guaranteed CrownRarity,
+            // falling back to 'common'), so a collector record is never written
+            // with a null/invalid rarity even if the crown document's field is.
+            rarity: rarityForMode,
+            collectedAt: Timestamp.fromDate(now),
+            // Bounds the collection's growth: a collector record is only useful
+            // while its crown is still live, so it expires WITH the crown. A
+            // Firestore TTL policy on `expireAt` (a manual operator step, like
+            // crownCellActivity/messages) reaps these alongside the swept crown;
+            // until then the sweeper never touches them, so the field is the only
+            // thing keeping the collection from growing without bound.
+            expireAt: expiresAt,
+            createdAt: FieldValue.serverTimestamp(),
+          });
+        }
         tx.set(
           dailyCounterRef,
           {
@@ -500,6 +568,25 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
         const crownExpiry = crown!.expiresAt as Timestamp | undefined;
         if (!crownExpiry || crownExpiry.toMillis() <= now.getTime()) {
           throw new SpawnClaimRejection('crown_expired');
+        }
+        // Resolve the collection mode from THIS transaction's crown read, so the
+        // write phase and the collector check below both branch on a value read
+        // inside the current attempt (retry-safe), not the pre-transaction one.
+        txCollectMode = resolveCollectMode(
+          crown!.collectMode,
+          (crown!.rarity as CrownRarity | undefined) ?? 'common',
+        );
+        // SHARED: this member's prior pickup is the authority for "once per
+        // member", re-checked here so a race between two of the same member's
+        // requests (different idempotency keys) cannot double-award — the loser
+        // re-reads the collector doc its rival created and rejects. Read AFTER the
+        // crown, so the decision to read it uses the in-transaction mode; still a
+        // read, so it precedes every write.
+        if (txCollectMode === 'shared') {
+          const collectorSnap = await tx.get(collectorRef);
+          if (collectorSnap.exists) {
+            throw new SpawnClaimRejection('already_collected');
+          }
         }
         const currentDaily = (counterSnap.data()?.count as number | undefined) ?? 0;
         if (currentDaily >= MAX_DAILY_SPAWN_CLAIMS) {

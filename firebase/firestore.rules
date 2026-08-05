@@ -1174,6 +1174,39 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // crownSpawnAreas – ADMIN-DRAWN areas the spawner may place in
+    // The wider half of the auto-spawn safety model: a polygon, circle, or
+    // rectangle an admin drew (crownSpawnAreas/{areaId}). The spawner places
+    // crowns at random points INSIDE an area that is `active == true` AND
+    // `safeAreaConfirmed == true`. Writes go exclusively through the audited,
+    // admin-gated crownHunt.createSpawnArea / updateSpawnArea / deleteSpawnArea
+    // callables (each requires the safe-area confirmation to ACTIVATE), so an
+    // area can never be opened without a named admin and a reason on record.
+    //
+    // Admin-readable (the draw/approval map in the admin portal); NOT
+    // member-readable, for the same reason as crownSpawnCells — the marked areas
+    // are an operational safety artefact, and exposing an approved-but-empty
+    // area would tell a client where to wait for the next spawn.
+    // -------------------------------------------------------------------------
+    match /crownSpawnAreas/{areaId} {
+      allow read: if isAdmin();
+      // No client writes — every mutation is an audited callable.
+    }
+
+    // -------------------------------------------------------------------------
+    // crownSpawnCollectors – per-(crown, user) pickup records for SHARED crowns
+    // Backend-only. A deterministic document (ID = SHA-256 of the crown id and
+    // the uid) that crownHunt.claimSpawn creates INSIDE the award transaction so
+    // a SHARED crown can be collected exactly once by each distinct member while
+    // it stays on the map to its TTL. Never client-readable or client-writable:
+    // a member must not be able to inspect who has collected a crown, nor forge
+    // or clear their own pickup record to collect a shared crown twice.
+    // -------------------------------------------------------------------------
+    match /crownSpawnCollectors/{collectorId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // crownCellActivity – aggregate ACTIVITY heat used to size spawn density
     // BACKEND-ONLY, both directions. One document per grid cell plus a
     // `recentUsers/{hash}` sub-collection holding one `lastSeenAt` per DISTINCT

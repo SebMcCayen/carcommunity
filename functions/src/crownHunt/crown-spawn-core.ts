@@ -393,6 +393,68 @@ export function crownExpiresAt(rarity: CrownRarity, now: Date): Date {
 }
 
 // ---------------------------------------------------------------------------
+// Collection mode: SHARED vs EXCLUSIVE
+// ---------------------------------------------------------------------------
+
+/**
+ * How a spawned crown is collected, stamped on the document at spawn time so the
+ * claim path and the map client agree without re-deriving it:
+ *
+ *  - `shared`   — many DISTINCT members may each collect the crown ONCE, and it
+ *                 STAYS on the map until its TTL expires. A member's second
+ *                 attempt on the same crown is refused (`already_collected`).
+ *                 This is the low-value common case: a crown by a busy car park
+ *                 is a small reward everyone who passes may pick up, not a race.
+ *  - `exclusive`— the FIRST member to collect it takes it and the crown is
+ *                 REMOVED immediately, gone for everyone else. This is the
+ *                 high-value jackpot: being first has to mean something, and a
+ *                 leaked coordinate must pay out once, not once per member.
+ */
+export const CROWN_COLLECT_MODES = ['shared', 'exclusive'] as const;
+export type CrownCollectMode = (typeof CROWN_COLLECT_MODES)[number];
+
+/**
+ * Rarity ordering, low → high. The single knob the exclusive cutoff turns on.
+ */
+export const CROWN_RARITY_RANK: Record<CrownRarity, number> = {
+  common: 0,
+  uncommon: 1,
+  rare: 2,
+  legendary: 3,
+};
+
+/**
+ * The cutoff: a crown whose rarity rank is at or above this is EXCLUSIVE, and
+ * everything below it is SHARED.
+ *
+ * Today that makes only `legendary` exclusive and common/uncommon/rare shared,
+ * which realises the product model "the top tier is a first-come jackpot,
+ * everything else is a shared pickup" against the rarity set that exists in the
+ * code. THE CUTOFF IS THIS ONE CONSTANT ON PURPOSE: introduce an `epic` tier
+ * above `rare` and it becomes exclusive automatically; drop this to
+ * `CROWN_RARITY_RANK.rare` to make rare exclusive too, or raise it to keep only
+ * the very top exclusive — a one-line change with no claim-path edits.
+ */
+export const MIN_EXCLUSIVE_CROWN_RANK = CROWN_RARITY_RANK.legendary;
+
+/** Derives a crown's collection mode from its rarity via {@link MIN_EXCLUSIVE_CROWN_RANK}. */
+export function crownCollectMode(rarity: CrownRarity): CrownCollectMode {
+  return CROWN_RARITY_RANK[rarity] >= MIN_EXCLUSIVE_CROWN_RANK ? 'exclusive' : 'shared';
+}
+
+/**
+ * Resolves the collection mode to use for a crown document, tolerating an
+ * absent field (a crown written before this model, or by a test fixture) by
+ * falling back to the rarity-derived mode. An explicit, valid stored value wins;
+ * anything else is re-derived — never trusted blindly, since the mode decides
+ * whether a crown is removed on first claim.
+ */
+export function resolveCollectMode(stored: unknown, rarity: CrownRarity): CrownCollectMode {
+  if (stored === 'shared' || stored === 'exclusive') return stored;
+  return crownCollectMode(rarity);
+}
+
+// ---------------------------------------------------------------------------
 // Seedable RNG
 // ---------------------------------------------------------------------------
 
@@ -477,12 +539,26 @@ export function sampleCrownPosition(
   cellKey: string,
   occupied: readonly CrownPosition[],
   rng: () => number,
-  options: { minSeparationMeters?: number; maxAttempts?: number } = {},
+  options: {
+    minSeparationMeters?: number;
+    maxAttempts?: number;
+    /**
+     * Optional extra acceptance test applied to every candidate BEFORE the
+     * separation check. The area spawner passes an in-shape predicate here so a
+     * cell that only partially overlaps a marked area places crowns only in the
+     * part that is actually inside the shape — a candidate drawn from the
+     * cell's rectangle but outside the polygon/circle/rectangle is rejected and
+     * re-drawn, exactly like a candidate that fails separation. Absent (the
+     * hand-approved cell path), every in-cell candidate is accepted.
+     */
+    accept?: (position: CrownPosition) => boolean;
+  } = {},
 ): CrownPosition | null {
   const bounds = crownCellBounds(cellKey);
   if (!bounds) return null;
   const minSeparation = options.minSeparationMeters ?? MIN_CROWN_SEPARATION_METERS;
   const maxAttempts = Math.max(1, options.maxAttempts ?? MAX_SPAWN_SAMPLE_ATTEMPTS);
+  const accept = options.accept;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const candidate: CrownPosition = {
@@ -490,6 +566,7 @@ export function sampleCrownPosition(
       longitude: bounds.minLon + rng() * (bounds.maxLon - bounds.minLon),
     };
     if (crownCellKey(candidate.latitude, candidate.longitude) !== cellKey) continue;
+    if (accept && !accept(candidate)) continue;
     if (isFarEnoughFromAll(candidate, occupied, minSeparation)) return candidate;
   }
   return null;
@@ -657,6 +734,7 @@ export function evaluateStationaryCollection(params: {
 export const CROWN_SPAWN_CLAIM_RESULTS = [
   'awarded',
   'already_taken',
+  'already_collected',
   'outside_radius',
   'must_be_stationary',
   'position_too_old',
@@ -674,6 +752,12 @@ export function getSpawnClaimMessage(result: CrownSpawnClaimResult): string {
       return 'Kronan är din! Poängen har lagts till i ditt Kronpoäng-saldo.';
     case 'already_taken':
       return 'Någon hann före — den här kronan är redan upphämtad.';
+    case 'already_collected':
+      // SHARED crown: this member has had their one pickup; the crown stays on
+      // the map for others. Deliberately distinct from `already_taken` (someone
+      // ELSE got an exclusive crown) — the honest reading is "you already got
+      // this one", not "you lost a race".
+      return 'Du har redan hämtat den här kronan.';
     case 'outside_radius':
       return 'Du är för långt från kronan.';
     case 'must_be_stationary':
@@ -747,6 +831,23 @@ export function scopeSpawnClaimKey(uid: string, idempotencyKey: string): string 
 /** Ledger idempotency key for a spawn claim's award (Firestore-safe). */
 export function spawnClaimLedgerIdempotencyKey(scopedKey: string): string {
   return `crown-spawn-claim_${scopedKey}`;
+}
+
+/**
+ * Deterministic `crownSpawnCollectors/{id}` document ID for a (crown, user)
+ * pair — the per-crown, per-user record that makes a SHARED crown collectable
+ * exactly once by each distinct member.
+ *
+ * Independent of the client idempotency key ON PURPOSE: the once-per-user
+ * guarantee for a shared crown must hold across a member's DIFFERENT claim
+ * requests (a fresh idempotency key each time), so it cannot key off the client
+ * key the way `scopeSpawnClaimKey` does. A length-prefixed digest keeps the ID
+ * Firestore-safe whatever the inputs contain, and is created transactionally in
+ * the award (create-if-absent), so two concurrent taps by the same member on
+ * the same shared crown serialize on it and exactly one awards.
+ */
+export function spawnCollectorDocId(spawnId: string, uid: string): string {
+  return hashDocId('crown-spawn-collector', [spawnId, uid]);
 }
 
 /** Start of the UTC calendar day — the daily-cap bucket. */
@@ -925,6 +1026,13 @@ export interface CrownSpawnFields {
   rarity: CrownRarity;
   rewardPoints: number;
   collectRadiusMeters: number;
+  /**
+   * SHARED or EXCLUSIVE, derived from rarity at spawn time (see
+   * {@link crownCollectMode}). Stamped on the document so the claim path decides
+   * removal-on-claim without re-deriving, and the map client can flag an
+   * exclusive crown ("first to catch") without knowing the rarity cutoff.
+   */
+  collectMode: CrownCollectMode;
   status: CrownSpawnStatus;
   source: typeof CROWN_SPAWN_SOURCE;
   /**
@@ -939,8 +1047,24 @@ export interface CrownSpawnFields {
    * inside a human-approved AREA (`approvedCellBy` below).
    */
   safeLocationConfirmed: false;
-  /** The admin who approved the CELL this crown was placed in. */
+  /**
+   * The admin who approved the AREA this crown was placed in — either the
+   * single grid CELL (`crownSpawnCells`, the hand-approved path) or the marked
+   * AREA (`crownSpawnAreas`, whose activator is recorded here). Named
+   * `approvedCellBy` for back-compat with the cell path that shipped first; it
+   * is the approving admin for whichever allow-list source placed the crown.
+   */
   approvedCellBy: string | null;
+  /**
+   * The marked AREA this crown was placed in, or null for a crown placed by the
+   * hand-approved single-cell path (`crownSpawnCells`).
+   *
+   * Stored explicitly so deactivating or deleting an area can DRAIN exactly its
+   * live crowns (`crownSpawns where areaId == X and status == 'live'`), mirroring
+   * the way revoking a cell drains that cell — without it, a crown placed inside
+   * an area an admin has just declared unsafe would stand for its full TTL.
+   */
+  areaId: string | null;
   claimedByUid: string | null;
 }
 
@@ -949,6 +1073,8 @@ export function buildCrownSpawnFields(params: {
   position: CrownPosition;
   rarity: CrownRarity;
   approvedCellBy: string | null;
+  /** Set for the marked-area spawner; omitted/null for the single-cell path. */
+  areaId?: string | null;
 }): CrownSpawnFields {
   return {
     cellKey: params.cellKey,
@@ -957,10 +1083,12 @@ export function buildCrownSpawnFields(params: {
     rarity: params.rarity,
     rewardPoints: crownRewardPoints(params.rarity),
     collectRadiusMeters: COLLECT_RADIUS_METERS,
+    collectMode: crownCollectMode(params.rarity),
     status: 'live',
     source: CROWN_SPAWN_SOURCE,
     safeLocationConfirmed: false,
     approvedCellBy: params.approvedCellBy,
+    areaId: params.areaId ?? null,
     claimedByUid: null,
   };
 }
