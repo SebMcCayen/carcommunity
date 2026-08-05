@@ -70,6 +70,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthKind
 import com.kungsbackacarcommunity.app.diagnostics.FeatureHealthReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
+import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.design.LocalKccDarkTheme
 import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
@@ -960,6 +961,10 @@ fun TurnByTurnNavScreen(
             // the same reason as the zoom above: a choice made while driving
             // persists and is the same the map home shows afterwards.
             val incidentAgeFilterController = LocalIncidentAgeFilterController.current
+            // Same ambient Kronjakt participation as the map home, for the same
+            // reason as the controllers above: a choice made while driving persists
+            // and is the same the map home shows afterwards.
+            val crownHuntParticipationController = LocalCrownHuntParticipationController.current
             MapLayersPopup(
                 incidentsOn = incidentsLayerEnabled,
                 onIncidentsChange = onIncidentsLayerEnabledChange,
@@ -977,6 +982,10 @@ fun TurnByTurnNavScreen(
                 onBrowsingZoomChange = { mapZoomController.setBrowsingZoom(it) },
                 incidentMaxAge = incidentAgeFilterController.maxAge,
                 onIncidentMaxAgeChange = { incidentAgeFilterController.setMaxAge(it) },
+                crownHuntParticipating = crownHuntParticipationController.participating,
+                onCrownHuntParticipatingChange = {
+                    crownHuntParticipationController.setParticipating(it)
+                },
                 onDismiss = { layersOpen = false },
             )
         }

@@ -238,6 +238,55 @@ class CrownMarkerStyleTest {
     }
 
     /**
+     * The hand-placed admin-point disc is its OWN colour — a member must be able
+     * to tell a curated admin point from every auto-spawn tier at a glance. The
+     * same measured claim the tiers hold against each other: ΔE ≥ 20 from all four
+     * rarity discs under normal vision AND each simulated dichromacy.
+     */
+    @Test
+    fun theAdminPointDiscStaysSeparableFromEveryRarityTier() {
+        val admin = CrownMarkerStyle.ADMIN_POINT_DISC
+        for (rarity in CrownRarity.entries) {
+            val tier = CrownMarkerStyle.discColorArgb(rarity)
+            val measurements =
+                buildList {
+                    add("normal vision" to Cvd.deltaE(admin, tier))
+                    for (deficiency in Cvd.Deficiency.entries) {
+                        add(
+                            deficiency.label to
+                                Cvd.deltaE(
+                                    Cvd.simulate(admin, deficiency),
+                                    Cvd.simulate(tier, deficiency),
+                                ),
+                        )
+                    }
+                }
+            for ((label, delta) in measurements) {
+                assertTrue(
+                    "admin point vs $rarity under $label: ΔE %.2f, below the %.1f floor"
+                        .format(delta, minTierDeltaE),
+                    delta >= minTierDeltaE,
+                )
+            }
+        }
+    }
+
+    /** The admin-point glyph is readable on the admin-point disc — same floor. */
+    @Test
+    fun theAdminPointGlyphIsReadableOnItsDisc() {
+        val contrast =
+            IncidentMarkerStyle.contrastRatio(
+                CrownMarkerStyle.adminPointGlyphColorArgb(),
+                CrownMarkerStyle.ADMIN_POINT_DISC,
+            )
+        assertTrue(
+            "admin point: glyph contrast is %.2f:1, below the %.1f:1 floor"
+                .format(contrast, minGlyphContrast),
+            contrast >= minGlyphContrast,
+        )
+    }
+
+    /**
      * Every tier's glyph is readable on its own disc — which is exactly why the
      * glyph colour is COMPUTED per tier rather than fixed at white.
      */

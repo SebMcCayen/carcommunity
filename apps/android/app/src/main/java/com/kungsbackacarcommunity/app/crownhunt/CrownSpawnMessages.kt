@@ -126,6 +126,16 @@ fun crownGlyphRes(rarity: CrownRarity): Int =
     }
 
 /**
+ * The crown silhouette for a HAND-PLACED admin Kronjakt point.
+ *
+ * The ROYAL crown, matching the "official / curated" reading of
+ * [CrownMarkerStyle.ADMIN_POINT_DISC]. Separate from [crownGlyphRes] (which is
+ * keyed by rarity) because an admin point has no rarity — it is its own source.
+ */
+@DrawableRes
+fun crownPointGlyphRes(): Int = R.drawable.ic_crown_royal
+
+/**
  * How a distance to a crown is written.
  *
  * Pure, so the switch-over point and the rounding are pinned by tests rather

@@ -11,6 +11,8 @@ import androidx.compose.ui.graphics.toArgb
 import com.kungsbackacarcommunity.app.design.KccDarkColors
 import com.kungsbackacarcommunity.app.design.KccLightColors
 import com.kungsbackacarcommunity.app.design.ThemeController
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationController
+import com.kungsbackacarcommunity.app.crownhunt.CrownHuntParticipationPreferenceStore
 import com.kungsbackacarcommunity.app.design.ThemePreference
 import com.kungsbackacarcommunity.app.design.ThemePreferenceStore
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterController
@@ -121,6 +123,14 @@ class MainActivity : ComponentActivity() {
     // setContent so a change re-filters the running alert layer with no restart.
     private val incidentAgeFilterPreferenceStore by lazy {
         IncidentAgeFilterPreferenceStore(applicationContext)
+    }
+
+    // Whether the user takes part in Kronjakt (Crown Hunt); default participating.
+    // Device-local SharedPreferences for the same reasons as the stores above;
+    // collected in setContent so opting in/out shows/hides the crown layer + UI on
+    // the running map with no restart.
+    private val crownHuntParticipationPreferenceStore by lazy {
+        CrownHuntParticipationPreferenceStore(applicationContext)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -319,6 +329,24 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+            // Kronjakt participation, exposed to the map-layers popup the same way
+            // as the zoom above: collected here so opting in/out shows/hides the
+            // crown layer + UI live, handed down through
+            // LocalCrownHuntParticipationController. Re-created when the value
+            // changes so `participating` reports the current one.
+            val crownHuntParticipating by
+                crownHuntParticipationPreferenceStore.participating.collectAsState()
+            val crownHuntParticipationController =
+                remember(crownHuntParticipating) {
+                    object : CrownHuntParticipationController {
+                        override val participating = crownHuntParticipating
+
+                        override fun setParticipating(participating: Boolean) {
+                            crownHuntParticipationPreferenceStore.set(participating)
+                        }
+                    }
+                }
+
             // Trafikverket alert max-age filter, exposed to the map-layers popup the
             // same way as the zoom above: collected here so a change re-filters the
             // drawn alerts live, handed down through LocalIncidentAgeFilterController.
@@ -400,6 +428,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = appDark,
                 themeController = themeController,
                 mapZoomController = mapZoomController,
+                crownHuntParticipationController = crownHuntParticipationController,
                 incidentAgeFilterController = incidentAgeFilterController,
                 onSignInClick = {
                     signInCoordinator?.let { coordinator ->
