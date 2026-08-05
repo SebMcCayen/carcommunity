@@ -627,27 +627,29 @@ export const submitClaim = onCall(
             if (!pointTxSnap.exists || pointTxSnap.data()?.status !== 'active') {
               throw new ClaimGuardRejection('point_inactive');
             }
-            // Marker existence decides ONLY new-vs-repeat, INDEPENDENT of the
-            // full check. A marker-holder already collected this crown, so a
-            // re-claim is idempotent: reject as already_claimed — never
-            // re-award and never consume a new slot. (Reached only for
-            // daily/weekly limited crowns in a fresh award-guard window; a
-            // 'once' crown is already caught by the award guard above.)
-            if (markerSnap.exists) {
-              throw new ClaimGuardRejection('already_claimed');
+            // Marker existence decides ONLY new-vs-repeat; maxCollectors caps
+            // the HEADCOUNT and must NOT override repeatRule. A marker-holder is
+            // an EXISTING collector who already occupies a slot, so this claim
+            // consumes none (isNewCollector stays false → no marker/count
+            // write). Let it proceed: the award guard above already enforced the
+            // repeat window, so a 'once' or too-soon re-collect was rejected
+            // there, while a daily/weekly limited crown still lets an existing
+            // collector re-collect in a NEW window. Only a NEW collector is
+            // subject to the cap.
+            if (!markerSnap.exists) {
+              // New distinct collector. The crown is full when collectorCount
+              // has reached the cap — including the edge case where an admin
+              // lowered maxCollectors below collectorCount. Reject new
+              // collectors once full.
+              const currentCollectors =
+                (pointTxSnap.data()?.collectorCount as number | undefined) ?? 0;
+              if (currentCollectors >= maxCollectors) {
+                throw new ClaimGuardRejection('point_inactive');
+              }
+              isNewCollector = true;
+              nextCollectorCount = currentCollectors + 1;
+              capReached = nextCollectorCount >= maxCollectors;
             }
-            // New distinct collector. The crown is full when collectorCount has
-            // reached the cap — including the edge case where an admin lowered
-            // maxCollectors below collectorCount on a paused point and
-            // reactivated it. Reject new collectors once full.
-            const currentCollectors =
-              (pointTxSnap.data()?.collectorCount as number | undefined) ?? 0;
-            if (currentCollectors >= maxCollectors) {
-              throw new ClaimGuardRejection('point_inactive');
-            }
-            isNewCollector = true;
-            nextCollectorCount = currentCollectors + 1;
-            capReached = nextCollectorCount >= maxCollectors;
           }
         },
       );

@@ -31,6 +31,8 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
+import { pointCollectorDocId } from '../crownHunt/crownhunt-core';
+
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
 const REGION = 'europe-west1';
@@ -728,6 +730,55 @@ describe('crownHunt maxCollectors (distinct-collector cap)', () => {
     expect(await collectAs(c, pointId)).toBe('point_inactive');
     doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
     expect(doc.collectorCount).toBe(2);
+  });
+
+  it('daily limited crown: an existing collector re-collects in a new window without taking a slot; new collectors still capped', async () => {
+    // maxCollectors caps the HEADCOUNT; it must NOT turn a daily/weekly crown
+    // into a one-shot. An existing collector re-collecting in a fresh window is
+    // allowed (award guard governs the window) and consumes NO new slot, while
+    // NEW distinct collectors are still capped.
+    const pointId = await createActivePoint({ maxCollectors: 2, repeatRule: 'daily' });
+    const a = await createFreshMember('ch-daily-a');
+
+    // Simulate A having collected in a PRIOR daily window: an awarded claim
+    // dated yesterday (so today's repeat-window query passes), the distinct-
+    // collector marker, and collectorCount = 1. No award guard for TODAY, so
+    // today's claim reaches the collector block with the marker already present.
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    await adminDb.collection('crownHuntClaims').doc(`seed-daily-${a.uid}`).set({
+      userId: a.uid,
+      pointId,
+      result: 'awarded',
+      claimedAt: yesterday,
+      createdAt: yesterday,
+    });
+    await adminDb
+      .collection('crownHuntPointCollectors')
+      .doc(pointCollectorDocId(pointId, a.uid))
+      .set({ pointId, userId: a.uid, collectedAt: yesterday, createdAt: yesterday });
+    await adminDb.collection('crownHuntPoints').doc(pointId).update({ collectorCount: 1 });
+
+    // A re-collects TODAY (new award-guard window): allowed, no new slot.
+    expect(await collectAs(a, pointId)).toBe('awarded');
+    let doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(1); // unchanged — existing collector
+    expect(doc.status).toBe('active');
+    const markers = await adminDb
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .get();
+    expect(markers.size).toBe(1); // still just A's marker
+
+    // A NEW distinct collector consumes the 2nd slot and fills the cap → ended.
+    const b = await createFreshMember('ch-daily-b');
+    expect(await collectAs(b, pointId)).toBe('awarded');
+    doc = (await adminDb.collection('crownHuntPoints').doc(pointId).get()).data()!;
+    expect(doc.collectorCount).toBe(2);
+    expect(doc.status).toBe('ended');
+
+    // A third new user is rejected — the crown is done.
+    const c = await createFreshMember('ch-daily-c');
+    expect(await collectAs(c, pointId)).toBe('point_inactive');
   });
 
   it('back-compat: a point with no maxCollectors field behaves as unlimited', async () => {
