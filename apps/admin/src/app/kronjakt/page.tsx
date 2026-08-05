@@ -230,12 +230,14 @@ const PointForm = ({ initial, onSave, onCancel, isSaving, saveError }: PointForm
   const selectCollectorMode = (collectorMode: PointFormState['collectorMode']) =>
     setForm((prev) => ({ ...prev, collectorMode }));
 
-  // Only meaningful in 'limited' mode: N must be an integer >= 1. This blocks
-  // submit and shows an inline message; the backend re-validates independently.
-  const parsedMaxCollectors = Number.parseInt(form.maxCollectors, 10);
+  // Only meaningful in 'limited' mode: N must be an integer >= 1. Parse with
+  // Number (not parseInt) so "1.5"/"2.9" are NOT truncated to a valid integer —
+  // Number.isInteger then rejects any decimal; empty → NaN → rejected. This
+  // blocks submit and shows an inline message; the backend re-validates.
+  const parsedMaxCollectors = Number(form.maxCollectors);
   const maxCollectorsInvalid =
     form.collectorMode === 'limited' &&
-    (!Number.isInteger(parsedMaxCollectors) || parsedMaxCollectors < 1);
+    !(Number.isInteger(parsedMaxCollectors) && parsedMaxCollectors >= 1);
 
   return (
     <form
@@ -1119,9 +1121,7 @@ export default function KronjaktPage() {
           // re-validated server-side). Sending null on edit reverts a limited
           // crown to unlimited.
           maxCollectors:
-            form.collectorMode === 'limited'
-              ? Number.parseInt(form.maxCollectors, 10)
-              : null,
+            form.collectorMode === 'limited' ? Number(form.maxCollectors) : null,
           availableFrom: localToIso(form.availableFrom) ?? undefined,
           availableUntil: localToIso(form.availableUntil) ?? undefined,
         };

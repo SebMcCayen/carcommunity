@@ -363,7 +363,7 @@ describe('Kronjakt point form — collectable redesign', () => {
     expect(payload.maxCollectors).toBe(3);
   });
 
-  it('blocks submit when Limited but N is missing or below 1', async () => {
+  it('blocks submit when Limited but N is empty, below 1, or a decimal', async () => {
     await render();
     await openCreateForm();
     await fillCoordinates();
@@ -378,6 +378,13 @@ describe('Kronjakt point form — collectable redesign', () => {
     const nInput = numberInputs()[2]!;
     await act(async () => {
       setNativeValue(nInput, '0');
+    });
+    expect(save.disabled).toBe(true);
+
+    // A decimal must NOT be silently truncated to a valid integer (regression:
+    // parseInt('1.5') === 1). Number + Number.isInteger rejects it.
+    await act(async () => {
+      setNativeValue(nInput, '1.5');
     });
     expect(save.disabled).toBe(true);
 

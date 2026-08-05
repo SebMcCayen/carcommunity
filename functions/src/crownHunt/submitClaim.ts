@@ -627,17 +627,27 @@ export const submitClaim = onCall(
             if (!pointTxSnap.exists || pointTxSnap.data()?.status !== 'active') {
               throw new ClaimGuardRejection('point_inactive');
             }
-            if (!markerSnap.exists) {
-              const currentCollectors =
-                (pointTxSnap.data()?.collectorCount as number | undefined) ?? 0;
-              if (currentCollectors >= maxCollectors) {
-                // Crown is full — collected out.
-                throw new ClaimGuardRejection('point_inactive');
-              }
-              isNewCollector = true;
-              nextCollectorCount = currentCollectors + 1;
-              capReached = nextCollectorCount >= maxCollectors;
+            // Marker existence decides ONLY new-vs-repeat, INDEPENDENT of the
+            // full check. A marker-holder already collected this crown, so a
+            // re-claim is idempotent: reject as already_claimed — never
+            // re-award and never consume a new slot. (Reached only for
+            // daily/weekly limited crowns in a fresh award-guard window; a
+            // 'once' crown is already caught by the award guard above.)
+            if (markerSnap.exists) {
+              throw new ClaimGuardRejection('already_claimed');
             }
+            // New distinct collector. The crown is full when collectorCount has
+            // reached the cap — including the edge case where an admin lowered
+            // maxCollectors below collectorCount on a paused point and
+            // reactivated it. Reject new collectors once full.
+            const currentCollectors =
+              (pointTxSnap.data()?.collectorCount as number | undefined) ?? 0;
+            if (currentCollectors >= maxCollectors) {
+              throw new ClaimGuardRejection('point_inactive');
+            }
+            isNewCollector = true;
+            nextCollectorCount = currentCollectors + 1;
+            capReached = nextCollectorCount >= maxCollectors;
           }
         },
       );
