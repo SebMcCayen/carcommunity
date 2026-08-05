@@ -252,6 +252,42 @@ class EventTest {
         assertEquals(listOf("keep-upcoming", "keep-ongoing"), kept.map { it.id })
     }
 
+    @Test
+    fun `a null-approximateArea pinned event still lists and pins (regression - created event not visible)`() {
+        // Since 2026-08 (#701) the member create form omits "Approximate area",
+        // so a member-created event carries approximateArea = null. Neither the
+        // events list nor the map may drop it for that: the list orders/keeps it,
+        // and the map pins it from its coordinates. Regression guard for the
+        // "created event not visible in the Events page or on the map" report.
+        val now = 10_000L
+        val created =
+            EventSummary(
+                id = "member-created",
+                title = "Pinned member meetup (no area)",
+                summary = null,
+                startsAtMillis = now + 1_000L,
+                endsAtMillis = null,
+                approximateArea = null,
+                locationName = null,
+                latitude = 57.4874,
+                longitude = 12.0757,
+                isOfficial = false,
+                status = EventStatus.PUBLISHED,
+                counts = RsvpCounts.EMPTY,
+            )
+
+        // (a) Events page: the list keeps the event (soonest-first ordering must
+        // not require an area).
+        assertEquals(listOf("member-created"), Events.sortedForList(listOf(created)).map { it.id })
+
+        // (b) Map marker: mapPinEvents keeps it, and its coordinates are intact so
+        // a marker can be placed at the pin the organiser positioned.
+        val pinned = Events.mapPinEvents(listOf(created), now)
+        assertEquals(listOf("member-created"), pinned.map { it.id })
+        assertEquals(57.4874, pinned.single().latitude!!, 0.0)
+        assertEquals(12.0757, pinned.single().longitude!!, 0.0)
+    }
+
     // ---- Pin expiry scheduling (the map re-filters on a clock) ---------------
 
     @Test
