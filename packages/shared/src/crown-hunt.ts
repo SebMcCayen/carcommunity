@@ -82,6 +82,17 @@ export interface AdminCreateCrownHuntPointRequest {
   repeatRule: CrownHuntRepeatRule;
   availableFrom?: string | null;
   availableUntil?: string | null;
+  /**
+   * How many DISTINCT users may collect this crown before it is done.
+   * `null` (or omitted) = unlimited — any number of distinct users may collect
+   * it (one collect each per the repeat rule) until the availability window /
+   * TTL ends; this is the default, best for events. A positive integer caps the
+   * headcount: the first N distinct collectors succeed, then the point is
+   * deactivated (status `ended`) so no one else can collect and it stops
+   * rendering on the map. Independent of the rarity tier (which sets reward +
+   * visual); this sets the headcount only.
+   */
+  maxCollectors?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -103,6 +114,8 @@ export interface AdminUpdateCrownHuntPointRequest {
   repeatRule?: CrownHuntRepeatRule;
   availableFrom?: string | null;
   availableUntil?: string | null;
+  /** See create request. `null` = unlimited; a positive integer caps the headcount. */
+  maxCollectors?: number | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,6 +138,10 @@ export interface AdminCrownHuntPointSummary {
   rewardPoints: number;
   status: CrownHuntPointStatus;
   repeatRule: CrownHuntRepeatRule;
+  /** Distinct-collector cap; `null` = unlimited (see the create request). */
+  maxCollectors: number | null;
+  /** Distinct users who have collected this crown so far (0 for unlimited/new points). */
+  collectorCount: number;
   availableFrom: string | null;
   availableUntil: string | null;
   approvedAt: string | null;

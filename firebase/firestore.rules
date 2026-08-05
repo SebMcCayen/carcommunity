@@ -1131,6 +1131,19 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // crownHuntPointCollectors – distinct-collector markers for LIMITED crowns
+    // Fully backend-only. One deterministic document per (point, user), created
+    // by crownHunt.submitClaim inside the award transaction the first time a
+    // user collects a limited crown, so the point's collectorCount counts
+    // DISTINCT users (a daily/weekly re-collect does not consume a new slot).
+    // The point's maxCollectors/collectorCount are the client-visible fields on
+    // crownHuntPoints; these markers are never client-readable or -writable.
+    // -------------------------------------------------------------------------
+    match /crownHuntPointCollectors/{markerId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // crownSpawns – AUTO-SPAWNED Kronjakt crowns (spawn engine)
     // Machine-placed, short-lived crowns written ONLY by the scheduled
     // crownHunt-spawnCrowns, and mutated only by crownHunt.claimSpawn and the

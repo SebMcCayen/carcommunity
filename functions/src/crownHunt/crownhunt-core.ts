@@ -174,6 +174,12 @@ const pointFieldsSchema = z.object({
     .max(MAX_GEOFENCE_RADIUS_METERS),
   rewardPoints: z.number().int().min(MIN_REWARD_POINTS).max(MAX_REWARD_POINTS),
   repeatRule: z.enum(CROWN_HUNT_REPEAT_RULES),
+  // Distinct-collector cap. null = unlimited (default, best for events); a
+  // positive integer caps the headcount so the first N distinct collectors
+  // succeed, then the point deactivates. Stored on the crownHuntPoints doc and
+  // enforced INSIDE the award transaction (submitClaim). Absent on legacy
+  // points → unlimited, for back-compat.
+  maxCollectors: z.number().int().min(1).nullable().optional(),
   availableFrom: z.string().datetime().nullable().optional(),
   availableUntil: z.string().datetime().nullable().optional(),
 });
@@ -236,7 +242,7 @@ export function parseCreatePointInput(data: unknown): ParseResult<CreatePointInp
   return parse(
     createPointInputSchema,
     data,
-    'Expected createPointRequest: { latitude, longitude, geofenceRadiusMeters (20-150), rewardPoints (1-1000), repeatRule, availableFrom?, availableUntil? }.',
+    'Expected createPointRequest: { latitude, longitude, geofenceRadiusMeters (20-150), rewardPoints (1-1000), repeatRule, maxCollectors? (>=1 or null=unlimited), availableFrom?, availableUntil? }.',
   );
 }
 
@@ -388,4 +394,17 @@ export function awardGuardDocId(
  */
 export function dailyClaimCounterDocId(uid: string, now: Date): string {
   return hashDocId([uid, utcDayKey(now)]);
+}
+
+/**
+ * Deterministic crownHuntPointCollectors document ID for a (point, user).
+ * Created the FIRST time a user is awarded on a given point, so a limited
+ * crown counts DISTINCT collectors regardless of the repeat rule: a user who
+ * re-collects under a daily/weekly rule already holds their marker and does
+ * NOT consume a second slot. `tx.create` of this ID inside the award
+ * transaction also serialises concurrent first-collects for the same user.
+ * Hashed for collision resistance (queryable pointId/userId stored as fields).
+ */
+export function pointCollectorDocId(pointId: string, uid: string): string {
+  return hashDocId([pointId, uid]);
 }

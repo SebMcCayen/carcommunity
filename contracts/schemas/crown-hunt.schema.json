@@ -42,6 +42,16 @@
         "rewardPoints": { "type": "integer", "minimum": 1, "maximum": 1000 },
         "repeatRule": { "$ref": "#/$defs/crownHuntRepeatRule" },
         "status": { "$ref": "#/$defs/crownHuntPointStatus" },
+        "maxCollectors": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "How many distinct users may collect this crown. null = unlimited (default). A positive integer caps the headcount: the first N distinct collectors succeed, then the point is deactivated (status 'ended'). Clients may show remaining slots as maxCollectors - collectorCount."
+        },
+        "collectorCount": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct users who have collected this crown so far. 0 for unlimited or freshly-created points; maintained by the backend only."
+        },
         "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "approvedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
@@ -137,6 +147,11 @@
         "geofenceRadiusMeters": { "type": "number", "minimum": 20, "maximum": 150 },
         "rewardPoints": { "type": "integer", "minimum": 1, "maximum": 1000 },
         "repeatRule": { "$ref": "#/$defs/crownHuntRepeatRule" },
+        "maxCollectors": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "How many distinct users may collect this crown. null (or omitted) = unlimited (default, best for events). A positive integer caps the headcount: the first N distinct collectors succeed, then the point is deactivated. Independent of the rarity tier."
+        },
         "availableFrom": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "availableUntil": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
       },

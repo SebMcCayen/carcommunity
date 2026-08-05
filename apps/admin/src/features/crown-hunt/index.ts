@@ -112,6 +112,9 @@ function toAdminPointSummary(id: string, data: DocumentData): AdminCrownHuntPoin
     rewardPoints: (data.rewardPoints as number | undefined) ?? 0,
     status: data.status as CrownHuntPointStatus,
     repeatRule: data.repeatRule as CrownHuntRepeatRule,
+    // Distinct-collector cap: absent on legacy points → null (unlimited).
+    maxCollectors: (data.maxCollectors as number | null | undefined) ?? null,
+    collectorCount: (data.collectorCount as number | undefined) ?? 0,
     availableFrom: toIso(data.availableFrom),
     availableUntil: toIso(data.availableUntil),
     approvedAt: toIso(data.approvedAt),

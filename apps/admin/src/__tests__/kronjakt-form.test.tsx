@@ -116,6 +116,16 @@ function buttonByText(label: string): HTMLButtonElement {
   return btn as HTMLButtonElement;
 }
 
+/** A button whose text CONTAINS the label (multi-span buttons, e.g. the
+ *  collector-headcount options that render a name + a hint). */
+function buttonContaining(label: string): HTMLButtonElement {
+  const btn = [...container.querySelectorAll('button')].find((b) =>
+    b.textContent?.includes(label),
+  );
+  if (!btn) throw new Error(`No button containing "${label}"`);
+  return btn as HTMLButtonElement;
+}
+
 async function openCreateForm() {
   await act(async () => {
     buttonByText(t('crownHunt.createPoint')).click();
@@ -126,10 +136,16 @@ function numberInputs(): HTMLInputElement[] {
   return [...container.querySelectorAll('input[type="number"]')] as HTMLInputElement[];
 }
 
-/** The rarity tier toggle buttons (aria-pressed group inside the form). */
+/**
+ * The rarity tier toggle buttons. The form now has TWO aria-pressed groups —
+ * the rarity tiers and the "how many can collect" headcount selector — so scope
+ * to the tier buttons, which uniquely carry their "{points} KP" preset label.
+ */
 function tierButtons(): HTMLButtonElement[] {
   const form = container.querySelector('form')!;
-  return [...form.querySelectorAll('button[aria-pressed]')] as HTMLButtonElement[];
+  return [...form.querySelectorAll('button[aria-pressed]')].filter((b) =>
+    b.textContent?.includes('KP'),
+  ) as HTMLButtonElement[];
 }
 
 async function fillCoordinates() {
@@ -315,6 +331,77 @@ describe('Kronjakt point form — collectable redesign', () => {
 
     const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
     expect(payload.geofenceRadiusMeters).toBe(75);
+  });
+
+  it('defaults the collector headcount to Everyone and sends maxCollectors: null', async () => {
+    await render();
+    await openCreateForm();
+    await fillCoordinates();
+    await submitForm();
+
+    const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
+    // Everyone (unlimited) is the default — null, independent of the tier.
+    expect(payload.maxCollectors).toBeNull();
+  });
+
+  it('sends the entered N when the headcount is Limited', async () => {
+    await render();
+    await openCreateForm();
+    await fillCoordinates();
+
+    await act(async () => {
+      buttonContaining(t('crownHunt.collectorsLimited')).click();
+    });
+    // The N field appears as a third number input (after lat/lng).
+    const nInput = numberInputs()[2]!;
+    await act(async () => {
+      setNativeValue(nInput, '3');
+    });
+    await submitForm();
+
+    const payload = mocks.create.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.maxCollectors).toBe(3);
+  });
+
+  it('blocks submit when Limited but N is missing or below 1', async () => {
+    await render();
+    await openCreateForm();
+    await fillCoordinates();
+
+    await act(async () => {
+      buttonContaining(t('crownHunt.collectorsLimited')).click();
+    });
+    const save = buttonByText(t('crownHunt.savePoint'));
+    // Empty N → invalid → submit disabled.
+    expect(save.disabled).toBe(true);
+
+    const nInput = numberInputs()[2]!;
+    await act(async () => {
+      setNativeValue(nInput, '0');
+    });
+    expect(save.disabled).toBe(true);
+
+    await act(async () => {
+      setNativeValue(nInput, '2');
+    });
+    expect(save.disabled).toBe(false);
+    await submitForm();
+    expect((mocks.create.mock.calls[0]![0] as Record<string, unknown>).maxCollectors).toBe(2);
+  });
+
+  it('prefills the headcount from an existing limited point on edit', async () => {
+    mocks.listPoints.mockResolvedValue(
+      pointsResponse([makePoint({ rewardPoints: 25, maxCollectors: 5, collectorCount: 1 })]),
+    );
+    await render();
+    await act(async () => {
+      buttonByText(t('crownHunt.editPoint')).click();
+    });
+
+    // Limited button pressed and the N field shows the stored cap.
+    const limited = buttonContaining(t('crownHunt.collectorsLimited'));
+    expect(limited.getAttribute('aria-pressed')).toBe('true');
+    expect(numberInputs()[2]!.value).toBe('5');
   });
 
   it('keeps the safe-location confirmation REQUIRED to activate a draft', async () => {

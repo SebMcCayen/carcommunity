@@ -78,6 +78,12 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
     geofenceRadiusMeters: input.geofenceRadiusMeters,
     rewardPoints: input.rewardPoints,
     repeatRule: input.repeatRule,
+    // Distinct-collector cap: null = unlimited (default, best for events); a
+    // positive integer caps the headcount. `collectorCount` is the running
+    // distinct-collector tally, maintained by submitClaim inside the award
+    // transaction and seeded to 0 here.
+    maxCollectors: input.maxCollectors ?? null,
+    collectorCount: 0,
     status: 'draft',
     availableFrom: toTimestampOrNull(input.availableFrom),
     availableUntil: toTimestampOrNull(input.availableUntil),
@@ -96,7 +102,11 @@ export const createPoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
         targetType: 'crownHuntPoint',
         targetId: pointRef.id,
         reason: 'Point created (draft).',
-        details: { rewardPoints: input.rewardPoints, geofenceRadiusMeters: input.geofenceRadiusMeters },
+        details: {
+          rewardPoints: input.rewardPoints,
+          geofenceRadiusMeters: input.geofenceRadiusMeters,
+          maxCollectors: input.maxCollectors ?? null,
+        },
       },
       serverTimestamp,
     ),
@@ -160,6 +170,7 @@ export const updatePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointI
       update.geofenceRadiusMeters = input.geofenceRadiusMeters;
     if (input.rewardPoints !== undefined) update.rewardPoints = input.rewardPoints;
     if (input.repeatRule !== undefined) update.repeatRule = input.repeatRule;
+    if (input.maxCollectors !== undefined) update.maxCollectors = input.maxCollectors;
     if (input.availableFrom !== undefined)
       update.availableFrom = toTimestampOrNull(input.availableFrom);
     if (input.availableUntil !== undefined)

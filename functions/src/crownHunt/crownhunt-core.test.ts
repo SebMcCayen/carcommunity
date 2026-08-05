@@ -5,6 +5,7 @@ import {
   awardGuardDocId,
   awardGuardWindowKey,
   dailyClaimCounterDocId,
+  pointCollectorDocId,
   utcDayKey,
 } from './crownhunt-core';
 
@@ -101,6 +102,23 @@ describe('crownhunt-core award-guard identifiers', () => {
 
     it('produces a Firestore-safe document id', () => {
       expect(isFirestoreSafeId(dailyClaimCounterDocId(uid, now))).toBe(true);
+    });
+  });
+
+  describe('pointCollectorDocId', () => {
+    it('is one marker per (point, user) and order-sensitive', () => {
+      const marker = pointCollectorDocId(pointId, uid);
+      // Stable for the same pair.
+      expect(pointCollectorDocId(pointId, uid)).toBe(marker);
+      // Distinct point or distinct user → a distinct marker.
+      expect(pointCollectorDocId('other-point', uid)).not.toBe(marker);
+      expect(pointCollectorDocId(pointId, 'other-user')).not.toBe(marker);
+      // Length-prefixed hashing: swapping the fields cannot collide.
+      expect(pointCollectorDocId('a', 'b__c')).not.toBe(pointCollectorDocId('a__b', 'c'));
+    });
+
+    it('produces a Firestore-safe document id', () => {
+      expect(isFirestoreSafeId(pointCollectorDocId(pointId, uid))).toBe(true);
     });
   });
 });
