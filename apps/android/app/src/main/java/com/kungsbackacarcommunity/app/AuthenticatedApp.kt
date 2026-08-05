@@ -1872,6 +1872,19 @@ fun AuthenticatedApp(
                         ?: MutableStateFlow<CrownHuntClaimStatus>(CrownHuntClaimStatus.Idle)
                 }
             val crownPointClaimStatus by crownPointClaimFlow.collectAsState()
+            // When the game goes off screen with a crown popup still OPEN — the
+            // member opts out, or the feature flag flips — consume the pending tap
+            // and clear both claim controllers. Without this the tap latch survives
+            // the hide, so opting back in would resurrect the old popup and a
+            // lingering "someone got there first" could greet the next crown.
+            val anyCrownLayerVisible = crownSpawnEnabled || adminCrownsVisible
+            LaunchedEffect(anyCrownLayerVisible) {
+                if (!anyCrownLayerVisible && tappedCrownId != null) {
+                    mapSurface.consumeCrownTap()
+                    crownSpawnController?.resetClaim()
+                    crownHuntCoordinator?.reset()
+                }
+            }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
