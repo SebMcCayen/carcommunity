@@ -56,10 +56,10 @@
  */
 
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const functionsDir = join(__dirname, '..');
@@ -243,12 +243,31 @@ async function outer() {
   }
 }
 
-// Only drive the emulators when invoked directly (node scripts/run-emulator-tests.mjs).
-// When imported by a unit test, do nothing but export resolveOuterExitCode.
-const isMain =
-  process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url;
+/**
+ * True when this file is the process entrypoint (node scripts/run-emulator-tests.mjs),
+ * false when it is merely imported (e.g. by the unit test, which only wants the
+ * exported helper). Robust to how the path was passed: `process.argv[1]` is
+ * whatever was on the command line — often RELATIVE (pnpm runs
+ * `node scripts/run-emulator-tests.mjs`) — and either side may traverse a
+ * symlink. Both sides are normalized to a real absolute filesystem path before
+ * comparing, so a relative argv, a differing cwd, or a symlinked worktree/tmp
+ * path can't make the entrypoint check silently return false — which for a
+ * CI-integrity runner would be the worst case: a no-op that never runs the
+ * tests yet lets the job pass.
+ */
+function isEntrypoint() {
+  const argv1 = process.argv[1];
+  if (!argv1) return false;
+  try {
+    const modulePath = realpathSync(fileURLToPath(import.meta.url));
+    const invokedPath = realpathSync(resolve(argv1));
+    return modulePath === invokedPath;
+  } catch {
+    return false;
+  }
+}
 
-if (isMain) {
+if (isEntrypoint()) {
   const mode = process.argv.includes('--inner') ? inner : outer;
   process.exit(await mode());
 }
