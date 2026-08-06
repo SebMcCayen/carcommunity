@@ -119,6 +119,35 @@ export interface AdminUpdateCrownHuntPointRequest {
 }
 
 // ---------------------------------------------------------------------------
+// Admin: delete-point request
+// ---------------------------------------------------------------------------
+
+/**
+ * Request body for DELETE /v1/admin/crown-hunt/points/:pointId
+ * (crownHunt.deletePoint).
+ *
+ * Hard-deletes a hand-placed point from ANY status (draft/active/paused/ended):
+ * the crownHuntPoints/{id} doc and its distinct-collector markers are removed,
+ * and a live active crown leaves the map immediately (members read only active
+ * points). Unlike pause/end this is irreversible; historical claims are kept as
+ * an audit trail. The optional reason is recorded in the admin audit entry.
+ */
+export interface AdminDeleteCrownHuntPointRequest {
+  reason?: string;
+}
+
+/** Response for crownHunt.deletePoint. */
+export interface AdminDeleteCrownHuntPointResponse {
+  ok: true;
+  data: {
+    pointId: string;
+    deleted: true;
+    /** Distinct-collector markers removed alongside the point (0 for unlimited). */
+    removedCollectors: number;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Admin: Kronjakt point summary (admin view)
 // ---------------------------------------------------------------------------
 

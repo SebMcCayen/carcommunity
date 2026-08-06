@@ -9,6 +9,7 @@
  *  - Edit draft/paused points
  *  - Activate points (with safety confirmation)
  *  - Pause active points
+ *  - Delete (remove) a point in any status, with a confirm dialog
  *  - Review claim summaries including high-risk claims
  *
  * Safety and security rules:
@@ -17,7 +18,9 @@
  *  - No exact user claim coordinates are shown.
  *  - No user movement routes are exposed.
  *  - High-risk claims are shown for review only (no manual award in this step).
- *  - Do not hard-delete points; prefer pause/end.
+ *  - Pause/end are the reversible controls; delete is an explicit, confirmed
+ *    hard-remove (crownHunt.deletePoint) for a point placed in error, and the
+ *    backend also drains the point's collector markers + audits it.
  *  - Kronjakt must never encourage speeding, risky driving, or unsafe stops.
  */
 
@@ -35,6 +38,7 @@ import type {
 import {
   adminActivateCrownHuntPoint,
   adminCreateCrownHuntPoint,
+  adminDeleteCrownHuntPoint,
   adminListCrownHuntClaims,
   adminListCrownHuntPoints,
   adminPauseCrownHuntPoint,
@@ -476,6 +480,65 @@ const ActivateModal = ({ point, onConfirm, onCancel, isConfirming, error }: Acti
 };
 
 // ---------------------------------------------------------------------------
+// Delete confirmation modal
+// ---------------------------------------------------------------------------
+
+interface DeleteModalProps {
+  point: AdminCrownHuntPointSummary;
+  onConfirm: (reason: string) => Promise<void>;
+  onCancel: () => void;
+  isConfirming: boolean;
+  error: string | null;
+}
+
+const DeleteModal = ({ point, onConfirm, onCancel, isConfirming, error }: DeleteModalProps) => {
+  const [reason, setReason] = useState('');
+  const display = tierDisplay(point.rewardPoints);
+
+  return (
+    <div className={styles.modalOverlay} role="dialog" aria-modal="true">
+      <div className={styles.modal}>
+        <h2 className={styles.modalTitle}>{t('crownHunt.deleteConfirmTitle')}</h2>
+        {/* Identify the crown by rarity + reward + coordinates (it is textless). */}
+        <p className={styles.modalBody}>
+          <span className={styles.tierCrown} style={{ color: display.color }} aria-hidden="true">
+            ♛
+          </span>{' '}
+          {display.label} · {point.rewardPoints} KP · {point.latitude.toFixed(5)}, {point.longitude.toFixed(5)}
+        </p>
+        <p className={styles.safetyWarning}>⚠️ {t('crownHunt.deleteConfirmBody')}</p>
+
+        <label className={styles.label}>
+          {t('crownHunt.deleteReasonLabel')}
+          <textarea
+            className={styles.input}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder={t('crownHunt.deleteReasonPlaceholder')}
+            rows={3}
+          />
+        </label>
+
+        {error !== null && <p className={styles.errorText}>{error}</p>}
+
+        <div className={styles.formActions}>
+          <button className={styles.btnSecondary} onClick={onCancel} disabled={isConfirming}>
+            {t('crownHunt.cancel')}
+          </button>
+          <button
+            className={styles.btnSmallWarning}
+            onClick={() => void onConfirm(reason)}
+            disabled={isConfirming}
+          >
+            {isConfirming ? t('crownHunt.loading') : t('crownHunt.deletePoint')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Points tab
 // ---------------------------------------------------------------------------
 
@@ -487,6 +550,7 @@ interface PointsTabProps {
   onActivate: (point: AdminCrownHuntPointSummary) => void;
   onPause: (point: AdminCrownHuntPointSummary) => void;
   onEdit: (point: AdminCrownHuntPointSummary) => void;
+  onDelete: (point: AdminCrownHuntPointSummary) => void;
   onCreateNew: () => void;
 }
 
@@ -498,6 +562,7 @@ const PointsTab = ({
   onActivate,
   onPause,
   onEdit,
+  onDelete,
   onCreateNew,
 }: PointsTabProps) => (
   <section>
@@ -579,6 +644,12 @@ const PointsTab = ({
                     {t('crownHunt.pausePoint')}
                   </button>
                 )}
+                {/* Remove (hard-delete) is available in every status — it is the
+                    only way to take a mis-placed crown off the map for good.
+                    Gated behind a confirm dialog. */}
+                <button className={styles.btnSmallWarning} onClick={() => onDelete(point)}>
+                  {t('crownHunt.deletePoint')}
+                </button>
               </td>
             </tr>
             );
@@ -1017,6 +1088,11 @@ export default function KronjaktPage() {
   const [isActivating, setIsActivating] = useState(false);
   const [activateError, setActivateError] = useState<string | null>(null);
 
+  // Delete modal state
+  const [deletingPoint, setDeletingPoint] = useState<AdminCrownHuntPointSummary | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Spawn cells state
   const [spawnCells, setSpawnCells] = useState<AdminSpawnCellSummary[]>([]);
   const [spawnCellsLoading, setSpawnCellsLoading] = useState(false);
@@ -1190,6 +1266,27 @@ export default function KronjaktPage() {
     [loadPoints],
   );
 
+  const handleDeleteConfirm = useCallback(
+    async (reason: string) => {
+      if (!deletingPoint) return;
+      setIsDeleting(true);
+      setDeleteError(null);
+      try {
+        await adminDeleteCrownHuntPoint(deletingPoint.pointId, reason.trim() || undefined);
+        if (!mountedRef.current) return;
+        setDeletingPoint(null);
+        showSuccess(t('crownHunt.deleteSuccess'));
+        void loadPoints();
+      } catch {
+        if (!mountedRef.current) return;
+        setDeleteError(t('crownHunt.error'));
+      } finally {
+        if (mountedRef.current) setIsDeleting(false);
+      }
+    },
+    [deletingPoint, loadPoints],
+  );
+
   // ---------------------------------------------------------------------------
   // Spawn cell handlers
   // ---------------------------------------------------------------------------
@@ -1333,6 +1430,10 @@ export default function KronjaktPage() {
             setShowForm(true);
             setSaveError(null);
           }}
+          onDelete={(p) => {
+            setDeletingPoint(p);
+            setDeleteError(null);
+          }}
           onCreateNew={() => {
             setEditingPoint(null);
             setShowForm(true);
@@ -1417,6 +1518,20 @@ export default function KronjaktPage() {
           }}
           isConfirming={isActivating}
           error={activateError}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {deletingPoint !== null && (
+        <DeleteModal
+          point={deletingPoint}
+          onConfirm={handleDeleteConfirm}
+          onCancel={() => {
+            setDeletingPoint(null);
+            setDeleteError(null);
+          }}
+          isConfirming={isDeleting}
+          error={deleteError}
         />
       )}
     </div>

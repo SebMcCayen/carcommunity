@@ -34,6 +34,7 @@ const t = (key: string) => translate('sv', key);
 const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
+  del: vi.fn(),
   listPoints: vi.fn(),
   listClaims: vi.fn(),
   activate: vi.fn(),
@@ -44,6 +45,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/features/crown-hunt', () => ({
   adminCreateCrownHuntPoint: mocks.create,
   adminUpdateCrownHuntPoint: mocks.update,
+  adminDeleteCrownHuntPoint: mocks.del,
   adminListCrownHuntPoints: mocks.listPoints,
   adminListCrownHuntClaims: mocks.listClaims,
   adminActivateCrownHuntPoint: mocks.activate,
@@ -174,6 +176,7 @@ beforeEach(() => {
   mocks.listSpawnCells.mockResolvedValue([]);
   mocks.create.mockResolvedValue({ ok: true, data: makePoint() });
   mocks.update.mockResolvedValue({ ok: true, data: makePoint() });
+  mocks.del.mockResolvedValue({ pointId: 'p1', deleted: true, removedCollectors: 0 });
   mocks.activate.mockResolvedValue({ ok: true, data: makePoint({ status: 'active' }) });
 
   container = document.createElement('div');
@@ -409,6 +412,114 @@ describe('Kronjakt point form — collectable redesign', () => {
     const limited = buttonContaining(t('crownHunt.collectorsLimited'));
     expect(limited.getAttribute('aria-pressed')).toBe('true');
     expect(numberInputs()[2]!.value).toBe('5');
+  });
+
+  it('reverse-maps + prefills the FULL form when editing an existing point', async () => {
+    // The edit action must open the form pre-filled with the point's stored
+    // values (location, rarity, headcount) so an admin edits from current
+    // state rather than a blank form — then submit via the update path.
+    mocks.listPoints.mockResolvedValue(
+      pointsResponse([
+        makePoint({
+          latitude: 58.41,
+          longitude: 15.62,
+          rewardPoints: 100,
+          repeatRule: 'weekly',
+          status: 'paused',
+        }),
+      ]),
+    );
+    await render();
+
+    await act(async () => {
+      buttonByText(t('crownHunt.editPoint')).click();
+    });
+
+    // Coordinates pre-filled from the point.
+    const [lat, lng] = numberInputs();
+    expect(lat!.value).toBe('58.41');
+    expect(lng!.value).toBe('15.62');
+    // Rarity resolved to the Epic tier (100 KP).
+    const pressed = tierButtons().find((r) => r.getAttribute('aria-pressed') === 'true');
+    expect(pressed?.textContent).toContain(t('crownHunt.tier_epic'));
+
+    await submitForm();
+
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    // The update targets THIS point id (edit-in-place, not a create).
+    expect(mocks.update.mock.calls[0]![0]).toBe('p1');
+    expect(mocks.create).not.toHaveBeenCalled();
+    const payload = mocks.update.mock.calls[0]![1] as Record<string, unknown>;
+    expect(payload.repeatRule).toBe('weekly');
+  });
+
+  it('shows a Delete control on every point, including an active one with no Edit', async () => {
+    mocks.listPoints.mockResolvedValue(
+      pointsResponse([makePoint({ status: 'active', approvedByUserId: 'admin1' })]),
+    );
+    await render();
+
+    // Active points are not editable (pause first), so there is no Edit button…
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (b) => b.textContent?.trim() === t('crownHunt.editPoint'),
+      ),
+    ).toBe(false);
+    // …but Delete is always available.
+    expect(
+      [...container.querySelectorAll('button')].some(
+        (b) => b.textContent?.trim() === t('crownHunt.deletePoint'),
+      ),
+    ).toBe(true);
+  });
+
+  it('gates delete behind a confirm dialog, then calls the delete path and refreshes', async () => {
+    mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ status: 'active' })]));
+    await render();
+    // One initial load.
+    expect(mocks.listPoints).toHaveBeenCalledTimes(1);
+
+    // Clicking the row Delete opens the confirm dialog but does NOT delete yet.
+    await act(async () => {
+      buttonByText(t('crownHunt.deletePoint')).click();
+    });
+    expect(mocks.del).not.toHaveBeenCalled();
+    const dialog = container.querySelector('[role="dialog"]');
+    expect(dialog).not.toBeNull();
+
+    // Confirm inside the dialog.
+    const confirmDelete = [...dialog!.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === t('crownHunt.deletePoint'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      confirmDelete.click();
+    });
+
+    expect(mocks.del).toHaveBeenCalledTimes(1);
+    expect(mocks.del.mock.calls[0]![0]).toBe('p1');
+    // The list refreshes after a successful delete (second load).
+    expect(mocks.listPoints).toHaveBeenCalledTimes(2);
+    // Dialog closes.
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  it('cancelling the delete dialog deletes nothing', async () => {
+    mocks.listPoints.mockResolvedValue(pointsResponse([makePoint({ status: 'draft' })]));
+    await render();
+
+    await act(async () => {
+      buttonByText(t('crownHunt.deletePoint')).click();
+    });
+    const dialog = container.querySelector('[role="dialog"]')!;
+    const cancel = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === t('crownHunt.cancel'),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      cancel.click();
+    });
+
+    expect(mocks.del).not.toHaveBeenCalled();
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it('keeps the safe-location confirmation REQUIRED to activate a draft', async () => {

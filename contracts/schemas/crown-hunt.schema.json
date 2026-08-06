@@ -173,6 +173,31 @@
       "required": ["pointId", "safeLocationConfirmed", "approvalNote"],
       "additionalProperties": false
     },
+    "deletePointRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.deletePoint (admin). Hard-deletes a hand-placed point from ANY status (draft/active/paused/ended): removes the crownHuntPoints/{id} doc and its distinct-collector markers (crownHuntPointCollectors). A live active crown leaves the map immediately (members read only active points). Historical crownHuntClaims are kept as an audit trail. The optional reason is recorded in the adminAuditEvents record (crownHunt.deletePoint).",
+      "properties": {
+        "pointId": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "maxLength": 2000 }
+      },
+      "required": ["pointId"],
+      "additionalProperties": false
+    },
+    "deletePointResponse": {
+      "type": "object",
+      "description": "Response for crownHunt.deletePoint.",
+      "properties": {
+        "pointId": { "type": "string", "minLength": 1 },
+        "deleted": { "type": "boolean", "const": true },
+        "removedCollectors": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct-collector markers removed alongside the point (0 for unlimited crowns)."
+        }
+      },
+      "required": ["pointId", "deleted", "removedCollectors"],
+      "additionalProperties": false
+    },
     "crownHuntRarity": {
       "type": "string",
       "enum": ["common", "uncommon", "rare", "legendary"],

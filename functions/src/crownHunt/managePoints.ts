@@ -15,6 +15,13 @@
  *   safeLocationConfirmed flag and an approval note (>=3 chars) that lands
  *   in the audit record; approvedAt/approvedByUserId are stamped.
  * - Ended points can be neither activated nor paused.
+ * - deletePoint HARD-DELETES a point from ANY status (draft/active/paused/
+ *   ended): it removes the crownHuntPoints/{id} doc and the point's
+ *   distinct-collector markers (crownHuntPointCollectors). Deleting the doc
+ *   removes a live crown from the map instantly (members read only
+ *   status=='active'); historical crownHuntClaims are kept as an audit trail
+ *   (the admin claims view tolerates a missing point). This is the ONE place a
+ *   point may be hard-deleted — the rest of the flow prefers pause/end.
  * - Every operation writes an adminAuditEvents record (legacy audit-log
  *   actions preserved as crownHunt.*).
  */
@@ -28,6 +35,7 @@ import {
   guardPointFields,
   parseActivatePointInput,
   parseCreatePointInput,
+  parseDeletePointInput,
   parsePausePointInput,
   parseUpdatePointInput,
   type CrownHuntPointStatus,
@@ -45,6 +53,40 @@ const CALLABLE_OPTS = {
 export interface PointIdResponse {
   pointId: string;
   status: CrownHuntPointStatus;
+}
+
+export interface PointDeletedResponse {
+  pointId: string;
+  deleted: true;
+  /** Distinct-collector markers removed alongside the point (0 for unlimited). */
+  removedCollectors: number;
+}
+
+/** Firestore batches cap at 500 writes; stay under it with headroom. */
+const DELETE_BATCH_SIZE = 400;
+
+/**
+ * Deletes every crownHuntPointCollectors marker for a point, paged. Only
+ * LIMITED crowns ever create these (one per distinct collector, so the set is
+ * bounded by maxCollectors), but page defensively regardless. Returns the count
+ * removed for the audit record.
+ */
+async function deletePointCollectorMarkers(pointId: string): Promise<number> {
+  let removed = 0;
+  for (;;) {
+    const snap = await db
+      .collection('crownHuntPointCollectors')
+      .where('pointId', '==', pointId)
+      .limit(DELETE_BATCH_SIZE)
+      .get();
+    if (snap.empty) break;
+    const batch = db.batch();
+    snap.docs.forEach((doc) => batch.delete(doc.ref));
+    await batch.commit();
+    removed += snap.size;
+    if (snap.size < DELETE_BATCH_SIZE) break;
+  }
+  return removed;
 }
 
 const toTimestampOrNull = (iso: string | null | undefined) =>
@@ -326,4 +368,50 @@ export const pausePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointId
   });
 
   return { pointId, status: 'paused' };
+});
+
+export const deletePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointDeletedResponse> => {
+  const actor = await requireAdminActor(request);
+
+  const parsed = parseDeletePointInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
+  const { pointId, reason } = parsed.input;
+  const pointRef = db.collection('crownHuntPoints').doc(pointId);
+  const serverTimestamp = () => FieldValue.serverTimestamp();
+
+  // Confirm the point exists (and read its prior status for the audit detail)
+  // before touching anything.
+  const snap = await pointRef.get();
+  if (!snap.exists) {
+    throw new HttpsError('not-found', 'Kronjakt point not found.');
+  }
+  const previousStatus = snap.data()!.status as CrownHuntPointStatus;
+
+  // Remove the distinct-collector markers first, THEN the point doc — the same
+  // "drain, then delete" ordering deleteSpawnArea uses so no dangling collector
+  // state can outlive the point. Deleting the doc is what removes a live active
+  // crown from the map (members read only status=='active').
+  const removedCollectors = await deletePointCollectorMarkers(pointId);
+  await pointRef.delete();
+
+  await db
+    .collection('adminAuditEvents')
+    .doc()
+    .set(
+      buildAdminAuditEvent(
+        {
+          adminId: actor.uid,
+          action: 'crownHunt.deletePoint',
+          targetType: 'crownHuntPoint',
+          targetId: pointId,
+          reason: reason?.trim() || 'Point deleted.',
+          details: { previousStatus, removedCollectors },
+        },
+        serverTimestamp,
+      ),
+    );
+
+  return { pointId, deleted: true, removedCollectors };
 });

@@ -68,7 +68,7 @@ import {
   onLedgerEntryCreated,
   onVehicleCreated,
 } from './points/economyTriggers';
-import { activatePoint, createPoint, pausePoint, updatePoint } from './crownHunt/managePoints';
+import { activatePoint, createPoint, deletePoint, pausePoint, updatePoint } from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
 import { setSpawnCellApproval } from './crownHunt/spawnCells';
@@ -446,7 +446,7 @@ export const points = {
 /**
  * Kronjakt domain (grouped export → deployed as `crownHunt-submitClaim`,
  * `crownHunt-createPoint`, `crownHunt-updatePoint`, `crownHunt-activatePoint`,
- * `crownHunt-pausePoint`, `crownHunt-claimSpawn`,
+ * `crownHunt-pausePoint`, `crownHunt-deletePoint`, `crownHunt-claimSpawn`,
  * `crownHunt-setSpawnCellApproval`, the marked-area CRUD
  * `crownHunt-createSpawnArea`, `crownHunt-updateSpawnArea`,
  * `crownHunt-deleteSpawnArea`, `crownHunt-listSpawnAreas`, and the scheduled
@@ -481,6 +481,7 @@ export const crownHunt = {
   updatePoint,
   activatePoint,
   pausePoint,
+  deletePoint,
   claimSpawn,
   setSpawnCellApproval,
   createSpawnArea,
