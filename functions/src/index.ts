@@ -132,6 +132,11 @@ import { reportIssue } from './feedback/reportIssue';
 import { reportClientError } from './errors/reportClientError';
 import { onClientErrorReport } from './errors/onClientErrorReport';
 import { onServerErrorReport } from './errors/onServerErrorReport';
+import {
+  onNewFatalIssue,
+  onNewAnrIssue,
+  onCrashRegression,
+} from './crashReporting/crashReporting';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
@@ -693,6 +698,35 @@ export const errors = {
   reportClientError,
   onClientErrorReport,
   onServerErrorReport,
+};
+
+/**
+ * Crash-reporting domain — the Crashlytics → GitHub-issue bridge (grouped export
+ * → deployed as `crashReporting-onNewFatalIssue`, `crashReporting-onNewAnrIssue`
+ * and `crashReporting-onCrashRegression`).
+ *
+ * Native crashes and ANRs already reach Firebase Crashlytics (Android SDK +
+ * gradle plugin, collection-on for release — docs/crashlytics.md), but a NEW
+ * Crashlytics issue never became a GitHub issue, so crashes were invisible to
+ * the issue tracker. These three Firebase Alerts triggers close that gap: each
+ * turns a new fatal crash / ANR / regressed-crash alert into ONE deduplicated
+ * PUBLIC GitHub issue, reusing the SAME shared auto-filing flow as the error
+ * pipelines (shared/autoIssueFiling.ts: claim → global hourly budget → create →
+ * reconcile) and the SAME GITHUB_ISSUE_TOKEN secret.
+ *
+ * The dedup fingerprint is the Crashlytics ISSUE ID — one crash issue files one
+ * GitHub issue (labelled `android-crash`/`anr`/`regression` + `auto-generated`),
+ * tallied in the server-only crashlyticsIssueLinks/{issueId} collection, and the
+ * create is charged against the shared 20-issues/hour global budget so a crash
+ * storm cannot spam the repo. The alert payload carries no uid/PII; the full
+ * multi-frame stack trace is NOT in the payload (it lives at the Crashlytics
+ * deep link the issue body links to — the title/subtitle give exception + top
+ * frame only), and the issue body says so honestly (functions/src/crashReporting/*).
+ */
+export const crashReporting = {
+  onNewFatalIssue,
+  onNewAnrIssue,
+  onCrashRegression,
 };
 
 /**
