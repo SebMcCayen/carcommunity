@@ -118,8 +118,9 @@ class ConvoyBarTest {
             listOf(
                 member("owner", ConvoyRole.Owner).copy(displayName = "Olle"),
                 member("me").copy(displayName = "Maja"),
-                // Invited-but-unanswered and declined are NOT in the convoy and
-                // must not appear in the list or inflate the count.
+                // Invited-but-unanswered is a PENDING invitee — it surfaces in the
+                // "waiting to join" rows, never in the accepted roster or the count.
+                // Declined is neither in the convoy nor waiting for it.
                 member("invited", inviteStatus = ConvoyInviteStatus.Invited),
                 member("declined", inviteStatus = ConvoyInviteStatus.Declined),
             )
@@ -129,6 +130,89 @@ class ConvoyBarTest {
         assertEquals(2, state.members.size)
         assertEquals(listOf("owner", "me"), state.members.map { it.uid })
         assertEquals(listOf("Olle", "Maja"), state.members.map { it.displayName })
+    }
+
+    // --- pending invitees in the "In this convoy" list --------------------
+
+    @Test
+    fun `pendingInvitees are the invited-but-unanswered, declined and accepted excluded`() {
+        val members =
+            listOf(
+                member("owner", ConvoyRole.Owner),
+                member("me"),
+                member("inv1", inviteStatus = ConvoyInviteStatus.Invited).copy(displayName = "Ivar"),
+                member("inv2", inviteStatus = ConvoyInviteStatus.Invited).copy(displayName = "Iris"),
+                member("declined", inviteStatus = ConvoyInviteStatus.Declined),
+            )
+        val pending = ConvoyBar.pendingInvitees(convoy(members = members))
+        assertEquals(listOf("inv1", "inv2"), pending.map { it.uid })
+        assertEquals(listOf("Ivar", "Iris"), pending.map { it.displayName })
+    }
+
+    @Test
+    fun `state carries the pending invitees separately from the accepted members`() {
+        val members =
+            listOf(
+                member("owner", ConvoyRole.Owner),
+                member("me"),
+                member("inv", inviteStatus = ConvoyInviteStatus.Invited),
+            )
+        val state = ConvoyBar.stateFor(loaded(convoy(members = members)))!!
+        // The waiting person never inflates the count or the accepted roster...
+        assertEquals(2, state.memberCount)
+        assertEquals(listOf("owner", "me"), state.members.map { it.uid })
+        // ...but is carried for the popup to show as "waiting to join".
+        assertEquals(listOf("inv"), state.pendingInvitees.map { it.uid })
+    }
+
+    @Test
+    fun `memberListEntries lists joined members first then waiting invitees`() {
+        val members =
+            listOf(
+                member("owner", ConvoyRole.Owner),
+                member("me"),
+                member("inv", inviteStatus = ConvoyInviteStatus.Invited),
+            )
+        val entries = ConvoyBar.memberListEntries(convoy(members = members))
+        assertEquals(
+            listOf(
+                "owner" to ConvoyMemberPresence.Joined,
+                "me" to ConvoyMemberPresence.Joined,
+                "inv" to ConvoyMemberPresence.WaitingToJoin,
+            ),
+            entries.map { it.member.uid to it.presence },
+        )
+    }
+
+    @Test
+    fun `a pending invitee moves from waiting to joined once they accept`() {
+        val invited =
+            listOf(member("owner", ConvoyRole.Owner), member("me"), member("guest", inviteStatus = ConvoyInviteStatus.Invited))
+        val before = ConvoyBar.memberListEntries(convoy(members = invited))
+        assertEquals(ConvoyMemberPresence.WaitingToJoin, before.first { it.member.uid == "guest" }.presence)
+
+        // The same convoy after `convoy-respond` flips the invite to accepted.
+        val accepted =
+            invited.map { if (it.uid == "guest") it.copy(inviteStatus = ConvoyInviteStatus.Accepted) else it }
+        val after = ConvoyBar.memberListEntries(convoy(members = accepted))
+        assertEquals(ConvoyMemberPresence.Joined, after.first { it.member.uid == "guest" }.presence)
+        assertTrue(after.none { it.presence == ConvoyMemberPresence.WaitingToJoin })
+    }
+
+    @Test
+    fun `a declined or cancelled invitee disappears from the list entirely`() {
+        val invited =
+            listOf(member("owner", ConvoyRole.Owner), member("me"), member("guest", inviteStatus = ConvoyInviteStatus.Invited))
+        // Declined: the row drops out of the waiting set and is not joined either.
+        val declined =
+            invited.map { if (it.uid == "guest") it.copy(inviteStatus = ConvoyInviteStatus.Declined) else it }
+        val afterDecline = ConvoyBar.memberListEntries(convoy(members = declined))
+        assertTrue(afterDecline.none { it.member.uid == "guest" })
+
+        // Cancelled: the invite is removed from the roster altogether.
+        val cancelled = invited.filterNot { it.uid == "guest" }
+        val afterCancel = ConvoyBar.memberListEntries(convoy(members = cancelled))
+        assertTrue(afterCancel.none { it.member.uid == "guest" })
     }
 
     @Test

@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,10 +10,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -25,6 +28,7 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Navigation
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.StopCircle
@@ -32,13 +36,16 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +53,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -54,6 +64,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -63,10 +74,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.navigation.LatLng
 
 /** Test tag on the whole convoy status bar. */
@@ -77,6 +90,15 @@ const val CONVOY_BAR_MEMBERS_TAG = "convoy_bar_members"
 
 /** Test tag on the member-list popup opened by tapping the member count. */
 const val CONVOY_BAR_MEMBER_LIST_TAG = "convoy_bar_member_list"
+
+/** Test tag on the member-actions sheet raised by tapping a joined member row. */
+const val CONVOY_BAR_MEMBER_ACTIONS_TAG = "convoy_bar_member_actions"
+
+/** Test tag on the member-actions "Profile" action. */
+const val CONVOY_BAR_MEMBER_PROFILE_TAG = "convoy_bar_member_profile"
+
+/** Test tag on the member-actions "Go to location" action. */
+const val CONVOY_BAR_MEMBER_LOCATION_TAG = "convoy_bar_member_location"
 
 /** Test tag on the bar's map-focus toggle (me vs the whole convoy). */
 const val CONVOY_BAR_FOCUS_TAG = "convoy_bar_focus"
@@ -187,7 +209,16 @@ const val CONVOY_BAR_DESTINATION_NAVIGATE_TAG = "convoy_bar_destination_navigate
  * @param navigationEvent what just happened to the destination the viewer is
  *   already navigating to; drives the dismissible banner.
  * @param onDismissNavigationEvent acknowledge that banner.
+ * @param onOpenMemberProfile open a JOINED member's profile (their uid) from the
+ *   member-list's per-member actions — the same read-only member profile the
+ *   friends/chat rows open. Null omits the Profile action.
+ * @param onGoToMemberLocation centre the convoy map on a JOINED member's current
+ *   shared position (their uid). Null omits the action (e.g. the turn-by-turn
+ *   variant, whose camera the Navigation SDK owns).
+ * @param memberLocations the uids that currently HAVE a shared position, so "Go to
+ *   location" is offered live and disabled for a member not sharing one right now.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ConvoyStatusBar(
     state: ConvoyBarState,
@@ -206,6 +237,9 @@ fun ConvoyStatusBar(
     navigationEvent: ConvoyDestinationNavigationEvent =
         ConvoyDestinationNavigationEvent.Unchanged,
     onDismissNavigationEvent: () -> Unit = {},
+    onOpenMemberProfile: ((String) -> Unit)? = null,
+    onGoToMemberLocation: ((String) -> Unit)? = null,
+    memberLocations: Set<String> = emptySet(),
 ) {
     // The convoy each open confirm dialog is ABOUT, captured when the user opened
     // it — not a bare boolean. [state] is hoisted and refreshes underneath this
@@ -238,6 +272,12 @@ fun ConvoyStatusBar(
     // count the user tapped. Keying it resets the flag to false on that switch, so
     // the popup closes rather than misrepresenting which convoy it is listing.
     var showMembers by remember(state.convoyId) { mutableStateOf(false) }
+
+    // The JOINED member whose actions sheet ("Profile" / "Go to location") is open,
+    // or null. Captured when a member row is tapped, and — like the member-list
+    // popup — keyed to the convoy so a background refresh that swaps the bar to a
+    // different convoy dismisses it rather than acting on a member of the old one.
+    var memberActionsFor by remember(state.convoyId) { mutableStateOf<ConvoyBarMember?>(null) }
 
     // Whether the "set destination" tap is currently waiting on the overwrite
     // confirmation (only raised when the current destination was set by someone
@@ -322,9 +362,23 @@ fun ConvoyStatusBar(
                         )
                     }
                     if (showMembers) {
+                        // Joined members get a per-member actions sheet when the
+                        // host wired at least one action; pending invitees never do
+                        // (they have no live location, and no in-convoy identity to
+                        // act on yet). Passing null disables the row tap entirely.
+                        val onMemberSelected: ((ConvoyBarMember) -> Unit)? =
+                            if (onOpenMemberProfile != null || onGoToMemberLocation != null) {
+                                { member ->
+                                    showMembers = false
+                                    memberActionsFor = member
+                                }
+                            } else {
+                                null
+                            }
                         ConvoyMemberListPopup(
-                            members = state.members,
+                            entries = state.memberListEntries,
                             onDismiss = { showMembers = false },
+                            onMemberSelected = onMemberSelected,
                         )
                     }
                 }
@@ -571,6 +625,34 @@ fun ConvoyStatusBar(
                 )
             }
         }
+    }
+
+    // The per-member actions sheet ("Profile" / "Go to location"), raised by
+    // tapping a JOINED member row in the list popup. Hosted here at the bar's top
+    // level — not inside the list Popup — so it is the app's ordinary bottom sheet
+    // (matching the place/message action sheets) rather than a fragile popup nested
+    // in a focusable popup.
+    val memberActions = memberActionsFor
+    if (memberActions != null) {
+        ConvoyMemberActionsSheet(
+            member = memberActions,
+            hasLocation = memberActions.uid in memberLocations,
+            onOpenProfile =
+                onOpenMemberProfile?.let { open ->
+                    {
+                        memberActionsFor = null
+                        open(memberActions.uid)
+                    }
+                },
+            onGoToLocation =
+                onGoToMemberLocation?.let { go ->
+                    {
+                        memberActionsFor = null
+                        go(memberActions.uid)
+                    }
+                },
+            onDismiss = { memberActionsFor = null },
+        )
     }
 
     // Destructive and group-wide: ending is never one tap. The body says out loud
@@ -978,14 +1060,22 @@ private fun ConvoyDestinationNavigationBanner(
  * A [Popup] (not a Dialog) so there is no dimming scrim — the map stays visible,
  * matching the profile menu's idiom on the map home. It anchors just below the
  * member-count control, start-aligned, and dismisses on an outside tap or Back
- * (`focusable = true`). Names come straight off [ConvoyBarState.members] (the
- * accepted roster the bar already carries); a member whose display name has not
- * resolved yet falls back to a generic label rather than showing a raw uid.
+ * (`focusable = true`). Rows come off [ConvoyBarState.memberListEntries] — the
+ * accepted roster the bar already carries, followed by the invited-but-unanswered
+ * people shown muted with a "Waiting to join…" status. A person whose display name
+ * has not resolved yet falls back to a generic label rather than showing a raw uid.
+ * Each member shows their real profile picture where one is set, falling back to a
+ * neutral avatar placeholder.
+ *
+ * [onMemberSelected] — when non-null — makes a JOINED row tappable to raise that
+ * member's actions sheet; pending-invitee rows are never tappable (no live
+ * location, no in-convoy identity to act on yet).
  */
 @Composable
 private fun ConvoyMemberListPopup(
-    members: List<ConvoyBarMember>,
+    entries: List<ConvoyMemberListEntry>,
     onDismiss: () -> Unit,
+    onMemberSelected: ((ConvoyBarMember) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val positionProvider =
@@ -1044,27 +1134,215 @@ private fun ConvoyMemberListPopup(
                 )
                 Spacer(modifier = Modifier.height(KccSpacing.s2))
                 val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
-                members.forEach { member ->
+                val waitingLabel = stringResource(R.string.convoy_barMemberWaiting)
+                entries.forEach { entry ->
+                    val waiting = entry.presence == ConvoyMemberPresence.WaitingToJoin
+                    // A pending invitee reads as muted — the avatar and name step
+                    // down to the secondary tone joined members never use — so "who
+                    // is actually here" and "who is on the way" are legible apart at
+                    // a glance without a second control.
+                    val nameTint =
+                        if (waiting) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        }
+                    // Only joined members open the actions sheet — see the KDoc.
+                    val tappable = !waiting && onMemberSelected != null
+                    val rowModifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .then(
+                                if (tappable) {
+                                    Modifier.clickable(role = Role.Button) {
+                                        onMemberSelected?.invoke(entry.member)
+                                    }
+                                } else {
+                                    Modifier
+                                },
+                            )
+                            .padding(vertical = KccSpacing.s1)
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = KccSpacing.s1),
+                        modifier = rowModifier,
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
                     ) {
-                        Icon(
-                            imageVector = Icons.Filled.AccountCircle,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(28.dp),
-                        )
-                        Text(
-                            text = member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        ConvoyMemberAvatar(avatarPath = entry.member.avatarPath, muted = waiting)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = entry.member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = nameTint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (waiting) {
+                                Text(
+                                    text = waitingLabel,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * A convoy member's avatar in the list popup: their real profile picture when one
+ * is set, resolved through the same [rememberStorageImageUrl] path the rest of the
+ * app loads member avatars with, falling back to a neutral placeholder when there
+ * is none (or while it loads). [muted] dims the placeholder for a pending invitee,
+ * matching the muted name/status of a "waiting to join" row.
+ */
+@Composable
+private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
+    val context = LocalContext.current
+    val url = rememberStorageImageUrl(context, avatarPath)
+    Box(
+        modifier =
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(28.dp),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint =
+                    if (muted) {
+                        MaterialTheme.colorScheme.outline
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/**
+ * The per-member actions raised by tapping a JOINED member in the list: open their
+ * profile, or centre the convoy map on their live location.
+ *
+ * A [ModalBottomSheet] to match the app's other row-action menus (place / message
+ * actions) and to avoid nesting a menu inside the member-list's focusable popup.
+ *
+ * "Go to location" is present whenever the host wired [onGoToLocation], but ENABLED
+ * only while [hasLocation] — a member not sharing a position right now cannot be
+ * centred on, so the action is shown disabled with a short "location unavailable"
+ * note rather than silently missing (its presence still tells you it is a thing you
+ * can normally do). "Profile" appears whenever [onOpenProfile] is wired.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ConvoyMemberActionsSheet(
+    member: ConvoyBarMember,
+    hasLocation: Boolean,
+    onOpenProfile: (() -> Unit)?,
+    onGoToLocation: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState()
+    val unnamed = stringResource(R.string.convoy_barMemberUnnamed)
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        modifier = Modifier.testTag(CONVOY_BAR_MEMBER_ACTIONS_TAG),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s2),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+            ) {
+                ConvoyMemberAvatar(avatarPath = member.avatarPath, muted = false)
+                Text(
+                    text = member.displayName?.takeIf { it.isNotBlank() } ?: unnamed,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            if (onOpenProfile != null) {
+                ConvoyMemberAction(
+                    icon = Icons.Filled.Person,
+                    text = stringResource(R.string.convoy_barMemberMenuProfile),
+                    onClick = onOpenProfile,
+                    testTag = CONVOY_BAR_MEMBER_PROFILE_TAG,
+                )
+            }
+            if (onGoToLocation != null) {
+                ConvoyMemberAction(
+                    icon = Icons.Filled.Place,
+                    text = stringResource(R.string.convoy_barMemberMenuGoToLocation),
+                    // Disabled — not hidden — when the member is not sharing a
+                    // position right now, so the affordance stays discoverable.
+                    subtext =
+                        if (!hasLocation) {
+                            stringResource(R.string.convoy_barMemberLocationUnavailable)
+                        } else {
+                            null
+                        },
+                    enabled = hasLocation,
+                    onClick = onGoToLocation,
+                    testTag = CONVOY_BAR_MEMBER_LOCATION_TAG,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ConvoyMemberAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+    onClick: () -> Unit,
+    testTag: String,
+    enabled: Boolean = true,
+    subtext: String? = null,
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.fillMaxWidth().testTag(testTag),
+    ) {
+        Icon(imageVector = icon, contentDescription = null)
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(start = KccSpacing.s3),
+        ) {
+            Text(text = text, textAlign = TextAlign.Start, modifier = Modifier.fillMaxWidth())
+            if (subtext != null) {
+                Text(
+                    text = subtext,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         }
     }

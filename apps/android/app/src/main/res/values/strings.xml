@@ -536,6 +536,10 @@
     <string name="convoy_barMembers">%1$d i konvojen</string>
     <string name="convoy_barMemberListTitle">I den här konvojen</string>
     <string name="convoy_barMemberUnnamed">Medlem</string>
+    <string name="convoy_barMemberWaiting">Väntar på att gå med …</string>
+    <string name="convoy_barMemberMenuProfile">Profil</string>
+    <string name="convoy_barMemberMenuGoToLocation">Visa på kartan</string>
+    <string name="convoy_barMemberLocationUnavailable">Plats inte tillgänglig</string>
     <string name="convoy_barInvite">Bjud in fler</string>
     <string name="convoy_barLeave">Lämna konvojen</string>
     <string name="convoy_barEnd">Avsluta konvojen</string>

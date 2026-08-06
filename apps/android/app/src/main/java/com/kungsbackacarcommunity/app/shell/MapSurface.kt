@@ -541,6 +541,23 @@ interface MapSurface : MapProjection {
     fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean)
 
     /**
+     * Glide the camera ONCE to [point], as a one-shot "show me this spot" — the
+     * convoy member-list's "Go to location" uses it to centre on the tapped
+     * member's live marker.
+     *
+     * Deliberately NOT part of the convoy-fit / focus-mode machinery: it is a
+     * single ease modelled on a manual pan, so it goes through the SAME follow
+     * detach + idle-return path a real pan does. The camera settles on [point],
+     * the position/roster ticks do not immediately yank it back, and after the
+     * ordinary idle window it glides back to following the user — exactly what
+     * panning the map to look at something already does. That keeps the single
+     * camera-owner invariant [setConvoyFit] documents: this never becomes a second
+     * owner fighting the follow path, it briefly borrows it. A no-op on the stub
+     * beyond recording the request for tests.
+     */
+    fun centerOn(point: MapPoint)
+
+    /**
      * The most recent "navigate to this place?" gesture, or null when none is
      * pending. The host observes this to open the navigation preview for the
      * requested place, then calls [consumePlaceRequest] to clear it.
@@ -894,6 +911,17 @@ class StubMapSurface(
     override fun setConvoyFit(points: List<MapPoint>?, focusEnabled: Boolean) {
         convoyFitFlow.value = points
         convoyFocusEnabledFlow.value = focusEnabled
+    }
+
+    private val centeredOnFlow = MutableStateFlow<MapPoint?>(null)
+
+    /** Last point passed to [centerOn] — observable so tests can assert the wiring. */
+    val centeredOn: StateFlow<MapPoint?> = centeredOnFlow.asStateFlow()
+
+    override fun centerOn(point: MapPoint) {
+        // No camera on the stub — just record the request so the "Go to location"
+        // wiring can be asserted off-device.
+        centeredOnFlow.value = point
     }
 
     // Test hook: the projection the stub should report, or null for "no map".

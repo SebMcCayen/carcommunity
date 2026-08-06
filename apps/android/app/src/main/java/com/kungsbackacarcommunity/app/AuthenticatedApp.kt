@@ -3575,6 +3575,40 @@ fun AuthenticatedApp(
                                     convoyDestinationEvent =
                                         ConvoyDestinationNavigationEvent.Unchanged
                                 },
+                                // Tap a JOINED member → their read-only profile
+                                // (the same route friend/chat rows open), or centre
+                                // the map on their live marker.
+                                onOpenMemberProfile =
+                                    if (memberProfileRepository != null) {
+                                        openMemberProfile
+                                    } else {
+                                        null
+                                    },
+                                // Only on the full map home — the turn-by-turn
+                                // variant's camera is the Navigation SDK's, not this
+                                // surface's. Centres on the member's current shared
+                                // position; a member not sharing one is not in
+                                // [memberLocations] and the action is offered
+                                // disabled.
+                                onGoToMemberLocation =
+                                    if (!compact) {
+                                        { targetUid ->
+                                            convoyMemberPositions
+                                                .firstOrNull { it.uid == targetUid }
+                                                ?.let { pos ->
+                                                    mapSurface.centerOn(
+                                                        MapPoint(
+                                                            longitude = pos.longitude,
+                                                            latitude = pos.latitude,
+                                                        ),
+                                                    )
+                                                }
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                memberLocations =
+                                    convoyMemberPositions.map { it.uid }.toSet(),
                             )
                         }
                     } else {

@@ -135,6 +135,28 @@ data class ConvoyBarMember(
 )
 
 /**
+ * Whether a person in the "In this convoy" list has actually JOINED, or is still
+ * an INVITED person who has not answered yet. Drives the row's status label
+ * ("Waiting to join…") and its muted styling, and is the ONE thing that
+ * separates a live member row from a pending-invitee row.
+ */
+enum class ConvoyMemberPresence { Joined, WaitingToJoin }
+
+/**
+ * One row of the bar's "In this convoy" popup: a person plus whether they have
+ * [ConvoyMemberPresence.Joined] or are still [ConvoyMemberPresence.WaitingToJoin].
+ * The list is composed by [ConvoyBar.memberListEntries] — accepted members first,
+ * in roster order, then the invited-but-unanswered people — so a pending invitee
+ * appears while pending and silently moves into the joined rows the moment they
+ * accept (and drops out entirely if they decline or their invite is cancelled),
+ * reusing the same live convoy read the rest of the bar already runs on.
+ */
+data class ConvoyMemberListEntry(
+    val member: ConvoyBarMember,
+    val presence: ConvoyMemberPresence,
+)
+
+/**
  * Everything the convoy status bar renders. `null` (rather than an empty
  * instance) is how "not in a convoy" is expressed, so the bar cannot accidentally
  * render as a blank strip or a placeholder.
@@ -153,6 +175,15 @@ data class ConvoyBarMember(
 data class ConvoyBarState(
     val convoyId: String,
     val members: List<ConvoyBarMember>,
+    /**
+     * The invited-but-not-yet-joined people, in roster order. Deliberately kept
+     * SEPARATE from [members] (the accepted roster) so [memberCount] — the number
+     * on the bar — still counts only the people actually in the convoy, while the
+     * "In this convoy" popup can still show who is on the way. Defaults to empty so
+     * an older caller (or a convoy with no pending invites) renders exactly as
+     * before.
+     */
+    val pendingInvitees: List<ConvoyBarMember> = emptyList(),
     val viewerIsOwner: Boolean,
     val busy: Boolean,
     val inviteAvailability: ConvoyBarActionAvailability,
@@ -184,6 +215,15 @@ data class ConvoyBarState(
      */
     val memberCount: Int
         get() = members.size
+
+    /**
+     * The rows the "In this convoy" popup renders: every accepted member as
+     * [ConvoyMemberPresence.Joined], then every pending invitee as
+     * [ConvoyMemberPresence.WaitingToJoin]. Derived from [members] + [pendingInvitees]
+     * so the popup and the count stay one source of truth.
+     */
+    val memberListEntries: List<ConvoyMemberListEntry>
+        get() = ConvoyBar.memberListEntries(members, pendingInvitees)
 
     /**
      * The explanation line, derived from BOTH availabilities independently. Both
@@ -325,6 +365,38 @@ object ConvoyBar {
             .map { ConvoyBarMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
 
     /**
+     * The invited-but-not-yet-joined people in [convoy], in roster order — the ones
+     * the "In this convoy" list shows as "Waiting to join…". Only
+     * [ConvoyInviteStatus.Invited]; DECLINED people (and, of course, accepted ones)
+     * are excluded, so a pending invitee appears here while pending and drops out
+     * the instant they accept (moving to [acceptedMembers]) or decline. The same
+     * denormalized profile the roster already carries names them, so nothing beyond
+     * what a convoy participant can already see is exposed.
+     */
+    fun pendingInvitees(convoy: ConvoySummary): List<ConvoyBarMember> =
+        convoy.members
+            .filter { it.inviteStatus == ConvoyInviteStatus.Invited }
+            .map { ConvoyBarMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
+
+    /**
+     * Composes the "In this convoy" rows: [accepted] first as
+     * [ConvoyMemberPresence.Joined], then [pending] as
+     * [ConvoyMemberPresence.WaitingToJoin]. Pure list-composition — no Firebase, no
+     * Compose — so the merge (and the way a pending invitee moves to joined on
+     * accept, or vanishes on decline) is JVM-unit-testable.
+     */
+    fun memberListEntries(
+        accepted: List<ConvoyBarMember>,
+        pending: List<ConvoyBarMember>,
+    ): List<ConvoyMemberListEntry> =
+        accepted.map { ConvoyMemberListEntry(it, ConvoyMemberPresence.Joined) } +
+            pending.map { ConvoyMemberListEntry(it, ConvoyMemberPresence.WaitingToJoin) }
+
+    /** [memberListEntries] straight from a convoy, deriving both halves from its roster. */
+    fun memberListEntries(convoy: ConvoySummary): List<ConvoyMemberListEntry> =
+        memberListEntries(acceptedMembers(convoy), pendingInvitees(convoy))
+
+    /**
      * The full bar state, or null when the bar must not render at all.
      *
      * [busyConvoys] is the coordinator's in-flight set, so the End action greys
@@ -345,6 +417,7 @@ object ConvoyBar {
         return ConvoyBarState(
             convoyId = convoy.convoyId,
             members = accepted,
+            pendingInvitees = pendingInvitees(convoy),
             viewerIsOwner = convoy.viewerIsOwner,
             busy = convoy.convoyId in busyConvoys,
             inviteAvailability = inviteAvailability,

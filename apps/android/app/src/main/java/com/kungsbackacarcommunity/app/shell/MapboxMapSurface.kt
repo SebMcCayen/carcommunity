@@ -1084,6 +1084,41 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
+     * One-shot centre on [point] (the convoy "Go to location"): eased like a
+     * my-location recentre, but to an ARBITRARY point rather than the user's puck.
+     *
+     * It is framed as a synthetic manual pan on purpose — [onUserGestureBegin]
+     * detaches follow and cancels any idle-return so the position/convoy-fit ticks
+     * cannot immediately override the centre, then [onUserGestureEnd] arms the
+     * ordinary idle-return timer so the camera drifts back to following the user
+     * after the same quiet window a real pan uses. No new camera owner, no change
+     * to the convoy-fit invariant: it borrows the existing follow path for one ease.
+     * A no-op until the map is composed; wrapped defensively.
+     */
+    override fun centerOn(point: MapPoint) {
+        val map = mapViewRef ?: return
+        runCatching {
+            onUserGestureBegin()
+            map.camera.easeTo(
+                cameraOptions {
+                    center(Point.fromLngLat(point.longitude, point.latitude))
+                    // The resting/browsing zoom, the same framing a my-location
+                    // recentre lands at, and keep the current tilt.
+                    zoom(browsingZoom)
+                    pitch(this@MapboxMapSurface.pitch)
+                    if (compassMode == MapCompassMode.CourseUp) {
+                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                    }
+                },
+                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
+            )
+            // Arm the idle-return timer so follow resumes after the quiet window,
+            // exactly as a real pan-to-look-at-something does.
+            onUserGestureEnd()
+        }
+    }
+
+    /**
      * A manual map-camera gesture STARTED (pan / pinch-zoom / rotate / tilt):
      * stop following and stop any pending idle-return — no 10-second countdown
      * runs while the user is actively interacting, so a continuous gesture lasting
