@@ -120,6 +120,71 @@ object CrownMarkerStyle {
     const val ADMIN_POINT_DISC: Int = 0xFFB0136A.toInt()
 
     /**
+     * The disc colour for a crown the member is OUT of collect range of.
+     *
+     * A crown is only collectable when the device is within its collect radius
+     * (see [CrownCollectGate]); until then its rarity colour would be a promise
+     * the map cannot keep — "walk to that legendary" reads the same at 5 km as at
+     * 5 m. So an out-of-range crown is drawn in a single flat, DESATURATED slate:
+     * still clearly a crown (the silhouette is untouched — rarity survives in the
+     * primary channel), but visibly inactive, so a member learns at a glance which
+     * crowns are actually reachable right now and the colour "lights up" to the
+     * rarity hue the moment they are in range.
+     *
+     * Deliberately DARKER and flatter than the [CrownRarity.COMMON] pewter
+     * (`0xFF8E9AA6`) so "out of range" never reads as "a common crown": a member
+     * standing on a common crown sees pewter, and a distant one sees this slate,
+     * and the two must not be confused. Neutral (near-zero chroma) so it cannot be
+     * mistaken for any rarity hue either.
+     */
+    const val OUT_OF_RANGE_DISC: Int = 0xFF5F6368.toInt()
+
+    /**
+     * The disc colour to actually draw a spawned crown with: its rarity colour
+     * when [inRange], the neutral [OUT_OF_RANGE_DISC] slate otherwise. The ONE
+     * place the in-range → colour rule lives, so the map layer and any preview
+     * agree and a test pins it.
+     */
+    fun discColorArgb(rarity: CrownRarity, inRange: Boolean): Int =
+        if (inRange) discColorArgb(rarity) else OUT_OF_RANGE_DISC
+
+    /** The disc for an admin point: its royal magenta in range, slate otherwise. */
+    fun adminPointDiscArgb(inRange: Boolean): Int =
+        if (inRange) ADMIN_POINT_DISC else OUT_OF_RANGE_DISC
+
+    /**
+     * The glyph tint for a spawned crown, following [discColorArgb] so an
+     * out-of-range crown's silhouette stays legible against the slate disc.
+     */
+    fun glyphColorArgb(rarity: CrownRarity, inRange: Boolean): Int =
+        if (inRange) glyphColorArgb(rarity) else outOfRangeGlyphColorArgb()
+
+    /** The glyph tint for an admin point, in or out of range. */
+    fun adminPointGlyphColorArgb(inRange: Boolean): Int =
+        if (inRange) adminPointGlyphColorArgb() else outOfRangeGlyphColorArgb()
+
+    /**
+     * The glow for a spawned crown: only [CrownRarity.LEGENDARY] glows, and only
+     * while IN range — an out-of-range crown carries no halo, so the "walk to that
+     * one" cue is reserved for a legendary the member can actually reach.
+     */
+    fun glowColorArgb(rarity: CrownRarity, inRange: Boolean): Int? =
+        if (inRange) glowColorArgb(rarity) else null
+
+    /**
+     * The glyph colour for the out-of-range slate disc — the same computed
+     * contrast choice [glyphColorArgb] and [adminPointGlyphColorArgb] make, so a
+     * retune of [OUT_OF_RANGE_DISC] cannot leave an unreadable silhouette behind.
+     */
+    fun outOfRangeGlyphColorArgb(): Int {
+        val light =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_LIGHT, OUT_OF_RANGE_DISC)
+        val dark =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_DARK, OUT_OF_RANGE_DISC)
+        return if (light >= dark) IncidentMarkerStyle.GLYPH_LIGHT else IncidentMarkerStyle.GLYPH_DARK
+    }
+
+    /**
      * The glyph colour for the admin-point disc — whichever of
      * [IncidentMarkerStyle.GLYPH_LIGHT] / [IncidentMarkerStyle.GLYPH_DARK]
      * contrasts better, chosen the same computed way as [glyphColorArgb] so a

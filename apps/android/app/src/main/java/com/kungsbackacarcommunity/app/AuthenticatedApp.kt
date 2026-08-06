@@ -161,6 +161,8 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
+import com.kungsbackacarcommunity.app.crownhunt.CrownRange
+import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
@@ -448,6 +450,18 @@ private const val INCIDENT_CAMERA_IDLE_DEBOUNCE_MS = 500L
  * feature the user is not currently looking at.
  */
 private const val CROWN_FIX_INTERVAL_MS = 2_000L
+
+/**
+ * How often the crown MAP layer refreshes the member's coarse location to decide
+ * which crowns are within collect range (coloured) vs out of range (greyed).
+ *
+ * Ten seconds — far slower than the 2 s claim-fix cadence, because a marker only
+ * needs to change colour when the member crosses a ~75 m ring, which walking or
+ * driving takes seconds to do; a faster poll would spend battery to move a colour
+ * boundary no one is watching that closely. The in-range SET is diffed, so a poll
+ * that does not cross any ring rebuilds no markers at all.
+ */
+private const val CROWN_RANGE_LOCATION_INTERVAL_MS = 10_000L
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -1678,27 +1692,71 @@ fun AuthenticatedApp(
                     }
                 }
             }
+            // The member's coarse location, refreshed on a slow cadence WHILE a
+            // crown layer is visible, purely to decide which crowns are within
+            // collect range (and so drawn in colour rather than greyed). Not the
+            // 2 s high-accuracy fix the claim flow uses — that runs only with a
+            // popup open; this is a cheap last-known poll that bounds how often the
+            // in-range sets can churn, so the markers never thrash on tiny moves.
+            val anyCrownLayerActive = crownSpawnEnabled || adminCrownsVisible
+            var crownUserLocation by remember { mutableStateOf<LatLng?>(null) }
+            LaunchedEffect(anyCrownLayerActive) {
+                if (!anyCrownLayerActive) {
+                    crownUserLocation = null
+                    return@LaunchedEffect
+                }
+                val appContext = context.applicationContext
+                while (true) {
+                    crownUserLocation = CurrentLocation.lastKnown(appContext)
+                    delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
+                }
+            }
+            // The spawn ids the member is within collect range of. Keyed on the
+            // location + the crown set, so it recomputes when either moves — but
+            // the marker list below is keyed on this SET, so the (more expensive)
+            // marker rebuild fires only when a crown actually crosses the range
+            // boundary, not on every location tick.
+            val inRangeSpawnIds =
+                remember(crownSpawns, crownUserLocation) {
+                    val loc = crownUserLocation ?: return@remember null
+                    crownSpawns
+                        .filter {
+                            CrownRange.isInRange(
+                                loc.latitude, loc.longitude, it.latitude, it.longitude,
+                                it.collectRadiusMeters,
+                            )
+                        }
+                        .map { it.id }
+                        .toSet()
+                }
             // Crowns → drawing primitives for the map seam, exactly as incidents
             // are above: the surface is handed a colour, a silhouette and a tint
             // and knows nothing about rarities. Empty whenever the feature is off,
             // so a flag flipped mid-session takes the markers off the map without
-            // waiting for a poll pass.
+            // waiting for a poll pass. A crown OUT of collect range is drawn in the
+            // neutral out-of-range slate; it lights up to its rarity colour once
+            // the member is close enough — the same rule that gates the popup.
             val crownMarkers =
-                remember(crownSpawns, crownSpawnEnabled) {
+                remember(crownSpawns, crownSpawnEnabled, inRangeSpawnIds) {
                     if (!crownSpawnEnabled) {
                         emptyList()
                     } else {
                         crownSpawns.map { spawn ->
+                            // null in-range set = no fix yet → colour normally,
+                            // rather than greying the whole layer.
+                            val inRange = inRangeSpawnIds == null || spawn.id in inRangeSpawnIds
                             MapCrownMarker(
                                 id = spawn.id,
                                 longitude = spawn.longitude,
                                 latitude = spawn.latitude,
-                                discColorArgb = CrownMarkerStyle.discColorArgb(spawn.rarity),
+                                discColorArgb = CrownMarkerStyle.discColorArgb(spawn.rarity, inRange),
                                 iconRes = crownGlyphRes(spawn.rarity),
-                                glyphColorArgb = CrownMarkerStyle.glyphColorArgb(spawn.rarity),
-                                // Only the legendary tier has one; the other three
-                                // pass null and are drawn without a halo.
-                                glowColorArgb = CrownMarkerStyle.glowColorArgb(spawn.rarity),
+                                glyphColorArgb =
+                                    CrownMarkerStyle.glyphColorArgb(spawn.rarity, inRange),
+                                // Only a legendary IN range glows; out of range it
+                                // carries no halo, so "walk to that one" is reserved
+                                // for a legendary the member can actually reach.
+                                glowColorArgb = CrownMarkerStyle.glowColorArgb(spawn.rarity, inRange),
                             )
                         }
                     }
@@ -1727,11 +1785,36 @@ fun AuthenticatedApp(
             val crownPointsState by
                 crownPointsFlow.collectAsState(initial = CrownHuntPointsState.Loading)
             val crownPointGlyph = crownPointGlyphRes()
-            val crownPointMarkers =
-                remember(crownPointsState, adminCrownsVisible, crownPointGlyph) {
+            // Admin points the member is within collect range of — the same
+            // greying rule as the spawns, over each point's own geofence radius.
+            val inRangePointIds =
+                remember(crownPointsState, crownUserLocation) {
+                    val loc = crownUserLocation ?: return@remember null
                     val points =
                         (crownPointsState as? CrownHuntPointsState.Loaded)?.points ?: emptyList()
-                    CrownPointMarkers.markers(points, adminCrownsVisible, crownPointGlyph)
+                    points
+                        .filter { point ->
+                            val lat = point.latitude
+                            val lon = point.longitude
+                            lat != null && lon != null &&
+                                CrownRange.isInRange(
+                                    loc.latitude, loc.longitude, lat, lon,
+                                    point.geofenceRadiusMeters ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
+                                )
+                        }
+                        .map { it.id }
+                        .toSet()
+                }
+            val crownPointMarkers =
+                remember(crownPointsState, adminCrownsVisible, crownPointGlyph, inRangePointIds) {
+                    val points =
+                        (crownPointsState as? CrownHuntPointsState.Loaded)?.points ?: emptyList()
+                    CrownPointMarkers.markers(
+                        points,
+                        adminCrownsVisible,
+                        crownPointGlyph,
+                        inRangeIds = inRangePointIds,
+                    )
                 }
             // Both crown sources share the ONE surface layer: the admin points and
             // the auto-spawns are drawn together (each already empty when its own
@@ -4516,6 +4599,8 @@ fun AuthenticatedApp(
                                 // same reason — a tap that landed just before a tab
                                 // switch cannot leave it hanging over another page.
                                 val crownForPopup = openCrown
+                                val crownNavLabel =
+                                    stringResource(R.string.crownHunt_navDestinationCrown)
                                 if (crownForPopup != null && crownSpawnEnabled) {
                                     CrownSpawnPopup(
                                         spawn = crownForPopup,
@@ -4539,6 +4624,21 @@ fun AuthenticatedApp(
                                                 }
                                             }
                                         },
+                                        onNavigate = {
+                                            // Drive to the crown through the app's ONE
+                                            // navigate-to-a-point flow, then close the
+                                            // popup so navigation is not competing with
+                                            // an open sheet.
+                                            startNavigationTo(
+                                                LatLng(
+                                                    longitude = crownForPopup.longitude,
+                                                    latitude = crownForPopup.latitude,
+                                                ),
+                                                crownNavLabel,
+                                            )
+                                            crownSpawnController?.resetClaim()
+                                            mapSurface.consumeCrownTap()
+                                        },
                                         onDismiss = {
                                             // Clear the RESULT as well as the tap:
                                             // the status flow lives on the
@@ -4561,6 +4661,24 @@ fun AuthenticatedApp(
                                     CrownPointPopup(
                                         point = pointForPopup,
                                         status = crownPointClaimStatus,
+                                        // In range iff the range poll placed this
+                                        // point in the in-range set (false with no
+                                        // fix yet — the button waits, with a hint,
+                                        // rather than looking live and being refused).
+                                        collectInRange =
+                                            inRangePointIds?.contains(pointForPopup.id) == true,
+                                        onNavigate = {
+                                            val lat = pointForPopup.latitude
+                                            val lon = pointForPopup.longitude
+                                            if (lat != null && lon != null) {
+                                                startNavigationTo(
+                                                    LatLng(longitude = lon, latitude = lat),
+                                                    pointForPopup.title,
+                                                )
+                                            }
+                                            crownHuntCoordinator?.reset()
+                                            mapSurface.consumeCrownTap()
+                                        },
                                         onCollect = {
                                             crownHuntCoordinator?.let { coordinator ->
                                                 scope.launch {
@@ -6089,22 +6207,25 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        ShellRoute.CrownHunt ->
-            if (crownHuntRepository != null) {
-                CrownHuntRoute(
-                    repository = crownHuntRepository,
-                    coordinator = crownHuntCoordinator,
-                    passesMemberGate = MemberGating.allows(profileActiveMember),
-                    onBack = onClose,
-                    // Powers the member's own Kronjägare standing above the nearby
-                    // list — the same owner-scoped users/{uid}/badges listener the
-                    // profile badge wall uses, so no new query shape or index.
-                    badgesRepository = badgesRepository,
-                    uid = uid,
-                )
-            } else {
-                LoadingScreen()
-            }
+        ShellRoute.CrownHunt -> {
+            // The hub is now a read-only stats + season-leaderboard page (crowns
+            // live on the map, not in a list here). Its reads come from the #710
+            // aggregates via a rules-gated Firestore repository, built here like the
+            // crown map layer's controller — null in a config-less/CI build, which
+            // simply shows the loading affordance.
+            val crownHuntStatsRepository =
+                remember(context) { FirebaseCrownHuntStatsRepository.createIfAvailable(context) }
+            CrownHuntRoute(
+                statsRepository = crownHuntStatsRepository,
+                passesMemberGate = MemberGating.allows(profileActiveMember),
+                onBack = onClose,
+                // Powers the member's own Kronjägare TIER standing — the same
+                // owner-scoped users/{uid}/badges listener the profile badge wall
+                // uses, so no new query shape or index.
+                badgesRepository = badgesRepository,
+                uid = uid,
+            )
+        }
 
         ShellRoute.Partners ->
             if (partnersRepository != null) {

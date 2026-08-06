@@ -39,23 +39,36 @@ object CrownPointMarkers {
      * at (0, 0): a crown off the Gulf of Guinea is worse than a point that is
      * briefly absent from the map while its document is repaired. [glyphRes] is
      * passed in (rather than referenced here) to keep this object Android-free.
+     *
+     * @param inRangeIds the ids of the points the member is currently within
+     *   collect range of. A point in this set is drawn in its royal magenta; one
+     *   NOT in it is greyed to the neutral out-of-range slate (see
+     *   [CrownMarkerStyle.adminPointDiscArgb]) so the map shows at a glance which
+     *   points are reachable right now. `null` (the default) means "no live
+     *   location to judge by" — every point is drawn in colour, exactly the
+     *   pre-greying behaviour, so a build with no fix never paints the whole layer
+     *   grey.
      */
     fun markers(
         points: List<CrownHuntPoint>,
         visible: Boolean,
         glyphRes: Int,
+        inRangeIds: Set<String>? = null,
     ): List<MapCrownMarker> {
         if (!visible) return emptyList()
         return points.mapNotNull { point ->
             val latitude = point.latitude ?: return@mapNotNull null
             val longitude = point.longitude ?: return@mapNotNull null
+            // null inRangeIds → treat every point as in range (colour it), so a
+            // location-less build renders exactly as before.
+            val inRange = inRangeIds == null || point.id in inRangeIds
             MapCrownMarker(
                 id = point.id,
                 longitude = longitude,
                 latitude = latitude,
-                discColorArgb = CrownMarkerStyle.ADMIN_POINT_DISC,
+                discColorArgb = CrownMarkerStyle.adminPointDiscArgb(inRange),
                 iconRes = glyphRes,
-                glyphColorArgb = CrownMarkerStyle.adminPointGlyphColorArgb(),
+                glyphColorArgb = CrownMarkerStyle.adminPointGlyphColorArgb(inRange),
                 // Admin points carry no glow; the halo stays reserved for the
                 // legendary spawn tier so it keeps meaning "walk to that one".
                 glowColorArgb = null,
