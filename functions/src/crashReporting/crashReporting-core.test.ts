@@ -127,6 +127,17 @@ describe('crashlyticsIssueDeepLink', () => {
       'https://console.firebase.google.com/project/_/crashlytics/app/APP/issues/ID',
     );
   });
+
+  it('encodes the issue-id segment but leaves the appId colons literal', () => {
+    const url = crashlyticsIssueDeepLink(APP_ID, 'abc#frag?q=1', 'proj');
+    // appId colons untouched (normal Firebase-console format).
+    expect(url).toContain(`/app/${APP_ID}/issues/`);
+    expect(url).toContain('1:1234567890:android:abcdef');
+    // Reserved chars in the id are percent-encoded, so the URL isn't truncated.
+    expect(url.endsWith('/issues/abc%23frag%3Fq%3D1')).toBe(true);
+    expect(url).not.toContain('#frag');
+    expect(url).not.toContain('?q=1');
+  });
 });
 
 describe('fatal-vs-ANR-vs-regression branching', () => {

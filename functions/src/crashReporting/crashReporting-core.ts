@@ -162,10 +162,16 @@ function isSafeDocId(id: string): boolean {
  * Builds the Crashlytics-issue deep link. `projectId` defaults to `_`, which
  * the Firebase console resolves to the caller's current project — so the link
  * still works even when the project id is unavailable at the trigger.
+ *
+ * The issue id is %-encoded for its path segment: `isSafeDocId` already rejects
+ * whitespace and `/`, but NOT the URL-reserved `?`/`#`, so a (hypothetical)
+ * issue id carrying one would otherwise truncate/mangle the link. Defence in
+ * depth — cheap and correct. The appId is left LITERAL: its colons are the
+ * normal Firebase-console format and must not be encoded.
  */
 export function crashlyticsIssueDeepLink(appId: string, issueId: string, projectId = '_'): string {
   const project = typeof projectId === 'string' && projectId.length > 0 ? projectId : '_';
-  return `https://console.firebase.google.com/project/${project}/crashlytics/app/${appId}/issues/${issueId}`;
+  return `https://console.firebase.google.com/project/${project}/crashlytics/app/${appId}/issues/${encodeURIComponent(issueId)}`;
 }
 
 /**
