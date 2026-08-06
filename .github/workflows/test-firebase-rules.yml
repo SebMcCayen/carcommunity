@@ -11,6 +11,8 @@ on:
       - 'firebase.json'
       - 'functions/src/**/*.emulator.test.ts'
       - 'functions/vitest.emulator.config.ts'
+      - 'functions/scripts/run-emulator-tests.mjs'
+      - 'functions/scripts/emulator-test-groups.mjs'
       - '.github/workflows/test-firebase-rules.yml'
   # Intentionally no `branches:` filter: every PR runs CI regardless of its
   # base branch, so stacked PRs (base = another feature branch) are verified
@@ -25,35 +27,65 @@ on:
       - 'firebase.json'
       - 'functions/src/**/*.emulator.test.ts'
       - 'functions/vitest.emulator.config.ts'
+      - 'functions/scripts/run-emulator-tests.mjs'
+      - 'functions/scripts/emulator-test-groups.mjs'
       - '.github/workflows/test-firebase-rules.yml'
 
 permissions:
   contents: read
 
 jobs:
-  # The ~900-test emulator suite across 8 emulators outgrew a single
-  # free (~7 GB) standard runner: it progressed fine for ~11 min and then the
+  # The ~900-test emulator suite across 8 emulators outgrew a single free
+  # (~7 GB) standard runner: it progressed fine for ~11 min and then the
   # Firestore emulator got SIGKILL'd and the job was cancelled — a resource
-  # ceiling, not a test failure (it passes on higher-RAM machines). So we shard
-  # the suite across parallel free runners, each with its OWN fresh emulator
-  # set running a deterministic 1/N slice of the test FILES (vitest `--shard`).
-  # Each shard's peak memory + wall-time then sits well under the ceiling.
+  # ceiling, not a test failure (it passes on higher-RAM machines). So we split
+  # the suite across parallel free runners, each spinning up its OWN fresh
+  # emulator set and running only ONE named feature GROUP of the test files.
   #
-  # To change the shard count, edit ONLY the `shard:` array below — the total is
-  # derived from it via `strategy.job-total`, so the two can never drift.
-  shard:
-    name: shard ${{ matrix.shard }}/${{ strategy.job-total }}
+  # `plan` is the coverage guard + matrix generator. It enumerates every
+  # `functions/src/**/*.emulator.test.ts` file and assigns it to a group from
+  # the single source of truth (functions/scripts/emulator-test-groups.mjs),
+  # FAILING (before any emulator starts) if any file is matched by zero groups,
+  # by more than one, or if a pattern is stale — so a new emulator test can
+  # never silently never-run. On success it emits the matrix the `group` jobs
+  # fan out over.
+  plan:
+    name: plan (group coverage guard)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.groups.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enumerate + validate + emit group matrix
+        id: groups
+        working-directory: functions
+        # Uses only Node builtins — no install needed. Fails the job (and thus
+        # the whole workflow) with a clear message if the partition is invalid.
+        run: node scripts/emulator-test-groups.mjs --emit-matrix
+
+  # One job per named feature group. The CI check name IS the group name
+  # ("Events, Convoy, Live & Garage", …) so it reads WHAT is under test.
+  group:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    needs: plan
     strategy:
-      # One shard hitting a resource wall or a real failure must not cancel the
-      # others — we want every shard's result.
+      # One group hitting a resource wall or a real failure must not cancel the
+      # others — we want every group's result.
       fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    # Each shard runs a quarter of the suite, so it finishes well inside this
-    # cap. Kept as a fail-fast guard so a mid-suite freeze (the process going
-    # silent and hanging) dies fast instead of burning the 6h default; the
-    # teardown/exit-code robustness lives in
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    # Each group runs a balanced fraction of the suite, so it finishes well
+    # inside this cap. Kept as a fail-fast guard so a mid-suite freeze (the
+    # process going silent and hanging) dies fast instead of burning the 6h
+    # default; the teardown/exit-code robustness lives in
     # functions/scripts/run-emulator-tests.mjs.
     timeout-minutes: 20
 
@@ -92,38 +124,43 @@ jobs:
         working-directory: functions
         run: pnpm install --frozen-lockfile
 
-      - name: Run emulator integration tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
+      - name: Run emulator integration tests (${{ matrix.name }})
         working-directory: functions
         # Cold-starting ~160 function definitions under CI load can exceed the
         # functions emulator's default 30s discovery timeout, surfacing as an
         # intermittent "Failed to load function" (e.g. admin-setFeatureFlag /
         # feedback-reportIssue) that flakes the whole suite. Give it headroom.
         #
-        # KCC_SHARD_INDEX/KCC_SHARD_TOTAL are forwarded by the runner as
-        # `vitest --shard=<i>/<n>`, so this job runs only its file subset.
+        # KCC_TEST_FILES is this group's file list; the runner forwards it to
+        # vitest as positional filters so this job runs only those files.
         env:
           FUNCTIONS_DISCOVERY_TIMEOUT: "120"
-          KCC_SHARD_INDEX: ${{ matrix.shard }}
-          KCC_SHARD_TOTAL: ${{ strategy.job-total }}
+          KCC_TEST_FILES: ${{ matrix.files }}
         run: pnpm run emulators:test
 
-  # Branch-protection gate. Sharding turns the work into `shard (1)`, `shard (2)`
-  # … so the single status name a required check expects would otherwise vanish.
-  # This job keeps the exact `test-firebase-rules` name and passes only when
-  # EVERY shard passed, so one required check still gates the whole matrix.
+  # Branch-protection gate. Splitting the work into the named group jobs above
+  # ("Events, Convoy, Live & Garage", …) would otherwise remove the single
+  # status name a required check expects. This job keeps the exact
+  # `test-firebase-rules` name and passes only when the coverage guard AND every
+  # group passed, so one required check still gates the whole matrix.
   test-firebase-rules:
     name: test-firebase-rules
     runs-on: ubuntu-latest
-    needs: shard
-    # Run even if a shard failed/was cancelled so this gate reports the true
+    needs: [plan, group]
+    # Run even if a group failed/was cancelled so this gate reports the true
     # aggregate result instead of being skipped.
     if: ${{ always() }}
     steps:
-      - name: Verify all shards passed
+      - name: Verify the coverage guard and all groups passed
         run: |
-          echo "Aggregate shard result: ${{ needs.shard.result }}"
-          if [ "${{ needs.shard.result }}" != "success" ]; then
-            echo "::error::One or more emulator-test shards did not succeed (result: ${{ needs.shard.result }})."
+          echo "plan (coverage guard) result: ${{ needs.plan.result }}"
+          echo "group (all feature groups) result: ${{ needs.group.result }}"
+          if [ "${{ needs.plan.result }}" != "success" ]; then
+            echo "::error::The emulator-test group coverage guard (plan job) did not pass."
             exit 1
           fi
-          echo "All emulator-test shards passed."
+          if [ "${{ needs.group.result }}" != "success" ]; then
+            echo "::error::One or more emulator-test groups did not succeed (result: ${{ needs.group.result }})."
+            exit 1
+          fi
+          echo "Coverage guard passed and all emulator-test groups passed."

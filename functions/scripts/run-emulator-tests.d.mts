@@ -12,12 +12,12 @@
 export declare function resolveOuterExitCode(sentinelPath: string, execCode: number): number;
 
 /**
- * Turn the optional KCC_SHARD_INDEX/KCC_SHARD_TOTAL env vars into the extra
- * vitest args. Returns `{ args: [] }` when unsharded (or total === 1), the
- * `--shard=<i>/<n>` args when validly sharded, and `{ error }` for a malformed
- * config (only one var set, non-integer, or out of range) — which the runner
- * fails closed on rather than silently running the whole suite in one shard.
+ * Turn the optional KCC_TEST_FILES env var into the positional vitest file
+ * args. Returns `{ args: [] }` when unset (whole suite), `{ args: [file, …] }`
+ * for a non-empty group, and `{ error }` when it is set but names no files —
+ * which the runner fails closed on rather than silently running the whole suite
+ * or testing nothing.
  */
-export declare function resolveShardArgs(
+export declare function resolveTestFileArgs(
   env?: NodeJS.ProcessEnv,
 ): { args: string[] } | { error: string };

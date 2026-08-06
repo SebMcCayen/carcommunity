@@ -68,16 +68,15 @@ const functionsDir = join(__dirname, '..');
 // vitest result. The value is a path inside a per-run mkdtemp'd directory.
 const ENV_SENTINEL = 'KCC_EMULATOR_TEST_SENTINEL';
 
-// Optional shard coordinates, set by the CI matrix so each runner spins up its
-// own full emulator set but runs only a deterministic 1/N slice of the test
-// FILES (vitest's built-in `--shard`, which balances by file). This is what
-// keeps each job's peak memory + wall-time under the free-runner ceiling — the
-// single-job suite outgrew ~7 GB and got the Firestore emulator SIGKILL'd.
-// Both are 1-based; index in [1..total]. Absent → run the whole suite (local
-// `pnpm test:emulator`, the runner unit test, and any non-sharded caller keep
-// working unchanged).
-const ENV_SHARD_INDEX = 'KCC_SHARD_INDEX';
-const ENV_SHARD_TOTAL = 'KCC_SHARD_TOTAL';
+// Optional explicit test-file list, set by the CI matrix so each runner spins
+// up its own full emulator set but runs only ONE named feature group's files
+// (see scripts/emulator-test-groups.mjs). This is what keeps each job's peak
+// memory + wall-time under the free-runner ceiling — the single-job suite
+// outgrew ~7 GB and got the Firestore emulator SIGKILL'd. The value is a
+// whitespace-separated list of functions-relative paths. Absent → run the
+// whole suite (local `pnpm test:emulator`, the runner unit test, and any
+// non-grouped caller keep working unchanged).
+const ENV_TEST_FILES = 'KCC_TEST_FILES';
 
 // Quiet window (ms) to let the background-trigger backlog drain before the
 // emulators shut down. A run is ~10 min; the default here is negligible
@@ -173,63 +172,34 @@ export function resolveOuterExitCode(sentinelPath, execCode) {
 }
 
 /**
- * Turn the optional shard env vars into the extra vitest args (if any).
+ * Turn the optional test-file-group env var into the positional vitest args.
  *
  * Fail-closed contract for CI integrity:
- *  - Neither var set  → `{ args: [] }` (run the whole suite; unchanged local
+ *  - Unset             → `{ args: [] }` (run the whole suite; unchanged local
  *    and unit-test behaviour).
- *  - `total === 1`    → `{ args: [] }` (a single shard IS the whole suite; no
- *    need to invoke `--shard`).
- *  - Both set & valid (integers, 1 <= index <= total) → the `--shard` args.
- *  - Anything else (only one var set, non-integer, out of range) → `{ error }`.
- *    A malformed shard config must NEVER silently run the FULL suite inside one
- *    shard — that would both mask the intent and re-create the memory ceiling
- *    this change exists to avoid. The caller turns `error` into a failed run.
+ *  - Set & non-empty   → `{ args: [file, …] }` — the group's files, forwarded to
+ *    vitest as positional file filters so it runs ONLY those.
+ *  - Set but empty/whitespace → `{ error }`. An empty group must NEVER fall back
+ *    to running the whole suite (that would re-create the memory ceiling this
+ *    change avoids) NOR silently test nothing. The caller turns `error` into a
+ *    failed run.
  *
  * Exported (side-effect-free) so it can be unit-tested directly.
  *
  * @param {NodeJS.ProcessEnv} [env=process.env]
  * @returns {{ args: string[] } | { error: string }}
  */
-export function resolveShardArgs(env = process.env) {
-  const rawIndex = env[ENV_SHARD_INDEX];
-  const rawTotal = env[ENV_SHARD_TOTAL];
+export function resolveTestFileArgs(env = process.env) {
+  const raw = env[ENV_TEST_FILES];
+  if (raw == null) return { args: [] };
 
-  const hasIndex = rawIndex != null && rawIndex !== '';
-  const hasTotal = rawTotal != null && rawTotal !== '';
-
-  if (!hasIndex && !hasTotal) return { args: [] };
-
-  if (hasIndex !== hasTotal) {
+  const files = raw.split(/\s+/).filter(Boolean);
+  if (files.length === 0) {
     return {
-      error: `only one of ${ENV_SHARD_INDEX}/${ENV_SHARD_TOTAL} is set (index=${JSON.stringify(
-        rawIndex,
-      )}, total=${JSON.stringify(rawTotal)}) — set both or neither.`,
+      error: `${ENV_TEST_FILES} is set but names no files — a CI group must run at least one test file. Refusing to run (an empty group would silently test nothing).`,
     };
   }
-
-  const index = Number(rawIndex);
-  const total = Number(rawTotal);
-  if (
-    !Number.isInteger(index) ||
-    !Number.isInteger(total) ||
-    total < 1 ||
-    index < 1 ||
-    index > total
-  ) {
-    return {
-      error: `invalid shard config ${ENV_SHARD_INDEX}=${JSON.stringify(
-        rawIndex,
-      )} ${ENV_SHARD_TOTAL}=${JSON.stringify(
-        rawTotal,
-      )} — expected integers with 1 <= index <= total.`,
-    };
-  }
-
-  // A single shard is the whole suite; don't bother slicing.
-  if (total === 1) return { args: [] };
-
-  return { args: [`--shard=${index}/${total}`] };
+  return { args: files };
 }
 
 async function inner() {
@@ -237,20 +207,28 @@ async function inner() {
 
   // Run the vitest emulator suite. `pnpm test:emulator` is the single source of
   // truth for how the suite is invoked (vitest run --config
-  // vitest.emulator.config.ts). Under the CI matrix we forward a deterministic
-  // `--shard=<i>/<n>` slice through pnpm (args after `--` reach vitest), so each
-  // runner executes only its subset — far lower peak memory than the whole run.
-  const shard = resolveShardArgs();
+  // vitest.emulator.config.ts). Under the CI matrix we append this group's test
+  // FILES as positional filters so each runner executes only its named subset —
+  // far lower peak memory than the whole run.
+  //
+  // The files are passed WITHOUT a `--` separator. `pnpm run <script> -- X`
+  // forwards the `--` verbatim into the final command; while a positional file
+  // path survives that, keeping the invocation `pnpm test:emulator <files>` →
+  // `vitest run --config … <files>` is the clean, unambiguous form (and mirrors
+  // how you'd filter files by hand).
+  const group = resolveTestFileArgs();
   let vitestCode;
-  if ('error' in shard) {
+  if ('error' in group) {
     console.error(
-      `[run-emulator-tests] ${shard.error} Refusing to run a mis-sharded suite; failing this shard.`,
+      `[run-emulator-tests] ${group.error} Refusing to run an ill-defined group; failing this job.`,
     );
     vitestCode = 1;
   } else {
-    const pnpmArgs = ['test:emulator', ...(shard.args.length ? ['--', ...shard.args] : [])];
-    if (shard.args.length) {
-      console.log(`[run-emulator-tests] running vitest ${shard.args.join(' ')} (pnpm ${pnpmArgs.join(' ')})`);
+    const pnpmArgs = ['test:emulator', ...group.args];
+    if (group.args.length) {
+      console.log(
+        `[run-emulator-tests] running ${group.args.length} test file(s) for this group:\n  ${group.args.join('\n  ')}`,
+      );
     }
     vitestCode = await run('pnpm', pnpmArgs);
   }
