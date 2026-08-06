@@ -3,6 +3,7 @@ import {
   ANR_ISSUE_LABEL,
   CRASH_ISSUE_LABEL,
   CRASHLYTICS_ISSUE_LINKS_COLLECTION,
+  MAX_ISSUE_TITLE_LENGTH,
   REGRESSION_ISSUE_LABEL,
   buildCrashIssueBody,
   buildCrashIssuePayload,
@@ -184,6 +185,16 @@ describe('buildCrashIssueTitle', () => {
     expect(
       buildCrashIssueTitle(normalizeCrashAlert('fatal', { issue: { id: 'onlyid' } }, APP_ID)!),
     ).toContain('onlyid');
+  });
+
+  it('collapses a long multi-line summary to a single line bounded under GitHub cap', () => {
+    const longSubtitle = ('line-a\nline-b\t' + 'x'.repeat(600)).slice(0, 600);
+    const alert = normalizeCrashAlert('regression', { issue: { id: 'i', subtitle: longSubtitle } }, APP_ID)!;
+    const title = buildCrashIssueTitle(alert);
+    expect(title.length).toBeLessThanOrEqual(MAX_ISSUE_TITLE_LENGTH);
+    expect(title).not.toMatch(/[\n\t]/);
+    expect(title.startsWith('[Crash regression] ')).toBe(true);
+    expect(title.endsWith('…')).toBe(true);
   });
 
   it('defangs @mentions and #refs in the title', () => {

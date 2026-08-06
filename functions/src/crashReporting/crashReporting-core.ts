@@ -236,10 +236,30 @@ function inlineCodeScalar(value: string): string {
   return `\`${safe}\``;
 }
 
-/** Public issue title, e.g. `[Crash] NullPointerException in FooActivity.onCreate`. */
+/**
+ * GitHub rejects an issue title longer than 256 chars, and a `createGitHubIssue`
+ * failure routes through the RETRYING auto-issue path — so an overlong or
+ * multi-line title would retry that crash forever, burning the global hourly
+ * budget without ever filing. Cap safely under 256 (the summary field alone is
+ * bounded to 500). An ellipsis marks truncation.
+ */
+export const MAX_ISSUE_TITLE_LENGTH = 250;
+
+/**
+ * Public issue title, e.g. `[Crash] NullPointerException in FooActivity.onCreate`.
+ * The summary (Crashlytics title, else subtitle, else issue id) is neutralized,
+ * collapsed to a single line, and the FINAL title — tag included — is bounded to
+ * MAX_ISSUE_TITLE_LENGTH so GitHub never rejects it. The tag is always preserved
+ * because the summary is what gets truncated, never the prefix.
+ */
 export function buildCrashIssueTitle(alert: NormalizedCrashAlert): string {
-  const summary = alert.title ?? alert.subtitle ?? alert.issueId;
-  return `${TITLE_TAG[alert.kind]} ${neutralizeMentions(summary)}`;
+  const raw = alert.title ?? alert.subtitle ?? alert.issueId;
+  const summary = neutralizeMentions(raw).replace(/\s+/g, ' ').trim();
+  const prefix = `${TITLE_TAG[alert.kind]} `;
+  const budget = MAX_ISSUE_TITLE_LENGTH - prefix.length;
+  const bounded =
+    summary.length > budget ? `${summary.slice(0, Math.max(0, budget - 1)).trimEnd()}…` : summary;
+  return `${prefix}${bounded}`;
 }
 
 /**
