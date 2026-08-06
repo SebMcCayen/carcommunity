@@ -586,6 +586,190 @@ class ConvoyStatusBarTest {
     }
 
     /**
+     * Seb's ask: the "In this convoy" list also shows people who were INVITED but
+     * have not joined yet, each as "<name> Waiting to join…". Here Dana is a pending
+     * invitee carried alongside the two accepted members, and the popup shows her
+     * name plus the waiting status while the count still reads only the two joined.
+     */
+    @Test
+    fun tappingMemberCount_showsPendingInviteesAsWaitingToJoin() {
+        val state =
+            memberState("c1").copy(
+                pendingInvitees =
+                    listOf(ConvoyBarMember(uid = "u9", displayName = "Dana", avatarPath = null)),
+            )
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = state,
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        // Joined members and the waiting invitee are all listed...
+        composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Bob").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dana").assertIsDisplayed()
+        // ...the pending invitee carrying the localized "waiting to join" status.
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barMemberWaiting))
+            .assertIsDisplayed()
+    }
+
+    /**
+     * Requirement 2: tapping a JOINED member opens the actions sheet with Profile
+     * and Go to location. Alice IS sharing a position ([memberLocations]), so Go to
+     * location is enabled and, tapped, reaches the host with her uid.
+     */
+    @Test
+    fun tappingJoinedMember_opensActionsSheet_andWiresProfileAndLocation() {
+        var profileUid: String? = null
+        var locationUid: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onInvite = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                    onOpenMemberProfile = { profileUid = it },
+                    onGoToMemberLocation = { locationUid = it },
+                    memberLocations = setOf("u1"),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        // Tap Alice's row → her actions sheet.
+        composeTestRule.onNodeWithText("Alice").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_ACTIONS_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_PROFILE_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LOCATION_TAG).performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("Go to location reaches the host with the member's uid", "u1", locationUid)
+        assertNull("only the location action was tapped", profileUid)
+    }
+
+    /**
+     * Go to location is present but DISABLED (not silently missing) for a joined
+     * member who is not sharing a position right now — Bob is not in
+     * [memberLocations], so tapping it does nothing.
+     */
+    @Test
+    fun goToLocation_isDisabled_forAMemberWithNoSharedPosition() {
+        var locationUid: String? = null
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = memberState("c1"),
+                    onEndConvoy = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                    onOpenMemberProfile = {},
+                    onGoToMemberLocation = { locationUid = it },
+                    // Nobody sharing a position.
+                    memberLocations = emptySet(),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Bob").performClick()
+        composeTestRule.waitForIdle()
+
+        // The action is shown (discoverable) with its unavailable note...
+        composeTestRule
+            .onNodeWithText(string(R.string.convoy_barMemberLocationUnavailable))
+            .assertIsDisplayed()
+        // ...but disabled: a click does not reach the host.
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_LOCATION_TAG).performClick()
+        composeTestRule.waitForIdle()
+        assertNull("a disabled Go to location must not fire", locationUid)
+    }
+
+    /**
+     * A PENDING invitee ("Waiting to join…") has no actions — their row is not
+     * tappable, so no sheet appears. (Only joined members carry a location/profile
+     * action in the convoy.)
+     */
+    @Test
+    fun tappingPendingInvitee_doesNotOpenActionsSheet() {
+        val state =
+            memberState("c1").copy(
+                pendingInvitees =
+                    listOf(ConvoyBarMember(uid = "u9", displayName = "Dana", avatarPath = null)),
+            )
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = state,
+                    onEndConvoy = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                    onOpenMemberProfile = {},
+                    onGoToMemberLocation = {},
+                    memberLocations = setOf("u9"),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Dana").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_ACTIONS_TAG).assertDoesNotExist()
+    }
+
+    /**
+     * Requirement 3 (avatar): a member WITHOUT a set picture falls back to the
+     * neutral placeholder — the row still renders by name and opening its actions
+     * sheet works, i.e. the placeholder path does not break the list. (The real
+     * image path reuses the app's established [rememberStorageImageUrl] + AsyncImage
+     * loader, exercised by the member-detail avatar tests.)
+     */
+    @Test
+    fun memberWithoutPicture_rendersPlaceholderRow_thatStillOpensActions() {
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state =
+                        memberState("c1").copy(
+                            members =
+                                listOf(
+                                    ConvoyBarMember(uid = "u1", displayName = "Alice", avatarPath = null),
+                                ),
+                        ),
+                    onEndConvoy = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                    onOpenMemberProfile = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alice").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_ACTIONS_TAG).assertIsDisplayed()
+    }
+
+    /**
      * The member-list popup is a passive info surface, so — unlike the destructive
      * end/leave dialogs — it must NOT linger across a convoy switch showing the new
      * convoy's roster under the count the user tapped. Its visibility flag is keyed
