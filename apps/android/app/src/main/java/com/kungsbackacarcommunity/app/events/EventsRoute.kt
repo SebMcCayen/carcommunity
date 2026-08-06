@@ -10,8 +10,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChat
@@ -25,6 +27,7 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRoute
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -310,6 +313,48 @@ fun EventsRoute(
         groupDriveRepository != null &&
             GroupDrive.canJoin(passesMemberGate, event?.status, myRsvp)
 
+    // --- Geofenced check-in ---
+    // One-shot HIGH-accuracy fix reused from Kronjakt (CrownLocation): fresh,
+    // no background-location permission, and carrying accuracy + isMock — exactly
+    // what the geofence + anti-fraud pipeline needs. A fresh coordinator per
+    // selected event so state never leaks from one event to the next.
+    val context = LocalContext.current
+    val checkInCoordinator =
+        remember(selected, repository) {
+            CheckInCoordinator(
+                repository = repository,
+                locationSource = {
+                    CrownLocation.currentFix(context)?.let { fix ->
+                        CheckInFix(
+                            latitude = fix.latitude,
+                            longitude = fix.longitude,
+                            accuracyMeters = fix.accuracyMeters,
+                            capturedAtMillis = fix.recordedAtMillis,
+                            isMock = fix.isMock ?: false,
+                        )
+                    }
+                },
+            )
+        }
+    val checkInState by checkInCoordinator.status.collectAsState()
+    val attendanceFlow =
+        remember(selected, uid) { repository.observeMyAttendance(selected, uid) }
+    val attendance by attendanceFlow.collectAsState(initial = null)
+
+    // Re-evaluate the window at its next boundary (opening or closing edge) rather
+    // than polling — the same delay-to-boundary shape the map's pin expiry uses.
+    var nowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(event?.id, event?.startsAtMillis, event?.endsAtMillis) {
+        while (true) {
+            nowMillis = System.currentTimeMillis()
+            val current = event ?: break
+            val boundary = EventCheckIn.nextWindowBoundaryMillis(current, nowMillis) ?: break
+            delay((boundary - nowMillis).coerceAtLeast(0L) + 1_000L)
+        }
+    }
+    val checkInAvailable =
+        event != null && EventCheckIn.canCheckIn(passesMemberGate, event, nowMillis)
+
     EventDetailScreen(
         event = event,
         detail = detail,
@@ -330,6 +375,10 @@ fun EventsRoute(
         attendees = attendees,
         onOpenMember = onViewProfile,
         onRetryAttendees = { attendeesReloadKey++ },
+        checkInAvailable = checkInAvailable,
+        checkInState = checkInState,
+        attendance = attendance,
+        onCheckIn = { event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } } },
     )
 }
 

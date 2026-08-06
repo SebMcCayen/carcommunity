@@ -42,6 +42,7 @@ import {
   readCount,
   stockholmDayKey,
 } from './points-economy-core';
+import { creditVerifiedEventAttendance } from '../badges/awards';
 import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
@@ -235,6 +236,22 @@ export const onAttendanceVerified = onDocumentWritten(
         limitWindowKey: eventId,
         relatedEntityType: 'event',
         relatedEntityId: eventId,
+      });
+    }
+
+    // The attendance BADGE (first_event / five_events / Träffräv) is credited
+    // HERE, off the verified check-in — not off an RSVP. This is the same edge
+    // the points award above fires on, so a member earns the badge for actually
+    // being at the meet. Idempotent per (uid, event) and best-effort: a badge
+    // failure must never fail (or retry) the trigger, so it is caught and
+    // logged rather than propagated (the points award has already landed).
+    try {
+      await creditVerifiedEventAttendance(uid, eventId);
+    } catch (error) {
+      logger.error('Verified-attendance badge credit failed', {
+        eventId,
+        uid,
+        error: String(error),
       });
     }
 

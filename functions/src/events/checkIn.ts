@@ -310,6 +310,13 @@ export const checkIn = onCall(CALLABLE_OPTS, async (request): Promise<CheckInRes
     successfulClaimsInVelocityWindow: 0,
     geofenceEdgeAttempts: 0,
     accuracyMeters: input.accuracyMeters ?? null,
+    // A self-reported mock location is the strongest spoofing signal available
+    // without an attestation API, and — exactly as for a Kronjakt claim — it
+    // scores at the review threshold ON ITS OWN (MOCK_LOCATION_SCORE), so a
+    // mocked fix is recorded as rejected and can never contribute dwell. This
+    // is why checkIn accepts `isMockLocation` at all: platformIntegrityPassed
+    // alone (a weaker +40 signal) would let a mocked position through.
+    mockLocationReported: input.isMockLocation ?? null,
     platformIntegrityPassed: input.platformIntegrityPassed ?? null,
   });
 

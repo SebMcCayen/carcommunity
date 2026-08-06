@@ -3,11 +3,11 @@
  *
  * Drives the exported runEventAutoClose runner at a deterministic instant
  * against seeded events, covering: a past event closing, a future one being
- * left alone, the grace window, idempotency, terminal statuses and the badge
- * attendance credit — plus the two things a unit test cannot reach: that the
- * candidate PAGING advances past a full page of still-running events, and that
- * a status change racing the sweep (closeEvent) is honoured rather than
- * overwritten.
+ * left alone, the grace window, idempotency, terminal statuses and that closing
+ * an event credits NO attendance (the badge counts verified check-ins, not
+ * RSVPs) — plus the two things a unit test cannot reach: that the candidate
+ * PAGING advances past a full page of still-running events, and that a status
+ * change racing the sweep (closeEvent) is honoured rather than overwritten.
  *
  * Events are seeded through the Admin SDK rather than the callables so start
  * and end instants can be placed in the past, which events.create rightly
@@ -155,9 +155,11 @@ describe('events auto-close sweep', () => {
     expect((await readEvent(cancelledId)).status).toBe('cancelled');
   });
 
-  it('credits badge attendance to going attendees, exactly once', async () => {
+  it('does NOT credit attendance to going attendees — the badge counts check-ins', async () => {
+    // The attendance badge counts VERIFIED check-ins (points-onAttendanceVerified),
+    // not RSVPs, so auto-closing an event must credit no one — an RSVP is a
+    // statement of intent, not proof anyone showed up.
     const attendeeUid = `autoclose-attendee-${Date.now()}`;
-    const maybeUid = `autoclose-maybe-${Date.now()}`;
     const eventId = await seedEvent(longPast);
     await adminDb
       .collection('events')
@@ -165,22 +167,13 @@ describe('events auto-close sweep', () => {
       .collection('rsvps')
       .doc(attendeeUid)
       .set({ status: 'going', updatedAt: Timestamp.fromDate(NOW) });
-    await adminDb
-      .collection('events')
-      .doc(eventId)
-      .collection('rsvps')
-      .doc(maybeUid)
-      .set({ status: 'maybe', updatedAt: Timestamp.fromDate(NOW) });
 
     await runEventAutoClose(NOW);
-    // A second sweep must not credit again — the event is already completed.
-    await runEventAutoClose(NOW);
 
+    // The event closed, but the going-RSVP earned no attendance credit.
+    expect((await readEvent(eventId)).status).toBe('completed');
     const progress = await adminDb.collection('badgeProgress').doc(attendeeUid).get();
-    expect(progress.data()?.completedEventsAttended).toBe(1);
-    // Only going-RSVPs are credited (legacy parity).
-    const maybeProgress = await adminDb.collection('badgeProgress').doc(maybeUid).get();
-    expect(maybeProgress.exists).toBe(false);
+    expect(progress.exists).toBe(false);
   });
 });
 
@@ -210,7 +203,7 @@ describe('events auto-close – concurrent status change', () => {
     // Stand in for events.complete (admin or creator) landing in the window.
     await adminDb.collection('events').doc(eventId).update({ status: 'completed' });
 
-    // False, so the caller credits attendance once — not a second time.
+    // Already completed, so the sweep reports no closure and leaves it alone.
     expect(await closeEvent(eventId)).toBe(false);
     expect((await readEvent(eventId)).autoClosedAt).toBeUndefined();
   });
@@ -224,34 +217,6 @@ describe('events auto-close – concurrent status change', () => {
 });
 
 describe('events auto-close – bounded work per run', () => {
-  it('credits every attendee when the going-list exceeds the concurrency chunk', async () => {
-    // ATTENDANCE_CREDIT_CONCURRENCY is 25, so 60 attendees spans three chunks.
-    // Chunking bounds burst load; it must not drop or double-credit anyone at a
-    // chunk boundary.
-    const eventId = await seedEvent(longPast);
-    const uids = Array.from(
-      { length: 60 },
-      (_, i) => `autoclose-bulk-${Date.now()}-${String(i).padStart(3, '0')}`,
-    );
-    const batch = adminDb.batch();
-    for (const uid of uids) {
-      batch.set(adminDb.collection('events').doc(eventId).collection('rsvps').doc(uid), {
-        status: 'going',
-        updatedAt: Timestamp.fromDate(NOW),
-      });
-    }
-    await batch.commit();
-
-    await runEventAutoClose(NOW);
-
-    const progress = await Promise.all(
-      uids.map((uid) => adminDb.collection('badgeProgress').doc(uid).get()),
-    );
-    const credits = progress.map((snap) => snap.data()?.completedEventsAttended);
-    // Every attendee credited exactly once — no gaps, no doubles.
-    expect(credits).toEqual(uids.map(() => 1));
-  }, 120_000);
-
   it('stops reading at the scanned-candidate cap even when nothing is due', async () => {
     // The cap bounds READS, which MAX_CLOSURES_PER_RUN cannot: these candidates
     // all match the coarse query (published, started before the cutoff) but none

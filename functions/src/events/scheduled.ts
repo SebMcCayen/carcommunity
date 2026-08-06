@@ -8,10 +8,11 @@
  * 9 August event was still listed as upcoming in mid-July of the next year).
  *
  * The USER-VISIBLE outcome matches the events.complete callable: published →
- * completed, with going-RSVP attendees credited badge attendance through the
- * shared creditEventAttendance. `completed` is terminal, and rules gate the
- * event's chat, member-gated detail and group-drive roster on `published`, so
- * completing an event closes it in the full sense.
+ * completed. `completed` is terminal, and rules gate the event's chat,
+ * member-gated detail and group-drive roster on `published`, so completing an
+ * event closes it in the full sense. Neither path credits attendance any more:
+ * the attendance badge counts VERIFIED check-ins (points-onAttendanceVerified),
+ * not RSVPs, so closing an event awards no badge to anyone who was not present.
  *
  * Two deliberate differences from the callable, both because there is no actor:
  * - No adminAuditEvents record. That log is a record of ADMIN actions, and an
@@ -48,7 +49,6 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { autoCloseCandidateCutoff, isAutoCloseDue, type EventStatus } from './events-core';
-import { creditEventAttendance } from './eventLifecycle';
 import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
@@ -195,9 +195,9 @@ export async function runEventAutoClose(
       }
       if (await closeEvent(doc.id)) {
         closed += 1;
-        // Same attendance credit the events.complete callable gives, so a
-        // badge never depends on who (or what) ended the event.
-        await creditEventAttendance(doc.id);
+        // No attendance credit here: the badge counts verified check-ins
+        // (points-onAttendanceVerified), which are earned while the event is
+        // live, not when the sweep later flips it to `completed`.
       }
     }
 

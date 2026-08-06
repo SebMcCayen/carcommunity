@@ -94,8 +94,7 @@ const MAX_CANDIDATES_PER_RUN = 20_000;
  * push a busy day past the 300s timeout; a small bounded fan-out makes it scale
  * with this concurrency instead. NOT an unbounded `Promise.all` over the whole
  * page — that would open B simultaneous streams and hammer Firestore (same
- * reasoning and chunked idiom as incidents-cleanup's DELETE_CONCURRENCY and the
- * event auto-close sweep's ATTENDANCE_CREDIT_CONCURRENCY). Each member's decision
+ * reasoning and chunked idiom as incidents-cleanup's DELETE_CONCURRENCY). Each member's decision
  * is fully independent — a distinct userPrivate doc and a distinct notification
  * inbox, over a shared read-only count() — so parallelism cannot change any
  * outcome; only log lines interleave. count() aggregation throughput is the real

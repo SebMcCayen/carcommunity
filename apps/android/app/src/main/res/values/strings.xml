@@ -339,6 +339,15 @@
     <string name="events_attendeesGroupGoing">Kommer</string>
     <string name="events_attendeesGroupMaybe">Kanske</string>
     <string name="events_attendeesGroupNotGoing">Kommer inte</string>
+    <string name="events_checkInTitle">Närvaro</string>
+    <string name="events_checkInButton">Checka in</string>
+    <string name="events_checkInConfirmed">Incheckad — närvaro bekräftad</string>
+    <string name="events_checkInPending">Incheckad. Stanna kvar på plats en stund till och checka in igen om cirka tio minuter för att bekräfta din närvaro.</string>
+    <string name="events_checkInErrorGeofence">Du måste vara på plats för att checka in.</string>
+    <string name="events_checkInErrorWindow">Incheckningen är inte öppen än, eller har redan stängt.</string>
+    <string name="events_checkInErrorLocation">Kunde inte hämta din plats. Kontrollera att platstjänster är på och försök igen.</string>
+    <string name="events_checkInErrorMock">Din plats kunde inte verifieras. Stäng av eventuella appar för fejkad plats och försök igen.</string>
+    <string name="events_checkInErrorGeneric">Incheckningen misslyckades. Försök igen.</string>
     <string name="chat_title">Chat</string>
     <string name="chat_placeholder">Eventchat kommer snart.</string>
     <string name="chat_eventChatTitle">Eventchatt</string>

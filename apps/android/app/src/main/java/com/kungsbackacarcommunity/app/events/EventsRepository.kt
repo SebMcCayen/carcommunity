@@ -62,6 +62,23 @@ interface EventsRepository {
     /** The caller's own RSVP answer; null when they have not responded. */
     fun observeMyRsvp(eventId: String, uid: String): Flow<RsvpStatus?>
 
+    /**
+     * The caller's own attendance record for [eventId] (eventAttendance is
+     * owner-readable), or null when they have never checked in. Lets the detail
+     * screen show a confirmed/pending state that survives a restart, rather than
+     * only reflecting the current session's check-in.
+     */
+    fun observeMyAttendance(eventId: String, uid: String): Flow<EventAttendanceStatus?>
+
+    /**
+     * Submits ONE geofenced check-in sample via the `events-checkIn` callable
+     * and returns the server's [CheckInResult]. The client sends only where and
+     * when it was (plus the mock flag); the server decides geofence, dwell and
+     * anti-fraud. Never returns a fabricated success — a garbled response maps to
+     * [CheckInResult.UNKNOWN], and a transport failure propagates to the caller.
+     */
+    suspend fun checkIn(eventId: String, fix: CheckInFix): CheckInResult
+
     /** Writes/updates the caller's RSVP answer (rules-validated). */
     suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus)
 

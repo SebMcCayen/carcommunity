@@ -1517,8 +1517,10 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     // badgeProgress – backend-only achievement counters (Phase 9f + ladders)
     //
-    // Maintained by events.complete (completedEventsAttended → first_event /
-    // five_events / Träffräv) and by the badges Firestore triggers
+    // Maintained by points-onAttendanceVerified (completedEventsAttended →
+    // first_event / five_events / Träffräv, credited off a VERIFIED check-in,
+    // NOT an RSVP — functions/src/badges/awards.ts creditVerifiedEventAttendance)
+    // and by the badges Firestore triggers
     // (functions/src/badges/progressTriggers.ts): crownsCollected,
     // lifetimeDistanceMeters, bestDayStreak, convoysLed, vehiclesInGarage.
     //
@@ -1538,6 +1540,15 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /badgeProgress/{userId} {
       allow read, write: if false;
+
+      // attendanceCredits/{eventId} – one-shot per-(user, event) idempotency
+      // markers claimed by creditVerifiedEventAttendance so a redelivery of the
+      // onAttendanceVerified trigger cannot double-count a check-in toward the
+      // attendance badge. Backend-only like its parent (a client that could
+      // write one could suppress a legitimate credit).
+      match /attendanceCredits/{eventId} {
+        allow read, write: if false;
+      }
     }
 
     // -------------------------------------------------------------------------

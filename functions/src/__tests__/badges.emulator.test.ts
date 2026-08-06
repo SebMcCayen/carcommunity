@@ -3,7 +3,8 @@
  *
  * Exercises the badge hooks and callable end-to-end:
  * - garage-addVehicle → garage_created award (once)
- * - events-complete → attendance credit + first_event award
+ * - a VERIFIED check-in (onAttendanceVerified) → attendance credit + first_event
+ *   award; an RSVP + completion credits nothing
  * - badges-awardHelpfulMember (admin gate, reason, audit, idempotency)
  *
  * Requires the Functions emulator — run via:
@@ -156,7 +157,28 @@ describe('garage_created badge', () => {
 });
 
 describe('event attendance badges', () => {
-  it('credits going attendees on completion and awards first_event', async () => {
+  /**
+   * Writes the eventAttendance/{eventId}__{uid} document with `verified: true`
+   * — exactly the false→true edge events.checkIn produces once its server-side
+   * geofence + dwell evaluation passes. That edge fires
+   * points-onAttendanceVerified, which is what credits the attendance badge.
+   */
+  async function verifyCheckIn(eventId: string, uid: string): Promise<void> {
+    await adminDb
+      .collection('eventAttendance')
+      .doc(`${eventId}__${uid}`)
+      .set(
+        {
+          eventId,
+          userId: uid,
+          verified: true,
+          verifiedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+  }
+
+  it('credits a VERIFIED check-in — not an RSVP — toward first_event', async () => {
     await signInAs(adminUser);
     const eventId = (
       (
@@ -169,37 +191,67 @@ describe('event attendance badges', () => {
     ).eventId;
     await call('events-publish', { eventId });
 
-    // RSVPs: member going, admin maybe (no credit for maybe).
+    // A going-RSVP plus completion must NOT credit the badge any more: the
+    // attendance badge counts proof-of-presence, not a tapped "going".
     await adminDb
       .collection('events')
       .doc(eventId)
       .collection('rsvps')
       .doc(member.uid)
       .set({ status: 'going', updatedAt: new Date() });
-    await adminDb
-      .collection('events')
-      .doc(eventId)
-      .collection('rsvps')
-      .doc(adminUser.uid)
-      .set({ status: 'maybe', updatedAt: new Date() });
-
     await call('events-complete', { eventId });
+    // Give any (now-removed) completion-time credit a chance to land, then assert
+    // it did not: no attendance counter, no first_event badge. The badgeProgress
+    // DOCUMENT may exist for OTHER reasons (e.g. this member added a vehicle in
+    // an earlier test → vehiclesInGarage), so the assertion is on the attendance
+    // FIELD, not the document's existence.
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    expect(
+      (await adminDb.collection('badgeProgress').doc(member.uid).get()).data()
+        ?.completedEventsAttended,
+    ).toBeUndefined();
+    expect((await badgeDoc(member.uid, 'first_event').get()).exists).toBe(false);
 
-    const progress = (await adminDb.collection('badgeProgress').doc(member.uid).get()).data()!;
-    expect(progress.completedEventsAttended).toBe(1);
+    // Now the member actually checks in and it verifies — THIS is what credits.
+    await verifyCheckIn(eventId, member.uid);
 
-    const badge = (await badgeDoc(member.uid, 'first_event').get()).data()!;
+    const progress = await pollUntil(async () => {
+      const value = (await adminDb.collection('badgeProgress').doc(member.uid).get()).data()
+        ?.completedEventsAttended;
+      return typeof value === 'number' ? value : undefined;
+    });
+    expect(progress).toBe(1);
+
+    const badge = await pollUntil(async () => {
+      const snap = await badgeDoc(member.uid, 'first_event').get();
+      return snap.exists ? snap.data()! : undefined;
+    });
     expect(badge.badgeKey).toBe('first_event');
     expect(badge.source).toBe('automatic');
 
-    // maybe-RSVP gets no credit and no badge.
-    expect((await adminDb.collection('badgeProgress').doc(adminUser.uid).get()).exists).toBe(
-      false,
-    );
-    expect((await badgeDoc(adminUser.uid, 'first_event').get()).exists).toBe(false);
-
-    // five_events requires five completions — not awarded after one.
+    // five_events requires five verified check-ins — not awarded after one.
     expect((await badgeDoc(member.uid, 'five_events').get()).exists).toBe(false);
+
+    // Idempotent per (uid, event): re-writing the already-verified record does
+    // not double-count. The onAttendanceVerified edge is false→true only, and
+    // the attendanceCredits marker guards any trigger redelivery besides.
+    await verifyCheckIn(eventId, member.uid);
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    expect(
+      (await adminDb.collection('badgeProgress').doc(member.uid).get()).data()
+        ?.completedEventsAttended,
+    ).toBe(1);
+    // The one-shot marker exists for this event.
+    expect(
+      (
+        await adminDb
+          .collection('badgeProgress')
+          .doc(member.uid)
+          .collection('attendanceCredits')
+          .doc(eventId)
+          .get()
+      ).exists,
+    ).toBe(true);
   });
 });
 
