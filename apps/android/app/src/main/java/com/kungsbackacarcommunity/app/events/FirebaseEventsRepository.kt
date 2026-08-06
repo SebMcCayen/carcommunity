@@ -161,10 +161,13 @@ class FirebaseEventsRepository private constructor(
                     .document("${eventId}__$uid")
                     .addSnapshotListener { snapshot, error ->
                         if (error != null) {
-                            // Owner-readable, but a transient read error must not
-                            // masquerade as "not checked in" — emit null only for a
-                            // genuinely absent document.
-                            trySend(null)
+                            // A transient read error must NOT masquerade as "not
+                            // checked in": emitting null here would flip a
+                            // confirmed/pending UI back to the check-in button on a
+                            // momentary hiccup. Emit NOTHING, keeping the last value —
+                            // `null` is reserved for a genuinely ABSENT document
+                            // (toAttendanceStatus returns null only then), the real
+                            // "never checked in".
                             return@addSnapshotListener
                         }
                         trySend(snapshot?.toAttendanceStatus())

@@ -201,16 +201,6 @@ fun EventDetailScreen(
                     RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
                 }
 
-                // Geofenced check-in — the PROOF of attendance (an RSVP is only
-                // intent). Verified attendance, not a "going", is what earns the
-                // attendance badge.
-                CheckInSection(
-                    available = checkInAvailable,
-                    state = checkInState,
-                    attendance = attendance,
-                    onCheckIn = onCheckIn,
-                )
-
                 // Who's going — same member+published gate as the details, so
                 // the roster is never teased to a non-member.
                 AttendeesSection(
@@ -220,6 +210,20 @@ fun EventDetailScreen(
                     onRetry = onRetryAttendees,
                 )
             }
+
+            // Geofenced check-in — the PROOF of attendance (an RSVP is only
+            // intent). Verified attendance, not a "going", earns the badge.
+            // OUTSIDE the published-only RSVP block on purpose: it must still show
+            // for a COMPLETED event that is inside its check-in window (the server
+            // accepts those), and the confirmed state must remain visible after the
+            // event ends. The section renders nothing on its own when there is no
+            // check-in to offer and none has happened.
+            CheckInSection(
+                available = checkInAvailable,
+                state = checkInState,
+                attendance = attendance,
+                onCheckIn = onCheckIn,
+            )
 
             // Event chat — offered only when eligible (decided by the caller:
             // chat flag + member + published + going/maybe RSVP).

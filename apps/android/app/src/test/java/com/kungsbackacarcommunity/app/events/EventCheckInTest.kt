@@ -66,18 +66,28 @@ class EventCheckInTest {
     }
 
     @Test
-    fun `canCheckIn requires member, published, positioned and an open window`() {
+    fun `canCheckIn requires member, a checkinable status, a pin and an open window`() {
         val nowInside = start
         assertTrue(EventCheckIn.canCheckIn(true, event(), nowInside))
+        // COMPLETED is still checkinable in-window — the server accepts it too, so
+        // a member on-site when the event auto-completes can still prove attendance.
+        assertTrue(EventCheckIn.canCheckIn(true, event(status = EventStatus.COMPLETED), nowInside))
         // Not a member.
         assertFalse(EventCheckIn.canCheckIn(false, event(), nowInside))
-        // Not published.
+        // Cancelled/draft are never checkinable.
         assertFalse(EventCheckIn.canCheckIn(true, event(status = EventStatus.CANCELLED), nowInside))
-        assertFalse(EventCheckIn.canCheckIn(true, event(status = EventStatus.COMPLETED), nowInside))
+        assertFalse(EventCheckIn.canCheckIn(true, event(status = EventStatus.DRAFT), nowInside))
         // No pin.
         assertFalse(EventCheckIn.canCheckIn(true, event(latitude = null, longitude = null), nowInside))
-        // Window closed.
+        // Window closed (even for a completed event).
         assertFalse(EventCheckIn.canCheckIn(true, event(), start + 10 * 60 * 60_000L))
+        assertFalse(
+            EventCheckIn.canCheckIn(
+                true,
+                event(status = EventStatus.COMPLETED),
+                start + 10 * 60 * 60_000L,
+            ),
+        )
     }
 
     @Test

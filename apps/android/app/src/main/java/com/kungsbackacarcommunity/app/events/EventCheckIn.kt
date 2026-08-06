@@ -122,10 +122,15 @@ object EventCheckIn {
 
     /**
      * Whether the "Check in" action should be offered at all: the caller passes
-     * the member gate, the event is published and positioned (a check-in with no
-     * event coordinates can never verify), and the window is open right now.
-     * Deliberately the SAME published gate RSVP uses — a cancelled or draft
-     * event is never checkinable, and neither is one with no pin.
+     * the member gate, the event is checkinable and positioned (a check-in with
+     * no event coordinates can never verify), and the window is open right now.
+     *
+     * PUBLISHED **or** COMPLETED — deliberately matching the server
+     * (functions/src/events/checkIn.ts loadEventLocation, which accepts both):
+     * the hourly auto-close sweep (or a creator/admin) can flip an event to
+     * `completed` while members are still standing in the car park, and one of
+     * them still inside the time window must be able to prove they were there. A
+     * cancelled or draft event is never checkinable, and neither is one with no pin.
      */
     fun canCheckIn(
         passesMemberGate: Boolean,
@@ -133,7 +138,7 @@ object EventCheckIn {
         nowMillis: Long,
     ): Boolean =
         passesMemberGate &&
-            event.status == EventStatus.PUBLISHED &&
+            (event.status == EventStatus.PUBLISHED || event.status == EventStatus.COMPLETED) &&
             event.latitude != null &&
             event.longitude != null &&
             isWindowOpen(event, nowMillis)
