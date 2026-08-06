@@ -135,109 +135,125 @@ export async function runEventCreatedFanOut(
   // rejects that op's promise, which the per-write handler classifies below.
   bulk.onWriteError((error) => error.code !== GRPC_ALREADY_EXISTS && error.failedAttempts < 3);
 
-  let cursor: string | null = null;
-  for (;;) {
-    const processed = summary.delivered + summary.skipped + summary.failed;
-    if (processed >= MAX_RECIPIENTS) {
-      summary.capped = true;
-      break;
-    }
-    // Single-equality query (the same one notifications.adminSend's `members`
-    // audience uses) — NO composite index. Ordered by documentId for a stable
-    // cursor.
-    let query = usersRef
-      .where('activeMember', '==', true)
-      .orderBy(FieldPath.documentId())
-      .limit(PAGE_SIZE);
-    if (cursor !== null) {
-      query = query.startAfter(cursor);
-    }
-    const page = await query.get();
-    if (page.empty) {
-      break;
-    }
-
-    const byUid = new Map(page.docs.map((doc) => [doc.id, doc]));
-    const { recipients, capped } = recipientsWithinCap(
-      page.docs.map((doc) => doc.id),
-      { creatorUid, processed, maxRecipients: MAX_RECIPIENTS },
-    );
-    if (capped) {
-      summary.capped = true;
-    }
-
-    // Batch-read the preference docs for this page in one round-trip (rather than
-    // one per member); a member with no userPrivate doc reads as "enabled".
-    const privateSnaps = recipients.length
-      ? await db.getAll(...recipients.map((uid) => db.collection('userPrivate').doc(uid)))
-      : [];
-
-    // Enqueue this page's writes, then flush + settle before the next page so the
-    // attempts cap (recipientsWithinCap above) is computed against up-to-date
-    // counts.
-    const pageWrites: Promise<void>[] = [];
-    recipients.forEach((uid, index) => {
-      const userDoc = byUid.get(uid);
-      const decision = decideInAppDelivery(
-        'event_created',
-        toUserAccessState(userDoc?.data()),
-        privateSnaps[index]?.data()?.notificationPreferences,
-      );
-      if (!decision.deliver) {
-        summary.skipped += 1;
-        return;
+  // Fan out inside try/finally so the BulkWriter is ALWAYS released. bulk.close()
+  // must run even if a query.get() / db.getAll() / bulk.flush() throws mid-run —
+  // otherwise the writer leaks its pending operations. See the finally below.
+  try {
+    let cursor: string | null = null;
+    for (;;) {
+      const processed = summary.delivered + summary.skipped + summary.failed;
+      if (processed >= MAX_RECIPIENTS) {
+        summary.capped = true;
+        break;
       }
-      const ref = db
-        .collection('notifications')
-        .doc(uid)
-        .collection('items')
-        .doc(notificationId);
-      const document = buildNotificationDocument(
-        {
-          category: 'event_created',
-          title: EVENT_CREATED_TITLE,
-          previewText,
-          actionType: 'open_event',
-          relatedEntityId: eventId,
-        },
-        () => FieldValue.serverTimestamp(),
-      );
-      pageWrites.push(
-        bulk
-          .create(ref, document)
-          .then(() => {
-            summary.delivered += 1;
-          })
-          .catch((error: unknown) => {
-            const code = (error as { code?: number } | null)?.code;
-            if (code === GRPC_ALREADY_EXISTS) {
-              // Idempotent replay — the item already existed.
-              summary.skipped += 1;
-              return;
-            }
-            summary.failed += 1;
-            // PII-free: the member's position in the run, not their uid.
-            logger.error('Event-created notification write failed for a member', {
-              eventId,
-              memberIndex: processed + index,
-              error: String(error),
-            });
-          }),
-      );
-    });
-    await bulk.flush();
-    await Promise.all(pageWrites);
+      // Single-equality query (the same one notifications.adminSend's `members`
+      // audience uses) — NO composite index. Ordered by documentId for a stable
+      // cursor.
+      let query = usersRef
+        .where('activeMember', '==', true)
+        .orderBy(FieldPath.documentId())
+        .limit(PAGE_SIZE);
+      if (cursor !== null) {
+        query = query.startAfter(cursor);
+      }
+      const page = await query.get();
+      if (page.empty) {
+        break;
+      }
 
-    if (summary.capped) {
-      break;
+      const byUid = new Map(page.docs.map((doc) => [doc.id, doc]));
+      const { recipients, capped } = recipientsWithinCap(
+        page.docs.map((doc) => doc.id),
+        { creatorUid, processed, maxRecipients: MAX_RECIPIENTS },
+      );
+      if (capped) {
+        summary.capped = true;
+      }
+
+      // Batch-read the preference docs for this page in one round-trip (rather
+      // than one per member); a member with no userPrivate doc reads as "enabled".
+      const privateSnaps = recipients.length
+        ? await db.getAll(...recipients.map((uid) => db.collection('userPrivate').doc(uid)))
+        : [];
+
+      // Enqueue this page's writes, then flush + settle before the next page so
+      // the attempts cap (recipientsWithinCap above) is computed against
+      // up-to-date counts.
+      const pageWrites: Promise<void>[] = [];
+      recipients.forEach((uid, index) => {
+        const userDoc = byUid.get(uid);
+        const decision = decideInAppDelivery(
+          'event_created',
+          toUserAccessState(userDoc?.data()),
+          privateSnaps[index]?.data()?.notificationPreferences,
+        );
+        if (!decision.deliver) {
+          summary.skipped += 1;
+          return;
+        }
+        const ref = db
+          .collection('notifications')
+          .doc(uid)
+          .collection('items')
+          .doc(notificationId);
+        const document = buildNotificationDocument(
+          {
+            category: 'event_created',
+            title: EVENT_CREATED_TITLE,
+            previewText,
+            actionType: 'open_event',
+            relatedEntityId: eventId,
+          },
+          () => FieldValue.serverTimestamp(),
+        );
+        pageWrites.push(
+          bulk
+            .create(ref, document)
+            .then(() => {
+              summary.delivered += 1;
+            })
+            .catch((error: unknown) => {
+              const code = (error as { code?: number } | null)?.code;
+              if (code === GRPC_ALREADY_EXISTS) {
+                // Idempotent replay — the item already existed.
+                summary.skipped += 1;
+                return;
+              }
+              summary.failed += 1;
+              // PII-free: the member's position in the run + the gRPC error CODE
+              // only. NEVER String(error) — a Firestore write error embeds the
+              // failed document path (notifications/{uid}/…), i.e. the recipient's
+              // uid. failedAttempts is a plain count, safe to include.
+              const failedAttempts = (error as { failedAttempts?: number } | null)
+                ?.failedAttempts;
+              logger.error('Event-created notification write failed for a member', {
+                eventId,
+                memberIndex: processed + index,
+                code: code ?? null,
+                ...(typeof failedAttempts === 'number' ? { failedAttempts } : {}),
+              });
+            }),
+        );
+      });
+      await bulk.flush();
+      await Promise.all(pageWrites);
+
+      if (summary.capped) {
+        break;
+      }
+      if (page.size < PAGE_SIZE) {
+        break;
+      }
+      cursor = page.docs[page.docs.length - 1]!.id;
     }
-    if (page.size < PAGE_SIZE) {
-      break;
-    }
-    cursor = page.docs[page.docs.length - 1]!.id;
+  } finally {
+    // ALWAYS release the BulkWriter — even if a query/getAll/flush threw
+    // mid-fan-out — so it can never leak pending operations. Every enqueued
+    // create() already has its own .catch above, so close() settles cleanly;
+    // swallow a close-time error so it cannot mask the original failure being
+    // propagated out of this function.
+    await bulk.close().catch(() => {});
   }
-
-  await bulk.close();
 
   if (summary.capped) {
     logger.warn('Event-created fan-out hit the recipient cap; later members not notified', {
