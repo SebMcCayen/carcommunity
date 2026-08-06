@@ -118,9 +118,12 @@ async function pruneDeadTokens(uid: string, tokenIds: readonly string[]): Promis
     logger.info('Pruned dead push tokens', { count: tokenIds.length });
   } catch (error) {
     // Cleanup is opportunistic: a failure here must not fail the send.
+    // PII-free: a Firestore error can embed the pushTokens document path
+    // (userPrivate/{uid}/…), so log the error CODE/NAME, not the full message.
     logger.warn('Failed to prune dead push tokens', {
       count: tokenIds.length,
-      error: error instanceof Error ? error.message : String(error),
+      code: (error as { code?: string | number } | null)?.code ?? null,
+      name: error instanceof Error ? error.name : null,
     });
   }
 }

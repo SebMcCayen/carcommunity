@@ -307,11 +307,18 @@ export const onEventPublished = onDocumentWritten(
     try {
       await runEventCreatedFanOut(eventId);
     } catch (error) {
-      // The published transition already happened; a fan-out failure must not
-      // retry the whole event forever. Idempotency (the deterministic id) makes
-      // a redelivery safe, so log and let the platform's at-least-once retry —
-      // bounded by the deterministic id — cover a transient failure.
-      logger.error('Event-created fan-out failed', { eventId, error: String(error) });
+      // PII-free: a Firestore error can embed the failed document path
+      // (notifications/{uid}/…) in its message, so log only the error CODE/NAME —
+      // never the full string (same reason as the per-member write log above).
+      // The published transition already happened, so a fan-out failure must not
+      // retry the whole event forever; idempotency (the deterministic id) makes a
+      // redelivery safe, so log and RETHROW to let the platform's at-least-once
+      // retry — bounded by that deterministic id — cover a transient failure.
+      logger.error('Event-created fan-out failed', {
+        eventId,
+        code: (error as { code?: string | number } | null)?.code ?? null,
+        name: error instanceof Error ? error.name : null,
+      });
       throw error;
     }
   },
