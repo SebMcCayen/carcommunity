@@ -68,6 +68,17 @@ export async function createGitHubIssue(
   userAgent: string,
   logContext: Record<string, string | number> = {},
 ): Promise<GitHubIssueResult | null> {
+  // Never reach api.github.com from the Firebase emulator. The emulator injects
+  // a non-empty placeholder GITHUB_ISSUE_TOKEN (functions/.secret.local) purely
+  // so the Functions emulator does not block on Google Secret Manager at each
+  // secret-declaring function's cold start (a CI-hanging network call). That
+  // placeholder must not turn into real GitHub traffic — every error-report
+  // trigger and feedback submission in the ~900-test emulator suite calls this.
+  // Treated exactly like an absent token: the caller records
+  // githubIssueStatus:'failed' and moves on, keeping the suite hermetic.
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return null;
+  }
   if (!token) {
     logger.error('createGitHubIssue: GITHUB_ISSUE_TOKEN is empty', logContext);
     return null;

@@ -34,6 +34,12 @@ jobs:
   test-firebase-rules:
     name: test-firebase-rules
     runs-on: ubuntu-latest
+    # The emulator suite normally runs ~10-12 min. Cap the job so a mid-suite
+    # freeze (the process going silent and hanging) dies fast instead of
+    # burning the 6h default — one such hang once ran 62 min before it was
+    # killed. This is the fail-fast guard; the teardown/exit-code robustness
+    # lives in functions/scripts/run-emulator-tests.mjs.
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
@@ -72,4 +78,10 @@ jobs:
 
       - name: Run emulator integration tests
         working-directory: functions
+        # Cold-starting ~160 function definitions under CI load can exceed the
+        # functions emulator's default 30s discovery timeout, surfacing as an
+        # intermittent "Failed to load function" (e.g. admin-setFeatureFlag /
+        # feedback-reportIssue) that flakes the whole suite. Give it headroom.
+        env:
+          FUNCTIONS_DISCOVERY_TIMEOUT: "120"
         run: pnpm run emulators:test
