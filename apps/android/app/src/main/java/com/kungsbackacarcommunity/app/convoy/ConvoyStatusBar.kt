@@ -46,12 +46,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -272,11 +274,13 @@ fun ConvoyStatusBar(
     // the popup closes rather than misrepresenting which convoy it is listing.
     var showMembers by remember(state.convoyId) { mutableStateOf(false) }
 
-    // The JOINED member whose actions sheet ("Profile" / "Go to location") is open,
-    // or null. Captured when a member row is tapped, and — like the member-list
-    // popup — keyed to the convoy so a background refresh that swaps the bar to a
-    // different convoy dismisses it rather than acting on a member of the old one.
-    var memberActionsFor by remember(state.convoyId) { mutableStateOf<ConvoyBarMember?>(null) }
+    // The UID of the JOINED member whose actions sheet ("Profile" / "Go to
+    // location") is open, or null. Stored as a uid rather than a captured
+    // [ConvoyBarMember] so the open sheet renders from the LIVE roster (name/avatar
+    // resolve while it is open), and — like the member-list popup — keyed to the
+    // convoy so a background refresh that swaps the bar to a different convoy
+    // dismisses it rather than acting on a member of the old one.
+    var memberActionsForUid by remember(state.convoyId) { mutableStateOf<String?>(null) }
 
     // Whether the "set destination" tap is currently waiting on the overwrite
     // confirmation (only raised when the current destination was set by someone
@@ -369,7 +373,7 @@ fun ConvoyStatusBar(
                             if (onOpenMemberProfile != null || onGoToMemberLocation != null) {
                                 { member ->
                                     showMembers = false
-                                    memberActionsFor = member
+                                    memberActionsForUid = member.uid
                                 }
                             } else {
                                 null
@@ -631,27 +635,36 @@ fun ConvoyStatusBar(
     // level — not inside the list Popup — so it is the app's ordinary bottom sheet
     // (matching the place/message action sheets) rather than a fragile popup nested
     // in a focusable popup.
-    val memberActions = memberActionsFor
-    if (memberActions != null) {
-        ConvoyMemberActionsSheet(
-            member = memberActions,
-            hasLocation = memberActions.uid in memberLocations,
-            onOpenProfile =
-                onOpenMemberProfile?.let { open ->
-                    {
-                        memberActionsFor = null
-                        open(memberActions.uid)
-                    }
-                },
-            onGoToLocation =
-                onGoToMemberLocation?.let { go ->
-                    {
-                        memberActionsFor = null
-                        go(memberActions.uid)
-                    }
-                },
-            onDismiss = { memberActionsFor = null },
-        )
+    val memberActionsUid = memberActionsForUid
+    if (memberActionsUid != null) {
+        // Resolve the member from the LIVE roster every recomposition, so a name or
+        // avatar that resolves while the sheet is open is reflected in it.
+        val liveMember = state.members.firstOrNull { it.uid == memberActionsUid }
+        if (liveMember == null) {
+            // The member is no longer in the convoy (they left, or the bar swapped
+            // convoys) — there is nothing to act on, so close the sheet.
+            LaunchedEffect(memberActionsUid) { memberActionsForUid = null }
+        } else {
+            ConvoyMemberActionsSheet(
+                member = liveMember,
+                hasLocation = liveMember.uid in memberLocations,
+                onOpenProfile =
+                    onOpenMemberProfile?.let { open ->
+                        {
+                            memberActionsForUid = null
+                            open(liveMember.uid)
+                        }
+                    },
+                onGoToLocation =
+                    onGoToMemberLocation?.let { go ->
+                        {
+                            memberActionsForUid = null
+                            go(liveMember.uid)
+                        }
+                    },
+                onDismiss = { memberActionsForUid = null },
+            )
+        }
     }
 
     // Destructive and group-wide: ending is never one tap. The body says out loud
@@ -1236,11 +1249,21 @@ private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(28.dp),
+                // A pending invitee's photo is dimmed too, not just the placeholder
+                // glyph — otherwise an invitee WITH a picture would render at full
+                // opacity and look identical to a joined member, defeating the muted
+                // "waiting to join" treatment the rest of the row uses.
+                modifier =
+                    Modifier
+                        .size(28.dp)
+                        .alpha(if (muted) MUTED_AVATAR_ALPHA else 1f),
             )
         }
     }
 }
+
+/** Opacity a pending invitee's avatar is dimmed to, matching the muted row. */
+private const val MUTED_AVATAR_ALPHA = 0.5f
 
 /**
  * The per-member actions raised by tapping a JOINED member in the list: open their

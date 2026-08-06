@@ -770,6 +770,46 @@ class ConvoyStatusBarTest {
     }
 
     /**
+     * The open actions sheet renders from the LIVE roster (by uid), not a captured
+     * snapshot: a display name that resolves while the sheet is open updates it.
+     */
+    @Test
+    fun openActionsSheet_reflectsLiveNameChange() {
+        var current by mutableStateOf(memberState("c1"))
+        composeTestRule.setContent {
+            KccTheme {
+                ConvoyStatusBar(
+                    state = current,
+                    onEndConvoy = {},
+                    onLeaveConvoy = {},
+                    showDestination = false,
+                    onOpenMemberProfile = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBERS_TAG).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Alice").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CONVOY_BAR_MEMBER_ACTIONS_TAG).assertIsDisplayed()
+
+        // Alice's profile resolves to a fuller name while the sheet is open.
+        current =
+            current.copy(
+                members =
+                    listOf(
+                        ConvoyBarMember(uid = "u1", displayName = "Alicia Svensson", avatarPath = null),
+                        ConvoyBarMember(uid = "u2", displayName = "Bob", avatarPath = null),
+                    ),
+            )
+        composeTestRule.waitForIdle()
+
+        // The open sheet shows the updated name, not the captured "Alice".
+        composeTestRule.onNodeWithText("Alicia Svensson").assertIsDisplayed()
+    }
+
+    /**
      * The member-list popup is a passive info surface, so — unlike the destructive
      * end/leave dialogs — it must NOT linger across a convoy switch showing the new
      * convoy's roster under the count the user tapped. Its visibility flag is keyed
