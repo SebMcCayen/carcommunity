@@ -84,6 +84,22 @@ describe('normalizeCrashAlert', () => {
     expect(normalizeCrashAlert('fatal', { issue: { id: '..' } }, APP_ID)).toBeNull();
   });
 
+  it('rejects an issue id carrying whitespace/control chars (log + URL injection)', () => {
+    // `boundedField` only trims the ends, so an INTERNAL newline/tab/control
+    // char would otherwise reach a log line and the console deep link.
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\ndef' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\tdef' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\rdef' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\x00def' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\x1fdef' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc\x7fdef' } }, APP_ID)).toBeNull();
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'abc def' } }, APP_ID)).toBeNull();
+    // A normal alphanumeric id (with common id punctuation) is still accepted.
+    expect(normalizeCrashAlert('fatal', { issue: { id: 'a1b2-c3_d4' } }, APP_ID)?.issueId).toBe(
+      'a1b2-c3_d4',
+    );
+  });
+
   it('defensively nulls wrong-typed / missing optional fields without throwing', () => {
     const alert = normalizeCrashAlert(
       'fatal',

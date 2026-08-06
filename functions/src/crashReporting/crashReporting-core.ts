@@ -135,12 +135,27 @@ function boundedField(value: unknown, max: number): string | null {
 }
 
 /**
- * Firestore document ids must be a single non-empty path segment: reject a
- * blank id, one containing '/', and the '.'/'..' reserved segments, so the
- * dedup key can never be coerced into a subcollection path or a bad ref.
+ * Firestore document ids must be a single non-empty path segment. Reject a
+ * blank id, one containing '/', and the '.'/'..' reserved segments (so the
+ * dedup key can never be coerced into a subcollection path or a bad ref), AND
+ * any id carrying whitespace or a control character. Crashlytics issue ids are
+ * opaque alphanumeric strings, so a legitimate id never contains a newline/tab —
+ * whereas `boundedField` only trims the ends, so an INTERNAL newline would
+ * otherwise survive into a log line (log injection) and into the console deep
+ * link (a broken URL). `\s` covers space/tab/newline/CR/formfeed/vtab;
+ * explicit ranges cover the remaining C0 control chars and DEL (0x7f).
  */
+const UNSAFE_DOC_ID_CHAR = /[\s\u0000-\u001f\u007f]/;
+
 function isSafeDocId(id: string): boolean {
-  return id.length > 0 && id.length <= MAX_ISSUE_ID_LENGTH && !id.includes('/') && id !== '.' && id !== '..';
+  return (
+    id.length > 0 &&
+    id.length <= MAX_ISSUE_ID_LENGTH &&
+    !id.includes('/') &&
+    id !== '.' &&
+    id !== '..' &&
+    !UNSAFE_DOC_ID_CHAR.test(id)
+  );
 }
 
 /**
