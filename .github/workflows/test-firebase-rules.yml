@@ -78,4 +78,10 @@ jobs:
 
       - name: Run emulator integration tests
         working-directory: functions
+        # Cold-starting ~160 function definitions under CI load can exceed the
+        # functions emulator's default 30s discovery timeout, surfacing as an
+        # intermittent "Failed to load function" (e.g. admin-setFeatureFlag /
+        # feedback-reportIssue) that flakes the whole suite. Give it headroom.
+        env:
+          FUNCTIONS_DISCOVERY_TIMEOUT: "120"
         run: pnpm run emulators:test
