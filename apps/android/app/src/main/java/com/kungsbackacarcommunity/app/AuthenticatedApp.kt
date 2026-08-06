@@ -6084,6 +6084,11 @@ private fun RouteHost(
                     onBack = onClose,
                     blockingRepository = blockingRepository,
                     onViewProfile = openProfileIfWired,
+                    // Backs the detail's in-app Share button: the friend picker sends
+                    // a DM carrying a tappable "Open event" chip. Both null in a
+                    // config-less build, which hides Share.
+                    friendsRepository = friendsRepository,
+                    dmRepository = dmRepository,
                 )
             } else {
                 LoadingScreen()
@@ -6269,6 +6274,9 @@ private fun RouteHost(
                     // The thread title names the other member; tapping it opens
                     // their read-only profile.
                     onViewProfile = openProfileIfWired,
+                    // A shared "Open event" chip in a DM lands the recipient on that
+                    // event's detail page via the shell's existing deep-link path.
+                    onOpenEvent = openEventFromNotification,
                 )
             } else {
                 LoadingScreen()

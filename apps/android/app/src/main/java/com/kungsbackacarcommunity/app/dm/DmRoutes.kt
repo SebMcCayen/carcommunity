@@ -104,6 +104,9 @@ fun ChatRoute(
     onViewProfile: ((String) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    // Opens an event by id from a shared "Open event" chip in a message; null
+    // leaves such tokens as plain text (no event navigation wired).
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
@@ -198,5 +201,6 @@ fun ChatRoute(
         blockStatus = blockStatus,
         onBlockDismiss = { blockingCoordinator?.reset() },
         onShowLocationOnMap = onShowLocationOnMap,
+        onOpenEvent = onOpenEvent,
     )
 }

@@ -58,6 +58,7 @@ import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
+import com.kungsbackacarcommunity.app.events.EventShareLinks
 import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
@@ -113,6 +114,9 @@ fun ChatScreen(
     // calls this. Null (no map to move) leaves such links as plain text — the same
     // rule the group channels use.
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
+    // A shared `kccevent:` link in a message becomes a tappable "Open event" chip
+    // that calls this with the event id. Null leaves such tokens as plain text.
+    onOpenEvent: ((String) -> Unit)? = null,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     // Held by message ID (Saveable, so the sheet survives rotation) and resolved
@@ -157,6 +161,7 @@ fun ChatScreen(
                     onLoadOlder = onLoadOlder,
                     onRetry = onRetry,
                     onShowLocationOnMap = onShowLocationOnMap,
+                    onOpenEvent = onOpenEvent,
                     // Long-press opens the moderation sheet — never on your own
                     // message, and never when the thread has no resolvable other
                     // member to act on.
@@ -261,6 +266,7 @@ private fun MessageList(
     onRetry: (DmMessage) -> Unit,
     onMessageLongPress: (DmMessage) -> Unit,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+    onOpenEvent: ((String) -> Unit)?,
 ) {
     val dates = rememberChatDateContext()
     // Day separators are inserted by pure logic over the WHOLE list (see
@@ -326,6 +332,7 @@ private fun MessageList(
                         onLongPress = if (isOwn) null else ({ onMessageLongPress(message) }),
                         onRetry = { onRetry(message) },
                         onShowLocationOnMap = onShowLocationOnMap,
+                        onOpenEvent = onOpenEvent,
                     )
                 }
             }
@@ -342,6 +349,7 @@ private fun MessageBubble(
     onLongPress: (() -> Unit)?,
     onRetry: () -> Unit,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+    onOpenEvent: ((String) -> Unit)?,
 ) {
     val bubbleColor =
         if (isOwn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
@@ -357,10 +365,19 @@ private fun MessageBubble(
     // AnnotatedString is not rebuilt every recompose. Mirrors the group channels.
     val linkColor = if (isOwn) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
     val linkLabel = stringResource(R.string.channel_locationLink)
+    val eventLinkLabel = stringResource(R.string.events_shareEventLinkLabel)
     val canShowLocation = onShowLocationOnMap != null
+    val canOpenEvent = onOpenEvent != null
     val body =
-        remember(message.text, linkColor, linkLabel, canShowLocation) {
-            annotateGeoLinks(message.text, linkColor, linkLabel, onShowLocationOnMap)
+        remember(message.text, linkColor, linkLabel, eventLinkLabel, canShowLocation, canOpenEvent) {
+            annotateChatLinks(
+                text = message.text,
+                linkColor = linkColor,
+                locationLabel = linkLabel,
+                eventLabel = eventLinkLabel,
+                onShowLocationOnMap = onShowLocationOnMap,
+                onOpenEvent = onOpenEvent,
+            )
         }
     // The time sits on the line ABOVE the bubble, aligned to the bubble's own
     // edge (right for your messages, left for theirs) — the same placement the
@@ -440,22 +457,50 @@ private fun MessageBubble(
     }
 }
 
+/** One tappable link found in a message body — a `geo:` map link or a `kccevent:` event link. */
+private sealed interface ChatLinkMatch {
+    val range: IntRange
+
+    data class Location(override val range: IntRange, val latitude: Double, val longitude: Double) :
+        ChatLinkMatch
+
+    data class Event(override val range: IntRange, val eventId: String) : ChatLinkMatch
+}
+
 /**
- * Replaces each `geo:lat,lng` token in [text] with a single tappable [linkLabel]
- * chip that moves the app's map to the point, leaving the rest of the message as
- * plain text. Uses the SAME [GeoLinks.findAll] parser as the clipboard writer and
- * the group channels, so a shared location reads identically everywhere and a
- * malformed/out-of-range token is never linkified. When [onShowLocationOnMap] is
- * null (no map to move) the raw text is returned untouched. DMs carry no mentions,
- * so — unlike the channels' annotateMessageBody — only geo links are handled.
+ * Replaces each recognised link token in [text] with a single tappable chip,
+ * leaving the rest of the message as plain text:
+ *  - a `geo:lat,lng` token → a [locationLabel] chip that moves the app's map to the
+ *    point (only when [onShowLocationOnMap] is wired);
+ *  - a `kccevent:<id>` token → an [eventLabel] chip that opens that event's detail
+ *    page (only when [onOpenEvent] is wired).
+ *
+ * Uses the SAME [GeoLinks.findAll] / [EventShareLinks.findAll] parsers as the
+ * writers, so a shared location or event reads identically everywhere and a
+ * malformed token is never linkified. When neither handler is wired the raw text is
+ * returned untouched. Matches are rendered in document order; the two token schemes
+ * are disjoint (`geo:` vs `kccevent:`) so their ranges can never overlap.
  */
-private fun annotateGeoLinks(
+private fun annotateChatLinks(
     text: String,
     linkColor: Color,
-    linkLabel: String,
+    locationLabel: String,
+    eventLabel: String,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+    onOpenEvent: ((String) -> Unit)?,
 ): AnnotatedString {
-    val matches = if (onShowLocationOnMap != null) GeoLinks.findAll(text) else emptyList()
+    val matches = buildList {
+        if (onShowLocationOnMap != null) {
+            GeoLinks.findAll(text).forEach {
+                add(ChatLinkMatch.Location(it.range, it.link.latitude, it.link.longitude))
+            }
+        }
+        if (onOpenEvent != null) {
+            EventShareLinks.findAll(text).forEach {
+                add(ChatLinkMatch.Event(it.range, it.link.eventId))
+            }
+        }
+    }.sortedBy { it.range.first }
     if (matches.isEmpty()) return AnnotatedString(text)
 
     val linkStyles =
@@ -471,17 +516,30 @@ private fun annotateGeoLinks(
         var index = 0
         for (match in matches) {
             if (match.range.first > index) append(text.substring(index, match.range.first))
-            val link = match.link
-            withLink(
-                LinkAnnotation.Clickable(
-                    tag = "geo",
-                    styles = linkStyles,
-                    linkInteractionListener = {
-                        onShowLocationOnMap?.invoke(link.latitude, link.longitude)
-                    },
-                ),
-            ) {
-                append(linkLabel)
+            when (match) {
+                is ChatLinkMatch.Location ->
+                    withLink(
+                        LinkAnnotation.Clickable(
+                            tag = "geo",
+                            styles = linkStyles,
+                            linkInteractionListener = {
+                                onShowLocationOnMap?.invoke(match.latitude, match.longitude)
+                            },
+                        ),
+                    ) {
+                        append(locationLabel)
+                    }
+
+                is ChatLinkMatch.Event ->
+                    withLink(
+                        LinkAnnotation.Clickable(
+                            tag = "event",
+                            styles = linkStyles,
+                            linkInteractionListener = { onOpenEvent?.invoke(match.eventId) },
+                        ),
+                    ) {
+                        append(eventLabel)
+                    }
             }
             index = match.range.last + 1
         }

@@ -12,8 +12,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -24,6 +27,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -88,8 +96,29 @@ fun EventDetailScreen(
     // Runs a check-in. Null (config-less build / no location source) hides the
     // action rather than offering one that cannot work.
     onCheckIn: (() -> Unit)? = null,
+    // Starts turn-by-turn navigation to the event's location (the app's
+    // navigate-to-point handoff). Offered only when the event has a valid pin;
+    // null leaves the button off. Independent of [hasMapToken] — navigation hands
+    // off to the device's maps app and needs no Mapbox token.
+    onNavigate: (() -> Unit)? = null,
+    // Shares this event with a friend in-app (friend picker → DM with a tappable
+    // "Open event" chip). Null (no friends/DM repository) hides the Share button.
+    onShareEvent: (() -> Unit)? = null,
+    // Adds the event to the phone's calendar with a one-hour reminder. Null (no
+    // readable start time) hides the button.
+    onAddToCalendar: (() -> Unit)? = null,
+    // Whether a Mapbox token is configured, so the embedded map can render. When
+    // false the map area is hidden (Navigate still shows if the event has a pin).
+    hasMapToken: Boolean = false,
 ) {
     val haptics = LocalHapticFeedback.current
+    // The event's single marker point, or null when it carries no valid pin — the
+    // one gate for the whole location section (embedded map + Navigate button), so
+    // an event with no coordinates hides both gracefully.
+    val markerPoint = remember(event) { event?.let { EventMapPresentation.markerPoint(it) } }
+    // Whether the full-screen (maximized) map is open. Saveable so a rotation while
+    // inspecting the map does not collapse it back to the thumbnail.
+    var mapMaximized by rememberSaveable { mutableStateOf(false) }
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
@@ -162,6 +191,36 @@ fun EventDetailScreen(
                 )
             }
 
+            // Location section — the embedded map (tap to maximize) + a Navigate
+            // button. Shown only when the event has a valid pin ([markerPoint]); the
+            // map itself needs a Mapbox token, but Navigate hands off to the device's
+            // maps app and shows even without one. An event with no coordinates gets
+            // neither, gracefully.
+            if (markerPoint != null) {
+                if (hasMapToken) {
+                    EventLocationMap(
+                        point = markerPoint,
+                        onMaximize = { mapMaximized = true },
+                    )
+                }
+                if (onNavigate != null) {
+                    Button(
+                        onClick = onNavigate,
+                        modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_NAVIGATE_TAG),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Navigation,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Text(
+                            text = stringResource(R.string.events_navigate),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
+                    }
+                }
+            }
+
             // Member-gated detail: the precise street address + full description,
             // or a gate. (The place name is public and already rendered above.)
             // Shown only when the rules would actually serve it: passes the member
@@ -225,6 +284,42 @@ fun EventDetailScreen(
                 onCheckIn = onCheckIn,
             )
 
+            // Share this event in-app + add it to the phone's calendar. Each is
+            // independent: Share appears when a friends/DM repository is wired, Add
+            // to calendar when the event has a readable start time.
+            if (onShareEvent != null) {
+                OutlinedButton(
+                    onClick = onShareEvent,
+                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_SHARE_TAG),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Share,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.events_shareEvent),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+            if (onAddToCalendar != null) {
+                OutlinedButton(
+                    onClick = onAddToCalendar,
+                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_CALENDAR_TAG),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CalendarMonth,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.events_addToCalendar),
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
+                }
+            }
+
             // Event chat — offered only when eligible (decided by the caller:
             // chat flag + member + published + going/maybe RSVP).
             if (onOpenChat != null) {
@@ -238,6 +333,16 @@ fun EventDetailScreen(
                 OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.groupDrive_screenTitle))
                 }
+            }
+
+            // Maximized (full-screen, zoomable) map, raised by tapping the embedded
+            // thumbnail. Composed here so it overlays the whole detail; dismissing
+            // returns to the thumbnail.
+            if (mapMaximized && markerPoint != null && hasMapToken) {
+                EventLocationFullscreenDialog(
+                    point = markerPoint,
+                    onDismiss = { mapMaximized = false },
+                )
             }
     }
 }
@@ -315,6 +420,16 @@ private fun CheckInSection(
                     Text(text = stringResource(R.string.events_checkInButton))
                 }
             }
+            // Make the geofence requirement explicit up front, so it is obvious WHY
+            // a check-in might be rejected: the server (functions/src/events/checkIn.ts)
+            // only accepts a fix within the event's geofence (150 m). Matches the
+            // EVENT_GEOFENCE_RADIUS_METERS the backend enforces.
+            Text(
+                text = stringResource(R.string.events_checkInWithinArea),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.testTag(CHECK_IN_WITHIN_AREA_TAG),
+            )
         }
         if (pending) {
             Text(
@@ -512,6 +627,14 @@ internal const val CHECK_IN_SECTION_TAG = "events_checkin_section"
 internal const val CHECK_IN_BUTTON_TAG = "events_checkin_button"
 internal const val CHECK_IN_CONFIRMED_TAG = "events_checkin_confirmed"
 internal const val CHECK_IN_ERROR_TAG = "events_checkin_error"
+
+/** Test tag on the "must be within the event area" check-in helper line. */
+internal const val CHECK_IN_WITHIN_AREA_TAG = "events_checkin_within_area"
+
+/** Test tags for the Navigate, Share and Add-to-calendar actions. */
+const val EVENT_DETAIL_NAVIGATE_TAG = "events_detail_navigate"
+const val EVENT_DETAIL_SHARE_TAG = "events_detail_share"
+const val EVENT_DETAIL_CALENDAR_TAG = "events_detail_calendar"
 
 /**
  * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered

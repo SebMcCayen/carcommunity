@@ -278,4 +278,90 @@ class EventsScreensTest {
         composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.events_cancelledNotice)).assertIsDisplayed()
     }
+
+    @Test
+    fun detail_checkInAvailable_showsWithinAreaHelperText() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event().copy(latitude = 57.4874, longitude = 12.0757),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    checkInAvailable = true,
+                    onCheckIn = {},
+                )
+            }
+        }
+        // The button is offered, and the geofence requirement is spelled out beside it.
+        composeTestRule.onNodeWithTag(CHECK_IN_BUTTON_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHECK_IN_WITHIN_AREA_TAG).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_shareButton_isShown_andInvokesCallback() {
+        var shared = false
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    onShareEvent = { shared = true },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_SHARE_TAG).performScrollTo().performClick()
+        assertEquals(true, shared)
+    }
+
+    @Test
+    fun detail_navigateButton_isShown_whenEventHasCoordinates() {
+        var navigated = false
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event().copy(latitude = 57.4874, longitude = 12.0757),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    onNavigate = { navigated = true },
+                    // hasMapToken = false so no Mapbox surface renders in the test —
+                    // the Navigate button does not depend on the token.
+                    hasMapToken = false,
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_NAVIGATE_TAG).performScrollTo().performClick()
+        assertEquals(true, navigated)
+    }
+
+    @Test
+    fun detail_noCoordinates_hidesNavigateButton() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(), // no latitude/longitude
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    onNavigate = { },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_NAVIGATE_TAG).assertDoesNotExist()
+    }
 }
