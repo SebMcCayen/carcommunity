@@ -107,98 +107,41 @@ export interface EventCreatedFanOutSummary {
   /** In-app notifications actually written across the audience. */
   delivered: number;
   /**
-   * Recipients delivery DECLINED (opted out / suspended / deleted / a
-   * deterministic-id duplicate).
+   * Recipients delivery DECLINED — opted out / suspended / deleted, OR a
+   * deterministic-id duplicate (an idempotent replay: the item already existed).
    */
   skipped: number;
   /**
-   * Recipients whose delivery THREW. Counted so the MAX_RECIPIENTS cap is
-   * enforced on ATTEMPTS, not just successes — otherwise a systemic delivery
-   * failure (every write throwing) would advance neither delivered nor skipped
-   * and the run would walk the whole active-users collection before the cap
-   * could bind.
+   * Recipients whose write THREW for a non-duplicate reason. Counted toward the
+   * attempts cap (see recipientsWithinCap) so a systemic failure cannot walk the
+   * whole active-users collection: the cap binds on ATTEMPTS
+   * (delivered + skipped + failed), not just successes.
    */
   failed: number;
   /** True when maxRecipients bound the scan. */
   capped: boolean;
 }
 
-export interface FanOutEventCreatedOptions {
-  /** Excluded from the fan-out (they already know about their own event). */
-  creatorUid: string;
-  /** Delivers one notification; resolves { delivered } or throws. */
-  deliverOne: (uid: string) => Promise<{ delivered: boolean }>;
-  /** Attempts cap (production MAX_RECIPIENTS); a run never processes more. */
-  maxRecipients: number;
-  /** Members delivered to concurrently per chunk. */
-  concurrency: number;
-  /**
-   * Called for a delivery that THREW, with the member's position in the run.
-   * Injected so this core stays logger-free (the trigger passes the real logger).
-   */
-  onFailure?: (index: number, error: unknown) => void;
-}
-
 /**
- * Fans the notice out across an async stream of active-member uid PAGES, with
- * the creator excluded and the attempts cap (delivered + skipped + failed)
- * enforced — truncating a page to the remaining budget so a run can never
- * overshoot `maxRecipients` even when every delivery is failing.
+ * Which uids of one page to attempt, given how many recipients have already been
+ * processed. Pure — the cap / creator-exclusion / per-page truncation logic, so
+ * it is unit-testable without the emulator.
  *
- * Pure: it owns NO I/O of its own — the caller supplies the pages (the Firestore
- * query) and `deliverOne` (the notification writer). That is exactly what makes
- * the cap / failure-counting / creator-exclusion logic unit-testable without the
- * emulator, with a small injected `maxRecipients` and a controllable `deliverOne`.
+ * `processed` is delivered + skipped + failed so far: the cap is on ATTEMPTS, so
+ * counting a failed write toward it is what stops a systemic failure (every write
+ * throwing) from walking the whole collection. The creator is dropped (they
+ * already know about their own event), and the surviving page is truncated to the
+ * remaining budget so a run never overshoots `maxRecipients` mid-page.
  */
-export async function fanOutEventCreated(
-  pages: AsyncIterable<readonly string[]>,
-  options: FanOutEventCreatedOptions,
-): Promise<EventCreatedFanOutSummary> {
-  const { creatorUid, deliverOne, maxRecipients, concurrency, onFailure } = options;
-  const summary: EventCreatedFanOutSummary = {
-    delivered: 0,
-    skipped: 0,
-    failed: 0,
-    capped: false,
-  };
-  const chunkSize = Math.max(1, concurrency);
-  const processed = () => summary.delivered + summary.skipped + summary.failed;
-
-  for await (const page of pages) {
-    const remaining = maxRecipients - processed();
-    if (remaining <= 0) {
-      summary.capped = true;
-      break;
-    }
-    // Skip the creator, then cap the page to the remaining budget so a run can
-    // never overshoot maxRecipients mid-page — even when every delivery fails.
-    const eligible = page.filter((uid) => uid !== creatorUid);
-    const recipients = eligible.slice(0, remaining);
-    if (recipients.length < eligible.length) {
-      summary.capped = true;
-    }
-
-    for (let i = 0; i < recipients.length; i += chunkSize) {
-      const chunk = recipients.slice(i, i + chunkSize);
-      const results = await Promise.allSettled(chunk.map((uid) => deliverOne(uid)));
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          if (result.value.delivered) {
-            summary.delivered += 1;
-          } else {
-            summary.skipped += 1;
-          }
-        } else {
-          summary.failed += 1;
-          onFailure?.(i + index, result.reason);
-        }
-      });
-    }
-
-    if (summary.capped) {
-      break;
-    }
+export function recipientsWithinCap(
+  pageUids: readonly string[],
+  options: { creatorUid: string; processed: number; maxRecipients: number },
+): { recipients: string[]; capped: boolean } {
+  const eligible = pageUids.filter((uid) => uid !== options.creatorUid);
+  const remaining = options.maxRecipients - options.processed;
+  if (remaining <= 0) {
+    return { recipients: [], capped: true };
   }
-
-  return summary;
+  const recipients = eligible.slice(0, remaining);
+  return { recipients, capped: recipients.length < eligible.length };
 }

@@ -150,6 +150,20 @@ export const onNotificationCreated = onDocumentCreated(
       return;
     }
 
+    // FAST-EXIT for a recipient with no registered device: push is impossible
+    // without a token, so read the token registry FIRST and bail before the
+    // feature-flag / eligibility reads below. A member with no token is then the
+    // cheapest possible invocation — a single empty subcollection read — instead
+    // of a flag read + two doc reads + the decision. This matters because this
+    // trigger is a per-recipient fan-out: a broadcast (admin send, or the new
+    // "event created" notice) writes one notification document PER member, and
+    // without this the tokenless majority would each do that full read set,
+    // amplifying one broadcast into a read storm against the SAME config doc.
+    // Behaviour for a member WHO HAS a token is unchanged: the flag gate and the
+    // re-derived eligibility decision below still run before anything is sent.
+    const tokens = await loadTokens(uid);
+    if (tokens.length === 0) return;
+
     if (!(await readFeatureFlag(PUSH_NOTIFICATIONS_FLAG_KEY))) {
       return;
     }
@@ -168,9 +182,6 @@ export const onNotificationCreated = onDocumentCreated(
       logger.debug('Push suppressed', { category, reason: decision.reason });
       return;
     }
-
-    const tokens = await loadTokens(uid);
-    if (tokens.length === 0) return;
 
     const payload = buildPushPayload({
       category,

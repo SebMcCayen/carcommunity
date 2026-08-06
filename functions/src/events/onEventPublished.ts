@@ -38,17 +38,18 @@
  */
 
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
-import { FieldPath } from 'firebase-admin/firestore';
+import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { writeInAppNotification } from '../notifications/deliver';
+import { toUserAccessState } from '../shared/access';
+import { buildNotificationDocument, decideInAppDelivery } from '../notifications/notifications-core';
 import {
   EVENT_CREATED_TITLE,
   type EventCreatedFanOutSummary,
   eventCreatedNotificationId,
   eventCreatedPreview,
-  fanOutEventCreated,
   isEventPublishedTransition,
+  recipientsWithinCap,
 } from './eventCreatedNotification-core';
 import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
@@ -63,62 +64,33 @@ const PAGE_SIZE = 200;
  */
 const MAX_RECIPIENTS = 10_000;
 
-/**
- * Active members notified CONCURRENTLY. Each writeInAppNotification is its own
- * transaction against a distinct per-user inbox, so the fan-out is
- * parallelisable — but NOT all at once: a large audience would otherwise open
- * one transaction per member simultaneously. Chunked exactly like the reminder
- * sweep's FANOUT_CONCURRENCY: bounded concurrency, still parallel enough to stay
- * well inside the timeout. Individual failures log per member and never propagate.
- */
-const FANOUT_CONCURRENCY = 15;
-
-/**
- * Injectable I/O — production uses the real notification writer; a test can pass
- * a stub. Same test-seam intent as the reminder sweep's deps.
- */
-export interface EventCreatedFanOutDeps {
-  deliver: typeof writeInAppNotification;
-}
-
-/**
- * Lazily pages the active-member uids (users/{uid}.activeMember == true) with a
- * documentId cursor — the SAME single-equality query notifications.adminSend's
- * `members` audience uses, so NO composite index. Yielded page-by-page so the
- * fan-out's attempts cap can stop the scan without ever loading the whole
- * collection.
- */
-async function* activeMemberPages(pageSize: number): AsyncGenerator<string[]> {
-  let cursor: string | null = null;
-  for (;;) {
-    let query = db
-      .collection('users')
-      .where('activeMember', '==', true)
-      .orderBy(FieldPath.documentId())
-      .limit(pageSize);
-    if (cursor !== null) {
-      query = query.startAfter(cursor);
-    }
-    const page = await query.get();
-    if (page.empty) {
-      return;
-    }
-    yield page.docs.map((doc) => doc.id);
-    if (page.size < pageSize) {
-      return;
-    }
-    cursor = page.docs[page.docs.length - 1]!.id;
-  }
-}
+/** gRPC ALREADY_EXISTS — a BulkWriter create() on an existing inbox item (an
+ * idempotent replay), which is a DUPLICATE (skip), never a real failure. */
+const GRPC_ALREADY_EXISTS = 6;
 
 /**
  * Fans the "new event" notice out to every active member (bar the creator) for
  * one just-published event. Exported so the emulator test can drive it directly
  * against seeded users + an event doc — the same test seam as the reminder
  * sweep's runEventReminders, so the untested surface stays just the onDocumentWritten
- * glue below. The cap / failure-counting / creator-exclusion loop lives in the
- * pure fanOutEventCreated (eventCreatedNotification-core.ts) and is unit-tested
- * there without the emulator; this function is only the Firestore I/O around it.
+ * glue below.
+ *
+ * EFFICIENT BY DESIGN — this is a BROADCAST, not a per-recipient callable, so it
+ * must not cost one round-trip per member. Prod audiences are tiny (~tens of
+ * members) but the write pattern still matters at test scale (the shared emulator
+ * accumulates hundreds of seeded users and MANY test files publish events, so a
+ * naive per-recipient transaction fan-out melts it). Per page it therefore:
+ *  - reuses the page's OWN users/{uid} document for the access state
+ *    (deleted/suspended) — no second read of a doc it already holds;
+ *  - batch-reads the page's userPrivate/{uid} preference docs in ONE getAll;
+ *  - writes the inbox items through a single BulkWriter (create() = idempotent
+ *    create-if-absent on the deterministic id, so a replay is an ALREADY_EXISTS
+ *    duplicate rather than an overwrite).
+ * It reuses the SAME pure decision + document builder writeInAppNotification uses
+ * (decideInAppDelivery / buildNotificationDocument), so eligibility (deleted /
+ * suspended / per-category opt-out) and the stored shape are identical — only the
+ * I/O is batched. Push follows for every created item via
+ * notifications-onNotificationCreated exactly as for any inbox write.
  *
  * Reads the event doc itself (title, createdByUserId) and re-checks status is
  * still `published` — a defensive re-derivation against the fresh document, so a
@@ -126,19 +98,18 @@ async function* activeMemberPages(pageSize: number): AsyncGenerator<string[]> {
  */
 export async function runEventCreatedFanOut(
   eventId: string,
-  deps: EventCreatedFanOutDeps = { deliver: writeInAppNotification },
 ): Promise<EventCreatedFanOutSummary> {
-  const empty: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
+  const summary: EventCreatedFanOutSummary = { delivered: 0, skipped: 0, failed: 0, capped: false };
 
   const eventSnap = await db.collection('events').doc(eventId).get();
   if (!eventSnap.exists) {
-    return empty;
+    return summary;
   }
   // Re-check against the FRESH document, not the trigger's stale after-snapshot:
   // a cancel/complete landing between the publish and this read must abort the
   // announcement (the guard is cheap and prevents "new event!" for a dead one).
   if (eventSnap.get('status') !== 'published') {
-    return empty;
+    return summary;
   }
   const title = String(eventSnap.get('title') ?? '');
   // The creator is excluded from the broadcast, so a trustworthy creator uid is a
@@ -151,19 +122,77 @@ export async function runEventCreatedFanOut(
   const rawCreator = eventSnap.get('createdByUserId');
   if (typeof rawCreator !== 'string' || rawCreator.length === 0) {
     logger.error('Event-created fan-out aborted: event has no valid createdByUserId', { eventId });
-    return empty;
+    return summary;
   }
   const creatorUid = rawCreator;
   const notificationId = eventCreatedNotificationId(eventId);
   const previewText = eventCreatedPreview(title);
+  const usersRef = db.collection('users');
 
-  const summary = await fanOutEventCreated(activeMemberPages(PAGE_SIZE), {
-    creatorUid,
-    maxRecipients: MAX_RECIPIENTS,
-    concurrency: FANOUT_CONCURRENCY,
-    deliverOne: (uid) =>
-      deps.deliver(
-        uid,
+  const bulk = db.bulkWriter();
+  // An ALREADY_EXISTS (idempotent replay) is a duplicate, NOT retryable; anything
+  // else gets the default bounded retry. Returning false stops the retry and
+  // rejects that op's promise, which the per-write handler classifies below.
+  bulk.onWriteError((error) => error.code !== GRPC_ALREADY_EXISTS && error.failedAttempts < 3);
+
+  let cursor: string | null = null;
+  for (;;) {
+    const processed = summary.delivered + summary.skipped + summary.failed;
+    if (processed >= MAX_RECIPIENTS) {
+      summary.capped = true;
+      break;
+    }
+    // Single-equality query (the same one notifications.adminSend's `members`
+    // audience uses) — NO composite index. Ordered by documentId for a stable
+    // cursor.
+    let query = usersRef
+      .where('activeMember', '==', true)
+      .orderBy(FieldPath.documentId())
+      .limit(PAGE_SIZE);
+    if (cursor !== null) {
+      query = query.startAfter(cursor);
+    }
+    const page = await query.get();
+    if (page.empty) {
+      break;
+    }
+
+    const byUid = new Map(page.docs.map((doc) => [doc.id, doc]));
+    const { recipients, capped } = recipientsWithinCap(
+      page.docs.map((doc) => doc.id),
+      { creatorUid, processed, maxRecipients: MAX_RECIPIENTS },
+    );
+    if (capped) {
+      summary.capped = true;
+    }
+
+    // Batch-read the preference docs for this page in one round-trip (rather than
+    // one per member); a member with no userPrivate doc reads as "enabled".
+    const privateSnaps = recipients.length
+      ? await db.getAll(...recipients.map((uid) => db.collection('userPrivate').doc(uid)))
+      : [];
+
+    // Enqueue this page's writes, then flush + settle before the next page so the
+    // attempts cap (recipientsWithinCap above) is computed against up-to-date
+    // counts.
+    const pageWrites: Promise<void>[] = [];
+    recipients.forEach((uid, index) => {
+      const userDoc = byUid.get(uid);
+      const decision = decideInAppDelivery(
+        'event_created',
+        toUserAccessState(userDoc?.data()),
+        privateSnaps[index]?.data()?.notificationPreferences,
+      );
+      if (!decision.deliver) {
+        summary.skipped += 1;
+        return;
+      }
+      const ref = db
+        .collection('notifications')
+        .doc(uid)
+        .collection('items')
+        .doc(notificationId);
+      const document = buildNotificationDocument(
         {
           category: 'event_created',
           title: EVENT_CREATED_TITLE,
@@ -171,17 +200,44 @@ export async function runEventCreatedFanOut(
           actionType: 'open_event',
           relatedEntityId: eventId,
         },
-        notificationId,
-      ),
-    // PII-free: the member's position in the run, not their uid.
-    onFailure: (memberIndex, error) => {
-      logger.error('Event-created notification delivery failed for a member', {
-        eventId,
-        memberIndex,
-        error: String(error),
-      });
-    },
-  });
+        () => FieldValue.serverTimestamp(),
+      );
+      pageWrites.push(
+        bulk
+          .create(ref, document)
+          .then(() => {
+            summary.delivered += 1;
+          })
+          .catch((error: unknown) => {
+            const code = (error as { code?: number } | null)?.code;
+            if (code === GRPC_ALREADY_EXISTS) {
+              // Idempotent replay — the item already existed.
+              summary.skipped += 1;
+              return;
+            }
+            summary.failed += 1;
+            // PII-free: the member's position in the run, not their uid.
+            logger.error('Event-created notification write failed for a member', {
+              eventId,
+              memberIndex: processed + index,
+              error: String(error),
+            });
+          }),
+      );
+    });
+    await bulk.flush();
+    await Promise.all(pageWrites);
+
+    if (summary.capped) {
+      break;
+    }
+    if (page.size < PAGE_SIZE) {
+      break;
+    }
+    cursor = page.docs[page.docs.length - 1]!.id;
+  }
+
+  await bulk.close();
 
   if (summary.capped) {
     logger.warn('Event-created fan-out hit the recipient cap; later members not notified', {
@@ -211,6 +267,24 @@ export const onEventPublished = onDocumentWritten(
     const beforeStatus = firestoreEvent.data?.before.data()?.status as string | undefined;
     const afterStatus = firestoreEvent.data?.after.data()?.status as string | undefined;
     if (!isEventPublishedTransition({ beforeStatus, afterStatus })) {
+      return;
+    }
+    // Under the shared Firestore emulator this trigger is a cross-test
+    // amplifier: EVERY test file that publishes an event fires it, and it then
+    // broadcasts to the WHOLE accumulated active-member set (hundreds of users
+    // other files seeded), writing one notification doc per member — each of
+    // which fires the notifications-onNotificationCreated push trigger. Across
+    // the suite that is tens of thousands of trigger dispatches piling into one
+    // shared functions runtime, congesting UNRELATED trigger-propagation waits
+    // (e.g. onRsvpWrite) until they time out. No emulator test relies on this
+    // trigger's broadcast — the feature's own coverage drives the exported
+    // runEventCreatedFanOut runner DIRECTLY (see events-created-notification
+    // .emulator.test.ts) and the transition guard above is unit-tested — so the
+    // trigger's fan-out is pure cross-test noise here. Skip it in the emulator
+    // ONLY. Production never sets FUNCTIONS_EMULATOR, so the broadcast to all
+    // active members is unchanged there. (Same env guard the callables use for
+    // enforceAppCheck.)
+    if (process.env.FUNCTIONS_EMULATOR === 'true') {
       return;
     }
     const { eventId } = firestoreEvent.params;

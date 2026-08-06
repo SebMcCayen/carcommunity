@@ -1,19 +1,12 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   EVENT_CREATED_TITLE,
   eventCreatedNotificationId,
   eventCreatedPreview,
-  fanOutEventCreated,
   isEventPublishedTransition,
+  recipientsWithinCap,
 } from './eventCreatedNotification-core';
 import { MAX_NOTIFICATION_TITLE_LENGTH } from '../notifications/notifications-core';
-
-/** An async page stream from plain arrays, for the pure fan-out tests. */
-async function* pagesOf(...pages: string[][]): AsyncGenerator<string[]> {
-  for (const page of pages) {
-    yield page;
-  }
-}
 
 describe('isEventPublishedTransition', () => {
   it('fires on a member create written already published (no before state)', () => {
@@ -83,87 +76,47 @@ describe('eventCreatedPreview', () => {
   });
 });
 
-describe('fanOutEventCreated', () => {
-  const okDeliver = async () => ({ delivered: true });
-
-  it('delivers to everyone except the creator and tallies the counts', async () => {
-    const summary = await fanOutEventCreated(pagesOf(['a', 'creator', 'b'], ['c']), {
+describe('recipientsWithinCap', () => {
+  it('drops the creator from the page', () => {
+    const { recipients } = recipientsWithinCap(['a', 'creator', 'b', 'creator'], {
       creatorUid: 'creator',
-      deliverOne: okDeliver,
+      processed: 0,
       maxRecipients: 100,
-      concurrency: 2,
     });
-    expect(summary).toEqual({ delivered: 3, skipped: 0, failed: 0, capped: false });
+    expect(recipients).toEqual(['a', 'b']);
   });
 
-  it('counts declined (delivered:false) recipients as skipped, not delivered', async () => {
-    const summary = await fanOutEventCreated(pagesOf(['a', 'b', 'c']), {
+  it('passes the whole (creator-free) page through when under the cap', () => {
+    const { recipients, capped } = recipientsWithinCap(['a', 'b', 'c'], {
       creatorUid: 'creator',
-      deliverOne: async (uid) => ({ delivered: uid !== 'b' }),
+      processed: 0,
       maxRecipients: 100,
-      concurrency: 5,
     });
-    expect(summary.delivered).toBe(2);
-    expect(summary.skipped).toBe(1);
-    expect(summary.failed).toBe(0);
+    expect(recipients).toEqual(['a', 'b', 'c']);
+    expect(capped).toBe(false);
   });
 
-  it('counts thrown deliveries as failed and keeps going (never aborts the run)', async () => {
-    const summary = await fanOutEventCreated(pagesOf(['a', 'b', 'c']), {
+  it('truncates a page to the remaining budget and flags capped', () => {
+    // 3 already processed, cap 5 → only 2 more may be attempted from this page.
+    const { recipients, capped } = recipientsWithinCap(['a', 'b', 'c', 'd'], {
       creatorUid: 'creator',
-      deliverOne: async () => {
-        throw new Error('boom');
-      },
-      maxRecipients: 100,
-      concurrency: 5,
+      processed: 3,
+      maxRecipients: 5,
     });
-    expect(summary.delivered).toBe(0);
-    expect(summary.failed).toBe(3);
+    expect(recipients).toEqual(['a', 'b']);
+    expect(capped).toBe(true);
   });
 
-  it('THE CAP FIX: a systemic failure still binds the cap on attempts, not just successes', async () => {
-    // Every delivery throws; without counting failures the cap could never bind
-    // and the run would walk every page. It must stop at maxRecipients ATTEMPTS.
-    const onFailure = vi.fn();
-    const summary = await fanOutEventCreated(pagesOf(['a', 'b', 'c', 'd', 'e']), {
+  it('THE CAP FIX: `processed` is delivered+skipped+FAILED, so a systemic failure still binds it', () => {
+    // The runner passes delivered+skipped+failed as `processed`; once that reaches
+    // the cap the next page yields nothing, so a run where every write FAILS still
+    // stops (rather than walking the whole active-users collection).
+    const { recipients, capped } = recipientsWithinCap(['x', 'y'], {
       creatorUid: 'creator',
-      deliverOne: async () => {
-        throw new Error('boom');
-      },
-      maxRecipients: 3,
-      concurrency: 1,
-      onFailure,
+      processed: 5, // e.g. all 5 prior attempts were failures
+      maxRecipients: 5,
     });
-    expect(summary.failed).toBe(3);
-    expect(summary.delivered).toBe(0);
-    expect(summary.capped).toBe(true);
-    // Exactly the cap's worth of attempts were made — the 4th/5th never ran.
-    expect(onFailure).toHaveBeenCalledTimes(3);
-  });
-
-  it('truncates a page to the remaining budget so a run never overshoots the cap', async () => {
-    let attempts = 0;
-    const summary = await fanOutEventCreated(pagesOf(['a', 'b', 'c', 'd', 'e']), {
-      creatorUid: 'creator',
-      deliverOne: async () => {
-        attempts += 1;
-        return { delivered: true };
-      },
-      maxRecipients: 2,
-      concurrency: 10,
-    });
-    expect(summary.delivered).toBe(2);
-    expect(summary.capped).toBe(true);
-    expect(attempts).toBe(2);
-  });
-
-  it('does not count the creator against the cap or the tallies', async () => {
-    const summary = await fanOutEventCreated(pagesOf(['creator', 'creator', 'a']), {
-      creatorUid: 'creator',
-      deliverOne: okDeliver,
-      maxRecipients: 100,
-      concurrency: 5,
-    });
-    expect(summary.delivered).toBe(1);
+    expect(recipients).toEqual([]);
+    expect(capped).toBe(true);
   });
 });
