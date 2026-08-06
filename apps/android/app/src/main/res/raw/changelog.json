@@ -2,6 +2,28 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 28,
+      "versionName": "0.8.17",
+      "releaseDate": "2026-08-06",
+      "highlights": [
+        "Checka in på en träff när du är på plats – det räknas mot din närvaro",
+        "Konvoj: se vilka som är inbjudna och tryck på en medlem för profil eller karta",
+        "Få en notis när en ny träff skapas – tryck för att öppna den direkt"
+      ],
+      "changes": [
+        "Du kan nu checka in på en träff när du är på plats – incheckningen (inte anmälan) är beviset på att du deltog och räknas mot utmärkelsen för närvaro",
+        "Konvoj: listan \"I den här konvojen\" visar nu även inbjudna som ännu inte gått med (\"Väntar på att gå med…\")",
+        "Konvoj: tryck på en medlem för att öppna Profil eller Visa på kartan, och medlemmar visas nu med sina riktiga profilbilder istället för en grå ikon",
+        "Konvoj: konvojen avslutas inte längre av sig själv när du står stilla, och när någon avslutar konvojen får alla ett meddelande om vem som avslutade den – konvojfältet försvinner nu som det ska när konvojen är över",
+        "Konvoj: att avsluta en konvoj går nu snabbt, och varje deltagares körning sparas även om appen låg i bakgrunden",
+        "När du skapar en träff öppnas kartan nu vid din egen plats istället för en fast startpunkt – flytta nålen därifrån",
+        "Du får nu en notis när en ny träff skapas, med en länk direkt till den",
+        "Vänner: du kan nu ångra en vänförfrågan du har skickat, och den väntande statusen visar \"Väntar på bekräftelse\"",
+        "En träff du skapar syns nu direkt både i träfflistan och på kartan",
+        "Chatten: det senaste meddelandet stannar ovanför tangentbordet när du öppnar det, så du alltid ser det"
+      ]
+    },
+    {
       "versionCode": 27,
       "versionName": "0.8.16",
       "releaseDate": "2026-08-05",
