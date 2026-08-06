@@ -10,3 +10,14 @@
  * a missing/unreadable/malformed sentinel or a non-zero code is a failure.
  */
 export declare function resolveOuterExitCode(sentinelPath: string, execCode: number): number;
+
+/**
+ * Turn the optional KCC_SHARD_INDEX/KCC_SHARD_TOTAL env vars into the extra
+ * vitest args. Returns `{ args: [] }` when unsharded (or total === 1), the
+ * `--shard=<i>/<n>` args when validly sharded, and `{ error }` for a malformed
+ * config (only one var set, non-integer, or out of range) — which the runner
+ * fails closed on rather than silently running the whole suite in one shard.
+ */
+export declare function resolveShardArgs(
+  env?: NodeJS.ProcessEnv,
+): { args: string[] } | { error: string };

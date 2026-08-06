@@ -14,8 +14,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // The runner is an ESM .mjs; it only drives the emulators when run as main, so
-// importing it here just pulls in the pure decision function.
-import { resolveOuterExitCode } from '../../scripts/run-emulator-tests.mjs';
+// importing it here just pulls in the pure decision functions.
+import { resolveOuterExitCode, resolveShardArgs } from '../../scripts/run-emulator-tests.mjs';
 
 let dir: string;
 let sentinel: string;
@@ -66,5 +66,39 @@ describe('resolveOuterExitCode', () => {
   ])('fails when %s (no false green from a malformed sentinel)', (_label, payload) => {
     writeFileSync(sentinel, JSON.stringify(payload));
     expect(resolveOuterExitCode(sentinel, 0)).toBe(1);
+  });
+});
+
+describe('resolveShardArgs', () => {
+  it('runs the whole suite (no --shard) when neither env var is set', () => {
+    expect(resolveShardArgs({})).toEqual({ args: [] });
+  });
+
+  it('runs the whole suite when total === 1 (a single shard is everything)', () => {
+    expect(resolveShardArgs({ KCC_SHARD_INDEX: '1', KCC_SHARD_TOTAL: '1' })).toEqual({ args: [] });
+  });
+
+  it.each([
+    ['1/4', '1', '4', '--shard=1/4'],
+    ['4/4', '4', '4', '--shard=4/4'],
+    ['2/3', '2', '3', '--shard=2/3'],
+  ])('forwards a valid %s slice to vitest', (_label, index, total, expected) => {
+    expect(resolveShardArgs({ KCC_SHARD_INDEX: index, KCC_SHARD_TOTAL: total })).toEqual({
+      args: [expected],
+    });
+  });
+
+  it.each([
+    ['only index set', { KCC_SHARD_INDEX: '1' }],
+    ['only total set', { KCC_SHARD_TOTAL: '4' }],
+    ['index above total', { KCC_SHARD_INDEX: '5', KCC_SHARD_TOTAL: '4' }],
+    ['zero index (1-based)', { KCC_SHARD_INDEX: '0', KCC_SHARD_TOTAL: '4' }],
+    ['non-integer index', { KCC_SHARD_INDEX: '1.5', KCC_SHARD_TOTAL: '4' }],
+    ['non-numeric total', { KCC_SHARD_INDEX: '1', KCC_SHARD_TOTAL: 'abc' }],
+    ['zero total', { KCC_SHARD_INDEX: '1', KCC_SHARD_TOTAL: '0' }],
+  ])('fails closed on a malformed shard config: %s', (_label, env) => {
+    const result = resolveShardArgs(env);
+    expect(result).toHaveProperty('error');
+    expect('args' in result).toBe(false);
   });
 });

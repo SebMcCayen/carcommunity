@@ -31,15 +31,31 @@ permissions:
   contents: read
 
 jobs:
-  test-firebase-rules:
-    name: test-firebase-rules
+  # The ~900-test emulator suite across 8 emulators outgrew a single
+  # free (~7 GB) standard runner: it progressed fine for ~11 min and then the
+  # Firestore emulator got SIGKILL'd and the job was cancelled — a resource
+  # ceiling, not a test failure (it passes on higher-RAM machines). So we shard
+  # the suite across parallel free runners, each with its OWN fresh emulator
+  # set running a deterministic 1/N slice of the test FILES (vitest `--shard`).
+  # Each shard's peak memory + wall-time then sits well under the ceiling.
+  #
+  # To change the shard count, edit ONLY the `shard:` array below — the total is
+  # derived from it via `strategy.job-total`, so the two can never drift.
+  shard:
+    name: shard ${{ matrix.shard }}/${{ strategy.job-total }}
     runs-on: ubuntu-latest
-    # The emulator suite normally runs ~10-12 min. Cap the job so a mid-suite
-    # freeze (the process going silent and hanging) dies fast instead of
-    # burning the 6h default — one such hang once ran 62 min before it was
-    # killed. This is the fail-fast guard; the teardown/exit-code robustness
-    # lives in functions/scripts/run-emulator-tests.mjs.
-    timeout-minutes: 25
+    strategy:
+      # One shard hitting a resource wall or a real failure must not cancel the
+      # others — we want every shard's result.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    # Each shard runs a quarter of the suite, so it finishes well inside this
+    # cap. Kept as a fail-fast guard so a mid-suite freeze (the process going
+    # silent and hanging) dies fast instead of burning the 6h default; the
+    # teardown/exit-code robustness lives in
+    # functions/scripts/run-emulator-tests.mjs.
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -76,12 +92,38 @@ jobs:
         working-directory: functions
         run: pnpm install --frozen-lockfile
 
-      - name: Run emulator integration tests
+      - name: Run emulator integration tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         working-directory: functions
         # Cold-starting ~160 function definitions under CI load can exceed the
         # functions emulator's default 30s discovery timeout, surfacing as an
         # intermittent "Failed to load function" (e.g. admin-setFeatureFlag /
         # feedback-reportIssue) that flakes the whole suite. Give it headroom.
+        #
+        # KCC_SHARD_INDEX/KCC_SHARD_TOTAL are forwarded by the runner as
+        # `vitest --shard=<i>/<n>`, so this job runs only its file subset.
         env:
           FUNCTIONS_DISCOVERY_TIMEOUT: "120"
+          KCC_SHARD_INDEX: ${{ matrix.shard }}
+          KCC_SHARD_TOTAL: ${{ strategy.job-total }}
         run: pnpm run emulators:test
+
+  # Branch-protection gate. Sharding turns the work into `shard (1)`, `shard (2)`
+  # … so the single status name a required check expects would otherwise vanish.
+  # This job keeps the exact `test-firebase-rules` name and passes only when
+  # EVERY shard passed, so one required check still gates the whole matrix.
+  test-firebase-rules:
+    name: test-firebase-rules
+    runs-on: ubuntu-latest
+    needs: shard
+    # Run even if a shard failed/was cancelled so this gate reports the true
+    # aggregate result instead of being skipped.
+    if: ${{ always() }}
+    steps:
+      - name: Verify all shards passed
+        run: |
+          echo "Aggregate shard result: ${{ needs.shard.result }}"
+          if [ "${{ needs.shard.result }}" != "success" ]; then
+            echo "::error::One or more emulator-test shards did not succeed (result: ${{ needs.shard.result }})."
+            exit 1
+          fi
+          echo "All emulator-test shards passed."

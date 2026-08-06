@@ -68,6 +68,17 @@ const functionsDir = join(__dirname, '..');
 // vitest result. The value is a path inside a per-run mkdtemp'd directory.
 const ENV_SENTINEL = 'KCC_EMULATOR_TEST_SENTINEL';
 
+// Optional shard coordinates, set by the CI matrix so each runner spins up its
+// own full emulator set but runs only a deterministic 1/N slice of the test
+// FILES (vitest's built-in `--shard`, which balances by file). This is what
+// keeps each job's peak memory + wall-time under the free-runner ceiling — the
+// single-job suite outgrew ~7 GB and got the Firestore emulator SIGKILL'd.
+// Both are 1-based; index in [1..total]. Absent → run the whole suite (local
+// `pnpm test:emulator`, the runner unit test, and any non-sharded caller keep
+// working unchanged).
+const ENV_SHARD_INDEX = 'KCC_SHARD_INDEX';
+const ENV_SHARD_TOTAL = 'KCC_SHARD_TOTAL';
+
 // Quiet window (ms) to let the background-trigger backlog drain before the
 // emulators shut down. A run is ~10 min; the default here is negligible
 // overhead and comfortably covers the observed ~ms-per-trigger drain. Tunable
@@ -161,13 +172,88 @@ export function resolveOuterExitCode(sentinelPath, execCode) {
   return code;
 }
 
+/**
+ * Turn the optional shard env vars into the extra vitest args (if any).
+ *
+ * Fail-closed contract for CI integrity:
+ *  - Neither var set  → `{ args: [] }` (run the whole suite; unchanged local
+ *    and unit-test behaviour).
+ *  - `total === 1`    → `{ args: [] }` (a single shard IS the whole suite; no
+ *    need to invoke `--shard`).
+ *  - Both set & valid (integers, 1 <= index <= total) → the `--shard` args.
+ *  - Anything else (only one var set, non-integer, out of range) → `{ error }`.
+ *    A malformed shard config must NEVER silently run the FULL suite inside one
+ *    shard — that would both mask the intent and re-create the memory ceiling
+ *    this change exists to avoid. The caller turns `error` into a failed run.
+ *
+ * Exported (side-effect-free) so it can be unit-tested directly.
+ *
+ * @param {NodeJS.ProcessEnv} [env=process.env]
+ * @returns {{ args: string[] } | { error: string }}
+ */
+export function resolveShardArgs(env = process.env) {
+  const rawIndex = env[ENV_SHARD_INDEX];
+  const rawTotal = env[ENV_SHARD_TOTAL];
+
+  const hasIndex = rawIndex != null && rawIndex !== '';
+  const hasTotal = rawTotal != null && rawTotal !== '';
+
+  if (!hasIndex && !hasTotal) return { args: [] };
+
+  if (hasIndex !== hasTotal) {
+    return {
+      error: `only one of ${ENV_SHARD_INDEX}/${ENV_SHARD_TOTAL} is set (index=${JSON.stringify(
+        rawIndex,
+      )}, total=${JSON.stringify(rawTotal)}) — set both or neither.`,
+    };
+  }
+
+  const index = Number(rawIndex);
+  const total = Number(rawTotal);
+  if (
+    !Number.isInteger(index) ||
+    !Number.isInteger(total) ||
+    total < 1 ||
+    index < 1 ||
+    index > total
+  ) {
+    return {
+      error: `invalid shard config ${ENV_SHARD_INDEX}=${JSON.stringify(
+        rawIndex,
+      )} ${ENV_SHARD_TOTAL}=${JSON.stringify(
+        rawTotal,
+      )} — expected integers with 1 <= index <= total.`,
+    };
+  }
+
+  // A single shard is the whole suite; don't bother slicing.
+  if (total === 1) return { args: [] };
+
+  return { args: [`--shard=${index}/${total}`] };
+}
+
 async function inner() {
   const sentinelPath = process.env[ENV_SENTINEL];
 
   // Run the vitest emulator suite. `pnpm test:emulator` is the single source of
   // truth for how the suite is invoked (vitest run --config
-  // vitest.emulator.config.ts).
-  const vitestCode = await run('pnpm', ['test:emulator']);
+  // vitest.emulator.config.ts). Under the CI matrix we forward a deterministic
+  // `--shard=<i>/<n>` slice through pnpm (args after `--` reach vitest), so each
+  // runner executes only its subset — far lower peak memory than the whole run.
+  const shard = resolveShardArgs();
+  let vitestCode;
+  if ('error' in shard) {
+    console.error(
+      `[run-emulator-tests] ${shard.error} Refusing to run a mis-sharded suite; failing this shard.`,
+    );
+    vitestCode = 1;
+  } else {
+    const pnpmArgs = ['test:emulator', ...(shard.args.length ? ['--', ...shard.args] : [])];
+    if (shard.args.length) {
+      console.log(`[run-emulator-tests] running vitest ${shard.args.join(' ')} (pnpm ${pnpmArgs.join(' ')})`);
+    }
+    vitestCode = await run('pnpm', pnpmArgs);
+  }
 
   // DRAIN: with the emulators still fully up, give the async Firestore/RTDB
   // trigger backlog a quiet window to finish on its fast path, so nothing is
