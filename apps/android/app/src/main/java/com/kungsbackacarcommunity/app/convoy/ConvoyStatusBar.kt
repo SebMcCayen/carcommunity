@@ -1196,9 +1196,15 @@ private fun ConvoyMemberListPopup(
 /**
  * A convoy member's avatar in the list popup: their real profile picture when one
  * is set, resolved through the same [rememberStorageImageUrl] path the rest of the
- * app loads member avatars with, falling back to a neutral placeholder when there
- * is none (or while it loads). [muted] dims the placeholder for a pending invitee,
- * matching the muted name/status of a "waiting to join" row.
+ * app loads member avatars with.
+ *
+ * The neutral placeholder (grey circle + person glyph) is drawn UNDERNEATH the
+ * image and always present, so it is what shows in every non-loaded case — no
+ * picture set, the image still loading, or the load failing — and the real image
+ * simply covers it once it decodes. That means a member with a set picture shows
+ * the placeholder while it loads and then the photo, and falls back to the same
+ * placeholder (never a blank circle) on error. [muted] dims the placeholder glyph
+ * for a pending invitee, matching the muted name/status of a "waiting to join" row.
  */
 @Composable
 private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
@@ -1212,24 +1218,26 @@ private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center,
     ) {
+        // Always-present placeholder beneath the image: shows for no-url, and stays
+        // visible while the image loads or if it fails (AsyncImage is transparent
+        // until it has a decoded bitmap, so this shows through).
+        Icon(
+            imageVector = Icons.Filled.Person,
+            contentDescription = null,
+            tint =
+                if (muted) {
+                    MaterialTheme.colorScheme.outline
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            modifier = Modifier.size(18.dp),
+        )
         if (url != null) {
             AsyncImage(
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(28.dp),
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint =
-                    if (muted) {
-                        MaterialTheme.colorScheme.outline
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                modifier = Modifier.size(18.dp),
             )
         }
     }

@@ -1097,23 +1097,31 @@ class MapboxMapSurface : MapSurface {
      */
     override fun centerOn(point: MapPoint) {
         val map = mapViewRef ?: return
-        runCatching {
-            onUserGestureBegin()
-            map.camera.easeTo(
-                cameraOptions {
-                    center(Point.fromLngLat(point.longitude, point.latitude))
-                    // The resting/browsing zoom, the same framing a my-location
-                    // recentre lands at, and keep the current tilt.
-                    zoom(browsingZoom)
-                    pitch(this@MapboxMapSurface.pitch)
-                    if (compassMode == MapCompassMode.CourseUp) {
-                        bearing(CompassCamera.followBearing(compassMode, lastBearing))
-                    }
-                },
-                mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
-            )
+        // Detach follow, then GUARANTEE it is re-armed: begin and end must be
+        // paired even if the ease throws, or a failed centre would leave the
+        // follow controller stuck in gesture-begun state with the idle-return job
+        // cancelled — follow permanently detached. The end therefore runs in a
+        // finally, and only the ease itself is defended with runCatching.
+        onUserGestureBegin()
+        try {
+            runCatching {
+                map.camera.easeTo(
+                    cameraOptions {
+                        center(Point.fromLngLat(point.longitude, point.latitude))
+                        // The resting/browsing zoom, the same framing a my-location
+                        // recentre lands at, and keep the current tilt.
+                        zoom(browsingZoom)
+                        pitch(this@MapboxMapSurface.pitch)
+                        if (compassMode == MapCompassMode.CourseUp) {
+                            bearing(CompassCamera.followBearing(compassMode, lastBearing))
+                        }
+                    },
+                    mapAnimationOptions { duration(RECENTER_ANIMATION_MS) },
+                )
+            }
+        } finally {
             // Arm the idle-return timer so follow resumes after the quiet window,
-            // exactly as a real pan-to-look-at-something does.
+            // exactly as a real pan-to-look-at-something does — success or throw.
             onUserGestureEnd()
         }
     }
