@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import java.time.Instant
 import java.time.ZoneId
+import java.util.Locale
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -13,6 +15,12 @@ import org.junit.Test
  */
 class CrownSeasonClockTest {
     private val stockholm = ZoneId.of("Europe/Stockholm")
+    private val defaultLocale = Locale.getDefault()
+
+    @After
+    fun restoreLocale() {
+        Locale.setDefault(defaultLocale)
+    }
 
     @Test
     fun midMonthSeasonId() {
@@ -40,6 +48,15 @@ class CrownSeasonClockTest {
             "2026-07",
             CrownSeasonClock.seasonIdForInstant(Instant.parse("2026-07-31T21:30:00Z"), stockholm),
         )
+    }
+
+    @Test
+    fun seasonIdIsAsciiDigitsEvenUnderANonLatinDefaultLocale() {
+        // A device whose default locale numbers with Arabic-Indic digits must NOT
+        // produce "٢٠٢٦-٠٨" — that would never match the backend's ASCII doc id.
+        Locale.setDefault(Locale.forLanguageTag("ar-EG-u-nu-arab"))
+        val id = CrownSeasonClock.seasonIdForInstant(Instant.parse("2026-08-15T12:00:00Z"), stockholm)
+        assertEquals("2026-08", id)
     }
 
     @Test

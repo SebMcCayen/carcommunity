@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.crownhunt
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * The current Kronjakt SEASON id, client side.
@@ -20,7 +21,13 @@ import java.time.format.DateTimeFormatter
  */
 object CrownSeasonClock {
     private val STOCKHOLM: ZoneId = ZoneId.of("Europe/Stockholm")
-    private val SEASON_ID: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM")
+
+    // Locale.ROOT so the digits are always ASCII: the backend's doc ids are a
+    // plain `YYYY-MM` (en-US formatter), and a device whose default locale uses a
+    // non-Latin numbering system (e.g. Arabic-Indic digits) would otherwise format
+    // "٢٠٢٦-٠٨" and read an empty board for a season that does not exist.
+    private val SEASON_ID: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("yyyy-MM", Locale.ROOT)
 
     /** The `YYYY-MM` season id [instant] falls in, in [zone] (default Stockholm). */
     fun seasonIdForInstant(instant: Instant, zone: ZoneId = STOCKHOLM): String =
