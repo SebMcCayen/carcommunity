@@ -10,3 +10,14 @@
  * a missing/unreadable/malformed sentinel or a non-zero code is a failure.
  */
 export declare function resolveOuterExitCode(sentinelPath: string, execCode: number): number;
+
+/**
+ * Turn the optional KCC_TEST_FILES env var into the positional vitest file
+ * args. Returns `{ args: [] }` when unset (whole suite), `{ args: [file, …] }`
+ * for a non-empty group, and `{ error }` when it is set but names no files —
+ * which the runner fails closed on rather than silently running the whole suite
+ * or testing nothing.
+ */
+export declare function resolveTestFileArgs(
+  env?: NodeJS.ProcessEnv,
+): { args: string[] } | { error: string };

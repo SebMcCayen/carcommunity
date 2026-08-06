@@ -68,6 +68,16 @@ const functionsDir = join(__dirname, '..');
 // vitest result. The value is a path inside a per-run mkdtemp'd directory.
 const ENV_SENTINEL = 'KCC_EMULATOR_TEST_SENTINEL';
 
+// Optional explicit test-file list, set by the CI matrix so each runner spins
+// up its own full emulator set but runs only ONE named feature group's files
+// (see scripts/emulator-test-groups.mjs). This is what keeps each job's peak
+// memory + wall-time under the free-runner ceiling — the single-job suite
+// outgrew ~7 GB and got the Firestore emulator SIGKILL'd. The value is a
+// whitespace-separated list of functions-relative paths. Absent → run the
+// whole suite (local `pnpm test:emulator`, the runner unit test, and any
+// non-grouped caller keep working unchanged).
+const ENV_TEST_FILES = 'KCC_TEST_FILES';
+
 // Quiet window (ms) to let the background-trigger backlog drain before the
 // emulators shut down. A run is ~10 min; the default here is negligible
 // overhead and comfortably covers the observed ~ms-per-trigger drain. Tunable
@@ -161,13 +171,67 @@ export function resolveOuterExitCode(sentinelPath, execCode) {
   return code;
 }
 
+/**
+ * Turn the optional test-file-group env var into the positional vitest args.
+ *
+ * Fail-closed contract for CI integrity:
+ *  - Unset             → `{ args: [] }` (run the whole suite; unchanged local
+ *    and unit-test behaviour).
+ *  - Set & non-empty   → `{ args: [file, …] }` — the group's files, forwarded to
+ *    vitest as positional file filters so it runs ONLY those.
+ *  - Set but empty/whitespace → `{ error }`. An empty group must NEVER fall back
+ *    to running the whole suite (that would re-create the memory ceiling this
+ *    change avoids) NOR silently test nothing. The caller turns `error` into a
+ *    failed run.
+ *
+ * Exported (side-effect-free) so it can be unit-tested directly.
+ *
+ * @param {NodeJS.ProcessEnv} [env=process.env]
+ * @returns {{ args: string[] } | { error: string }}
+ */
+export function resolveTestFileArgs(env = process.env) {
+  const raw = env[ENV_TEST_FILES];
+  if (raw == null) return { args: [] };
+
+  const files = raw.split(/\s+/).filter(Boolean);
+  if (files.length === 0) {
+    return {
+      error: `${ENV_TEST_FILES} is set but names no files — a CI group must run at least one test file. Refusing to run (an empty group would silently test nothing).`,
+    };
+  }
+  return { args: files };
+}
+
 async function inner() {
   const sentinelPath = process.env[ENV_SENTINEL];
 
   // Run the vitest emulator suite. `pnpm test:emulator` is the single source of
   // truth for how the suite is invoked (vitest run --config
-  // vitest.emulator.config.ts).
-  const vitestCode = await run('pnpm', ['test:emulator']);
+  // vitest.emulator.config.ts). Under the CI matrix we append this group's test
+  // FILES as positional filters so each runner executes only its named subset —
+  // far lower peak memory than the whole run.
+  //
+  // The files are passed WITHOUT a `--` separator. `pnpm run <script> -- X`
+  // forwards the `--` verbatim into the final command; while a positional file
+  // path survives that, keeping the invocation `pnpm test:emulator <files>` →
+  // `vitest run --config … <files>` is the clean, unambiguous form (and mirrors
+  // how you'd filter files by hand).
+  const group = resolveTestFileArgs();
+  let vitestCode;
+  if ('error' in group) {
+    console.error(
+      `[run-emulator-tests] ${group.error} Refusing to run an ill-defined group; failing this job.`,
+    );
+    vitestCode = 1;
+  } else {
+    const pnpmArgs = ['test:emulator', ...group.args];
+    if (group.args.length) {
+      console.log(
+        `[run-emulator-tests] running ${group.args.length} test file(s) for this group:\n  ${group.args.join('\n  ')}`,
+      );
+    }
+    vitestCode = await run('pnpm', pnpmArgs);
+  }
 
   // DRAIN: with the emulators still fully up, give the async Firestore/RTDB
   // trigger backlog a quiet window to finish on its fast path, so nothing is
