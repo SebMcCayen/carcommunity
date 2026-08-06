@@ -205,5 +205,10 @@ private fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
                 null
             }
         }
-    return LiveSessionInfo(sessionId, status, duration, expiresAtMillis)
+    // Absent on a manually-started solo session (the field is only written by the
+    // convoy auto-start producer), so a missing/false child means "not a convoy
+    // session". Read as a boxed Boolean and default to false.
+    val convoyAutoStarted =
+        child("convoyAutoStarted").getValue(Boolean::class.java) == true
+    return LiveSessionInfo(sessionId, status, duration, expiresAtMillis, convoyAutoStarted)
 }

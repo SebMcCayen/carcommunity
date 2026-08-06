@@ -384,6 +384,49 @@ describe('live TTL sweep', () => {
     );
     expect((await adminRtdb.ref('liveLocation/ttl-healthy/latest').get()).exists()).toBe(true);
   });
+
+  it('does NOT end a stationary convoy session within a realistic window (issue #1)', async () => {
+    // Root-cause guard for "the convoy auto-ended after ~20 min while I stood
+    // still". The BACKEND never ends a convoy on a short timeout: a convoy-auto
+    // session runs a 6h window, and a member standing still (its heartbeat still
+    // refreshing the marker within the 15-min stale window) is swept as HEALTHY —
+    // status stays active and the marker is kept. The premature end was purely the
+    // CLIENT's stationary auto-stop, now suppressed for convoy sessions.
+    const now = new Date();
+    const iso = (msAgo: number) => new Date(now.getTime() - msAgo).toISOString();
+    await adminRtdb.ref('liveLocation/ttl-convoy-parked').set({
+      session: {
+        id: 's-convoy-parked',
+        status: 'active',
+        duration: '6h',
+        // Started 20 minutes ago and parked ever since — the exact window Seb hit.
+        startedAt: iso(20 * 60_000),
+        expiresAt: new Date(now.getTime() + 6 * 3600_000 - 20 * 60_000).toISOString(),
+        stoppedAt: null,
+        convoyAutoStarted: true,
+        convoyId: 'convoy-parked',
+      },
+      // A parked member's 3-min heartbeat keeps the marker inside the 15-min
+      // stale window, so it is NOT silent-stale.
+      latest: {
+        latitude: 4,
+        longitude: 4,
+        recordedAt: iso(2 * 60_000),
+        sessionId: 's-convoy-parked',
+      },
+    });
+
+    await runLiveCleanup(now);
+
+    // The session is untouched — still active — so the convoy it backs stays live.
+    expect(
+      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/session/status').get()).val(),
+    ).toBe('active');
+    // And the marker is kept, so the member stays visible to the convoy.
+    expect(
+      (await adminRtdb.ref('liveLocation/ttl-convoy-parked/latest').get()).exists(),
+    ).toBe(true);
+  });
 });
 
 describe('convoy run finalize (server-side member-run backstop)', () => {

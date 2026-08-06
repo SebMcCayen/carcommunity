@@ -165,6 +165,17 @@ class LocationSharingService : Service() {
     private val stationaryMonitor = StationarySharingMonitor()
     private val stationaryLock = Any()
 
+    /**
+     * Whether the session currently being observed was auto-started BY a convoy
+     * ([LiveSessionInfo.convoyAutoStarted]). While true the stationary
+     * prompt/auto-stop is suppressed so an active convoy always keeps its member's
+     * live session ongoing (Seb's session↔convoy coupling) — see
+     * [evaluateStationary] and [StationarySharingMonitor]. Updated from the session
+     * observer, read from the ticker, so it is @Volatile.
+     */
+    @Volatile
+    private var sessionIsConvoy: Boolean = false
+
     /** Which prompt (if any) the ongoing notification is currently offering. */
     private var promptMode: SharingPromptMode = SharingPromptMode.NORMAL
 
@@ -465,6 +476,10 @@ class LocationSharingService : Service() {
         promptMode = SharingPromptMode.NORMAL
         shownPromptMode = null
         synchronized(stationaryLock) { stationaryMonitor.reset() }
+        // Unknown until the first observation of the new session; default to
+        // "not a convoy" so a manual solo session is not accidentally treated as
+        // convoy-coupled before its node is read.
+        sessionIsConvoy = false
 
         // Post the notification and enter the foreground FIRST: the platform
         // requires startForeground within a few seconds of the start request.
@@ -552,6 +567,12 @@ class LocationSharingService : Service() {
                 }
                 try {
                     repo.observeOwnSession(uid).collectLatest { session ->
+                        // Track whether the live session is convoy-tied so the
+                        // stationary auto-stop can be suppressed for it (session↔
+                        // convoy coupling). Only updated on a REAL observation — a
+                        // null (a read blip inside the absent-grace window) keeps
+                        // the last-known value rather than momentarily un-coupling.
+                        if (session != null) sessionIsConvoy = session.convoyAutoStarted
                         decideAndApply {
                             lifecycle.onObservation(
                                 signedIn = isStillSignedIn(uid),
@@ -628,7 +649,15 @@ class LocationSharingService : Service() {
      * notification.
      */
     private suspend fun evaluateStationary(nowMillis: Long): Boolean {
-        val decision = synchronized(stationaryLock) { stationaryMonitor.decide(nowMillis) }
+        // Session↔convoy coupling: while sharing THROUGH an active convoy, the
+        // session must stay alive regardless of movement, so neither the auto-stop
+        // nor the prompt applies. Passing inConvoy to decide() suppresses both at
+        // the source (and stops the prompt latching); gating stationaryPending on
+        // it as well clears any prompt that was already outstanding when the
+        // convoy started. The 6h cap (LiveSharingLifecycle) still bounds the run.
+        val inConvoy = sessionIsConvoy
+        val decision =
+            synchronized(stationaryLock) { stationaryMonitor.decide(nowMillis, inConvoy) }
         if (decision is StationaryDecision.AutoStop) {
             // Parked ~15 min with no reply: stop on the SAME server path as a
             // manual stop (removes the marker; leaves any convoy membership intact).
@@ -636,8 +665,9 @@ class LocationSharingService : Service() {
             return true
         }
         val stationaryPending =
-            decision is StationaryDecision.Prompt ||
-                synchronized(stationaryLock) { stationaryMonitor.isPromptOutstanding() }
+            !inConvoy &&
+                (decision is StationaryDecision.Prompt ||
+                    synchronized(stationaryLock) { stationaryMonitor.isPromptOutstanding() })
         lifecycleMutex.withLock {
             promptMode =
                 if (stationaryPending) SharingPromptMode.STATIONARY else SharingPromptMode.NORMAL
