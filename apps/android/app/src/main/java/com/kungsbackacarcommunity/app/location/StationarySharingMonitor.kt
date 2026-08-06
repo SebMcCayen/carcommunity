@@ -23,13 +23,18 @@ package com.kungsbackacarcommunity.app.location
  * - Any movement beyond the threshold, OR an explicit [answerStillSharing], cancels
  *   a pending prompt/stop and starts the clock over.
  *
- * ## Convoy members
- * A convoy member shares through this very same live session, so the same rule
- * applies to them. Auto-stopping stops their location BROADCAST only — it removes
- * their `latest` marker via the ordinary stop path and does NOT touch convoy
- * membership (memberUids / the roster), so they remain a convoy member with no
- * live position until they choose to share again. The prompt wording (owned by
- * the presenter, not this pure logic) reflects that.
+ * ## Convoy members are EXEMPT (session↔convoy coupling)
+ * A convoy member shares through this very same live session — but a convoy is
+ * precisely where standing still is normal (a meet-up, a fuel stop, waiting for
+ * stragglers), and Seb's invariant is "an active convoy always has a live session
+ * ongoing". Auto-stopping a convoy member's session would strand the convoy
+ * ACTIVE with that member's live-share dead — the exact decoupling behind the
+ * "convoy ended on its own after ~20 min while I stood still" and "my location
+ * stopped but the convoy bar stayed up" reports. So while the observed session is
+ * a convoy-auto session, [decide] is called with `inConvoy = true` and never
+ * prompts or auto-stops: the convoy keeps the session alive regardless of
+ * movement. The session's own 6h hard cap ([LiveSharingLifecycle]) remains the
+ * backstop, so a forgotten phone in a never-ended convoy still stops there.
  *
  * The monitor holds NO clock of its own: the caller supplies `nowMillis` on every
  * call, exactly like [LiveSharingLifecycle].
@@ -93,7 +98,24 @@ class StationarySharingMonitor(
      * prompt has now been shown (so a [StationaryDecision.Prompt] is emitted once,
      * then the monitor waits out the auto-stop window rather than re-prompting).
      */
-    fun decide(nowMillis: Long): StationaryDecision {
+    fun decide(nowMillis: Long, inConvoy: Boolean = false): StationaryDecision {
+        // Convoy↔session coupling: a member sharing THROUGH a convoy-auto session
+        // is never stationary-prompted or auto-stopped — standing still in a
+        // convoy is expected, and stopping the broadcast would leave the convoy
+        // active with a dead session.
+        //
+        // Also CLEAR any prompt that was already latched BEFORE the convoy began:
+        // without this, a member who parked solo (prompt latched), then joined a
+        // convoy, then LEFT while still parked would carry the stale
+        // promptedAtMillis across — and the first post-leave decision would jump
+        // straight to AutoStop (now - promptedAt >= grace) instead of prompting
+        // once. Clearing it here restarts the prompt-once cycle: the stationary
+        // clock keeps running, so on leaving they get a single fresh Prompt (never
+        // an immediate stop). See this class's KDoc.
+        if (inConvoy) {
+            promptedAtMillis = null
+            return StationaryDecision.None
+        }
         val since = stationarySinceMillis ?: return StationaryDecision.None
         val stationaryFor = nowMillis - since
         if (stationaryFor < promptAfterMillis) return StationaryDecision.None

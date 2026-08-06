@@ -601,6 +601,28 @@ async function convoyUpdateNotified(uid: string, convoyId: string): Promise<bool
   }, 20_000);
 }
 
+/**
+ * The previewText of `uid`'s convoy_update in-app notice for `convoyId` — used to
+ * assert the "who ended the convoy" message names the ender (issue #2: members
+ * must always be told WHY a convoy ended and by WHOM, never just have it vanish).
+ */
+async function convoyUpdateNoticeText(uid: string, convoyId: string): Promise<string> {
+  return pollUntil(async () => {
+    const snap = await adminDb
+      .collection('notifications')
+      .doc(uid)
+      .collection('items')
+      .where('relatedEntityId', '==', convoyId)
+      .get();
+    const notice = snap.docs.find((d) => d.data().category === 'convoy_update');
+    const text = notice?.data().previewText as string | undefined;
+    // Keep polling (return undefined) until the notice AND its previewText have
+    // actually landed — returning '' here would stop pollUntil early and assert
+    // against empty text before the real "<Name> ended the convoy" body arrives.
+    return text && text.length > 0 ? text : undefined;
+  }, 20_000);
+}
+
 describe('convoy-leave: a plain exit', () => {
   it('removes a NON-LEADER from every membership collection, convoy carries on', async () => {
     const { owner, members, convoyId } = await convoyWithAcceptedMembers('LeaveOwnerC', [
@@ -935,6 +957,27 @@ describe('convoy-end is LEADER-only', () => {
     const ended = (await call('convoy-end', { convoyId })).data as { convoy: ConvoySummary };
     expect(ended.convoy.status).toBe('ended');
     expect(await convoyUpdateNotified(a.uid, convoyId)).toBe(true);
+  }, 90_000);
+
+  it('the end notice NAMES the member who ended it (issue #2)', async () => {
+    // A member whose app was backgrounded when someone else ended the convoy must
+    // still learn WHY it ended and by WHOM — not just have the bar silently
+    // vanish, indistinguishable from an expiry. convoy.end fans the SAME
+    // convoy_update notice out to every other member, and its body identifies the
+    // ender by their roster display name.
+    const { owner, members, convoyId } = await convoyWithAcceptedMembers('EndNoticeOwnerC', [
+      'EndNoticeMemberC',
+    ]);
+    const member = members[0]!;
+
+    await signInAs(owner);
+    await call('convoy-end', { convoyId });
+
+    const notice = await convoyUpdateNoticeText(member.uid, convoyId);
+    // "<Name> har avslutat konvojen." — names the ender, and is distinct from the
+    // leave / expiry wording so members can tell someone ended it.
+    expect(notice).toContain('EndNoticeOwnerC');
+    expect(notice).toContain('avslutat konvojen');
   }, 90_000);
 });
 

@@ -55,6 +55,16 @@ data class LiveSessionInfo(
     val status: LiveSessionStatus,
     val duration: LiveSessionDuration?,
     val expiresAtMillis: Long?,
+    /**
+     * True when this session was auto-started BY a convoy (the backend stamps
+     * `convoyAutoStarted` on the RTDB session node — see
+     * functions/src/live/session.ts `startConvoyAutoSession`). Read by the
+     * foreground service to enforce the convoy↔session coupling: while sharing
+     * THROUGH a convoy the session must stay alive regardless of movement, so the
+     * stationary auto-stop/prompt is suppressed for it (the 6h hard cap still
+     * bounds it). Absent on a manually-started solo session → false.
+     */
+    val convoyAutoStarted: Boolean = false,
 )
 
 object LiveLocation {
