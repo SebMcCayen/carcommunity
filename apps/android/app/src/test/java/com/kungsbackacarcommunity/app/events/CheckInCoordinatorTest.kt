@@ -4,7 +4,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -200,6 +199,5 @@ class CheckInCoordinatorTest {
         assertEquals(CheckInResult.OUTSIDE_WINDOW, CheckInResult.fromWire("outside_window"))
         assertEquals(CheckInResult.UNKNOWN, CheckInResult.fromWire("gibberish"))
         assertEquals(CheckInResult.UNKNOWN, CheckInResult.fromWire(null))
-        assertNull(null) // documents the null-safety intent
     }
 }

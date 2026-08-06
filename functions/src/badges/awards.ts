@@ -88,9 +88,21 @@ export async function awardBadge(params: {
  * AT-LEAST-ONCE, the increment is guarded to fire exactly once per
  * (uid, event): a `badgeProgress/{uid}/attendanceCredits/{eventId}` marker is
  * claimed in the SAME transaction that increments the counter, so a redelivery
- * of the same edge reads the marker and no-ops. The counter and its markers are
- * Admin-SDK-only (firestore.rules denies badgeProgress and every subcollection
- * to clients), so neither can be minted from a device.
+ * of the same edge reads the marker and does NOT increment again. The counter
+ * and its markers are Admin-SDK-only (firestore.rules denies badgeProgress and
+ * every subcollection to clients), so neither can be minted from a device.
+ *
+ * RETRY-SAFE, on purpose. This function is allowed to THROW (the trigger no
+ * longer swallows its failures — see onAttendanceVerified), so it must be
+ * correct under an at-least-once retry in BOTH directions:
+ *  - never OVER-credits: the marker makes the counter increment single-shot,
+ *    and awardBadge is create-if-absent, so a retry adds nothing;
+ *  - never UNDER-credits: the badge award loop runs on EVERY delivery, keyed on
+ *    the current stored total, NOT only on the delivery that first created the
+ *    marker. That matters because the milestone badges (first_event/five_events)
+ *    are awarded ONLY here — onBadgeProgressWritten evaluates the tier ladders,
+ *    not these — so if a first delivery committed the counter but then failed
+ *    before awarding, the retry (marker already present) still awards them.
  */
 export async function creditVerifiedEventAttendance(
   targetUid: string,
@@ -100,16 +112,18 @@ export async function creditVerifiedEventAttendance(
   const creditRef = progressRef.collection('attendanceCredits').doc(eventId);
   const attendanceCount = await db.runTransaction(async (tx) => {
     const [progressSnap, creditSnap] = await Promise.all([tx.get(progressRef), tx.get(creditRef)]);
-    // Already credited for THIS event — a trigger redelivery, or a second
-    // verified write. Return null so the caller awards nothing further; the
-    // counter must not double-count a single attendance.
-    if (creditSnap.exists) {
-      return null;
-    }
     const stored = progressSnap.data()?.completedEventsAttended;
     // Guard against a corrupted counter (e.g. a string) — '3' + 1 would
     // concatenate and permanently break the thresholds.
     const current = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0;
+    // Already credited for THIS event — a trigger redelivery, or a second
+    // verified write. Do NOT increment again (the counter must not double-count
+    // a single attendance), but RETURN the stored total so the idempotent badge
+    // awards below still run: a delivery that committed the counter yet failed
+    // mid-award must be able to finish awarding on retry.
+    if (creditSnap.exists) {
+      return current;
+    }
     const next = current + 1;
     tx.set(
       progressRef,
@@ -125,9 +139,6 @@ export async function creditVerifiedEventAttendance(
     return next;
   });
 
-  if (attendanceCount === null) {
-    return;
-  }
   for (const badgeKey of qualifiedEventBadges(attendanceCount)) {
     await awardBadge({ targetUid, badgeKey, source: 'automatic' });
   }
