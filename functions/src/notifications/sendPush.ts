@@ -150,23 +150,27 @@ export const onNotificationCreated = onDocumentCreated(
       return;
     }
 
-    // FAST-EXIT for a recipient with no registered device: push is impossible
-    // without a token, so read the token registry FIRST and bail before the
-    // feature-flag / eligibility reads below. A member with no token is then the
-    // cheapest possible invocation — a single empty subcollection read — instead
-    // of a flag read + two doc reads + the decision. This matters because this
-    // trigger is a per-recipient fan-out: a broadcast (admin send, or the new
-    // "event created" notice) writes one notification document PER member, and
-    // without this the tokenless majority would each do that full read set,
-    // amplifying one broadcast into a read storm against the SAME config doc.
-    // Behaviour for a member WHO HAS a token is unchanged: the flag gate and the
-    // re-derived eligibility decision below still run before anything is sent.
-    const tokens = await loadTokens(uid);
-    if (tokens.length === 0) return;
-
+    // Global push kill-switch FIRST — the cheapest possible bail. When push is
+    // disabled platform-wide this returns before ANY per-recipient read (no
+    // token read, no user/preference reads).
     if (!(await readFeatureFlag(PUSH_NOTIFICATIONS_FLAG_KEY))) {
       return;
     }
+
+    // FAST-EXIT (push enabled) for a recipient with no registered device: push
+    // is impossible without a token, so read the token registry NEXT and bail
+    // before the eligibility reads (users/{uid} + userPrivate/{uid}) and the
+    // decision. On this flag-enabled path a tokenless recipient — the whole
+    // seeded test population, and any real member who never registered a device —
+    // costs just the flag read plus one empty subcollection read, rather than
+    // that plus two doc reads and the decision. This trigger is a per-recipient
+    // fan-out (a broadcast — admin send, or the new "event created" notice —
+    // writes one notification document PER member), so trimming the tokenless
+    // majority keeps a broadcast from amplifying into a read storm. A member WHO
+    // HAS a token takes the same path as before: the re-derived eligibility
+    // decision below still runs before anything is sent.
+    const tokens = await loadTokens(uid);
+    if (tokens.length === 0) return;
 
     // Re-derive the SAME decision the inbox write made (decidePushDelivery
     // calls decideInAppDelivery), then apply the push-specific opt-out.
