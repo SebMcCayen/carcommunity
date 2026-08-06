@@ -34,6 +34,7 @@ import { onMessageReportCreate } from './events/onMessageReportCreate';
 import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
+import { onEventPublished } from './events/onEventPublished';
 import { checkIn } from './events/checkIn';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
@@ -290,6 +291,10 @@ export const events = {
   cancel,
   complete,
   onRsvpWrite,
+  // Firestore trigger: on the published transition of an event (member create
+  // OR admin publish), fans ONE `event_created` in-app notice (push follows) out
+  // to every active member bar the creator, deep-linking to the event on tap.
+  onEventPublished,
   // Scheduled lifecycle: hourly sweep completing events past their end.
   autoClose,
   // Scheduled RSVP reminder: every 15 min, one `event_reminder` in-app

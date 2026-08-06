@@ -11,6 +11,10 @@ package com.kungsbackacarcommunity.app.notifications
 
 /** Notification category (notifications/{uid}/items/{id}.category). */
 enum class NotificationCategory(val wire: String) {
+    // Community broadcast: a new event was published. Fanned out to every active
+    // member (bar the creator) by the events-onEventPublished backend trigger;
+    // tapping it opens the event's detail (relatedEntityId = eventId).
+    EVENT_CREATED("event_created"),
     EVENT_REMINDER("event_reminder"),
     EVENT_UPDATED("event_updated"),
     EVENT_CANCELLED("event_cancelled"),

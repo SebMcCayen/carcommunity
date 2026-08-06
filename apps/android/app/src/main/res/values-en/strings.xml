@@ -1121,6 +1121,7 @@
     <string name="notifications_timeDatePatternWithYear">d MMM yyyy</string>
     <string name="notifications_timeReceivedAt">Received %1$s</string>
     <string name="notifications_categoryEvent">Event</string>
+    <string name="notifications_categoryEventCreated">New event</string>
     <string name="notifications_categoryEventReminder">Reminder</string>
     <string name="notifications_categoryEventUpdated">Update</string>
     <string name="notifications_categoryEventCancelled">Cancelled</string>

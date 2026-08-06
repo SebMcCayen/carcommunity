@@ -31,12 +31,12 @@ import { useEffect, useRef, useState } from 'react';
 
 import type {
   AdminSendNotificationRequest,
-  NotificationCategory,
+  AdminSendableCategory,
   AdminNotificationAudience,
 } from '@/features/notifications';
 import {
   adminSendNotification,
-  ACTIVE_NOTIFICATION_CATEGORIES,
+  ADMIN_SENDABLE_CATEGORIES,
   ADMIN_NOTIFICATION_AUDIENCES,
   ApiError,
 } from '@/features/notifications';
@@ -68,7 +68,7 @@ function audienceLabel(audience: string): string {
 // ---------------------------------------------------------------------------
 
 interface SendFormState {
-  category: NotificationCategory;
+  category: AdminSendableCategory;
   audience: AdminNotificationAudience;
   title: string;
   previewText: string;
@@ -215,7 +215,7 @@ export default function AdminNotificationsPage() {
               value={form.category}
               onChange={(e) => handleFieldChange('category', e.target.value)}
             >
-              {ACTIVE_NOTIFICATION_CATEGORIES.map((cat) => (
+              {ADMIN_SENDABLE_CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>{cat}</option>
               ))}
             </select>

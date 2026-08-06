@@ -1121,6 +1121,7 @@
     <string name="notifications_timeDatePatternWithYear">d MMM yyyy</string>
     <string name="notifications_timeReceivedAt">Mottagen %1$s</string>
     <string name="notifications_categoryEvent">Event</string>
+    <string name="notifications_categoryEventCreated">Nytt event</string>
     <string name="notifications_categoryEventReminder">Påminnelse</string>
     <string name="notifications_categoryEventUpdated">Uppdatering</string>
     <string name="notifications_categoryEventCancelled">Inställt</string>

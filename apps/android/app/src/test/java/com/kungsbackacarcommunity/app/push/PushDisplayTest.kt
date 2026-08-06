@@ -152,6 +152,7 @@ class PushDisplayTest {
     fun `channel selection groups every category`() {
         val expected =
             mapOf(
+                NotificationCategory.EVENT_CREATED to PushChannel.EVENTS,
                 NotificationCategory.EVENT_REMINDER to PushChannel.EVENTS,
                 NotificationCategory.EVENT_UPDATED to PushChannel.EVENTS,
                 NotificationCategory.EVENT_CANCELLED to PushChannel.EVENTS,

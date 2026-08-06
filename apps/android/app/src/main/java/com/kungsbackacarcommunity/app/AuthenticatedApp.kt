@@ -3033,6 +3033,18 @@ fun AuthenticatedApp(
                         },
                     )
 
+                // Tapping an event notification (event_created and the other event
+                // categories) in the inbox opens that event's detail — the same
+                // pendingEventDeepLinkId → Events-route mechanism a PushTarget.EVENT
+                // tap uses, so the in-app inbox matches the push. Closes the chat
+                // hub popup in the same frame as the navigation (its gate only holds
+                // while no route is open), exactly as the convoy onOpen above does.
+                val openEventFromNotification: (String) -> Unit = { eventId ->
+                    chatHubOpen = false
+                    pendingEventDeepLinkId = eventId
+                    openRootRoute(ShellRoute.Events)
+                }
+
                 // A failed leave/end from the bar surfaces as a snackbar rather than
                 // a silent no-op: the coordinator sets actionError, which we show
                 // once and then clear. (Invite failures are surfaced inline in the
@@ -4007,6 +4019,7 @@ fun AuthenticatedApp(
                         convoyInviteDeepLinkId = pendingConvoyInviteId,
                         onConvoyInviteDeepLinkConsumed = { pendingConvoyInviteId = null },
                         convoyNotificationLink = convoyNotificationLink,
+                        openEventFromNotification = openEventFromNotification,
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
                         convoyChatRepository = convoyChatRepository,
@@ -5297,6 +5310,7 @@ fun AuthenticatedApp(
                         // beside `chatHubOpen`.
                         pushDeepLink = chatHubLandingLink,
                         convoyLink = convoyNotificationLink,
+                        onOpenEvent = openEventFromNotification,
                         // Tapping a sender in a channel / the DM title opens their
                         // read-only profile — a shell ROUTE, which the hub popup's
                         // gate (route == null) does not survive. Close the hub
@@ -5641,6 +5655,10 @@ private fun RouteHost(
     // Convoy state + "open this" for the notification inbox's convoy rows,
     // wherever the inbox is hosted (its own route, or the chat hub's tab).
     convoyNotificationLink: ConvoyNotificationLink?,
+    // Opens an event's detail from an event notification tap in the inbox,
+    // wherever it is hosted. Sets the event deep-link and routes to Events (and
+    // closes the chat hub popup) — the same path a PushTarget.EVENT tap takes.
+    openEventFromNotification: (String) -> Unit,
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
@@ -6084,6 +6102,7 @@ private fun RouteHost(
                     // without friend actions.
                     friendsRepository = friendsRepository,
                     convoyLink = convoyNotificationLink,
+                    onOpenEvent = openEventFromNotification,
                 )
             } else {
                 LoadingScreen()
@@ -6246,6 +6265,7 @@ private fun RouteHost(
                 blockingRepository = blockingRepository,
                 pushDeepLink = chatHubPushLink,
                 convoyLink = convoyNotificationLink,
+                onOpenEvent = openEventFromNotification,
             )
 
         // Migration-safe: `Badges` is the retired flat awards list. Its profile-menu

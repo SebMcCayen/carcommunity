@@ -35,10 +35,46 @@
 // ---------------------------------------------------------------------------
 
 /**
- * Active notification categories supported in this MVP.
- * These may be sent to users and appear in preference settings.
+ * The FULL set of delivered notification categories — every category the backend
+ * can write to a member's inbox, mirroring the backend NOTIFICATION_CATEGORIES.
+ * This INCLUDES the producer-only categories an admin cannot broadcast: the
+ * social ones (member-to-member activity) AND `event_created` (a system-generated
+ * community broadcast the backend fires on event publish). `NotificationCategory`
+ * derives from this set, so the type can represent EVERY delivered category
+ * (e.g. `event_created`) — matching the backend and the app's own settings
+ * (Android NotificationCategories). The admin-sendable subset that drives the
+ * "send notification" dropdown is ADMIN_SENDABLE_CATEGORIES below.
  */
-export const ACTIVE_NOTIFICATION_CATEGORIES = [
+export const NOTIFICATION_CATEGORIES = [
+  'event_created',
+  'event_reminder',
+  'event_updated',
+  'event_cancelled',
+  'admin_message',
+  'account_warning',
+  'account_suspension',
+  'subscription_status',
+  'system_notice',
+  'direct_message',
+  'community_chat',
+  'convoy_chat',
+  'friend_request',
+  'convoy_invite',
+  'convoy_update',
+] as const;
+export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
+
+/**
+ * The ADMIN-SENDABLE subset — the categories an admin may broadcast, and the
+ * only ones the admin "send notification" dropdown offers (mirrors the backend
+ * ADMIN_SENDABLE_CATEGORIES). The producer-only categories above — the social
+ * ones AND `event_created` — are deliberately absent so the dropdown never
+ * offers a category `notifications.adminSend` would reject. Per-category opt-outs
+ * for the absent categories are still delivered/honoured backend-side and exposed
+ * in the app's own settings. Distinct from NOTIFICATION_CATEGORIES on purpose:
+ * this is "what an admin may send", not "what may be delivered".
+ */
+export const ADMIN_SENDABLE_CATEGORIES = [
   'event_reminder',
   'event_updated',
   'event_cancelled',
@@ -48,7 +84,7 @@ export const ACTIVE_NOTIFICATION_CATEGORIES = [
   'subscription_status',
   'system_notice',
 ] as const;
-export type NotificationCategory = (typeof ACTIVE_NOTIFICATION_CATEGORIES)[number];
+export type AdminSendableCategory = (typeof ADMIN_SENDABLE_CATEGORIES)[number];
 
 // ---------------------------------------------------------------------------
 // Admin audience types
@@ -91,7 +127,7 @@ type NotificationActionType = (typeof NOTIFICATION_ACTION_TYPES)[number];
  * Request body for an admin-initiated notification send.
  *
  * Security requirements:
- *  - Category must be from the active allow-list.
+ *  - Category must be from the admin-sendable allow-list.
  *  - Audience must be from the defined audience types.
  *  - eventId is required for event_participants audience.
  *  - userId is required for specific_user audience.
@@ -103,7 +139,7 @@ type NotificationActionType = (typeof NOTIFICATION_ACTION_TYPES)[number];
  *  - Backend validates recipient eligibility independently.
  */
 export interface AdminSendNotificationRequest {
-  category: NotificationCategory;
+  category: AdminSendableCategory;
   audience: AdminNotificationAudience;
   title: string;
   previewText: string;

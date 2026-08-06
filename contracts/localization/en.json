@@ -1206,6 +1206,7 @@
     "timeDatePatternWithYear": "d MMM yyyy",
     "timeReceivedAt": "Received %1$s",
     "categoryEvent": "Event",
+    "categoryEventCreated": "New event",
     "categoryEventReminder": "Reminder",
     "categoryEventUpdated": "Update",
     "categoryEventCancelled": "Cancelled",

@@ -64,6 +64,11 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  * Producers today. Each writes the in-app inbox item; the
  * notifications-onNotificationCreated trigger turns that item into a push, so
  * no producer sends push directly and none can bypass the opt-outs:
+ *  - event_created   — events/onEventPublished.ts (an events/{eventId}
+ *                      Firestore trigger fanning ONE notice out to every active
+ *                      member — bar the event's own creator — the moment an
+ *                      event transitions INTO `published`, whether created
+ *                      published by a member or published later by an admin).
  *  - convoy_invite   — convoy/manageConvoy.ts (create + invite: you were
  *                      invited to a convoy)
  *  - convoy_update   — convoy/manageConvoy.ts (leave + end: somebody left the
@@ -87,6 +92,7 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  *                      non-starter. See the communityChat.ts header.
  */
 export const NOTIFICATION_CATEGORIES = [
+  'event_created',
   'event_reminder',
   'event_updated',
   'event_cancelled',
@@ -464,9 +470,14 @@ export function buildPushDeepLink(
       return { target: 'convoys', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
       return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };
+    case 'event_created':
     case 'event_reminder':
     case 'event_updated':
     case 'event_cancelled':
+      // relatedEntityId is the eventId (the events-onEventPublished trigger for
+      // event_created, the reminder sweep / lifecycle callables for the rest).
+      // Passing it through is what lets a tapped notification open THAT event's
+      // detail rather than the events list.
       return { target: 'event', entityId: entityIdOrNull(relatedEntityId) };
     case 'subscription_status':
       // Deliberately null: the subscription screen is a single destination with

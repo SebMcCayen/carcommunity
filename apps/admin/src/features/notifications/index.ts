@@ -26,10 +26,11 @@
  */
 
 import {
-  ACTIVE_NOTIFICATION_CATEGORIES,
+  ADMIN_SENDABLE_CATEGORIES,
   ADMIN_NOTIFICATION_AUDIENCES,
   NOTIFICATION_ACTION_TYPES,
   type AdminNotificationAudience,
+  type AdminSendableCategory,
   type AdminSendNotificationRequest,
   type AdminSendNotificationResponse,
   type NotificationCategory,
@@ -40,11 +41,12 @@ import { callAdmin } from '../../lib/callables';
 
 export type {
   NotificationCategory,
+  AdminSendableCategory,
   AdminNotificationAudience,
   AdminSendNotificationRequest,
   AdminSendNotificationResponse,
 };
-export { ApiError, ACTIVE_NOTIFICATION_CATEGORIES, ADMIN_NOTIFICATION_AUDIENCES, NOTIFICATION_ACTION_TYPES };
+export { ApiError, ADMIN_SENDABLE_CATEGORIES, ADMIN_NOTIFICATION_AUDIENCES, NOTIFICATION_ACTION_TYPES };
 
 // ---------------------------------------------------------------------------
 // Callable-backed data layer

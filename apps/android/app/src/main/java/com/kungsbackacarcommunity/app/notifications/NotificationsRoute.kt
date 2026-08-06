@@ -58,6 +58,9 @@ fun NotificationsRoute(
     onBack: () -> Unit,
     friendsRepository: FriendsRepository? = null,
     convoyLink: ConvoyNotificationLink? = null,
+    // Opens an event's detail from an event notification tap. Null in a
+    // config-less build (no navigation host); the row then only marks read.
+    onOpenEvent: ((String) -> Unit)? = null,
     // False inside the chat hub, whose "Notifications" TAB already names this
     // section; true for the standalone route, where the header is the only
     // thing that does. See [NotificationsScreen].
@@ -120,6 +123,7 @@ fun NotificationsRoute(
             deleteError = actions.deleteError,
             onDismissDeleteError = actions.onDismissDeleteError,
             convoyLink = convoyLink,
+            onOpenEvent = onOpenEvent,
         )
         return
     }
@@ -132,6 +136,7 @@ fun NotificationsRoute(
         onBack = onBack,
         deleteActions = actions,
         convoyLink = convoyLink,
+        onOpenEvent = onOpenEvent,
         showTitle = showTitle,
     )
 }
@@ -166,6 +171,7 @@ private fun FriendAwareNotificationsInbox(
     onBack: () -> Unit,
     deleteActions: InboxDeleteActions,
     convoyLink: ConvoyNotificationLink?,
+    onOpenEvent: ((String) -> Unit)?,
     showTitle: Boolean,
 ) {
     val context = LocalContext.current
@@ -210,6 +216,7 @@ private fun FriendAwareNotificationsInbox(
         deleteError = deleteActions.deleteError,
         onDismissDeleteError = deleteActions.onDismissDeleteError,
         convoyLink = convoyLink,
+        onOpenEvent = onOpenEvent,
     )
 }
 

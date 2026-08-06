@@ -1206,6 +1206,7 @@
     "timeDatePatternWithYear": "d MMM yyyy",
     "timeReceivedAt": "Mottagen %1$s",
     "categoryEvent": "Event",
+    "categoryEventCreated": "Nytt event",
     "categoryEventReminder": "Påminnelse",
     "categoryEventUpdated": "Uppdatering",
     "categoryEventCancelled": "Inställt",
