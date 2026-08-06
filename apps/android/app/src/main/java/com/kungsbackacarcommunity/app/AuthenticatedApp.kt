@@ -230,6 +230,8 @@ import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
+import com.kungsbackacarcommunity.app.live.LiveSessionLoad
+import com.kungsbackacarcommunity.app.live.LiveSessionRecordingLifecycle
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.live.LiveStartAttempt
 import com.kungsbackacarcommunity.app.live.LiveMapLayers
@@ -2158,11 +2160,26 @@ fun AuthenticatedApp(
 
             // Own live-location session drives the floating toggle's colour +
             // action (wired to the REAL live-location state).
-            val liveSession by
-                remember(uid, liveLocationRepository) {
-                    liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
+            //
+            // Collected as a LOAD STATE (Loading until the flow first emits, then
+            // Loaded) rather than a bare nullable: after an Activity recreation
+            // (rotation) the collector is momentarily back on its placeholder null
+            // while the RTDB listener re-attaches, which is indistinguishable BY
+            // VALUE from "no session" and used to trip the recording-lifecycle
+            // effect into treating a rotation as a session end (stopping the drive
+            // and raising its save prompt). [liveSessionObserved] gates that off —
+            // see the recording effect below. See [LiveSessionLoad].
+            val liveSessionLoad by
+                produceState<LiveSessionLoad>(
+                    initialValue = LiveSessionLoad.Loading,
+                    uid,
+                    liveLocationRepository,
+                ) {
+                    val flow = liveLocationRepository?.observeOwnSession(uid) ?: flowOf(null)
+                    flow.collect { value = LiveSessionLoad.Loaded(it) }
                 }
-                    .collectAsState(initial = null)
+            val liveSession = liveSessionLoad.sessionOrNull
+            val liveSessionObserved = liveSessionLoad.observed
             // Re-evaluate at expiry: a single nowMillis() snapshot would keep
             // isSharing == true if the app stays open past expiresAtMillis with
             // no other recomposition. Schedule one delay-to-expiry that flips
@@ -2283,7 +2300,17 @@ fun AuthenticatedApp(
             // are idempotent, so re-running this after a recreation resumes the
             // existing recording / keeps the pending prompt rather than
             // restarting or clearing either.
-            LaunchedEffect(isSharing) {
+            //
+            // Keyed on [liveSessionObserved] as well as [isSharing] so the STOP
+            // path only fires once the session flow has actually emitted. On a
+            // rotation the recreated composition briefly reads isSharing == false
+            // off the flow's not-yet-loaded placeholder; stopping there tore the
+            // live drive down and raised its save/discard prompt on every rotate.
+            // [LiveSessionRecordingLifecycle.shouldStopRecording] withholds the
+            // stop until the flow is loaded, so rotation is a no-op while a real
+            // end (Stop / Hide / expiry / convoy end — all of which arrive with
+            // the flow loaded) still stops and auto-saves.
+            LaunchedEffect(isSharing, liveSessionObserved) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
@@ -2312,11 +2339,18 @@ fun AuthenticatedApp(
                             DriveLocationController.createIfPermitted(context)
                         }
                     }
-                } else {
-                    // Session ended: stop recording and raise the end-of-session
-                    // summary (the drive is then auto-saved by the effect below).
-                    // The holder releases the GPS source here, at the real session
-                    // end, rather than on composable disposal.
+                } else if (
+                    LiveSessionRecordingLifecycle.shouldStopRecording(
+                        sharing = isSharing,
+                        sessionObserved = liveSessionObserved,
+                    )
+                ) {
+                    // Session genuinely ended: stop recording and raise the
+                    // end-of-session summary (the drive is then auto-saved by the
+                    // effect below). The holder releases the GPS source here, at
+                    // the real session end, rather than on composable disposal.
+                    // Withheld while the session flow has not re-emitted after a
+                    // recreation, so a rotation neither stops nor prompts.
                     SingleSessionRecording.stop()
                 }
             }
@@ -3785,6 +3819,13 @@ fun AuthenticatedApp(
                         // The map home's saved-places control, on the same shared
                         // stack; opens the same saved-locations picker.
                         onOpenSavedPlaces = { savedPlacesPickerOpen = true },
+                        // The ongoing live-session pill (elapsed + distance +
+                        // speed). Starting turn-by-turn navigation used to hide it
+                        // along with the whole map-home chrome; a session that is
+                        // still sharing must keep its indicator on screen while
+                        // driving, so it is handed to the nav screen's top chrome
+                        // exactly as the convoy bar is.
+                        liveSessionBar = liveSessionBarSlot,
                         // Compact variant below the maneuver banner, WITH the
                         // shared-destination row (turn-by-turn has the vertical room
                         // for it — see the screen's KDoc).

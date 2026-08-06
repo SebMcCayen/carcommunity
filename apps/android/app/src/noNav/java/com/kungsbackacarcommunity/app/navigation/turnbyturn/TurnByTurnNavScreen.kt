@@ -45,6 +45,9 @@ import com.kungsbackacarcommunity.app.shell.MapQueryViewport
  *   (wired by the host to the shared `incidents-report` path; unused here).
  * @param incidentReportingEnabled whether reporting is offered (unused here —
  *   this stub owns no map and no control stack).
+ * @param liveSessionBar the ongoing live-session pill (unused here; the real impl
+ *   keeps it on screen during navigation). This screen renders no map chrome at
+ *   all, so there is nowhere honest to put it.
  * @param convoyBar the convoy status bar slot (unused here; the real impl places
  *   it below the maneuver banner). This screen renders no map chrome at all, so
  *   there is nowhere honest to put it.
@@ -86,6 +89,7 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") unreadChatCount: Int = 0,
     @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") onOpenSavedPlaces: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") liveSessionBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
