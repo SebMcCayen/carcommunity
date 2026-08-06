@@ -53,7 +53,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -1215,8 +1214,9 @@ private fun ConvoyMemberListPopup(
  * picture set, the image still loading, or the load failing — and the real image
  * simply covers it once it decodes. That means a member with a set picture shows
  * the placeholder while it loads and then the photo, and falls back to the same
- * placeholder (never a blank circle) on error. [muted] dims the placeholder glyph
- * for a pending invitee, matching the muted name/status of a "waiting to join" row.
+ * placeholder (never a blank circle) on error. [muted] lays a semi-transparent scrim
+ * over the whole avatar for a pending invitee — keeping the photo/placeholder opaque
+ * underneath — to match the muted name/status of a "waiting to join" row.
  */
 @Composable
 private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
@@ -1249,21 +1249,32 @@ private fun ConvoyMemberAvatar(avatarPath: String?, muted: Boolean) {
                 model = url,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                // A pending invitee's photo is dimmed too, not just the placeholder
-                // glyph — otherwise an invitee WITH a picture would render at full
-                // opacity and look identical to a joined member, defeating the muted
-                // "waiting to join" treatment the rest of the row uses.
+                // Kept fully OPAQUE. Dimming the image with alpha would let the
+                // always-present placeholder glyph beneath it bleed through the loaded
+                // photo; a pending invitee is instead muted by the scrim drawn on top.
+                modifier = Modifier.size(28.dp),
+            )
+        }
+        // A pending invitee reads as muted via a semi-transparent scrim laid over the
+        // whole avatar (photo or placeholder), rather than by dimming the image — that
+        // way an invitee WITH a picture no longer looks identical to a joined member,
+        // yet the opaque photo/placeholder underneath is never made see-through.
+        if (muted) {
+            Box(
                 modifier =
                     Modifier
-                        .size(28.dp)
-                        .alpha(if (muted) MUTED_AVATAR_ALPHA else 1f),
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .background(
+                            MaterialTheme.colorScheme.surface.copy(alpha = MUTED_AVATAR_SCRIM_ALPHA),
+                        ),
             )
         }
     }
 }
 
-/** Opacity a pending invitee's avatar is dimmed to, matching the muted row. */
-private const val MUTED_AVATAR_ALPHA = 0.5f
+/** Opacity of the scrim laid over a pending invitee's avatar to mute it, matching the row. */
+private const val MUTED_AVATAR_SCRIM_ALPHA = 0.5f
 
 /**
  * The per-member actions raised by tapping a JOINED member in the list: open their
