@@ -339,6 +339,15 @@
     <string name="events_attendeesGroupGoing">Going</string>
     <string name="events_attendeesGroupMaybe">Maybe</string>
     <string name="events_attendeesGroupNotGoing">Not going</string>
+    <string name="events_checkInTitle">Attendance</string>
+    <string name="events_checkInButton">Check in</string>
+    <string name="events_checkInConfirmed">Checked in — attendance confirmed</string>
+    <string name="events_checkInPending">Checked in. Stay at the event a little longer, then check in again in about ten minutes to confirm your attendance.</string>
+    <string name="events_checkInErrorGeofence">You need to be at the event location to check in.</string>
+    <string name="events_checkInErrorWindow">Check-in isn\'t open yet, or has already closed.</string>
+    <string name="events_checkInErrorLocation">Couldn\'t get your location. Check that location is on and try again.</string>
+    <string name="events_checkInErrorMock">Your location couldn\'t be verified. Turn off any mock-location apps and try again.</string>
+    <string name="events_checkInErrorGeneric">Check-in failed. Please try again.</string>
     <string name="chat_title">Chat</string>
     <string name="chat_placeholder">Event chat coming soon.</string>
     <string name="chat_eventChatTitle">Event Chat</string>

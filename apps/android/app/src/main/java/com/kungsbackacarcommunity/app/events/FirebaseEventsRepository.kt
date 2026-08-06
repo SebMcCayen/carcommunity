@@ -153,6 +153,50 @@ class FirebaseEventsRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeMyAttendance(eventId: String, uid: String): Flow<EventAttendanceStatus?> =
+        callbackFlow {
+            val registration =
+                firestore
+                    .collection(EVENT_ATTENDANCE)
+                    .document("${eventId}__$uid")
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null) {
+                            // A transient read error must NOT masquerade as "not
+                            // checked in": emitting null here would flip a
+                            // confirmed/pending UI back to the check-in button on a
+                            // momentary hiccup. Emit NOTHING, keeping the last value —
+                            // `null` is reserved for a genuinely ABSENT document
+                            // (toAttendanceStatus returns null only then), the real
+                            // "never checked in".
+                            return@addSnapshotListener
+                        }
+                        trySend(snapshot?.toAttendanceStatus())
+                    }
+            awaitClose { registration.remove() }
+        }
+
+    override suspend fun checkIn(eventId: String, fix: CheckInFix): CheckInResult =
+        suspendCancellableCoroutine { continuation ->
+            functions
+                .getHttpsCallable(CHECK_IN)
+                .call(EventCheckIn.checkInPayload(eventId, fix))
+                .addOnCompleteListener { task ->
+                    if (!continuation.isActive) return@addOnCompleteListener
+                    if (task.isSuccessful) {
+                        @Suppress("UNCHECKED_CAST")
+                        val data = task.result?.data as? Map<String, Any?>
+                        // A well-formed response always carries `result`; an absent
+                        // or non-string value is UNKNOWN, never a silent success.
+                        continuation.resume(CheckInResult.fromWire(data?.get("result") as? String))
+                    } else {
+                        continuation.resumeWithException(
+                            task.exception
+                                ?: IllegalStateException("events-checkIn failed without a cause"),
+                        )
+                    }
+                }
+        }
+
     override suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus) {
         val doc =
             mapOf(
@@ -254,9 +298,11 @@ class FirebaseEventsRepository private constructor(
         private const val DETAILS = "details"
         private const val PRIVATE = "private"
         private const val RSVPS = "rsvps"
+        private const val EVENT_ATTENDANCE = "eventAttendance"
         private const val REGION = "europe-west1"
         private const val CREATE = "events-create"
         private const val LIST_ATTENDEES = "events-listAttendees"
+        private const val CHECK_IN = "events-checkIn"
 
         fun createIfAvailable(context: Context): EventsRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -312,6 +358,16 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
         isOfficial = getBoolean("isOfficial") ?: false,
         status = status,
         counts = counts,
+    )
+}
+
+private fun DocumentSnapshot.toAttendanceStatus(): EventAttendanceStatus? {
+    if (!exists()) return null
+    // Only the owner-readable fields — `verified` and `sampleCount`. The raw
+    // samples/risk are backend-only and never read here.
+    return EventAttendanceStatus(
+        verified = getBoolean("verified") ?: false,
+        sampleCount = getLong("sampleCount")?.toInt()?.coerceAtLeast(0) ?: 0,
     )
 }
 

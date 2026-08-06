@@ -977,6 +977,16 @@ const checkInInputSchema = z
     longitude: z.number().min(-180).max(180),
     accuracyMeters: z.number().nonnegative().max(100_000).nullish(),
     capturedAt: z.string().datetime(),
+    /**
+     * The platform's mock-provider flag for this fix (Location.isMock). Reported
+     * as observed, never suppressed — the SAME one-way signal a Kronjakt claim
+     * sends: `true` is penalised at the review threshold on its own (see
+     * MOCK_LOCATION_SCORE in crown-hunt-risk.ts), while `false` and absent are
+     * identical, so an honest client gives nothing away and a dishonest one
+     * gains nothing by omitting it. checkIn.ts maps this onto the risk
+     * pipeline's `mockLocationReported`.
+     */
+    isMockLocation: z.boolean().nullish(),
     /** Play Integrity / App Attest verdict once those are wired up. */
     platformIntegrityPassed: z.boolean().nullish(),
   })
@@ -988,7 +998,7 @@ export function parseCheckInInput(data: unknown): ParseResult<CheckInInput> {
   return parse(
     checkInInputSchema,
     data,
-    'Expected { eventId, latitude, longitude, capturedAt, accuracyMeters?, platformIntegrityPassed? }.',
+    'Expected { eventId, latitude, longitude, capturedAt, accuracyMeters?, isMockLocation?, platformIntegrityPassed? }.',
   );
 }
 

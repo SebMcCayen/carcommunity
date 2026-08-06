@@ -86,8 +86,7 @@ const MAX_CANDIDATES_PER_RUN = 5_000;
  * writeInAppNotification is its own transaction against a distinct per-user
  * inbox, so the fan-out is parallelisable — but NOT all at once: a large going
  * list would otherwise open one transaction per attendee simultaneously. Chunked
- * exactly like the auto-close sweep's ATTENDANCE_CREDIT_CONCURRENCY and the
- * community digest's MEMBER_CONCURRENCY: bounded concurrency, still parallel
+ * exactly like the community digest's MEMBER_CONCURRENCY: bounded concurrency, still parallel
  * enough to stay well inside the timeout. Individual failures log per attendee
  * and never propagate.
  */

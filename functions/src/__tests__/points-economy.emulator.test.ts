@@ -470,7 +470,12 @@ describe('events.checkIn — geofence + dwell', () => {
     expect(entry.amount).toBe(50);
     expect(entry.source).toBe('event');
 
-    // Re-checking in after verification awards nothing further.
+    // Verification ALSO credits the attendance badge (first_event), which the
+    // badges-onBadgeProgressWritten trigger may pay points for — so the total
+    // ledger count after verification is not necessarily 1. Let those settle,
+    // snapshot the count, then prove the RE-CHECK-IN adds nothing on top.
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+    const beforeRecheck = await entryCount(user.uid);
     await call('events-checkIn', {
       eventId,
       latitude: LAT,
@@ -479,7 +484,9 @@ describe('events.checkIn — geofence + dwell', () => {
       capturedAt: new Date().toISOString(),
     });
     await new Promise((resolve) => setTimeout(resolve, 2_000));
-    expect(await entryCount(user.uid)).toBe(1);
+    // already_verified: no further event_attend_verified, and the badge is
+    // already held, so the ledger is unchanged.
+    expect(await entryCount(user.uid)).toBe(beforeRecheck);
   });
 
   /**
@@ -543,6 +550,37 @@ describe('events.checkIn — geofence + dwell', () => {
       })
     ).data as { result: string };
     expect(response.result).toBe('outside_window');
+  });
+
+  it('rejects a self-reported mock location as risk_review, crediting no dwell', async () => {
+    const startsAt = new Date(Date.now() - 20 * 60_000);
+    const eventId = await publishEvent(startsAt, new Date(Date.now() + 2 * 60 * 60_000));
+    const user = await createProvisionedUser('pe-mock');
+    await signInAs(user);
+
+    // A fix reported as mock scores at the review threshold on its own, exactly
+    // as a Kronjakt claim does — inside the fence and window is not enough.
+    const response = (
+      await call('events-checkIn', {
+        eventId,
+        latitude: LAT,
+        longitude: LON,
+        accuracyMeters: 8,
+        isMockLocation: true,
+        capturedAt: new Date().toISOString(),
+      })
+    ).data as { result: string; verified: boolean };
+    expect(response.result).toBe('risk_review');
+    expect(response.verified).toBe(false);
+
+    // The rejected sample never joins `samples`, so it can contribute no dwell,
+    // and the risk score/reasons stay off the owner-readable record.
+    const stored = (
+      await adminDb.collection('eventAttendance').doc(attendanceDocId(eventId, user.uid)).get()
+    ).data();
+    expect(stored?.samples ?? []).toEqual([]);
+    expect(stored?.verified ?? false).toBe(false);
+    expect(stored).not.toHaveProperty('lastRiskReasons');
   });
 
   it('refuses a forged dwell, distance or point value', async () => {

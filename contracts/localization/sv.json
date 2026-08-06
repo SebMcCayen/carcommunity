@@ -367,7 +367,16 @@
     "attendeesUnknownMember": "KCC-medlem",
     "attendeesGroupGoing": "Kommer",
     "attendeesGroupMaybe": "Kanske",
-    "attendeesGroupNotGoing": "Kommer inte"
+    "attendeesGroupNotGoing": "Kommer inte",
+    "checkInTitle": "Närvaro",
+    "checkInButton": "Checka in",
+    "checkInConfirmed": "Incheckad — närvaro bekräftad",
+    "checkInPending": "Incheckad. Stanna kvar på plats en stund till och checka in igen om cirka tio minuter för att bekräfta din närvaro.",
+    "checkInErrorGeofence": "Du måste vara på plats för att checka in.",
+    "checkInErrorWindow": "Incheckningen är inte öppen än, eller har redan stängt.",
+    "checkInErrorLocation": "Kunde inte hämta din plats. Kontrollera att platstjänster är på och försök igen.",
+    "checkInErrorMock": "Din plats kunde inte verifieras. Stäng av eventuella appar för fejkad plats och försök igen.",
+    "checkInErrorGeneric": "Incheckningen misslyckades. Försök igen."
   },
   "chat": {
     "title": "Chat",

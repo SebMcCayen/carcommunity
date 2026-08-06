@@ -367,7 +367,16 @@
     "attendeesUnknownMember": "KCC member",
     "attendeesGroupGoing": "Going",
     "attendeesGroupMaybe": "Maybe",
-    "attendeesGroupNotGoing": "Not going"
+    "attendeesGroupNotGoing": "Not going",
+    "checkInTitle": "Attendance",
+    "checkInButton": "Check in",
+    "checkInConfirmed": "Checked in — attendance confirmed",
+    "checkInPending": "Checked in. Stay at the event a little longer, then check in again in about ten minutes to confirm your attendance.",
+    "checkInErrorGeofence": "You need to be at the event location to check in.",
+    "checkInErrorWindow": "Check-in isn't open yet, or has already closed.",
+    "checkInErrorLocation": "Couldn't get your location. Check that location is on and try again.",
+    "checkInErrorMock": "Your location couldn't be verified. Turn off any mock-location apps and try again.",
+    "checkInErrorGeneric": "Check-in failed. Please try again."
   },
   "chat": {
     "title": "Chat",

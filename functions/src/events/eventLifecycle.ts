@@ -16,9 +16,12 @@
  * - cancel: draft or published; requires a reason; sets cancelledAt; never
  *   hard-deletes.
  * - complete: published only; callable by an admin OR the member who created
- *   the event (guardCompleteActor); going-RSVP attendees receive badge
- *   attendance credit (first_event / five_events, Phase 9f). Events also reach
- *   `completed` unattended via the scheduled auto-close sweep (scheduled.ts).
+ *   the event (guardCompleteActor). Completion NO LONGER credits attendance:
+ *   the first_event / five_events / Träffräv badge counts VERIFIED check-ins
+ *   (points-onAttendanceVerified → creditVerifiedEventAttendance), not an RSVP,
+ *   so a member earns it by being at the meet rather than by tapping "going".
+ *   Events also reach `completed` unattended via the scheduled auto-close sweep
+ *   (scheduled.ts).
  *
  * Each ADMIN transition writes an immutable adminAuditEvents record in the
  * same transaction that changes the status. A member completing their own
@@ -31,8 +34,6 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { requireMemberOrAdminActor } from '../shared/memberActor';
-import { recordEventAttendance } from '../badges/awards';
-import { logger } from 'firebase-functions';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import {
   guardCancellable,
@@ -46,14 +47,6 @@ import {
 } from './events-core';
 import type { EventIdResponse } from './manageEvent';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
-
-/**
- * Max attendance-credit transactions in flight at once, per event. Each credit
- * is its own Firestore transaction on an independent badgeProgress/{uid}
- * document (no cross-attendee contention), so this bounds burst load, not
- * correctness — every attendee is still credited, just in waves.
- */
-const ATTENDANCE_CREDIT_CONCURRENCY = 25;
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -69,70 +62,6 @@ interface StoredEvent {
   approximateArea: string;
   startsAt: Timestamp;
   createdByUserId?: string | null;
-}
-
-/**
- * Credits badge attendance for every going-RSVP attendee of a just-completed
- * event (first_event / five_events, Phase 9f).
- *
- * Shared by BOTH completion paths — the events.complete callable and the
- * scheduled auto-close sweep — so "a completed event credits its attendees"
- * holds however the event reached `completed`, rather than depending on an
- * admin having clicked the button.
- *
- * CALLER CONTRACT: call this only after YOUR OWN write has just moved the
- * event published→completed inside a transaction. That is what makes the
- * credit single-shot — `completed` is terminal, so exactly one writer can ever
- * make that transition and only that writer credits. The two paths establish
- * it differently, and neither is a guard the other shares:
- * - events.complete — `guardCompletable` rejects any status but `published`,
- *   inside the transitionEvent transaction.
- * - the auto-close sweep — `closeEvent` re-reads the status inside its own
- *   transaction and returns false without writing if it is no longer
- *   `published`; the sweep credits only when it returned true.
- *
- * Calling this WITHOUT having performed that transition (e.g. on an
- * already-completed event) would double-credit — nothing in this function
- * detects that. Failures log per attendee and never propagate: attendance
- * credit must not undo a completion.
- */
-export async function creditEventAttendance(eventId: string): Promise<void> {
-  try {
-    const goingRsvps = await db
-      .collection('events')
-      .doc(eventId)
-      .collection('rsvps')
-      .where('status', '==', 'going')
-      .get();
-    // Per-attendee writes target independent per-user documents, so they can
-    // run in parallel — but NOT all at once: each recordEventAttendance is its
-    // own Firestore transaction, and a large going-list would otherwise open
-    // one per attendee simultaneously. The auto-close sweep can complete many
-    // events per run, so an unbounded burst here is a throttling risk it would
-    // hit unattended. Chunked to ATTENDANCE_CREDIT_CONCURRENCY at a time:
-    // bounded concurrency, still parallel enough to stay well inside the
-    // caller's timeout. Individual failures log per user and never propagate.
-    for (let i = 0; i < goingRsvps.docs.length; i += ATTENDANCE_CREDIT_CONCURRENCY) {
-      const batch = goingRsvps.docs.slice(i, i + ATTENDANCE_CREDIT_CONCURRENCY);
-      const results = await Promise.allSettled(
-        batch.map((rsvp) => recordEventAttendance(rsvp.id)),
-      );
-      results.forEach((result, index) => {
-        if (result.status === 'rejected') {
-          logger.error('Attendance credit failed for attendee', {
-            eventId,
-            uid: batch[index]?.id,
-            error: String(result.reason),
-          });
-        }
-      });
-    }
-  } catch (error) {
-    logger.error('Event badge attendance recording failed', {
-      eventId,
-      error: String(error),
-    });
-  }
 }
 
 /**
@@ -282,9 +211,8 @@ export const complete = onCall(CALLABLE_OPTS, async (request): Promise<EventIdRe
     audit: actor.isAdmin,
   });
 
-  // Badge attendance (Phase 9f, legacy parity) — shared with the auto-close
-  // sweep so completion always credits attendees.
-  await creditEventAttendance(eventId);
-
+  // Completion does NOT credit attendance: the badge counts VERIFIED check-ins
+  // (points-onAttendanceVerified), not RSVPs, so ending the event awards
+  // nobody a badge who was not measurably present.
   return { eventId, status };
 });

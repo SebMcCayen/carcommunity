@@ -68,6 +68,14 @@ class EventsPastTabRouteTest {
 
         override fun observeMyRsvp(eventId: String, uid: String): Flow<RsvpStatus?> = flowOf(null)
 
+        override fun observeMyAttendance(
+            eventId: String,
+            uid: String,
+        ): Flow<EventAttendanceStatus?> = flowOf(null)
+
+        override suspend fun checkIn(eventId: String, fix: CheckInFix): CheckInResult =
+            CheckInResult.UNKNOWN
+
         override suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus) = Unit
 
         override suspend fun createEvent(input: CreateEventInput): String = "new-id"

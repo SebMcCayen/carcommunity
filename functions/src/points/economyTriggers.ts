@@ -42,6 +42,7 @@ import {
   readCount,
   stockholmDayKey,
 } from './points-economy-core';
+import { creditVerifiedEventAttendance } from '../badges/awards';
 import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
@@ -237,6 +238,21 @@ export const onAttendanceVerified = onDocumentWritten(
         relatedEntityId: eventId,
       });
     }
+
+    // The attendance BADGE (first_event / five_events / Träffräv) is credited
+    // HERE, off the verified check-in — not off an RSVP. This is the same edge
+    // the points award above fires on, so a member earns the badge for actually
+    // being at the meet.
+    //
+    // Deliberately NOT swallowed: a transient Firestore failure here must not
+    // silently DROP the badge with no retry. Every write in this handler is
+    // idempotent under the trigger's at-least-once redelivery — the points
+    // award keys on `attendKey`, the attendance counter on the
+    // attendanceCredits/{eventId} marker, awardBadge is create-if-absent, and
+    // maybeAwardHost's tally is guarded by counted/{uid} — so letting this
+    // throw makes the whole handler RETRY to completion with no double credit.
+    // See creditVerifiedEventAttendance for the full retry-safety argument.
+    await creditVerifiedEventAttendance(uid, eventId);
 
     await maybeAwardHost(eventId, uid, now);
   },

@@ -17,9 +17,9 @@
  * split is what keeps evaluation cheap and complete at the same time:
  *  - cheap — evaluation is per-user and fires only when that user's counters
  *    actually changed; nothing ever scans all users on a write;
- *  - complete — it also picks up the completed-event counter maintained by the
- *    PRE-EXISTING attendance path (awards.ts::recordEventAttendance), so
- *    Träffräv needed no change to the events domain at all;
+ *  - complete — it also picks up the verified-attendance counter maintained by
+ *    the check-in path (awards.ts::creditVerifiedEventAttendance), so Träffräv
+ *    tracks members who were measurably at the meet, not who RSVP'd;
  *  - loop-free — evaluation writes to `users/{uid}/badges` and `pointsLedger`,
  *    never back to `badgeProgress`, so it cannot retrigger itself.
  *
@@ -30,9 +30,9 @@
  *  - Vägfarare   ← `rides/{id}.distanceMeters`, computed server-side by
  *                  drives.save from the submitted route.
  *  - Träffräv    ← `badgeProgress/{uid}.completedEventsAttended`, credited by
- *                  the event lifecycle for a `going` RSVP on an event that
- *                  reached `completed` — the existing verified-attendance
- *                  signal (see the SEAM note below).
+ *                  points-onAttendanceVerified when a member's geofenced
+ *                  check-in verifies (awards.ts::creditVerifiedEventAttendance).
+ *                  A `going` RSVP does NOT count — only proof of presence does.
  *  - Trogen      ← `userLifecycle/{uid}.lastLoginAt`, a trusted server write
  *                  (auth.recordLogin uses the Admin SDK; rules deny every
  *                  client write to that document).
@@ -42,15 +42,14 @@
  *                  convoys (docs/gamification-system.md §7.2).
  *  - Samlare     ← a server-side `count()` of the member's `vehicles`.
  *
- * SEAM — VERIFIED EVENT ATTENDANCE. A richer `event_attend_verified` record
- * type (per-attendee check-in verification) does not exist on `main` at the
- * time of writing. Träffräv is therefore coded against the counter that DOES
- * exist and is already authoritative and server-written:
- * `badgeProgress/{uid}.completedEventsAttended`. If that richer signal lands
- * later, the ONLY change needed is for its writer to increment this same
- * counter (or for BADGE_METRIC_FIELD.verifiedEventsAttended in badge-tiers.ts
- * to point at the new field) — the ladder, thresholds, evaluation and awards
- * need no change whatsoever.
+ * VERIFIED EVENT ATTENDANCE. Träffräv reads
+ * `badgeProgress/{uid}.completedEventsAttended`, which is now written ONLY by
+ * the verified check-in path (points-onAttendanceVerified →
+ * awards.ts::creditVerifiedEventAttendance) — a member who was physically at
+ * the meet, geofence + dwell confirmed server-side, not one who merely RSVP'd.
+ * The seam anticipated this: the counter name is unchanged, so the ladder,
+ * thresholds, evaluation and awards needed no change when the writer switched
+ * from the RSVP-on-completion proxy to the real check-in signal.
  */
 
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';

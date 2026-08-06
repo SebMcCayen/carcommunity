@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -75,6 +77,17 @@ fun EventDetailScreen(
     onOpenMember: ((String) -> Unit)? = null,
     // Re-runs the roster read from the transient-error state; null hides retry.
     onRetryAttendees: (() -> Unit)? = null,
+    // True when a geofenced check-in can be attempted right now: member +
+    // published + positioned + inside the event's time window (EventCheckIn).
+    checkInAvailable: Boolean = false,
+    // The in-flight check-in flow state (spinner / success / error message).
+    checkInState: CheckInUiState = CheckInUiState.Idle,
+    // The caller's own attendance record, so a confirmed/pending state survives a
+    // restart rather than only reflecting this session's tap.
+    attendance: EventAttendanceStatus? = null,
+    // Runs a check-in. Null (config-less build / no location source) hides the
+    // action rather than offering one that cannot work.
+    onCheckIn: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
@@ -198,6 +211,20 @@ fun EventDetailScreen(
                 )
             }
 
+            // Geofenced check-in — the PROOF of attendance (an RSVP is only
+            // intent). Verified attendance, not a "going", earns the badge.
+            // OUTSIDE the published-only RSVP block on purpose: it must still show
+            // for a COMPLETED event that is inside its check-in window (the server
+            // accepts those), and the confirmed state must remain visible after the
+            // event ends. The section renders nothing on its own when there is no
+            // check-in to offer and none has happened.
+            CheckInSection(
+                available = checkInAvailable,
+                state = checkInState,
+                attendance = attendance,
+                onCheckIn = onCheckIn,
+            )
+
             // Event chat — offered only when eligible (decided by the caller:
             // chat flag + member + published + going/maybe RSVP).
             if (onOpenChat != null) {
@@ -214,6 +241,109 @@ fun EventDetailScreen(
             }
     }
 }
+
+/**
+ * Geofenced check-in — the attendance PROOF. Three faces, chosen by what has
+ * happened so far:
+ *  - VERIFIED: a confirmed row with a check icon; the button is gone (there is
+ *    nothing left to do, and it stays confirmed even after the window closes).
+ *  - PENDING: the first sample landed but the geofence+dwell evidence is not yet
+ *    complete — the button stays so the member can check in again ~10 min later,
+ *    with a note explaining why.
+ *  - AVAILABLE: inside the window, not yet checked in — just the button.
+ * Renders nothing when a check-in cannot be attempted and none has happened, so
+ * an event outside its window shows no dead control.
+ */
+@Composable
+private fun CheckInSection(
+    available: Boolean,
+    state: CheckInUiState,
+    attendance: EventAttendanceStatus?,
+    onCheckIn: (() -> Unit)?,
+) {
+    // Verified from EITHER the persistent record OR this session's success (the
+    // observed record can lag the callable's reply by a snapshot).
+    val verified = attendance?.verified == true || (state as? CheckInUiState.Success)?.verified == true
+    val pending = !verified && (attendance?.checkedIn == true || state is CheckInUiState.Success)
+    val working = state == CheckInUiState.Working
+    val offerButton = available && onCheckIn != null
+    if (!verified && !pending && !offerButton) return
+
+    Column(
+        modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_SECTION_TAG),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.events_checkInTitle),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (verified) {
+            Row(
+                modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_CONFIRMED_TAG),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(R.string.events_checkInConfirmed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+            return@Column
+        }
+
+        if (offerButton) {
+            Button(
+                onClick = onCheckIn!!,
+                enabled = !working,
+                modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_BUTTON_TAG),
+            ) {
+                if (working) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Text(text = stringResource(R.string.events_checkInButton))
+                }
+            }
+        }
+        if (pending) {
+            Text(
+                text = stringResource(R.string.events_checkInPending),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        (state as? CheckInUiState.Failed)?.let { failed ->
+            Text(
+                text = stringResource(checkInErrorLabel(failed.error)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag(CHECK_IN_ERROR_TAG),
+            )
+        }
+    }
+}
+
+/** String resource for a check-in failure, in the member's own terms. */
+private fun checkInErrorLabel(error: CheckInError): Int =
+    when (error) {
+        CheckInError.OUTSIDE_GEOFENCE -> R.string.events_checkInErrorGeofence
+        CheckInError.WINDOW_CLOSED, CheckInError.NOT_CHECKINABLE ->
+            R.string.events_checkInErrorWindow
+        CheckInError.POSITION_UNAVAILABLE -> R.string.events_checkInErrorLocation
+        CheckInError.MOCK_LOCATION -> R.string.events_checkInErrorMock
+        CheckInError.GENERIC -> R.string.events_checkInErrorGeneric
+    }
 
 /**
  * "Who's going": the count (always available — it is the server-maintained
@@ -376,6 +506,12 @@ private fun AttendeeAvatar(avatarPath: String?) {
 
 /** Test tag for the attendees section container. */
 internal const val ATTENDEES_SECTION_TAG = "events_attendees_section"
+
+/** Test tags for the check-in section, its button, confirmed row and error line. */
+internal const val CHECK_IN_SECTION_TAG = "events_checkin_section"
+internal const val CHECK_IN_BUTTON_TAG = "events_checkin_button"
+internal const val CHECK_IN_CONFIRMED_TAG = "events_checkin_confirmed"
+internal const val CHECK_IN_ERROR_TAG = "events_checkin_error"
 
 /**
  * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered
