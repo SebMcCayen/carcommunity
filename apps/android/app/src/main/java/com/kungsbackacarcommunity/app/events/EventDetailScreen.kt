@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -117,8 +118,11 @@ fun EventDetailScreen(
     // an event with no coordinates hides both gracefully.
     val markerPoint = remember(event) { event?.let { EventMapPresentation.markerPoint(it) } }
     // Whether the full-screen (maximized) map is open. Saveable so a rotation while
-    // inspecting the map does not collapse it back to the thumbnail.
-    var mapMaximized by rememberSaveable { mutableStateOf(false) }
+    // inspecting the map does not collapse it back to the thumbnail. KEYED on the
+    // event id so it resets when the selected event changes in place (e.g. a shared
+    // "Open event" chip switches events while this screen stays composed) rather
+    // than leaving a stale full-screen map open for the new event.
+    var mapMaximized by rememberSaveable(event?.id) { mutableStateOf(false) }
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
@@ -198,10 +202,17 @@ fun EventDetailScreen(
             // neither, gracefully.
             if (markerPoint != null) {
                 if (hasMapToken) {
-                    EventLocationMap(
-                        point = markerPoint,
-                        onMaximize = { mapMaximized = true },
-                    )
+                    // Keyed on the point so the underlying MapView is disposed and
+                    // recreated (onRelease → onDestroy, then a fresh factory at the
+                    // new coordinate) when the selected event changes in place — the
+                    // static factory has no update path, so without this the map
+                    // would keep showing the previous event's location.
+                    key(markerPoint) {
+                        EventLocationMap(
+                            point = markerPoint,
+                            onMaximize = { mapMaximized = true },
+                        )
+                    }
                 }
                 if (onNavigate != null) {
                     Button(
@@ -339,10 +350,12 @@ fun EventDetailScreen(
             // thumbnail. Composed here so it overlays the whole detail; dismissing
             // returns to the thumbnail.
             if (mapMaximized && markerPoint != null && hasMapToken) {
-                EventLocationFullscreenDialog(
-                    point = markerPoint,
-                    onDismiss = { mapMaximized = false },
-                )
+                key(markerPoint) {
+                    EventLocationFullscreenDialog(
+                        point = markerPoint,
+                        onDismiss = { mapMaximized = false },
+                    )
+                }
             }
     }
 }
