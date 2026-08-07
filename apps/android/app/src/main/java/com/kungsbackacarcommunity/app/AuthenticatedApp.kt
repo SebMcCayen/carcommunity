@@ -1762,8 +1762,17 @@ fun AuthenticatedApp(
             // crown layer is visible, purely to decide which crowns are within
             // collect range (and so drawn in colour rather than greyed). Not the
             // 2 s high-accuracy fix the claim flow uses — that runs only with a
-            // popup open; this is a cheap last-known poll that bounds how often the
-            // in-range sets can churn, so the markers never thrash on tiny moves.
+            // popup open; this is a cheap balanced-accuracy poll that bounds how
+            // often the in-range sets can churn, so the markers never thrash on
+            // tiny moves.
+            //
+            // Uses CurrentLocation.currentFix (a FRESH fix each pass), NOT
+            // lastKnown: lastKnown prefers the fused provider's passive
+            // `lastLocation` cache, which only advances while something else is
+            // actively requesting updates — so a member driving into range kept
+            // reading the same stale, out-of-range coordinate and the crown never
+            // recoloured. currentFix asks the provider to recompute the position,
+            // so the in-range set tracks the member across the ring.
             val anyCrownLayerActive = crownSpawnEnabled || adminCrownsVisible
             var crownUserLocation by remember { mutableStateOf<LatLng?>(null) }
             LaunchedEffect(anyCrownLayerActive) {
@@ -1773,7 +1782,7 @@ fun AuthenticatedApp(
                 }
                 val appContext = context.applicationContext
                 while (true) {
-                    crownUserLocation = CurrentLocation.lastKnown(appContext)
+                    crownUserLocation = CurrentLocation.currentFix(appContext)
                     delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
                 }
             }
