@@ -445,11 +445,13 @@ dependencies {
     // the DEBUG variant's merged manifest, NEVER the shipped release manifest.
     // These Compose UI tests therefore live in src/testDebug (the debug-only unit
     // test source set) so they run under testDebugUnitTest and are excluded from
-    // testReleaseUnitTest, where that host activity does not exist.
-    testImplementation(libs.robolectric)
-    testImplementation(libs.androidx.junit)
-    testImplementation(platform(libs.androidx.compose.bom))
-    testImplementation(libs.androidx.ui.test.junit4)
+    // testReleaseUnitTest, where that host activity does not exist. The deps are
+    // scoped to testDebugImplementation to match — no other unit test uses them,
+    // so they never enter the release unit-test classpath.
+    testDebugImplementation(libs.robolectric)
+    testDebugImplementation(libs.androidx.junit)
+    testDebugImplementation(platform(libs.androidx.compose.bom))
+    testDebugImplementation(libs.androidx.ui.test.junit4)
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)
