@@ -66,6 +66,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = false,
                 sessionObserved = false,
+                sessionPresent = false,
                 convoyActive = false,
             ),
         )
@@ -81,6 +82,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = false,
                 sessionObserved = true,
+                sessionPresent = true,
                 convoyActive = false,
             ),
         )
@@ -93,6 +95,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = true,
                 sessionObserved = true,
+                sessionPresent = true,
                 convoyActive = false,
             ),
         )
@@ -100,6 +103,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = true,
                 sessionObserved = false,
+                sessionPresent = false,
                 convoyActive = true,
             ),
         )
@@ -110,17 +114,38 @@ class LiveSessionRecordingLifecycleTest {
     /**
      * A convoy member's auto-started session re-syncs after a rotation, so the
      * own-session flow can re-emit a transient `Loaded(null)`: the flow HAS
-     * emitted ([sessionObserved] true) yet the session reads not-sharing. The
-     * [sessionObserved] guard alone would stop and raise the save prompt here —
-     * the exact regression. The still-active convoy (#726) proves the session
-     * cannot really have ended, so the stop is withheld.
+     * emitted ([sessionObserved] true) and carries NO session ([sessionPresent]
+     * false), so it reads not-sharing. The [sessionObserved] guard alone would
+     * stop and raise the save prompt here — the exact regression. The still-active
+     * convoy (#726) proves the missing session is a re-sync transient, so the stop
+     * is withheld.
      */
     @Test
-    fun anActiveConvoyWithholdsAnObservedNotSharingRead_theConvoyRotationCase() {
+    fun anActiveConvoyWithholdsAMissingSessionRead_theConvoyRotationCase() {
         assertFalse(
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = false,
                 sessionObserved = true,
+                sessionPresent = false,
+                convoyActive = true,
+            ),
+        )
+    }
+
+    /**
+     * The decisive scope of the convoy guard: a REAL observed end while a convoy
+     * is still active — Hide-me-now leaves a `status=stopped` session node
+     * ([sessionPresent] true) and does NOT leave the convoy — is NOT a re-sync
+     * transient and MUST stop and auto-save. Only the missing-session transient is
+     * withheld, so the recording can never be stranded unsaved.
+     */
+    @Test
+    fun aRealStoppedSessionStopsEvenInAnActiveConvoy_theHideMeNowCase() {
+        assertTrue(
+            LiveSessionRecordingLifecycle.shouldStopRecording(
+                sharing = false,
+                sessionObserved = true,
+                sessionPresent = true,
                 convoyActive = true,
             ),
         )
@@ -128,9 +153,9 @@ class LiveSessionRecordingLifecycleTest {
 
     /**
      * Once the convoy is no longer active — the owner ended it, or the caller
-     * left — an observed not-sharing state is a real end again and stops (and
-     * saves the member's run). This is what keeps the convoy path from silently
-     * dropping a finished drive.
+     * left — even a missing-session read is a real end again and stops (and saves
+     * the member's run). This is what keeps the convoy path from silently dropping
+     * a finished drive.
      */
     @Test
     fun endingTheConvoyReleasesTheGuardAndStops() {
@@ -138,6 +163,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = false,
                 sessionObserved = true,
+                sessionPresent = false,
                 convoyActive = false,
             ),
         )
@@ -154,6 +180,7 @@ class LiveSessionRecordingLifecycleTest {
             LiveSessionRecordingLifecycle.shouldStopRecording(
                 sharing = false,
                 sessionObserved = false,
+                sessionPresent = false,
                 convoyActive = true,
             ),
         )

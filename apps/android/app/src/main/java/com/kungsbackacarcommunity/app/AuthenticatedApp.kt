@@ -2508,8 +2508,14 @@ fun AuthenticatedApp(
                     LiveSessionRecordingLifecycle.shouldStopRecording(
                         sharing = isSharing,
                         sessionObserved = liveSessionObserved,
-                        // Withheld while a convoy is (or, across the recreation,
-                        // was) still active — see the latch above and #726.
+                        // A real observed end (Stop / Hide-me-now / expiry) leaves
+                        // a status=stopped/expired session node, so this is true
+                        // and the convoy guard below does NOT apply — hide-me-now
+                        // stops without leaving the convoy and must still save.
+                        sessionPresent = liveSession != null,
+                        // Withheld only for the MISSING-session re-sync transient
+                        // while a convoy is (or, across the recreation, was) still
+                        // active — see the latch above and #726.
                         convoyActive = convoyActiveLatched,
                     )
                 ) {
