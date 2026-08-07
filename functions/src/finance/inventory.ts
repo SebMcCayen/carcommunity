@@ -256,6 +256,21 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Rolls daily aggregates into periods.',
   },
   {
+    id: 'partnerInsights-aggregateDriveHeat',
+    label: 'Partner drive heatmap',
+    schedule: '30 4 * * *',
+    runsPerDay: 1,
+    // Reads: one page of rides + a consent doc per distinct user + a route.bin
+    // Storage download per consented ride; a single aggregate write.
+    writesPerRun: 1,
+    readsPerRun: 400,
+    deletesPerRun: 0,
+    // Route decode + H3 binning over a rolling 90-day window; the heaviest job.
+    avgSeconds: 120,
+    memoryGiB: 1,
+    note: 'Anonymised H3 drive-density aggregate over consented drives.',
+  },
+  {
     id: 'chatchannels-communityDigest',
     label: 'Community digest',
     schedule: '0 18 * * *',
@@ -365,6 +380,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'partners.showOfferCode': 'variable-member',
   'partnerInsights.recordInteraction': 'variable-member',
   'partnerInsights.adminSummary': 'admin-rare',
+  'partnerInsights.driveHeat': 'admin-rare',
   'billboards.create': 'admin-rare',
   'billboards.update': 'admin-rare',
   'billboards.activate': 'admin-rare',

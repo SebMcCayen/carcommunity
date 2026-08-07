@@ -49,6 +49,7 @@ const navGroups: NavGroup[] = [
       { label: 'Announcements', href: '/announcements', icon: '◻' },
       { label: 'Notifications', href: '/notifications', icon: '◻' },
       { label: 'Partners', href: '/partners', icon: '◇' },
+      { label: 'Drive Heatmap', href: '/partners/drive-heat', icon: '◉' },
       { label: 'Digital Billboards', href: '/billboards', icon: '▣' },
       { label: 'Kronjakt', href: '/kronjakt', icon: '✦' },
     ],

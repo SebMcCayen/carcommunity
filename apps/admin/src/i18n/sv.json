@@ -700,6 +700,25 @@
     "retry": "Försök igen",
     "backToPartner": "Tillbaka till partner"
   },
+  "driveHeat": {
+    "pageTitle": "Körningskarta (värmekarta)",
+    "pageDescription": "En anonymiserad värmekarta över var communityn kör, aggregerad i ett hexrutnät. Använd den för att se de mest trafikerade områdena för digitala skyltplatser i appen.",
+    "privacyNote": "Endast aggregerat. Företag ser aldrig identitet, position i realtid eller körhistorik. En ruta visas bara om minst 10 unika förare har kört där, och varje körnings start- och slutpunkt (hem/arbete) trimmas bort innan aggregeringen.",
+    "meta": "Rullande {windowDays} dagar. Senast uppdaterad: {generatedAt}. {cells} rutor visas.",
+    "legendTitle": "Relativ körtäthet",
+    "legendNote": "Färgen visar hur mycket ett område körs i förhållande till det mest trafikerade — inte absoluta antal.",
+    "bandLow": "Låg",
+    "bandModerate": "Måttlig",
+    "bandBusy": "Livlig",
+    "bandHigh": "Hög",
+    "bandVeryHigh": "Mycket hög",
+    "attribution": "Anonymiserad aggregerad körtäthet",
+    "sparse": "Ingen värmekarta ännu. Kartan är gles tills körvolymen passerar tröskeln på minst 10 unika förare per ruta.",
+    "neverRun": "har inte körts ännu",
+    "loading": "Laddar värmekarta …",
+    "error": "Kunde inte ladda värmekartan.",
+    "retry": "Försök igen"
+  },
   "billboards": {
     "pageTitle": "Digitala reklamskyltar",
     "pageDescription": "Hantera sponsrade reklamskyltsplaceringar på kartan.",
