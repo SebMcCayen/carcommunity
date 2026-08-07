@@ -215,10 +215,23 @@ const pausePointInputSchema = z
   })
   .strict();
 
+// Hard-delete a hand-placed point. Unlike pause/end this REMOVES the
+// crownHuntPoints/{id} doc and its distinct-collector markers; it is allowed
+// from ANY status (a live active crown is removed from the map the instant its
+// doc is gone, since members read only status=='active'). Same optional-reason
+// shape as pause, recorded in the audit entry.
+const deletePointInputSchema = z
+  .object({
+    pointId: pointIdSchema,
+    reason: z.string().trim().max(2000).optional(),
+  })
+  .strict();
+
 export type CreatePointInput = z.infer<typeof createPointInputSchema>;
 export type UpdatePointInput = z.infer<typeof updatePointInputSchema>;
 export type ActivatePointInput = z.infer<typeof activatePointInputSchema>;
 export type PausePointInput = z.infer<typeof pausePointInputSchema>;
+export type DeletePointInput = z.infer<typeof deletePointInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -260,6 +273,10 @@ export function parseActivatePointInput(data: unknown): ParseResult<ActivatePoin
 
 export function parsePausePointInput(data: unknown): ParseResult<PausePointInput> {
   return parse(pausePointInputSchema, data, 'Expected { pointId, reason? }.');
+}
+
+export function parseDeletePointInput(data: unknown): ParseResult<DeletePointInput> {
+  return parse(deletePointInputSchema, data, 'Expected { pointId, reason? }.');
 }
 
 // ---------------------------------------------------------------------------

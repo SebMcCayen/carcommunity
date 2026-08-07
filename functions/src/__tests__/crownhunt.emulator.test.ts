@@ -231,6 +231,85 @@ describe('crownHunt admin point lifecycle', () => {
   });
 });
 
+describe('crownHunt-deletePoint', () => {
+  it('hard-deletes a point from any status, drains its collector markers, and audits it', async () => {
+    await signInAs(adminUser);
+    // A LIMITED, ACTIVE crown — the case that has both a live map presence and a
+    // distinct-collector marker to clean up.
+    const created = (
+      await call('crownHunt-createPoint', {
+        latitude: POINT_LAT,
+        longitude: POINT_LON,
+        geofenceRadiusMeters: 50,
+        rewardPoints: 25,
+        repeatRule: 'once',
+        maxCollectors: 3,
+      })
+    ).data as { pointId: string };
+    const pointId = created.pointId;
+    await call('crownHunt-activatePoint', {
+      pointId,
+      safeLocationConfirmed: true,
+      approvalNote: 'Trygg parkeringsficka intill torget.',
+    });
+
+    // Seed a distinct-collector marker exactly as submitClaim's award would, so
+    // the drain has something to remove.
+    const markerRef = adminDb
+      .collection('crownHuntPointCollectors')
+      .doc(pointCollectorDocId(pointId, member.uid));
+    await markerRef.set({
+      pointId,
+      userId: member.uid,
+      collectedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    });
+
+    const res = (await call('crownHunt-deletePoint', { pointId, reason: 'Fel plats.' })).data as {
+      pointId: string;
+      deleted: boolean;
+      removedCollectors: number;
+    };
+    expect(res.deleted).toBe(true);
+    expect(res.removedCollectors).toBe(1);
+
+    // Point doc and collector marker are both gone.
+    expect((await adminDb.collection('crownHuntPoints').doc(pointId).get()).exists).toBe(false);
+    expect((await markerRef.get()).exists).toBe(false);
+
+    // Audited under crownHunt.deletePoint with the prior status recorded.
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('targetId', '==', pointId)
+      .get();
+    const deleteEvent = audit.docs.find((d) => d.data().action === 'crownHunt.deletePoint');
+    expect(deleteEvent).toBeDefined();
+    expect(deleteEvent!.data().details.previousStatus).toBe('active');
+  });
+
+  it('rejects a non-admin and leaves the point intact', async () => {
+    const pointId = await createActivePoint();
+
+    await signInAs(member);
+    expect(await callableErrorCode(call('crownHunt-deletePoint', { pointId }))).toBe(
+      'functions/permission-denied',
+    );
+    expect((await adminDb.collection('crownHuntPoints').doc(pointId).get()).exists).toBe(true);
+
+    // Admin cleans it up.
+    await signInAs(adminUser);
+    await call('crownHunt-deletePoint', { pointId });
+    expect((await adminDb.collection('crownHuntPoints').doc(pointId).get()).exists).toBe(false);
+  });
+
+  it('returns not-found for a missing point', async () => {
+    await signInAs(adminUser);
+    expect(
+      await callableErrorCode(call('crownHunt-deletePoint', { pointId: 'no-such-point-xyz' })),
+    ).toBe('functions/not-found');
+  });
+});
+
 describe('crownHunt-submitClaim', () => {
   it('AWARDS a non-member while member gating is disabled', async () => {
     // Was: not_eligible (a result code, not an error). Re-locking restores it.

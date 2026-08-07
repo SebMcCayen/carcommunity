@@ -32,6 +32,8 @@ import {
 import {
   type AdminCreateCrownHuntPointRequest,
   type AdminUpdateCrownHuntPointRequest,
+  type AdminDeleteCrownHuntPointRequest,
+  type AdminDeleteCrownHuntPointResponse,
   type AdminCrownHuntPointResponse,
   type AdminCrownHuntPointSummary,
   type AdminCrownHuntClaimSummary,
@@ -49,6 +51,8 @@ import { getAdminFirestore } from '../../lib/firestore';
 export type {
   AdminCreateCrownHuntPointRequest,
   AdminUpdateCrownHuntPointRequest,
+  AdminDeleteCrownHuntPointRequest,
+  AdminDeleteCrownHuntPointResponse,
   AdminCrownHuntPointSummary,
   AdminCrownHuntClaimSummary,
   CrownHuntClaimResult,
@@ -392,4 +396,21 @@ export async function adminPauseCrownHuntPoint(
 ): Promise<AdminCrownHuntPointResponse> {
   await callAdmin<PointIdResponse>('crownHunt-pausePoint', { pointId });
   return getPointResponse(pointId);
+}
+
+/**
+ * Hard-deletes a Kronjakt point via crownHunt.deletePoint. Works from any
+ * status; the backend removes the point doc + its collector markers and audits
+ * the action. Returns the raw callable payload (there is no point to re-read).
+ */
+export async function adminDeleteCrownHuntPoint(
+  pointId: string,
+  reason?: string,
+  _token?: string,
+): Promise<AdminDeleteCrownHuntPointResponse> {
+  const request: AdminDeleteCrownHuntPointRequest = reason ? { reason } : {};
+  return callAdmin<AdminDeleteCrownHuntPointResponse>('crownHunt-deletePoint', {
+    pointId,
+    ...request,
+  });
 }
