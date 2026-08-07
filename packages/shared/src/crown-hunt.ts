@@ -621,3 +621,138 @@ export interface AdminListCrownSpawnAreasRequest {
 export interface AdminListCrownSpawnAreasResponse {
   areas: AdminCrownSpawnArea[];
 }
+
+// ---------------------------------------------------------------------------
+// Marked-area auto-spawn diagnostics (crownHunt.spawnDiagnostics, admin-only)
+// ---------------------------------------------------------------------------
+
+/** Input for crownHunt.spawnDiagnostics (admin). Names one marked area. */
+export interface AdminCrownSpawnDiagnosticsRequest {
+  areaId: string;
+}
+
+/** Why a scanned grid cell would (or would not) receive a crown on the next visit. */
+export const CROWN_SPAWN_DIAGNOSTIC_CELL_REASONS = [
+  /** Below target AND has a safe-stop POI to anchor to — a real spawn candidate. */
+  'would_spawn',
+  /** `A < 1`: nobody has been here recently enough, so the target is 0. */
+  'below_activity_floor',
+  /** Target reached: the live crown count already meets the activity-derived target. */
+  'at_target',
+  /** Below target but the cell has no cached OSM safe stop, so nothing to anchor to. */
+  'no_pois_in_cell',
+] as const;
+export type CrownSpawnDiagnosticCellReason = (typeof CROWN_SPAWN_DIAGNOSTIC_CELL_REASONS)[number];
+
+/**
+ * Area-level reasons the marked-area spawner is placing nothing right now. Any
+ * subset can hold at once; the diagnostics view lists every one that applies so
+ * an admin can see the actual blocker(s). An empty list means the engine WOULD
+ * place crowns in this area on its next visit (subject to the per-cell detail).
+ */
+export const CROWN_SPAWN_DIAGNOSTIC_BLOCKERS = [
+  /** The `crownHuntSpawn` feature flag is off — the whole engine is dormant. */
+  'spawn_flag_off',
+  /** The area is not `active`, so the pass never considers it. */
+  'area_inactive',
+  /** The area is not `safeAreaConfirmed` (defensive; activation requires it). */
+  'area_not_confirmed',
+  /** The area's bounding box exceeds the cell cap, so the pass skips it entirely. */
+  'area_oversize',
+  /** The area has no cached safe-stop POIs (ingestion pending or a POI-less region). */
+  'no_area_pois',
+  /** The cached POIs are older than the weekly refresh window — possibly stale. */
+  'pois_stale',
+  /** Every scanned cell scored below the activity floor (`A < 1`). */
+  'all_cells_below_activity_floor',
+  /** Every scanned cell is already at its activity-derived target. */
+  'all_cells_at_target',
+] as const;
+export type CrownSpawnDiagnosticBlocker = (typeof CROWN_SPAWN_DIAGNOSTIC_BLOCKERS)[number];
+
+/** A safe-stop POI anchor the spawner would place a crown at (coordinate + kind). */
+export interface CrownSpawnDiagnosticPoiAnchor {
+  lat: number;
+  lon: number;
+  category: CrownSpawnPoiCategory;
+}
+
+/** Per-cell diagnostics for one grid cell of a marked area. */
+export interface CrownSpawnDiagnosticCell {
+  /** The `"{latIdx}_{lonIdx}"` grid cell key. */
+  cellKey: string;
+  /** The cell's centroid (WGS-84). */
+  center: CrownSpawnAreaVertex;
+  /** The cell's coordinate box. */
+  bounds: { minLat: number; maxLat: number; minLon: number; maxLon: number };
+  /** Decayed distinct-user activity score `A` for the cell. */
+  activityScore: number;
+  /** Activity-derived target live-crown count (`ceil(1.5·ln(1+A))`, cap 5, 0 when A<1). */
+  target: number;
+  /** Live auto-spawned crowns currently in the cell. */
+  liveCount: number;
+  /** `max(0, target - liveCount)` — how many the next visit would try to add. */
+  deficit: number;
+  /** Cached safe-stop POIs inside this cell (bounded; see `poiCountCapped`). */
+  poiCount: number;
+  /** True when `poiCount` hit the per-cell read cap and the real count may be higher. */
+  poiCountCapped: boolean;
+  /** A bounded sample of the cell's POI anchors, for the map/list. */
+  poiAnchors: CrownSpawnDiagnosticPoiAnchor[];
+  reason: CrownSpawnDiagnosticCellReason;
+  /** True when the cell itself would spawn on the next visit if the area gates pass. */
+  eligible: boolean;
+}
+
+/**
+ * Response of crownHunt.spawnDiagnostics — a read-only snapshot of the
+ * marked-area auto-spawn engine's state for one area, so an admin can see WHEN
+ * the next run is, WHERE (which cells) it would place crowns, and WHY it might be
+ * placing nothing. Every time-relative estimate (countdown, per-area ETA) is
+ * derived client-side from `serverTime` / `nextRunAt` and the queue facts here —
+ * it is deliberately an estimate (round-robin ordering + a shared per-run cell
+ * budget + cells that are already at target).
+ */
+export interface AdminCrownSpawnDiagnosticsResponse {
+  areaId: string;
+  name: string | null;
+  shape: CrownSpawnAreaShape;
+  /** The `crownHuntSpawn` feature flag state (the whole engine's master switch). */
+  flagEnabled: boolean;
+  active: boolean;
+  safeAreaConfirmed: boolean;
+  /** Area-level cached safe-stop POI count (mirrors listSpawnAreas' `poiCount`). */
+  areaPoiCount: number;
+  /** When the area's POI cache was last refreshed (ISO 8601), or null if never. */
+  poisRefreshedAt: string | null;
+  /** The server's clock at request time (ISO 8601) — the countdown's origin. */
+  serverTime: string;
+  /** The next scheduled replenish-run boundary (ISO 8601). */
+  nextRunAt: string;
+  /** Seconds between replenish runs (600). */
+  runIntervalSeconds: number;
+  /** Active marked areas in the round-robin queue (bounded count). */
+  activeAreaCount: number;
+  /** Active areas served BEFORE this one (lower `lastSpawnPassAt`) — its queue position. */
+  areasAhead: number;
+  /** Areas visited per run (round-robin, least-recently-served first). */
+  maxAreasPerRun: number;
+  /** Grid cells processed per run across ALL areas — the shared per-run budget. */
+  maxAreaCellsPerRun: number;
+  /** When this area was last visited by a pass (ISO 8601), or null if never served. */
+  lastSpawnPassAt: string | null;
+  /** Grid cells the area's bounding box spans (capped at the enumeration limit). */
+  totalCells: number;
+  /** True when the bounding box exceeded the cell cap (the pass would skip the area). */
+  cellsTruncated: boolean;
+  /** The area's round-robin cell cursor — where its next visit resumes scanning. */
+  nextCellOffset: number;
+  /** How many cells this diagnostics call actually examined (from the cursor). */
+  cellsScanned: number;
+  /** Scanned cells that are real spawn candidates (`eligible`). */
+  candidateCellCount: number;
+  /** Per-cell detail for the scanned window, in visit order from the cursor. */
+  cells: CrownSpawnDiagnosticCell[];
+  /** Area-level blockers currently in effect (see {@link CROWN_SPAWN_DIAGNOSTIC_BLOCKERS}). */
+  blockers: CrownSpawnDiagnosticBlocker[];
+}

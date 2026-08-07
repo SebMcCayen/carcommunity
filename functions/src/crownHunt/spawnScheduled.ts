@@ -92,11 +92,18 @@ const MAX_SPAWNS_PER_RUN = 100;
  * The score is logarithmic and capped at 5 crowns by A ≈ 27, so the difference
  * between 200 recent visitors and 2000 is nil. Reading the first 200 is enough
  * to saturate the curve while keeping the per-cell read cost flat.
+ *
+ * Exported so the read-only `crownHunt.spawnDiagnostics` callable can compute a
+ * cell's activity score with the SAME read bound the live pass uses, rather than
+ * a second copy that could drift from it.
  */
-const MAX_ACTIVITY_USERS_PER_CELL = 200;
+export const MAX_ACTIVITY_USERS_PER_CELL = 200;
 
-/** Live crowns loaded from a 3x3 neighbourhood for the separation check. */
-const MAX_NEIGHBOURHOOD_CROWNS = 100;
+/**
+ * Live crowns loaded from a 3x3 neighbourhood for the separation check.
+ * Exported for `crownHunt.spawnDiagnostics` (see {@link MAX_ACTIVITY_USERS_PER_CELL}).
+ */
+export const MAX_NEIGHBOURHOOD_CROWNS = 100;
 
 /** Expired crowns deleted per sweep. */
 const MAX_SWEEP_DELETIONS = 1000;
@@ -345,7 +352,7 @@ export async function runCrownSpawnPass(
  * big areas, not thousands, so this is generous; the round-robin cursor
  * (`lastSpawnPassAt`) keeps a long list fair rather than starving its tail.
  */
-const MAX_AREAS_PER_RUN = 10;
+export const MAX_AREAS_PER_RUN = 10;
 
 /**
  * Grid CELLS processed per run across all areas — the read budget. A big area
@@ -353,10 +360,10 @@ const MAX_AREAS_PER_RUN = 10;
  * area's own cell cursor (`nextCellOffset`) advances so its tail is served on
  * later runs rather than always the same head.
  */
-const MAX_AREA_CELLS_PER_RUN = 60;
+export const MAX_AREA_CELLS_PER_RUN = 60;
 
 /** Crowns created per area run, across all areas — the hard write budget. */
-const MAX_AREA_SPAWNS_PER_RUN = 100;
+export const MAX_AREA_SPAWNS_PER_RUN = 100;
 
 /**
  * Cached safe-stop POIs read for ONE grid cell when it has a spawn deficit to
@@ -886,6 +893,23 @@ const SPAWN_SCHEDULE_OPTS = {
 };
 
 /**
+ * Minutes between replenish passes. The single source of truth for BOTH the
+ * `spawnCrowns` cron below and the `crownHunt.spawnDiagnostics` countdown, so the
+ * "time to next spawn run" an admin sees can never drift from the actual
+ * cadence. A step cron on the minute field fires on wall-clock minutes that are
+ * multiples of N and aligned to the hour, and every timezone Sweden uses is a
+ * whole-hour offset, so the next boundary is simply the next epoch multiple of
+ * this interval.
+ */
+export const SPAWN_RUN_INTERVAL_MINUTES = 10;
+
+/** {@link SPAWN_RUN_INTERVAL_MINUTES} in milliseconds. */
+export const SPAWN_RUN_INTERVAL_MS = SPAWN_RUN_INTERVAL_MINUTES * 60 * 1000;
+
+/** The replenish cron, derived from the interval so the two cannot disagree. */
+const SPAWN_SCHEDULE_CRON = `*/${SPAWN_RUN_INTERVAL_MINUTES} * * * *`;
+
+/**
  * Replenish pass, every 10 minutes.
  *
  * Faster than the 15-minute sweep so a cell that loses its crowns (collected or
@@ -893,7 +917,7 @@ const SPAWN_SCHEDULE_OPTS = {
  * hundred reads an hour at the active footprint we expect.
  */
 export const spawnCrowns = onSchedule(
-  { ...SPAWN_SCHEDULE_OPTS, schedule: '*/10 * * * *' },
+  { ...SPAWN_SCHEDULE_OPTS, schedule: SPAWN_SCHEDULE_CRON },
   withServerErrorReporting('crownHunt.spawnCrowns', async () => {
     // Both candidate sources, in one serialized invocation. The single-cell pass
     // runs first, then the marked-area pass; because the area pass reads the live

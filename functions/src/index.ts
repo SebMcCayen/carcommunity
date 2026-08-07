@@ -68,7 +68,13 @@ import {
   onLedgerEntryCreated,
   onVehicleCreated,
 } from './points/economyTriggers';
-import { activatePoint, createPoint, deletePoint, pausePoint, updatePoint } from './crownHunt/managePoints';
+import {
+  activatePoint,
+  createPoint,
+  deletePoint,
+  pausePoint,
+  updatePoint,
+} from './crownHunt/managePoints';
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
 import { setSpawnCellApproval } from './crownHunt/spawnCells';
@@ -79,6 +85,7 @@ import {
   updateSpawnArea,
 } from './crownHunt/spawnAreas';
 import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
+import { spawnDiagnostics } from './crownHunt/spawnDiagnostics';
 import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIngestion';
 import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
@@ -133,11 +140,7 @@ import { reportIssue } from './feedback/reportIssue';
 import { reportClientError } from './errors/reportClientError';
 import { onClientErrorReport } from './errors/onClientErrorReport';
 import { onServerErrorReport } from './errors/onServerErrorReport';
-import {
-  onNewFatalIssue,
-  onNewAnrIssue,
-  onCrashRegression,
-} from './crashReporting/crashReporting';
+import { onNewFatalIssue, onNewAnrIssue, onCrashRegression } from './crashReporting/crashReporting';
 import { report as reportIncident } from './incidents/report';
 import { listNearby as listNearbyIncidents } from './incidents/listNearby';
 import { remove as removeIncident } from './incidents/remove';
@@ -488,6 +491,10 @@ export const crownHunt = {
   updateSpawnArea,
   deleteSpawnArea,
   listSpawnAreas,
+  // Read-only admin troubleshooting view over the marked-area auto-spawn engine
+  // (next-run countdown, candidate cells, blockers). Deployed as
+  // crownHunt-spawnDiagnostics (functions/src/crownHunt/spawnDiagnostics.ts).
+  spawnDiagnostics,
   spawnCrowns,
   sweepSpawns,
   // OpenStreetMap safe-stop POI ingestion for AREA spawning. The area spawn pass
