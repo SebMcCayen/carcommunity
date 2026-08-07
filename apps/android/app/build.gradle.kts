@@ -312,6 +312,17 @@ android {
         buildConfig = true
     }
 
+    // Robolectric-backed JVM Compose UI tests need the app's Android resources
+    // (the onboarding screen resolves strings via stringResource); without this,
+    // resource lookups return an empty/erroring table and setContent fails. This
+    // switches the unit-test classpath from the stubbed mockable android.jar to a
+    // resource-aware runtime, which is exactly what Robolectric consumes.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
+
     // Turn-by-turn navigation: exactly ONE of two mutually-exclusive source dirs
     // is added to `main`, both defining the same TurnByTurnNavScreen entry point
     // (same package + signature) so the rest of the app calls it uniformly:
@@ -420,6 +431,20 @@ dependencies {
     // before the mockable jar on the unit-test classpath, so it wins there;
     // devices/instrumented tests still use the platform org.json.
     testImplementation(libs.org.json)
+
+    // Robolectric-backed JVM Compose UI tests (no emulator). Robolectric provides
+    // the Android runtime + resources on the JVM; androidx.test.ext:junit's
+    // AndroidJUnit4 runner delegates to RobolectricTestRunner off-device; and the
+    // Compose test artifacts — reused from the same BoM the app ships, so
+    // versions never drift — supply createComposeRule()/assertions (ui-test-junit4)
+    // and the ComponentActivity host it launches into (ui-test-manifest). This is
+    // the OnboardingScreenTest pilot for running Compose UI tests in the fast,
+    // blocking testDebugUnitTest suite instead of the flaky CI emulator.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.junit)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.ui.test.junit4)
+    testImplementation(libs.androidx.ui.test.manifest)
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)
