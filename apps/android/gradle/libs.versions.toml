@@ -38,10 +38,10 @@ orgJson = "20240303"
 androidxJunit = "1.3.0"
 espressoCore = "3.7.0"
 # Robolectric — runs Android/Compose UI tests on the JVM (no emulator). 4.14.1
-# ships SDK 34 sandbox jars, so the pilot tests pin @Config(sdk=34) via
-# src/test/resources/robolectric.properties even though the app compiles against
-# compileSdk 36. Native graphics mode (also in robolectric.properties) is
-# required for Compose to render/layout under Robolectric.
+# ships SDK 34 sandbox jars, so the pilot tests run under SDK 34 (set globally
+# in src/test/resources/robolectric.properties) even though the app compiles
+# against compileSdk 36. That same properties file also selects NATIVE graphics
+# mode, which Compose needs to render/layout under Robolectric.
 robolectric = "4.14.1"
 
 [libraries]
