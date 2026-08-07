@@ -27,8 +27,17 @@ class OnboardingScreenTest {
     @Test
     fun continueIsGatedOnAllThreeConsentsAndADisplayName() {
         var submitted = 0
+        var submittedPartnerStats: Boolean? = null
         composeTestRule.setContent {
-            KccTheme { OnboardingScreen(status = OnboardingStatus.Idle, onSubmit = { submitted++ }) }
+            KccTheme {
+                OnboardingScreen(
+                    status = OnboardingStatus.Idle,
+                    onSubmit = { _, partnerStats ->
+                        submitted++
+                        submittedPartnerStats = partnerStats
+                    },
+                )
+            }
         }
         val continueBtn = str(R.string.onboarding_continueButton)
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
@@ -47,5 +56,38 @@ class OnboardingScreenTest {
             .performTextInput("Sebbe")
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsEnabled().performClick()
         assertEquals(1, submitted)
+        // Anonymised partner statistics are default-on / opt-out: untouched, the
+        // step reports true.
+        assertEquals(true, submittedPartnerStats)
+    }
+
+    @Test
+    fun partnerStatsCanBeOptedOutDuringOnboarding() {
+        var submittedPartnerStats: Boolean? = null
+        composeTestRule.setContent {
+            KccTheme {
+                OnboardingScreen(
+                    status = OnboardingStatus.Idle,
+                    onSubmit = { _, partnerStats -> submittedPartnerStats = partnerStats },
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.onboarding_displayNameLabel))
+            .performScrollTo()
+            .performTextInput("Sebbe")
+        // Turn the default-on partner-stats toggle OFF.
+        composeTestRule
+            .onNodeWithText(str(R.string.onboarding_partnerStatsOptIn))
+            .performScrollTo()
+            .performClick()
+        composeTestRule
+            .onNodeWithText(str(R.string.onboarding_continueButton))
+            .performScrollTo()
+            .performClick()
+        assertEquals(false, submittedPartnerStats)
     }
 }

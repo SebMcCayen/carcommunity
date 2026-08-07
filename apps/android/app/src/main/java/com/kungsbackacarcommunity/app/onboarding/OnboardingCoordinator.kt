@@ -27,12 +27,18 @@ class OnboardingCoordinator(
     private val state = MutableStateFlow<OnboardingStatus>(OnboardingStatus.Idle)
     val status: StateFlow<OnboardingStatus> = state.asStateFlow()
 
-    /** Submits once; re-entrant calls while submitting are ignored. */
-    suspend fun submit(displayName: String?) {
+    /**
+     * Submits once; re-entrant calls while submitting are ignored.
+     *
+     * [anonymousPartnerStatsOptIn] carries the onboarding partner-statistics
+     * choice (default-on / opt-out). null omits it — the backend keeps the
+     * provisioning default (ON); false opts the member out.
+     */
+    suspend fun submit(displayName: String?, anonymousPartnerStatsOptIn: Boolean? = null) {
         if (state.value == OnboardingStatus.Submitting) return
         state.value = OnboardingStatus.Submitting
         try {
-            repository.completeOnboarding(displayName)
+            repository.completeOnboarding(displayName, anonymousPartnerStatsOptIn)
             state.value = OnboardingStatus.Done
         } catch (cancellation: CancellationException) {
             state.value = OnboardingStatus.Idle

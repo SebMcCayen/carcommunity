@@ -48,6 +48,26 @@ class PartnerStatsScreenTest {
     }
 
     @Test
+    fun defaultsOn_whenNoExplicitChoice() {
+        // Default-on / opt-out: a null value (no explicit choice / still loading)
+        // renders the toggle ON, and Save persists that ON choice.
+        var saved: Boolean? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerStatsScreen(
+                    currentOptIn = null,
+                    saveStatus = PartnerStatsSaveStatus.Idle,
+                    onSave = { saved = it },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule.onNodeWithText(str(R.string.privacySettings_saveButton)).performScrollTo().performClick()
+        assertEquals(true, saved)
+    }
+
+    @Test
     fun savedStatus_showsConfirmation() {
         composeTestRule.setContent {
             KccTheme {

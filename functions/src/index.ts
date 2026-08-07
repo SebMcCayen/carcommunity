@@ -536,8 +536,9 @@ export const partners = {
  * `partnerInsights-cleanupExpired`).
  *
  * Privacy-critical (contracts/functions/functions.json): events carry only
- * partner-scoped user hashes, anonymous_pass_by requires flag + explicit
- * opt-in (silent opt-out), aggregates enforce the minimum-contributor
+ * partner-scoped user hashes, anonymous_pass_by requires the flag and
+ * default-on consent (only an explicit opt-out is silently excluded),
+ * aggregates enforce the minimum-contributor
  * threshold with zeroed below-threshold counts, and raw events expire
  * after 7 days.
  */

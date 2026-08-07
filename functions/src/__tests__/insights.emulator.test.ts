@@ -35,7 +35,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
+import { FieldValue, getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { buildScopedHash } from '../partnerInsights/insights-core';
 import { runInsightsAggregation, runInsightsCleanup } from '../partnerInsights/scheduled';
@@ -186,9 +186,9 @@ describe('partnerInsights-recordInteraction', () => {
     ).toBe('functions/not-found');
   });
 
-  it('pass-by requires the feature flag, then the explicit opt-in — opting out is SILENT', async () => {
+  it('pass-by requires the flag; consent is DEFAULT-ON — only an explicit opt-out is SILENTLY excluded', async () => {
     await signInAs(user);
-    // Flag off (contract default): failed-precondition even for opted-in users.
+    // Flag off (contract default): failed-precondition regardless of consent.
     expect(
       await callableErrorCode(
         call('partnerInsights-recordInteraction', {
@@ -203,15 +203,19 @@ describe('partnerInsights-recordInteraction', () => {
       .doc('featureFlags')
       .set({ partnerInsightsPassBy: true }, { merge: true });
     try {
-      // Flag on, user NOT opted in: silent { recorded: false } — same shape
-      // as a dedupe, so opting out is unobservable.
-      const notOptedIn = (
+      // Flag on, member EXPLICITLY opted out: silent { recorded: false } —
+      // same shape as a dedupe, so opting out is unobservable. No event created.
+      await adminDb
+        .collection('userPrivate')
+        .doc(user.uid)
+        .set({ anonymousPartnerStatsOptIn: false }, { merge: true });
+      const optedOut = (
         await call('partnerInsights-recordInteraction', {
           companyId,
           interactionType: 'anonymous_pass_by',
         })
       ).data as { recorded: boolean };
-      expect(notOptedIn.recorded).toBe(false);
+      expect(optedOut.recorded).toBe(false);
       expect(
         (
           await adminDb
@@ -222,18 +226,19 @@ describe('partnerInsights-recordInteraction', () => {
         ).size,
       ).toBe(0);
 
-      // Opt in → recorded.
+      // No explicit choice (field absent) → DEFAULT-ON → recorded. A member who
+      // never touches the toggle contributes.
       await adminDb
         .collection('userPrivate')
         .doc(user.uid)
-        .set({ anonymousPartnerStatsOptIn: true }, { merge: true });
-      const optedIn = (
+        .update({ anonymousPartnerStatsOptIn: FieldValue.delete() });
+      const defaultOn = (
         await call('partnerInsights-recordInteraction', {
           companyId,
           interactionType: 'anonymous_pass_by',
         })
       ).data as { recorded: boolean };
-      expect(optedIn.recorded).toBe(true);
+      expect(defaultOn.recorded).toBe(true);
     } finally {
       await adminDb
         .collection('config')

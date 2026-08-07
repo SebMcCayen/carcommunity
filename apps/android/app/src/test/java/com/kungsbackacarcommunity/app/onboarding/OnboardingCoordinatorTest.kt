@@ -7,12 +7,15 @@ import org.junit.Test
 class OnboardingCoordinatorTest {
 
     private class FakeRepo : OnboardingRepository {
-        val calls = mutableListOf<String?>()
+        val calls = mutableListOf<Pair<String?, Boolean?>>()
         var failWith: Exception? = null
 
-        override suspend fun completeOnboarding(displayName: String?) {
+        override suspend fun completeOnboarding(
+            displayName: String?,
+            anonymousPartnerStatsOptIn: Boolean?,
+        ) {
             failWith?.let { throw it }
-            calls += displayName
+            calls += displayName to anonymousPartnerStatsOptIn
         }
     }
 
@@ -21,7 +24,16 @@ class OnboardingCoordinatorTest {
         val repo = FakeRepo()
         val coordinator = OnboardingCoordinator(repo)
         coordinator.submit("Sebbe")
-        assertEquals(listOf("Sebbe"), repo.calls)
+        assertEquals(listOf<Pair<String?, Boolean?>>("Sebbe" to null), repo.calls)
+        assertEquals(OnboardingStatus.Done, coordinator.status.value)
+    }
+
+    @Test
+    fun `submit forwards the partner-stats opt-out choice`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = OnboardingCoordinator(repo)
+        coordinator.submit("Sebbe", anonymousPartnerStatsOptIn = false)
+        assertEquals(listOf<Pair<String?, Boolean?>>("Sebbe" to false), repo.calls)
         assertEquals(OnboardingStatus.Done, coordinator.status.value)
     }
 

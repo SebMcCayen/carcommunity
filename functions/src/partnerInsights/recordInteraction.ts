@@ -11,9 +11,11 @@
  * - One event per (company, type, UTC day, user): the dedupe is the
  *   deterministic document ID; duplicates return { recorded: false }.
  * - anonymous_pass_by requires the pass-by feature flag (contract default
- *   OFF) AND the caller's anonymousPartnerStatsOptIn. A non-opted-in
- *   contribution returns { recorded: false } silently — never an error —
- *   so opting out is unobservable from the response shape.
+ *   OFF). Consent is DEFAULT-ON / opt-out: the caller contributes unless
+ *   anonymousPartnerStatsOptIn is explicitly `false` (missing/true both
+ *   contribute). An opted-out contribution returns { recorded: false }
+ *   silently — never an error — so opting out is unobservable from the
+ *   response shape.
  * - Events carry expiresAt (+7 days) and are removed by the scheduled
  *   cleanup; only threshold-enforced aggregates persist.
  */
@@ -60,14 +62,16 @@ export const recordInteraction = onCall(
     }
     const input = parsed.input;
 
-    // anonymous_pass_by: feature flag + explicit opt-in. Opt-out is silent
-    // (recorded: false), never an error — unobservable by design.
+    // anonymous_pass_by: feature flag + default-on consent. Consent is
+    // opt-out — only an explicit `false` excludes the caller (a missing or
+    // true value contributes). Opt-out is silent (recorded: false), never an
+    // error — unobservable by design.
     if (input.interactionType === 'anonymous_pass_by') {
       if (!(await isPassByEnabled())) {
         throw new HttpsError('failed-precondition', 'Anonymous pass-by collection is disabled.');
       }
       const privateSnap = await db.collection('userPrivate').doc(actor.uid).get();
-      if (privateSnap.data()?.anonymousPartnerStatsOptIn !== true) {
+      if (privateSnap.data()?.anonymousPartnerStatsOptIn === false) {
         return { recorded: false };
       }
     }

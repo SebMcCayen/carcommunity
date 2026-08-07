@@ -39,8 +39,10 @@ fun PartnerStatsScreen(
 ) {
     // Seed the pending toggle from the observed value ONCE — decoupled from
     // later Firestore emissions so a live update doesn't overwrite an edit the
-    // user is in the middle of making.
-    var pending by rememberSaveable { mutableStateOf(currentOptIn ?: false) }
+    // user is in the middle of making. Anonymised partner statistics are
+    // DEFAULT-ON / opt-out: a member who has made no explicit choice (null —
+    // still loading or field absent) sees the toggle ON.
+    var pending by rememberSaveable { mutableStateOf(currentOptIn ?: true) }
     var seeded by rememberSaveable { mutableStateOf(currentOptIn != null) }
     LaunchedEffect(currentOptIn) {
         if (!seeded && currentOptIn != null) {

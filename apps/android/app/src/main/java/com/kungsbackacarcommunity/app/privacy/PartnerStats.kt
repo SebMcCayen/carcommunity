@@ -16,12 +16,16 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
- * Anonymised partner-statistics opt-in (Phase 12 slice 19). A privacy toggle
- * on `userPrivate/{uid}.anonymousPartnerStatsOptIn` — default OFF, owner-only,
- * a direct rules-validated write. Firebase-free interface for testability.
+ * Anonymised partner-statistics consent (Phase 12 slice 19). A privacy toggle
+ * on `userPrivate/{uid}.anonymousPartnerStatsOptIn` — DEFAULT-ON / opt-out,
+ * owner-only, a direct rules-validated write. A missing field (no explicit
+ * choice) is treated as ON both here and in the backend recordInteraction gate,
+ * which excludes a member only on an explicit `false`. Firebase-free interface
+ * for testability.
  */
 interface PartnerStatsRepository {
-    /** The caller's current opt-in; null until read (rendered as off). */
+    /** The caller's stored choice; null until read or when no explicit choice
+     * has been made (the screen renders null as ON — default-on). */
     fun observeOptIn(uid: String): Flow<Boolean?>
 
     suspend fun setOptIn(uid: String, optIn: Boolean)

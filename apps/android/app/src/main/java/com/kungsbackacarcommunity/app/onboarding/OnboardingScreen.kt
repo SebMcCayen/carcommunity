@@ -21,8 +21,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -52,6 +55,12 @@ import com.kungsbackacarcommunity.app.design.KccTheme
  * consents are checked and a valid display name is entered
  * ([OnboardingForm.canSubmit]) and no submission is in flight.
  *
+ * When [partnerStatsEnabled] is true a fourth, NON-mandatory step is shown:
+ * anonymised partner statistics are DEFAULT-ON / opt-out, so the toggle starts
+ * enabled and the member may turn it off here (or later under Privacy). The
+ * choice is passed to [onSubmit] as the second argument (null when the step is
+ * hidden, so the backend keeps its provisioning default).
+ *
  * The content scrolls and consumes safe-drawing insets (status/navigation bars
  * and the IME) so the submit button stays reachable under edge-to-edge and with
  * the keyboard open. All copy is generated string resources
@@ -60,14 +69,18 @@ import com.kungsbackacarcommunity.app.design.KccTheme
 @Composable
 fun OnboardingScreen(
     status: OnboardingStatus,
-    onSubmit: (displayName: String?) -> Unit,
+    onSubmit: (displayName: String?, anonymousPartnerStatsOptIn: Boolean?) -> Unit,
     modifier: Modifier = Modifier,
+    partnerStatsEnabled: Boolean = true,
 ) {
     var licence by remember { mutableStateOf(false) }
     var terms by remember { mutableStateOf(false) }
     var privacy by remember { mutableStateOf(false) }
     // Starts empty on purpose — never prefilled with the Google account name.
     var displayName by remember { mutableStateOf("") }
+    // Default-on / opt-out: the toggle starts ON. Only meaningful when the step
+    // is shown ([partnerStatsEnabled]); otherwise onSubmit is passed null.
+    var partnerStats by remember { mutableStateOf(true) }
 
     val submitting = status == OnboardingStatus.Submitting
     val canSubmit = OnboardingForm.canSubmit(licence, terms, privacy, displayName) && !submitting
@@ -112,6 +125,11 @@ fun OnboardingScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            if (partnerStatsEnabled) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                PartnerStatsStep(checked = partnerStats, onCheckedChange = { partnerStats = it })
+            }
+
             if (status == OnboardingStatus.Failed) {
                 Text(
                     text = stringResource(R.string.onboarding_error),
@@ -122,7 +140,13 @@ fun OnboardingScreen(
 
             Spacer(modifier = Modifier.height(4.dp))
             Button(
-                onClick = { onSubmit(OnboardingForm.normalizedDisplayName(displayName)) },
+                onClick = {
+                    onSubmit(
+                        OnboardingForm.normalizedDisplayName(displayName),
+                        // null when the step is hidden → backend keeps its default.
+                        if (partnerStatsEnabled) partnerStats else null,
+                    )
+                },
                 enabled = canSubmit,
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -134,6 +158,55 @@ fun OnboardingScreen(
             }
         }
     }
+}
+
+/**
+ * The optional anonymised-partner-statistics step (default-on / opt-out). Shows
+ * the same privacy reassurance as the Settings screen (companies never see the
+ * member's identity, live location or drive history) with a Switch that starts
+ * ON; the member can turn it off here or later under Privacy.
+ */
+@Composable
+private fun PartnerStatsStep(checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    Text(
+        text = stringResource(R.string.privacySettings_partnerStatsTitle),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+    )
+    Text(
+        text = stringResource(R.string.privacySettings_partnerStatsExplainer),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        text = stringResource(R.string.privacySettings_partnerStatsNotice),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    // Whole row is one Switch-roled toggle target with merged semantics, so
+    // TalkBack reads the label as the switch's description.
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .toggleable(value = checked, onValueChange = onCheckedChange, role = Role.Switch)
+                .semantics(mergeDescendants = true) {},
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_partnerStatsOptIn),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            modifier = Modifier.weight(1f),
+        )
+        // Null callback — the row's toggleable owns the interaction.
+        Switch(checked = checked, onCheckedChange = null)
+    }
+    Text(
+        text = stringResource(R.string.onboarding_partnerStatsNote),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -208,5 +281,5 @@ private fun openExternalUrl(context: Context, url: String) {
 @Preview(name = "Onboarding", showBackground = true)
 @Composable
 private fun OnboardingScreenPreview() {
-    KccTheme { OnboardingScreen(status = OnboardingStatus.Idle, onSubmit = {}) }
+    KccTheme { OnboardingScreen(status = OnboardingStatus.Idle, onSubmit = { _, _ -> }) }
 }
