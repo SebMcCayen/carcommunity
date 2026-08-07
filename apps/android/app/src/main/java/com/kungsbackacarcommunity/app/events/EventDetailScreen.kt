@@ -111,6 +111,16 @@ fun EventDetailScreen(
     // Adds the event to the phone's calendar with a one-hour reminder. Null (no
     // readable start time) hides the button.
     onAddToCalendar: (() -> Unit)? = null,
+    // The event organiser's current display name (resolved from the creator uid
+    // via live users/{uid} in the route). Null hides the "Organizer: …" line — an
+    // event with no creator uid, an unresolved name, or a config-less build.
+    organizerName: String? = null,
+    // Triggers the DEFERRED attendee-roster load when the viewer taps "Check who
+    // answered": the roster is collapsed behind that button so the page stays
+    // short, and the events-listAttendees read is not run until it is asked for.
+    // Null in isolated screen tests, where the [attendees] state is supplied
+    // directly — the button still expands the section locally.
+    onRevealAttendees: (() -> Unit)? = null,
     // Whether a Mapbox token is configured, so the embedded map can render. When
     // false the map area is hidden (Navigate still shows if the event has a pin).
     hasMapToken: Boolean = false,
@@ -126,6 +136,11 @@ fun EventDetailScreen(
     // "Open event" chip switches events while this screen stays composed) rather
     // than leaving a stale full-screen map open for the new event.
     var mapMaximized by rememberSaveable(event?.id) { mutableStateOf(false) }
+    // Whether the "who answered" roster is expanded. Collapsed by default (the
+    // viewer taps "Check who answered" to reveal it), which keeps the page short
+    // and defers the roster read. Keyed on the event id so switching events in
+    // place re-collapses rather than showing the previous event's roster.
+    var attendeesExpanded by rememberSaveable(event?.id) { mutableStateOf(false) }
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
@@ -198,12 +213,90 @@ fun EventDetailScreen(
                 )
             }
 
-            // Location section — the embedded map (tap to maximize) + a Navigate
+            // Organizer — the event's creator, resolved to their current display
+            // name in the route. Sits with the event's identity, just under the
+            // title/teaser lines. Hidden when no name resolved (older event with no
+            // creator uid, unresolved name, or config-less build).
+            organizerName?.takeIf { it.isNotBlank() }?.let { name ->
+                Text(
+                    text = stringResource(R.string.events_organizerLabel, name),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
+                )
+            }
+
+            // 2. Description — the member-gated detail (long write-up + precise
+            // street address), or the membership gate. Shown only when the rules
+            // would actually serve it: passes the member gate AND published. A
+            // caller who fails the gate sees the membership upsell INSTEAD of the
+            // detail (that copy is the block, not a hint beside it, so it
+            // disappears while gating is disabled); someone who passes but is on a
+            // non-published event sees neither (the cancelled notice above already
+            // explains the state).
+            if (Events.canSeeDetails(passesMemberGate, event.status)) {
+                DetailCard(detail)
+            } else if (!passesMemberGate) {
+                InfoCard(
+                    title = stringResource(R.string.events_memberRequiredTitle),
+                    body = stringResource(R.string.events_memberRequiredBody),
+                )
+            }
+
+            // 3. RSVP row — gate-passers only, published events only — then 4. the
+            // "Check who answered" button, which reveals the roster on tap.
+            if (Events.canRsvp(passesMemberGate, event.status)) {
+                Text(
+                    text = stringResource(R.string.events_rsvpCountsLabel),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    // A light confirm haptic accompanies the RSVP write; the
+                    // failure path is surfaced as a shell snackbar by the route.
+                    val onRsvpHaptic: (RsvpStatus) -> Unit = { answer ->
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onRsvp(answer)
+                    }
+                    RsvpButton(R.string.events_rsvpGoing, RsvpStatus.GOING, myRsvp, rsvpStatus, onRsvpHaptic)
+                    RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvpHaptic)
+                    RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
+                }
+
+                // Who's going — collapsed behind a button so the roster never makes
+                // the page long, and its events-listAttendees read is deferred until
+                // the viewer asks (onRevealAttendees). Same member+published gate as
+                // the details, so the roster is never teased to a non-member.
+                if (attendeesExpanded) {
+                    AttendeesSection(
+                        state = attendees,
+                        goingCount = event.counts.going,
+                        onOpenMember = onOpenMember,
+                        onRetry = onRetryAttendees,
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            attendeesExpanded = true
+                            onRevealAttendees?.invoke()
+                        },
+                        modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG),
+                    ) {
+                        Text(text = stringResource(R.string.events_attendeesReveal))
+                    }
+                }
+            }
+
+            // 5. Location — the embedded map (tap to maximize) + the Navigate
             // button. Shown only when the event has a valid pin ([markerPoint]); the
             // embedded map itself needs a Mapbox token, but the Navigate button
             // gates on the pin (not the token) and shows even without one — it
-            // routes through the app's in-app navigate-to-point handoff. An event
-            // with no coordinates gets neither, gracefully.
+            // routes through the app's IN-APP navigate-to-point handoff (the same
+            // "Navigate here" preview a tapped map place raises), never the device's
+            // maps app in the real app. An event with no coordinates gets neither.
             if (markerPoint != null) {
                 if (hasMapToken) {
                     // Keyed on the point so the underlying MapView is disposed and
@@ -236,72 +329,9 @@ fun EventDetailScreen(
                 }
             }
 
-            // Member-gated detail: the precise street address + full description,
-            // or a gate. (The place name is public and already rendered above.)
-            // Shown only when the rules would actually serve it: passes the member
-            // gate AND published. A caller who fails the gate sees the membership
-            // upsell INSTEAD of the detail (that copy is the block, not a hint
-            // beside it, so it disappears while gating is disabled); someone who
-            // passes but is on a non-published event sees
-            // neither (the cancelled notice above already explains the state).
-            if (Events.canSeeDetails(passesMemberGate, event.status)) {
-                DetailCard(detail)
-            } else if (!passesMemberGate) {
-                InfoCard(
-                    title = stringResource(R.string.events_memberRequiredTitle),
-                    body = stringResource(R.string.events_memberRequiredBody),
-                )
-            }
-
-            // RSVP row — gate-passers only, published events only.
-            if (Events.canRsvp(passesMemberGate, event.status)) {
-                Text(
-                    text = stringResource(R.string.events_rsvpCountsLabel),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    // A light confirm haptic accompanies the RSVP write; the
-                    // failure path is surfaced as a shell snackbar by the route.
-                    val onRsvpHaptic: (RsvpStatus) -> Unit = { answer ->
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        onRsvp(answer)
-                    }
-                    RsvpButton(R.string.events_rsvpGoing, RsvpStatus.GOING, myRsvp, rsvpStatus, onRsvpHaptic)
-                    RsvpButton(R.string.events_rsvpMaybe, RsvpStatus.MAYBE, myRsvp, rsvpStatus, onRsvpHaptic)
-                    RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
-                }
-
-                // Who's going — same member+published gate as the details, so
-                // the roster is never teased to a non-member.
-                AttendeesSection(
-                    state = attendees,
-                    goingCount = event.counts.going,
-                    onOpenMember = onOpenMember,
-                    onRetry = onRetryAttendees,
-                )
-            }
-
-            // Geofenced check-in — the PROOF of attendance (an RSVP is only
-            // intent). Verified attendance, not a "going", earns the badge.
-            // OUTSIDE the published-only RSVP block on purpose: it must still show
-            // for a COMPLETED event that is inside its check-in window (the server
-            // accepts those), and the confirmed state must remain visible after the
-            // event ends. The section renders nothing on its own when there is no
-            // check-in to offer and none has happened.
-            CheckInSection(
-                available = checkInAvailable,
-                state = checkInState,
-                attendance = attendance,
-                onCheckIn = onCheckIn,
-            )
-
-            // Share this event in-app + add it to the phone's calendar. Each is
-            // independent: Share appears when a friends/DM repository is wired, Add
-            // to calendar when the event has a readable start time.
+            // 6. Share this event in-app + 7. add it to the phone's calendar. Each
+            // is independent: Share appears when a friends/DM repository is wired,
+            // Add to calendar when the event has a readable start time.
             if (onShareEvent != null) {
                 OutlinedButton(
                     onClick = onShareEvent,
@@ -334,6 +364,20 @@ fun EventDetailScreen(
                     )
                 }
             }
+
+            // Geofenced check-in — the PROOF of attendance (an RSVP is only
+            // intent). Kept below the primary spine but still OUTSIDE the
+            // published-only RSVP block on purpose: it must still show for a
+            // COMPLETED event inside its check-in window (the server accepts
+            // those), and the confirmed state must remain visible after the event
+            // ends. Renders nothing on its own when there is no check-in to offer
+            // and none has happened.
+            CheckInSection(
+                available = checkInAvailable,
+                state = checkInState,
+                attendance = attendance,
+                onCheckIn = onCheckIn,
+            )
 
             // Event chat — offered only when eligible (decided by the caller:
             // chat flag + member + published + going/maybe RSVP).
@@ -652,6 +696,12 @@ internal const val CHECK_IN_WITHIN_AREA_TAG = "events_checkin_within_area"
 const val EVENT_DETAIL_NAVIGATE_TAG = "events_detail_navigate"
 const val EVENT_DETAIL_SHARE_TAG = "events_detail_share"
 const val EVENT_DETAIL_CALENDAR_TAG = "events_detail_calendar"
+
+/** Test tag on the "Organizer: <name>" line. */
+const val EVENT_DETAIL_ORGANIZER_TAG = "events_detail_organizer"
+
+/** Test tag on the "Check who answered" button that reveals the attendee roster. */
+const val EVENT_DETAIL_REVEAL_ATTENDEES_TAG = "events_detail_reveal_attendees"
 
 /**
  * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered

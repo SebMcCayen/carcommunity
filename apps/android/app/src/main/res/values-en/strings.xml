@@ -283,7 +283,8 @@
     <string name="events_memberRequiredTitle">Event details require KCC Membership.</string>
     <string name="events_memberRequiredBody">As a member you can see exact location, more information and RSVP.</string>
     <string name="events_memberGateBody">KCC Membership is required to see exact location, event details, and RSVP.</string>
-    <string name="events_memberDetailPlaceholder">Exact location and details</string>
+    <string name="events_memberDetailPlaceholder">Description</string>
+    <string name="events_organizerLabel">Organizer: %1$s</string>
     <string name="events_navigationPlaceholder">Navigation will open in Apple Maps or Google Maps in a later version.</string>
     <string name="events_rsvpGoing">Going</string>
     <string name="events_rsvpMaybe">Maybe</string>
@@ -334,6 +335,7 @@
     <string name="events_createDialogConfirm">OK</string>
     <string name="events_createRateLimited">You can create %1$d events per day. You\'ve reached that limit — please try again later.</string>
     <string name="events_attendeesTitle">Who answered</string>
+    <string name="events_attendeesReveal">Check who answered</string>
     <string name="events_attendeesCount">%1$d going</string>
     <string name="events_rowGoingCount">%1$d going</string>
     <string name="events_attendeesLoading">Loading who answered…</string>

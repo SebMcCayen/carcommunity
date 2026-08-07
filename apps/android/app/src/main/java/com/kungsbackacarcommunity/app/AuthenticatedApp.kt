@@ -6538,6 +6538,11 @@ private fun RouteHost(
                     // in-app navigate-to-point handoff (the same "Navigate here"
                     // preview a tapped map place uses), never the device's maps app.
                     onNavigateToPoint = onNavigateToPoint,
+                    // Resolves the organiser's current display name (live users/{uid})
+                    // for the detail page's "Organizer: …" line. The shared instance
+                    // (or EMPTY in a config-less build) — already process-stable.
+                    liveProfileRepository =
+                        FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current),
                 )
             } else {
                 LoadingScreen()
