@@ -27,7 +27,7 @@ import {
   parseTrafikverketResponse,
   type TrafikverketResponse,
 } from './trafikverket-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 const TRAFIKVERKET_API_KEY = defineSecret('TRAFIKVERKET_API_KEY');
@@ -141,6 +141,8 @@ export const syncTrafikverket = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

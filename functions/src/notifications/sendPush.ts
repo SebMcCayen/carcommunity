@@ -46,7 +46,7 @@ import {
   isEssentialCategory,
   type NotificationCategory,
 } from './notifications-core';
-import { MAX_INSTANCES_TRIGGER_FANOUT } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER_FANOUT, CPU_TRIGGER_FANOUT } from '../shared/instanceLimits';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -135,6 +135,8 @@ export const onNotificationCreated = onDocumentCreated(
     // notification document per member, so this is the highest-volume trigger
     // here and a queued instance is a push that arrives late.
     maxInstances: MAX_INSTANCES_TRIGGER_FANOUT,
+    cpu: CPU_TRIGGER_FANOUT,
+    concurrency: 1,
     document: 'notifications/{uid}/items/{notificationId}',
     memory: '256MiB',
     timeoutSeconds: 60,

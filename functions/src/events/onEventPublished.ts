@@ -51,7 +51,7 @@ import {
   isEventPublishedTransition,
   recipientsWithinCap,
 } from './eventCreatedNotification-core';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 /** Active members fetched per query round-trip. */
 const PAGE_SIZE = 200;
@@ -275,6 +275,8 @@ export const onEventPublished = onDocumentWritten(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_TRIGGER,
+    cpu: CPU_TRIGGER,
+    concurrency: 1,
     document: 'events/{eventId}',
     memory: '256MiB',
     timeoutSeconds: 300,

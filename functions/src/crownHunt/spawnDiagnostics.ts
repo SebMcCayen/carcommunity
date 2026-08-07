@@ -30,7 +30,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
   ACTIVITY_WINDOW_MS,
@@ -120,6 +120,8 @@ export interface SpawnDiagnosticsResponse {
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_ADMIN,
+  cpu: CPU_ADMIN,
+  concurrency: 1,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

@@ -75,7 +75,7 @@ import {
   resolveLastActivity,
   type InactivityAction,
 } from './inactivity-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /**
@@ -512,6 +512,8 @@ export const cleanupInactive = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '512MiB' as const,
     timeoutSeconds: 540,

@@ -36,7 +36,7 @@ import { onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { Timestamp, type DocumentData } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 import { shapeBoundingBox, type CrownSpawnAreaShape } from './crown-area-core';
 import { crownCellKey } from './crown-spawn-core';
@@ -354,6 +354,8 @@ export const refreshAreaPois = onSchedule(
     memory: '256MiB',
     timeoutSeconds: 300,
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     schedule: '0 3 * * 1',
   },
   withServerErrorReporting('crownHunt.refreshAreaPois', async () => {

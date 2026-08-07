@@ -68,7 +68,7 @@ import {
   blockMirrorRtdbKey,
   deletionRetentionCutoff,
 } from './deletion-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 const QUERY_BATCH_SIZE = 500;
@@ -497,6 +497,8 @@ export const purgeDeleted = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '512MiB' as const,
     timeoutSeconds: 540,

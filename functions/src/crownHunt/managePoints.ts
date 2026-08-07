@@ -40,11 +40,13 @@ import {
   parseUpdatePointInput,
   type CrownHuntPointStatus,
 } from './crownhunt-core';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_ADMIN,
+  cpu: CPU_ADMIN,
+  concurrency: 1,
   memory: '256MiB' as const,
   timeoutSeconds: 30,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
