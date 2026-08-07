@@ -97,11 +97,12 @@ fun EventDetailScreen(
     // Runs a check-in. Null (config-less build / no location source) hides the
     // action rather than offering one that cannot work.
     onCheckIn: (() -> Unit)? = null,
-    // Navigates to the event's location via the app's OWN in-app navigate-to-point
-    // handoff (the same "Navigate here" preview a tapped map place or a chat
-    // geo-link raises), NOT the device's external maps app. Offered only when the
-    // event has a valid pin; null leaves the button off. Independent of
-    // [hasMapToken] — the button gates on the pin, not on this screen's embedded
+    // Triggers the app's navigate-to-the-event action. In the real app this is the
+    // OWN in-app navigate-to-point handoff (the same "Navigate here" preview a
+    // tapped map place or a chat geo-link raises); only a config-less build that
+    // wires no in-app handoff falls back to the device's external maps app. Offered
+    // only when the event has a valid pin; null leaves the button off. Independent
+    // of [hasMapToken] — the button gates on the pin, not on this screen's embedded
     // map token.
     onNavigate: (() -> Unit)? = null,
     // Shares this event with a friend in-app (friend picker → DM with a tappable
