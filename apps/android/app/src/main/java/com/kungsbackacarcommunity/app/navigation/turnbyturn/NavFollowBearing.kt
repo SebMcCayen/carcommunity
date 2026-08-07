@@ -24,15 +24,15 @@ import com.kungsbackacarcommunity.app.shell.MapCompassMode
  * The follow camera's bearing is the vehicle's course (its GPS heading). That is
  * exactly right WHILE MOVING, and the Mapbox Navigation SDK's own viewport data
  * source already produces it — blending the location course with the route
- * geometry — so the common case simply hands the bearing to the SDK ([NULL_HAND
- * back][followingBearingOverride] returns `null`).
+ * geometry — so the common case simply hands the bearing back to the SDK
+ * ([followingBearingOverride] returns `null`).
  *
  * The gap is at LOW SPEED. A GPS fix's course is only meaningful once the vehicle
  * is actually moving: standing at a light, crawling in a queue or the instant
  * before pulling away, the reported course is stale, jittery or absent, and a
  * camera that followed it would swing the map to a heading that has nothing to do
- * with the road — the reported skew. This object detects that case ([isCourse
- * Trustworthy]) and, instead of chasing a bad course, HOLDS a known-good
+ * with the road — the reported skew. This object detects that case
+ * ([isCourseTrustworthy]) and, instead of chasing a bad course, HOLDS a known-good
  * road-aligned heading ([fallbackBearingDeg]) so the map keeps facing the way the
  * driver was last actually going.
  */
