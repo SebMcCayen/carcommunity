@@ -223,22 +223,54 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.2.0
 
-      # The emulator boot is flaky on hosted runners: it intermittently fails to
-      # bring up adb ("Unable to connect to adb daemon on port: 5037") BEFORE the
-      # test script ever runs — a CI-infra failure, not a test failure. Run it as
-      # two attempts so a transient boot failure re-attempts on a fresh emulator
-      # instead of red-flagging the PR. Attempt 1 is continue-on-error so its
-      # failure doesn't fail the job; the retry runs only if it failed, and the
-      # retry's outcome gates the job (both must fail for a real red).
+      # ROOT-CAUSE FIX for the intermittent "Unable to connect to adb daemon on
+      # port: 5037" → "Failed to start Emulator console" flake: the job used to
+      # COLD-boot a full API-34 system image every run (-no-snapshot + fresh
+      # image install), and that cold boot occasionally never became adb-ready.
+      # Now we (1) boot the CI-optimised google_atd image (Automated Test Device,
+      # WITH Google APIs the app needs — Firebase/Maps — but far lighter/faster to
+      # boot than the full image), and (2) cache the AVD + a warm snapshot so runs
+      # boot from a known-good snapshot instead of cold. Actions cache is FREE
+      # (10 GB, auto-evicting) and separate from the artifact-storage quota.
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-google_atd-34-x86_64-v1
+
+      # On a cache miss, create the AVD once and boot it to generate the snapshot
+      # the cache stores. Skipped entirely on a cache hit.
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_atd
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: false
+          script: echo "AVD snapshot generated for caching."
+
+      # Run the tests, booting from the cached snapshot (-no-snapshot-save loads
+      # it without re-saving). Two attempts as a backstop: attempt 1 is
+      # continue-on-error so a rare boot flake doesn't fail the job; the retry
+      # runs only if it failed, and the retry's outcome gates the job (both must
+      # fail for a real red).
       - name: Run Compose UI tests on emulator (attempt 1)
         id: emulator_attempt_1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_atd
           arch: x86_64
+          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
@@ -247,9 +279,11 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_atd
           arch: x86_64
+          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
