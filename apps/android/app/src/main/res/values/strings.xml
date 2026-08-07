@@ -644,6 +644,16 @@
     <string name="convoy_barLeaveEndsConfirmBody">Du är näst sista medlemmen, så konvojen avslutas när du lämnar — ingen blir kvar och kör ensam. Sammanfattningen sparas.</string>
     <string name="convoy_barLeaveEndsConfirmAction">Lämna och avsluta</string>
     <string name="convoy_barLeaveEnds">Lämna konvojen (den avslutas då)</string>
+    <string name="convoy_stopSessionTitle">Avsluta din livedelning?</string>
+    <string name="convoy_stopSessionOwnerBody">Du leder en konvoj. Avsluta den för alla, eller lämna över den och låt den fortsätta för de andra. Oavsett vilket avslutas din livedelning.</string>
+    <string name="convoy_stopSessionOwnerEndOnlyBody">Du leder en konvoj, och det finns ingen kvar att lämna över den till — att avsluta din livedelning avslutar konvojen. Sammanfattningen sparas.</string>
+    <string name="convoy_stopSessionMemberBody">Du är med i en konvoj. Lämna den och avsluta din livedelning, eller fortsätt dela för att stanna kvar med gruppen.</string>
+    <string name="convoy_stopSessionLeaveEndsBody">Du är med i en konvoj, men det finns ingen kvar att föra den vidare — att lämna avslutar den för alla. Sammanfattningen sparas.</string>
+    <string name="convoy_stopSessionEnd">Avsluta konvojen</string>
+    <string name="convoy_stopSessionLeaveRunning">Låt den fortsätta</string>
+    <string name="convoy_stopSessionLeave">Lämna konvojen</string>
+    <string name="convoy_stopSessionLeaveEnds">Lämna (den avslutas då)</string>
+    <string name="convoy_stopSessionKeep">Fortsätt dela</string>
     <string name="convoy_leftConvoyToast">Du lämnade konvojen.</string>
     <string name="convoy_leftAndEndedToast">Du lämnade konvojen, och den avslutades.</string>
     <string name="convoy_leftAsLeaderToast">Du lämnade konvojen. En annan medlem är nu konvojledare.</string>

@@ -58,17 +58,40 @@ sealed interface LiveSessionLoad {
  */
 object LiveSessionRecordingLifecycle {
     /**
-     * True only when the observed-session flow has actually reported a
-     * not-sharing state ([sessionObserved] && ![sharing]).
+     * True only when the observed-session flow has actually reported a genuine
+     * not-sharing state, and not a config-change re-sync artifact.
      *
-     * The [sessionObserved] guard is what makes a rotation a no-op: right after
-     * an Activity recreation the flow has not re-emitted yet ([sessionObserved]
-     * false), so even though [sharing] reads false on the placeholder, the
-     * recording is NOT stopped and no save prompt fires. A genuine end — user
-     * Stop, Hide, session expiry, convoy end — reaches this with the flow having
-     * emitted the ended/expired session ([sessionObserved] true), so it still
-     * stops and auto-saves exactly as before.
+     * The [sessionObserved] guard is what makes a plain SOLO rotation a no-op:
+     * right after an Activity recreation the flow has not re-emitted yet
+     * ([sessionObserved] false), so even though [sharing] reads false on the
+     * placeholder, the recording is NOT stopped and no save prompt fires.
+     *
+     * The [convoyActive]+[sessionPresent] guard closes the CONVOY rotation gap. A
+     * convoy member's live session is auto-started server-side and re-synced (not
+     * locally authored), and its node read is gated on convoy membership, so after
+     * a rotation the own-session flow can re-emit a transient `Loaded(null)` while
+     * the listener re-attaches — the flow HAS emitted ([sessionObserved] true) and
+     * carries NO session ([sessionPresent] false), so [sharing] reads false and
+     * the [sessionObserved] guard alone treats it as a real end and stops on it.
+     * #726's invariant ("an active convoy implies an ongoing live session") is the
+     * disambiguator: while a convoy is still active a MISSING session is a re-sync
+     * transient, never a real end, so the stop is withheld. The caller latches
+     * [convoyActive] across the config change (the convoy snapshot is itself
+     * transiently Loading right after a recreation), so the guard holds through the
+     * whole rotation window.
+     *
+     * Crucially the convoy guard is scoped to the MISSING-session transient only.
+     * A genuine end that the flow reports as a real session object — user Stop,
+     * Hide-me-now and session expiry all leave a `status=stopped/expired` node
+     * ([sessionPresent] true) — is a real end even while a convoy is active
+     * (hide-me-now stops the session without leaving the convoy), so it still
+     * stops and auto-saves. The convoy ending clears [convoyActive] as well, so
+     * that path is covered twice over.
      */
-    fun shouldStopRecording(sharing: Boolean, sessionObserved: Boolean): Boolean =
-        sessionObserved && !sharing
+    fun shouldStopRecording(
+        sharing: Boolean,
+        sessionObserved: Boolean,
+        sessionPresent: Boolean,
+        convoyActive: Boolean,
+    ): Boolean = sessionObserved && !sharing && !(convoyActive && !sessionPresent)
 }
