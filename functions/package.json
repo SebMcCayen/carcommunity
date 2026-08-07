@@ -17,6 +17,7 @@
     "emulators:test": "pnpm build && node scripts/run-emulator-tests.mjs",
     "backfill:display-name-lower": "node scripts/backfill-display-name-lower.mjs",
     "backfill:block-visibility": "node scripts/backfill-block-visibility.mjs",
+    "backfill:partner-stats-optin": "node scripts/backfill-partner-stats-optin.mjs",
     "set-first-admin": "node scripts/set-first-admin.mjs",
     "lockfile:check": "node scripts/deploy-lockfile.mjs check",
     "lockfile:sync": "node scripts/deploy-lockfile.mjs sync"
