@@ -40,6 +40,13 @@ class GeoUriParserTest {
     }
 
     @Test
+    fun `RFC 5870 semicolon parameters after the coordinates are ignored`() {
+        val result = point(GeoUriParser.parse("geo:57.4874,12.0757;u=35"))
+        assertEquals(57.4874, result.point.latitude, 1e-9)
+        assertEquals(12.0757, result.point.longitude, 1e-9)
+    }
+
+    @Test
     fun `q coordinate is the destination when the path is the 0,0 placeholder`() {
         val result = point(GeoUriParser.parse("geo:0,0?q=57.4874,12.0757"))
         assertEquals(57.4874, result.point.latitude, 1e-9)

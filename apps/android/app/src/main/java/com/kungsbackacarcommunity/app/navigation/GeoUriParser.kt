@@ -161,7 +161,10 @@ object GeoUriParser {
      * longitude-first.
      */
     private fun parseLatLng(text: String): LatLng? {
-        val parts = text.split(',')
+        // RFC 5870 allows ';'-prefixed parameters after the coordinates
+        // (e.g. "lat,lng;u=35" for uncertainty radius, which some apps emit);
+        // they are not part of the numeric pair, so drop them before parsing.
+        val parts = text.substringBefore(';').split(',')
         if (parts.size < 2) return null
         val lat = parts[0].trim().toDoubleOrNull() ?: return null
         val lng = parts[1].trim().toDoubleOrNull() ?: return null
