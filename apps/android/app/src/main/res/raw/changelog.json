@@ -2,6 +2,29 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 29,
+      "versionName": "0.8.18",
+      "releaseDate": "2026-08-07",
+      "highlights": [
+        "Träffar: dela en träff med en vän, lägg till den i kalendern och se hur många som kommer",
+        "Appen minns nu dina inställningar (t.ex. kartlager) när du startar om",
+        "Navigering: live- och konvojfältet syns nu hela tiden och din plats visas tydligare"
+      ],
+      "changes": [
+        "Träffar: på en träffs sida finns nu en navigeringsknapp och en karta du kan trycka på för att förstora",
+        "Träffar: dela en träff med en vän direkt i appen – de får en länk som öppnar träffen",
+        "Träffar: lägg till en träff i din kalender med en påminnelse en timme innan",
+        "Träffar: incheckningsknappen förklarar nu att du måste vara inom träffens område för att kunna checka in",
+        "Träffar: varje träff visar nu hur många som har anmält att de kommer",
+        "Appen kommer nu ihåg dina inställningar (som kartlager) när du stänger och öppnar appen igen",
+        "Navigering: när du roterar telefonen frågar appen inte längre om du vill spara din session – den fortsätter som vanligt",
+        "Navigering: live- och konvojfältet döljs inte längre när navigeringen startar",
+        "Navigering: din position visas nu högre upp på skärmen så att du ser mer av vägen framför dig",
+        "Anonymiserad partnerstatistik är nu på som standard – du kan stänga av den redan när du skapar konto och när som helst under Inställningar",
+        "\"Spara den här platsen\" visar nu bara Spara och Avbryt (Kopiera position finns kvar i menyn innan)"
+      ]
+    },
+    {
       "versionCode": 28,
       "versionName": "0.8.17",
       "releaseDate": "2026-08-06",
