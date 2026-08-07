@@ -16,13 +16,35 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.suspendCancellableCoroutine
 
 /**
- * Anonymised partner-statistics opt-in (Phase 12 slice 19). A privacy toggle
- * on `userPrivate/{uid}.anonymousPartnerStatsOptIn` — default OFF, owner-only,
- * a direct rules-validated write. Firebase-free interface for testability.
+ * Observed anonymised-partner-statistics consent. Deliberately distinguishes a
+ * read that has NOT resolved (or failed) from one that resolved to "no explicit
+ * choice": a transient Firestore error must NEVER be mistaken for default-on and
+ * silently overwrite an explicitly opted-out member on the next Save.
+ */
+sealed interface PartnerStatsConsentState {
+    /** Not yet read, or the read failed. The UI shows the default-on value but
+     * must NOT let it be persisted (Save disabled) until a definitive read. */
+    data object Unknown : PartnerStatsConsentState
+
+    /** Read succeeded with no explicit choice stored → default-on (opt-out). */
+    data object DefaultOn : PartnerStatsConsentState
+
+    /** Read succeeded with an explicit stored choice. */
+    data class Chosen(val optIn: Boolean) : PartnerStatsConsentState
+}
+
+/**
+ * Anonymised partner-statistics consent (Phase 12 slice 19). A privacy toggle
+ * on `userPrivate/{uid}.anonymousPartnerStatsOptIn` — DEFAULT-ON / opt-out,
+ * owner-only, a direct rules-validated write. A missing field (no explicit
+ * choice) is treated as ON both here and in the backend recordInteraction gate,
+ * which excludes a member only on an explicit `false`. Firebase-free interface
+ * for testability.
  */
 interface PartnerStatsRepository {
-    /** The caller's current opt-in; null until read (rendered as off). */
-    fun observeOptIn(uid: String): Flow<Boolean?>
+    /** The caller's consent state: [PartnerStatsConsentState.Unknown] until the
+     * first snapshot resolves (or on read error), then DefaultOn / Chosen. */
+    fun observeConsent(uid: String): Flow<PartnerStatsConsentState>
 
     suspend fun setOptIn(uid: String, optIn: Boolean)
 }
@@ -72,14 +94,24 @@ class FirebasePartnerStatsRepository private constructor(
     private val firestore: FirebaseFirestore,
 ) : PartnerStatsRepository {
 
-    override fun observeOptIn(uid: String): Flow<Boolean?> = callbackFlow {
+    override fun observeConsent(uid: String): Flow<PartnerStatsConsentState> = callbackFlow {
         val registration =
             firestore.collection(USER_PRIVATE).document(uid).addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    trySend(null)
+                    // A read error is NOT "no explicit choice": surface Unknown so
+                    // the UI never overwrites a real (possibly opted-out) value
+                    // with the default-on assumption.
+                    trySend(PartnerStatsConsentState.Unknown)
                     return@addSnapshotListener
                 }
-                trySend(snapshot?.getBoolean("anonymousPartnerStatsOptIn"))
+                val stored = snapshot?.getBoolean("anonymousPartnerStatsOptIn")
+                trySend(
+                    if (stored == null) {
+                        PartnerStatsConsentState.DefaultOn
+                    } else {
+                        PartnerStatsConsentState.Chosen(stored)
+                    },
+                )
             }
         awaitClose { registration.remove() }
     }

@@ -622,9 +622,21 @@ fun AuthenticatedApp(
                     .collectAsState(initial = OnboardingStatus.Idle)
             OnboardingScreen(
                 status = onboardingStatus,
-                onSubmit = { name ->
-                    onboardingCoordinator?.let { c -> scope.launch { c.submit(name) } }
+                onSubmit = { name, partnerStatsOptIn ->
+                    onboardingCoordinator?.let { c ->
+                        scope.launch { c.submit(name, partnerStatsOptIn) }
+                    }
                 },
+                // Anonymised partner statistics are default-on / opt-out; only
+                // surface the onboarding step when the feature is enabled so it
+                // stays consistent with the Settings entry's gate.
+                partnerStatsEnabled =
+                    FeatureGate.isAvailable(
+                        flags = flags,
+                        flag = FeatureFlag.PARTNER_STATS,
+                        memberGated = false,
+                        isActiveMember = false,
+                    ),
             )
         }
 

@@ -122,8 +122,8 @@
     <string name="onboarding_displayNameLabel">Visningsnamn</string>
     <string name="onboarding_displayNamePlaceholder">Ditt visningsnamn</string>
     <string name="onboarding_displayNameDescription">Detta är det publika namn som andra medlemmar ser (i evenemang, chatt med mera). Ditt riktiga Google-namn visas aldrig.</string>
-    <string name="onboarding_partnerStatsOptIn">Jag vill bidra med anonymiserad partnerstatistik.</string>
-    <string name="onboarding_partnerStatsNote">Du kan ändra detta senare under Integritet.</string>
+    <string name="onboarding_partnerStatsOptIn">Bidra med anonymiserad partnerstatistik</string>
+    <string name="onboarding_partnerStatsNote">På som standard. Du kan stänga av det nu, eller senare under Integritet.</string>
     <string name="onboarding_continueButton">Fortsätt</string>
     <string name="onboarding_termsLink">Läs villkoren</string>
     <string name="onboarding_privacyLink">Läs integritetspolicyn</string>
@@ -173,12 +173,12 @@
     <string name="settingsMenu_themeDarkDescription">Alltid mörkt, oavsett vad enheten gör</string>
     <string name="privacySettings_title">Integritet</string>
     <string name="privacySettings_partnerStatsTitle">Anonymiserad partnerstatistik</string>
-    <string name="privacySettings_partnerStatsBody">Jag vill bidra med anonymiserad partnerstatistik.</string>
+    <string name="privacySettings_partnerStatsBody">Bidra med anonymiserad partnerstatistik</string>
     <string name="privacySettings_partnerStatsExplainer">När funktionen är på kan aggregerad statistik bidra till att visa hur många användare som passerar nära KCC:s företagspartner.</string>
     <string name="privacySettings_partnerStatsNotice">Företag får aldrig se din identitet, liveposition eller körhistorik.</string>
     <string name="privacySettings_partnerStatsOptOut">Du kan stänga av funktionen när som helst.</string>
     <string name="privacySettings_partnerStatsOptIn">Bidra med anonymiserad partnerstatistik</string>
-    <string name="privacySettings_partnerStatsNote">Opt-in är frivillig. Du kan ändra dig när som helst.</string>
+    <string name="privacySettings_partnerStatsNote">På som standard. Du kan stänga av det när som helst.</string>
     <string name="privacySettings_saveButton">Spara</string>
     <string name="privacySettings_loading">Sparar...</string>
     <string name="privacySettings_error">Något gick fel. Försök igen.</string>

@@ -12,7 +12,7 @@
     {
       "name": "auth.completeOnboarding",
       "domain": "auth",
-      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",
+      "description": "Marks onboarding complete for the calling user; backend writes onboardingCompletedAt and consent timestamps. Also accepts an optional anonymousPartnerStatsOptIn boolean (anonymised partner statistics are DEFAULT-ON / opt-out): the onboarding step surfaces the toggle pre-enabled and the member's choice persists to userPrivate/{uid}.anonymousPartnerStatsOptIn in the same transaction. Deployed via grouped export as auth-completeOnboarding (functions/src/auth/completeOnboarding.ts).",
       "access": "authenticated",
       "appCheck": true,
       "status": "implemented",

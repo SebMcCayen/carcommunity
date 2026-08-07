@@ -129,7 +129,9 @@ describe('auth-onUserCreate trigger', () => {
     expect(priv.ageConfirmedAt).toBeUndefined();
     expect(priv.termsAcceptedAt).toBeNull();
     expect(priv.privacyPolicyAcceptedAt).toBeNull();
-    expect(priv.anonymousPartnerStatsOptIn).toBe(false);
+    // Default-on / opt-out consent: a newly provisioned member contributes
+    // anonymised partner statistics unless they explicitly opt out.
+    expect(priv.anonymousPartnerStatsOptIn).toBe(true);
   });
 });
 

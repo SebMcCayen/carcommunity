@@ -24,13 +24,22 @@ class FirebaseOnboardingRepository private constructor(
     private val functions: FirebaseFunctions,
 ) : OnboardingRepository {
 
-    override suspend fun completeOnboarding(displayName: String?) {
+    override suspend fun completeOnboarding(
+        displayName: String?,
+        anonymousPartnerStatsOptIn: Boolean?,
+    ) {
         val data =
             buildMap<String, Any> {
                 put("licenceConfirmed", true)
                 put("termsAccepted", true)
                 put("privacyPolicyAccepted", true)
                 if (displayName != null) put("displayName", displayName)
+                // Default-on / opt-out: only sent when the onboarding toggle is
+                // shown, so an omitted field keeps the backend provisioning
+                // default (ON).
+                if (anonymousPartnerStatsOptIn != null) {
+                    put("anonymousPartnerStatsOptIn", anonymousPartnerStatsOptIn)
+                }
             }
         suspendCancellableCoroutine { continuation ->
             functions

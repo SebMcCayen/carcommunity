@@ -56,6 +56,21 @@ describe('parseCompleteOnboardingInput', () => {
     expect(parseCompleteOnboardingInput({ ...validInput, role: 'admin' }).ok).toBe(false);
   });
 
+  it('accepts the optional partner-stats opt-out choice (default-on / opt-out)', () => {
+    expect(
+      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: false }),
+    ).toStrictEqual({ ok: true, input: { ...validInput, anonymousPartnerStatsOptIn: false } });
+    expect(
+      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: true }).ok,
+    ).toBe(true);
+  });
+
+  it('rejects a non-boolean partner-stats choice', () => {
+    expect(
+      parseCompleteOnboardingInput({ ...validInput, anonymousPartnerStatsOptIn: 'yes' }).ok,
+    ).toBe(false);
+  });
+
   it('rejects a blank display name', () => {
     expect(parseCompleteOnboardingInput({ ...validInput, displayName: '   ' }).ok).toBe(false);
   });
@@ -156,5 +171,26 @@ describe('computeOnboardingWrites', () => {
   it('leaves the display name untouched when omitted', () => {
     const { profileUpdate } = computeOnboardingWrites(validInput, nothingSet, serverTimestamp);
     expect(profileUpdate).not.toHaveProperty('displayName');
+  });
+
+  it('writes the partner-stats opt-out choice when provided', () => {
+    const optedOut = computeOnboardingWrites(
+      { ...validInput, anonymousPartnerStatsOptIn: false },
+      nothingSet,
+      serverTimestamp,
+    );
+    expect(optedOut.privateUpdate.anonymousPartnerStatsOptIn).toBe(false);
+
+    const optedIn = computeOnboardingWrites(
+      { ...validInput, anonymousPartnerStatsOptIn: true },
+      nothingSet,
+      serverTimestamp,
+    );
+    expect(optedIn.privateUpdate.anonymousPartnerStatsOptIn).toBe(true);
+  });
+
+  it('omits the partner-stats field when no choice is sent (provisioning default stands)', () => {
+    const { privateUpdate } = computeOnboardingWrites(validInput, nothingSet, serverTimestamp);
+    expect(privateUpdate).not.toHaveProperty('anonymousPartnerStatsOptIn');
   });
 });

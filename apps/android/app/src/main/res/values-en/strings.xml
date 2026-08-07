@@ -122,8 +122,8 @@
     <string name="onboarding_displayNameLabel">Display name</string>
     <string name="onboarding_displayNamePlaceholder">Your display name</string>
     <string name="onboarding_displayNameDescription">This is the public name other members see (in events, chat and more). Your real Google account name is never shown.</string>
-    <string name="onboarding_partnerStatsOptIn">I want to contribute anonymised partner statistics.</string>
-    <string name="onboarding_partnerStatsNote">You can change this later under Privacy.</string>
+    <string name="onboarding_partnerStatsOptIn">Contribute anonymised partner statistics</string>
+    <string name="onboarding_partnerStatsNote">On by default. You can turn it off now, or later under Privacy.</string>
     <string name="onboarding_continueButton">Continue</string>
     <string name="onboarding_termsLink">Read the terms</string>
     <string name="onboarding_privacyLink">Read the privacy policy</string>
@@ -173,12 +173,12 @@
     <string name="settingsMenu_themeDarkDescription">Always dark, whatever the device does</string>
     <string name="privacySettings_title">Privacy</string>
     <string name="privacySettings_partnerStatsTitle">Anonymised partner statistics</string>
-    <string name="privacySettings_partnerStatsBody">I want to contribute anonymised partner statistics.</string>
+    <string name="privacySettings_partnerStatsBody">Contribute anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsExplainer">When enabled, aggregated statistics can help show how many users pass near KCC partner companies.</string>
     <string name="privacySettings_partnerStatsNotice">Companies can never see your identity, live location, or drive history.</string>
     <string name="privacySettings_partnerStatsOptOut">You can turn the feature off at any time.</string>
     <string name="privacySettings_partnerStatsOptIn">Contribute anonymised partner statistics</string>
-    <string name="privacySettings_partnerStatsNote">Opt-in is voluntary. You can change your mind at any time.</string>
+    <string name="privacySettings_partnerStatsNote">On by default. You can turn it off at any time.</string>
     <string name="privacySettings_saveButton">Save</string>
     <string name="privacySettings_loading">Saving...</string>
     <string name="privacySettings_error">Something went wrong. Please try again.</string>
