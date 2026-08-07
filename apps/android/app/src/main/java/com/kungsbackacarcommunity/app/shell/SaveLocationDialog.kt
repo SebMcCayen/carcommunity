@@ -34,8 +34,10 @@ const val SAVE_LOCATION_SAVE_TEST_TAG = "save_location_save"
  * nameless. The [coordinateHint] is shown as the field's supporting placeholder so
  * the member can see what an empty name will become before committing.
  *
- * Sharing a location lives on the place-actions menu (Copy position) and the
- * Saved-places long-press, so this popup offers only Save/Cancel.
+ * Getting a location out of the app lives elsewhere, so this popup offers only
+ * Save/Cancel: the place-actions menu that opens first has "Copy position" (the
+ * coordinates to the clipboard), and the Saved-places long-press has a
+ * Share-to-a-friend action.
  *
  * @param initialName a pre-resolved POI name when the gesture tapped a basemap
  *   place, else blank for a bare long-press.
