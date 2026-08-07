@@ -75,6 +75,40 @@ class CrownPointMarkersTest {
         assertTrue("opted out / feature off must draw no crowns", markers.isEmpty())
     }
 
+    // ---- In-range greying ------------------------------------------------
+
+    @Test
+    fun aPointNotInRangeIsGreyedAndOneInRangeKeepsItsColour() {
+        val far = point(id = "far")
+        val near = point(id = "near")
+        val markers =
+            CrownPointMarkers.markers(
+                listOf(far, near),
+                visible = true,
+                glyphRes = glyphRes,
+                inRangeIds = setOf("near"),
+            )
+        val byId = markers.associateBy { it.id }
+        assertEquals(
+            "in range → royal magenta",
+            CrownMarkerStyle.ADMIN_POINT_DISC,
+            byId.getValue("near").discColorArgb,
+        )
+        assertEquals(
+            "out of range → neutral slate",
+            CrownMarkerStyle.OUT_OF_RANGE_DISC,
+            byId.getValue("far").discColorArgb,
+        )
+    }
+
+    @Test
+    fun nullInRangeSetColoursEveryPointExactlyAsBefore() {
+        // The default (no live location) must not grey the whole layer.
+        val markers =
+            CrownPointMarkers.markers(listOf(point()), visible = true, glyphRes = glyphRes)
+        assertEquals(CrownMarkerStyle.ADMIN_POINT_DISC, markers.single().discColorArgb)
+    }
+
     // ---- A point with no coordinate is skipped, not drawn at (0,0) --------
 
     @Test

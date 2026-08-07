@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -43,6 +44,9 @@ const val CROWN_POINT_POPUP_TAG = "crown_point_popup"
 /** Test tag on the Collect action. */
 const val CROWN_POINT_COLLECT_TAG = "crown_point_collect"
 
+/** Test tag on the Navigate action. */
+const val CROWN_POINT_NAVIGATE_TAG = "crown_point_navigate"
+
 /**
  * The panel opened by TAPPING a hand-placed admin Kronjakt point on the map.
  *
@@ -54,18 +58,29 @@ const val CROWN_POINT_COLLECT_TAG = "crown_point_collect"
  * (`crownHunt.submitClaim`) which owns the geofence, cooldown and daily-cap
  * checks and hands back a localized result.
  *
- * Simpler than [CrownSpawnPopup] on purpose: an admin point's claim needs a
- * single fresh fix, not a two-fix dwell proof, so there is no client-side gate
- * and no distance readout that would need continuous polling — the button is
- * always offered and the honest answer comes from the server. Like the spawn
- * popup it never nags: it renders only while the host holds a tapped point, and
- * shows a driver a static message rather than anything that ticks.
+ * Two actions, stacked: **Collect**, gated by range so it is only live once the
+ * member is within the point's geofence (the same in-range rule that lights the
+ * marker on the map — see [CrownRange]); and **Navigate**, directly below it, to
+ * start turn-by-turn to the point so a member who is too far can drive there. The
+ * backend still owns the final claim decision (geofence, cooldown, daily cap);
+ * the client gate only stops an obviously-doomed press and says why. Like the
+ * spawn popup it never nags: it renders only while the host holds a tapped point,
+ * and shows a driver a static message rather than anything that ticks.
+ *
+ * @param collectInRange whether the member is within the point's collect radius —
+ *   the Collect button is grey/disabled until this is true, with a "get closer"
+ *   hint, then enables. Computed by the host from the live location, exactly as
+ *   the marker greying in [CrownRange] / [CrownPointMarkers] is.
+ * @param onNavigate start navigation to the point's location (the host reuses the
+ *   app's one navigate-to-a-point flow).
  */
 @Composable
 fun CrownPointPopup(
     point: CrownHuntPoint,
     status: CrownHuntClaimStatus,
+    collectInRange: Boolean,
     onCollect: () -> Unit,
+    onNavigate: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -96,7 +111,13 @@ fun CrownPointPopup(
                 if (done != null) {
                     CrownPointOutcomeBody(result = done.outcome.result, points = done.outcome.pointsAwarded, onDismiss = onDismiss)
                 } else {
-                    CrownPointCollectBody(point = point, status = status, onCollect = onCollect)
+                    CrownPointCollectBody(
+                        point = point,
+                        status = status,
+                        collectInRange = collectInRange,
+                        onCollect = onCollect,
+                        onNavigate = onNavigate,
+                    )
                 }
             }
         }
@@ -153,12 +174,14 @@ private fun CrownPointHeader(point: CrownHuntPoint, onDismiss: () -> Unit) {
     }
 }
 
-/** Description, the "collect when you're here" hint, any status line, the button. */
+/** Description, the collect hint / range gate, any status line, then Collect + Navigate. */
 @Composable
 private fun CrownPointCollectBody(
     point: CrownHuntPoint,
     status: CrownHuntClaimStatus,
+    collectInRange: Boolean,
     onCollect: () -> Unit,
+    onNavigate: () -> Unit,
 ) {
     point.description?.takeIf { it.isNotBlank() }?.let { description ->
         Text(
@@ -168,7 +191,17 @@ private fun CrownPointCollectBody(
         )
     }
     Text(
-        text = stringResource(R.string.crownHunt_pointCollectHint),
+        // In range: "collect it here". Out of range: "get closer" — the same
+        // in-range rule that lit (or greyed) the marker on the map, so the popup
+        // never contradicts what the member just tapped.
+        text =
+            stringResource(
+                if (collectInRange) {
+                    R.string.crownHunt_pointCollectHint
+                } else {
+                    R.string.crownHunt_pointCollectRangeHint
+                },
+            ),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -190,9 +223,11 @@ private fun CrownPointCollectBody(
     Button(
         onClick = onCollect,
         modifier = Modifier.fillMaxWidth().testTag(CROWN_POINT_COLLECT_TAG),
-        // The in-flight guard is the only enablement rule the client owns; the
-        // backend is the source of truth for whether the claim succeeds.
-        enabled = !collecting,
+        // Grey until the member is within the geofence AND no claim is in flight.
+        // The backend re-checks the geofence, so the gate only spares an
+        // obviously-doomed round-trip and makes "why can't I collect?" answerable
+        // before it is asked.
+        enabled = collectInRange && !collecting,
     ) {
         Text(
             text =
@@ -200,6 +235,15 @@ private fun CrownPointCollectBody(
                     if (collecting) R.string.crownHunt_claiming else R.string.crownHunt_collectButton,
                 ),
         )
+    }
+    // Directly BELOW Collect: drive there. Offered whether or not in range — a
+    // member who is too far needs exactly this to close the gap; one who is
+    // already here simply will not use it.
+    OutlinedButton(
+        onClick = onNavigate,
+        modifier = Modifier.fillMaxWidth().testTag(CROWN_POINT_NAVIGATE_TAG),
+    ) {
+        Text(text = stringResource(R.string.crownHunt_navigate))
     }
 }
 

@@ -2,16 +2,18 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BadgeLadderId
@@ -20,30 +22,27 @@ import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Kronjakt (crown hunt) screen (Phase 12 slice 16). Stateless: lists active
- * reward points and reports collect taps. Collecting requires passing the
- * member gate (the backend enforces the same gate, and while member gating is
- * disabled both admit any signed-in, non-suspended user); the GPS capture
- * background-location slice, so a collect with no position shows a "needs
- * location" hint rather than a failed claim.
+ * Kronjakt (crown hunt) hub screen. Stateless.
  *
- * WORTH OPENING WITH ZERO CROWNS NEARBY. Spawned crowns are sparse and expire,
- * so an empty nearby list is the NORMAL case, not an error. The page therefore
- * leads with the member's own Kronjägare standing ([kronjagare]) and, when the
- * nearby list is empty, an explanatory empty state — never a blank screen. When
- * crowns ARE nearby the collectable list still renders below the stats.
+ * NO LONGER A LIST OF CROWNS. Crowns are a MAP collectable — they appear on the
+ * map and are collected there (greyed until you are in range, tapped to open a
+ * popup). Listing them here as well was a second, worse way to find the same
+ * crowns and invited "collect" taps away from the crown's actual location. This
+ * page is now the member's Kronjakt HOME: their own standing and this season's
+ * top scores — worth opening whether or not a crown is nearby, and read-only (it
+ * awards nothing; the backend owns every count).
  *
- * @param kronjagare the member's own crown-hunter tier standing, or null while
- *   the owner badge listener is still loading (the stats band is simply omitted;
- *   the rest of the page is already useful). Never carries a fabricated
- *   crowns-collected count — that counter is backend-only (see [KronjagareStanding]).
+ * @param statsState the viewer's own stats + this season's leaderboard, or
+ *   Loading/Error. Read from the #710 aggregates ([CrownHuntStatsRepository]).
+ * @param kronjagare the member's own crown-hunter TIER standing (the badge
+ *   ladder), or null while the owner badge listener is still loading — the badge
+ *   band is then simply omitted. Never carries a fabricated crowns-collected
+ *   count (that counter is backend-only; see [KronjagareStanding]).
  */
 @Composable
 fun CrownHuntScreen(
-    pointsState: CrownHuntPointsState,
-    claimStatus: CrownHuntClaimStatus,
+    statsState: CrownStatsUiState,
     passesMemberGate: Boolean,
-    onCollect: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     kronjagare: KronjagareStanding? = null,
@@ -57,62 +56,120 @@ fun CrownHuntScreen(
             return@AeroPage
         }
 
-        ClaimStatusBanner(claimStatus)
-
-        // The member's own crown-hunter standing sits ABOVE the nearby list, so
-        // the page carries real, page-specific content whether or not a crown is
-        // in range. Omitted (not blanked) until the badge listener resolves.
+        // The member's own badge-ladder standing (the "badges" facet of the
+        // personal stats). Omitted, not blanked, until the badge listener resolves.
         kronjagare?.let { KronjagareStatsCard(it) }
 
-        when (pointsState) {
-            CrownHuntPointsState.Loading ->
+        when (statsState) {
+            CrownStatsUiState.Loading ->
                 Text(
                     text = stringResource(R.string.crownHunt_loading),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
-            CrownHuntPointsState.Error ->
+            CrownStatsUiState.Error ->
                 Text(
-                    text = stringResource(R.string.crownHunt_error),
+                    text = stringResource(R.string.crownHunt_statsError),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error,
                 )
 
-            is CrownHuntPointsState.Loaded ->
-                if (pointsState.points.isEmpty()) {
-                    // The core fix: no crown nearby is the ordinary case, so say
-                    // what Kronjakt is and that none is in range right now —
-                    // friendly, not an error — instead of drawing nothing.
-                    CrownHuntEmptyState()
+            is CrownStatsUiState.Loaded -> {
+                if (statsState.personal != null) {
+                    PersonalStatsCard(statsState.personal)
                 } else {
-                    pointsState.points.forEach { point ->
-                        PointCard(
-                            point = point,
-                            collectEnabled = claimStatus != CrownHuntClaimStatus.Claiming,
-                            onCollect = { onCollect(point.id) },
-                        )
-                    }
+                    NoStatsYetCard()
                 }
+                SeasonLeaderboardCard(statsState.board)
+            }
         }
     }
 }
 
-/** Friendly "what Kronjakt is + none nearby right now" card for the empty list. */
+/** The member's own Kronjakt numbers: crowns, Kronpoäng, season rank, streak. */
 @Composable
-private fun CrownHuntEmptyState() {
+private fun PersonalStatsCard(stats: CrownPersonalStats) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = stringResource(R.string.crownHunt_emptyHeadline),
+                text = stringResource(R.string.crownHunt_myStatsTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            StatRow(
+                label = stringResource(R.string.crownHunt_statCrowns),
+                value = stats.crownsCollected.toString(),
+            )
+            StatRow(
+                label = stringResource(R.string.crownHunt_statPoints),
+                value = stringResource(R.string.crownHunt_kpValue, stats.points),
+            )
+            StatRow(
+                label = stringResource(R.string.crownHunt_statSeasonRank),
+                value =
+                    stats.seasonRank?.let { stringResource(R.string.crownHunt_rankValue, it) }
+                        ?: stringResource(R.string.crownHunt_rankNone),
+            )
+            StatRow(
+                label = stringResource(R.string.crownHunt_statStreak),
+                value = stats.streakCurrent.toString(),
+            )
+            if (stats.seasonsWon > 0) {
+                StatRow(
+                    label = stringResource(R.string.crownHunt_statSeasonsWon),
+                    value = stats.seasonsWon.toString(),
+                )
+            }
+            stats.rarest?.let { rarity ->
+                StatRow(
+                    label = stringResource(R.string.crownHunt_statRarest),
+                    value = stringResource(CrownSpawnMessages.rarityLabelRes(rarity)),
+                )
+            }
+        }
+    }
+}
+
+/** One "label … value" line in the stats card. */
+@Composable
+private fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/** Shown before a member's first collection: an invitation, not a wall of zeros. */
+@Composable
+private fun NoStatsYetCard() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_myStatsTitle),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = stringResource(R.string.crownHunt_emptyBody),
+                text = stringResource(R.string.crownHunt_noStatsYet),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -120,14 +177,73 @@ private fun CrownHuntEmptyState() {
     }
 }
 
+/** This season's top scores, with the viewer's own row highlighted. */
+@Composable
+private fun SeasonLeaderboardCard(board: CrownSeasonBoard) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_leaderboardTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (board.rows.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.crownHunt_leaderboardEmpty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                board.rows.forEach { row -> LeaderboardRow(row) }
+            }
+        }
+    }
+}
+
+/** One leaderboard line: "#rank name … N KP", the viewer's own in bold. */
+@Composable
+private fun LeaderboardRow(row: CrownLeaderboardRow) {
+    val weight = if (row.isViewer) FontWeight.Bold else FontWeight.Normal
+    val nameColor =
+        if (row.isViewer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = stringResource(R.string.crownHunt_rankValue, row.rank),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = weight,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = row.displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = weight,
+            color = nameColor,
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            text = stringResource(R.string.crownHunt_kpValue, row.points),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = weight,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
 /**
- * The member's own Kronjägare standing: the tier held (or an invitation when
- * none is), the next tier and its crown threshold. Reuses the badge catalog's
+ * The member's own Kronjägare TIER standing: the rung held (or an invitation when
+ * none is), the next rung and its crown threshold. Reuses the badge catalog's
  * ladder/tier strings so it can never disagree with the profile badge wall.
  *
- * Shows NO crowns-collected count and NO progress bar: that counter is
- * backend-only, so the note explains the rank is tallied server-side rather than
- * inventing a number (mirrors the profile's own honesty about this ladder).
+ * Shows NO crowns-collected count and NO progress bar: that counter lives on
+ * `badgeProgress/{uid}`, denied to every client, so the note explains the rank is
+ * tallied server-side rather than inventing a number.
  */
 @Composable
 private fun KronjagareStatsCard(standing: KronjagareStanding) {
@@ -172,9 +288,6 @@ private fun KronjagareStatsCard(standing: KronjagareStanding) {
                 )
             }
             Text(
-                // Why there is no "23 / 50" count here: the rank is tallied on the
-                // server (badgeProgress is client-denied), so we name the goal but
-                // never fake the progress toward it.
                 text = stringResource(R.string.crownHunt_statsServerNote),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -184,79 +297,11 @@ private fun KronjagareStatsCard(standing: KronjagareStanding) {
 }
 
 @Composable
-private fun ClaimStatusBanner(status: CrownHuntClaimStatus) {
-    val message =
-        when (status) {
-            CrownHuntClaimStatus.Idle -> null
-            CrownHuntClaimStatus.Claiming -> stringResource(R.string.crownHunt_claiming)
-            CrownHuntClaimStatus.NeedsLocation ->
-                stringResource(R.string.crownHunt_locationUnavailable)
-            CrownHuntClaimStatus.Failed -> stringResource(R.string.crownHunt_errorClaim)
-            is CrownHuntClaimStatus.Done -> claimResultMessage(status.outcome.result)
-        }
-    if (message != null) {
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                modifier = Modifier.padding(16.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun claimResultMessage(result: CrownHuntClaimResult): String =
-    // ONE mapping, shared with the map's CrownPointPopup, so a new result code
-    // cannot be localized in one place and forgotten in the other.
-    stringResource(crownHuntClaimResultRes(result))
-
-@Composable
-private fun PointCard(point: CrownHuntPoint, collectEnabled: Boolean, onCollect: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            Text(
-                text = point.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            point.description?.takeIf { it.isNotBlank() }?.let { description ->
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Text(
-                // crownHunt_rewardLabel carries a {points} placeholder
-                // ("Reward: {points} KP") — substitute it, don't append.
-                text =
-                    stringResource(R.string.crownHunt_rewardLabel)
-                        .replace("{points}", point.rewardPoints.toString()),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Button(
-                onClick = onCollect,
-                enabled = collectEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(text = stringResource(R.string.crownHunt_collectButton))
-            }
-        }
-    }
-}
-
-@Composable
 private fun InfoCard(title: String, body: String) {
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(),
+    ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),

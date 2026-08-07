@@ -3,20 +3,20 @@ package com.kungsbackacarcommunity.app.crownhunt
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BadgeTier
 import com.kungsbackacarcommunity.app.design.KccTheme
-import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Compose UI tests for the Kronjakt screen (Phase 12 slice 16).
+ * Compose UI tests for the Kronjakt HUB screen — now a read-only stats + season
+ * leaderboard page. The crown LIST is gone (crowns live on the map only), so
+ * these assert the new shape: own stats, this season's top scores, and no
+ * per-crown collect button anywhere on the page.
  */
 @RunWith(AndroidJUnit4::class)
 class CrownHuntScreenTest {
@@ -26,15 +26,29 @@ class CrownHuntScreenTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
-    private fun point() =
-        CrownHuntPoint(
-            id = "p1",
-            title = "Torg-kronan",
-            description = "By the square",
-            rewardPoints = 50,
-            latitude = 57.0,
-            longitude = 12.0,
-            geofenceRadiusMeters = 50.0,
+    private fun board() =
+        CrownSeasonBoard(
+            seasonId = "2026-08",
+            rows =
+                listOf(
+                    CrownLeaderboardRow(1, "u1", "Alice", 500, 12, isViewer = false),
+                    CrownLeaderboardRow(2, "me", "You", 300, 7, isViewer = true),
+                ),
+            viewerRank = 2,
+        )
+
+    private fun personal() =
+        CrownPersonalStats(
+            points = 300,
+            crownsCollected = 7,
+            seasonRank = 2,
+            seasonPoints = 120,
+            seasonCrowns = 3,
+            byRarity = mapOf(CrownRarity.COMMON to 5, CrownRarity.RARE to 2),
+            streakCurrent = 4,
+            streakBest = 9,
+            seasonsWon = 0,
+            rarest = CrownRarity.RARE,
         )
 
     @Test
@@ -42,82 +56,78 @@ class CrownHuntScreenTest {
         composeTestRule.setContent {
             KccTheme {
                 CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(emptyList()),
-                    claimStatus = CrownHuntClaimStatus.Idle,
+                    statsState = CrownStatsUiState.Loading,
                     passesMemberGate = false,
-                    onCollect = {},
                     onBack = {},
                 )
             }
         }
         composeTestRule.onNodeWithText(str(R.string.subscription_memberRequiredBody)).assertIsDisplayed()
+        // No collect button exists anywhere on this page any more.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
     }
 
     @Test
-    fun member_seesPoints_andCollectReportsId() {
-        var collected: String? = null
+    fun loaded_showsOwnStatsAndSeasonLeaderboard() {
         composeTestRule.setContent {
             KccTheme {
                 CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(listOf(point())),
-                    claimStatus = CrownHuntClaimStatus.Idle,
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
                     passesMemberGate = true,
-                    onCollect = { collected = it },
                     onBack = {},
                 )
             }
         }
-        composeTestRule.onNodeWithText("Torg-kronan").assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).performScrollTo().performClick()
-        assertEquals("p1", collected)
-    }
-
-    @Test
-    fun needsLocation_showsHint() {
-        composeTestRule.setContent {
-            KccTheme {
-                CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(listOf(point())),
-                    claimStatus = CrownHuntClaimStatus.NeedsLocation,
-                    passesMemberGate = true,
-                    onCollect = {},
-                    onBack = {},
-                )
-            }
-        }
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_locationUnavailable)).assertIsDisplayed()
-    }
-
-    @Test
-    fun member_withNoCrownsNearby_seesEmptyStateNotBlank() {
-        composeTestRule.setContent {
-            KccTheme {
-                CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(emptyList()),
-                    claimStatus = CrownHuntClaimStatus.Idle,
-                    passesMemberGate = true,
-                    onCollect = {},
-                    onBack = {},
-                )
-            }
-        }
-        // The core fix: an empty nearby list shows a friendly explanation, not a
-        // blank page, and never the collect button (nothing to collect).
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyHeadline)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyBody)).assertIsDisplayed()
+        // Own stats block.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statCrowns)).assertIsDisplayed()
+        // Season leaderboard block + a top scorer's name.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        // The crowns-list collect button is gone.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
     }
 
     @Test
-    fun statsCard_showsKronjagareStandingAboveEmptyState() {
+    fun loaded_withNoPersonalStats_showsInvitationNotZeros() {
         composeTestRule.setContent {
             KccTheme {
                 CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(emptyList()),
-                    claimStatus = CrownHuntClaimStatus.Idle,
+                    statsState =
+                        CrownStatsUiState.Loaded(
+                            personal = null,
+                            board = CrownSeasonBoard("2026-08", emptyList(), viewerRank = null),
+                        ),
                     passesMemberGate = true,
-                    onCollect = {},
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_noStatsYet)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardEmpty)).assertIsDisplayed()
+    }
+
+    @Test
+    fun error_showsErrorMessage() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Error,
+                    passesMemberGate = true,
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsError)).assertIsDisplayed()
+    }
+
+    @Test
+    fun badgeStanding_stillShownAboveStats() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
                     onBack = {},
                     kronjagare =
                         KronjagareStanding(
@@ -129,26 +139,6 @@ class CrownHuntScreenTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.crownHunt_statsTitle)).assertIsDisplayed()
-        // The 250-crown Guld goal is named; no fabricated crowns-collected count.
         composeTestRule.onNodeWithText("250", substring = true).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_emptyHeadline)).assertIsDisplayed()
-    }
-
-    @Test
-    fun awardedResult_showsAwardedMessage() {
-        composeTestRule.setContent {
-            KccTheme {
-                CrownHuntScreen(
-                    pointsState = CrownHuntPointsState.Loaded(listOf(point())),
-                    claimStatus = CrownHuntClaimStatus.Done(
-                        ClaimOutcome(CrownHuntClaimResult.AWARDED, 50, 150),
-                    ),
-                    passesMemberGate = true,
-                    onCollect = {},
-                    onBack = {},
-                )
-            }
-        }
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_resultAwarded)).assertIsDisplayed()
     }
 }

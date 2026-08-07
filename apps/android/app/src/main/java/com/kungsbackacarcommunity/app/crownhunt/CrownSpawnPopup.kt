@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -42,6 +43,9 @@ const val CROWN_SPAWN_POPUP_TAG = "crown_spawn_popup"
 
 /** Test tag on the Collect action. */
 const val CROWN_SPAWN_COLLECT_TAG = "crown_spawn_collect"
+
+/** Test tag on the Navigate action. */
+const val CROWN_SPAWN_NAVIGATE_TAG = "crown_spawn_navigate"
 
 /**
  * The panel opened by TAPPING a Kronjakt crown on the map.
@@ -81,6 +85,7 @@ fun CrownSpawnPopup(
     status: CrownClaimStatus,
     distanceMeters: Double?,
     onCollect: () -> Unit,
+    onNavigate: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     Popup(
@@ -118,6 +123,7 @@ fun CrownSpawnPopup(
                         distanceMeters = distanceMeters,
                         collectRadiusMeters = spawn.collectRadiusMeters,
                         onCollect = onCollect,
+                        onNavigate = onNavigate,
                     )
                 }
             }
@@ -186,6 +192,7 @@ private fun CrownCollectBody(
     distanceMeters: Double?,
     collectRadiusMeters: Double,
     onCollect: () -> Unit,
+    onNavigate: () -> Unit,
 ) {
     if (distanceMeters != null && distanceMeters.isFinite()) {
         Text(
@@ -254,6 +261,15 @@ private fun CrownCollectBody(
                     },
                 ),
         )
+    }
+    // Directly BELOW Collect: drive to the crown. Offered whatever the gate says —
+    // a member who is too far or moving needs exactly this to get parked beside
+    // it; one already in range simply will not use it.
+    OutlinedButton(
+        onClick = onNavigate,
+        modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_NAVIGATE_TAG),
+    ) {
+        Text(text = stringResource(R.string.crownHunt_navigate))
     }
 }
 
