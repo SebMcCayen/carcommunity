@@ -136,7 +136,7 @@ fun OnboardingScreen(
             // does NOT gate Continue (it writes nothing to onSubmit), so it is
             // fully skippable — the member can ignore it and finish onboarding,
             // and reach the same screen later under Settings.
-            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = KccSpacing.s1))
             DefaultMapAppStep()
 
             if (status == OnboardingStatus.Failed) {
