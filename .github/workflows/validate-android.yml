@@ -196,7 +196,10 @@ jobs:
 
   instrumented-tests:
     name: instrumented-tests (Compose UI)
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest) so the runner image can't drift between OS
+    # versions under us — a moving image is itself an emulator-boot flake source,
+    # and it keeps the cached AVD snapshot matched to a stable environment.
+    runs-on: ubuntu-24.04
     # Phase 17: Compose UI tests on an emulator. Emulator CI is
     # environment-sensitive (KVM, boot, Compose timing) and cannot be
     # validated outside GitHub Actions, so this job is INFORMATIONAL
@@ -234,10 +237,12 @@ jobs:
       # is the full image WITH the Google APIs the app needs — Firebase/Maps — and
       # a working IME.) Actions cache is FREE (10 GB, auto-evicting) and separate
       # from the artifact-storage quota.
-      # runner.os is in the key so a snapshot is never restored across a runner
-      # image change (which can itself cause boot issues). Cache ONLY the AVD dir
-      # (the snapshot lives here) — deliberately NOT ~/.android/adb* which matches
-      # the private `adbkey`; the emulator gets its adb pubkey injected at boot
+      # The runner is pinned (ubuntu-24.04) so the image can't drift; env.ImageOS
+      # (e.g. "ubuntu24") is ALSO in the key as belt-and-suspenders, since
+      # runner.os alone stays "Linux" across an image bump and would let a stale
+      # snapshot restore onto a different OS image. Cache ONLY the AVD dir (the
+      # snapshot lives here) — deliberately NOT ~/.android/adb* which matches the
+      # private `adbkey`; the emulator gets its adb pubkey injected at boot
       # (androidboot.qemu.adb.pubkey), so the key does not need caching, and
       # keeping a private key out of the cache avoids any blast-radius.
       - name: AVD cache
@@ -246,7 +251,7 @@ jobs:
         with:
           path: |
             ~/.android/avd/*
-          key: avd-${{ runner.os }}-google_apis-34-x86_64-v3
+          key: avd-${{ runner.os }}-${{ env.ImageOS }}-google_apis-34-x86_64-v3
 
       # On a cache miss, create the AVD once and boot it to generate the snapshot
       # the cache stores. Skipped entirely on a cache hit.
