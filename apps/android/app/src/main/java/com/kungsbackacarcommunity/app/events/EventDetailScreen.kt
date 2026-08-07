@@ -97,10 +97,12 @@ fun EventDetailScreen(
     // Runs a check-in. Null (config-less build / no location source) hides the
     // action rather than offering one that cannot work.
     onCheckIn: (() -> Unit)? = null,
-    // Starts turn-by-turn navigation to the event's location (the app's
-    // navigate-to-point handoff). Offered only when the event has a valid pin;
-    // null leaves the button off. Independent of [hasMapToken] — navigation hands
-    // off to the device's maps app and needs no Mapbox token.
+    // Navigates to the event's location via the app's OWN in-app navigate-to-point
+    // handoff (the same "Navigate here" preview a tapped map place or a chat
+    // geo-link raises), NOT the device's external maps app. Offered only when the
+    // event has a valid pin; null leaves the button off. Independent of
+    // [hasMapToken] — the button gates on the pin, not on this screen's embedded
+    // map token.
     onNavigate: (() -> Unit)? = null,
     // Shares this event with a friend in-app (friend picker → DM with a tappable
     // "Open event" chip). Null (no friends/DM repository) hides the Share button.
@@ -197,9 +199,10 @@ fun EventDetailScreen(
 
             // Location section — the embedded map (tap to maximize) + a Navigate
             // button. Shown only when the event has a valid pin ([markerPoint]); the
-            // map itself needs a Mapbox token, but Navigate hands off to the device's
-            // maps app and shows even without one. An event with no coordinates gets
-            // neither, gracefully.
+            // embedded map itself needs a Mapbox token, but the Navigate button
+            // gates on the pin (not the token) and shows even without one — it
+            // routes through the app's in-app navigate-to-point handoff. An event
+            // with no coordinates gets neither, gracefully.
             if (markerPoint != null) {
                 if (hasMapToken) {
                     // Keyed on the point so the underlying MapView is disposed and

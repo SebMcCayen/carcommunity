@@ -88,6 +88,13 @@ fun EventsRoute(
     // event" chip (via dmRepository). BOTH null (config-less build) hides Share.
     friendsRepository: FriendsRepository? = null,
     dmRepository: DmRepository? = null,
+    // The app's OWN in-app navigate-to-point handoff ((latitude, longitude,
+    // name) -> Unit): the same "Navigate here" preview a tapped map place or a
+    // chat geo-link raises. Backs the event detail's Navigate button so it stays
+    // INSIDE the app instead of firing the device's maps app. Non-null in the
+    // real app (the shell always supplies moveMapToPoint); null in a config-less
+    // build, where Navigate falls back to the external maps handoff.
+    onNavigateToPoint: ((latitude: Double, longitude: Double, name: String?) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -372,22 +379,31 @@ fun EventsRoute(
     val shareSuccessTemplate = stringResource(R.string.events_shareEventSuccess)
     val shareUnnamedFriend = stringResource(R.string.events_shareEventUnnamedFriend)
 
-    // Navigate to the event's pin via the app's navigate-to-point handoff (device
-    // maps app, turn-by-turn). Offered only when the event has a valid pin.
+    // Navigate to the event's pin via the app's OWN in-app navigate-to-point
+    // handoff ([onNavigateToPoint]) — the same "Navigate here" preview a tapped
+    // map place or a chat geo-link raises — so Navigate stays inside the app. The
+    // external maps handoff is kept only as a fallback for a config-less build
+    // that wires no in-app handoff. Offered only when the event has a valid pin.
+    val navLabel =
+        event?.locationName?.takeIf { it.isNotBlank() } ?: event?.title.orEmpty()
     val onNavigate: (() -> Unit)? =
-        markerPoint?.let { point ->
-            {
-                ExternalNavigation.launch(
-                    context = context,
-                    destination = point,
-                    label = event?.locationName?.takeIf { it.isNotBlank() }
-                        ?: event?.title.orEmpty(),
-                    onUnavailable = {
-                        scope.launch { snackbarHostState?.showSnackbar(navUnavailableMsg) }
-                    },
-                )
-            }
-        }
+        EventNavigation.navigateAction(
+            point = markerPoint,
+            label = navLabel,
+            onNavigateToPoint = onNavigateToPoint,
+            onExternalFallback = markerPoint?.let { point ->
+                {
+                    ExternalNavigation.launch(
+                        context = context,
+                        destination = point,
+                        label = navLabel,
+                        onUnavailable = {
+                            scope.launch { snackbarHostState?.showSnackbar(navUnavailableMsg) }
+                        },
+                    )
+                }
+            },
+        )
 
     // Add to the phone's calendar with a one-hour reminder (Intent-based; no
     // write-permission). Offered only when the event has a readable start time.
