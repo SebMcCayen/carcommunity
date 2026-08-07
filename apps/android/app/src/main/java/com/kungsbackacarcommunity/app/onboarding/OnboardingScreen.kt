@@ -22,6 +22,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -43,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
 
 /**
  * Onboarding consent gate (Phase 12 slice 2).
@@ -130,6 +132,13 @@ fun OnboardingScreen(
                 PartnerStatsStep(checked = partnerStats, onCheckedChange = { partnerStats = it })
             }
 
+            // Optional, non-mandatory step: offer to open map links in KCC. It
+            // does NOT gate Continue (it writes nothing to onSubmit), so it is
+            // fully skippable — the member can ignore it and finish onboarding,
+            // and reach the same screen later under Settings.
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            DefaultMapAppStep()
+
             if (status == OnboardingStatus.Failed) {
                 Text(
                     text = stringResource(R.string.onboarding_error),
@@ -207,6 +216,34 @@ private fun PartnerStatsStep(checked: Boolean, onCheckedChange: (Boolean) -> Uni
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+/**
+ * The optional "open map links in KCC" step. Honest copy: this makes KCC an
+ * OPTION Android offers when another app opens a map location — there is no
+ * OS-level default-navigator role and no way to set it programmatically, so the
+ * button opens the system screen where the member picks KCC (or sets it as the
+ * default). Skippable: it gates nothing.
+ */
+@Composable
+private fun DefaultMapAppStep() {
+    val context = LocalContext.current
+    Text(
+        text = stringResource(R.string.onboarding_defaultMapTitle),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onBackground,
+    )
+    Text(
+        text = stringResource(R.string.onboarding_defaultMapBody),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    OutlinedButton(
+        onClick = { openDefaultMapAppSettings(context) },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(stringResource(R.string.onboarding_defaultMapButton))
+    }
 }
 
 @Composable

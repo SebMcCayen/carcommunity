@@ -78,6 +78,27 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Map-link handler. Makes KCC appear in Android's "Open with"
+                 chooser (and be selectable as the "Always"/default) for map
+                 links other apps fire — a browser's "geo:" result, a shared
+                 pin, a "navigate to" deep link. This is a plain scheme handler
+                 chosen through the chooser: Android has NO OS-level "default
+                 navigator" role, so there is no autoVerify here (that is only
+                 for http(s) App Links) and no claim to be one. MainActivity
+                 parses the incoming URI (GeoUriParser) and drives the app's own
+                 in-app navigate-here flow — see MapLinkNavigator. singleTop +
+                 exported are already declared above, so a link delivered to a
+                 running task arrives in onNewIntent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <!-- RFC 5870 map points ("geo:lat,lng"). -->
+                <data android:scheme="geo" />
+                <!-- The turn-by-turn deep link some apps emit. -->
+                <data android:scheme="google.navigation" />
+            </intent-filter>
         </activity>
 
         <!-- Foreground service that streams GPS to live.updatePosition while a
