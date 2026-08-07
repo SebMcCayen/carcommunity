@@ -81,6 +81,11 @@ export function SpawnDiagnosticsPanel({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [candidatesOnly, setCandidatesOnly] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  // Server clock minus local clock, captured at load. The countdown ticks off
+  // the local clock but corrects by this offset, so an admin whose machine clock
+  // is skewed still sees a countdown/ETA aligned to backend time (the callable's
+  // nextRunAt is a server timestamp). Defaults to 0 until the first load lands.
+  const [serverSkewMs, setServerSkewMs] = useState(0);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -88,6 +93,8 @@ export function SpawnDiagnosticsPanel({
     try {
       const res = await adminSpawnDiagnostics(areaId);
       if (!mountedRef.current) return;
+      const serverMs = new Date(res.serverTime).getTime();
+      setServerSkewMs(Number.isFinite(serverMs) ? serverMs - Date.now() : 0);
       setData(res);
       setNowMs(Date.now());
     } catch {
@@ -124,7 +131,9 @@ export function SpawnDiagnosticsPanel({
     }
     if (!data) return null;
 
-    const secondsToNextRun = countdownSeconds(data.nextRunAt, nowMs);
+    // Correct the local clock to server time so skew doesn't distort the count.
+    const serverNowMs = nowMs + serverSkewMs;
+    const secondsToNextRun = countdownSeconds(data.nextRunAt, serverNowMs);
     const service = estimateAreaService({
       areasAhead: data.areasAhead,
       maxAreasPerRun: data.maxAreasPerRun,
