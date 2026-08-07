@@ -26,6 +26,9 @@ class EventsScreensTest {
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
+    private fun str(id: Int, vararg args: Any) =
+        InstrumentationRegistry.getInstrumentation().targetContext.getString(id, *args)
+
     private fun event(
         id: String = "e1",
         status: EventStatus = EventStatus.PUBLISHED,
@@ -52,6 +55,24 @@ class EventsScreensTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.events_noUpcomingTitle)).assertIsDisplayed()
+    }
+
+    @Test
+    fun list_showsGoingCountOnEachRow() {
+        // The row shows the RSVP "going" tally (people who marked themselves
+        // attending), on the trailing side. The fixture has going = 12.
+        composeTestRule.setContent {
+            KccTheme {
+                EventsListScreen(
+                    state = EventsListState.Loaded(listOf(event())),
+                    onOpenEvent = {},
+                )
+            }
+        }
+        composeTestRule
+            .onNodeWithText(str(R.string.events_rowGoingCount, 12))
+            .performScrollTo()
+            .assertIsDisplayed()
     }
 
     @Test

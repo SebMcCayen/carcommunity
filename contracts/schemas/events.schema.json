@@ -210,7 +210,7 @@
     },
     "createEventRequest": {
       "type": "object",
-      "description": "Event creation payload for events.create — sent by an active member or an admin/owner. `isOfficial` is honoured only for an admin caller; it is forced false on a member-created event.",
+      "description": "Event creation payload for events.create — sent by an active member or an admin/owner. `isOfficial` is honoured only for an admin caller; it is forced false on a member-created event. `publishNow` publishes the event on create (the community app, which has no draft/publish UI, always sends it); it only lifts an admin-created event from draft to published and is a no-op for a member. Omitted by admin-web, which keeps its draft-then-publish flow.",
       "properties": {
         "title": { "type": "string", "minLength": 1 },
         "summary": { "type": ["string", "null"] },
@@ -222,7 +222,8 @@
         "address": { "type": ["string", "null"] },
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
-        "isOfficial": { "type": "boolean" }
+        "isOfficial": { "type": "boolean" },
+        "publishNow": { "type": "boolean" }
       },
       "required": ["title", "startsAt"],
       "additionalProperties": false

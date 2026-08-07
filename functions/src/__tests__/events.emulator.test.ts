@@ -396,6 +396,29 @@ describe('events-create / events-update', () => {
     expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
   });
 
+  it('publishes an admin event immediately when the app sends publishNow', async () => {
+    // The community app has no draft/publish UI, so it always sends
+    // publishNow: true. An admin creating in the app must therefore get a
+    // PUBLISHED (list- and map-visible) event, not the draft the admin-web flow
+    // produces — otherwise an admin's in-app event is invisible everywhere.
+    await signInAs(adminUser);
+    const result = await call('events-create', { ...validCreate, publishNow: true });
+    const { eventId, status } = result.data as { eventId: string; status: string };
+    expect(status).toBe('published');
+
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('published');
+    // Still an admin-authored event (role + audit record preserved) — publishNow
+    // only lifts the status, it does not change attribution or the audit trail.
+    expect(event.createdByRole).toBe('admin');
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.create')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.size).toBe(1);
+  });
+
   it('rejects invalid create input with contract codes', async () => {
     await signInAs(adminUser);
     expect(await callableErrorCode(call('events-create', { title: 'No required fields' }))).toBe(

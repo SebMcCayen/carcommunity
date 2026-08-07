@@ -84,8 +84,14 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     throw new HttpsError(coordsGuard.code, coordsGuard.message);
   }
 
-  const status = initialEventStatus(creatorRole);
-  // A member-created event skips the admin `events.publish` step, so it must
+  // The community APP sends `publishNow` (it has no draft concept and no publish
+  // UI), so an in-app create publishes immediately even for an admin — whose
+  // event would otherwise start `draft` and be invisible in BOTH the events
+  // list and the map. Admin-web omits the flag and keeps its draft-then-publish
+  // flow; a member is published regardless (publishNow is a no-op for them).
+  const publishNow = input.publishNow === true;
+  const status = initialEventStatus(creatorRole, publishNow);
+  // A publish-on-create event skips the admin `events.publish` step, so it must
   // still clear the same publish preconditions that callable enforces —
   // otherwise creation would be a back door to a published event with a start
   // time in the past (guardEventTimes alone never checks that).
@@ -109,6 +115,7 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     actor.uid,
     serverTimestamp,
     creatorRole,
+    publishNow,
   );
 
   const events = db.collection('events');

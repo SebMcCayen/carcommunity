@@ -300,6 +300,14 @@ object Events {
         val payload = mutableMapOf<String, Any>(
             "title" to input.title.trim(),
             "startsAt" to toIsoUtc(input.startsAtMillis),
+            // The app has no draft concept and no publish UI, so every event it
+            // creates must publish immediately. Without this an admin's in-app
+            // event lands as a `draft` (initialEventStatus(admin) === draft) and
+            // is invisible in BOTH the events list and the map, with no in-app
+            // way to publish it. A member is published either way (no-op for
+            // them); admin-web omits the flag and keeps its draft-then-publish
+            // flow. See events-core.ts initialEventStatus.
+            "publishNow" to true,
         )
         input.approximateArea?.trim()?.takeIf { it.isNotEmpty() }?.let { payload["approximateArea"] = it }
         input.endsAtMillis?.let { payload["endsAt"] = toIsoUtc(it) }

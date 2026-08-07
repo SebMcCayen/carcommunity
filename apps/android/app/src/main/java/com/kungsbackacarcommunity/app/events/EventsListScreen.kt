@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.events
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
@@ -12,6 +13,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -160,11 +162,28 @@ private fun EventCard(event: EventSummary, onClick: () -> Unit) {
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
-            Text(
-                text = event.title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            // Title on the left, the "going" tally on the trailing/right edge.
+            // The count is the RSVP `going` tally (people who marked themselves
+            // as attending), NOT the geofenced check-in count — it reads off the
+            // teaser's denormalized rsvpCounts.going maintained by
+            // events-onRsvpWrite, so it is public and needs no member gate.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = event.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = stringResource(R.string.events_rowGoingCount, event.counts.going),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             if (event.isOfficial) {
                 Text(
                     text = stringResource(R.string.events_officialBadge),

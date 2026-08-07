@@ -504,6 +504,38 @@ describe('events-core member-created events', () => {
     expect(initialEventStatus('member')).toBe('published');
   });
 
+  it('publishNow lifts an admin from draft to published, is a no-op for a member', () => {
+    // The app sends publishNow so an in-app admin event is visible, not a draft.
+    expect(initialEventStatus('admin', true)).toBe('published');
+    expect(initialEventStatus('admin', false)).toBe('draft');
+    // A member is published either way — publishNow can never demote them.
+    expect(initialEventStatus('member', true)).toBe('published');
+    expect(initialEventStatus('member', false)).toBe('published');
+  });
+
+  it('builds a published admin event when publishNow is requested', () => {
+    const parsed = parseCreateEventInput({ ...validCreate, publishNow: true });
+    if (!parsed.ok) throw new Error('expected ok');
+    // Explicit publishNow arg.
+    expect(
+      buildEventDocuments(parsed.input, 'admin-1', serverTimestamp, 'admin', true).eventDoc.status,
+    ).toBe('published');
+    // Falls back to input.publishNow when the arg is omitted.
+    expect(
+      buildEventDocuments(parsed.input, 'admin-1', serverTimestamp, 'admin').eventDoc.status,
+    ).toBe('published');
+    // createdByRole stays admin — publishNow only lifts the status.
+    expect(
+      buildEventDocuments(parsed.input, 'admin-1', serverTimestamp, 'admin', true).eventDoc
+        .createdByRole,
+    ).toBe('admin');
+  });
+
+  it('accepts publishNow on the create input schema', () => {
+    const parsed = parseCreateEventInput({ ...validCreate, publishNow: true });
+    expect(parsed.ok).toBe(true);
+  });
+
   it('rate-limits a member at the cap, not below it', () => {
     expect(isMemberEventRateLimited(0)).toBe(false);
     expect(isMemberEventRateLimited(MEMBER_EVENT_RATE_LIMIT_MAX - 1)).toBe(false);

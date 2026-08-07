@@ -360,6 +360,7 @@
     "createRateLimited": "You can create %1$d events per day. You've reached that limit — please try again later.",
     "attendeesTitle": "Who answered",
     "attendeesCount": "%1$d going",
+    "rowGoingCount": "%1$d going",
     "attendeesLoading": "Loading who answered…",
     "attendeesEmpty": "No one has answered yet. Be the first!",
     "attendeesUnavailable": "Names aren't shown for this event — only the number of people going.",

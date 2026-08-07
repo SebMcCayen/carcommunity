@@ -331,6 +331,7 @@
     <string name="events_createRateLimited">You can create %1$d events per day. You\'ve reached that limit — please try again later.</string>
     <string name="events_attendeesTitle">Who answered</string>
     <string name="events_attendeesCount">%1$d going</string>
+    <string name="events_rowGoingCount">%1$d going</string>
     <string name="events_attendeesLoading">Loading who answered…</string>
     <string name="events_attendeesEmpty">No one has answered yet. Be the first!</string>
     <string name="events_attendeesUnavailable">Names aren\'t shown for this event — only the number of people going.</string>
