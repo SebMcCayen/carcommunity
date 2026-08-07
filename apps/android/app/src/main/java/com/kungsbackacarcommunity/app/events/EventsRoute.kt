@@ -23,6 +23,9 @@ import com.kungsbackacarcommunity.app.chat.EventChatRepository
 import com.kungsbackacarcommunity.app.chat.EventChatRoute
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
+import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.friends.FriendsRepository
+import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
@@ -80,6 +83,11 @@ fun EventsRoute(
     // that made the Past tab dead-end announces itself if it ever recurs.
     // Null in a config-less build, which the `?.` is the whole handling for.
     errorReporter: ClientErrorReporter? = rememberClientErrorReporter(),
+    // Backs the event detail's in-app Share button: the friend picker (from
+    // friendsRepository) sends the chosen friend a DM carrying a tappable "Open
+    // event" chip (via dmRepository). BOTH null (config-less build) hides Share.
+    friendsRepository: FriendsRepository? = null,
+    dmRepository: DmRepository? = null,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -355,6 +363,76 @@ fun EventsRoute(
     val checkInAvailable =
         event != null && EventCheckIn.canCheckIn(passesMemberGate, event, nowMillis)
 
+    // --- Navigate / calendar / share wiring ---
+    val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
+    val markerPoint = remember(event) { event?.let { EventMapPresentation.markerPoint(it) } }
+    val navUnavailableMsg = stringResource(R.string.events_navigateUnavailable)
+    val calendarUnavailableMsg = stringResource(R.string.events_calendarUnavailable)
+    val shareFailedMsg = stringResource(R.string.events_shareEventFailed)
+    val shareSuccessTemplate = stringResource(R.string.events_shareEventSuccess)
+    val shareUnnamedFriend = stringResource(R.string.events_shareEventUnnamedFriend)
+
+    // Navigate to the event's pin via the app's navigate-to-point handoff (device
+    // maps app, turn-by-turn). Offered only when the event has a valid pin.
+    val onNavigate: (() -> Unit)? =
+        markerPoint?.let { point ->
+            {
+                ExternalNavigation.launch(
+                    context = context,
+                    destination = point,
+                    label = event?.locationName?.takeIf { it.isNotBlank() }
+                        ?: event?.title.orEmpty(),
+                    onUnavailable = {
+                        scope.launch { snackbarHostState?.showSnackbar(navUnavailableMsg) }
+                    },
+                )
+            }
+        }
+
+    // Add to the phone's calendar with a one-hour reminder (Intent-based; no
+    // write-permission). Offered only when the event has a readable start time.
+    val onAddToCalendar: (() -> Unit)? =
+        event?.takeIf { EventCalendar.values(it) != null }?.let { current ->
+            {
+                EventCalendar.launch(
+                    context = context,
+                    event = current,
+                    onUnavailable = {
+                        scope.launch { snackbarHostState?.showSnackbar(calendarUnavailableMsg) }
+                    },
+                )
+            }
+        }
+
+    // Share in-app: raise the friend picker. Offered only when BOTH the friends
+    // and DM repositories are wired (a config-less build has neither).
+    var showShare by rememberSaveable { mutableStateOf(false) }
+    val onShareEvent: (() -> Unit)? =
+        if (friendsRepository != null && dmRepository != null && event != null) {
+            { showShare = true }
+        } else {
+            null
+        }
+    if (showShare && friendsRepository != null && dmRepository != null && event != null) {
+        EventShareSheet(
+            eventId = event.id,
+            eventTitle = event.title,
+            friendsRepository = friendsRepository,
+            dmRepository = dmRepository,
+            onShared = { friendName ->
+                showShare = false
+                val name = friendName?.takeIf { it.isNotBlank() } ?: shareUnnamedFriend
+                scope.launch {
+                    snackbarHostState?.showSnackbar(String.format(shareSuccessTemplate, name))
+                }
+            },
+            onSendFailed = {
+                scope.launch { snackbarHostState?.showSnackbar(shareFailedMsg) }
+            },
+            onDismiss = { showShare = false },
+        )
+    }
+
     EventDetailScreen(
         event = event,
         detail = detail,
@@ -379,6 +457,10 @@ fun EventsRoute(
         checkInState = checkInState,
         attendance = attendance,
         onCheckIn = { event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } } },
+        onNavigate = onNavigate,
+        onShareEvent = onShareEvent,
+        onAddToCalendar = onAddToCalendar,
+        hasMapToken = hasMapToken,
     )
 }
 
