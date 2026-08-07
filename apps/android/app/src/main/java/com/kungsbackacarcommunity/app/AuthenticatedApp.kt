@@ -310,6 +310,7 @@ import com.kungsbackacarcommunity.app.push.PushTarget
 import com.kungsbackacarcommunity.app.push.RequestPushPermissionEffect
 import com.kungsbackacarcommunity.app.shell.HubEntry
 import com.kungsbackacarcommunity.app.shell.CompassModePreferenceStore
+import com.kungsbackacarcommunity.app.shell.MapLayersPreferenceStore
 import com.kungsbackacarcommunity.app.shell.MapCompassMode
 import com.kungsbackacarcommunity.app.shell.MapMode
 import com.kungsbackacarcommunity.app.shell.HubScreen
@@ -712,6 +713,15 @@ fun AuthenticatedApp(
                 route = null
             }
 
+            // Device-local persistence for the map-layers popup toggles (traffic
+            // alerts, Mapbox congestion overlay, night-mode override, 3D buildings).
+            // Seeds the hoisted states / the surface below on start-up and records
+            // every toggle, so a user's map layers survive a cold restart instead of
+            // snapping back to defaults. Mirrors compassModeStore just below.
+            val mapLayersContext = LocalContext.current
+            val mapLayersStore =
+                remember(mapLayersContext) { MapLayersPreferenceStore(mapLayersContext) }
+
             // The map's manual day/night override (null = follow the app theme).
             //
             // Owned HERE, not inside MapHome, precisely because [route] above can
@@ -720,8 +730,9 @@ fun AuthenticatedApp(
             // there — silently discarding the user's Day choice, so returning to
             // the map snapped it back to Night on a dark-themed device. This
             // scope survives every route change, so the override sticks for the
-            // session. rememberSaveable additionally carries it across rotation
-            // and process death, matching the old in-MapHome behaviour.
+            // session. rememberSaveable additionally carries it across rotation,
+            // and — seeded from [mapLayersStore] and written back below — across a
+            // cold restart / process kill too (matching the compass preference).
             val mapNightModeOverride =
                 rememberSaveable(
                     stateSaver = Saver(
@@ -734,7 +745,19 @@ fun AuthenticatedApp(
                             (saved as? String)?.let { name -> MapMode.entries.find { it.name == name } }
                         },
                     ),
-                ) { mutableStateOf<MapMode?>(null) }
+                    // Seed from disk: the stored override, or null (follow the app
+                    // theme) when unset. rememberSaveable restores its own bundle
+                    // value across system-initiated process death; on a genuine cold
+                    // start (bundle gone) this lambda runs and reads the durable store.
+                ) { mutableStateOf(mapLayersStore.readNightMode()) }
+
+            // Persist any day/night change durably so it survives a cold restart.
+            // The first run writes the seed back (an idempotent same-value no-op),
+            // and every toggle records the user's new pick (null clears it back to
+            // "follow the app theme").
+            LaunchedEffect(mapNightModeOverride.value) {
+                mapLayersStore.writeNightMode(mapNightModeOverride.value)
+            }
 
             // The map's compass orientation (course-up default vs north-up).
             //
@@ -1067,11 +1090,39 @@ fun AuthenticatedApp(
                 remember(visibleIncidents) { hasTrafikverketData(visibleIncidents) }
             // Visibility of the "Traffic alerts" layer (Trafikverket + crowd-sourced
             // incidents) toggled from the map-layers popup. Defaults ON (the shared
-            // road-info layer is visible to all users); persisted so the choice
-            // survives rotation / process death. Gating the fetch below on this flag
-            // means a user who turns the layer off stops polling, and turning it back
-            // on re-fetches immediately.
-            var incidentsLayerEnabled by rememberSaveable { mutableStateOf(true) }
+            // road-info layer is visible to all users); seeded from [mapLayersStore]
+            // and written back below so the choice survives rotation AND a cold
+            // restart / process kill, not just system-initiated recreation. Gating
+            // the fetch below on this flag means a user who turns the layer off stops
+            // polling, and turning it back on re-fetches immediately.
+            var incidentsLayerEnabled by
+                rememberSaveable { mutableStateOf(mapLayersStore.readIncidents()) }
+            // Persist the traffic-alerts layer choice durably (no-op on the first
+            // same-value write; records every genuine toggle).
+            LaunchedEffect(incidentsLayerEnabled) {
+                mapLayersStore.writeIncidents(incidentsLayerEnabled)
+            }
+
+            // The Mapbox congestion overlay and the 3D-buildings camera live in the
+            // surface (their StateFlows are the single source of truth), so unlike
+            // the two hoisted states above they need seeding INTO the surface and
+            // observing back OUT of it. On start-up — and again on a Stub -> real
+            // Mapbox surface swap, which resets a fresh surface to its field defaults
+            // (traffic off, 3D on) — push the stored choice into the surface, then
+            // collect each flow to record every subsequent toggle. Seeding writes the
+            // stored value straight back through the collectors, which the store's
+            // no-op-on-unchanged guard swallows, so a launch that changes nothing
+            // touches no disk. Keyed on mapSurface so the collectors follow the swap.
+            LaunchedEffect(mapSurface) {
+                mapSurface.setTrafficEnabled(mapLayersStore.readTrafficCongestion())
+                mapSurface.set3dEnabled(mapLayersStore.read3d())
+                launch {
+                    mapSurface.trafficEnabled.collect { mapLayersStore.writeTrafficCongestion(it) }
+                }
+                launch {
+                    mapSurface.is3d.collect { mapLayersStore.write3d(it) }
+                }
+            }
             // The incident marker the user has TAPPED, resolved back from the id
             // the map surface published to the incident we already hold. Only the
             // id crosses the surface seam (the surface knows nothing about
