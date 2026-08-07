@@ -16,6 +16,28 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
+/**
+ * Robolectric pilot: this Compose UI test runs on the JVM in the fast, blocking
+ * `testDebugUnitTest` suite — no emulator. `@RunWith(AndroidJUnit4::class)`
+ * delegates to Robolectric's runner off-device, and `createComposeRule()` drives
+ * Compose against a deterministic test clock with auto-syncing assertions. SDK
+ * level (34) and NATIVE graphics mode come from
+ * `src/test/resources/robolectric.properties`.
+ *
+ * This lives in `src/testDebug` (the debug-only unit-test source set), not
+ * `src/test`, on purpose: `createComposeRule()` launches into the
+ * ComponentActivity host from `ui-test-manifest`, which is a `debugImplementation`
+ * and so only present in the debug variant's merged manifest. Running under
+ * `testReleaseUnitTest` would fail to resolve that activity, so the test is
+ * scoped to the debug unit-test variant — the convention for future
+ * Compose-on-Robolectric tests here.
+ *
+ * Note on `performScrollTo()`: the onboarding form is a vertically-scrolling
+ * Column, and under Robolectric a `performClick` only lands when the target is
+ * actually within the viewport — an off-screen node is clipped and the toggle
+ * never fires. So every consent row is scrolled into view before it is clicked;
+ * without this the checkboxes stay Off and Continue never enables.
+ */
 @RunWith(AndroidJUnit4::class)
 class OnboardingScreenTest {
     @get:Rule
@@ -42,11 +64,11 @@ class OnboardingScreenTest {
         val continueBtn = str(R.string.onboarding_continueButton)
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
-        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performClick()
-        composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performScrollTo().performClick()
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
-        composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performScrollTo().performClick()
         // Display name is now required — consents alone are not enough.
         composeTestRule.onNodeWithText(continueBtn).performScrollTo().assertIsNotEnabled()
 
@@ -72,9 +94,9 @@ class OnboardingScreenTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performClick()
-        composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performClick()
-        composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_licenceConfirm)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_termsAccept)).performScrollTo().performClick()
+        composeTestRule.onNodeWithText(str(R.string.onboarding_privacyAccept)).performScrollTo().performClick()
         composeTestRule
             .onNodeWithText(str(R.string.onboarding_displayNameLabel))
             .performScrollTo()
