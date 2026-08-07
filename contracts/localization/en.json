@@ -1488,7 +1488,6 @@
     "saveLocationTitle": "Save location",
     "saveLocationNameLabel": "Name (optional)",
     "saveLocationSave": "Save",
-    "saveLocationShare": "Share",
     "saveLocationCancel": "Cancel",
     "locationShared": "Location shared with %1$s",
     "locationSharedFriendFallback": "your friend",

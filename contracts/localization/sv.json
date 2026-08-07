@@ -1488,7 +1488,6 @@
     "saveLocationTitle": "Spara plats",
     "saveLocationNameLabel": "Namn (valfritt)",
     "saveLocationSave": "Spara",
-    "saveLocationShare": "Dela",
     "saveLocationCancel": "Avbryt",
     "locationShared": "Platsen delades med %1$s",
     "locationSharedFriendFallback": "din vän",

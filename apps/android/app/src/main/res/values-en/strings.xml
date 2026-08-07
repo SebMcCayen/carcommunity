@@ -1391,7 +1391,6 @@
     <string name="shell_saveLocationTitle">Save location</string>
     <string name="shell_saveLocationNameLabel">Name (optional)</string>
     <string name="shell_saveLocationSave">Save</string>
-    <string name="shell_saveLocationShare">Share</string>
     <string name="shell_saveLocationCancel">Cancel</string>
     <string name="shell_locationShared">Location shared with %1$s</string>
     <string name="shell_locationSharedFriendFallback">your friend</string>

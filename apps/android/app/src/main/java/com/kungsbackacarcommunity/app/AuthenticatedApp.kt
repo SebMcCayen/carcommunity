@@ -2110,12 +2110,11 @@ fun AuthenticatedApp(
             // The saved-locations picker the map's saved-places control opens.
             var savedPlacesPickerOpen by remember { mutableStateOf(false) }
             // The point pending a NAME in the save-location popup ("Save this
-            // location"): naming it persists it as a favourite; sharing it instead
-            // opens the friend picker below via [shareLocationTarget].
+            // location"): naming it persists it as a favourite.
             var saveLocationTarget by remember { mutableStateOf<MapPlaceRequest?>(null) }
             // A resolved location pending a friend to share it with — set by the
-            // save popup's Share, the Saved-places long-press Share, or any other
-            // share entry point, and consumed by the ShareLocationSheet below.
+            // Saved-places long-press Share (or any other share entry point), and
+            // consumed by the ShareLocationSheet below.
             var shareLocationTarget by remember { mutableStateOf<ShareableLocation?>(null) }
             val pendingPlace by mapSurface.placeRequest.collectAsState()
             LaunchedEffect(pendingPlace) {
@@ -2165,7 +2164,7 @@ fun AuthenticatedApp(
                     },
                     // "Save this location" now opens a naming popup (below) rather
                     // than saving silently: the member names the point — or leaves
-                    // it blank for a coordinate name — or shares it with a friend.
+                    // it blank for a coordinate name.
                     onSave = {
                         saveLocationTarget = target
                         placeMenuTarget = null
@@ -2176,7 +2175,7 @@ fun AuthenticatedApp(
 
             // The save-location naming popup raised by "Save this location". A blank
             // name is filled from the GPS coordinate (LocationShare.resolveName), so
-            // a saved point is never nameless; Share hands off to the friend picker.
+            // a saved point is never nameless.
             saveLocationTarget?.let { target ->
                 val latLng =
                     LatLng(longitude = target.point.longitude, latitude = target.point.latitude)
@@ -2204,18 +2203,13 @@ fun AuthenticatedApp(
                         saveLocationTarget = null
                         scope.launch { snackbarHostState.showSnackbar(positionSavedText) }
                     },
-                    onShare = { rawName ->
-                        shareLocationTarget =
-                            ShareableLocation(LocationShare.resolveName(rawName, latLng), latLng)
-                        saveLocationTarget = null
-                    },
                     onDismiss = { saveLocationTarget = null },
                 )
             }
 
             // The shared "share a location with a friend" picker, hosted once for
-            // every entry point (the save popup's Share, the Saved-places long-press
-            // Share). Delivery reuses the existing DM send path — no new backend.
+            // every entry point (the Saved-places long-press Share, and any other
+            // share entry). Delivery reuses the existing DM send path — no new backend.
             // Guarded on both repositories (a config-less build wires neither).
             val fRepo = friendsRepository
             val dRepo = dmRepository
