@@ -232,14 +232,18 @@ jobs:
       # boot than the full image), and (2) cache the AVD + a warm snapshot so runs
       # boot from a known-good snapshot instead of cold. Actions cache is FREE
       # (10 GB, auto-evicting) and separate from the artifact-storage quota.
+      # Cache ONLY the AVD dir (the snapshot lives here) — deliberately NOT
+      # ~/.android/adb* which matches the private `adbkey`; the emulator gets its
+      # adb pubkey injected at boot (androidboot.qemu.adb.pubkey), so the key does
+      # not need caching, and keeping a private key out of the cache avoids any
+      # blast-radius if a cache is restored in an untrusted context.
       - name: AVD cache
         uses: actions/cache@v4
         id: avd-cache
         with:
           path: |
             ~/.android/avd/*
-            ~/.android/adb*
-          key: avd-google_atd-34-x86_64-v1
+          key: avd-google_atd-34-x86_64-v2
 
       # On a cache miss, create the AVD once and boot it to generate the snapshot
       # the cache stores. Skipped entirely on a cache hit.
