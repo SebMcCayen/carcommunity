@@ -328,6 +328,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'crownHunt.updateSpawnArea': 'admin-rare',
   'crownHunt.deleteSpawnArea': 'admin-rare',
   'crownHunt.listSpawnAreas': 'admin-rare',
+  'crownHunt.deletePoint': 'admin-rare',
   'events.create': 'admin-rare',
   'events.update': 'admin-rare',
   'events.publish': 'admin-rare',

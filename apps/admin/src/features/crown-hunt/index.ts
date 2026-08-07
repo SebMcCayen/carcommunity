@@ -407,9 +407,9 @@ export async function adminDeleteCrownHuntPoint(
   pointId: string,
   reason?: string,
   _token?: string,
-): Promise<AdminDeleteCrownHuntPointResponse['data']> {
+): Promise<AdminDeleteCrownHuntPointResponse> {
   const request: AdminDeleteCrownHuntPointRequest = reason ? { reason } : {};
-  return callAdmin<AdminDeleteCrownHuntPointResponse['data']>('crownHunt-deletePoint', {
+  return callAdmin<AdminDeleteCrownHuntPointResponse>('crownHunt-deletePoint', {
     pointId,
     ...request,
   });

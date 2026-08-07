@@ -136,15 +136,16 @@ export interface AdminDeleteCrownHuntPointRequest {
   reason?: string;
 }
 
-/** Response for crownHunt.deletePoint. */
+/**
+ * Response for crownHunt.deletePoint — the raw callable payload (matches
+ * contracts/schemas/crown-hunt.schema.json#deletePointResponse and the
+ * PointDeletedResponse the callable returns; there is no { ok, data } envelope).
+ */
 export interface AdminDeleteCrownHuntPointResponse {
-  ok: true;
-  data: {
-    pointId: string;
-    deleted: true;
-    /** Distinct-collector markers removed alongside the point (0 for unlimited). */
-    removedCollectors: number;
-  };
+  pointId: string;
+  deleted: true;
+  /** Distinct-collector markers removed alongside the point (0 for unlimited). */
+  removedCollectors: number;
 }
 
 // ---------------------------------------------------------------------------

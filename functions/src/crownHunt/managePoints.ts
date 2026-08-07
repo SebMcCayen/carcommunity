@@ -389,6 +389,16 @@ export const deletePoint = onCall(CALLABLE_OPTS, async (request): Promise<PointD
   }
   const previousStatus = snap.data()!.status as CrownHuntPointStatus;
 
+  // If the point is still claimable (active), first flip it to a non-claimable
+  // status so submitClaim stops minting new collector markers, THEN drain, THEN
+  // delete — deleteSpawnArea's "disable, drain, delete" ordering. Without this a
+  // claim landing between the final drain query and pointRef.delete() would leave
+  // a dangling crownHuntPointCollectors marker outliving the deleted point
+  // (submitClaim only writes markers while the point reads status=='active').
+  if (previousStatus === 'active') {
+    await pointRef.update({ status: 'paused', updatedAt: serverTimestamp() });
+  }
+
   // Remove the distinct-collector markers first, THEN the point doc — the same
   // "drain, then delete" ordering deleteSpawnArea uses so no dangling collector
   // state can outlive the point. Deleting the doc is what removes a live active
