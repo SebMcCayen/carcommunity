@@ -640,6 +640,16 @@
     <string name="convoy_barLeaveEndsConfirmBody">You\'re the second-to-last member, so leaving ends the convoy — nobody is left driving in it alone. The summary is saved.</string>
     <string name="convoy_barLeaveEndsConfirmAction">Leave and end</string>
     <string name="convoy_barLeaveEnds">Leave convoy (this ends it)</string>
+    <string name="convoy_stopSessionTitle">End your live session?</string>
+    <string name="convoy_stopSessionOwnerBody">You\'re leading a convoy. End it for everyone, or hand it over and leave it running for the others. Either way your live session ends.</string>
+    <string name="convoy_stopSessionOwnerEndOnlyBody">You\'re leading a convoy, and there\'s no one left to hand it to — ending your live session ends the convoy. The summary is saved.</string>
+    <string name="convoy_stopSessionMemberBody">You\'re in a convoy. Leave it and end your live session, or keep sharing to stay with the group.</string>
+    <string name="convoy_stopSessionLeaveEndsBody">You\'re in a convoy, but there\'s no one left to carry it on — leaving ends it for everyone. The summary is saved.</string>
+    <string name="convoy_stopSessionEnd">End convoy</string>
+    <string name="convoy_stopSessionLeaveRunning">Leave it running</string>
+    <string name="convoy_stopSessionLeave">Leave convoy</string>
+    <string name="convoy_stopSessionLeaveEnds">Leave (ends the convoy)</string>
+    <string name="convoy_stopSessionKeep">Keep sharing</string>
     <string name="convoy_leftConvoyToast">You left the convoy.</string>
     <string name="convoy_leftAndEndedToast">You left, and the convoy ended.</string>
     <string name="convoy_leftAsLeaderToast">You left. Another member is now the convoy leader.</string>

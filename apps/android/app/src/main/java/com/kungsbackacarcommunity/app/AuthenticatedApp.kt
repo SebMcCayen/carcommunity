@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -134,8 +135,12 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationNavigationEvent
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinationState
 import com.kungsbackacarcommunity.app.convoy.ConvoyDestinations
+import com.kungsbackacarcommunity.app.convoy.ConvoyExitChoice
 import com.kungsbackacarcommunity.app.convoy.ConvoyInviteStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyLeaveOutcome
+import com.kungsbackacarcommunity.app.convoy.ConvoyStopAction
+import com.kungsbackacarcommunity.app.convoy.LiveSessionConvoyStop
+import com.kungsbackacarcommunity.app.convoy.LiveSessionStopPlan
 import com.kungsbackacarcommunity.app.convoy.ConvoyInvitePickerScreen
 import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
@@ -504,6 +509,16 @@ private val navLatLngSaver: Saver<LatLng?, DoubleArray> =
  * repositories to those pieces. Repositories are nullable so the no-Firebase
  * (Unavailable) build still renders the main shell.
  */
+/**
+ * A pending "end live session while a convoy is active" prompt. Frozen at the
+ * moment Stop is tapped so a background convoy refresh (roster/leadership change)
+ * cannot re-point which convoy or which exits the open dialog acts on.
+ */
+private data class ConvoyStopPromptState(
+    val convoyId: String,
+    val exitChoice: ConvoyExitChoice,
+)
+
 @Composable
 fun AuthenticatedApp(
     uid: String,
@@ -2320,6 +2335,16 @@ fun AuthenticatedApp(
                 }
             val liveSession = liveSessionLoad.sessionOrNull
             val liveSessionObserved = liveSessionLoad.observed
+            // #726 invariant guard for the recording-stop effect below: an ACTIVE
+            // convoy implies an ongoing live session, so a not-sharing read while
+            // a convoy is active is a config-change transient, never a real end.
+            // Latched (rememberSaveable) so it SURVIVES the Activity recreation: on
+            // rotation the convoy snapshot (derived far below, next to the bar) is
+            // itself briefly Loading, so the live value would read false in exactly
+            // the window we must protect. The write, keyed on the convoy snapshot
+            // having loaded, is done where that snapshot exists; the restored value
+            // bridges the gap until it does. See [LiveSessionRecordingLifecycle].
+            var convoyActiveLatched by rememberSaveable { mutableStateOf(false) }
             // Re-evaluate at expiry: a single nowMillis() snapshot would keep
             // isSharing == true if the app stays open past expiresAtMillis with
             // no other recomposition. Schedule one delay-to-expiry that flips
@@ -2450,7 +2475,7 @@ fun AuthenticatedApp(
             // stop until the flow is loaded, so rotation is a no-op while a real
             // end (Stop / Hide / expiry / convoy end — all of which arrive with
             // the flow loaded) still stops and auto-saves.
-            LaunchedEffect(isSharing, liveSessionObserved) {
+            LaunchedEffect(isSharing, liveSessionObserved, convoyActiveLatched) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
@@ -2483,6 +2508,9 @@ fun AuthenticatedApp(
                     LiveSessionRecordingLifecycle.shouldStopRecording(
                         sharing = isSharing,
                         sessionObserved = liveSessionObserved,
+                        // Withheld while a convoy is (or, across the recreation,
+                        // was) still active — see the latch above and #726.
+                        convoyActive = convoyActiveLatched,
                     )
                 ) {
                     // Session genuinely ended: stop recording and raise the
@@ -2693,8 +2721,16 @@ fun AuthenticatedApp(
             // sharing, so it is force-closed the instant a session ends (expiry,
             // sign-out, or Stop from inside the sheet) by the effect below.
             var liveManageOpen by remember { mutableStateOf(false) }
+            // A pending "what about the convoy?" prompt raised when Stop is tapped
+            // while a convoy is active (Bug: the session used to just stop, leaving
+            // the convoy orphaned). Non-null → the dialog below is shown instead of
+            // stopping immediately. Force-closed with the sheet when sharing ends.
+            var convoyStopPrompt by remember { mutableStateOf<ConvoyStopPromptState?>(null) }
             LaunchedEffect(isSharingUi) {
-                if (!isSharingUi) liveManageOpen = false
+                if (!isSharingUi) {
+                    liveManageOpen = false
+                    convoyStopPrompt = null
+                }
             }
 
             // Start the Single session for the given duration. The drive
@@ -3138,6 +3174,27 @@ fun AuthenticatedApp(
 
                 val convoyBarState =
                     ConvoyBar.stateFor(convoyBarStatus, convoyBarBusy, uid, convoyChatUnread)
+
+                // The convoy this map is actively DRIVING (Active, not merely
+                // Forming), shared by the live-session stop flow below. Two uses:
+                //  - it latches the #726 recording-stop guard far above (a rotation
+                //    while in a convoy must not raise the drive save prompt), and
+                //  - it decides whether ending the live session must first ask what
+                //    to do with the convoy (end it for everyone vs leave it
+                //    running) instead of orphaning an active convoy.
+                val liveStopActiveConvoy =
+                    ConvoyBar.activeConvoy(convoyBarStatus)
+                        ?.takeIf { it.status == ConvoyStatus.Active }
+                // Whether the convoy snapshot has actually answered yet: only then
+                // may the latch drop to false. During the recreation window it is
+                // Loading, so the latch keeps its restored value and bridges the
+                // rotation. A config-less build has no coordinator and no convoy,
+                // so it counts as loaded (the latch simply stays false).
+                val convoyStopLoaded =
+                    convoyBarCoordinator == null || convoyBarStatus !is ConvoyListStatus.Loading
+                LaunchedEffect(convoyStopLoaded, liveStopActiveConvoy != null) {
+                    if (convoyStopLoaded) convoyActiveLatched = liveStopActiveConvoy != null
+                }
 
                 // The convoy facts the notification inbox re-derives its convoy
                 // rows against.
@@ -5460,7 +5517,31 @@ fun AuthenticatedApp(
                         // Unused while sharing (no Start row), kept non-null for the
                         // shared signature.
                         onStart = {},
-                        onStop = { stopLiveShare() },
+                        onStop = {
+                            // Ending a live session while a convoy is active must
+                            // not orphan the convoy (#726: an active convoy implies
+                            // an ongoing session). Decide off the frozen snapshot:
+                            // no active convoy → stop straight away; otherwise raise
+                            // the convoy prompt and defer the stop to its choice.
+                            val active = liveStopActiveConvoy
+                            val plan =
+                                LiveSessionConvoyStop.plan(
+                                    inActiveConvoy = active != null,
+                                    viewerIsOwner = active?.viewerIsOwner == true,
+                                    acceptedMemberCount =
+                                        active?.let { ConvoyBar.acceptedMembers(it).size } ?: 0,
+                                )
+                            when (plan) {
+                                LiveSessionStopPlan.StopNow -> stopLiveShare()
+                                is LiveSessionStopPlan.AskConvoy -> {
+                                    liveManageOpen = false
+                                    convoyStopPrompt =
+                                        active?.let {
+                                            ConvoyStopPromptState(it.convoyId, plan.exitChoice)
+                                        }
+                                }
+                            }
+                        },
                         // Not shown by this sheet (see above); the shared signature
                         // still requires handlers, and they stay CORRECT rather than
                         // becoming no-ops, so re-enabling a row can never wire it to
@@ -5476,6 +5557,95 @@ fun AuthenticatedApp(
                         },
                         onOpenDetails = { openLiveShareFallback() },
                         onDismiss = { liveManageOpen = false },
+                    )
+                }
+
+                // "What about the convoy?" — raised when Stop is tapped while a
+                // convoy is active, instead of silently ending the session and
+                // orphaning it. The two convoy exits are the SAME the convoy bar
+                // offers, so the semantics can't drift: EndConvoy -> convoy-end
+                // (owner-only, ends it for everyone), LeaveConvoy -> convoy-leave
+                // (the caller drops out, the others carry on; leadership transfers
+                // when the owner leaves, and the server ends the convoy when too
+                // few are left). Each choice performs its convoy action AND then
+                // ends the live session; "Keep sharing" dismisses and does neither.
+                val stopPrompt = convoyStopPrompt
+                if (stopPrompt != null && isSharingUi) {
+                    val exitChoice = stopPrompt.exitChoice
+                    val bodyRes =
+                        when (exitChoice) {
+                            ConvoyExitChoice.LeaveOrEnd -> R.string.convoy_stopSessionOwnerBody
+                            ConvoyExitChoice.EndOnly -> R.string.convoy_stopSessionOwnerEndOnlyBody
+                            ConvoyExitChoice.LeaveOnly -> R.string.convoy_stopSessionMemberBody
+                            ConvoyExitChoice.LeaveEndsConvoy ->
+                                R.string.convoy_stopSessionLeaveEndsBody
+                        }
+                    // Perform a convoy action, then end the session; closes the
+                    // prompt first so neither is double-fired on recomposition.
+                    val actAndStop: (ConvoyStopAction) -> Unit = { action ->
+                        convoyStopPrompt = null
+                        val convoyId = stopPrompt.convoyId
+                        scope.launch {
+                            when (action) {
+                                ConvoyStopAction.EndConvoy ->
+                                    convoyBarCoordinator?.end(convoyId)
+                                ConvoyStopAction.LeaveConvoy ->
+                                    convoyBarCoordinator?.leave(convoyId)
+                            }
+                        }
+                        stopLiveShare()
+                    }
+                    AlertDialog(
+                        onDismissRequest = { convoyStopPrompt = null },
+                        title = { Text(stringResource(R.string.convoy_stopSessionTitle)) },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
+                                Text(
+                                    text = stringResource(bodyRes),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                LiveSessionConvoyStop.actionsFor(exitChoice).forEach { action ->
+                                    when (action) {
+                                        ConvoyStopAction.LeaveConvoy -> {
+                                            val label =
+                                                when (exitChoice) {
+                                                    ConvoyExitChoice.LeaveEndsConvoy ->
+                                                        R.string.convoy_stopSessionLeaveEnds
+                                                    ConvoyExitChoice.LeaveOrEnd ->
+                                                        R.string.convoy_stopSessionLeaveRunning
+                                                    else -> R.string.convoy_stopSessionLeave
+                                                }
+                                            Button(
+                                                onClick = { actAndStop(ConvoyStopAction.LeaveConvoy) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                            ) {
+                                                Text(stringResource(label))
+                                            }
+                                        }
+                                        ConvoyStopAction.EndConvoy ->
+                                            // Destructive: a text action in the error
+                                            // colour, never the accidental default.
+                                            TextButton(
+                                                onClick = { actAndStop(ConvoyStopAction.EndConvoy) },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                colors =
+                                                    ButtonDefaults.textButtonColors(
+                                                        contentColor = MaterialTheme.colorScheme.error,
+                                                    ),
+                                            ) {
+                                                Text(stringResource(R.string.convoy_stopSessionEnd))
+                                            }
+                                    }
+                                }
+                            }
+                        },
+                        confirmButton = {},
+                        dismissButton = {
+                            TextButton(onClick = { convoyStopPrompt = null }) {
+                                Text(stringResource(R.string.convoy_stopSessionKeep))
+                            }
+                        },
                     )
                 }
 
