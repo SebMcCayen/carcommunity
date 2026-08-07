@@ -103,6 +103,7 @@ import com.mapbox.maps.MapView
 import com.mapbox.maps.ImageHolder
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.LocationPuck2D
+import com.mapbox.maps.plugin.PuckBearing
 import com.mapbox.maps.plugin.animation.camera
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
@@ -1617,6 +1618,24 @@ private class TurnByTurnEngine(
     private var threeDEnabled = true
     private var compassMode = MapCompassMode.CourseUp
 
+    // ── Latest fix, for the follow camera's bearing decision ────────────────
+    //
+    // The course-up bearing the map faces is decided by the pure, unit-tested
+    // [NavFollowBearing] from the newest fix. These hold that fix so BOTH the
+    // ~1 Hz location observer AND the compass / 3D / style-reload paths
+    // ([applyCameraOverrides]) reach the same decision — the override the
+    // location observer set must not be undone a frame later by a style reload
+    // recomputing the bearing from nothing.
+    private var lastCourseBearingDeg: Double? = null
+    private var lastSpeedMps: Double? = null
+
+    // The last course seen while the vehicle was moving fast enough to trust it
+    // (see [NavFollowBearing.isCourseTrustworthy]): a road-aligned heading to hold
+    // when the live course goes stale at low speed, so the map keeps facing the
+    // way the driver was actually going instead of swinging to noise. Null until
+    // the trip's first trustworthy course.
+    private var lastGoodCourseBearingDeg: Double? = null
+
     /**
      * Whether the destination pill is currently drawn above the maneuver banner.
      * Part of the camera's top padding, so it lives with the other remembered
@@ -1779,6 +1798,14 @@ private class TurnByTurnEngine(
                                 com.mapbox.navigation.ui.components.R.drawable.mapbox_navigation_puck_icon,
                             ),
                     )
+                // COURSE (direction of travel), not the default HEADING (the
+                // device compass): while driving, the phone's physical facing is
+                // meaningless — it sits in a mount or a cup holder — so a
+                // HEADING-driven arrow points somewhere unrelated to the road,
+                // reading as a puck skewed off the direction of travel. COURSE
+                // ties the arrow to where the car is actually going, matching the
+                // map home ([MapboxMapSurface]) and the course-up follow camera.
+                puckBearing = PuckBearing.COURSE
                 puckBearingEnabled = true
                 enabled = true
             }
@@ -1966,6 +1993,17 @@ private class TurnByTurnEngine(
                     keyPoints = locationMatcherResult.keyPoints,
                 )
                 viewportDataSource.onLocationChanged(enhanced)
+                // Record this fix and decide the follow camera's bearing from it,
+                // so the map stays course-up while moving and holds the last
+                // road-aligned heading rather than chasing a stale course at low
+                // speed (the reported "map skewed off the road"). Set BEFORE
+                // evaluate() so the new bearing is part of this frame's camera.
+                lastCourseBearingDeg = enhanced.bearing
+                lastSpeedMps = enhanced.speed
+                if (NavFollowBearing.isCourseTrustworthy(enhanced.bearing, enhanced.speed)) {
+                    lastGoodCourseBearingDeg = enhanced.bearing
+                }
+                applyFollowingBearingOverride()
                 viewportDataSource.evaluate()
 
                 // Move the travelled/remaining split with the car. Route progress
@@ -2223,13 +2261,42 @@ private class TurnByTurnEngine(
             // undone the moment the camera zooms out to show the whole route.
             viewportDataSource.followingPitchPropertyOverride(if (threeDEnabled) null else 0.0)
             viewportDataSource.overviewPitchPropertyOverride(if (threeDEnabled) null else 0.0)
-            viewportDataSource.followingBearingPropertyOverride(
-                when (compassMode) {
-                    MapCompassMode.NorthUp -> 0.0
-                    MapCompassMode.CourseUp -> null
-                },
-            )
+            // The bearing goes through the SAME pure decision the location
+            // observer uses, seeded from the latest fix — so a compass toggle, a
+            // 3D flip or a day/night style reload cannot recompute a different
+            // bearing (e.g. snap course-up back to a raw stale course, or drop the
+            // held low-speed heading) from the one the observer just applied.
+            viewportDataSource.followingBearingPropertyOverride(followingBearingOverrideNow())
             viewportDataSource.evaluate()
+        }
+    }
+
+    /**
+     * The follow camera's bearing override for the latest fix and current mode,
+     * from the pure [NavFollowBearing] decision:
+     * - `null` hands the bearing to the SDK's own course-up following (location
+     *   course blended with the route) — the moving course-up case;
+     * - `0.0` in north-up;
+     * - the last road-aligned heading in low-speed course-up, so the map does not
+     *   swing to a course the stationary fix cannot resolve.
+     */
+    private fun followingBearingOverrideNow(): Double? =
+        NavFollowBearing.followingBearingOverride(
+            mode = compassMode,
+            gpsBearingDeg = lastCourseBearingDeg,
+            speedMps = lastSpeedMps,
+            fallbackBearingDeg = lastGoodCourseBearingDeg,
+        )
+
+    /**
+     * Push the current bearing decision at the viewport data source WITHOUT
+     * touching pitch — the per-fix path the location observer takes, kept separate
+     * from [applyCameraOverrides] so a ~1 Hz fix does not re-assert the pitch
+     * override on every tick. The observer calls `evaluate()` itself.
+     */
+    private fun applyFollowingBearingOverride() {
+        runCatching {
+            viewportDataSource.followingBearingPropertyOverride(followingBearingOverrideNow())
         }
     }
 
