@@ -20,6 +20,9 @@ import com.kungsbackacarcommunity.app.incidents.IncidentAgeFilterPreferenceStore
 import com.kungsbackacarcommunity.app.incidents.IncidentAgeOption
 import com.kungsbackacarcommunity.app.map.MapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomPreferenceStore
+import com.kungsbackacarcommunity.app.navigation.GeoUriParser
+import com.kungsbackacarcommunity.app.navigation.GeoUriTarget
+import com.kungsbackacarcommunity.app.navigation.MapLinkNavigator
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -143,6 +146,12 @@ class MainActivity : ComponentActivity() {
         // with the SAME launch Intent).
         if (savedInstanceState == null) {
             publishPushDeepLink(intent)
+            // Same cold-start reasoning for an incoming map link (the member
+            // picked KCC from Android's "Open with"/default-handler chooser for
+            // a geo:/google.navigation: URI): park the point before the shell
+            // composes so it is already waiting, and guard on savedInstanceState
+            // so a rotation does not replay a navigation already performed.
+            publishMapLinkDeepLink(intent)
         }
 
         // Draw edge-to-edge so map/content renders behind the system bars. The
@@ -504,11 +513,30 @@ class MainActivity : ComponentActivity() {
         // later recreation would resurrect the stale launch Intent.
         setIntent(intent)
         publishPushDeepLink(intent)
+        // A map link delivered to the already-running (singleTop) task arrives
+        // here rather than in a fresh onCreate; handle it the same way.
+        publishMapLinkDeepLink(intent)
     }
 
     /** Hands a tapped notification's destination to the shell, if there is one. */
     private fun publishPushDeepLink(intent: Intent?) {
         KccMessagingService.deepLinkFrom(intent)?.let(PushNavigator::publish)
+    }
+
+    /**
+     * Hands an incoming map link (geo: / google.navigation:) to the shell as an
+     * in-app navigate-here point, if the Intent is one and carries a real
+     * coordinate. Only ACTION_VIEW Intents are considered, so a plain launcher
+     * start never triggers it. A free-text address query ([GeoUriTarget.Query])
+     * is intentionally ignored — the chooser still offered a real maps app
+     * alongside KCC, and geocoding an arbitrary address from a deep link is out
+     * of scope (see GeoUriTarget.Query).
+     */
+    private fun publishMapLinkDeepLink(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val data = intent.data ?: return
+        val target = GeoUriParser.parse(data.toString())
+        if (target is GeoUriTarget.Point) MapLinkNavigator.publish(target)
     }
 
     /**
@@ -535,6 +563,9 @@ class MainActivity : ComponentActivity() {
         // Local push state belongs to the departing member — drop it now so a
         // pending deep link cannot navigate whoever signs in next.
         PushNavigator.clear()
+        // A pending map-link point is just a coordinate (no privacy weight), but
+        // clear it for symmetry so no session change carries a stale navigation.
+        MapLinkNavigator.clear()
         ActiveChatRegistry.clear()
         // Same reasoning for the resolved-image-URL cache: a Firebase download
         // URL is a bearer link — the token in it IS the authorisation — so the

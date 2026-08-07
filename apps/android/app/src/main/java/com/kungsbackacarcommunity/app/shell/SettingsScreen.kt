@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NewReleases
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Stars
@@ -48,6 +49,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalThemeController
 import com.kungsbackacarcommunity.app.design.ThemePreference
+import com.kungsbackacarcommunity.app.navigation.openDefaultMapAppSettings
 
 /**
  * The Settings screen reached from the profile-picture ("More") menu. It groups
@@ -93,6 +95,14 @@ fun SettingsScreen(
             Icons.Filled.Bookmark,
             onSavedPlaces,
         )
+        // Always available (opens a system screen, no backend dependency): make
+        // KCC the app Android offers for map links. Honest label — it opens the
+        // system "open by default" screen where the member picks KCC; there is
+        // no OS default-navigator role to set, and no API to set one.
+        HubRow(
+            stringResource(R.string.settingsMenu_defaultMapApp),
+            Icons.Filled.Map,
+        ) { openDefaultMapAppSettings(context) }
         if (onNotificationSettings != null) {
             HubRow(
                 stringResource(R.string.settingsMenu_notificationSettings),

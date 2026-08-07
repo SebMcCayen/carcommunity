@@ -277,6 +277,7 @@ import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
 import com.kungsbackacarcommunity.app.navigation.HttpMapboxSearchClient
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.MapLinkNavigator
 import com.kungsbackacarcommunity.app.navigation.NavResumePolicy
 import com.kungsbackacarcommunity.app.navigation.NavResumeStore
 import com.kungsbackacarcommunity.app.navigation.NavigationSearchScreen
@@ -2139,6 +2140,25 @@ fun AuthenticatedApp(
             val positionCopiedText = stringResource(R.string.shell_placeCopied)
             val positionSavedText = stringResource(R.string.shell_placeSaved)
             val sharedLocationName = stringResource(R.string.shell_sharedLocationName)
+
+            // Incoming map-link deep link. MainActivity parses a geo: /
+            // google.navigation: URI the member opened WITH KCC (from Android's
+            // "Open with"/default-handler chooser) and parks the point in
+            // MapLinkNavigator — a process-level hand-off for the same reason as
+            // PushNavigator: the Intent arrives outside this composition and may
+            // precede it on a cold start. Consumed exactly once here and driven
+            // through the SAME in-app [moveMapToPoint] flow a chat geo-link tap or
+            // a saved-place pick uses (which raises the navigate-here preview over
+            // whatever is showing — see ShellNav.mapCover, where navSearchOpen is
+            // a Transparent cover that wins over the current tab/route). It never
+            // fires an external maps app. The link's own label names the pin when
+            // it carries one; otherwise the shared "shared location" name is used.
+            val mapLinkTarget by MapLinkNavigator.pending.collectAsState()
+            LaunchedEffect(mapLinkTarget) {
+                val target = MapLinkNavigator.consume() ?: return@LaunchedEffect
+                val name = target.label?.takeIf { it.isNotBlank() } ?: sharedLocationName
+                moveMapToPoint(target.point.latitude, target.point.longitude, name)
+            }
             // Share-to-friend confirmation copy, resolved in composition (the send
             // callback fires off the UI thread and cannot call stringResource). The
             // "shared" line keeps its %1$s placeholder and is String.format-ed with

@@ -124,6 +124,9 @@
     <string name="onboarding_displayNameDescription">Detta är det publika namn som andra medlemmar ser (i evenemang, chatt med mera). Ditt riktiga Google-namn visas aldrig.</string>
     <string name="onboarding_partnerStatsOptIn">Bidra med anonymiserad partnerstatistik</string>
     <string name="onboarding_partnerStatsNote">På som standard. Du kan stänga av det nu, eller senare under Integritet.</string>
+    <string name="onboarding_defaultMapTitle">Öppna kartlänkar i KCC</string>
+    <string name="onboarding_defaultMapBody">När en annan app öppnar en kartplats – en delad pin eller en ”geo:”-länk – kan du låta KCC ta hand om den och navigera direkt här, utan att byta app. Android styr vilken app som öppnar dessa, så öppna appinställningarna för att göra KCC till ett alternativ och välj den (eller ange den som standard) när Android frågar. Valfritt – du kan hoppa över detta och ställa in det senare under Inställningar.</string>
+    <string name="onboarding_defaultMapButton">Ange standardkartapp</string>
     <string name="onboarding_continueButton">Fortsätt</string>
     <string name="onboarding_termsLink">Läs villkoren</string>
     <string name="onboarding_privacyLink">Läs integritetspolicyn</string>
@@ -151,6 +154,7 @@
     <string name="settingsMenu_accountSection">Konto</string>
     <string name="settingsMenu_manageSubscription">Hantera medlemskap</string>
     <string name="settingsMenu_savedPlaces">Sparade platser</string>
+    <string name="settingsMenu_defaultMapApp">Ange KCC som standardkartapp</string>
     <string name="settingsMenu_notificationSettings">Aviseringsinställningar</string>
     <string name="settingsMenu_partnerStats">Partnerstatistik</string>
     <string name="settingsMenu_feedback">Rapportera ett problem</string>
