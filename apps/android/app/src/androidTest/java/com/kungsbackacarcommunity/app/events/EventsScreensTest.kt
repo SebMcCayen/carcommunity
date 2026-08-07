@@ -385,4 +385,46 @@ class EventsScreensTest {
         }
         composeTestRule.onNodeWithTag(EVENT_DETAIL_NAVIGATE_TAG).assertDoesNotExist()
     }
+
+    @Test
+    fun detail_showsOrganizer_whenNameResolved() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    organizerName = "Alice",
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_ORGANIZER_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule
+            .onNodeWithText(str(R.string.events_organizerLabel, "Alice"))
+            .performScrollTo()
+            .assertIsDisplayed()
+    }
+
+    @Test
+    fun detail_hidesOrganizer_whenNameAbsent() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event(),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    organizerName = null,
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_ORGANIZER_TAG).assertDoesNotExist()
+    }
 }

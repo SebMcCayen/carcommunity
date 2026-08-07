@@ -597,6 +597,29 @@ export function buildEventDocuments(
 }
 
 /**
+ * The RSVP document (`events/{eventId}/rsvps/{creatorUid}`) that marks an
+ * event's creator as attending ("going") from the moment the event is created.
+ *
+ * Shape matches exactly what a member's own client writes and what the
+ * firestore.rules `validRsvpDocument()` guard permits — `{ status, updatedAt }`
+ * — so the same [computeRsvpCountDeltas] trigger (events-onRsvpWrite) folds it
+ * into `rsvpCounts.going`, and the same roster read (events-listAttendees)
+ * surfaces the organiser among the "going". The parent `rsvpCounts` is therefore
+ * seeded at zero in [buildEventDocuments] and the trigger brings `going` to 1 —
+ * seeding it here as well would double-count.
+ *
+ * The caller decides WHEN to write this (see manageEvent.create): only for an
+ * event that is published on creation, since RSVP is meaningless on a draft and
+ * the roster/counts are exposed only for published events.
+ */
+export function buildCreatorRsvpDocument(serverTimestamp: () => unknown): {
+  status: RsvpStatus;
+  updatedAt: unknown;
+} {
+  return { status: 'going', updatedAt: serverTimestamp() };
+}
+
+/**
  * Splits a partial update into per-document field updates. Returns the list
  * of changed field names for the audit record (legacy parity: changedFields).
  */

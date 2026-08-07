@@ -279,7 +279,8 @@
     <string name="events_memberRequiredTitle">Eventdetaljer kräver KCC Medlem.</string>
     <string name="events_memberRequiredBody">Som medlem kan du se exakt plats, mer information och RSVP.</string>
     <string name="events_memberGateBody">KCC Medlem krävs för att se exakt plats, eventinformation och RSVP.</string>
-    <string name="events_memberDetailPlaceholder">Exakt plats och detaljer</string>
+    <string name="events_memberDetailPlaceholder">Beskrivning</string>
+    <string name="events_organizerLabel">Arrangör: %1$s</string>
     <string name="events_navigationPlaceholder">Navigering öppnas i Apple Maps eller Google Maps i en senare version.</string>
     <string name="events_rsvpGoing">Kommer</string>
     <string name="events_rsvpMaybe">Kanske</string>
@@ -330,6 +331,7 @@
     <string name="events_createDialogConfirm">OK</string>
     <string name="events_createRateLimited">Du kan skapa %1$d träffar per dygn. Du har nått gränsen — försök igen senare.</string>
     <string name="events_attendeesTitle">Vilka har svarat</string>
+    <string name="events_attendeesReveal">Se vilka som svarat</string>
     <string name="events_attendeesCount">%1$d kommer</string>
     <string name="events_rowGoingCount">%1$d kommer</string>
     <string name="events_attendeesLoading">Hämtar vilka som har svarat…</string>

@@ -53,6 +53,7 @@ class EventAttendeesScreenTest {
         attendees: EventAttendeesState,
         onOpenMember: ((String) -> Unit)? = {},
         passesMemberGate: Boolean = true,
+        reveal: Boolean = true,
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -69,6 +70,32 @@ class EventAttendeesScreenTest {
                 )
             }
         }
+        // The roster is collapsed behind the "Check who answered" button; reveal it
+        // so these tests exercise the rows/states. Only a gate-passer sees the
+        // button (canRsvp), so a non-member run skips the reveal.
+        if (passesMemberGate && reveal) {
+            composeTestRule
+                .onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG)
+                .performScrollTo()
+                .performClick()
+        }
+    }
+
+    @Test
+    fun attendees_areCollapsedBehindAButton_untilRevealed() {
+        // Before the tap the roster must be hidden and only the reveal button
+        // shown, so the page stays short.
+        setDetail(
+            EventAttendeesState.Loaded(listOf(EventAttendee(uid = "u1", displayName = "Alice"))),
+            reveal = false,
+        )
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(ATTENDEES_SECTION_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithText("Alice").assertDoesNotExist()
+
+        // Tapping reveals the roster.
+        composeTestRule.onNodeWithTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG).performClick()
+        composeTestRule.onNodeWithText("Alice").performScrollTo().assertIsDisplayed()
     }
 
     @Test

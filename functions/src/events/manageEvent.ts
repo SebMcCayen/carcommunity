@@ -36,6 +36,7 @@ import { requireAdminActor } from '../admin/actorContext';
 import { requireMemberOrAdminActor } from '../shared/memberActor';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import {
+  buildCreatorRsvpDocument,
   buildEventDocuments,
   buildEventUpdates,
   guardCoordinatePair,
@@ -151,6 +152,16 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
 
     tx.set(eventRef, eventDoc);
     tx.set(eventRef.collection('details').doc('private'), privateDoc);
+    // Auto-RSVP the creator as "going" so the organiser counts among the
+    // attendees from the moment the event exists. Scoped to a published-on-create
+    // event: a draft (admin-web's draft-then-publish flow) has no RSVP surface and
+    // its rsvpCounts must stay {0,0,0} until it is published and someone answers.
+    // The rsvpCounts on eventDoc is seeded at zero; the events-onRsvpWrite trigger
+    // folds this write into `rsvpCounts.going` (seeding it here too would
+    // double-count), and the creator's own client reflects it via observeMyRsvp.
+    if (status === 'published') {
+      tx.set(eventRef.collection('rsvps').doc(actor.uid), buildCreatorRsvpDocument(serverTimestamp));
+    }
     if (creatorRole === 'admin') {
       tx.set(
         db.collection('adminAuditEvents').doc(),

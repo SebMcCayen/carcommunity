@@ -358,6 +358,9 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
         isOfficial = getBoolean("isOfficial") ?: false,
         status = status,
         counts = counts,
+        // Creator uid, resolved to the organiser's live display name on the detail
+        // page. Absent on events written before the field existed.
+        createdByUserId = getString("createdByUserId"),
     )
 }
 

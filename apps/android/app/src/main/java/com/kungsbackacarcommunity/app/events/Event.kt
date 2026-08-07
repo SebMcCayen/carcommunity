@@ -82,6 +82,11 @@ data class EventSummary(
     val isOfficial: Boolean,
     val status: EventStatus,
     val counts: RsvpCounts,
+    // The creator's uid (events/{id}.createdByUserId), used to surface the
+    // organiser's current display name on the detail page. Null for older events
+    // written before the field existed, or fixtures that omit it — the organiser
+    // line is simply not shown then.
+    val createdByUserId: String? = null,
 )
 
 /**

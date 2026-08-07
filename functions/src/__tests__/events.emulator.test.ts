@@ -246,6 +246,46 @@ describe('events-create – member-created events', () => {
     expect(audit.empty).toBe(true);
   });
 
+  it('auto-RSVPs the creator as going and counts them from creation', async () => {
+    const member = await createMemberUser('events-member-autorsvp');
+    await signInAs(member);
+
+    const result = await call('events-create', validCreate);
+    const { eventId, status } = result.data as { eventId: string; status: string };
+    expect(status).toBe('published');
+
+    // The creator's own RSVP document is written inside the create transaction,
+    // with exactly the { status, updatedAt } shape a member's client writes.
+    const rsvp = (
+      await adminDb.collection('events').doc(eventId).collection('rsvps').doc(member.uid).get()
+    ).data();
+    expect(rsvp?.status).toBe('going');
+
+    // ...and the events-onRsvpWrite trigger folds it into the public tally, so
+    // the organiser is among the "going" from the start (single source of truth:
+    // rsvpCounts is seeded at zero and the trigger brings going to 1).
+    const counts = async () =>
+      (await adminDb.collection('events').doc(eventId).get()).data()!.rsvpCounts;
+    await pollUntil(async () => ((await counts()).going === 1 ? true : undefined));
+    expect(await counts()).toEqual({ going: 1, maybe: 0, not_going: 0 });
+  });
+
+  it('does NOT auto-RSVP the creator on an admin draft', async () => {
+    // The admin draft-then-publish flow has no RSVP surface until publish, so a
+    // draft must carry no creator RSVP and keep its zero tally.
+    await signInAs(adminUser);
+    const eventId = await createDraftEvent();
+    const rsvp = await adminDb
+      .collection('events')
+      .doc(eventId)
+      .collection('rsvps')
+      .doc(adminUser.uid)
+      .get();
+    expect(rsvp.exists).toBe(false);
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.rsvpCounts).toEqual({ going: 0, maybe: 0, not_going: 0 });
+  });
+
   it('rejects a suspended member', async () => {
     const suspended = await createMemberUser('events-member-suspended', true);
     await signInAs(suspended);

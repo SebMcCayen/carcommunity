@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -26,6 +27,7 @@ import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.dm.DmRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.navigation.ExternalNavigation
+import com.kungsbackacarcommunity.app.profile.LiveProfileRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
@@ -95,6 +97,10 @@ fun EventsRoute(
     // real app (the shell always supplies moveMapToPoint); null in a config-less
     // build, where Navigate falls back to the external maps handoff.
     onNavigateToPoint: ((latitude: Double, longitude: Double, name: String?) -> Unit)? = null,
+    // Resolves the event organiser's CURRENT display name from the creator uid
+    // (a live users/{uid} read) for the detail page's "Organizer: …" line. The
+    // EMPTY default (config-less build) simply resolves no name, hiding the line.
+    liveProfileRepository: LiveProfileRepository = LiveProfileRepository.EMPTY,
 ) {
     val scope = rememberCoroutineScope()
     var selectedEventId by rememberSaveable { mutableStateOf<String?>(null) }
@@ -297,11 +303,16 @@ fun EventsRoute(
     // stays the server's public tally — see EventAttendees.stateFor.
     val attendeesVisible = Events.canSeeDetails(passesMemberGate, event?.status ?: EventStatus.DRAFT)
     var attendeesReloadKey by rememberSaveable { mutableStateOf(0) }
+    // The roster is collapsed behind the detail page's "Check who answered"
+    // button; it flips this true (via onRevealAttendees) so the events-listAttendees
+    // read below is DEFERRED until the viewer asks for it. Keyed on the selected
+    // event so switching events in place re-collapses and re-defers.
+    var attendeesRevealed by rememberSaveable(selected) { mutableStateOf(false) }
     var attendees by remember(selected) {
         mutableStateOf<EventAttendeesState>(EventAttendeesState.Loading)
     }
-    LaunchedEffect(selected, attendeesVisible, attendeesReloadKey, blockingRepository, uid) {
-        if (!attendeesVisible) return@LaunchedEffect
+    LaunchedEffect(selected, attendeesVisible, attendeesRevealed, attendeesReloadKey, blockingRepository, uid) {
+        if (!attendeesVisible || !attendeesRevealed) return@LaunchedEffect
         attendees = EventAttendeesState.Loading
         val result = repository.loadAttendees(selected)
         // Only a Loaded roster has rows to filter, and stateFor ignores the
@@ -449,6 +460,24 @@ fun EventsRoute(
         )
     }
 
+    // Resolve the organiser's CURRENT display name from the event's creator uid
+    // (a one-shot live users/{uid} read), so the detail page can show
+    // "Organizer: <name>". Null while unresolved, for an event with no creator
+    // uid, or when the user doc has no name — the line is simply hidden then.
+    val organizerName by produceState<String?>(
+        initialValue = null,
+        event?.createdByUserId,
+        liveProfileRepository,
+    ) {
+        val creatorId = event?.createdByUserId
+        value =
+            if (creatorId.isNullOrBlank()) {
+                null
+            } else {
+                liveProfileRepository.loadProfiles(setOf(creatorId))[creatorId]?.displayName
+            }
+    }
+
     EventDetailScreen(
         event = event,
         detail = detail,
@@ -476,6 +505,9 @@ fun EventsRoute(
         onNavigate = onNavigate,
         onShareEvent = onShareEvent,
         onAddToCalendar = onAddToCalendar,
+        organizerName = organizerName,
+        // Defer the attendee-roster read until the viewer taps "Check who answered".
+        onRevealAttendees = { attendeesRevealed = true },
         hasMapToken = hasMapToken,
     )
 }
