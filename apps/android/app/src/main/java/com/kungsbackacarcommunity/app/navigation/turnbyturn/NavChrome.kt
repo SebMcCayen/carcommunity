@@ -187,6 +187,48 @@ object NavCameraPadding {
     }
 }
 
+/**
+ * Where the follow camera pins the user's puck, as a fraction of the padded box.
+ *
+ * The follow frame places the framed point at a focal point expressed as a
+ * fraction of the box left after [NavCameraPadding] is applied: x from its left
+ * (0.0) to its right (1.0), y from its top (0.0) to its bottom (1.0). The values
+ * are pure numbers with no SDK dependency, so they live here with the padding
+ * they pair with and are pinned by tests; the navigation screen reads them into
+ * `FollowingFrameOptions.FocalPoint`.
+ *
+ * ## The reported bug
+ * "During navigation my position sits too low, near the bottom edge, so there is
+ * little road visible ahead." The puck was pinned to y = 1.0 — the very bottom of
+ * the padded box — which reads as the car crammed against the bottom chrome. The
+ * fix lifts it into the lower third ([FOLLOWING_Y]) so more road ahead is on
+ * screen while the position still LEADS the view rather than sitting at its
+ * centre.
+ */
+object NavFollowPuck {
+    /**
+     * Horizontal focal fraction: the centre line. Paired with the symmetric side
+     * padding in [NavCameraPadding], this is what keeps the puck horizontally
+     * centred; it must stay 0.5 for the same reason the side padding is symmetric.
+     */
+    const val FOLLOWING_X: Double = 0.5
+
+    /**
+     * Vertical focal fraction: the puck sits in the LOWER THIRD of the padded box
+     * rather than pinned to its bottom edge.
+     *
+     * Below 1.0 so the car lifts off the bottom chrome (the reported "too low"),
+     * and kept in the bottom portion (>= two-thirds down) so the view still leads
+     * with the road ahead — a puck at the centre would waste half the screen on
+     * the road already driven. 0.8 puts roughly four-fifths of the padded box
+     * ahead of the driver, matching how the common navigation apps frame it.
+     *
+     * Device-independent by construction: it is a FRACTION of the box, so it
+     * reads as "the lower third" on any screen size, unlike a fixed dp offset.
+     */
+    const val FOLLOWING_Y: Double = 0.8
+}
+
 /** Visibility rules for the navigation screen's TOP chrome. */
 object NavTopChrome {
     /**

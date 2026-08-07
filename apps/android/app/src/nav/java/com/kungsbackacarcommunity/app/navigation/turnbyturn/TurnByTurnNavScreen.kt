@@ -314,6 +314,13 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  *   the SAME roster, the same live listeners and the same entitlement gating it
  *   uses for the map home; null (nobody to draw) composes nothing at all.
  *
+ * @param liveSessionBar the ongoing live-session pill (elapsed time, distance and
+ *   speed), composed only while the driver is still sharing a live position. It is
+ *   kept on screen during navigation for the same reason [convoyBar] is: a session
+ *   does not stop existing because guidance started, and its indicator must not
+ *   vanish with the rest of the map-home chrome. Placed at the bottom of the top
+ *   column, above the convoy bar (the map home's order), so neither displaces the
+ *   maneuver banner.
  * @param convoyBar the shared convoy status bar
  *   ([com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar]), composed only when
  *   the driver is in a convoy — a convoy does not stop existing because someone
@@ -367,6 +374,7 @@ fun TurnByTurnNavScreen(
     // control, so the same button on the same right-side stack (see
     // [MapControlSet.rightSideStack]).
     onOpenSavedPlaces: () -> Unit = {},
+    liveSessionBar: (@Composable () -> Unit)? = null,
     convoyBar: (@Composable () -> Unit)? = null,
     liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
 ) {
@@ -818,6 +826,18 @@ fun TurnByTurnNavScreen(
                     }
                 }
             }
+
+            // Ongoing live-session pill (elapsed + distance + speed), kept on
+            // screen while driving so starting navigation does not hide the fact
+            // that a live session is still running. Placed with the convoy bar at
+            // the BOTTOM of the top column — below the maneuver banner, the same
+            // reasoning as [convoyBar]: it reads as top chrome, never shoves the
+            // safety-critical instruction down, and lands inside the region the
+            // navigation camera already reserves as top padding. Above the convoy
+            // bar, matching the map home where the live pill sits in the top search
+            // strip and the convoy bar is the row beneath it. Composed only while a
+            // session is actually sharing (null otherwise).
+            liveSessionBar?.invoke()
 
             // Convoy status bar, LAST so the maneuver banner keeps its place at
             // the top of the screen (see the [convoyBar] KDoc). Composed only
@@ -1680,14 +1700,21 @@ private class TurnByTurnEngine(
         // Switching the maximisation off keeps the puck pinned to the focal
         // point at every pitch. The focal point is then stated rather than
         // inherited: x = 0.5 is the horizontal centre of the padded box (which,
-        // with equal side padding, is the screen's centre line), y = 1.0 its
-        // bottom edge — the standard navigation position, showing the road ahead
-        // rather than the road behind. Both are the SDK's own defaults; naming
-        // them means a future default change cannot quietly move the puck.
+        // with equal side padding, is the screen's centre line), y = 0.8 puts the
+        // puck in the LOWER THIRD rather than pinned to the bottom edge — the
+        // reported "my position sits too low" fix, lifting the car off the bottom
+        // chrome so more road ahead is visible while the view still leads with the
+        // road ahead rather than the road behind. Both fractions live in the pure,
+        // unit-tested [NavFollowPuck] so a future edit is a visible change to where
+        // the puck sits, not a silent one.
         runCatching {
             viewportDataSource.options.followingFrameOptions.apply {
                 maximizeViewableGeometryWhenPitchZero = false
-                focalPoint = FollowingFrameOptions.FocalPoint(0.5, 1.0)
+                focalPoint =
+                    FollowingFrameOptions.FocalPoint(
+                        NavFollowPuck.FOLLOWING_X,
+                        NavFollowPuck.FOLLOWING_Y,
+                    )
             }
         }
         applyCameraPadding()

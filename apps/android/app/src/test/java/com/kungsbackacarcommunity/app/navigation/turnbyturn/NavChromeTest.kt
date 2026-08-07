@@ -129,6 +129,39 @@ class NavChromeTest {
     }
 
     /**
+     * **The regression test for "during navigation my position sits too low".**
+     *
+     * The follow puck must be LIFTED off the bottom edge (y &lt; 1.0) into the
+     * lower third, so more road ahead is on screen, while still LEADING the view
+     * (kept in the bottom portion, y &gt; 0.5, so the screen is not wasted on the
+     * road already driven). Anyone pinning it back to the bottom — or dropping it
+     * to the centre — has to break this test.
+     */
+    @Test
+    fun theFollowPuckSitsInTheLowerThirdNotAtTheBottomEdge() {
+        assertTrue(
+            "Puck must be lifted off the bottom edge (y=${NavFollowPuck.FOLLOWING_Y})",
+            NavFollowPuck.FOLLOWING_Y < 1.0,
+        )
+        assertTrue(
+            "Puck must still lead the view, not sit at/above centre (y=${NavFollowPuck.FOLLOWING_Y})",
+            NavFollowPuck.FOLLOWING_Y > 0.5,
+        )
+        // "Around the lower third": at least two-thirds down the padded box.
+        assertTrue(NavFollowPuck.FOLLOWING_Y >= 2.0 / 3.0)
+    }
+
+    /**
+     * The puck stays horizontally centred: the focal x must be 0.5, the same
+     * statement the symmetric side padding makes. A puck lifted vertically must
+     * not drift sideways.
+     */
+    @Test
+    fun theFollowPuckIsHorizontallyCentred() {
+        assertEquals(0.5, NavFollowPuck.FOLLOWING_X, 0.0)
+    }
+
+    /**
      * **The regression test for "I still see the search result while navigating".**
      *
      * Hidden the moment guidance is running, shown again when it is not — the
