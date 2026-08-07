@@ -223,7 +223,27 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.2.0
 
-      - name: Run Compose UI tests on emulator
+      # The emulator boot is flaky on hosted runners: it intermittently fails to
+      # bring up adb ("Unable to connect to adb daemon on port: 5037") BEFORE the
+      # test script ever runs — a CI-infra failure, not a test failure. Run it as
+      # two attempts so a transient boot failure re-attempts on a fresh emulator
+      # instead of red-flagging the PR. Attempt 1 is continue-on-error so its
+      # failure doesn't fail the job; the retry runs only if it failed, and the
+      # retry's outcome gates the job (both must fail for a real red).
+      - name: Run Compose UI tests on emulator (attempt 1)
+        id: emulator_attempt_1
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          working-directory: apps/android
+          script: ./gradlew --no-daemon connectedDebugAndroidTest
+
+      - name: Run Compose UI tests on emulator (retry)
+        if: steps.emulator_attempt_1.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
