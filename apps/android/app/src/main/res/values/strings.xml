@@ -1390,7 +1390,6 @@
     <string name="shell_saveLocationTitle">Spara plats</string>
     <string name="shell_saveLocationNameLabel">Namn (valfritt)</string>
     <string name="shell_saveLocationSave">Spara</string>
-    <string name="shell_saveLocationShare">Dela</string>
     <string name="shell_saveLocationCancel">Avbryt</string>
     <string name="shell_locationShared">Platsen delades med %1$s</string>
     <string name="shell_locationSharedFriendFallback">din vän</string>
