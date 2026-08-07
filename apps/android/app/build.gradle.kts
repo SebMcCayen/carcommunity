@@ -436,15 +436,20 @@ dependencies {
     // the Android runtime + resources on the JVM; androidx.test.ext:junit's
     // AndroidJUnit4 runner delegates to RobolectricTestRunner off-device; and the
     // Compose test artifacts — reused from the same BoM the app ships, so
-    // versions never drift — supply createComposeRule()/assertions (ui-test-junit4)
-    // and the ComponentActivity host it launches into (ui-test-manifest). This is
-    // the OnboardingScreenTest pilot for running Compose UI tests in the fast,
-    // blocking testDebugUnitTest suite instead of the flaky CI emulator.
+    // versions never drift — supply createComposeRule()/assertions (ui-test-junit4).
+    // This is the OnboardingScreenTest pilot for running Compose UI tests in the
+    // fast, blocking testDebugUnitTest suite instead of the flaky CI emulator.
+    //
+    // The ComponentActivity host createComposeRule() launches into comes from
+    // ui-test-manifest, already a `debugImplementation` below — so it is only in
+    // the DEBUG variant's merged manifest, NEVER the shipped release manifest.
+    // These Compose UI tests therefore live in src/testDebug (the debug-only unit
+    // test source set) so they run under testDebugUnitTest and are excluded from
+    // testReleaseUnitTest, where that host activity does not exist.
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.junit)
     testImplementation(platform(libs.androidx.compose.bom))
     testImplementation(libs.androidx.ui.test.junit4)
-    testImplementation(libs.androidx.ui.test.manifest)
 
     // Instrumented / Compose UI tests
     androidTestImplementation(libs.androidx.junit)

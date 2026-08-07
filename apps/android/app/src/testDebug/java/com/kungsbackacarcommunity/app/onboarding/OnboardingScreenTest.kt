@@ -24,6 +24,14 @@ import org.junit.runner.RunWith
  * level (34) and NATIVE graphics mode come from
  * `src/test/resources/robolectric.properties`.
  *
+ * This lives in `src/testDebug` (the debug-only unit-test source set), not
+ * `src/test`, on purpose: `createComposeRule()` launches into the
+ * ComponentActivity host from `ui-test-manifest`, which is a `debugImplementation`
+ * and so only present in the debug variant's merged manifest. Running under
+ * `testReleaseUnitTest` would fail to resolve that activity, so the test is
+ * scoped to the debug unit-test variant — the convention for future
+ * Compose-on-Robolectric tests here.
+ *
  * Note on `performScrollTo()`: the onboarding form is a vertically-scrolling
  * Column, and under Robolectric a `performClick` only lands when the target is
  * actually within the viewport — an off-screen node is clipped and the toggle
