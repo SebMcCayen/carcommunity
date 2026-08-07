@@ -17,14 +17,15 @@ fun PartnerStatsRoute(
     onBack: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val current by
-        remember(repository, uid) { repository.observeOptIn(uid) }.collectAsState(initial = null)
+    val consent by
+        remember(repository, uid) { repository.observeConsent(uid) }
+            .collectAsState(initial = PartnerStatsConsentState.Unknown)
     val saveStatus by
         (coordinator?.saveStatus ?: flowOf(PartnerStatsSaveStatus.Idle))
             .collectAsState(initial = PartnerStatsSaveStatus.Idle)
 
     PartnerStatsScreen(
-        currentOptIn = current,
+        consent = consent,
         saveStatus = saveStatus,
         onSave = { optIn -> coordinator?.let { c -> scope.launch { c.save(uid, optIn) } } },
         onBack = {

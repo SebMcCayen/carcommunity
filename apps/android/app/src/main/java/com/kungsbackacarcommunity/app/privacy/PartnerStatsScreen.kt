@@ -31,23 +31,34 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  */
 @Composable
 fun PartnerStatsScreen(
-    currentOptIn: Boolean?,
+    consent: PartnerStatsConsentState,
     saveStatus: PartnerStatsSaveStatus,
     onSave: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Seed the pending toggle from the observed value ONCE — decoupled from
-    // later Firestore emissions so a live update doesn't overwrite an edit the
-    // user is in the middle of making. Anonymised partner statistics are
-    // DEFAULT-ON / opt-out: a member who has made no explicit choice (null —
-    // still loading or field absent) sees the toggle ON.
-    var pending by rememberSaveable { mutableStateOf(currentOptIn ?: true) }
-    var seeded by rememberSaveable { mutableStateOf(currentOptIn != null) }
-    LaunchedEffect(currentOptIn) {
-        if (!seeded && currentOptIn != null) {
-            pending = currentOptIn
-            seeded = true
+    // Seed the pending toggle from the first DEFINITIVE read ONCE — decoupled
+    // from later Firestore emissions so a live update doesn't overwrite an edit
+    // the user is in the middle of making. Anonymised partner statistics are
+    // DEFAULT-ON / opt-out, so the toggle shows ON while unresolved; but Save
+    // stays DISABLED until a definitive read ([seeded]) so a transient read
+    // error (Unknown) can never persist the default-on value over an explicitly
+    // opted-out member's real choice.
+    var pending by rememberSaveable { mutableStateOf(true) }
+    var seeded by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(consent) {
+        if (!seeded) {
+            when (consent) {
+                PartnerStatsConsentState.DefaultOn -> {
+                    pending = true
+                    seeded = true
+                }
+                is PartnerStatsConsentState.Chosen -> {
+                    pending = consent.optIn
+                    seeded = true
+                }
+                PartnerStatsConsentState.Unknown -> Unit
+            }
         }
     }
 
@@ -122,7 +133,9 @@ fun PartnerStatsScreen(
 
             Button(
                 onClick = { onSave(pending) },
-                enabled = saveStatus != PartnerStatsSaveStatus.Saving,
+                // Disabled until a definitive read: never let the default-on value
+                // be persisted over an unresolved/errored (Unknown) read.
+                enabled = seeded && saveStatus != PartnerStatsSaveStatus.Saving,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.privacySettings_saveButton))

@@ -7,10 +7,11 @@
  * - Raw user IDs are NEVER stored on insight events: a user is represented
  *   by a partner-scoped SHA-256 hash, so events for the same user at two
  *   different partners cannot be correlated.
- * - anonymous_pass_by contributions require BOTH the user's explicit
- *   anonymousPartnerStatsOptIn AND the pass-by feature flag (default OFF).
- *   A non-opted-in contribution returns { recorded: false } silently —
- *   opting out must be unobservable.
+ * - anonymous_pass_by contributions require the pass-by feature flag
+ *   (default OFF) AND default-on / opt-out consent: a user contributes
+ *   unless anonymousPartnerStatsOptIn is explicitly `false` (missing/true
+ *   both contribute). An opted-out contribution returns { recorded: false }
+ *   silently — opting out must be unobservable.
  * - Aggregates for anonymous_pass_by below the minimum-unique-contributor
  *   threshold are ZEROED (status insufficient_data, counts 0/null), not
  *   merely hidden — a small partner can never infer individuals.

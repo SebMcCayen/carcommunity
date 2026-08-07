@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.privacy
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -33,7 +34,7 @@ class PartnerStatsScreenTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerStatsScreen(
-                    currentOptIn = false,
+                    consent = PartnerStatsConsentState.Chosen(false),
                     saveStatus = PartnerStatsSaveStatus.Idle,
                     onSave = { saved = it },
                     onBack = {},
@@ -55,7 +56,7 @@ class PartnerStatsScreenTest {
         composeTestRule.setContent {
             KccTheme {
                 PartnerStatsScreen(
-                    currentOptIn = null,
+                    consent = PartnerStatsConsentState.DefaultOn,
                     saveStatus = PartnerStatsSaveStatus.Idle,
                     onSave = { saved = it },
                     onBack = {},
@@ -68,11 +69,35 @@ class PartnerStatsScreenTest {
     }
 
     @Test
+    fun unknownState_disablesSave_soAReadErrorCannotOverwrite() {
+        // Unknown = still loading or a read error. The toggle shows the default-on
+        // value, but Save must be DISABLED so a transient error can never persist
+        // the default over an explicitly opted-out member's real choice.
+        var saved: Boolean? = null
+        composeTestRule.setContent {
+            KccTheme {
+                PartnerStatsScreen(
+                    consent = PartnerStatsConsentState.Unknown,
+                    saveStatus = PartnerStatsSaveStatus.Idle,
+                    onSave = { saved = it },
+                    onBack = {},
+                )
+            }
+        }
+        composeTestRule.onNode(androidx.compose.ui.test.isToggleable()).assertIsOn()
+        composeTestRule
+            .onNodeWithText(str(R.string.privacySettings_saveButton))
+            .performScrollTo()
+            .assertIsNotEnabled()
+        assertEquals(null, saved)
+    }
+
+    @Test
     fun savedStatus_showsConfirmation() {
         composeTestRule.setContent {
             KccTheme {
                 PartnerStatsScreen(
-                    currentOptIn = true,
+                    consent = PartnerStatsConsentState.Chosen(true),
                     saveStatus = PartnerStatsSaveStatus.Saved,
                     onSave = {},
                     onBack = {},

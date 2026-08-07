@@ -14,7 +14,8 @@ class PartnerStatsCoordinatorTest {
         val writes = mutableListOf<Pair<String, Boolean>>()
         var failWith: Exception? = null
 
-        override fun observeOptIn(uid: String): Flow<Boolean?> = flowOf(null)
+        override fun observeConsent(uid: String): Flow<PartnerStatsConsentState> =
+            flowOf(PartnerStatsConsentState.DefaultOn)
 
         override suspend fun setOptIn(uid: String, optIn: Boolean) {
             failWith?.let { throw it }
