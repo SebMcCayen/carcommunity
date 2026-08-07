@@ -36,12 +36,14 @@ import {
   countDistinctReporters,
   shouldAutoHide,
 } from './chat-core';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 export const onMessageReportCreate = onDocumentCreated(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_TRIGGER,
+    cpu: CPU_TRIGGER,
+    concurrency: 1,
     document: 'events/{eventId}/messageReports/{reportId}',
     memory: '256MiB',
     timeoutSeconds: 30,

@@ -29,7 +29,7 @@ import {
   parseModerationInput,
 } from './claims-core';
 import { toUserAccessState } from '../shared/access';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 
 export interface ModerationStatusResponse {
   targetUid: string;
@@ -40,6 +40,8 @@ export const suspendUser = onCall(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_ADMIN,
+    cpu: CPU_ADMIN,
+    concurrency: 1,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

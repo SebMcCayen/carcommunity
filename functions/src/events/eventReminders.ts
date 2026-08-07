@@ -64,7 +64,7 @@ import {
   reminderWindowEnd,
   reminderWindowStart,
 } from './eventReminders-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Candidate events fetched per query round-trip. */
@@ -388,6 +388,8 @@ export const remindUpcoming = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 300,

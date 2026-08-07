@@ -21,7 +21,7 @@
 import { onCall } from 'firebase-functions/v2/https';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 import { MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD } from './insights-core';
 import {
   DRIVE_HEAT_DOC_PATH,
@@ -63,6 +63,8 @@ export const driveHeat = onCall(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_ADMIN,
+    cpu: CPU_ADMIN,
+    concurrency: 1,
     memory: '256MiB',
     timeoutSeconds: 30,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

@@ -42,7 +42,7 @@ import {
   parsePurgeInput,
 } from './purgeNeverOnboarded-core';
 import { purgeUserData } from '../account/scheduled';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 
 /** A dry-run candidate — NON-SENSITIVE identifiers only (never name/email). */
 export interface PurgeCandidate {
@@ -160,6 +160,8 @@ export const purgeNeverOnboarded = onCall(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_ADMIN,
+    cpu: CPU_ADMIN,
+    concurrency: 1,
     memory: '512MiB',
     timeoutSeconds: 540,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',

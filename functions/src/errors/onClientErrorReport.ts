@@ -46,7 +46,7 @@ import {
   type ClientErrorReport,
   type GitHubIssueStatus,
 } from './clientErrors-core';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 /** Same secret bound to feedback.reportIssue + diagnostics-onSignInFailure. */
 const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
@@ -84,6 +84,8 @@ export const onClientErrorReport = onDocumentCreated(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_TRIGGER,
+    cpu: CPU_TRIGGER,
+    concurrency: 1,
     document: 'clientErrorReports/{reportId}',
     memory: '256MiB',
     timeoutSeconds: 30,

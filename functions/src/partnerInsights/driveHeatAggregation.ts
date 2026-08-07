@@ -198,6 +198,13 @@ const SCHEDULE_OPTS = {
   // Route decoding + H3 binning over many drives is CPU/memory heavier than the
   // interaction aggregation; give it more headroom than the 256 MiB default.
   memory: '1GiB' as const,
+  // DELIBERATE EXCEPTION to the CPU_SCHEDULED (0.5 vCPU) tier: this job decodes
+  // 90 days of route files and H3-bins them, so it is genuinely CPU-bound and
+  // stays at a full vCPU to avoid timeouts. concurrency stays 1 (scheduled, one
+  // invocation per tick), which is also required to pin cpu without hitting the
+  // gen2 "cpu < 1 needs concurrency 1" rule — here cpu is 1, so it is unaffected.
+  cpu: 1,
+  concurrency: 1,
   timeoutSeconds: 540,
 };
 

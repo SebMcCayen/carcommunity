@@ -71,7 +71,7 @@ import {
   reconcileDerivedBadgeCounters,
   tryEvaluateBadgeTiers,
 } from './tierAwards';
-import { MAX_INSTANCES_TRIGGER_FANOUT } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER_FANOUT, CPU_TRIGGER_FANOUT } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
@@ -79,6 +79,8 @@ const TRIGGER_OPTS = {
   // every sign-in (a morning spike across the whole member base) and each
   // counter bump cascades into onBadgeProgressWritten.
   maxInstances: MAX_INSTANCES_TRIGGER_FANOUT,
+  cpu: CPU_TRIGGER_FANOUT,
+  concurrency: 1,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
 };

@@ -40,7 +40,7 @@ import {
 import { defineSecret } from 'firebase-functions/params';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 import { fileAutoIssue } from '../shared/autoIssueFiling';
 import {
   CRASHLYTICS_ISSUE_LINKS_COLLECTION,
@@ -58,6 +58,8 @@ const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 const CRASHLYTICS_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_TRIGGER,
+  cpu: CPU_TRIGGER,
+  concurrency: 1,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
   secrets: [GITHUB_ISSUE_TOKEN],

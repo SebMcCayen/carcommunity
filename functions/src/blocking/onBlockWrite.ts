@@ -44,7 +44,7 @@ import { adminRtdb, db } from '../firebase';
 import { shouldHidePair } from './block-visibility';
 import { applyPairVisibility } from './blockVisibilityStore';
 import { setConversationBlocked } from '../dm/blockedConversation';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 export const blockMirrorRef = (blockerUid: string, blockedUid: string) =>
   adminRtdb.ref(`liveLocationBlocks/${blockerUid}/${blockedUid}`);
@@ -64,6 +64,8 @@ export const onBlockWrite = onDocumentWritten(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_TRIGGER,
+    cpu: CPU_TRIGGER,
+    concurrency: 1,
     document: 'userBlocks/{blockerUid}/blocked/{blockedUid}',
     memory: '256MiB',
     timeoutSeconds: 60,

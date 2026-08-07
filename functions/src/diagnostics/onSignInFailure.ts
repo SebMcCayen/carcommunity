@@ -57,7 +57,7 @@ import {
   extractSignInFailureReport,
   type SignInIssueLink,
 } from './signInIssues-core';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 /**
  * Fine-grained GitHub token with `issues: write` on SebMcCayen/carcommunity —
@@ -71,6 +71,8 @@ export const onSignInFailure = onDocumentCreated(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_TRIGGER,
+    cpu: CPU_TRIGGER,
+    concurrency: 1,
     document: 'diagnosticsReports/{reportId}',
     memory: '256MiB',
     timeoutSeconds: 30,

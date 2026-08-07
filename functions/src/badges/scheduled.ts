@@ -59,7 +59,7 @@ import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { evaluateAndAwardBadgeTiers, reconcileDerivedBadgeCounters } from './tierAwards';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Members evaluated per run. */
@@ -142,6 +142,8 @@ export const evaluateBacklog = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     schedule: 'every 6 hours',
     timeZone: 'Europe/Stockholm',
     memory: '512MiB',

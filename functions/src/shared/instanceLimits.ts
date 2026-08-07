@@ -130,3 +130,46 @@ export const MAX_INSTANCES_TRIGGER_FANOUT = 50;
  * reason and is deliberately not on this tier.
  */
 export const MAX_INSTANCES_SCHEDULED = 2;
+
+/**
+ * Per-function CPU allocation — the regional-quota guardrail.
+ *
+ * Cloud Run gen2 (which backs every v2 function here) allocates a whole vCPU
+ * per instance by default, and europe-west1 enforces a **total allowable CPU
+ * per project per region** quota. During a deploy each function's new revision
+ * spins up *beside* its old one, so momentary CPU demand is ~2x the steady
+ * footprint; at ~172 functions x 1 vCPU that transient peak now exceeds the
+ * regional quota and fails the `Deploy Firebase Functions` job on every merge.
+ *
+ * Dropping the idle/serialized tiers to 0.5 vCPU roughly halves their share of
+ * that peak. Mirror the instance tiers above: each options object references
+ * one of these next to its `MAX_INSTANCES_*`, so a function's CPU is visible at
+ * its definition and a tier changes for every member at once.
+ *
+ * ## The hard Cloud Run constraint
+ *
+ * A gen2 instance may only run **`cpu` < 1 when `concurrency` === 1**. v2
+ * HTTP/callable functions default to `concurrency: 80`, so ANY options object
+ * that sets one of these sub-1 constants MUST also set `concurrency: 1`, or the
+ * deploy fails validation before it starts. That pairing is safe exactly where
+ * we apply it:
+ *  - admin/operator callables are near-idle (a few operators clicking), so they
+ *    never needed concurrency 80;
+ *  - Firestore triggers and scheduled jobs already process one event/tick per
+ *    instance, so `concurrency: 1` is a behavioural no-op for them.
+ *
+ * ## Deliberately NOT reduced (kept at the gen2 default of 1 vCPU)
+ *
+ * - `MAX_INSTANCES_HOT` and `MAX_INSTANCES_MEMBER` — ordinary and hot member
+ *   callables rely on `concurrency: 80` for throughput; pinning them to
+ *   `concurrency: 1` would serialize real user traffic. They keep 1 vCPU. A
+ *   future pass could revisit MEMBER, but not by starving concurrency.
+ * - Genuinely CPU-heavy jobs on an otherwise-reduced tier — notably the
+ *   drive-heat aggregation (`partnerInsights/driveHeatAggregation.ts`), which
+ *   decodes 90 days of routes and H3-bins them. Those pin `cpu: 1` explicitly
+ *   even though they sit on `MAX_INSTANCES_SCHEDULED`.
+ */
+export const CPU_ADMIN = 0.5;
+export const CPU_TRIGGER = 0.5;
+export const CPU_TRIGGER_FANOUT = 0.5;
+export const CPU_SCHEDULED = 0.5;

@@ -59,7 +59,7 @@ import {
   seasonIdForInstant,
   type LeaderboardCounter,
 } from './crown-hunt-stats-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 
 /** How many ranked members are stored on the finalized season document. */
 export const SEASON_STANDINGS_LIMIT = 100;
@@ -302,6 +302,8 @@ export const rolloverSeason = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     schedule: '15 0 * * *',
     timeZone: 'Europe/Stockholm',
     memory: '512MiB',

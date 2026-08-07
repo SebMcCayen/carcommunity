@@ -43,11 +43,13 @@ import {
   stockholmDayKey,
 } from './points-economy-core';
 import { creditVerifiedEventAttendance } from '../badges/awards';
-import { MAX_INSTANCES_TRIGGER } from '../shared/instanceLimits';
+import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_TRIGGER,
+  cpu: CPU_TRIGGER,
+  concurrency: 1,
   memory: '256MiB' as const,
   timeoutSeconds: 60,
 };

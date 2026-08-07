@@ -46,6 +46,7 @@ import { FieldValue, Timestamp, type DocumentData } from 'firebase-admin/firesto
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
+import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import {
   ACTIVITY_WINDOW_MS,
   CROWN_SPAWN_FLAG_KEY,
@@ -889,6 +890,11 @@ const SPAWN_SCHEDULE_OPTS = {
   memory: '256MiB' as const,
   timeoutSeconds: 300,
   maxInstances: 1,
+  // Half a vCPU — this scheduled pair is on the CPU_SCHEDULED tier in spirit
+  // (one lightweight read-then-write pass per tick, not CPU-bound). concurrency
+  // is already pinned to 1 above, so dropping below a full vCPU is allowed by
+  // the gen2 "cpu < 1 requires concurrency 1" rule.
+  cpu: CPU_SCHEDULED,
   concurrency: 1,
 };
 

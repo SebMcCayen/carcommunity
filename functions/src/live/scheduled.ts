@@ -33,7 +33,7 @@ import {
   computeDriveStats,
   type SaveDriveInput,
 } from '../drives/drives-core';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Max discovery docs deleted per sweep (bounded; the 5-min cadence catches up). */
@@ -259,6 +259,8 @@ export const cleanupExpired = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 120,

@@ -46,7 +46,7 @@ import { logger } from 'firebase-functions';
 import type { Query } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { withServerErrorReporting } from '../errors/serverErrors';
-import { MAX_INSTANCES_SCHEDULED } from '../shared/instanceLimits';
+import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { decideVisibility, type VisibilityChange } from './billboards-core';
 
 /**
@@ -158,6 +158,8 @@ export const sweepVisibility = onSchedule(
   {
     region: 'europe-west1',
     maxInstances: MAX_INSTANCES_SCHEDULED,
+    cpu: CPU_SCHEDULED,
+    concurrency: 1,
     timeZone: 'Europe/Stockholm',
     memory: '256MiB' as const,
     timeoutSeconds: 120,

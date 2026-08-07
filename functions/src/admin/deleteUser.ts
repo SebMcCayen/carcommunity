@@ -56,11 +56,13 @@ import {
 import { isUserRole, toUserAccessState, type UserRole } from '../shared/access';
 import { purgeUserData } from '../account/scheduled';
 import { isAlreadyExistsError } from '../chatchannels/chat-core';
-import { MAX_INSTANCES_ADMIN } from '../shared/instanceLimits';
+import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_ADMIN,
+  cpu: CPU_ADMIN,
+  concurrency: 1,
   // The full erasure sweep (doc trees, mirrors, RTDB, storage, Auth user) is
   // heavier than the other admin callables, so it gets the scheduled-purge
   // memory/timeout budget rather than the 256MiB/30s moderation default.
