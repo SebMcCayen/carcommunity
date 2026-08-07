@@ -25,6 +25,9 @@ importers:
       firebase-functions:
         specifier: ^7.3.2
         version: 7.3.2(firebase-admin@13.10.0)
+      h3-js:
+        specifier: ^4.2.1
+        version: 4.5.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -2166,6 +2169,10 @@ packages:
   gtoken@8.0.0:
     resolution: {integrity: sha512-+CqsMbHPiSTdtSO14O51eMNlrp9N79gmeqmXeouJOhfucAedHw9noVe/n5uJk3tbKE6a+6ZCQg3RPhVhHByAIw==}
     engines: {node: '>=18'}
+
+  h3-js@4.5.0:
+    resolution: {integrity: sha512-uKmdPc+DuarnR+XqZxEuWOMw7KzzKROrx3MLeJpFnMOs78S9M5eZ+X5RieS9UcSFQqbeXzbfWuX/W9Pyajinqw==}
+    engines: {node: '>=4', npm: '>=3', yarn: '>=1.3.0'}
 
   has-flag@4.0.0:
     resolution: {integrity: sha512-EykJT/Q1KjTWctppgIAgfSO0tKVuZUjhgMr17kqTumMl6Afv3EISleU7qZUzoXDFTAHTDC4NOoG/ZxU3EvlMPQ==}
@@ -6197,6 +6204,8 @@ snapshots:
       jws: 4.0.1
     transitivePeerDependencies:
       - supports-color
+
+  h3-js@4.5.0: {}
 
   has-flag@4.0.0: {}
 

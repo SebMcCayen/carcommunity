@@ -912,6 +912,20 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // partnerDriveHeat – anonymised DRIVE HEATMAP aggregate (partner-facing).
+    // A single backend-written document (partnerDriveHeat/current) of H3 heat
+    // cells, each holding only { h3Index, contributorCount, weight } with a
+    // ≥10 unique-contributor floor and drive endpoints trimmed. It is written
+    // ONLY by the scheduled partnerInsights-aggregateDriveHeat job (Admin SDK,
+    // which bypasses these rules) and read ONLY through the admin-gated
+    // partnerInsights.driveHeat callable — never client-readable, so no partner
+    // or member can pull the aggregate directly.
+    // -------------------------------------------------------------------------
+    match /partnerDriveHeat/{docId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // metrics – community growth snapshots (admin-only, server-written)
     // One bounded document per day (`metrics/{YYYY-MM-DD}`) of PII-free
     // aggregate totals, written ONLY by the scheduled metrics-captureDaily job

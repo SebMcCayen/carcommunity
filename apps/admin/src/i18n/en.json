@@ -682,6 +682,25 @@
     "retry": "Retry",
     "backToPartner": "Back to partner"
   },
+  "driveHeat": {
+    "pageTitle": "Drive heatmap",
+    "pageDescription": "An anonymised heatmap of where the community drives, aggregated into a hex grid. Use it to see the busiest areas for in-app digital billboard placements.",
+    "privacyNote": "Aggregate only. Companies never see identity, live location or drive history. A hex appears only if at least 10 distinct drivers drove there, and every drive's start and end (home/work) is trimmed off before aggregation.",
+    "meta": "Rolling {windowDays} days. Last updated: {generatedAt}. {cells} hexes shown.",
+    "legendTitle": "Relative drive density",
+    "legendNote": "Colour shows how much an area is driven relative to the busiest one — not absolute counts.",
+    "bandLow": "Low",
+    "bandModerate": "Moderate",
+    "bandBusy": "Busy",
+    "bandHigh": "High",
+    "bandVeryHigh": "Very high",
+    "attribution": "Anonymised aggregate drive density",
+    "sparse": "No heatmap yet. It stays sparse until drive volume clears the floor of at least 10 unique drivers per hex.",
+    "neverRun": "not run yet",
+    "loading": "Loading heatmap …",
+    "error": "Could not load the heatmap.",
+    "retry": "Retry"
+  },
   "billboards": {
     "pageTitle": "Digital Billboards",
     "pageDescription": "Manage sponsored digital billboard placements on the map.",

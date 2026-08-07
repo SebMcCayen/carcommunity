@@ -108,6 +108,53 @@
       },
       "required": ["recorded"],
       "additionalProperties": false
+    },
+    "driveHeatCell": {
+      "type": "object",
+      "description": "One anonymised drive-heat cell — the ONLY per-cell shape that leaves the backend. No user ids, routes, endpoints or timestamps. contributorCount is always >= 10 (the unique-contributor floor); cells below it are omitted entirely, never zeroed-and-shown.",
+      "properties": {
+        "h3Index": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{15,16}$",
+          "description": "H3 cell index at resolution 10 (~150 m across)."
+        },
+        "contributorCount": {
+          "type": "integer",
+          "minimum": 10,
+          "description": "Distinct consented users who drove this cell (>= the privacy floor)."
+        },
+        "weight": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total drive-traversals of this cell (density signal; carries no identity)."
+        }
+      },
+      "required": ["h3Index", "contributorCount", "weight"],
+      "additionalProperties": false
+    },
+    "driveHeatResponse": {
+      "type": "object",
+      "description": "Raw payload of the partnerInsights.driveHeat admin callable (no { ok, data } envelope). The anonymised H3 drive heatmap: consented users' completed drives over a rolling window, endpoints trimmed, binned to H3 cells and floored at >= 10 unique contributors per hex.",
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/driveHeatCell" }
+        },
+        "resolution": {
+          "type": "integer",
+          "description": "H3 resolution the cells are binned at (10), so the client renders boundaries to match."
+        },
+        "windowDays": {
+          "type": "integer",
+          "description": "Rolling window (days) of completed drives folded into the aggregate."
+        },
+        "generatedAt": {
+          "type": ["string", "null"],
+          "description": "ISO 8601 build time of the aggregate, or null if it has never run."
+        }
+      },
+      "required": ["cells", "resolution", "windowDays", "generatedAt"],
+      "additionalProperties": false
     }
   }
 }

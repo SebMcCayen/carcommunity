@@ -95,6 +95,8 @@ import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partn
 import { recordInteraction } from './partnerInsights/recordInteraction';
 import { aggregateDaily, cleanupExpired } from './partnerInsights/scheduled';
 import { adminSummary as partnerInsightsAdminSummary } from './partnerInsights/adminSummary';
+import { driveHeat as partnerInsightsDriveHeat } from './partnerInsights/driveHeat';
+import { aggregateDriveHeat_scheduled } from './partnerInsights/driveHeatAggregation';
 import {
   activate as activateBillboard,
   create as createBillboard,
@@ -538,22 +540,27 @@ export const partners = {
 
 /**
  * Partner insights domain (grouped export → deployed as
- * `partnerInsights-recordInteraction` plus the migration's first scheduled
- * functions `partnerInsights-aggregateDaily` and
- * `partnerInsights-cleanupExpired`).
+ * `partnerInsights-recordInteraction`, `partnerInsights-adminSummary`,
+ * `partnerInsights-driveHeat`, plus the scheduled functions
+ * `partnerInsights-aggregateDaily`, `partnerInsights-cleanupExpired` and
+ * `partnerInsights-aggregateDriveHeat`).
  *
  * Privacy-critical (contracts/functions/functions.json): events carry only
  * partner-scoped user hashes, anonymous_pass_by requires the flag and
  * default-on consent (only an explicit opt-out is silently excluded),
  * aggregates enforce the minimum-contributor
  * threshold with zeroed below-threshold counts, and raw events expire
- * after 7 days.
+ * after 7 days. The drive heatmap adds an anonymised H3 heat aggregate over
+ * consented users' completed drives, floored at ≥10 unique contributors per
+ * hex with endpoints trimmed (driveHeatAggregation.ts / drive-heat-core.ts).
  */
 export const partnerInsights = {
   recordInteraction,
   adminSummary: partnerInsightsAdminSummary,
+  driveHeat: partnerInsightsDriveHeat,
   aggregateDaily,
   cleanupExpired,
+  aggregateDriveHeat: aggregateDriveHeat_scheduled,
 };
 
 /**

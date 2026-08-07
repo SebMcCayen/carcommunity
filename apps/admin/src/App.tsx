@@ -24,6 +24,7 @@ const PartnersPage = lazy(() => import('@/app/partners/page'));
 const PartnerApplicationsPage = lazy(() => import('@/app/partners/applications/page'));
 const PartnerOffersPage = lazy(() => import('@/app/partners/offers/page'));
 const PartnerInsightsPage = lazy(() => import('@/app/partners/[partnerId]/insights/page'));
+const PartnerDriveHeatPage = lazy(() => import('@/app/partners/drive-heat/page'));
 const BillboardsPage = lazy(() => import('@/app/billboards/page'));
 const KronjaktPage = lazy(() => import('@/app/kronjakt/page'));
 const MetricsPage = lazy(() => import('@/app/metrics/page'));
@@ -83,6 +84,7 @@ export function App() {
         <Route path="/partners" element={<PartnersPage />} />
         <Route path="/partners/applications" element={<PartnerApplicationsPage />} />
         <Route path="/partners/offers" element={<PartnerOffersPage />} />
+        <Route path="/partners/drive-heat" element={<PartnerDriveHeatPage />} />
         <Route path="/partners/:partnerId/insights" element={<PartnerInsightsPage />} />
         <Route path="/billboards" element={<BillboardsPage />} />
         <Route path="/kronjakt" element={<KronjaktPage />} />

@@ -568,6 +568,15 @@
       "source": "services/api/src/lib/partner-insights-service.ts (admin/partner summary)"
     },
     {
+      "name": "partnerInsights.driveHeat",
+      "domain": "partnerInsights",
+      "description": "Read path for the anonymised DRIVE HEATMAP shown to partners so they can buy in-app digital billboards in the busiest areas. Returns the current aggregate's H3 heat cells, each ONLY { h3Index, contributorCount, weight } — no user ids, no routes, no endpoints, no timestamps. The aggregate is built daily by the scheduled partnerInsights-aggregateDriveHeat over a rolling 90-day window of COMPLETED drives from users with anonymousPartnerStatsOptIn === true: each route.bin is decoded, its endpoints trimmed (~200 m off each end to hide the home/work reveal), binned into H3 res-10 cells (~150 m across, hugging roads), and every cell below the ≥10 unique-contributor floor (MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD, config can only raise) is OMITTED entirely. partnerDriveHeat is backend-only (firestore.rules read,write:false, even for admins) so this callable is the only way in; it re-applies the ≥10 floor at read time as defense in depth. Live sessions are NOT a source (they keep no path). Heat is SPARSE until drive volume clears the floor. Deployed via grouped export as partnerInsights-driveHeat (functions/src/partnerInsights/driveHeat.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Partner insights — drive heatmap MVP)"
+    },
+    {
       "name": "billboards.create",
       "domain": "billboards",
       "description": "Creates a draft sponsored billboard for an existing partner (headline <=100, message <=300, placement enum, coordinates, optional CTA pair + safety note + image under billboardImages/{billboardId}/). Audited. Deployed via grouped export as billboards-create (functions/src/billboards/manageBillboard.ts).",

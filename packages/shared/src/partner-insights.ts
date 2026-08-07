@@ -115,3 +115,45 @@ export const MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD = 10;
 export const PASS_BY_RADIUS_METERS = 100;
 export const INTERACTION_EVENT_TTL_DAYS = 7;
 export const PASS_BY_CONTRIBUTION_TTL_DAYS = 2;
+
+// ---------------------------------------------------------------------------
+// Drive heatmap (anonymised H3 heat over consented users' completed drives)
+// ---------------------------------------------------------------------------
+
+/**
+ * H3 resolution the drive-heat cells are binned at. Res 10 ≈ 76 m hexagon edge
+ * (~150 m across) — fine enough that the heat visibly hugs roads, coarse enough
+ * that drivers concentrate into cells that can clear the ≥10 contributor floor.
+ * Kept in sync with the backend DRIVE_HEAT_H3_RESOLUTION.
+ */
+export const DRIVE_HEAT_H3_RESOLUTION = 10;
+
+/** Metres trimmed from each end of a drive before binning (home/work reveal). */
+export const DRIVE_HEAT_ENDPOINT_TRIM_METERS = 200;
+
+/**
+ * One anonymised drive-heat cell. The ONLY per-cell shape that ever leaves the
+ * backend: no user ids, no routes, no endpoints, no timestamps.
+ */
+export interface DriveHeatCell {
+  /** H3 cell index at {@link DRIVE_HEAT_H3_RESOLUTION}. */
+  h3Index: string;
+  /** Distinct consented users who drove this cell — always ≥ the privacy floor. */
+  contributorCount: number;
+  /** Total drive-traversals of this cell (density signal, carries no identity). */
+  weight: number;
+}
+
+/**
+ * Raw payload of the partnerInsights.driveHeat admin callable (no { ok, data }
+ * envelope — callAdmin returns this directly).
+ */
+export interface DriveHeatResult {
+  cells: DriveHeatCell[];
+  /** H3 resolution of the cells, so the client renders boundaries to match. */
+  resolution: number;
+  /** Rolling window (days) of completed drives folded into the aggregate. */
+  windowDays: number;
+  /** ISO 8601 build time of the aggregate, or null if it has never run. */
+  generatedAt: string | null;
+}
