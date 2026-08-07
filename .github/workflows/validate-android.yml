@@ -225,34 +225,41 @@ jobs:
 
       # ROOT-CAUSE FIX for the intermittent "Unable to connect to adb daemon on
       # port: 5037" → "Failed to start Emulator console" flake: the job used to
-      # COLD-boot a full API-34 system image every run (-no-snapshot + fresh
-      # image install), and that cold boot occasionally never became adb-ready.
-      # Now we (1) boot the CI-optimised google_atd image (Automated Test Device,
-      # WITH Google APIs the app needs — Firebase/Maps — but far lighter/faster to
-      # boot than the full image), and (2) cache the AVD + a warm snapshot so runs
-      # boot from a known-good snapshot instead of cold. Actions cache is FREE
-      # (10 GB, auto-evicting) and separate from the artifact-storage quota.
-      # Cache ONLY the AVD dir (the snapshot lives here) — deliberately NOT
-      # ~/.android/adb* which matches the private `adbkey`; the emulator gets its
-      # adb pubkey injected at boot (androidboot.qemu.adb.pubkey), so the key does
-      # not need caching, and keeping a private key out of the cache avoids any
-      # blast-radius if a cache is restored in an untrusted context.
+      # COLD-boot the system image every run (-no-snapshot + fresh image install),
+      # and that cold boot occasionally never became adb-ready. Now we cache the
+      # AVD + a warm snapshot so runs boot from a known-good snapshot instead of
+      # cold — THIS is the actual reliability fix. (An earlier attempt used the
+      # google_atd Automated Test Device image; it boots faster but is too minimal
+      # — performTextInput did not register on it, failing UI tests. google_apis
+      # is the full image WITH the Google APIs the app needs — Firebase/Maps — and
+      # a working IME.) Actions cache is FREE (10 GB, auto-evicting) and separate
+      # from the artifact-storage quota.
+      # runner.os is in the key so a snapshot is never restored across a runner
+      # image change (which can itself cause boot issues). Cache ONLY the AVD dir
+      # (the snapshot lives here) — deliberately NOT ~/.android/adb* which matches
+      # the private `adbkey`; the emulator gets its adb pubkey injected at boot
+      # (androidboot.qemu.adb.pubkey), so the key does not need caching, and
+      # keeping a private key out of the cache avoids any blast-radius.
       - name: AVD cache
         uses: actions/cache@v4
         id: avd-cache
         with:
           path: |
             ~/.android/avd/*
-          key: avd-google_atd-34-x86_64-v2
+          key: avd-${{ runner.os }}-google_apis-34-x86_64-v3
 
       # On a cache miss, create the AVD once and boot it to generate the snapshot
       # the cache stores. Skipped entirely on a cache hit.
+      # continue-on-error: this step is itself a cold boot (the flaky part). If it
+      # flakes, don't kill the job before the retry-backed test attempts run —
+      # they'll cold-boot without a snapshot as a fallback.
       - name: Create AVD + snapshot (cache miss only)
         if: steps.avd-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_atd
+          target: google_apis
           arch: x86_64
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
@@ -270,7 +277,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_atd
+          target: google_apis
           arch: x86_64
           force-avd-creation: false
           disable-animations: true
@@ -283,7 +290,7 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          target: google_atd
+          target: google_apis
           arch: x86_64
           force-avd-creation: false
           disable-animations: true
