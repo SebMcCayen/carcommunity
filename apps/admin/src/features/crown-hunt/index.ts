@@ -133,6 +133,22 @@ export type {
   GeoJsonPolygonFeature,
 } from './spawn-areas';
 
+// Auto-spawn DIAGNOSTICS (spawn-diagnostics.ts) — the read-only troubleshooting
+// view over the marked-area spawn engine: the crownHunt.spawnDiagnostics wrapper
+// plus the pure countdown / queue-ETA / candidate-cell helpers used by the panel.
+export {
+  adminSpawnDiagnostics,
+  countdownSeconds,
+  estimateAreaService,
+  candidateCells,
+} from './spawn-diagnostics';
+export type {
+  AdminCrownSpawnDiagnosticsRequest,
+  AdminCrownSpawnDiagnosticsResponse,
+  CrownSpawnDiagnosticCell,
+  AreaServiceEstimate,
+} from './spawn-diagnostics';
+
 // STATISTICS + LEADERBOARD + SEASONS (stats.ts) — admin read layer over the
 // #710 aggregates (spawn/collect totals, per-cell heat-map, ranked leaderboard,
 // season winners), all direct rules-gated Firestore reads.

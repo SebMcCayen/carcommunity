@@ -589,6 +589,143 @@
       },
       "required": ["areas"],
       "additionalProperties": false
+    },
+    "spawnDiagnosticsRequest": {
+      "type": "object",
+      "description": "Input for crownHunt.spawnDiagnostics (admin). Names one marked area to troubleshoot.",
+      "properties": {
+        "areaId": { "type": "string", "minLength": 1, "maxLength": 64 }
+      },
+      "required": ["areaId"],
+      "additionalProperties": false
+    },
+    "spawnDiagnosticsCell": {
+      "type": "object",
+      "description": "Per-cell diagnostics for one grid cell of a marked area, in the marked-area spawn engine's own decision shape.",
+      "properties": {
+        "cellKey": { "type": "string", "minLength": 1 },
+        "center": { "$ref": "#/$defs/crownSpawnAreaVertex" },
+        "bounds": {
+          "type": "object",
+          "properties": {
+            "minLat": { "type": "number" },
+            "maxLat": { "type": "number" },
+            "minLon": { "type": "number" },
+            "maxLon": { "type": "number" }
+          },
+          "required": ["minLat", "maxLat", "minLon", "maxLon"],
+          "additionalProperties": false
+        },
+        "activityScore": { "type": "number", "minimum": 0 },
+        "target": { "type": "integer", "minimum": 0 },
+        "liveCount": { "type": "integer", "minimum": 0 },
+        "deficit": { "type": "integer", "minimum": 0 },
+        "poiCount": { "type": "integer", "minimum": 0 },
+        "poiCountCapped": { "type": "boolean" },
+        "poiAnchors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "lat": { "type": "number" },
+              "lon": { "type": "number" },
+              "category": { "type": "string", "enum": ["parking", "fuel", "charging"] }
+            },
+            "required": ["lat", "lon", "category"],
+            "additionalProperties": false
+          }
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["would_spawn", "below_activity_floor", "at_target", "no_pois_in_cell"]
+        },
+        "eligible": { "type": "boolean" }
+      },
+      "required": [
+        "cellKey",
+        "center",
+        "bounds",
+        "activityScore",
+        "target",
+        "liveCount",
+        "deficit",
+        "poiCount",
+        "poiCountCapped",
+        "poiAnchors",
+        "reason",
+        "eligible"
+      ],
+      "additionalProperties": false
+    },
+    "spawnDiagnosticsResponse": {
+      "type": "object",
+      "description": "Response of crownHunt.spawnDiagnostics (admin) — a read-only snapshot of the marked-area auto-spawn engine's state for one area: WHEN the next run is (serverTime + nextRunAt for a client-side countdown), WHERE crowns would land (the scanned cells + candidateCellCount), and WHY nothing is spawning (blockers). Every time-relative estimate is derived client-side and framed as an ESTIMATE (round-robin queue + shared per-run cell budget + already-at-target cells).",
+      "properties": {
+        "areaId": { "type": "string", "minLength": 1 },
+        "name": { "type": ["string", "null"], "maxLength": 120 },
+        "shape": { "$ref": "#/$defs/crownSpawnAreaShape" },
+        "flagEnabled": { "type": "boolean" },
+        "active": { "type": "boolean" },
+        "safeAreaConfirmed": { "type": "boolean" },
+        "areaPoiCount": { "type": "integer", "minimum": 0 },
+        "poisRefreshedAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "serverTime": { "type": "string", "format": "date-time" },
+        "nextRunAt": { "type": "string", "format": "date-time" },
+        "runIntervalSeconds": { "type": "integer", "minimum": 1 },
+        "activeAreaCount": { "type": "integer", "minimum": 0 },
+        "areasAhead": { "type": "integer", "minimum": 0 },
+        "maxAreasPerRun": { "type": "integer", "minimum": 1 },
+        "maxAreaCellsPerRun": { "type": "integer", "minimum": 1 },
+        "lastSpawnPassAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
+        "totalCells": { "type": "integer", "minimum": 0 },
+        "cellsTruncated": { "type": "boolean" },
+        "nextCellOffset": { "type": "integer", "minimum": 0 },
+        "cellsScanned": { "type": "integer", "minimum": 0 },
+        "candidateCellCount": { "type": "integer", "minimum": 0 },
+        "cells": { "type": "array", "items": { "$ref": "#/$defs/spawnDiagnosticsCell" } },
+        "blockers": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "spawn_flag_off",
+              "area_inactive",
+              "area_not_confirmed",
+              "area_oversize",
+              "no_area_pois",
+              "pois_stale",
+              "all_cells_below_activity_floor",
+              "all_cells_at_target"
+            ]
+          }
+        }
+      },
+      "required": [
+        "areaId",
+        "name",
+        "shape",
+        "flagEnabled",
+        "active",
+        "safeAreaConfirmed",
+        "areaPoiCount",
+        "poisRefreshedAt",
+        "serverTime",
+        "nextRunAt",
+        "runIntervalSeconds",
+        "activeAreaCount",
+        "areasAhead",
+        "maxAreasPerRun",
+        "maxAreaCellsPerRun",
+        "lastSpawnPassAt",
+        "totalCells",
+        "cellsTruncated",
+        "nextCellOffset",
+        "cellsScanned",
+        "candidateCellCount",
+        "cells",
+        "blockers"
+      ],
+      "additionalProperties": false
     }
   }
 }

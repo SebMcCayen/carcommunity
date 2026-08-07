@@ -39,14 +39,12 @@ import {
 import { AreaDrawMap, type AreaDrawTool } from '@/components/map/AreaDrawMap';
 import { translate } from '@/i18n';
 
+import { SpawnDiagnosticsPanel } from './SpawnDiagnosticsPanel';
 import styles from './page.module.css';
 
 const t = (key: string) => translate('sv', key);
 const fmt = (key: string, params: Record<string, string | number>): string =>
-  Object.entries(params).reduce(
-    (acc, [k, v]) => acc.replace(`{${k}}`, String(v)),
-    t(key),
-  );
+  Object.entries(params).reduce((acc, [k, v]) => acc.replace(`{${k}}`, String(v)), t(key));
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -115,6 +113,9 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Auto-spawn diagnostics panel (read-only troubleshooting for one area)
+  const [diagnosticsTarget, setDiagnosticsTarget] = useState<AdminCrownSpawnArea | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -150,9 +151,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   const validation = shape ? validateAreaShape(shape) : null;
   const shapeValid = validation?.ok === true;
   const shapeErrorText =
-    shape && validation && !validation.ok
-      ? t(`crownHunt.areaError.${validation.code}`)
-      : null;
+    shape && validation && !validation.ok ? t(`crownHunt.areaError.${validation.code}`) : null;
   // Activation may only be requested with the safety confirmation ticked.
   const canActivateFromForm = activateNow && safeConfirm;
 
@@ -171,9 +170,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
         });
         onFlash(t('crownHunt.areaUpdateSuccess'));
       } else {
-        await adminCreateSpawnArea(
-          buildCreateAreaRequest(shape, name, activateNow, safeConfirm),
-        );
+        await adminCreateSpawnArea(buildCreateAreaRequest(shape, name, activateNow, safeConfirm));
         onFlash(t('crownHunt.areaCreateSuccess'));
       }
       if (!mountedRef.current) return;
@@ -185,7 +182,17 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
     } finally {
       if (mountedRef.current) setIsSaving(false);
     }
-  }, [shape, shapeValid, editingAreaId, name, activateNow, safeConfirm, canActivateFromForm, load, onFlash]);
+  }, [
+    shape,
+    shapeValid,
+    editingAreaId,
+    name,
+    activateNow,
+    safeConfirm,
+    canActivateFromForm,
+    load,
+    onFlash,
+  ]);
 
   const handleActivate = useCallback(async () => {
     if (!activateTarget) return;
@@ -281,7 +288,11 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
             </h3>
 
             {/* Shape tool selector */}
-            <div role="radiogroup" aria-label={t('crownHunt.areaToolLabel')} className={styles.tabHeader}>
+            <div
+              role="radiogroup"
+              aria-label={t('crownHunt.areaToolLabel')}
+              className={styles.tabHeader}
+            >
               {(['polygon', 'rectangle', 'circle'] as const).map((toolOption) => (
                 <button
                   key={toolOption}
@@ -348,9 +359,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
                 {shapeErrorText}
               </p>
             )}
-            {shape && shapeValid && (
-              <p className={styles.introText}>{shapeSummary(shape)}</p>
-            )}
+            {shape && shapeValid && <p className={styles.introText}>{shapeSummary(shape)}</p>}
 
             {/* Activation safety gate */}
             <label className={styles.checkLabel}>
@@ -387,11 +396,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
               <button
                 className={styles.btnPrimary}
                 onClick={() => void handleSave()}
-                disabled={
-                  isSaving ||
-                  !shapeValid ||
-                  (activateNow && !safeConfirm)
-                }
+                disabled={isSaving || !shapeValid || (activateNow && !safeConfirm)}
               >
                 {isSaving
                   ? t('crownHunt.loading')
@@ -444,9 +449,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
                       {active ? t('crownHunt.areaStateActive') : t('crownHunt.areaStateInactive')}
                     </span>
                   </td>
-                  <td>
-                    {poi !== null ? fmt('crownHunt.areaPoiCount', { count: poi }) : '—'}
-                  </td>
+                  <td>{poi !== null ? fmt('crownHunt.areaPoiCount', { count: poi }) : '—'}</td>
                   <td title={area.approvedByUserId ?? area.createdByUserId}>
                     {(area.approvedByUserId ?? area.createdByUserId ?? '').slice(0, 8)
                       ? `${(area.approvedByUserId ?? area.createdByUserId ?? '').slice(0, 8)}…`
@@ -475,6 +478,9 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
                     )}
                     <button className={styles.btnSmall} onClick={() => startEdit(area)}>
                       {t('crownHunt.areaEdit')}
+                    </button>
+                    <button className={styles.btnSmall} onClick={() => setDiagnosticsTarget(area)}>
+                      {t('crownHunt.diagButton')}
                     </button>
                     <button
                       className={styles.btnSmallWarning}
@@ -557,6 +563,15 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Auto-spawn diagnostics panel */}
+      {diagnosticsTarget !== null && (
+        <SpawnDiagnosticsPanel
+          areaId={diagnosticsTarget.areaId}
+          areaName={diagnosticsTarget.name ?? ''}
+          onClose={() => setDiagnosticsTarget(null)}
+        />
       )}
     </section>
   );
