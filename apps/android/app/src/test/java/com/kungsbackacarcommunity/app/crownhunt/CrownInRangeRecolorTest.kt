@@ -8,10 +8,11 @@ import org.junit.Test
  * never lit to its rarity colour once the member drove into range.
  *
  * The greying/colouring HELPERS were never the fault — this test proves it. It
- * reproduces the exact pipeline `AuthenticatedApp` runs (filter the spawns by
- * [CrownRange.isInRange] against the member's location → the in-range id set →
- * [CrownMarkerStyle.discColorArgb] per crown) and shows the disc flips grey →
- * rarity the instant the FED location crosses the ring. The real defect was
+ * exercises the same per-crown DECISION `AuthenticatedApp` makes for each marker
+ * ([CrownRange.isInRange] against the member's location → that crown's
+ * [CrownMarkerStyle.discColorArgb]) — the step the app runs inside its
+ * spawn-filter/in-range-set build — and shows the disc flips grey → rarity the
+ * instant the FED location crosses the ring. The real defect was
  * upstream: the map poll read `CurrentLocation.lastKnown`, whose passive
  * `lastLocation` cache never advanced as the member moved, so the location fed
  * to this pipeline stayed stale and the crown stayed grey. The fix feeds it a
