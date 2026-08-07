@@ -53,30 +53,54 @@ export function minWeight(cells: readonly DriveHeatCell[]): number {
   return min;
 }
 
+/** Evenly sample `n` items from `all` (n>=1), always including the last item. */
+function sampleEven<T>(all: readonly T[], n: number): T[] {
+  const last = all.length - 1;
+  if (n <= 1) return [all[last]!];
+  return Array.from({ length: n }, (_, i) => all[Math.round((i * last) / (n - 1))]!);
+}
+
 /**
- * Five relative-density bands spanning the actual `[minWeight .. maxWeight]`
- * range, split into equal weight ranges. Returns a SINGLE full-width band when
- * every cell shares one weight (or there is one/zero cell) so the legend never
- * shows five identical ranges. Bands describe RELATIVE density — colour is "how
- * busy relative to the busiest area", never an absolute count.
+ * Relative-density bands spanning the actual `[minWeight .. maxWeight]` range.
+ *
+ * The band COUNT is derived from the integer weight span, capped at the ramp
+ * length: a narrow range (e.g. weights 1–4) yields fewer, non-overlapping bands
+ * rather than five with duplicate bounds. Each band's lower bound is a distinct
+ * integer, the TOP band is open-ended and anchored so the busiest cell always
+ * reaches the darkest colour, and colours/labels are sampled evenly from the
+ * ramp so the top is always the darkest / "Very high". Returns a SINGLE band
+ * when every cell shares one weight (or there is one/zero cell). Bands describe
+ * RELATIVE density — "how busy relative to the busiest area", never an absolute
+ * count.
  */
 export function driveHeatBands(cells: readonly DriveHeatCell[]): DriveHeatBand[] {
   const max = maxWeight(cells);
   const floor = cells.length > 0 ? minWeight(cells) : 1;
-  const topColor = DRIVE_HEAT_COLORS[DRIVE_HEAT_COLORS.length - 1]!;
-  const topLabel = BAND_LABEL_KEYS[BAND_LABEL_KEYS.length - 1]!;
   if (max <= floor) {
-    return [{ min: floor, max: null, color: topColor, labelKey: topLabel }];
+    return [
+      {
+        min: floor,
+        max: null,
+        color: DRIVE_HEAT_COLORS[DRIVE_HEAT_COLORS.length - 1]!,
+        labelKey: BAND_LABEL_KEYS[BAND_LABEL_KEYS.length - 1]!,
+      },
+    ];
   }
-  const span = max - floor;
-  const step = span / DRIVE_HEAT_COLORS.length;
-  return DRIVE_HEAT_COLORS.map((color, i) => {
-    const isTop = i === DRIVE_HEAT_COLORS.length - 1;
+  // Integer weight levels available: at most one band per level, capped at the
+  // ramp length. width = levels / n >= 1, so consecutive lower bounds (via
+  // floor) are strictly increasing distinct integers.
+  const levels = max - floor + 1;
+  const n = Math.min(DRIVE_HEAT_COLORS.length, levels);
+  const colors = sampleEven(DRIVE_HEAT_COLORS, n);
+  const labels = sampleEven(BAND_LABEL_KEYS, n);
+  return colors.map((color, i) => {
+    const min = floor + Math.floor((i * levels) / n);
+    const isTop = i === n - 1;
     return {
-      min: Math.round(floor + step * i),
-      max: isTop ? null : Math.round(floor + step * (i + 1)),
+      min,
+      max: isTop ? null : floor + Math.floor(((i + 1) * levels) / n),
       color,
-      labelKey: BAND_LABEL_KEYS[i]!,
+      labelKey: labels[i]!,
     };
   });
 }
@@ -84,17 +108,14 @@ export function driveHeatBands(cells: readonly DriveHeatCell[]): DriveHeatBand[]
 /**
  * Mapbox GL `interpolate` colour stops for a `['get','weight']` fill, as a flat
  * `[value0, color0, value1, color1, …]` array. Anchored at the same band lower
- * bounds as {@link driveHeatBands} so the map and the legend agree exactly, with
- * strictly ascending inputs (Mapbox requires it).
+ * bounds as {@link driveHeatBands} — which are already strictly ascending
+ * distinct integers, so no bumping is needed and the busiest cell always lands
+ * on the darkest colour.
  */
 export function driveHeatColorStops(cells: readonly DriveHeatCell[]): Array<number | string> {
-  const bands = driveHeatBands(cells);
   const stops: Array<number | string> = [];
-  let prev = -1;
-  for (const band of bands) {
-    const value = band.min <= prev ? prev + 1 : band.min;
-    stops.push(value, band.color);
-    prev = value;
+  for (const band of driveHeatBands(cells)) {
+    stops.push(band.min, band.color);
   }
   return stops;
 }

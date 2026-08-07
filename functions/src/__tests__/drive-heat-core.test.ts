@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { greatCircleDistance, latLngToCell, UNITS } from 'h3-js';
 import {
   aggregateDriveHeat,
+  DriveHeatAccumulator,
   routeCells,
   trimRouteEndpoints,
   DRIVE_HEAT_H3_RESOLUTION,
@@ -139,6 +140,22 @@ describe('aggregateDriveHeat — privacy floor', () => {
     const cells = aggregateDriveHeat(contributionsFrom(userIds), 1);
     expect(cells).toEqual([]);
     expect(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD).toBe(10);
+  });
+
+  it('DriveHeatAccumulator streams to the same result as the array helper', () => {
+    const CELL = latLngToCell(57.48, 12.0, DRIVE_HEAT_H3_RESOLUTION);
+    const userIds = Array.from({ length: 12 }, (_, i) => `u${i}`);
+    const drives: DriveContribution[] = [
+      ...userIds.map((userId) => ({ userId, cells: [CELL] })),
+      { userId: 'u0', cells: [CELL] }, // u0 drives it a second time
+    ];
+    const acc = new DriveHeatAccumulator();
+    for (const d of drives) acc.add(d.userId, d.cells);
+    expect(acc.finalize()).toEqual(aggregateDriveHeat(drives));
+    // u0 counted once toward contributors, but both traversals toward weight.
+    const [cell] = acc.finalize();
+    expect(cell!.contributorCount).toBe(12);
+    expect(cell!.weight).toBe(13);
   });
 
   it('sorts emitted cells by weight descending', () => {

@@ -35,13 +35,12 @@ import { withServerErrorReporting } from '../errors/serverErrors';
 import { decodeRoute } from '../drives/route-codec';
 import { rideRoutePath } from '../drives/drives-core';
 import {
-  aggregateDriveHeat,
+  DriveHeatAccumulator,
   routeCells,
   trimRouteEndpoints,
   DRIVE_HEAT_H3_RESOLUTION,
   ENDPOINT_TRIM_METERS,
   MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
-  type DriveContribution,
   type DriveHeatCell,
 } from './drive-heat-core';
 
@@ -92,7 +91,10 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
     return allowed;
   };
 
-  const contributions: DriveContribution[] = [];
+  // Fold each drive into the accumulator as we page, so peak memory is bounded
+  // by the number of distinct cells (the aggregate size), NOT by the number of
+  // rides in the 90-day window — see DriveHeatAccumulator.
+  const accumulator = new DriveHeatAccumulator();
   let ridesConsidered = 0;
   let ridesContributing = 0;
 
@@ -118,7 +120,7 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
 
       const cells = await cellsForRide(bucket, uid, doc.id);
       if (cells.length === 0) continue;
-      contributions.push({ userId: uid, cells });
+      accumulator.add(uid, cells);
       ridesContributing += 1;
     }
 
@@ -126,7 +128,7 @@ export async function runDriveHeatAggregation(now: Date): Promise<{
     cursor = page.docs[page.size - 1]!;
   }
 
-  const allCells = aggregateDriveHeat(contributions, MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD);
+  const allCells = accumulator.finalize(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD);
   const cells: DriveHeatCell[] = allCells.slice(0, DRIVE_HEAT_MAX_CELLS);
 
   await db

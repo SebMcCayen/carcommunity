@@ -165,39 +165,69 @@ export interface DriveHeatCell {
 }
 
 /**
- * Aggregates per-drive contributions into anonymised heat cells, applying the
- * ≥ {@link MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD} unique-contributor floor.
+ * Streaming accumulator for drive-heat contributions.
+ *
+ * Folds one drive at a time into a per-cell tally so a caller can page through a
+ * large window of drives without ever holding them all in memory: peak memory is
+ * bounded by the number of DISTINCT cells and their contributor sets (the size
+ * of the aggregate itself), NOT by the number of drives. {@link add} takes a
+ * user's already-de-duplicated cells for a single drive; {@link finalize}
+ * applies the ≥ {@link MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD} floor and returns the
+ * emitted cells.
+ */
+export class DriveHeatAccumulator {
+  private readonly byCell = new Map<string, { contributors: Set<string>; traversals: number }>();
+
+  /**
+   * Folds one drive's cells in: each counts once as a traversal and the user is
+   * added once to each cell's contributor set (a user driving a cell twice still
+   * counts once toward its contributor floor).
+   */
+  add(userId: string, cells: readonly string[]): void {
+    for (const cell of cells) {
+      const entry = this.byCell.get(cell) ?? { contributors: new Set<string>(), traversals: 0 };
+      entry.contributors.add(userId);
+      entry.traversals += 1;
+      this.byCell.set(cell, entry);
+    }
+  }
+
+  /**
+   * The anonymised heat cells at or above the floor, sorted by weight descending
+   * for a stable, review-able document. `threshold` can only RAISE the floor,
+   * never lower it below {@link MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD}.
+   */
+  finalize(threshold: number = MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD): DriveHeatCell[] {
+    const floor = Math.max(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD, Math.floor(threshold) || 0);
+    const cells: DriveHeatCell[] = [];
+    for (const [h3Index, entry] of this.byCell) {
+      const contributorCount = entry.contributors.size;
+      if (contributorCount < floor) continue; // below floor → omitted entirely
+      cells.push({ h3Index, contributorCount, weight: entry.traversals });
+    }
+    cells.sort((a, b) => b.weight - a.weight || b.contributorCount - a.contributorCount);
+    return cells;
+  }
+}
+
+/**
+ * Aggregates an in-memory array of per-drive contributions into anonymised heat
+ * cells. A thin convenience over {@link DriveHeatAccumulator} for callers (and
+ * tests) that already have every contribution in hand; the scheduled job uses
+ * the accumulator directly so it never materialises all drives at once.
  *
  * Each user counts ONCE toward a cell's contributor count no matter how many of
  * their drives touched it; `weight` is the total number of drive-traversals of
  * the cell (a density signal, not tied to any user). Cells below the threshold
- * are OMITTED. Output is sorted by weight descending for a stable, review-able
- * document. `threshold` can only RAISE the floor, never lower it.
+ * are OMITTED.
  */
 export function aggregateDriveHeat(
   contributions: readonly DriveContribution[],
   threshold: number = MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD,
 ): DriveHeatCell[] {
-  const floor = Math.max(MIN_ANONYMOUS_CONTRIBUTOR_THRESHOLD, Math.floor(threshold) || 0);
-
-  const byCell = new Map<string, { contributors: Set<string>; traversals: number }>();
+  const accumulator = new DriveHeatAccumulator();
   for (const drive of contributions) {
-    // A drive's cells are already de-duplicated, so each counts once as a
-    // traversal and the user is added once to the cell's contributor set.
-    for (const cell of drive.cells) {
-      const entry = byCell.get(cell) ?? { contributors: new Set<string>(), traversals: 0 };
-      entry.contributors.add(drive.userId);
-      entry.traversals += 1;
-      byCell.set(cell, entry);
-    }
+    accumulator.add(drive.userId, drive.cells);
   }
-
-  const cells: DriveHeatCell[] = [];
-  for (const [h3Index, entry] of byCell) {
-    const contributorCount = entry.contributors.size;
-    if (contributorCount < floor) continue; // below floor → omitted entirely
-    cells.push({ h3Index, contributorCount, weight: entry.traversals });
-  }
-  cells.sort((a, b) => b.weight - a.weight || b.contributorCount - a.contributorCount);
-  return cells;
+  return accumulator.finalize(threshold);
 }

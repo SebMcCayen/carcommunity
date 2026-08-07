@@ -43,7 +43,7 @@ describe('driveHeatBands', () => {
     expect(bands[0]!.color).toBe(DRIVE_HEAT_COLORS[DRIVE_HEAT_COLORS.length - 1]);
   });
 
-  it('produces five ascending bands across the weight range', () => {
+  it('produces five ascending bands across a wide weight range', () => {
     const bands = driveHeatBands(cells([1, 25, 50, 75, 100]));
     expect(bands).toHaveLength(DRIVE_HEAT_COLORS.length);
     // Lower bounds strictly ascending; top band is open-ended.
@@ -52,6 +52,23 @@ describe('driveHeatBands', () => {
     }
     expect(bands[bands.length - 1]!.max).toBeNull();
     expect(bands.map((b) => b.color)).toEqual([...DRIVE_HEAT_COLORS]);
+  });
+
+  it('shrinks the band count for a narrow range so bounds never collide', () => {
+    // Weights 1..4 → 4 integer levels → 4 distinct bands, not 5 with dup mins.
+    const bands = driveHeatBands(cells([1, 2, 3, 4]));
+    expect(bands).toHaveLength(4);
+    const mins = bands.map((b) => b.min);
+    for (let i = 1; i < mins.length; i += 1) {
+      expect(mins[i]!).toBeGreaterThan(mins[i - 1]!);
+    }
+    // Busiest cell (weight 4) reaches the top band, which is the darkest colour.
+    expect(mins[mins.length - 1]!).toBeLessThanOrEqual(4);
+    expect(bands[bands.length - 1]!.color).toBe(DRIVE_HEAT_COLORS[DRIVE_HEAT_COLORS.length - 1]);
+    expect(bands[bands.length - 1]!.max).toBeNull();
+    // Top label stays "Very high" even with fewer bands.
+    expect(bands[bands.length - 1]!.labelKey).toBe('driveHeat.bandVeryHigh');
+    expect(bands[0]!.labelKey).toBe('driveHeat.bandLow');
   });
 });
 

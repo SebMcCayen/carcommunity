@@ -77,7 +77,7 @@ export const driveHeat = onCall(
     const data = snap.exists ? snap.data() : undefined;
 
     const rawCells = Array.isArray(data?.cells) ? (data!.cells as unknown[]) : [];
-    const cells: DriveHeatCellOut[] = [];
+    const valid: DriveHeatCellOut[] = [];
     for (const raw of rawCells) {
       if (!raw || typeof raw !== 'object') continue;
       const cell = raw as Record<string, unknown>;
@@ -90,9 +90,13 @@ export const driveHeat = onCall(
         continue;
       }
       if (!Number.isFinite(weight) || weight < 0) continue;
-      cells.push({ h3Index: cell.h3Index, contributorCount, weight });
-      if (cells.length >= DRIVE_HEAT_MAX_CELLS) break;
+      valid.push({ h3Index: cell.h3Index, contributorCount, weight });
     }
+    // Sort by weight BEFORE capping so the "busiest areas are preserved"
+    // invariant holds even if the stored aggregate is ever unsorted/corrupt —
+    // capping a still-sorted-on-write array is then just a no-op.
+    valid.sort((a, b) => b.weight - a.weight || b.contributorCount - a.contributorCount);
+    const cells = valid.slice(0, DRIVE_HEAT_MAX_CELLS);
 
     return {
       cells,
