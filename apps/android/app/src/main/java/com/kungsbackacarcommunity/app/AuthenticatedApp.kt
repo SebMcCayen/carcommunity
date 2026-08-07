@@ -4174,6 +4174,9 @@ fun AuthenticatedApp(
                         onShowLocationOnMap = { lat, lng ->
                             moveMapToPoint(lat, lng, sharedLocationName)
                         },
+                        // Event Navigate → the SAME in-app navigate-to-point flow,
+                        // carrying the event's own label rather than a shared-name.
+                        onNavigateToPoint = moveMapToPoint,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
                         partnersRepository = partnersRepository,
@@ -5859,6 +5862,11 @@ private fun RouteHost(
     // Moves the app's OWN map to a shared location (from a chat geo-link tap),
     // in-app. Forwarded to the chat hub route; the hub closes first.
     onShowLocationOnMap: (latitude: Double, longitude: Double) -> Unit,
+    // The app's OWN in-app navigate-to-point handoff (moveMapToPoint): raises the
+    // "Navigate here" preview on the app's map. Forwarded to EventsRoute so the
+    // event detail's Navigate button stays in-app instead of firing the device's
+    // maps app — the same flow a tapped map place or a chat geo-link uses.
+    onNavigateToPoint: (latitude: Double, longitude: Double, name: String?) -> Unit,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
     partnersRepository: PartnersRepository?,
@@ -6305,6 +6313,10 @@ private fun RouteHost(
                     // config-less build, which hides Share.
                     friendsRepository = friendsRepository,
                     dmRepository = dmRepository,
+                    // Event detail's Navigate button routes through the app's own
+                    // in-app navigate-to-point handoff (the same "Navigate here"
+                    // preview a tapped map place uses), never the device's maps app.
+                    onNavigateToPoint = onNavigateToPoint,
                 )
             } else {
                 LoadingScreen()
