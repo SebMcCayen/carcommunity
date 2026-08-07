@@ -2475,7 +2475,11 @@ fun AuthenticatedApp(
             // stop until the flow is loaded, so rotation is a no-op while a real
             // end (Stop / Hide / expiry / convoy end — all of which arrive with
             // the flow loaded) still stops and auto-saves.
-            LaunchedEffect(isSharing, liveSessionObserved, convoyActiveLatched) {
+            // Keyed on (liveSession != null) too: an observed session can go from
+            // a transient MISSING read to a real status=stopped object without
+            // isSharing/observed/convoy changing, and the stop decision reads that
+            // presence — so the effect must re-run when it flips.
+            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
@@ -5586,20 +5590,32 @@ fun AuthenticatedApp(
                             ConvoyExitChoice.LeaveEndsConvoy ->
                                 R.string.convoy_stopSessionLeaveEndsBody
                         }
-                    // Perform a convoy action, then end the session; closes the
-                    // prompt first so neither is double-fired on recomposition.
+                    // Perform the convoy action, then end the session — but ONLY
+                    // if the convoy action succeeded. Ending the session on a
+                    // FAILED end/leave would leave the convoy behind with no live
+                    // session, the exact invariant this dialog exists to protect
+                    // (#726). Closes the prompt first so it can't double-fire;
+                    // re-raises it on failure (the coordinator has reconciled the
+                    // convoy back) so the user can retry without orphaning it.
                     val actAndStop: (ConvoyStopAction) -> Unit = { action ->
-                        convoyStopPrompt = null
                         val convoyId = stopPrompt.convoyId
+                        convoyStopPrompt = null
                         scope.launch {
+                            val coordinator = convoyBarCoordinator
                             when (action) {
-                                ConvoyStopAction.EndConvoy ->
-                                    convoyBarCoordinator?.end(convoyId)
-                                ConvoyStopAction.LeaveConvoy ->
-                                    convoyBarCoordinator?.leave(convoyId)
+                                ConvoyStopAction.EndConvoy -> coordinator?.end(convoyId)
+                                ConvoyStopAction.LeaveConvoy -> coordinator?.leave(convoyId)
+                            }
+                            // runRowAction clears the row error before each attempt
+                            // and sets it on failure, so this reads THIS call's
+                            // outcome (the same pattern the convoy accept path uses).
+                            val succeeded = coordinator == null || coordinator.actionError.value == null
+                            if (succeeded) {
+                                stopLiveShare()
+                            } else {
+                                convoyStopPrompt = stopPrompt
                             }
                         }
-                        stopLiveShare()
                     }
                     AlertDialog(
                         onDismissRequest = { convoyStopPrompt = null },
