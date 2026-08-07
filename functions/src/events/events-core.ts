@@ -66,6 +66,15 @@ const createEventInputSchema = z
     latitude: eventFieldsSchema.latitude.optional(),
     longitude: eventFieldsSchema.longitude.optional(),
     isOfficial: eventFieldsSchema.isOfficial.optional(),
+    // Publish-on-create intent (2026-08). The community APP has no draft concept
+    // and no publish UI — a publish step exists only in admin-web — so an
+    // in-app-created event must become visible immediately. The app sends
+    // `publishNow: true`; the callable then publishes even when the creator
+    // happens to be an admin (whose events would otherwise start `draft` and be
+    // invisible in BOTH the events list and the map, with no in-app way out).
+    // Admin-web omits it and keeps its deliberate draft-then-publish flow; a
+    // member is published either way, so the flag is a no-op for them.
+    publishNow: z.boolean().optional(),
   })
   .strict();
 
@@ -484,12 +493,27 @@ export function isMemberEventRateLimited(recentCount: number): boolean {
 }
 
 /**
- * The status a newly created event starts in. Admin-created events stay
- * `draft` (an admin publishes explicitly — unchanged since Phase 9b); member
- * events publish immediately (see the [EVENT_CREATOR_ROLES] note).
+ * The status a newly created event starts in.
+ *
+ * - member → always `published` immediately (see the [EVENT_CREATOR_ROLES]
+ *   note); `publishNow` is irrelevant for a member and never demotes them.
+ * - admin  → `draft` by default (an admin publishes explicitly via
+ *   `events.publish` — the admin-web draft-then-publish flow, unchanged since
+ *   Phase 9b), UNLESS `publishNow` is set, which the community APP passes so an
+ *   admin creating an event in the app gets a published, visible event rather
+ *   than a permanently-invisible draft (the app has no publish UI).
+ *
+ * `publishNow` only lifts an admin from draft to published; it can never turn a
+ * would-be published event into a draft. A published result still has to clear
+ * [guardPublishable] on the create path (title + future start), so this is not a
+ * back door around those preconditions.
  */
-export function initialEventStatus(creatorRole: EventCreatorRole): EventStatus {
-  return creatorRole === 'member' ? 'published' : 'draft';
+export function initialEventStatus(
+  creatorRole: EventCreatorRole,
+  publishNow = false,
+): EventStatus {
+  if (creatorRole === 'member') return 'published';
+  return publishNow ? 'published' : 'draft';
 }
 
 // ---------------------------------------------------------------------------
@@ -531,6 +555,12 @@ export function buildEventDocuments(
   createdByUserId: string,
   serverTimestamp: () => unknown,
   creatorRole: EventCreatorRole = 'admin',
+  // Publish-on-create intent — see [initialEventStatus]. Defaults false so the
+  // Phase 9b admin behaviour (created `draft`) is unchanged unless a caller
+  // (the app) explicitly asks to publish. Ignored for a member (always
+  // published). Falls back to `input.publishNow` when not passed explicitly, so
+  // the parsed request field alone is enough.
+  publishNow: boolean = input.publishNow ?? false,
 ): EventDocuments {
   return {
     eventDoc: {
@@ -549,7 +579,7 @@ export function buildEventDocuments(
       latitude: input.latitude ?? null,
       longitude: input.longitude ?? null,
       isOfficial: creatorRole === 'admin' ? (input.isOfficial ?? false) : false,
-      status: initialEventStatus(creatorRole),
+      status: initialEventStatus(creatorRole, publishNow),
       cancelledAt: null,
       rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
       createdByUserId,

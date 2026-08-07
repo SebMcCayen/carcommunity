@@ -97,6 +97,17 @@ class EventTest {
         assertFalse(payload.containsKey("description")) // blank dropped
         assertTrue(payload.containsKey("endsAt"))
         assertFalse(payload.containsKey("locationName"))
+        // The app has no draft/publish UI, so every in-app create publishes
+        // immediately — otherwise an admin's in-app event lands as an invisible
+        // draft. See Events.createPayload / events-core.ts initialEventStatus.
+        assertEquals(true, payload["publishNow"])
+    }
+
+    @Test
+    fun `createPayload always requests immediate publish`() {
+        // Pinned on the minimal (trimmed) input too, so a future refactor of the
+        // optional-field handling can't silently drop publishNow.
+        assertEquals(true, Events.createPayload(createInput())["publishNow"])
     }
 
     @Test

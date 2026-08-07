@@ -331,6 +331,7 @@
     <string name="events_createRateLimited">Du kan skapa %1$d träffar per dygn. Du har nått gränsen — försök igen senare.</string>
     <string name="events_attendeesTitle">Vilka har svarat</string>
     <string name="events_attendeesCount">%1$d kommer</string>
+    <string name="events_rowGoingCount">%1$d kommer</string>
     <string name="events_attendeesLoading">Hämtar vilka som har svarat…</string>
     <string name="events_attendeesEmpty">Ingen har svarat än. Bli först!</string>
     <string name="events_attendeesUnavailable">Namnen visas inte för den här träffen — bara antalet som kommer.</string>

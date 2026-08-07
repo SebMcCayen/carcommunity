@@ -96,6 +96,11 @@ export interface CreateEventRequest {
   latitude?: number | null;
   longitude?: number | null;
   isOfficial?: boolean;
+  // Publish-on-create intent. The community app (no draft/publish UI) always
+  // sends true so an in-app-created event is visible immediately — it only
+  // lifts an admin-created event from draft to published and is a no-op for a
+  // member. Admin-web omits it and keeps its draft-then-publish flow.
+  publishNow?: boolean;
 }
 
 export interface UpdateEventRequest {
