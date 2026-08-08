@@ -93,6 +93,7 @@ fun ConversationListRoute(
             onOpenConversation = onOpenConversation,
             onRetry = { retryKey++ },
             showTitle = showTitle,
+            reserveBottomActionSpace = canStartNew,
         )
 
         if (canStartNew) {
