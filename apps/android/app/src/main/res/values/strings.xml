@@ -360,6 +360,11 @@
     <string name="events_checkInErrorMock">Din plats kunde inte verifieras. Stäng av eventuella appar för fejkad plats och försök igen.</string>
     <string name="events_checkInErrorGeneric">Incheckningen misslyckades. Försök igen.</string>
     <string name="events_checkInWithinArea">Du måste vara inom eventområdet (cirka 150 m) för att checka in.</string>
+    <string name="events_checkInCountdown">Du kan bekräfta din närvaro om %1$s.</string>
+    <string name="events_checkInCountdownLabel">Tid kvar innan du kan bekräfta din närvaro</string>
+    <string name="events_checkInReadyToConfirm">Du har stannat tillräckligt länge. Checka in igen nu för att bekräfta din närvaro — du behöver bara vara tillbaka i eventområdet.</string>
+    <string name="events_checkInConfirmButton">Bekräfta närvaro</string>
+    <string name="events_checkInMoveBackToFinish">Gå tillbaka in i eventområdet för att slutföra incheckningen.</string>
     <string name="events_navigate">Navigera</string>
     <string name="events_navigateUnavailable">Ingen kartapp hittades för att starta navigeringen.</string>
     <string name="events_addToCalendar">Lägg till i kalender</string>

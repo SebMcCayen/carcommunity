@@ -386,6 +386,17 @@ fun EventsRoute(
     val attendanceFlow =
         remember(selected, uid) { repository.observeMyAttendance(selected, uid) }
     val attendance by attendanceFlow.collectAsState(initial = null)
+    // Anchor of the dwell countdown: the EARLIEST of this session's first-fix
+    // capturedAt (a DEVICE-clock instant, the basis the backend measures dwell
+    // from) and the persisted record's server `createdAt` (the only anchor that
+    // survives a process restart). The min keeps the session fix during snapshot
+    // lag (no jump when it lands) yet, after a restart, stops a later new-session
+    // tap from pushing the anchor forward past the persisted original — which
+    // would make the UI ask for a LONGER wait than the backend. See
+    // CheckInDwell.selectAnchor.
+    val sessionFirstFixAt by checkInCoordinator.firstFixAtMillis.collectAsState()
+    val firstSampleAtMillis =
+        CheckInDwell.selectAnchor(sessionFirstFixAt, attendance?.recordCreatedAtMillis)
 
     // Re-evaluate the window at its next boundary (opening or closing edge) rather
     // than polling — the same delay-to-boundary shape the map's pin expiry uses.
@@ -521,6 +532,7 @@ fun EventsRoute(
         checkInAvailable = checkInAvailable,
         checkInState = checkInState,
         attendance = attendance,
+        firstSampleAtMillis = firstSampleAtMillis,
         onCheckIn = { event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } } },
         onNavigate = onNavigate,
         onShareEvent = onShareEvent,

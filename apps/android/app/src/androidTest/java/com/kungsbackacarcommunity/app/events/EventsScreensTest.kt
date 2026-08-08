@@ -329,6 +329,65 @@ class EventsScreensTest {
     }
 
     @Test
+    fun detail_checkInPending_duringDwell_showsCountdownProgressBar() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event().copy(latitude = 57.4874, longitude = 12.0757),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    checkInAvailable = true,
+                    // A recorded sample (pending), anchored just now → the ten
+                    // minutes are still running.
+                    attendance = EventAttendanceStatus(verified = false, sampleCount = 1),
+                    firstSampleAtMillis = System.currentTimeMillis(),
+                    onCheckIn = {},
+                )
+            }
+        }
+        // The determinate progress bar and the countdown line are shown, and the
+        // button is still the initial "Check in" (not the confirm CTA yet).
+        composeTestRule.onNodeWithTag(CHECK_IN_PROGRESS_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHECK_IN_COUNTDOWN_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_checkInButton)).assertExists()
+    }
+
+    @Test
+    fun detail_checkInPending_afterDwell_showsConfirmCta_andNoProgressBar() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event().copy(latitude = 57.4874, longitude = 12.0757),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    checkInAvailable = true,
+                    // Anchored more than the full dwell ago → the countdown is done.
+                    attendance = EventAttendanceStatus(verified = false, sampleCount = 1),
+                    firstSampleAtMillis =
+                        System.currentTimeMillis() - (CheckInDwell.REQUIRED_DWELL_MS + 60_000L),
+                    onCheckIn = {},
+                )
+            }
+        }
+        // Dwell complete: the button becomes the "Confirm attendance" CTA and the
+        // ready-to-confirm line shows; the progress bar is gone.
+        composeTestRule
+            .onNodeWithText(str(R.string.events_checkInConfirmButton))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHECK_IN_COUNTDOWN_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHECK_IN_PROGRESS_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun detail_shareButton_isShown_andInvokesCallback() {
         var shared = false
         composeTestRule.setContent {

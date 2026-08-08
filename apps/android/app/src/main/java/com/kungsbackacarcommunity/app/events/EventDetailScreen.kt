@@ -26,13 +26,16 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -47,6 +50,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -57,6 +62,7 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.delay
 
 /**
  * Event detail (Phase 12 slice 9). Stateless: shows the teaser fields to any
@@ -98,6 +104,12 @@ fun EventDetailScreen(
     // The caller's own attendance record, so a confirmed/pending state survives a
     // restart rather than only reflecting this session's tap.
     attendance: EventAttendanceStatus? = null,
+    // When the member's first sample was recorded (epoch millis) — the anchor of
+    // the dwell countdown. The caller resolves it from the persisted record's
+    // createdAt (survives app death) falling back to this session's first fix, so
+    // a temporary exit or leaving the screen never restarts the countdown. Null
+    // when no sample has landed yet.
+    firstSampleAtMillis: Long? = null,
     // Runs a check-in. Null (config-less build / no location source) hides the
     // action rather than offering one that cannot work.
     onCheckIn: (() -> Unit)? = null,
@@ -378,6 +390,7 @@ fun EventDetailScreen(
                 available = checkInAvailable,
                 state = checkInState,
                 attendance = attendance,
+                firstSampleAtMillis = firstSampleAtMillis,
                 onCheckIn = onCheckIn,
             )
 
@@ -429,8 +442,15 @@ fun EventDetailScreen(
  *  - VERIFIED: a confirmed row with a check icon; the button is gone (there is
  *    nothing left to do, and it stays confirmed even after the window closes).
  *  - PENDING: the first sample landed but the geofence+dwell evidence is not yet
- *    complete — the button stays so the member can check in again ~10 min later,
- *    with a note explaining why.
+ *    complete. A DWELL COUNTDOWN (progress bar + "m:ss") runs down the ten
+ *    minutes since that first sample; while it runs the member is told to stay a
+ *    little longer, and once it completes the button becomes a "Confirm
+ *    attendance" call-to-action. The countdown is anchored to THIS session's
+ *    first-fix capture time (a stable device-clock instant, the same basis the
+ *    backend measures dwell from), falling back to the persisted record's
+ *    createdAt so it survives leaving the screen or the app; a temporary walk out
+ *    of the fence NEVER restarts it — only the final fix has to be back inside
+ *    (see CheckInDwell / functions checkIn.ts).
  *  - AVAILABLE: inside the window, not yet checked in — just the button.
  * Renders nothing when a check-in cannot be attempted and none has happened, so
  * an event outside its window shows no dead control.
@@ -440,6 +460,7 @@ private fun CheckInSection(
     available: Boolean,
     state: CheckInUiState,
     attendance: EventAttendanceStatus?,
+    firstSampleAtMillis: Long?,
     onCheckIn: (() -> Unit)?,
 ) {
     // Verified from EITHER the persistent record OR this session's success (the
@@ -449,6 +470,23 @@ private fun CheckInSection(
     val working = state == CheckInUiState.Working
     val offerButton = available && onCheckIn != null
     if (!verified && !pending && !offerButton) return
+
+    // The dwell countdown ticks once a second while a sample is pending and the
+    // ten minutes have not yet elapsed. `now` seeds from the clock and is the
+    // only thing that recomposes; the ANCHOR ([firstSampleAtMillis]) is external
+    // and persisted, so backgrounding, navigating away, or a temporary exit from
+    // the fence leaves it untouched.
+    val anchor = firstSampleAtMillis.takeIf { pending }
+    var now by remember(anchor) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(anchor) {
+        val start = anchor ?: return@LaunchedEffect
+        while (!CheckInDwell.isDwellElapsed(start, System.currentTimeMillis())) {
+            now = System.currentTimeMillis()
+            delay(1_000L)
+        }
+        now = System.currentTimeMillis()
+    }
+    val dwellElapsed = anchor != null && CheckInDwell.isDwellElapsed(anchor, now)
 
     Column(
         modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_SECTION_TAG),
@@ -481,6 +519,14 @@ private fun CheckInSection(
         }
 
         if (offerButton) {
+            // Once the dwell is done the button IS the confirm step, so it says so;
+            // before then it is the initial "Check in".
+            val buttonLabel =
+                if (pending && dwellElapsed) {
+                    R.string.events_checkInConfirmButton
+                } else {
+                    R.string.events_checkInButton
+                }
             Button(
                 onClick = onCheckIn!!,
                 enabled = !working,
@@ -493,30 +539,80 @@ private fun CheckInSection(
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Text(text = stringResource(R.string.events_checkInButton))
+                    Text(text = stringResource(buttonLabel))
                 }
             }
-            // Make the geofence requirement explicit up front, so it is obvious WHY
-            // a check-in might be rejected: the server (functions/src/events/checkIn.ts)
-            // only accepts a fix within the event's geofence (150 m). Matches the
-            // EVENT_GEOFENCE_RADIUS_METERS the backend enforces.
-            Text(
-                text = stringResource(R.string.events_checkInWithinArea),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.testTag(CHECK_IN_WITHIN_AREA_TAG),
-            )
+            // The geofence requirement, stated up front only before the first
+            // sample — once a countdown is running the pending copy below carries
+            // the "stay in the area" message, so this would be redundant.
+            if (!pending) {
+                Text(
+                    text = stringResource(R.string.events_checkInWithinArea),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.testTag(CHECK_IN_WITHIN_AREA_TAG),
+                )
+            }
         }
         if (pending) {
-            Text(
-                text = stringResource(R.string.events_checkInPending),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            when {
+                // Countdown running: a determinate bar plus the remaining "m:ss".
+                anchor != null && !dwellElapsed -> {
+                    val remaining = CheckInDwell.remainingMillis(anchor, now)
+                    val (mins, secs) = CheckInDwell.remainingMinutesSeconds(remaining)
+                    val progressLabel = stringResource(R.string.events_checkInCountdownLabel)
+                    LinearProgressIndicator(
+                        progress = { CheckInDwell.progressFraction(anchor, now) },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(CHECK_IN_PROGRESS_TAG)
+                                .semantics { contentDescription = progressLabel },
+                    )
+                    Text(
+                        text =
+                            stringResource(
+                                R.string.events_checkInCountdown,
+                                String.format("%d:%02d", mins, secs),
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.testTag(CHECK_IN_COUNTDOWN_TAG),
+                    )
+                }
+                // Dwell complete: invite the confirming check-in.
+                anchor != null && dwellElapsed ->
+                    Text(
+                        text = stringResource(R.string.events_checkInReadyToConfirm),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.testTag(CHECK_IN_COUNTDOWN_TAG),
+                    )
+                // Pending but no anchor (a legacy record without createdAt): the
+                // original generic guidance, still correct.
+                else ->
+                    Text(
+                        text = stringResource(R.string.events_checkInPending),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+            }
         }
         (state as? CheckInUiState.Failed)?.let { failed ->
+            // A geofence miss on the FINAL (confirming) fix is a different problem
+            // from one on the first — the member has already dwelt the full ten
+            // minutes, they just stepped out. Tell them to come back to FINISH.
+            // Only in that confirm phase (dwell elapsed): earlier in the wait
+            // "finish checking in" would be a lie — they still have to wait — so a
+            // geofence miss then falls back to the generic "be at the location".
+            val label =
+                if (failed.error == CheckInError.OUTSIDE_GEOFENCE && pending && dwellElapsed) {
+                    R.string.events_checkInMoveBackToFinish
+                } else {
+                    checkInErrorLabel(failed.error)
+                }
             Text(
-                text = stringResource(checkInErrorLabel(failed.error)),
+                text = stringResource(label),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.testTag(CHECK_IN_ERROR_TAG),
@@ -787,6 +883,12 @@ internal const val CHECK_IN_ERROR_TAG = "events_checkin_error"
 
 /** Test tag on the "must be within the event area" check-in helper line. */
 internal const val CHECK_IN_WITHIN_AREA_TAG = "events_checkin_within_area"
+
+/** Test tag on the dwell-countdown progress bar. */
+internal const val CHECK_IN_PROGRESS_TAG = "events_checkin_progress"
+
+/** Test tag on the dwell-countdown / ready-to-confirm line. */
+internal const val CHECK_IN_COUNTDOWN_TAG = "events_checkin_countdown"
 
 /** Test tags for the Navigate, Share and Add-to-calendar actions. */
 const val EVENT_DETAIL_NAVIGATE_TAG = "events_detail_navigate"

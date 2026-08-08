@@ -24,6 +24,21 @@ package com.kungsbackacarcommunity.app.events
 data class EventAttendanceStatus(
     val verified: Boolean,
     val sampleCount: Int,
+    /**
+     * The attendance record's server `createdAt`, in epoch millis, or null when
+     * the record predates the field or has not been created yet. It is a
+     * CONSERVATIVE, durable anchor for the client dwell countdown — NOT the first
+     * sample's own `capturedAt`. It is a serverTimestamp written when the record
+     * is created, so it can LAG the true first sample by up to the freshness
+     * window (~60 s), and it is a different clock from the device `now` the
+     * countdown ticks against. It is therefore used only as the FALLBACK for when
+     * this session's first-fix `capturedAt` is gone (process restart / returning
+     * to the screen); `CheckInDwell.selectAnchor` takes the EARLIEST of the two,
+     * so the lag can only ever make the countdown slightly conservative, never
+     * confirm earlier than the backend. Being read off the persisted record, it
+     * survives app death, backgrounding and navigation.
+     */
+    val recordCreatedAtMillis: Long? = null,
 ) {
     val checkedIn: Boolean get() = verified || sampleCount > 0
 }

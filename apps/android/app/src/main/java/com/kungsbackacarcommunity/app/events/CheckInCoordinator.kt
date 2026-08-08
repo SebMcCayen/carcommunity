@@ -70,6 +70,19 @@ class CheckInCoordinator(
     private val state = MutableStateFlow<CheckInUiState>(CheckInUiState.Idle)
     val status: StateFlow<CheckInUiState> = state.asStateFlow()
 
+    private val firstFixAt = MutableStateFlow<Long?>(null)
+
+    /**
+     * The capture time of the FIRST recorded (in-geofence) fix this session, or
+     * null before one lands / after verification. It seeds the dwell countdown
+     * immediately, before the persisted attendance record's `createdAt` has
+     * round-tripped back through the snapshot listener (the record can lag the
+     * callable's reply by a snapshot). It is DELIBERATELY not cleared by a later
+     * failed tap — a member who briefly leaves the fence and taps must not see
+     * the countdown restart; only the FINAL fix has to be inside.
+     */
+    val firstFixAtMillis: StateFlow<Long?> = firstFixAt.asStateFlow()
+
     /**
      * Runs one check-in attempt for [event]. No-op while another attempt is in
      * flight. Never throws (except on cancellation): every failure resolves to a
@@ -102,6 +115,20 @@ class CheckInCoordinator(
 
             val result = repository.checkIn(event.id, fix)
             state.value = mapResult(result)
+            when (result) {
+                // First in-geofence sample landed — anchor the countdown at this
+                // fix's own capture time (matching the `capturedAt` the server
+                // stored), but only if one is not already running: a second
+                // "recorded" reply must not push the countdown forward.
+                CheckInResult.RECORDED ->
+                    if (firstFixAt.value == null) firstFixAt.value = fix.capturedAtMillis
+                // Proven — the countdown has done its job and is retired.
+                CheckInResult.VERIFIED, CheckInResult.ALREADY_VERIFIED ->
+                    firstFixAt.value = null
+                // Every other result (including OUTSIDE_GEOFENCE from a temporary
+                // excursion) leaves the countdown exactly as it was.
+                else -> Unit
+            }
         } catch (cancellation: CancellationException) {
             state.value = CheckInUiState.Idle
             throw cancellation
