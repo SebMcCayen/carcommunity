@@ -31,9 +31,10 @@ class AppLanguageTest {
     }
 
     /**
-     * No explicit selection (a fresh install: the application-locale list is
-     * empty) must follow the app's default resources, which are Swedish — not
-     * throw, and not silently pick English.
+     * An absent/unknown language tag — null, blank, or one this build doesn't
+     * offer — must fall back to the default option (Swedish), not throw and not
+     * silently pick English. (Distinct from an empty AppCompat locale list, which
+     * means "follow system"; the Settings screen maps that read to a null tag.)
      */
     @Test
     fun `null or blank falls back to the Swedish default`() {

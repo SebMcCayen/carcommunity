@@ -10,9 +10,9 @@ package com.kungsbackacarcommunity.app.language
  * hand to AppCompat". The framework glue that actually applies it —
  * [androidx.appcompat.app.AppCompatDelegate.setApplicationLocales] /
  * [androidx.appcompat.app.AppCompatDelegate.getApplicationLocales] — lives in
- * the Settings screen; keeping the mapping here means the "empty selection ->
- * follow the default (Swedish)" and "tag -> option" rules are unit-tested
- * without touching Android.
+ * the Settings screen; keeping the mapping here means the "absent/unknown tag ->
+ * default option (Swedish)" and "tag -> option" rules are unit-tested without
+ * touching Android.
  */
 enum class AppLanguage(val languageTag: String) {
     SWEDISH("sv"),
@@ -21,9 +21,15 @@ enum class AppLanguage(val languageTag: String) {
 
     companion object {
         /**
-         * The option applied when the user has made no explicit choice (a fresh
-         * install with an empty application-locale list): follow the app's
-         * default resources, which are Swedish.
+         * The option the picker shows as selected when the tag we read carries
+         * no explicit choice — a null/blank tag, or one this build doesn't offer:
+         * Swedish, the app's default resource set.
+         *
+         * Note the distinction: an EMPTY AppCompat application-locale list means
+         * "follow the system locales" (which Android then resolves to res/values-en/
+         * on an English device, else the res/values/ Swedish default). This DEFAULT
+         * is only the picker's fallback for an absent/unknown TAG, not a claim about
+         * runtime resource resolution.
          */
         val DEFAULT: AppLanguage = SWEDISH
 
