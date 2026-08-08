@@ -157,6 +157,28 @@ object ConvoyFocusPlanner {
     const val REFIT_EPSILON_DEGREES: Double = 0.0002
 
     /**
+     * The shortest gap between two convoy re-fits, in milliseconds.
+     *
+     * [shouldRefit] alone bounds re-fits by DISTANCE — the framed box has to have
+     * moved more than [REFIT_EPSILON_DEGREES] — which stops a parked convoy's GPS
+     * jitter from nudging the camera, but does NOT bound how OFTEN the camera
+     * moves once the group is genuinely on the move. A convoy driving down a
+     * motorway spreads and bunches by well over 20 m every single second, so a
+     * purely spatial gate would ease the camera on every position tick: the fit
+     * animation (~900 ms) would never finish before the next one cancelled it,
+     * leaving the map in a permanent slow zoom-wobble that fights the driver.
+     *
+     * So a re-fit also has to be at least this long after the last one. 1.5 s sits
+     * just above the fit animation duration, so each ease is allowed to settle
+     * before the next is considered — the camera tracks the group without the
+     * seasick churn. It is a LEADING-edge throttle: the moment the interval has
+     * elapsed, the next material change fits immediately (no added latency), and a
+     * change that arrives mid-interval is simply picked up by the following tick,
+     * because the applied fit is not advanced while a re-fit is suppressed.
+     */
+    const val MIN_REFIT_INTERVAL_MS: Long = 1500L
+
+    /**
      * The pitch a convoy fit is COMPUTED at: dead flat, always, regardless of
      * how tilted the map the user is looking at happens to be. See
      * [fitComputationContext].
@@ -242,6 +264,61 @@ object ConvoyFocusPlanner {
             abs(a.north - b.north) > REFIT_EPSILON_DEGREES ||
             abs(a.west - b.west) > REFIT_EPSILON_DEGREES ||
             abs(a.east - b.east) > REFIT_EPSILON_DEGREES
+    }
+
+    /**
+     * Whether to re-fit the camera RIGHT NOW, combining the spatial test in
+     * [shouldRefit] with the temporal one in [MIN_REFIT_INTERVAL_MS].
+     *
+     * Both have to say yes: the framed box must have moved materially
+     * ([shouldRefit]) AND enough time must have passed since the last fit. The
+     * two guard different failure modes — the first stops a still convoy's jitter
+     * from moving the camera at all, the second stops a moving convoy from moving
+     * it too often — and neither subsumes the other.
+     *
+     * [lastFitAtMillis] is null before the first fit of a focus session, and the
+     * first fit is never time-suppressed: pressing the focus button must reframe
+     * immediately, not up to [MIN_REFIT_INTERVAL_MS] later. The distance gate
+     * still applies (it returns true for a null previous), so an empty roster
+     * still yields no fit.
+     */
+    fun shouldRefitNow(
+        previous: List<ConvoyLatLng>?,
+        next: List<ConvoyLatLng>,
+        lastFitAtMillis: Long?,
+        nowMillis: Long,
+    ): Boolean {
+        if (!shouldRefit(previous, next)) return false
+        if (lastFitAtMillis == null) return true
+        return nowMillis - lastFitAtMillis >= MIN_REFIT_INTERVAL_MS
+    }
+
+    /**
+     * The zoom a convoy fit should actually apply, clamped to a sane band.
+     *
+     * [rawZoom] is what the map SDK's fit-to-coordinates call returned (nullable
+     * because the call can decline to give one). It is clamped into
+     * [[minZoom], [maxZoom]] so the fit can never drop to building level nor pull
+     * out to a whole-country view:
+     * - The **many-spread-out** end is held by [minZoom] — without it a group that
+     *   has drifted 100 km apart frames as dots on a national map.
+     * - The **all-bunched-up** end is held by [maxZoom]. When every member sits on
+     *   effectively ONE point (a convoy stopped together at a meet), the SDK has
+     *   no spread to fit and hands back a degenerate zoom — often a non-finite
+     *   value or one pinned at its own ceiling. Both are caught here: a non-finite
+     *   raw zoom falls back to [fallbackZoom] and the result is then capped at
+     *   [maxZoom]. The caller passes the camera's CURRENT zoom as [fallbackZoom],
+     *   so a fit the SDK could not compute holds the existing zoom (no jump to a
+     *   fixed level) rather than snapping the stationary huddle to rooftops.
+     */
+    fun clampFitZoom(
+        rawZoom: Double?,
+        minZoom: Double,
+        maxZoom: Double,
+        fallbackZoom: Double,
+    ): Double {
+        val z = rawZoom?.takeIf { it.isFinite() } ?: fallbackZoom
+        return z.coerceIn(minZoom, maxZoom)
     }
 
     /** Axis-aligned bounds of a set of points. */

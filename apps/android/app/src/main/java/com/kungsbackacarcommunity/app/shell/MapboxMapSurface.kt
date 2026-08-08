@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.shell
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -198,6 +199,18 @@ class MapboxMapSurface : MapSurface {
     // does not actually change the framing does not re-ease the camera every
     // second (see ConvoyFocusPlanner.shouldRefit). Null when not fitting.
     private var appliedConvoyFit: List<ConvoyLatLng>? = null
+
+    // When the last convoy fit was actually eased, so a genuinely moving convoy is
+    // re-fitted at most once per [ConvoyFocusPlanner.MIN_REFIT_INTERVAL_MS] rather
+    // than on every position tick (which would leave the camera in a permanent
+    // zoom-wobble that never settles). Null before the first fit of a focus
+    // session, so that first fit is immediate. See [applyConvoyFit].
+    //
+    // Read from the MONOTONIC clock (SystemClock.elapsedRealtime), not wall time:
+    // this measures an ELAPSED interval, and a wall-clock correction jumping
+    // backwards mid-convoy would otherwise suppress every fit until real time
+    // caught up.
+    private var lastConvoyFitAtMillis: Long? = null
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
     override val incidentTap: StateFlow<String?> = incidentTapFlow.asStateFlow()
@@ -666,10 +679,18 @@ class MapboxMapSurface : MapSurface {
             // momentary gap in live positions also arrives here with focus still
             // ON. Easing to the user then would re-zoom the map mid-convoy every
             // time the roster blinked.
-            if (toggled && !focusEnabled &&
-                followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)
-            ) {
-                easeToUser()
+            if (toggled && !focusEnabled) {
+                // Real focus-off (toggle, or left / convoy ended): reset the
+                // throttle clock too, so re-enabling focus fits immediately
+                // rather than waiting out the interval. Deliberately NOT cleared
+                // on a transient roster gap that arrives here with focus still
+                // ON — doing so would let a flickering roster bypass the interval
+                // and re-introduce the back-to-back fits this throttle exists to
+                // stop.
+                lastConvoyFitAtMillis = null
+                if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                    easeToUser()
+                }
             }
             return
         }
@@ -700,8 +721,21 @@ class MapboxMapSurface : MapSurface {
         val points = convoyFitPoints ?: return
         val asLatLng = points.map { ConvoyLatLng(latitude = it.latitude, longitude = it.longitude) }
         // Live positions tick every second; re-easing on each one is visibly
-        // seasick and pointless when the framing is unchanged.
-        if (!ConvoyFocusPlanner.shouldRefit(appliedConvoyFit, asLatLng)) return
+        // seasick. Two gates guard it: the framing must have MOVED materially
+        // (else a parked convoy's GPS jitter would nudge the camera) and it must
+        // be at least MIN_REFIT_INTERVAL_MS since the last fit (else a moving
+        // convoy would re-ease every tick, the animation never settling). Only the
+        // successful path advances lastConvoyFitAtMillis, so a change suppressed
+        // mid-interval is picked up by the next tick rather than lost.
+        if (!ConvoyFocusPlanner.shouldRefitNow(
+                previous = appliedConvoyFit,
+                next = asLatLng,
+                lastFitAtMillis = lastConvoyFitAtMillis,
+                nowMillis = SystemClock.elapsedRealtime(),
+            )
+        ) {
+            return
+        }
 
         // Keep the user's bearing so course-up framing rotates with travel, but
         // compute the fit on a FLAT view. cameraForCoordinates over-estimates how
@@ -714,6 +748,11 @@ class MapboxMapSurface : MapSurface {
         // the route-overlay fit (which has always framed the whole route) computes
         // flat.
         val currentBearing = map.mapboxMap.cameraState.bearing
+        // The zoom to keep if the SDK cannot give a fit zoom (a single-point /
+        // bunched-up convoy yields a null / non-finite result): the camera's
+        // CURRENT zoom, so a failed fit holds position instead of snapping to a
+        // fixed level. See ConvoyFocusPlanner.clampFitZoom.
+        val currentZoom = map.mapboxMap.cameraState.zoom
         val fitContext = ConvoyFocusPlanner.fitComputationContext(currentBearing)
         runCatching {
             // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
@@ -749,8 +788,12 @@ class MapboxMapSurface : MapSurface {
                     offset = null,
                 )
             val zoom =
-                (fitted.zoom ?: MapMarkers.OWN_MARKER_ZOOM)
-                    .coerceIn(MIN_CONVOY_FIT_ZOOM, MAX_CONVOY_FIT_ZOOM)
+                ConvoyFocusPlanner.clampFitZoom(
+                    rawZoom = fitted.zoom,
+                    minZoom = MIN_CONVOY_FIT_ZOOM,
+                    maxZoom = MAX_CONVOY_FIT_ZOOM,
+                    fallbackZoom = currentZoom,
+                )
             map.camera.easeTo(
                 cameraOptions {
                     center(fitted.center)
@@ -765,6 +808,10 @@ class MapboxMapSurface : MapSurface {
                 mapAnimationOptions { duration(CONVOY_FIT_ANIMATION_MS) },
             )
             appliedConvoyFit = asLatLng
+            // Only stamped on a fit that actually ran, so the interval throttle in
+            // shouldRefitNow measures from the last real camera move. Monotonic
+            // clock, matching the read above.
+            lastConvoyFitAtMillis = SystemClock.elapsedRealtime()
         }
     }
 
@@ -2022,6 +2069,7 @@ class MapboxMapSurface : MapSurface {
                 // so clearing the applied fit here cannot strand the camera.
                 convoyFitPoints = null
                 appliedConvoyFit = null
+                lastConvoyFitAtMillis = null
                 convoyFocusEnabled = false
                 mapView.onDestroy()
             },
