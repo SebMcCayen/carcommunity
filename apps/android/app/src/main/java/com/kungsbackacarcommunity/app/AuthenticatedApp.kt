@@ -2396,14 +2396,18 @@ fun AuthenticatedApp(
             // = no choice pending. rememberSaveable so a convoy that ends while the
             // app is backgrounded still prompts on return, and the dialog survives an
             // Activity recreation — mirroring the process-scoped save-prompt state.
-            var convoyEndPromptSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+            // Keyed by uid (matching the other auth-scoped saveable state in this
+            // file) so an account switch within the same process resets it — a
+            // stopped session id belonging to the previous user must never raise this
+            // prompt for the next one.
+            var convoyEndPromptSessionId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
             // The convoy-ended session the member has ALREADY answered for (End or
             // Continue). Because the recording-stop effect re-derives the convoy-ended
             // condition from the still-stopped session on every re-run/recreation, this
             // stops the choice dialog re-raising over the save prompt (End) or over the
             // freshly-transferred solo session before it echoes back (Continue). Keyed
             // by session id, so a LATER convoy end (a different session) still prompts.
-            var convoyEndDecidedSessionId by rememberSaveable { mutableStateOf<String?>(null) }
+            var convoyEndDecidedSessionId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
             // Re-evaluate at expiry: a single nowMillis() snapshot would keep
             // isSharing == true if the app stays open past expiresAtMillis with
             // no other recomposition. Schedule one delay-to-expiry that flips
