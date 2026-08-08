@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.shell
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
@@ -204,6 +205,11 @@ class MapboxMapSurface : MapSurface {
     // than on every position tick (which would leave the camera in a permanent
     // zoom-wobble that never settles). Null before the first fit of a focus
     // session, so that first fit is immediate. See [applyConvoyFit].
+    //
+    // Read from the MONOTONIC clock (SystemClock.elapsedRealtime), not wall time:
+    // this measures an ELAPSED interval, and a wall-clock correction jumping
+    // backwards mid-convoy would otherwise suppress every fit until real time
+    // caught up.
     private var lastConvoyFitAtMillis: Long? = null
 
     private val incidentTapFlow = MutableStateFlow<String?>(null)
@@ -661,11 +667,8 @@ class MapboxMapSurface : MapSurface {
 
         if (convoyFitPoints == null) {
             // Nothing to frame. Forget the applied fit either way, so a later
-            // refit is not compared against a stale bounding box. Clear the fit
-            // timestamp too, so the FIRST fit of the next focus session eases
-            // immediately instead of waiting out the interval throttle.
+            // refit is not compared against a stale bounding box.
             appliedConvoyFit = null
-            lastConvoyFitAtMillis = null
             // Glide back to the normal framing — which restores the ZOOM as well
             // as the centre — ONLY when the user actually switched focus off
             // (or left / the convoy ended). Without that the camera would be left
@@ -676,10 +679,18 @@ class MapboxMapSurface : MapSurface {
             // momentary gap in live positions also arrives here with focus still
             // ON. Easing to the user then would re-zoom the map mid-convoy every
             // time the roster blinked.
-            if (toggled && !focusEnabled &&
-                followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)
-            ) {
-                easeToUser()
+            if (toggled && !focusEnabled) {
+                // Real focus-off (toggle, or left / convoy ended): reset the
+                // throttle clock too, so re-enabling focus fits immediately
+                // rather than waiting out the interval. Deliberately NOT cleared
+                // on a transient roster gap that arrives here with focus still
+                // ON — doing so would let a flickering roster bypass the interval
+                // and re-introduce the back-to-back fits this throttle exists to
+                // stop.
+                lastConvoyFitAtMillis = null
+                if (followController.shouldTrack(hasRouteOverlay = routeOverlayFlow.value != null)) {
+                    easeToUser()
+                }
             }
             return
         }
@@ -720,7 +731,7 @@ class MapboxMapSurface : MapSurface {
                 previous = appliedConvoyFit,
                 next = asLatLng,
                 lastFitAtMillis = lastConvoyFitAtMillis,
-                nowMillis = System.currentTimeMillis(),
+                nowMillis = SystemClock.elapsedRealtime(),
             )
         ) {
             return
@@ -793,8 +804,9 @@ class MapboxMapSurface : MapSurface {
             )
             appliedConvoyFit = asLatLng
             // Only stamped on a fit that actually ran, so the interval throttle in
-            // shouldRefitNow measures from the last real camera move.
-            lastConvoyFitAtMillis = System.currentTimeMillis()
+            // shouldRefitNow measures from the last real camera move. Monotonic
+            // clock, matching the read above.
+            lastConvoyFitAtMillis = SystemClock.elapsedRealtime()
         }
     }
 
