@@ -168,13 +168,16 @@ if (file("google-services.json").exists()) {
     // on every variant so KccApplication compiles everywhere; without Firebase
     // configuration it simply never initializes (same shape as appcheck-debug).
     //
-    // FORWARD-LOOKING: `isMinifyEnabled = false` on release today, so there is no
-    // mapping file to upload and this plugin is INERT beyond stamping the build
-    // id. It is wired now so that flipping minification on (a separate, riskier
-    // change) does not silently produce unreadable obfuscated stack traces. The
-    // plugin's defaults are relied on deliberately — mapping upload on, native
-    // symbol upload off (native symbols already ship via the release
-    // `ndk { debugSymbolLevel = "FULL" }` block, which Play symbolicates).
+    // `isMinifyEnabled = true` on release, so R8 emits a mapping.txt and this
+    // plugin uploads it to FIREBASE CRASHLYTICS — release crash/ANR stack traces
+    // de-obfuscate in the Firebase console. (This is distinct from the Play
+    // Console: AGP separately embeds the same mapping.txt in the AAB at
+    // bundleRelease, which is what Play reads to de-obfuscate its own crash
+    // reports and to clear the "no deobfuscation file" upload warning — that path
+    // does not involve this plugin.) The plugin's defaults are relied on
+    // deliberately — mapping upload on, native symbol upload off (native symbols
+    // already ship via the release `ndk { debugSymbolLevel = "FULL" }` block,
+    // which Play symbolicates).
     apply(plugin = libs.plugins.firebase.crashlytics.get().pluginId)
 }
 
@@ -286,7 +289,14 @@ android {
             if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
-            isMinifyEnabled = false
+            // R8 code + resource shrinking on release. Produces a mapping.txt:
+            // AGP embeds it in the AAB at bundleRelease, which clears the Play
+            // Console "no deobfuscation file" warning and de-obfuscates Play crash
+            // reports; the Crashlytics build plugin above separately uploads the
+            // same file to Firebase. Also yields a smaller AAB. Debug stays
+            // un-minified.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
