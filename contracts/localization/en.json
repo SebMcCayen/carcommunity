@@ -404,7 +404,16 @@
     "shareEventUnnamedFriend": "Friend",
     "shareEventSuccess": "Event shared with %1$s",
     "shareEventFailed": "The event couldn't be shared. Try again.",
-    "shareEventLinkLabel": "🎟️ Open event"
+    "shareEventLinkLabel": "🎟️ Open event",
+    "distanceFilterLabel": "Distance",
+    "distanceFilterAll": "All",
+    "distanceFilterWithin5": "Within 5 km",
+    "distanceFilterWithin25": "Within 25 km",
+    "distanceFilterWithin50": "Within 50 km",
+    "distanceFilterNoLocationHint": "Turn on location to filter events by distance.",
+    "distanceRowAway": "%1$s km away",
+    "noNearbyTitle": "No events nearby",
+    "noNearbyBody": "No events fall within this distance. Try a wider range or \"All\"."
   },
   "chat": {
     "title": "Chat",
