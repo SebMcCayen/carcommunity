@@ -19,15 +19,26 @@
  * ## Three gates, in this order
  *  1. the `crownHuntSpawn` feature flag (contract default OFF — nothing here
  *     runs in production until it is deliberately switched on);
- *  2. the ADMIN ALLOW-LIST: the candidate set is `crownSpawnCells` where
- *     `approved == true`, never the set of cells that happen to have activity.
- *     A busy cell nobody approved is invisible to this function (spawnCells.ts);
- *  3. POI ANCHORING (marked-area path) plus the slow-sighting filter, which
- *     narrow WHERE a crown lands within an approved area. On the marked-area path
- *     every crown — baseline or activity-derived — is placed AT a cached
- *     safe-stop POI, so a cell with no POI spawns nothing however it is targeted;
- *     the activity floor still zeroes the target on the random single-cell path,
- *     which carries no baseline.
+ *  2. the ADMIN ALLOW-LIST — the candidate set is always something an admin
+ *     approved, never the set of cells that happen to have activity. This file
+ *     runs BOTH approval paths in one invocation, each with its OWN allow-list
+ *     query:
+ *       - the single-cell path (`runCrownSpawnPass`) scans `crownSpawnCells`
+ *         where `approved == true` (spawnCells.ts) and places crowns at RANDOM
+ *         in-cell coordinates — activity-gated, NO baseline;
+ *       - the marked-area path (`runCrownAreaSpawnPass`) scans `crownSpawnAreas`
+ *         where `active == true` (with `safeAreaConfirmed` re-checked
+ *         defensively per area, spawnAreas.ts) and places crowns AT cached
+ *         safe-stop POIs — targeting BASELINE + activity.
+ *     A busy cell or area nobody approved is invisible to this function on either
+ *     path, however the activity data looks;
+ *  3. WITHIN an approved cell/area, what narrows WHERE a crown lands: the
+ *     slow-sighting activity filter on both paths, plus POI ANCHORING on the
+ *     marked-area path. There, every crown — baseline or activity-derived — is
+ *     placed AT a cached safe-stop POI, so a cell with no POI spawns nothing
+ *     however it is targeted; on the random single-cell path the activity floor
+ *     still zeroes the target (it carries no baseline), so a quiet approved cell
+ *     spawns nothing there.
  * Each gate is independently sufficient to produce zero spawns. That is
  * deliberate: the failure mode this engine has to be defended against is
  * inviting a member to stop somewhere dangerous, and no single condition should
