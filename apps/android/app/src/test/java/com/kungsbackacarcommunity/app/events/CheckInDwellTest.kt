@@ -58,4 +58,19 @@ class CheckInDwellTest {
     fun `required dwell matches the ten-minute server constant`() {
         assertEquals(10L * 60_000L, CheckInDwell.REQUIRED_DWELL_MS)
     }
+
+    @Test
+    fun `selectAnchor takes the earliest of the two references`() {
+        // Snapshot lag: only the session fix is known yet.
+        assertEquals(first, CheckInDwell.selectAnchor(first, null))
+        // Process restart, before any new tap: only the persisted createdAt.
+        assertEquals(first, CheckInDwell.selectAnchor(null, first))
+        // Both known — the earlier wins, so the snapshot never moves the anchor.
+        assertEquals(first, CheckInDwell.selectAnchor(first, first + 3_000L))
+        // Restart then a LATER new-session tap must not push the anchor forward
+        // past the persisted (earlier, correct) original.
+        assertEquals(first, CheckInDwell.selectAnchor(first + 5 * 60_000L, first))
+        // Neither known.
+        assertEquals(null, CheckInDwell.selectAnchor(null, null))
+    }
 }

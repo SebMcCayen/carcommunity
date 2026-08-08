@@ -35,6 +35,29 @@ internal object CheckInDwell {
      */
     const val REQUIRED_DWELL_MS = 10L * 60_000L
 
+    /**
+     * The countdown anchor: the EARLIEST of the two available first-sample
+     * references. [sessionFirstFixAt] is this session's first-fix capturedAt (a
+     * device-clock instant, the basis the backend measures dwell from);
+     * [persistedCreatedAt] is the record's server `createdAt`, the only anchor
+     * that survives a process restart. Taking the MINIMUM means:
+     *  - before the snapshot lands (or with no record yet) the session fix is
+     *    the only value, so it is used — no jump when the snapshot arrives, since
+     *    the session fix is the earlier of the two;
+     *  - after a process restart a later new-session tap can never push the
+     *    anchor FORWARD past the persisted original, which would ask the member
+     *    to wait LONGER than the backend (whose dwell runs from the ORIGINAL
+     *    first capturedAt). The backend rejects a future capturedAt, so
+     *    `createdAt` is never earlier than that original — the min is the truth.
+     * Null only when neither reference is known.
+     */
+    fun selectAnchor(sessionFirstFixAt: Long?, persistedCreatedAt: Long?): Long? =
+        when {
+            sessionFirstFixAt == null -> persistedCreatedAt
+            persistedCreatedAt == null -> sessionFirstFixAt
+            else -> minOf(sessionFirstFixAt, persistedCreatedAt)
+        }
+
     /** Dwell elapsed since the first sample, clamped to [0, REQUIRED_DWELL_MS]. */
     fun elapsedMillis(firstSampleAtMillis: Long, nowMillis: Long): Long =
         (nowMillis - firstSampleAtMillis).coerceIn(0L, REQUIRED_DWELL_MS)
