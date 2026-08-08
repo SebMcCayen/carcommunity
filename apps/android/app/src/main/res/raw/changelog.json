@@ -2,6 +2,25 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 32,
+      "versionName": "0.8.21",
+      "releaseDate": "2026-08-08",
+      "highlights": [
+        "Kronjakten: rättat så att kronor nu visas pålitligt för alla som deltar",
+        "Träffar: en stapel visar hur lång tid som är kvar tills du kan checka in",
+        "Vänner: ny knapp för att starta en konversation med valfri vän"
+      ],
+      "changes": [
+        "Kronjakten: rättat ett fel som gjorde att kronor ibland inte dök upp på kartan – de visas nu pålitligt för alla som deltar",
+        "Träffar: vid incheckning visas nu en stapel med tiden kvar (~10 min). Du behöver inte oroa dig om du råkar lämna området en kort stund – det räcker att du är på plats i början och i slutet",
+        "Träffar: se hur många som svarat Kommer / Kanske / Kommer inte, och tryck för att se vilka som svarat",
+        "Profil: Statistik-avsnittet visar nu antal körningar och högsta uppmätta hastighet",
+        "Vänner: en ny knapp för att starta en ny konversation med vem som helst av dina vänner",
+        "Konvoj: kartan zoomar nu automatiskt så att alla konvojmedlemmar hålls i bild när de kör runt",
+        "Konvoj: när någon avslutar en konvoj kan du välja att avsluta eller fortsätta som en egen livedelning – din pågående session avbryts inte, den fortsätter som en enskild session"
+      ]
+    },
+    {
       "versionCode": 31,
       "versionName": "0.8.20",
       "releaseDate": "2026-08-08",
