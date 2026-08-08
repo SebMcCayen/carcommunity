@@ -62,6 +62,16 @@ object SingleSessionRecording {
      */
     val promptPending: StateFlow<Boolean> = promptPendingState.asStateFlow()
 
+    private val stopReasonState = MutableStateFlow(SavePromptReason.Default)
+
+    /**
+     * Why the pending summary was raised, so the dialog can explain a session that
+     * ended for a reason the member did not cause — chiefly the convoy ending
+     * under them. Captured in [stop] alongside [promptPending] and, like it,
+     * survives Activity recreation and is cleared by [clear] for the next session.
+     */
+    val stopReason: StateFlow<SavePromptReason> = stopReasonState.asStateFlow()
+
     private var locationController: DriveLocationController? = null
 
     /**
@@ -179,8 +189,15 @@ object SingleSessionRecording {
      * recording, and a real session end always stops the updates. Idempotent:
      * safe to call repeatedly (and after a recreation, when the summary is
      * already pending).
+     *
+     * [reason] explains WHY the session ended, so the summary can render
+     * convoy-specific copy when the convoy ended under the member. It is recorded
+     * only when this call actually RAISES the prompt (the coordinator transitions
+     * to [RecordingState.PromptSave]); an idempotent re-call after a recreation
+     * finds the coordinator already past that state and leaves the first reason —
+     * and the pending flag — untouched.
      */
-    fun stop() {
+    fun stop(reason: SavePromptReason = SavePromptReason.Default) {
         // Unconditionally, and BEFORE the "nothing recording" bail-out: the
         // readout must go blank when a session ends however it ended, including
         // the case where no recording was ever started (no drives backend / the
@@ -190,7 +207,14 @@ object SingleSessionRecording {
         locationController?.stop()
         locationController = null
         coordinator.stop()
-        if (coordinator.state.value is RecordingState.PromptSave) {
+        // Only capture the reason on the FIRST call that actually raises the prompt.
+        // coordinator.stop() no-ops unless it was Recording, so a re-call (effect
+        // re-run / recreation) leaves it in PromptSave with promptPending already
+        // set — guard on that so the first reason stands and a later call (which may
+        // recompute a different reason, e.g. after the self-stop marker was cleared)
+        // can never overwrite it.
+        if (coordinator.state.value is RecordingState.PromptSave && !promptPendingState.value) {
+            stopReasonState.value = reason
             promptPendingState.value = true
         }
     }
@@ -206,6 +230,7 @@ object SingleSessionRecording {
         ownerUid = null
         activeState.value = null
         promptPendingState.value = false
+        stopReasonState.value = SavePromptReason.Default
     }
 
     /**

@@ -839,6 +839,8 @@
     "saveSuccess": "Drive saved.",
     "autoSavedTitle": "Drive saved",
     "autoSavedBody": "Your drive was saved automatically. Keep it in your history, or delete it if you don't want it.",
+    "convoyEndedTitle": "The convoy ended",
+    "convoyEndedBody": "The convoy has ended, so your live session stopped. Your drive was saved automatically — keep it in your history, or delete it if you don't want it.",
     "keepAction": "Keep",
     "deleteSessionAction": "Delete",
     "deleteSessionConfirmTitle": "Delete this saved session?",

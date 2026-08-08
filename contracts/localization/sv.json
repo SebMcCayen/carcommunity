@@ -839,6 +839,8 @@
     "saveSuccess": "Körningen har sparats.",
     "autoSavedTitle": "Körningen sparad",
     "autoSavedBody": "Din körning sparades automatiskt. Behåll den i historiken, eller radera den om du inte vill ha den.",
+    "convoyEndedTitle": "Konvojen avslutades",
+    "convoyEndedBody": "Konvojen har avslutats, så din livedelning stoppades. Din körning sparades automatiskt – behåll den i historiken, eller radera den om du inte vill ha den.",
     "keepAction": "Behåll",
     "deleteSessionAction": "Radera",
     "deleteSessionConfirmTitle": "Radera den här sparade körningen?",

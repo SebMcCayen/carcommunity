@@ -114,6 +114,7 @@ import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
+import com.kungsbackacarcommunity.app.drives.savePromptReason
 import com.kungsbackacarcommunity.app.billboards.Billboard
 import com.kungsbackacarcommunity.app.billboards.BillboardCallToAction
 import com.kungsbackacarcommunity.app.billboards.BillboardInteractionType
@@ -2374,6 +2375,15 @@ fun AuthenticatedApp(
             // having loaded, is done where that snapshot exists; the restored value
             // bridges the gap until it does. See [LiveSessionRecordingLifecycle].
             var convoyActiveLatched by rememberSaveable { mutableStateOf(false) }
+            // Whether the member ended THIS session themselves — tapped Stop / Hide
+            // me now, or chose End/Leave in the convoy-stop dialog (all of which run
+            // through stopLiveShare/hideMeNow below). Distinguishes a self-stop from
+            // a convoy-auto session the backend stopped BECAUSE the convoy ended
+            // under them, so the save prompt only explains the latter (see
+            // [savePromptReason]). Reset when a new session starts; rememberSaveable
+            // so a recreation between the tap and the stop effect can't lose it and
+            // mislabel a deliberate stop as a convoy end.
+            var userEndedSession by rememberSaveable { mutableStateOf(false) }
             // Re-evaluate at expiry: a single nowMillis() snapshot would keep
             // isSharing == true if the app stays open past expiresAtMillis with
             // no other recomposition. Schedule one delay-to-expiry that flips
@@ -2452,6 +2462,9 @@ fun AuthenticatedApp(
                 remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
             val activeRecording by SingleSessionRecording.active.collectAsState()
             val showSessionSummary by SingleSessionRecording.promptPending.collectAsState()
+            // Why the summary opened, so it can explain a convoy that ended under
+            // the member rather than reading the neutral copy out of nowhere.
+            val sessionStopReason by SingleSessionRecording.stopReason.collectAsState()
             val recordingState by
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
@@ -2558,7 +2571,30 @@ fun AuthenticatedApp(
                     // the real session end, rather than on composable disposal.
                     // Withheld while the session flow has not re-emitted after a
                     // recreation, so a rotation neither stops nor prompts.
-                    SingleSessionRecording.stop()
+                    //
+                    // A convoy-auto session that stopped without the member ending
+                    // it themselves — and before its 6h expiry — was stopped by the
+                    // convoy ending (functions stopConvoyAutoSession), so the summary
+                    // explains that rather than reading the neutral "Drive saved" out
+                    // of nowhere. A session that simply hit its expiry (its own clock
+                    // ran out, convoy possibly still running) stays neutral.
+                    val endedByExpiry =
+                        liveSession?.expiresAtMillis?.let { it <= nowMillis() } == true
+                    SingleSessionRecording.stop(
+                        savePromptReason(
+                            convoyAutoStarted = liveSession?.convoyAutoStarted == true,
+                            userEndedSession = userEndedSession,
+                            endedByExpiry = endedByExpiry,
+                        ),
+                    )
+                    // Consume the self-stop marker now the reason is captured, so the
+                    // NEXT session is judged fresh. Reset HERE rather than on session
+                    // start: the convoy-stop dialog flips convoyActiveLatched (a key
+                    // of this effect) mid-stop while isSharing is still true, so a
+                    // reset in the sharing branch could wipe the marker between the
+                    // user's choice and the actual stop. stop() already froze the
+                    // reason, so a re-run reading the cleared flag is a harmless no-op.
+                    userEndedSession = false
                 }
             }
 
@@ -2845,6 +2881,10 @@ fun AuthenticatedApp(
              * delete the saved drive" choice.
              */
             fun stopLiveShare() {
+                // The member is ending their own session, so the end-of-session
+                // save prompt stays neutral even on a convoy-auto session — they
+                // know why it stopped (see [savePromptReason]).
+                userEndedSession = true
                 // Drop any optimistic "starting…" overlay first: stopping while a
                 // start is still in flight must return the control to "+" at once,
                 // not keep a STOP sign alive on an attempt the user just abandoned.
@@ -4209,6 +4249,7 @@ fun AuthenticatedApp(
                         mediaUploader = mediaUploader,
                         liveLocationRepository = liveLocationRepository,
                         liveLocationCoordinator = liveLocationCoordinator,
+                        onUserEndLiveSession = { userEndedSession = true },
                         nowMillis = nowMillis,
                         canShareLive = canShareLive,
                         eventsRepository = eventsRepository,
@@ -5589,6 +5630,9 @@ fun AuthenticatedApp(
                         // becoming no-ops, so re-enabling a row can never wire it to
                         // nothing.
                         onHideMeNow = {
+                            // Self-initiated end — keep the neutral save-prompt copy
+                            // (see [savePromptReason]).
+                            userEndedSession = true
                             val c = liveLocationCoordinator
                             if (c != null) {
                                 scope.launch { c.hideMeNow() }
@@ -5717,6 +5761,7 @@ fun AuthenticatedApp(
                         onDelete = { scope.launch { activeRecording?.delete() } },
                         onRetry = { scope.launch { activeRecording?.autoSave(null) } },
                         onDiscard = { activeRecording?.discard() },
+                        reason = sessionStopReason,
                     )
                 }
 
@@ -6069,6 +6114,12 @@ private fun RouteHost(
     mediaUploader: MediaUploader?,
     liveLocationRepository: LiveLocationRepository?,
     liveLocationCoordinator: LiveLocationCoordinator?,
+    // Marks that the member ended their own live session from the full-screen
+    // live-location surface (Stop / Hide me now), so the shell's save prompt keeps
+    // the neutral copy rather than mislabeling a deliberate stop as a convoy end
+    // (see [savePromptReason]). A no-op path still stops the session; this only
+    // records intent for the prompt.
+    onUserEndLiveSession: () -> Unit,
     nowMillis: () -> Long,
     canShareLive: Boolean,
     eventsRepository: EventsRepository?,
@@ -6486,10 +6537,12 @@ private fun RouteHost(
                     liveLocationCoordinator?.let { c -> scope.launch { c.start(d) } }
                 },
                 onStop = {
+                    onUserEndLiveSession()
                     liveLocationCoordinator?.let { c -> scope.launch { c.stop() } }
                     BackgroundLocationController.stop(context)
                 },
                 onHideMeNow = {
+                    onUserEndLiveSession()
                     liveLocationCoordinator?.let { c -> scope.launch { c.hideMeNow() } }
                     BackgroundLocationController.stop(context)
                 },

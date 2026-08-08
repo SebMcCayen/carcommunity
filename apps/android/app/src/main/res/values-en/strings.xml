@@ -784,6 +784,8 @@
     <string name="savedDrives_saveSuccess">Drive saved.</string>
     <string name="savedDrives_autoSavedTitle">Drive saved</string>
     <string name="savedDrives_autoSavedBody">Your drive was saved automatically. Keep it in your history, or delete it if you don\'t want it.</string>
+    <string name="savedDrives_convoyEndedTitle">The convoy ended</string>
+    <string name="savedDrives_convoyEndedBody">The convoy has ended, so your live session stopped. Your drive was saved automatically — keep it in your history, or delete it if you don\'t want it.</string>
     <string name="savedDrives_keepAction">Keep</string>
     <string name="savedDrives_deleteSessionAction">Delete</string>
     <string name="savedDrives_deleteSessionConfirmTitle">Delete this saved session?</string>
