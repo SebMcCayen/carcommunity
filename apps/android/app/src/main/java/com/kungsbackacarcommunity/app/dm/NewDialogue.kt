@@ -48,7 +48,10 @@ object NewDialogue {
      *
      * A blank/absent name on the existing row never shadows a usable friend-row
      * name (falls through to it), so the opened thread is titled as well as it
-     * can be from whichever source has a name.
+     * can be from whichever source has a name. When NEITHER source has a usable
+     * name, [DmOpenTarget.displayName] is null — never a blank/whitespace string —
+     * so the thread title falls back to the neutral "Member" placeholder
+     * (ChatScreen's `otherName ?: dm_unknownMember`) instead of rendering empty.
      */
     fun openTargetFor(
         friend: FriendSummary,
@@ -58,7 +61,7 @@ object NewDialogue {
         val existingName = existing?.otherUser?.displayName?.takeIf { it.isNotBlank() }
         return DmOpenTarget(
             uid = friend.uid,
-            displayName = existingName ?: friend.displayName,
+            displayName = existingName ?: friend.displayName?.takeIf { it.isNotBlank() },
             isExisting = existing != null,
         )
     }

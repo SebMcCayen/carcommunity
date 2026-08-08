@@ -76,6 +76,17 @@ class NewDialogueTest {
     }
 
     @Test
+    fun `openTargetFor a friend with a blank name and no conversation yields a null title`() {
+        // A whitespace-only friend name must not become the thread title (it would
+        // render blank); it collapses to null so ChatScreen shows "Member".
+        val target = NewDialogue.openTargetFor(friend("u1", "   "), conversations = emptyList())
+
+        assertEquals("u1", target.uid)
+        assertNull(target.displayName)
+        assertFalse(target.isExisting)
+    }
+
+    @Test
     fun `openTargetFor a friend with an existing conversation prefers the inbox name`() {
         // The inbox card is the name the member just saw; it can be fresher than the
         // friend-graph row (live-hydrated), so it wins when present.
