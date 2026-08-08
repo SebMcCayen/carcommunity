@@ -25,6 +25,12 @@ class AppLanguageTest {
     }
 
     @Test
+    fun `underscore-separated Locale toString form maps on the primary subtag`() {
+        assertEquals(AppLanguage.ENGLISH, AppLanguage.fromLanguageTag("en_US"))
+        assertEquals(AppLanguage.SWEDISH, AppLanguage.fromLanguageTag("sv_SE"))
+    }
+
+    @Test
     fun `case and surrounding whitespace are ignored`() {
         assertEquals(AppLanguage.ENGLISH, AppLanguage.fromLanguageTag(" EN "))
         assertEquals(AppLanguage.SWEDISH, AppLanguage.fromLanguageTag("SV"))

@@ -35,14 +35,17 @@ enum class AppLanguage(val languageTag: String) {
 
         /**
          * Maps a stored/active language tag to the matching option. Accepts a
-         * bare subtag ("sv") or a full BCP-47 tag ("en-US") — only the primary
-         * language subtag is considered. A null/blank tag (no explicit
-         * selection) or one this build does not offer falls back to [DEFAULT]
-         * rather than throwing, so a value written by a future build or a
-         * region-qualified system locale can never crash the Settings screen.
+         * bare subtag ("sv") or a region-qualified tag using either the BCP-47
+         * hyphen ("en-US") or the [java.util.Locale.toString] underscore
+         * ("en_US") separator — only the primary language subtag is considered.
+         * A null/blank tag (no explicit selection) or one this build does not
+         * offer falls back to [DEFAULT] rather than throwing, so a value written
+         * by a future build or a region-qualified system locale can never crash
+         * the Settings screen. Case-folding is locale-independent (Kotlin's
+         * no-arg [String.lowercase] uses the invariant locale).
          */
         fun fromLanguageTag(tag: String?): AppLanguage {
-            val language = tag?.trim()?.substringBefore('-')?.lowercase()
+            val language = tag?.trim()?.substringBefore('-')?.substringBefore('_')?.lowercase()
             if (language.isNullOrEmpty()) return DEFAULT
             return entries.find { it.languageTag == language } ?: DEFAULT
         }
