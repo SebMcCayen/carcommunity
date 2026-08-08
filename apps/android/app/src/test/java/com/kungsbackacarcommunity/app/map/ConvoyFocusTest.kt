@@ -159,6 +159,127 @@ class ConvoyFocusTest {
         assertFalse(ConvoyFocusPlanner.shouldRefit(listOf(me, other), emptyList()))
     }
 
+    // ---- refit throttle (time gate on top of the distance gate) -------------
+
+    private val spreadOut = listOf(me, other.copy(latitude = other.latitude + 0.05))
+
+    @Test
+    fun `the very first fit of a session is never time-suppressed`() {
+        // lastFitAtMillis null == no fit yet; the button press must reframe now.
+        assertTrue(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = null,
+                next = listOf(me, other),
+                lastFitAtMillis = null,
+                nowMillis = 0L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a material move within the interval is throttled out`() {
+        // The box moved plenty, but only half a second has passed since the last
+        // fit: too soon, so the camera holds.
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = spreadOut,
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_500L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a burst of material moves within the interval yields exactly one fit`() {
+        // Simulate five position ticks 300 ms apart, all materially different,
+        // feeding the applied-fit forward only when a fit is allowed — the way the
+        // surface advances lastConvoyFitAtMillis only on a real ease. Just the
+        // first should fit; the rest fall inside the 1.5 s window.
+        var applied: List<ConvoyLatLng>? = listOf(me, other)
+        var lastFitAt: Long? = 0L
+        var fits = 0
+        for (i in 1..5) {
+            val now = i * 300L
+            val next = listOf(me, other.copy(latitude = other.latitude + 0.05 * i))
+            if (ConvoyFocusPlanner.shouldRefitNow(applied, next, lastFitAt, now)) {
+                fits++
+                applied = next
+                lastFitAt = now
+            }
+        }
+        assertEquals(1, fits)
+    }
+
+    @Test
+    fun `a material move refits once the interval has elapsed`() {
+        assertTrue(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = spreadOut,
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_000L + ConvoyFocusPlanner.MIN_REFIT_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `jitter is still ignored even after the interval has elapsed`() {
+        // The time gate opening does not license a fit the distance gate rejects:
+        // a parked convoy sitting still must never drift the camera.
+        val jittered = listOf(me, other.copy(latitude = other.latitude + 0.00005))
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = jittered,
+                lastFitAtMillis = 0L,
+                nowMillis = 10 * ConvoyFocusPlanner.MIN_REFIT_INTERVAL_MS,
+            ),
+        )
+    }
+
+    @Test
+    fun `an empty roster never refits regardless of elapsed time`() {
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = emptyList(),
+                lastFitAtMillis = 0L,
+                nowMillis = Long.MAX_VALUE,
+            ),
+        )
+    }
+
+    // ---- zoom clamp (never building level, never a whole-country view) ------
+
+    @Test
+    fun `a zoom inside the band is left alone`() {
+        assertEquals(12.0, ConvoyFocusPlanner.clampFitZoom(12.0, 8.0, 16.5, 14.0), 1e-9)
+    }
+
+    @Test
+    fun `a bunched-up group is capped so it never frames at building level`() {
+        assertEquals(16.5, ConvoyFocusPlanner.clampFitZoom(19.0, 8.0, 16.5, 14.0), 1e-9)
+    }
+
+    @Test
+    fun `a spread-out group is floored so it never frames as a country map`() {
+        assertEquals(8.0, ConvoyFocusPlanner.clampFitZoom(3.0, 8.0, 16.5, 14.0), 1e-9)
+    }
+
+    @Test
+    fun `a missing or non-finite fit zoom falls back to the browsing zoom`() {
+        // The SDK declines to give a zoom (null) or hands back a degenerate one
+        // for a single-point cluster; both resolve to the fallback, then clamp.
+        assertEquals(14.0, ConvoyFocusPlanner.clampFitZoom(null, 8.0, 16.5, 14.0), 1e-9)
+        assertEquals(14.0, ConvoyFocusPlanner.clampFitZoom(Double.NaN, 8.0, 16.5, 14.0), 1e-9)
+        assertEquals(
+            16.5,
+            ConvoyFocusPlanner.clampFitZoom(Double.POSITIVE_INFINITY, 8.0, 16.5, 20.0),
+            1e-9,
+        )
+    }
+
     @Test
     fun `bounds cover every point`() {
         val bounds = ConvoyFocusPlanner.boundsOf(listOf(me, other, ConvoyLatLng(57.0, 13.0)))
