@@ -12,10 +12,11 @@ import kotlinx.coroutines.flow.asStateFlow
  *
  * The durable source of truth is [observe]: a realtime listener whose
  * emissions update [flags] as the backend changes and whose auto-reconnect
- * recovers a client that missed the value at startup. Once a good value has
- * arrived it is never dropped back to defaults — a listener/flow error keeps
- * the last good value. [refresh] is an optional one-shot fast path with the
- * same never-fail-off contract.
+ * recovers a client that missed the value at startup. A listener/flow ERROR
+ * keeps the last good value (a transient failure never silently forces flags
+ * "off"); a backend value that omits a flag still resolves to that flag's
+ * documented default, by design. [refresh] is an optional one-shot fast path
+ * with the same never-fail-off-on-error contract.
  */
 class FeatureFlagsStore(
     private val repository: FeatureFlagsRepository?,

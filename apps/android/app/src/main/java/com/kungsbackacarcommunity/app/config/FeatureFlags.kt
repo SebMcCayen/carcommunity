@@ -41,7 +41,21 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
     CROWN_HUNT_SPAWN("crownHuntSpawn", false),
 }
 
-class FeatureFlags private constructor(private val values: Map<FeatureFlag, Boolean>) {
+/**
+ * A `data class` over the fully-populated backing map so equality is
+ * structural: two flag sets with the same values compare equal, which lets the
+ * store's `StateFlow` dedupe identical realtime-listener emissions instead of
+ * recomposing every `collectAsState()` reader on each snapshot. The map always
+ * carries every [FeatureFlag] key (see [DEFAULTS]/[fromStored]), so `Map`'s own
+ * structural equality is exact here.
+ *
+ * [ConsistentCopyVisibility] keeps the generated `copy()` as private as the
+ * constructor, so callers still can only build a set through [DEFAULTS] or
+ * [fromStored] (which guarantee every key is present) — copy can't be used to
+ * smuggle in a partially-populated map.
+ */
+@ConsistentCopyVisibility
+data class FeatureFlags private constructor(private val values: Map<FeatureFlag, Boolean>) {
 
     fun isEnabled(flag: FeatureFlag): Boolean = values[flag] ?: flag.default
 
