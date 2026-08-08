@@ -21,10 +21,16 @@
  *    the approval moves up a level: a cell spawns nothing until an admin has
  *    approved it (`crownSpawnCells`, see spawnCells.ts). The algorithm decides
  *    HOW MANY and WHERE-ISH inside an approved area; it never opens a new area.
- *  - Never spawn where nobody goes: activity score below
- *    {@link MIN_ACTIVITY_FOR_SPAWN} yields a target of ZERO crowns, so the
- *    engine cannot lure a member to an empty field or an industrial estate at
- *    night just because the grid cell was approved.
+ *  - Never spawn where nobody goes, UNLESS a human has vetted the exact stop.
+ *    On the RANDOM-placement single-cell path, an activity score below
+ *    {@link MIN_ACTIVITY_FOR_SPAWN} yields a target of ZERO crowns, so the engine
+ *    cannot lure a member to an empty field or an industrial estate at night just
+ *    because the grid cell was approved. The POI-ANCHORED marked-area path adds a
+ *    small unconditional {@link CROWN_BASELINE_TARGET_PER_CELL} on top of the
+ *    activity-derived amount, but only ever places it AT a cached safe-stop POI
+ *    inside the approved area — so a baseline crown still lands on a vetted
+ *    parking/fuel/charging stop, never a random coordinate, and a cell with no
+ *    cached POI gets nothing to place on and spawns nothing.
  *  - Never spawn where people only DRIVE PAST: a sighting counts toward the
  *    activity score only when the member was moving slowly
  *    ({@link MAX_ACTIVITY_SPEED_MPS}). "A > 0" alone would rate a motorway as
@@ -307,22 +313,67 @@ export const MAX_CROWNS_PER_CELL = 5;
 export const MIN_ACTIVITY_FOR_SPAWN = 1;
 
 /**
- * `N_target(cell) = ceil(K * ln(1 + A))`, capped at
- * {@link MAX_CROWNS_PER_CELL}, and 0 when `A < 1`.
+ * BASELINE crowns per approved cell — the floor a POI-anchored, admin-approved
+ * area receives even with ZERO recent member activity (`A = 0`), placed ON TOP
+ * of the activity-derived amount and clamped to {@link MAX_CROWNS_PER_CELL}.
  *
- * Logarithmic on purpose: a city-centre cell with 50 recent visitors should
- * feel a bit richer than a quiet suburb with 5, not ten times richer. The
- * curve reaches the cap around A ≈ 27 and never exceeds it.
+ * Why it exists: the activity-derived target `ceil(K·ln(1+A))` is 0 whenever
+ * `A < 1`, so during a low-usage launch an admin who has marked whole safe areas
+ * sees crowns only in the cells they personally drove through recently. A small
+ * unconditional baseline lets a freshly-approved area populate its safe stops
+ * before it has any traffic; activity still adds richness on top, up to the cap.
+ *
+ * SAFETY — the baseline does NOT relax any placement guarantee. It only raises
+ * the per-cell TARGET; WHERE a crown may be placed is unchanged. A baseline crown
+ * is therefore only ever created by the POI-ANCHORED marked-area pass
+ * (`runCrownAreaSpawnPass`), AT a cached safe-stop POI inside the drawn area — a
+ * cell with no cached POI has nothing to anchor to and still spawns nothing. The
+ * hand-approved single-cell path samples RANDOM in-cell coordinates and so is
+ * deliberately given NO baseline (it passes the default 0 — see
+ * `runCrownSpawnPass`): an unconditional crown at a random point is exactly the
+ * "invite a stop somewhere unvetted" outcome the whole engine exists to prevent.
+ *
+ * Conservative on purpose: 1 crown. Set to 0 to disable the baseline entirely,
+ * which restores the pure activity-derived target for every caller.
+ */
+export const CROWN_BASELINE_TARGET_PER_CELL = 1;
+
+/**
+ * `N_target(cell) = min(max, baseline + activityDerived)`, where
+ * `activityDerived = ceil(K · ln(1 + A))` for `A ≥ minActivity` and 0 below the
+ * floor.
+ *
+ * With the default `baseline` of 0 this is the original pure activity curve: 0
+ * below the floor, logarithmic above it (the log curve reaches the cap around
+ * `A ≈ 27` and never exceeds it), capped at {@link MAX_CROWNS_PER_CELL}. The
+ * POI-anchored marked-area pass passes {@link CROWN_BASELINE_TARGET_PER_CELL},
+ * so an approved area receives that many crowns even at `A = 0`, with activity
+ * adding on top up to the same cap. See that constant for why a baseline is safe
+ * ONLY on the POI-anchored path.
+ *
+ * Logarithmic on purpose: a city-centre cell with 50 recent visitors should feel
+ * a bit richer than a quiet suburb with 5, not ten times richer.
  */
 export function targetCrownCount(
   activity: number,
-  options: { k?: number; max?: number; minActivity?: number } = {},
+  options: { k?: number; max?: number; minActivity?: number; baseline?: number } = {},
 ): number {
   const k = options.k ?? DENSITY_K;
   const max = options.max ?? MAX_CROWNS_PER_CELL;
   const minActivity = options.minActivity ?? MIN_ACTIVITY_FOR_SPAWN;
-  if (!Number.isFinite(activity) || activity < minActivity) return 0;
-  return Math.min(max, Math.ceil(k * Math.log(1 + activity)));
+  // Clamp the baseline to a non-negative integer so a malformed option can only
+  // ever LOWER the target, never inject a fractional or negative crown count.
+  // A non-finite or absent baseline is 0 (the pure activity curve).
+  const baseline = Number.isFinite(options.baseline)
+    ? Math.max(0, Math.floor(options.baseline as number))
+    : 0;
+  // Below the floor (or a non-finite activity), the activity term contributes
+  // nothing — only the baseline, if any, remains.
+  const activityDerived =
+    Number.isFinite(activity) && activity >= minActivity
+      ? Math.ceil(k * Math.log(1 + activity))
+      : 0;
+  return Math.min(max, baseline + activityDerived);
 }
 
 // ---------------------------------------------------------------------------

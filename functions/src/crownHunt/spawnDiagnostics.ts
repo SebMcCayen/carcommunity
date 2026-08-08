@@ -34,6 +34,7 @@ import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
   ACTIVITY_WINDOW_MS,
+  CROWN_BASELINE_TARGET_PER_CELL,
   CROWN_SPAWN_FLAG_KEY,
   activityScore,
   crownCellBounds,
@@ -276,7 +277,11 @@ export const spawnDiagnostics = onCall(
         .map((doc) => toMillisOrNull(doc.data().lastSeenAt))
         .filter((value): value is number => value !== null);
       const activity = activityScore(lastSeenValues, nowMs);
-      const target = targetCrownCount(activity);
+      // MIRROR the marked-area pass exactly (runCrownAreaSpawnPass): its target is
+      // BASELINE + activity-derived, so the diagnostics must add the same baseline
+      // or an admin would see "below activity floor / would not spawn" for a cell
+      // the pass actually populates from the baseline.
+      const target = targetCrownCount(activity, { baseline: CROWN_BASELINE_TARGET_PER_CELL });
 
       // Live crowns IN this cell, counted from the 3×3 neighbourhood read the
       // pass uses for the separation check.

@@ -4,6 +4,7 @@ import {
   ACTIVITY_TAU_MS,
   ACTIVITY_WINDOW_MS,
   COLLECT_RADIUS_METERS,
+  CROWN_BASELINE_TARGET_PER_CELL,
   CROWN_CELL_DEGREES,
   CROWN_RARITIES,
   CROWN_RARITY_TABLE,
@@ -263,6 +264,78 @@ describe('target density N_target = ceil(K * ln(1 + A))', () => {
   it('rejects non-finite activity instead of spawning', () => {
     expect(targetCrownCount(Number.NaN)).toBe(0);
     expect(targetCrownCount(Number.POSITIVE_INFINITY)).toBe(0);
+  });
+});
+
+describe('target density with a BASELINE (POI-anchored area path)', () => {
+  it('defaults to no baseline, leaving the pure activity curve intact', () => {
+    // No baseline option ⇒ identical to the activity-only formula. This is what
+    // keeps the random single-cell path (which passes no baseline) unchanged.
+    for (const a of [0, 0.5, 1, 5, 10, 20, 100]) {
+      expect(targetCrownCount(a, {})).toBe(targetCrownCount(a));
+    }
+    expect(targetCrownCount(0, { baseline: 0 })).toBe(0);
+  });
+
+  it('places the baseline even with ZERO activity — the whole point of the change', () => {
+    // A = 0 is below the floor, so activityDerived = 0; only the baseline remains.
+    expect(targetCrownCount(0, { baseline: 1 })).toBe(1);
+    expect(targetCrownCount(0.5, { baseline: 1 })).toBe(1);
+    expect(targetCrownCount(0, { baseline: 2 })).toBe(2);
+    // And the shipped constant behaves the same way at A = 0.
+    expect(targetCrownCount(0, { baseline: CROWN_BASELINE_TARGET_PER_CELL })).toBe(
+      CROWN_BASELINE_TARGET_PER_CELL,
+    );
+  });
+
+  it('adds activity ON TOP of the baseline', () => {
+    // activityDerived(1) = ceil(1.5*ln2) = 2, so baseline 1 ⇒ 3.
+    expect(targetCrownCount(1, { baseline: 1 })).toBe(targetCrownCount(1) + 1);
+    // activityDerived(5) = 3, so baseline 1 ⇒ 4.
+    expect(targetCrownCount(5, { baseline: 1 })).toBe(4);
+    expect(targetCrownCount(5, { baseline: 2 })).toBe(5);
+  });
+
+  it('clamps baseline + activity to the per-cell cap', () => {
+    // activityDerived(20) already = 5 (the cap); any baseline cannot exceed it.
+    expect(targetCrownCount(20, { baseline: 1 })).toBe(MAX_CROWNS_PER_CELL);
+    expect(targetCrownCount(1000, { baseline: 5 })).toBe(MAX_CROWNS_PER_CELL);
+    // A baseline larger than the cap is itself clamped, even at zero activity.
+    expect(targetCrownCount(0, { baseline: 99 })).toBe(MAX_CROWNS_PER_CELL);
+  });
+
+  it('a baseline of 0 restores the activity floor (the disable guard)', () => {
+    for (const a of [0, 0.001, 0.5, 0.999]) {
+      expect(targetCrownCount(a, { baseline: 0 })).toBe(0);
+    }
+  });
+
+  it('treats a malformed baseline as a value that can only LOWER the target', () => {
+    // Non-finite, negative, or fractional baselines never inject crowns: they
+    // clamp to a non-negative integer (floor), and non-finite ⇒ 0.
+    expect(targetCrownCount(0, { baseline: -5 })).toBe(0);
+    expect(targetCrownCount(0, { baseline: Number.NaN })).toBe(0);
+    expect(targetCrownCount(0, { baseline: Number.POSITIVE_INFINITY })).toBe(0);
+    expect(targetCrownCount(0, { baseline: 1.9 })).toBe(1); // floored to 1
+    expect(targetCrownCount(0, { baseline: 0.9 })).toBe(0); // floored to 0
+  });
+
+  it('stays monotonically non-decreasing in A for a fixed baseline', () => {
+    let previous = 0;
+    for (let a = 0; a <= 200; a += 0.25) {
+      const target = targetCrownCount(a, { baseline: CROWN_BASELINE_TARGET_PER_CELL });
+      expect(target).toBeGreaterThanOrEqual(previous);
+      expect(target).toBeGreaterThanOrEqual(CROWN_BASELINE_TARGET_PER_CELL);
+      previous = target;
+    }
+  });
+
+  it('ships a conservative, safe baseline constant', () => {
+    // A guard on the shipped value: a positive baseline that is at most the cap.
+    // (Set the constant to 0 to disable the baseline entirely.)
+    expect(Number.isInteger(CROWN_BASELINE_TARGET_PER_CELL)).toBe(true);
+    expect(CROWN_BASELINE_TARGET_PER_CELL).toBeGreaterThanOrEqual(0);
+    expect(CROWN_BASELINE_TARGET_PER_CELL).toBeLessThanOrEqual(MAX_CROWNS_PER_CELL);
   });
 });
 

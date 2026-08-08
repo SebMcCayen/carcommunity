@@ -357,35 +357,42 @@ describe('POI-anchored spawn pass', () => {
     await clearAreas();
     const areaId = await createArea();
     const now = new Date();
-    // Low-ish activity so the per-cell target is small, and exactly enough POIs to
-    // reach it: 2 distinct users → A≈2 → target 2; two POIs >150 m apart.
+    // Low-ish activity so the per-cell target is small, and EXACTLY enough POIs to
+    // reach it so the cell genuinely lands AT target (the invariant under test). The
+    // per-cell target is BASELINE + activity-derived: 2 distinct users → A≈2 →
+    // ceil(1.5·ln3)=2, plus CROWN_BASELINE_TARGET_PER_CELL(=1) ⇒ target 3, so three
+    // POIs pairwise >150 m apart. (With too few POIs the baseline deficit would be
+    // unfillable and every tick would reload POIs — which is exactly what this test
+    // must NOT trip over.)
     await seedActivity(CELL_KEY, 2, now);
-    const twoPois = [
+    const targetPois = [
       { lat: CELL_LAT, lon: CELL_LON, category: 'parking' as const },
       { lat: CELL_LAT + 0.0018, lon: CELL_LON, category: 'fuel' as const }, // ~200 m north
+      { lat: CELL_LAT, lon: CELL_LON + 0.0035, category: 'charging' as const }, // ~220 m east
     ];
     // The area-level gate reads the stored poiCount (not POI docs); set it so the
     // area is served. The per-cell POIs come from the injected counting loader.
     await adminDb
       .collection('crownSpawnAreas')
       .doc(areaId)
-      .set({ poiCount: twoPois.length }, { merge: true });
+      .set({ poiCount: targetPois.length }, { merge: true });
 
-    const poisFor: Record<string, typeof twoPois> = { [CELL_KEY]: twoPois };
+    const poisFor: Record<string, typeof targetPois> = { [CELL_KEY]: targetPois };
     let loaderCalls = 0;
     const countingLoader = async (_areaId: string, cellKey: string) => {
       loaderCalls += 1;
       return poisFor[cellKey] ?? [];
     };
 
-    // First tick: there IS a deficit, so the loader is invoked and crowns are placed.
+    // First tick: there IS a deficit, so the loader is invoked and crowns are placed
+    // up to target (BASELINE + activity-derived = 3), one per far-apart POI.
     const first = await runCrownAreaSpawnPass(
       now,
       { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
       createSeededRng(1234),
       { loadCellPois: countingLoader },
     );
-    expect(first.spawned).toBe(2);
+    expect(first.spawned).toBe(3);
     expect(loaderCalls).toBeGreaterThan(0);
 
     // Second tick: the cell is now at target, so NO cell reaches the POI load — the
