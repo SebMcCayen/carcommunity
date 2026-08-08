@@ -1278,6 +1278,13 @@
     <string name="dm_sendErrorGeneric">Kunde inte skicka ditt meddelande. Försök igen.</string>
     <string name="dm_statusSending">Skickar…</string>
     <string name="dm_statusFailedRetry">Skickades inte. Tryck för att försöka igen.</string>
+    <string name="dm_newDialogue_action">Nytt meddelande</string>
+    <string name="dm_newDialogue_title">Starta ett nytt meddelande</string>
+    <string name="dm_newDialogue_subtitle">Välj en vän att skriva till</string>
+    <string name="dm_newDialogue_empty">Du har inte lagt till några vänner än. Lägg till en vän för att börja ett meddelande.</string>
+    <string name="dm_newDialogue_error">Kunde inte ladda dina vänner. Försök igen.</string>
+    <string name="dm_newDialogue_retry">Försök igen</string>
+    <string name="dm_newDialogue_unnamedFriend">Vän</string>
     <string name="channel_inputPlaceholder">Skriv ett meddelande…</string>
     <string name="channel_send">Skicka</string>
     <string name="channel_loadOlder">Ladda tidigare meddelanden</string>

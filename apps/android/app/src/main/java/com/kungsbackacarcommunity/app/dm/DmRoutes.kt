@@ -1,5 +1,13 @@
 package com.kungsbackacarcommunity.app.dm
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -9,14 +17,21 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.blocking.BlockingCoordinator
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
+import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -34,6 +49,13 @@ fun ConversationListRoute(
     // true for the standalone route, where the header is the only thing that
     // does. See [ConversationListScreen].
     showTitle: Boolean = true,
+    // When BOTH are wired, a "start a new dialogue" FAB is shown that opens a
+    // friend picker; picking a friend opens (or re-opens) the DM thread with them
+    // via [onOpenDm]. A config-less build — or a host that has no way to open a
+    // thread — passes null for either and gets the plain inbox with no dead
+    // control. [onOpenDm] receives the resolved peer uid + best-known display name.
+    friendsRepository: FriendsRepository? = null,
+    onOpenDm: ((uid: String, name: String?) -> Unit)? = null,
 ) {
     // A retry bumps [retryKey], re-subscribing the inbox listener (a transient
     // failure — offline, or a not-yet-active composite index — can then recover
@@ -57,12 +79,61 @@ fun ConversationListRoute(
         }
     }
 
-    ConversationListScreen(
-        state = state,
-        onOpenConversation = onOpenConversation,
-        onRetry = { retryKey++ },
-        showTitle = showTitle,
-    )
+    // The inbox rows currently loaded, used to resolve whether a picked friend
+    // re-opens an existing conversation or starts a new one (pure:
+    // [NewDialogue.openTargetFor]). Empty while loading/errored — a pick then
+    // simply opens a fresh thread, which is correct.
+    val conversations = (state as? DmConversationsState.Loaded)?.conversations.orEmpty()
+    var showPicker by remember { mutableStateOf(false) }
+    val canStartNew = friendsRepository != null && onOpenDm != null
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        ConversationListScreen(
+            state = state,
+            onOpenConversation = onOpenConversation,
+            onRetry = { retryKey++ },
+            showTitle = showTitle,
+            reserveBottomActionSpace = canStartNew,
+        )
+
+        if (canStartNew) {
+            // Material "compose new message" convention: a bottom-end FAB. This
+            // section has no top app bar of its own to hang an action on (inside
+            // the chat hub the tab row sits above it; the standalone route uses the
+            // shared Aero chrome), so the FAB is both the conventional and the
+            // best-fitting placement here.
+            FloatingActionButton(
+                onClick = { showPicker = true },
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomEnd)
+                        .navigationBarsPadding()
+                        .padding(KccSpacing.s4)
+                        .testTag(NEW_DIALOGUE_FAB_TEST_TAG),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = stringResource(R.string.dm_newDialogue_action),
+                )
+            }
+
+            if (showPicker) {
+                NewDialogueSheet(
+                    friendsRepository = friendsRepository,
+                    onPick = { friend ->
+                        showPicker = false
+                        val target = NewDialogue.openTargetFor(friend, conversations)
+                        // A blank uid would open a dead thread; the picker already
+                        // drops blank-uid friends, this is belt-and-braces.
+                        if (target.uid.isNotBlank()) {
+                            onOpenDm(target.uid, target.displayName)
+                        }
+                    },
+                    onDismiss = { showPicker = false },
+                )
+            }
+        }
+    }
 }
 
 /** Stable feature key for the Messages inbox (matches the backend fingerprint input). */

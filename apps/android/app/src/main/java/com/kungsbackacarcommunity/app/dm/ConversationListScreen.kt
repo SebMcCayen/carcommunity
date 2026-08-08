@@ -6,9 +6,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -60,6 +65,10 @@ fun ConversationListScreen(
     modifier: Modifier = Modifier,
     onRetry: () -> Unit = {},
     showTitle: Boolean = true,
+    // True when a bottom-end FAB overlays this list ("start a new dialogue"): a
+    // trailing spacer then lets the last row scroll clear of the FAB rather than
+    // sit permanently behind it.
+    reserveBottomActionSpace: Boolean = false,
 ) {
     // Durable list: a LazyColumn so only visible rows compose. The title is the
     // first `item {}`; conversation rows are keyed by conversationId so
@@ -115,9 +124,30 @@ fun ConversationListScreen(
                         }
                     }
             }
+
+            if (reserveBottomActionSpace) {
+                item(key = "fabSpacer") {
+                    // The FAB is also inset by navigationBarsPadding() in
+                    // ConversationListRoute, so it sits HIGHER on devices with a
+                    // larger nav-bar inset (gesture nav / 3-button). Add that inset
+                    // to the fixed clearance so the last row clears the FAB on every
+                    // device, not just insetless ones.
+                    val navBottom =
+                        WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                    Spacer(Modifier.height(FAB_CLEARANCE + navBottom))
+                }
+            }
         }
     }
 }
+
+/**
+ * Bottom clearance reserved below the list when the "start a new dialogue" FAB
+ * overlays it — a standard 56dp FAB plus its margin — so the last conversation
+ * row can scroll fully into view above the button. The navigation-bar inset the
+ * FAB is additionally offset by is added on top of this at the call site.
+ */
+private val FAB_CLEARANCE = 80.dp
 
 @Composable
 private fun ConversationRow(
