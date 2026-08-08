@@ -11,7 +11,7 @@
         "Appen är mindre i nedladdningsstorlek"
       ],
       "changes": [
-        "Kronjakten: kronor skapas nu automatiskt vid säkra stopp-platser i hela de markerade områdena – inte längre bara där det nyligen kört bilar, så det finns mer att hitta",
+        "Kronjakten: kronor skapas nu automatiskt vid säkra stopp-platser i hela de markerade områdena – inte längre bara där det nyligen varit trafik, så det finns mer att hitta",
         "Kartan: du ser nu kronor i ett större område runt kartan när du drar eller zoomar ut, istället för bara närmast dig",
         "Appen är nu mindre i nedladdningsstorlek och kraschrapporter blir enklare att felsöka"
       ]
