@@ -5,6 +5,38 @@ carcommunity is an open source monorepo for a safety-focused car community platf
 The MVP brand is **Kungsbacka Car Community (KCC)**.  
 The codebase is intentionally **brand-ready** so it can support a future national name or multiple local communities without hardcoding KCC-specific behavior into core architecture.
 
+## Project status
+
+**Phase: active development — pre-public-launch.** The Android app is distributed through **Google Play closed testing** and has not been publicly released. Interfaces, data, and feature scope are still changing.
+
+The MVP is three parts, all in this monorepo:
+
+- **Android app** (Kotlin / Jetpack Compose) — the primary member client.
+- **Admin web app** (React + Vite) — internal community administration and moderation.
+- **Firebase backend** (Cloud Functions, Firestore, Realtime Database, App Check) — deployed from CI via Workload Identity Federation.
+
+iOS is **out of scope for the MVP** (parked on the Future Ideas board).
+
+### Implemented feature areas
+
+These member-facing areas exist in the codebase today. As a pre-launch project, individual capabilities may sit behind feature flags or remain under active iteration.
+
+- **Community events** — RSVP, on-site check-in, and per-event chat.
+- **Convoys** — group drives with live location sharing and on-map convoy awareness.
+- **Crown Hunt** — a map-based collect-on-location gamification layer with points, badges, and statistics.
+- **Friends & direct messaging** — friend connections, DMs, and community chat channels.
+- **Vehicle garage** — members' cars and vehicle profiles.
+- **Saved drives** — routes stored only after an explicit user action; users can delete them at any time.
+- **Traffic-incident overlays** — incident reporting and map overlays.
+- **Partner insights** — anonymised, aggregated engagement signals for community partners; location-derived pass-by statistics require explicit opt-in (off by default).
+- **Membership & subscription** — Google Play billing and entitlement checks.
+
+Supporting systems include Firebase Authentication, push notifications (FCM), in-app moderation and blocking, and an in-app problem reporter.
+
+### What's next
+
+Work is focused on hardening the closed-testing build toward a public launch: stabilizing the map-first Android experience, completing feature areas still behind flags, and operational readiness. Roadmap items are tracked internally and are not commitments.
+
 ## Open source status
 
 - This repository is open source.
