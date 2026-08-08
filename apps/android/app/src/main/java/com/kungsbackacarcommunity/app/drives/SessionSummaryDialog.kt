@@ -101,6 +101,7 @@ fun SessionSummaryDialog(
     onDelete: () -> Unit,
     onRetry: () -> Unit,
     onDiscard: () -> Unit,
+    reason: SavePromptReason = SavePromptReason.Default,
 ) {
     when (state) {
         is RecordingState.SavedPendingChoice ->
@@ -108,6 +109,7 @@ fun SessionSummaryDialog(
                 elapsedMillis = state.elapsedMillis,
                 pointsProvider = pointsProvider,
                 deleteFailed = state.deleteFailed,
+                reason = reason,
                 onKeep = onKeep,
                 onDelete = onDelete,
             )
@@ -145,6 +147,7 @@ private fun KeepOrDeletePrompt(
     elapsedMillis: Long,
     pointsProvider: () -> List<RecordedPoint>,
     deleteFailed: Boolean,
+    reason: SavePromptReason,
     onKeep: () -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -163,7 +166,10 @@ private fun KeepOrDeletePrompt(
         modifier = Modifier.testTag(SESSION_SUMMARY_DIALOG_TAG),
         // Force an explicit choice: back / outside-tap does not dismiss.
         onDismissRequest = {},
-        title = { Text(stringResource(R.string.savedDrives_autoSavedTitle)) },
+        // Title + body vary by why the session ended (SavePromptCopy): the neutral
+        // "Drive saved" for a self-stop, or a convoy-ended explanation when the
+        // convoy ending under the member is what stopped their session.
+        title = { Text(stringResource(SavePromptCopy.titleRes(reason))) },
         text = {
             Column(
                 // The expanded map makes this the tallest content the dialog can
@@ -175,7 +181,7 @@ private fun KeepOrDeletePrompt(
                 verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
             ) {
                 Text(
-                    text = stringResource(R.string.savedDrives_autoSavedBody),
+                    text = stringResource(SavePromptCopy.bodyRes(reason)),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 DriveSummaryRows(elapsedMillis = elapsedMillis, preview = content?.preview)

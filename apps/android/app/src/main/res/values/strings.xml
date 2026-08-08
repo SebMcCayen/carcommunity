@@ -783,6 +783,8 @@
     <string name="savedDrives_saveSuccess">Körningen har sparats.</string>
     <string name="savedDrives_autoSavedTitle">Körningen sparad</string>
     <string name="savedDrives_autoSavedBody">Din körning sparades automatiskt. Behåll den i historiken, eller radera den om du inte vill ha den.</string>
+    <string name="savedDrives_convoyEndedTitle">Konvojen avslutades</string>
+    <string name="savedDrives_convoyEndedBody">Konvojen har avslutats, så din livedelning stoppades. Din körning sparades automatiskt – behåll den i historiken, eller radera den om du inte vill ha den.</string>
     <string name="savedDrives_keepAction">Behåll</string>
     <string name="savedDrives_deleteSessionAction">Radera</string>
     <string name="savedDrives_deleteSessionConfirmTitle">Radera den här sparade körningen?</string>
