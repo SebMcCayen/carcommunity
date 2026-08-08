@@ -26,9 +26,9 @@ These member-facing areas exist in the codebase today. As a pre-launch project, 
 - **Crown Hunt** — a map-based collect-on-location gamification layer with points, badges, and statistics.
 - **Friends & direct messaging** — friend connections, DMs, and community chat channels.
 - **Vehicle garage** — members' cars and vehicle profiles.
-- **Saved drives** — recorded and saved routes.
+- **Saved drives** — routes stored only after an explicit user action; users can delete them at any time.
 - **Traffic-incident overlays** — incident reporting and map overlays.
-- **Partner insights** — aggregated engagement signals for community partners.
+- **Partner insights** — anonymised, aggregated engagement signals for community partners; location-derived pass-by statistics require explicit opt-in (off by default).
 - **Membership & subscription** — Google Play billing and entitlement checks.
 
 Supporting systems include Firebase Authentication, push notifications (FCM), in-app moderation and blocking, and an in-app problem reporter.
