@@ -2,8 +2,11 @@
  * Kronjakt auto-spawn — the scheduled REPLENISHER and SWEEPER.
  *
  * `crownHunt-spawnCrowns` (every 10 min): tops each ADMIN-APPROVED grid cell up
- * toward its activity-derived target, respecting the minimum separation between
- * live crowns.
+ * toward its per-cell target, respecting the minimum separation between live
+ * crowns. The target is BASELINE + activity-derived on the POI-anchored
+ * marked-area path (so an approved area populates its safe stops even at zero
+ * recent activity) and purely activity-derived on the random-placement
+ * single-cell path (which gets no baseline — see below).
  *
  * `crownHunt-sweepSpawns` (every 15 min): deletes crowns whose `expiresAt` has
  * passed (including ones marked claimed, whose expiry is set to the claim
@@ -19,8 +22,12 @@
  *  2. the ADMIN ALLOW-LIST: the candidate set is `crownSpawnCells` where
  *     `approved == true`, never the set of cells that happen to have activity.
  *     A busy cell nobody approved is invisible to this function (spawnCells.ts);
- *  3. the activity floor and the slow-sighting filter, which narrow placement
- *     WITHIN an approved area.
+ *  3. POI ANCHORING (marked-area path) plus the slow-sighting filter, which
+ *     narrow WHERE a crown lands within an approved area. On the marked-area path
+ *     every crown — baseline or activity-derived — is placed AT a cached
+ *     safe-stop POI, so a cell with no POI spawns nothing however it is targeted;
+ *     the activity floor still zeroes the target on the random single-cell path,
+ *     which carries no baseline.
  * Each gate is independently sufficient to produce zero spawns. That is
  * deliberate: the failure mode this engine has to be defended against is
  * inviting a member to stop somewhere dangerous, and no single condition should
@@ -49,6 +56,7 @@ import { readFeatureFlag } from '../shared/featureFlags';
 import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import {
   ACTIVITY_WINDOW_MS,
+  CROWN_BASELINE_TARGET_PER_CELL,
   CROWN_SPAWN_FLAG_KEY,
   activityScore,
   buildCrownSpawnFields,
@@ -248,6 +256,11 @@ export async function runCrownSpawnPass(
       .map((doc) => (doc.data().lastSeenAt as Timestamp | undefined)?.toMillis())
       .filter((value): value is number => typeof value === 'number');
 
+    // NO BASELINE on this path. A hand-approved single cell places crowns at
+    // RANDOM in-cell coordinates (sampleCrownPosition below), and an
+    // unconditional crown at a random point would invite a stop somewhere no
+    // human vetted. The baseline lives only on the POI-anchored marked-area pass
+    // (runCrownAreaSpawnPass), so here the target stays purely activity-derived.
     const target = targetCrownCount(activityScore(lastSeenValues, now.getTime()));
     if (target === 0) {
       // A < 1 — nobody has been here recently enough. Never spawn.
@@ -387,7 +400,12 @@ export interface CrownAreaSpawnResult {
   areasScanned: number;
   /** Grid cells (across all areas) whose activity was read this run. */
   cellsScanned: number;
-  /** Cells whose activity was below the floor (`A < 1`). */
+  /**
+   * Cells that produced a per-cell target of 0 and so spawned nothing. With a
+   * non-zero {@link CROWN_BASELINE_TARGET_PER_CELL} an approved area's target is
+   * always ≥ the baseline, so this is 0 while the baseline is enabled; it counts
+   * below-floor cells only when the baseline constant is set to 0.
+   */
   cellsBelowActivityFloor: number;
   /** Crowns created. */
   spawned: number;
@@ -426,8 +444,12 @@ export interface CrownAreaSpawnResult {
  * (`crownSpawnAreas`) rather than hand-approved single cells (`crownSpawnCells`).
  * It reuses every property of the single-cell engine unchanged — the per-cell
  * activity score `A`, `targetCrownCount`, the 3×3 neighbourhood separation, the
- * rarity table and TTL — but its PLACEMENT is SAFE-STOP-ANCHORED rather than
- * random: instead of drawing a uniform-random in-shape point, a crown is placed
+ * rarity table and TTL — with two differences. First, its per-cell target adds a
+ * BASELINE ({@link CROWN_BASELINE_TARGET_PER_CELL}) on top of the activity-derived
+ * amount, so an approved area receives a few crowns even at `A = 0` (a low-usage
+ * area with no recent traffic still populates), clamped to the same per-cell cap.
+ * Second, its PLACEMENT is SAFE-STOP-ANCHORED rather than random: instead of
+ * drawing a uniform-random in-shape point, a crown is placed
  * AT a cached OpenStreetMap safe-stop POI (a parking lot, fuel station, or
  * charging station) that lies inside the area — optionally jittered ≤ ~5 m — via
  * {@link samplePoiPlacement}. The POIs are ingested per area into
@@ -445,8 +467,11 @@ export interface CrownAreaSpawnResult {
  * flag (this returns `skipped` while off), the admin allow-list (here the
  * candidate set IS `crownSpawnAreas where active == true`, and `active` can only
  * be true while `safeAreaConfirmed` is — enforced by the CRUD callables and
- * re-checked defensively below), and the `A < 1` activity floor plus the
- * slow-sighting filter narrowing placement within an approved area.
+ * re-checked defensively below), and — for the activity BONUS only — the `A < 1`
+ * floor plus the slow-sighting filter. The baseline is unconditional, so a cell
+ * below the activity floor is no longer skipped here; it still receives the
+ * baseline crowns, provided (as always) it has a cached safe-stop POI to anchor
+ * them to.
  */
 /**
  * Advances an area's round-robin cursor, tolerating a concurrent delete.
@@ -654,7 +679,14 @@ export async function runCrownAreaSpawnPass(
         .map((doc) => (doc.data().lastSeenAt as Timestamp | undefined)?.toMillis())
         .filter((value): value is number => typeof value === 'number');
 
-      const target = targetCrownCount(activityScore(lastSeenValues, now.getTime()));
+      // BASELINE + activity bonus. The baseline is added on THIS (POI-anchored)
+      // path only, so an approved area at A = 0 still targets a few crowns — but
+      // they are placed exclusively at cached safe-stop POIs below, never a random
+      // point. With a non-zero baseline the target is never 0, so the below-floor
+      // skip only fires when the baseline constant is set to 0.
+      const target = targetCrownCount(activityScore(lastSeenValues, now.getTime()), {
+        baseline: CROWN_BASELINE_TARGET_PER_CELL,
+      });
       if (target === 0) {
         result.cellsBelowActivityFloor += 1;
         continue;

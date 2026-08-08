@@ -45,6 +45,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runCrownAreaSpawnPass } from '../crownHunt/spawnScheduled';
 import {
   COLLECT_RADIUS_METERS,
+  CROWN_BASELINE_TARGET_PER_CELL,
+  MAX_CROWNS_PER_CELL,
+  MIN_CROWN_SEPARATION_METERS,
   crownActivityUserHash,
   crownCellKey,
   createSeededRng,
@@ -171,12 +174,35 @@ async function seedAreaPois(
 
 /** Smallest ground distance from `position` to any of the seeded POIs. */
 function nearestPoiMeters(position: { latitude: number; longitude: number }): number {
+  return nearestOfMeters(position, AREA_POIS);
+}
+
+/** Smallest ground distance from `position` to any POI in `pois`. */
+function nearestOfMeters(
+  position: { latitude: number; longitude: number },
+  pois: { lat: number; lon: number }[],
+): number {
   return Math.min(
-    ...AREA_POIS.map((poi) =>
+    ...pois.map((poi) =>
       haversineDistanceMeters(poi.lat, poi.lon, position.latitude, position.longitude),
     ),
   );
 }
+
+// SIX safe-stop POIs, all inside AREA_CIRCLE and inside CELL_KEY, pairwise well
+// over the 150 m separation (a centre point plus five on a ~250 m ring). Enough
+// anchors that the per-cell target — not the POI supply — is what limits the
+// spawn count, so the cap and "activity adds on top of the baseline" are real
+// constraints rather than side effects of running out of POIs.
+const BASELINE_CAP_POIS: { lat: number; lon: number; category: 'parking' | 'fuel' | 'charging' }[] =
+  [
+    { lat: CELL_LAT, lon: CELL_LON, category: 'parking' },
+    { lat: CELL_LAT + 0.002246, lon: CELL_LON, category: 'parking' }, // ring 0°
+    { lat: CELL_LAT + 0.000694, lon: CELL_LON + 0.004184, category: 'fuel' }, // ring 72°
+    { lat: CELL_LAT - 0.001817, lon: CELL_LON + 0.002586, category: 'charging' }, // ring 144°
+    { lat: CELL_LAT - 0.001817, lon: CELL_LON - 0.002586, category: 'parking' }, // ring 216°
+    { lat: CELL_LAT + 0.000694, lon: CELL_LON - 0.004184, category: 'fuel' }, // ring 288°
+  ];
 
 async function setSpawnFlag(enabled: boolean): Promise<void> {
   await adminDb
@@ -527,6 +553,162 @@ describe('marked-area spawner', () => {
       adminDb.collection('crownCellActivity').doc(crownCellKey(55, 15)),
     );
     await areaRef.delete();
+  });
+});
+
+describe('marked-area BASELINE spawn (low/zero-activity approved areas)', () => {
+  it('spawns the baseline in an approved area that HAS POIs but ZERO activity', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    const created = (
+      await call('crownHunt-createSpawnArea', {
+        shape: AREA_CIRCLE,
+        active: true,
+        safeAreaConfirmed: true,
+      })
+    ).data as AreaMutation;
+
+    // POIs but DELIBERATELY no activity: A = 0, so the activity-derived amount is
+    // 0 and the ONLY thing that can place a crown is the baseline.
+    await seedAreaPois(created.areaId);
+
+    const result = await runCrownAreaSpawnPass(
+      new Date(),
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(2026),
+    );
+    // With a non-zero baseline no scanned cell is skipped for being below the
+    // activity floor — the floor now only gates the activity BONUS.
+    expect(result.cellsBelowActivityFloor).toBe(0);
+
+    const spawns = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', created.areaId)
+      .get();
+    // Only CELL_KEY carries POIs, so exactly the baseline lands there.
+    expect(spawns.size).toBe(CROWN_BASELINE_TARGET_PER_CELL);
+    for (const doc of spawns.docs) {
+      const d = doc.data();
+      expect(isPointInShape(d.latitude as number, d.longitude as number, AREA_CIRCLE)).toBe(true);
+      // Baseline crowns are POI-anchored too — never a random in-shape point.
+      expect(
+        nearestPoiMeters({ latitude: d.latitude as number, longitude: d.longitude as number }),
+      ).toBeLessThanOrEqual(POI_JITTER_METERS + 1);
+      expect(d.safeLocationConfirmed).toBe(false);
+    }
+
+    // No activity aggregate was ever written for this cell.
+    const activity = await adminDb.collection('crownCellActivity').doc(CELL_KEY).get();
+    expect(activity.exists).toBe(false);
+
+    await call('crownHunt-deleteSpawnArea', { areaId: created.areaId });
+  });
+
+  it('spawns NOTHING for an approved area with NO cached POIs, baseline notwithstanding', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    const created = (
+      await call('crownHunt-createSpawnArea', {
+        shape: AREA_CIRCLE,
+        active: true,
+        safeAreaConfirmed: true,
+      })
+    ).data as AreaMutation;
+
+    // Activity present, but NO POIs seeded (poiCount stays 0). Safety-first: with
+    // nowhere vetted to anchor to, the baseline places nothing — it can never
+    // fall back to a random coordinate.
+    await seedActivity(CELL_KEY, 12, new Date());
+
+    const result = await runCrownAreaSpawnPass(
+      new Date(),
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(55),
+    );
+    expect(result.areasWithoutPois).toBeGreaterThanOrEqual(1);
+
+    const spawns = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', created.areaId)
+      .get();
+    expect(spawns.empty).toBe(true);
+
+    await call('crownHunt-deleteSpawnArea', { areaId: created.areaId });
+    await clearActivity(CELL_KEY);
+  });
+
+  it('adds activity ON TOP of the baseline, clamped to the cap and still ≥150 m apart', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    const created = (
+      await call('crownHunt-createSpawnArea', {
+        shape: AREA_CIRCLE,
+        active: true,
+        safeAreaConfirmed: true,
+      })
+    ).data as AreaMutation;
+    await seedAreaPois(created.areaId, BASELINE_CAP_POIS);
+
+    // Run 1 — ZERO activity: the target is just the baseline.
+    const baselineRun = await runCrownAreaSpawnPass(
+      new Date(),
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(11),
+    );
+    expect(baselineRun.spawned).toBeGreaterThan(0);
+    const baselineSpawns = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', created.areaId)
+      .get();
+    expect(baselineSpawns.size).toBe(CROWN_BASELINE_TARGET_PER_CELL);
+
+    // Run 2 — busy cell: A = 12 ⇒ activityDerived = ceil(1.5·ln13) = 4, plus the
+    // baseline of 1 ⇒ target 5, exactly the per-cell cap. Six POIs are available,
+    // so the target (not the POI supply) is what limits the count.
+    await clearSpawns();
+    await seedActivity(CELL_KEY, 12, new Date());
+    await runCrownAreaSpawnPass(
+      new Date(),
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(12),
+    );
+    const busySpawns = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', created.areaId)
+      .get();
+
+    // Activity added on top of the baseline (5 > 1) and the per-cell cap held.
+    expect(busySpawns.size).toBeGreaterThan(baselineSpawns.size);
+    expect(busySpawns.size).toBe(MAX_CROWNS_PER_CELL);
+
+    // Every crown is at one of the six safe stops, inside the shape…
+    const positions = busySpawns.docs.map((d) => ({
+      latitude: d.data().latitude as number,
+      longitude: d.data().longitude as number,
+    }));
+    for (const p of positions) {
+      expect(isPointInShape(p.latitude, p.longitude, AREA_CIRCLE)).toBe(true);
+      expect(nearestOfMeters(p, BASELINE_CAP_POIS)).toBeLessThanOrEqual(POI_JITTER_METERS + 1);
+    }
+    // …and the 150 m separation holds across the whole placed set.
+    for (let i = 0; i < positions.length; i += 1) {
+      for (let j = i + 1; j < positions.length; j += 1) {
+        expect(
+          haversineDistanceMeters(
+            positions[i]!.latitude,
+            positions[i]!.longitude,
+            positions[j]!.latitude,
+            positions[j]!.longitude,
+          ),
+        ).toBeGreaterThanOrEqual(MIN_CROWN_SEPARATION_METERS);
+      }
+    }
+
+    await call('crownHunt-deleteSpawnArea', { areaId: created.areaId });
+    await clearActivity(CELL_KEY);
   });
 });
 
