@@ -2,6 +2,24 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 30,
+      "versionName": "0.8.19",
+      "releaseDate": "2026-08-08",
+      "highlights": [
+        "Kronpoäng syns nu tydligt på din profil och bredvid dina vänners namn",
+        "Byt språk mellan svenska och engelska i Inställningar",
+        "Filtrera träffar efter avstånd så du hittar det som är närmast"
+      ],
+      "changes": [
+        "Kronpoäng visas nu stort högst upp på profilen, bredvid smeknamnet – och bredvid varje vän i Vänner-listan",
+        "Nytt språkval: byt mellan svenska och engelska under Inställningar, med engelska översättningar i hela appen (Kronpoäng heter \"Crown Points\" på engelska)",
+        "Träffar: filtrera listan efter avstånd (inom 5, 25 eller 50 km) för att snabbt hitta träffar nära dig",
+        "Träffar: den som skapar en träff anmäls nu automatiskt och visas som arrangör, och deltagarlistan är hopfälld för en renare vy",
+        "Kartan: du kan nu välja appen som din navigeringsapp när du öppnar en kartlänk till en plats (koordinater)",
+        "Kronjakten: kronan byter färg när du är nära nog att samla den, så du ser direkt när den är inom räckhåll"
+      ]
+    },
+    {
       "versionCode": 29,
       "versionName": "0.8.18",
       "releaseDate": "2026-08-07",
