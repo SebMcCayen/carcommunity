@@ -32,6 +32,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -485,17 +487,23 @@ private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
  */
 @Composable
 private fun PointsHeadline(balance: Long?) {
+    val value = balance ?: 0L
+    val label = stringResource(R.string.profile_pointsTitle)
+    // Merge the number + label into ONE accessible announcement so TalkBack reads
+    // "<n> Crown Points" as a single coherent phrase instead of the two separate
+    // nodes ("<n>" then "Crown Points") the split Texts would otherwise expose.
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        modifier = Modifier.clearAndSetSemantics { contentDescription = "$value $label" },
     ) {
         Text(
-            text = (balance ?: 0L).toString(),
+            text = value.toString(),
             style = MaterialTheme.typography.displaySmall,
             color = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = stringResource(R.string.profile_pointsTitle),
+            text = label,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,

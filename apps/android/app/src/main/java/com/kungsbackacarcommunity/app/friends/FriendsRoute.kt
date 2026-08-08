@@ -28,9 +28,10 @@ fun FriendsRoute(
     onMessageFriend: (FriendSummary) -> Unit,
     onViewProfile: (FriendSummary) -> Unit,
     errorReporter: ClientErrorReporter? = defaultClientErrorReporter(),
+    pointsRepository: FriendPointsRepository? = defaultFriendPointsRepository(),
 ) {
-    val coordinator = remember(repository, errorReporter) {
-        FriendsCoordinator(repository, errorReporter)
+    val coordinator = remember(repository, errorReporter, pointsRepository) {
+        FriendsCoordinator(repository, errorReporter, pointsRepository)
     }
     val status by coordinator.status.collectAsState()
     val addState by coordinator.add.collectAsState()
@@ -66,4 +67,15 @@ fun FriendsRoute(
 private fun defaultClientErrorReporter(): ClientErrorReporter? {
     val context = LocalContext.current
     return remember(context) { FirebaseClientErrorReporter.createIfAvailable(context) }
+}
+
+/**
+ * Builds the Firebase-backed [FriendPointsRepository] (public Crown Points
+ * balances) from the local context, or null in a config-less build — in which
+ * case the friends list simply renders without points.
+ */
+@Composable
+private fun defaultFriendPointsRepository(): FriendPointsRepository? {
+    val context = LocalContext.current
+    return remember(context) { FirebaseFriendPointsRepository.createIfAvailable(context) }
 }
