@@ -30,4 +30,10 @@ class FriendPointsFormatTest {
     fun `a negative balance keeps its sign`() {
         assertEquals("-1 240", FriendPointsFormat.grouped(-1_240))
     }
+
+    @Test
+    fun `Long extremes format without overflow`() {
+        assertEquals("9 223 372 036 854 775 807", FriendPointsFormat.grouped(Long.MAX_VALUE))
+        assertEquals("-9 223 372 036 854 775 808", FriendPointsFormat.grouped(Long.MIN_VALUE))
+    }
 }

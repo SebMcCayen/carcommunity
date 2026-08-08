@@ -1,7 +1,5 @@
 package com.kungsbackacarcommunity.app.friends
 
-import kotlin.math.abs
-
 /**
  * Reads members' PUBLIC Crown Points balances — the same denormalized
  * `pointsLedger/{uid}.balance` the member profile surfaces as its headline
@@ -43,7 +41,10 @@ object FriendPointsFormat {
      */
     fun grouped(balance: Long): String {
         val negative = balance < 0
-        val digits = abs(balance).toString()
+        // Magnitude via ULong so Long.MIN_VALUE (whose abs() overflows back to a
+        // negative) still yields correct digits.
+        val magnitude: ULong = if (negative) 0uL - balance.toULong() else balance.toULong()
+        val digits = magnitude.toString()
         val firstGroup = digits.length % 3
         val sb = StringBuilder()
         for (i in digits.indices) {
