@@ -50,6 +50,8 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -556,9 +558,14 @@ private fun CheckInSection(
                 anchor != null && !dwellElapsed -> {
                     val remaining = CheckInDwell.remainingMillis(anchor, now)
                     val (mins, secs) = CheckInDwell.remainingMinutesSeconds(remaining)
+                    val progressLabel = stringResource(R.string.events_checkInCountdownLabel)
                     LinearProgressIndicator(
                         progress = { CheckInDwell.progressFraction(anchor, now) },
-                        modifier = Modifier.fillMaxWidth().testTag(CHECK_IN_PROGRESS_TAG),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(CHECK_IN_PROGRESS_TAG)
+                                .semantics { contentDescription = progressLabel },
                     )
                     Text(
                         text =
@@ -591,11 +598,13 @@ private fun CheckInSection(
         }
         (state as? CheckInUiState.Failed)?.let { failed ->
             // A geofence miss on the FINAL (confirming) fix is a different problem
-            // from one on the first — the member has already dwelt, they just
-            // stepped out. Tell them to come back rather than repeating the
-            // generic "be at the location" line.
+            // from one on the first — the member has already dwelt the full ten
+            // minutes, they just stepped out. Tell them to come back to FINISH.
+            // Only in that confirm phase (dwell elapsed): earlier in the wait
+            // "finish checking in" would be a lie — they still have to wait — so a
+            // geofence miss then falls back to the generic "be at the location".
             val label =
-                if (failed.error == CheckInError.OUTSIDE_GEOFENCE && pending) {
+                if (failed.error == CheckInError.OUTSIDE_GEOFENCE && pending && dwellElapsed) {
                     R.string.events_checkInMoveBackToFinish
                 } else {
                     checkInErrorLabel(failed.error)

@@ -386,11 +386,16 @@ fun EventsRoute(
     val attendanceFlow =
         remember(selected, uid) { repository.observeMyAttendance(selected, uid) }
     val attendance by attendanceFlow.collectAsState(initial = null)
-    // Anchor of the dwell countdown: the PERSISTED record's first-sample time
-    // (survives app death / navigation) with this session's first fix as the
-    // fallback for the snapshot lag right after the first check-in.
+    // Anchor of the dwell countdown. This SESSION's first fix wins: its capture
+    // time is a DEVICE-clock instant — the same clock as the `now` the countdown
+    // ticks against, and the same value the backend measures dwell/spacing from —
+    // so it neither jumps when the snapshot lands nor drifts against device/server
+    // clock skew. The persisted record's `createdAt` (a SERVER instant) is only
+    // the fallback for when the session value is gone: after navigating away and
+    // back, or a process restart, where a slightly-later, cross-clock anchor is an
+    // acceptable price for surviving at all.
     val sessionFirstFixAt by checkInCoordinator.firstFixAtMillis.collectAsState()
-    val firstSampleAtMillis = attendance?.firstSampleAtMillis ?: sessionFirstFixAt
+    val firstSampleAtMillis = sessionFirstFixAt ?: attendance?.firstSampleAtMillis
 
     // Re-evaluate the window at its next boundary (opening or closing edge) rather
     // than polling — the same delay-to-boundary shape the map's pin expiry uses.

@@ -45,32 +45,6 @@ class CheckInDwellTest {
     }
 
     @Test
-    fun `canCompleteNow needs BOTH the elapsed dwell and a fix inside the fence`() {
-        val after = first + required
-        val before = first + required - 1
-        assertTrue(CheckInDwell.canCompleteNow(first, after, latestFixInsideFence = true))
-        // Elapsed but standing outside — the timer kept running, but they still
-        // have to come back for the final fix.
-        assertFalse(CheckInDwell.canCompleteNow(first, after, latestFixInsideFence = false))
-        // Inside but too soon.
-        assertFalse(CheckInDwell.canCompleteNow(first, before, latestFixInsideFence = true))
-    }
-
-    @Test
-    fun `firstAndLastInside tolerates a middle exit but not a first or last miss`() {
-        assertTrue(CheckInDwell.firstAndLastInside(listOf(true, true)))
-        // Walked to a shop mid-dwell and back — first and last inside, middle out.
-        assertTrue(CheckInDwell.firstAndLastInside(listOf(true, false, false, true)))
-        // A single ping can never prove a ten-minute stay.
-        assertFalse(CheckInDwell.firstAndLastInside(listOf(true)))
-        assertFalse(CheckInDwell.firstAndLastInside(emptyList()))
-        // Final fix outside — do not award.
-        assertFalse(CheckInDwell.firstAndLastInside(listOf(true, false)))
-        // First fix outside — the countdown should never have started.
-        assertFalse(CheckInDwell.firstAndLastInside(listOf(false, true)))
-    }
-
-    @Test
     fun `remaining minutes and seconds round up so 0-00 means genuinely zero`() {
         assertEquals(10 to 0, CheckInDwell.remainingMinutesSeconds(10L * 60_000L))
         assertEquals(9 to 59, CheckInDwell.remainingMinutesSeconds(9L * 60_000L + 59_000L))

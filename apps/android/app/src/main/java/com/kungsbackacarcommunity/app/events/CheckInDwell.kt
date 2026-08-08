@@ -19,10 +19,11 @@ package com.kungsbackacarcommunity.app.events
  * the fence at the FIRST fix and again at the FINAL (>= 10-min-later) fix — not
  * continuously in between. A member who walks to a shop and back mid-dwell still
  * qualifies. So the countdown is driven purely by wall-clock time since the
- * first sample and is NEVER reset by a temporary exit; only the final fix has to
- * be inside the fence, which [canCompleteNow] and [firstAndLastInside] encode.
+ * first sample and is NEVER reset by a temporary exit; that only the FINAL fix
+ * has to be inside the fence is the server's rule to enforce (checkIn.ts), not
+ * the client's — this object only measures the wait.
  */
-object CheckInDwell {
+internal object CheckInDwell {
     /**
      * How long the member must dwell before a verifying check-in can succeed —
      * mirrors REQUIRED_DWELL_MS in functions/src/points/points-economy-core.ts
@@ -54,33 +55,16 @@ object CheckInDwell {
                 .coerceIn(0f, 1f)
         }
 
-    /** True once at least [REQUIRED_DWELL_MS] has passed since the first sample. */
+    /**
+     * True once at least [REQUIRED_DWELL_MS] has passed since the first sample —
+     * the moment the confirming check-in is worth attempting. Being ELAPSED is
+     * necessary but not sufficient: the member must also be back inside the fence
+     * for the final fix, which only the server can and does decide (checkIn.ts).
+     * The "first + final inside, tolerate the middle" model is enforced there;
+     * the client neither computes the geofence nor tracks per-fix presence.
+     */
     fun isDwellElapsed(firstSampleAtMillis: Long, nowMillis: Long): Boolean =
         nowMillis - firstSampleAtMillis >= REQUIRED_DWELL_MS
-
-    /**
-     * Whether a verifying check-in can succeed right now: the dwell has elapsed
-     * AND the latest fix is inside the fence. A member who left the area still
-     * has to come BACK for the final fix — the timer keeping running is not the
-     * same as being allowed to confirm from the next town.
-     */
-    fun canCompleteNow(
-        firstSampleAtMillis: Long,
-        nowMillis: Long,
-        latestFixInsideFence: Boolean,
-    ): Boolean = isDwellElapsed(firstSampleAtMillis, nowMillis) && latestFixInsideFence
-
-    /**
-     * The "first-and-last inside, tolerate the middle" predicate over a series
-     * of in-fence flags (one per fix, in capture order): attendance needs the
-     * FIRST fix and the FINAL fix inside the fence, and does not care whether any
-     * fix in between was. Needs at least two fixes — a single ping can never
-     * prove a ten-minute stay. Mirrors, on the client, exactly what
-     * evaluateAttendance rewards on the server without weakening it: a `false`
-     * here only ever HIDES the confirm affordance; the server still decides.
-     */
-    fun firstAndLastInside(insideFlags: List<Boolean>): Boolean =
-        insideFlags.size >= 2 && insideFlags.first() && insideFlags.last()
 
     /**
      * The remaining time split into whole minutes and seconds for a "m:ss"
