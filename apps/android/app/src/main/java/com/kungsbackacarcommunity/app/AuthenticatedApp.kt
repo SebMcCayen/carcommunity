@@ -2606,9 +2606,12 @@ fun AuthenticatedApp(
                             userEndedSession = userEndedSession,
                             endedByExpiry = endedByExpiry,
                         )
-                    when (ConvoyEndSessionChoice.onSessionEnded(reason)) {
+                    when (val action = ConvoyEndSessionChoice.onSessionEnded(reason)) {
                         is EndedSessionAction.StopAndSave -> {
-                            SingleSessionRecording.stop(reason)
+                            // Use the reason the decision carried, not the recomputed
+                            // one, so the two can't drift if onSessionEnded ever maps
+                            // to a different reason (identical today).
+                            SingleSessionRecording.stop(action.reason)
                             // Consume the self-stop marker now the reason is captured,
                             // so the NEXT session is judged fresh. Reset HERE rather
                             // than on session start: the convoy-stop dialog flips
@@ -2626,14 +2629,15 @@ fun AuthenticatedApp(
                             // session). Key the prompt on the ended session's id and
                             // skip it once that session has been answered, so this
                             // effect re-running (recreation / a further emission of the
-                            // still-stopped session) can't re-open the dialog. With no
-                            // session id to key on, fall back to the old stop-and-save
-                            // so a member is never stranded without a prompt.
+                            // still-stopped session) can't re-open the dialog.
+                            //
+                            // reason == ConvoyEnded here, which requires
+                            // convoyAutoStarted == true and therefore a non-null
+                            // liveSession carrying a non-null sessionId — so this
+                            // `!= null` only exists to smart-cast the nullable local,
+                            // never to guard a real null.
                             val endedSessionId = liveSession?.sessionId
-                            if (endedSessionId == null) {
-                                SingleSessionRecording.stop(reason)
-                                userEndedSession = false
-                            } else if (endedSessionId != convoyEndDecidedSessionId) {
+                            if (endedSessionId != null && endedSessionId != convoyEndDecidedSessionId) {
                                 convoyEndPromptSessionId = endedSessionId
                             }
                         }
