@@ -376,6 +376,15 @@
     <string name="events_shareEventSuccess">Eventet delades med %1$s</string>
     <string name="events_shareEventFailed">Eventet kunde inte delas. Försök igen.</string>
     <string name="events_shareEventLinkLabel">🎟️ Öppna event</string>
+    <string name="events_distanceFilterLabel">Avstånd</string>
+    <string name="events_distanceFilterAll">Alla</string>
+    <string name="events_distanceFilterWithin5">Inom 5 km</string>
+    <string name="events_distanceFilterWithin25">Inom 25 km</string>
+    <string name="events_distanceFilterWithin50">Inom 50 km</string>
+    <string name="events_distanceFilterNoLocationHint">Slå på plats för att filtrera event efter avstånd.</string>
+    <string name="events_distanceRowAway">%1$s km bort</string>
+    <string name="events_noNearbyTitle">Inga event i närheten</string>
+    <string name="events_noNearbyBody">Inga event finns inom det här avståndet. Prova ett större intervall eller \"Alla\".</string>
     <string name="chat_title">Chat</string>
     <string name="chat_placeholder">Eventchat kommer snart.</string>
     <string name="chat_eventChatTitle">Eventchatt</string>

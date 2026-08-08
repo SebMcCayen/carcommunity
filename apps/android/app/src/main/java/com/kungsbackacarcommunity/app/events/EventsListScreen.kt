@@ -1,18 +1,22 @@
 package com.kungsbackacarcommunity.app.events
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -20,9 +24,11 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
 import java.util.Date
+import java.util.Locale
 
 /** Which slice of the events collection the list is showing. */
 enum class EventsListTab {
@@ -48,6 +54,13 @@ enum class EventsListTab {
  * [state] to match. Creating an event belongs to the upcoming tab only: the
  * button is not rendered on [EventsListTab.PAST] even when [onCreateEvent] is
  * non-null, since "create" has no meaning in an archive.
+ *
+ * Distance filtering is opt-in: when [onSelectDistanceBand] is non-null a chip
+ * row lets the viewer narrow the list to events within [distanceBand] of
+ * [userLocation]. The narrowing itself is the pure [EventDistanceFilter] (unit
+ * tested), not inline logic here. A null [userLocation] (no permission / no fix)
+ * disables the distance chips and shows a hint — "All" is the only honest option
+ * with nowhere to measure from.
  */
 @Composable
 fun EventsListScreen(
@@ -61,6 +74,15 @@ fun EventsListScreen(
     onRetry: (() -> Unit)? = null,
     // Opens the create-event form; when null the button is hidden.
     onCreateEvent: (() -> Unit)? = null,
+    // The viewer's current position (from navigation/CurrentLocation), or null
+    // when there is no permission / no fix. Backs the distance filter and the
+    // per-row "N km away" label.
+    userLocation: LatLng? = null,
+    // The selected distance band; ignored unless [onSelectDistanceBand] is set.
+    distanceBand: DistanceBand = DistanceBand.ALL,
+    // Selecting a distance band; when null the whole filter row is hidden (keeps
+    // existing test/preview callers and any config-less caller unchanged).
+    onSelectDistanceBand: ((DistanceBand) -> Unit)? = null,
 ) {
     AeroPage(title = stringResource(R.string.events_title), modifier = modifier) {
             if (onSelectTab != null) {
@@ -96,6 +118,14 @@ fun EventsListScreen(
                 }
             }
 
+            if (onSelectDistanceBand != null) {
+                DistanceFilterRow(
+                    selected = distanceBand,
+                    hasLocation = userLocation != null,
+                    onSelect = onSelectDistanceBand,
+                )
+            }
+
             when (state) {
                 EventsListState.Loading ->
                     Text(
@@ -117,15 +147,101 @@ fun EventsListScreen(
                     }
                 }
 
-                is EventsListState.Loaded ->
-                    if (state.events.isEmpty()) {
-                        EmptyState(tab)
+                is EventsListState.Loaded -> {
+                    // Pure filter (unit tested); ALL / no-location just pass the
+                    // list through, so the rows stay in their upstream order.
+                    // Memoized on its inputs so the haversine pass runs only when
+                    // the events, the fix, or the band actually change — not on
+                    // every recomposition.
+                    val rows =
+                        remember(state.events, userLocation, distanceBand) {
+                            EventDistanceFilter.withDistances(state.events, userLocation, distanceBand)
+                        }
+                    if (rows.isEmpty()) {
+                        if (state.events.isEmpty()) {
+                            EmptyState(tab)
+                        } else {
+                            // The list is non-empty but nothing survives the band:
+                            // an honest "no events near you", not a silent blank.
+                            NoNearbyState()
+                        }
                     } else {
-                        state.events.forEach { event ->
-                            EventCard(event = event, onClick = { onOpenEvent(event.id) })
+                        rows.forEach { row ->
+                            EventCard(
+                                event = row.event,
+                                distanceMeters = row.distanceMeters,
+                                onClick = { onOpenEvent(row.event.id) },
+                            )
                         }
                     }
+                }
             }
+    }
+}
+
+@Composable
+private fun DistanceFilterRow(
+    selected: DistanceBand,
+    hasLocation: Boolean,
+    onSelect: (DistanceBand) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s1)) {
+        Text(
+            text = stringResource(R.string.events_distanceFilterLabel),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        ) {
+            DistanceBand.values().forEach { band ->
+                FilterChip(
+                    // A distance band needs a location to measure from; without a
+                    // fix only "All" is selectable. "All" is always enabled.
+                    enabled = hasLocation || band == DistanceBand.ALL,
+                    selected = selected == band,
+                    onClick = { onSelect(band) },
+                    label = { Text(text = stringResource(distanceBandLabel(band))) },
+                )
+            }
+        }
+        if (!hasLocation) {
+            Text(
+                text = stringResource(R.string.events_distanceFilterNoLocationHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun distanceBandLabel(band: DistanceBand): Int =
+    when (band) {
+        DistanceBand.ALL -> R.string.events_distanceFilterAll
+        DistanceBand.WITHIN_5_KM -> R.string.events_distanceFilterWithin5
+        DistanceBand.WITHIN_25_KM -> R.string.events_distanceFilterWithin25
+        DistanceBand.WITHIN_50_KM -> R.string.events_distanceFilterWithin50
+    }
+
+@Composable
+private fun NoNearbyState() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        ) {
+            Text(
+                text = stringResource(R.string.events_noNearbyTitle),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.events_noNearbyBody),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -156,7 +272,7 @@ private fun EmptyState(tab: EventsListTab) {
 }
 
 @Composable
-private fun EventCard(event: EventSummary, onClick: () -> Unit) {
+private fun EventCard(event: EventSummary, distanceMeters: Double?, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
@@ -222,9 +338,21 @@ private fun EventCard(event: EventSummary, onClick: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+            // Nice-to-have: how far the event is, when a location is available.
+            distanceMeters?.let { meters ->
+                Text(
+                    text = stringResource(R.string.events_distanceRowAway, formatKm(meters)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
+
+/** Metres → a one-decimal kilometre string in the device locale (e.g. "4.2"). */
+private fun formatKm(meters: Double): String =
+    String.format(Locale.getDefault(), "%.1f", meters / 1_000.0)
 
 @Preview(name = "Events – list", showBackground = true)
 @Composable

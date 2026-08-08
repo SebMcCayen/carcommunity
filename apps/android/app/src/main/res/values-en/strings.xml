@@ -376,6 +376,15 @@
     <string name="events_shareEventSuccess">Event shared with %1$s</string>
     <string name="events_shareEventFailed">The event couldn\'t be shared. Try again.</string>
     <string name="events_shareEventLinkLabel">🎟️ Open event</string>
+    <string name="events_distanceFilterLabel">Distance</string>
+    <string name="events_distanceFilterAll">All</string>
+    <string name="events_distanceFilterWithin5">Within 5 km</string>
+    <string name="events_distanceFilterWithin25">Within 25 km</string>
+    <string name="events_distanceFilterWithin50">Within 50 km</string>
+    <string name="events_distanceFilterNoLocationHint">Turn on location to filter events by distance.</string>
+    <string name="events_distanceRowAway">%1$s km away</string>
+    <string name="events_noNearbyTitle">No events nearby</string>
+    <string name="events_noNearbyBody">No events fall within this distance. Try a wider range or \"All\".</string>
     <string name="chat_title">Chat</string>
     <string name="chat_placeholder">Event chat coming soon.</string>
     <string name="chat_eventChatTitle">Event Chat</string>

@@ -32,6 +32,8 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDrive
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRoute
+import com.kungsbackacarcommunity.app.navigation.CurrentLocation
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -112,6 +114,9 @@ fun EventsRoute(
     var listTab by rememberSaveable { mutableStateOf(EventsListTab.UPCOMING) }
     // Bumped by the "try again" affordance to re-subscribe the observe flows.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
+    // Selected distance band for the list filter. Saveable so a rotation keeps the
+    // viewer's chosen radius instead of snapping back to "All".
+    var distanceBand by rememberSaveable { mutableStateOf(DistanceBand.ALL) }
 
     // Seed the detail view from a deep link (event-reminder push) exactly once,
     // then have the shell clear its pending id so the same tap can't re-open the
@@ -220,6 +225,18 @@ fun EventsRoute(
             )
         }
 
+        // The viewer's current position for the distance filter, from the same
+        // navigation/CurrentLocation source the map and crown poll use. Null until
+        // a fix resolves, or permanently when permission is denied — the filter
+        // row degrades to "All only" then. Re-fetched when the viewer retries so a
+        // just-granted permission takes effect. lastKnown (cheap, cached-or-fresh)
+        // is close enough to sort meetups into coarse km bands.
+        val listContext = LocalContext.current
+        val userLocation by
+            produceState<LatLng?>(initialValue = null, listContext, reloadKey) {
+                value = CurrentLocation.lastKnown(listContext)
+            }
+
         EventsListScreen(
             state = listState,
             onOpenEvent = { selectedEventId = it },
@@ -228,6 +245,9 @@ fun EventsRoute(
             onRetry = { reloadKey++ },
             onBack = onBack,
             onCreateEvent = { showCreate = true },
+            userLocation = userLocation,
+            distanceBand = distanceBand,
+            onSelectDistanceBand = { distanceBand = it },
         )
         return
     }

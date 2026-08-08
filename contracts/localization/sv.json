@@ -404,7 +404,16 @@
     "shareEventUnnamedFriend": "Vän",
     "shareEventSuccess": "Eventet delades med %1$s",
     "shareEventFailed": "Eventet kunde inte delas. Försök igen.",
-    "shareEventLinkLabel": "🎟️ Öppna event"
+    "shareEventLinkLabel": "🎟️ Öppna event",
+    "distanceFilterLabel": "Avstånd",
+    "distanceFilterAll": "Alla",
+    "distanceFilterWithin5": "Inom 5 km",
+    "distanceFilterWithin25": "Inom 25 km",
+    "distanceFilterWithin50": "Inom 50 km",
+    "distanceFilterNoLocationHint": "Slå på plats för att filtrera event efter avstånd.",
+    "distanceRowAway": "%1$s km bort",
+    "noNearbyTitle": "Inga event i närheten",
+    "noNearbyBody": "Inga event finns inom det här avståndet. Prova ett större intervall eller \"Alla\"."
   },
   "chat": {
     "title": "Chat",
