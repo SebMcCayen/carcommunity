@@ -209,7 +209,10 @@ class EventsScreensTest {
                 )
             }
         }
-        composeTestRule.onNodeWithText(str(R.string.events_rsvpGoing)).performScrollTo().performClick()
+        // Target the RSVP action BUTTON by its tag: its "Going" label now also
+        // appears as a count in the RSVP breakdown, so onNodeWithText("Going")
+        // would match two nodes.
+        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).performScrollTo().performClick()
         assertEquals(RsvpStatus.GOING, answer)
     }
 
@@ -229,7 +232,10 @@ class EventsScreensTest {
             }
         }
         composeTestRule.onNodeWithText(str(R.string.events_memberRequiredTitle)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.events_rsvpGoing)).assertDoesNotExist()
+        // Non-members get no RSVP block at all: neither the action button nor the
+        // count breakdown (both gated on canRsvp).
+        composeTestRule.onNodeWithTag(rsvpButtonTag(RsvpStatus.GOING)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(RSVP_COUNTS_BREAKDOWN_TAG).assertDoesNotExist()
     }
 
     /**

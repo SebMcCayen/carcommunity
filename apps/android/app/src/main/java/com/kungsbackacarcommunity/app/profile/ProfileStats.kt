@@ -26,6 +26,12 @@ data class ProfileStatsSummary(
     val totalDistanceMeters: Double,
     /** Lifetime driving time across all saved drives, in seconds. */
     val totalDurationSeconds: Long,
+    /**
+     * Highest single-drive max speed (m/s) on record, or null when no saved drive
+     * stored one. Rendered as a neutral fact at the same weight as the other
+     * totals — see [DriveStats.highestMaxSpeedMps].
+     */
+    val highestMaxSpeedMps: Double? = null,
     /** Number of earned awards (badges). */
     val badgeCount: Int,
     /** Kronpoäng balance, or null when the wallet has not been read yet. */
@@ -62,6 +68,7 @@ data class ProfileStatsSummary(
                 totalDrives = driveStats?.totalDrives ?: 0,
                 totalDistanceMeters = driveStats?.totalDistanceMeters ?: 0.0,
                 totalDurationSeconds = driveStats?.totalDurationSeconds ?: 0L,
+                highestMaxSpeedMps = driveStats?.highestMaxSpeedMps,
                 badgeCount = badgeCount.coerceAtLeast(0),
                 pointsBalance = pointsBalance,
                 memberSinceMillis = memberSinceMillis,

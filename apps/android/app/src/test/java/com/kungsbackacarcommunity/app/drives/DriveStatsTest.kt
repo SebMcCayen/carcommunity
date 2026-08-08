@@ -13,6 +13,7 @@ class DriveStatsTest {
         distanceMeters: Double? = 1000.0,
         durationSeconds: Long = 60,
         averageSpeedMetersPerSecond: Double? = 10.0,
+        maxSpeedMetersPerSecond: Double? = null,
         startedAtMillis: Long? = null,
         createdAtMillis: Long? = null,
     ) = SavedDrive(
@@ -24,6 +25,7 @@ class DriveStatsTest {
         startedAtMillis = startedAtMillis,
         endedAtMillis = null,
         createdAtMillis = createdAtMillis,
+        maxSpeedMetersPerSecond = maxSpeedMetersPerSecond,
     )
 
     @Test
@@ -113,6 +115,41 @@ class DriveStatsTest {
                 monthStart,
             )!!
         assertEquals(10.0, stats.fastestAverageSpeedMps!!, 0.0001)
+    }
+
+    @Test
+    fun `highest max speed picks the greatest stored per-drive max`() {
+        val drives =
+            listOf(
+                drive(id = "a", maxSpeedMetersPerSecond = 25.0),
+                drive(id = "b", maxSpeedMetersPerSecond = 40.0),
+                drive(id = "c", maxSpeedMetersPerSecond = 15.0),
+            )
+        val stats = DriveStatsCalculator.compute(drives, monthStart)!!
+        assertEquals(40.0, stats.highestMaxSpeedMps!!, 0.0001)
+    }
+
+    @Test
+    fun `highest max speed is null when no drive stored one`() {
+        val drives = listOf(drive(id = "a"), drive(id = "b")) // both maxSpeed == null
+        val stats = DriveStatsCalculator.compute(drives, monthStart)!!
+        assertNull(stats.highestMaxSpeedMps)
+    }
+
+    @Test
+    fun `highest max speed ignores null and non-finite and negative maxes`() {
+        // A stored max exists only on one drive; the rest are unknown/glitch and
+        // must neither poison the maximum nor make it read as zero.
+        val drives =
+            listOf(
+                drive(id = "a", maxSpeedMetersPerSecond = null),
+                drive(id = "b", maxSpeedMetersPerSecond = Double.NaN),
+                drive(id = "c", maxSpeedMetersPerSecond = Double.POSITIVE_INFINITY),
+                drive(id = "d", maxSpeedMetersPerSecond = -5.0),
+                drive(id = "e", maxSpeedMetersPerSecond = 30.0),
+            )
+        val stats = DriveStatsCalculator.compute(drives, monthStart)!!
+        assertEquals(30.0, stats.highestMaxSpeedMps!!, 0.0001)
     }
 
     @Test

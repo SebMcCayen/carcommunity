@@ -33,6 +33,18 @@ data class DriveStats(
      * resolution as the detail view ([DriveFormatters.effectiveAverageSpeed]).
      */
     val fastestAverageSpeedMps: Double?,
+    /**
+     * Highest single-drive MAX speed (m/s) across all drives — the greatest
+     * [SavedDrive.maxSpeedMetersPerSecond] on record, or null when no drive stored
+     * one (all drives predate the field, or were summary-only saves). Drives with
+     * no stored max simply don't contribute; this is never derived from
+     * distance/duration (that would be an average, not a max).
+     *
+     * Presentation rule carried over from [SavedDrive.maxSpeedMetersPerSecond]:
+     * a neutral fact at the same weight as the other totals — no record, no
+     * personal-best framing, no emphasis.
+     */
+    val highestMaxSpeedMps: Double? = null,
     /** Number of drives started (or, absent a start, created) this month. */
     val thisMonthDrives: Int,
     /** Sum of this month's drive distances; unusable distances count as 0. */
@@ -58,6 +70,7 @@ object DriveStatsCalculator {
         var totalDuration = 0L
         var longest = 0.0
         var fastest: Double? = null
+        var highestMax: Double? = null
         var monthDrives = 0
         var monthDistance = 0.0
 
@@ -76,6 +89,16 @@ object DriveStatsCalculator {
                 )
             if (speed != null && (fastest == null || speed > fastest)) fastest = speed
 
+            // Highest recorded max speed: only a stored, finite, non-negative value
+            // contributes. A null/glitch value is "unknown", not zero, and must not
+            // poison the maximum.
+            val maxSpeed = drive.maxSpeedMetersPerSecond
+            if (maxSpeed != null && maxSpeed.isFinite() && maxSpeed >= 0 &&
+                (highestMax == null || maxSpeed > highestMax)
+            ) {
+                highestMax = maxSpeed
+            }
+
             val timestamp = drive.startedAtMillis ?: drive.createdAtMillis
             if (timestamp != null && timestamp >= monthStartMillis) {
                 monthDrives += 1
@@ -90,6 +113,7 @@ object DriveStatsCalculator {
             longestDriveMeters = longest,
             averageDriveMeters = totalDistance / drives.size,
             fastestAverageSpeedMps = fastest,
+            highestMaxSpeedMps = highestMax,
             thisMonthDrives = monthDrives,
             thisMonthDistanceMeters = monthDistance,
         )

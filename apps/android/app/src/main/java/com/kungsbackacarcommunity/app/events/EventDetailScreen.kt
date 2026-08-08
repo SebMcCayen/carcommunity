@@ -2,6 +2,8 @@ package com.kungsbackacarcommunity.app.events
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -26,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -136,11 +140,11 @@ fun EventDetailScreen(
     // "Open event" chip switches events while this screen stays composed) rather
     // than leaving a stale full-screen map open for the new event.
     var mapMaximized by rememberSaveable(event?.id) { mutableStateOf(false) }
-    // Whether the "who answered" roster is expanded. Collapsed by default (the
-    // viewer taps "Check who answered" to reveal it), which keeps the page short
-    // and defers the roster read. Keyed on the event id so switching events in
-    // place re-collapses rather than showing the previous event's roster.
-    var attendeesExpanded by rememberSaveable(event?.id) { mutableStateOf(false) }
+    // Whether the "who answered" roster DIALOG is open. Closed by default (the
+    // viewer taps "Check who answered" to open it), which keeps the page short
+    // and defers the roster read until asked. Keyed on the event id so switching
+    // events in place closes it rather than showing the previous event's roster.
+    var showAttendeesDialog by rememberSaveable(event?.id) { mutableStateOf(false) }
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
@@ -266,27 +270,25 @@ fun EventDetailScreen(
                     RsvpButton(R.string.events_rsvpNotGoing, RsvpStatus.NOT_GOING, myRsvp, rsvpStatus, onRsvpHaptic)
                 }
 
-                // Who's going — collapsed behind a button so the roster never makes
-                // the page long, and its events-listAttendees read is deferred until
-                // the viewer asks (onRevealAttendees). Same member+published gate as
-                // the details, so the roster is never teased to a non-member.
-                if (attendeesExpanded) {
-                    AttendeesSection(
-                        state = attendees,
-                        goingCount = event.counts.going,
-                        onOpenMember = onOpenMember,
-                        onRetry = onRetryAttendees,
-                    )
-                } else {
-                    OutlinedButton(
-                        onClick = {
-                            attendeesExpanded = true
-                            onRevealAttendees?.invoke()
-                        },
-                        modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG),
-                    ) {
-                        Text(text = stringResource(R.string.events_attendeesReveal))
-                    }
+                // How many answered each way (Going / Maybe / Can't go), from the
+                // server-maintained public rsvpCounts tally on the event doc — no
+                // roster read needed, so it is always shown. Neutral tallies at equal
+                // weight; the same three labels the buttons above use, mirrored.
+                RsvpCountsBreakdown(event.counts)
+
+                // Who answered — behind a button so the roster never makes the page
+                // long, and its events-listAttendees read is deferred until the
+                // viewer asks (onRevealAttendees). Tapping opens a dialog listing the
+                // people who answered, grouped by their answer. Same member+published
+                // gate as the details, so the roster is never teased to a non-member.
+                OutlinedButton(
+                    onClick = {
+                        showAttendeesDialog = true
+                        onRevealAttendees?.invoke()
+                    },
+                    modifier = Modifier.fillMaxWidth().testTag(EVENT_DETAIL_REVEAL_ATTENDEES_TAG),
+                ) {
+                    Text(text = stringResource(R.string.events_attendeesReveal))
                 }
             }
 
@@ -392,6 +394,19 @@ fun EventDetailScreen(
                 OutlinedButton(onClick = onOpenGroupDrive, modifier = Modifier.fillMaxWidth()) {
                     Text(text = stringResource(R.string.groupDrive_screenTitle))
                 }
+            }
+
+            // "Check who answered" dialog — the roster, grouped by answer. Opened
+            // from the button above; the deferred roster read has already been
+            // triggered (onRevealAttendees) when it opened.
+            if (showAttendeesDialog) {
+                AttendeesDialog(
+                    state = attendees,
+                    goingCount = event.counts.going,
+                    onOpenMember = onOpenMember,
+                    onRetry = onRetryAttendees,
+                    onDismiss = { showAttendeesDialog = false },
+                )
             }
 
             // Maximized (full-screen, zoomable) map, raised by tapping the embedded
@@ -522,11 +537,92 @@ private fun checkInErrorLabel(error: CheckInError): Int =
     }
 
 /**
- * "Who's going": the count (always available — it is the server-maintained
+ * The three-way RSVP tally (Going / Maybe / Can't go) from the event's public
+ * `rsvpCounts`. Always available — it needs no roster read — so it renders for
+ * every gate-passer beneath the RSVP buttons.
+ *
+ * Presentation is deliberately NEUTRAL: three equal-weight counts using the same
+ * three labels the RSVP buttons carry, no emphasis, no "winning" answer. It is a
+ * factual summary of who answered what, nothing more.
+ */
+@Composable
+private fun RsvpCountsBreakdown(counts: RsvpCounts) {
+    Row(
+        modifier = Modifier.fillMaxWidth().testTag(RSVP_COUNTS_BREAKDOWN_TAG),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        RsvpCountItem(R.string.events_rsvpGoing, counts.going, RsvpStatus.GOING, Modifier.weight(1f))
+        RsvpCountItem(R.string.events_rsvpMaybe, counts.maybe, RsvpStatus.MAYBE, Modifier.weight(1f))
+        RsvpCountItem(R.string.events_rsvpNotGoing, counts.notGoing, RsvpStatus.NOT_GOING, Modifier.weight(1f))
+    }
+}
+
+/** One count in the RSVP breakdown: the tally over its answer label. Carries a
+ * per-answer tag so a test targets the count distinctly from the like-labelled
+ * RSVP action button. */
+@Composable
+private fun RsvpCountItem(labelRes: Int, count: Int, answer: RsvpStatus, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier.testTag(rsvpCountTag(answer)),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = stringResource(labelRes),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+/**
+ * The "Check who answered" dialog: the roster grouped by answer (Going / Maybe /
+ * Can't go), each member a tappable row into their profile. The body reuses the
+ * same [AttendeesSection] the page used to expand inline, wrapped in a scroll
+ * container so a long roster scrolls inside the dialog. Its own header (the
+ * "Who answered" title + the going tally) doubles as the dialog heading, so no
+ * separate AlertDialog title is set.
+ */
+@Composable
+private fun AttendeesDialog(
+    state: EventAttendeesState,
+    goingCount: Int,
+    onOpenMember: ((String) -> Unit)?,
+    onRetry: (() -> Unit)?,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = stringResource(R.string.events_attendeesClose))
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                AttendeesSection(
+                    state = state,
+                    goingCount = goingCount,
+                    onOpenMember = onOpenMember,
+                    onRetry = onRetry,
+                )
+            }
+        },
+    )
+}
+
+/**
+ * "Who answered": the count (always available — it is the server-maintained
  * public rsvpCounts tally) plus, when the roster read succeeded, the members
- * themselves. [EventAttendeesState.Unavailable] states plainly that names
- * aren't shown rather than pretending the event has no attendees — the count
- * next to it would contradict that lie anyway.
+ * themselves, grouped by answer. [EventAttendeesState.Unavailable] states plainly
+ * that names aren't shown rather than pretending the event has no attendees — the
+ * count next to it would contradict that lie anyway. Rendered as the body of
+ * [AttendeesDialog].
  */
 @Composable
 private fun AttendeesSection(
@@ -700,8 +796,21 @@ const val EVENT_DETAIL_CALENDAR_TAG = "events_detail_calendar"
 /** Test tag on the "Organizer: <name>" line. */
 const val EVENT_DETAIL_ORGANIZER_TAG = "events_detail_organizer"
 
-/** Test tag on the "Check who answered" button that reveals the attendee roster. */
+/** Test tag on the "Check who answered" button that opens the attendee roster dialog. */
 const val EVENT_DETAIL_REVEAL_ATTENDEES_TAG = "events_detail_reveal_attendees"
+
+/** Test tag on the three-way RSVP count breakdown (Going / Maybe / Can't go). */
+const val RSVP_COUNTS_BREAKDOWN_TAG = "events_detail_rsvp_counts_breakdown"
+
+/**
+ * Per-answer test tag on an RSVP ACTION button. Distinct from [rsvpCountTag] so a
+ * test can tap the button without colliding with the like-labelled count in the
+ * breakdown (both render "Going" / "Maybe" / "Can't go").
+ */
+fun rsvpButtonTag(answer: RsvpStatus): String = "events_rsvp_button_${answer.wire}"
+
+/** Per-answer test tag on a count in the RSVP breakdown (see [rsvpButtonTag]). */
+fun rsvpCountTag(answer: RsvpStatus): String = "events_rsvp_count_${answer.wire}"
 
 /**
  * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered
@@ -783,15 +892,20 @@ private fun RowScope.RsvpButton(
 ) {
     val label = stringResource(labelRes)
     val enabled = rsvpStatus != RsvpStatusUi.Saving
+    // Distinct per-answer tag on the ACTION button, so a test targets the button
+    // unambiguously — its label ("Going" / "Maybe" / "Can't go") now also appears
+    // as a count label in the RSVP breakdown below, so matching by text alone is
+    // ambiguous.
+    val tag = Modifier.weight(1f).testTag(rsvpButtonTag(answer))
     if (answer == myRsvp) {
-        Button(onClick = { onRsvp(answer) }, enabled = enabled, modifier = Modifier.weight(1f)) {
+        Button(onClick = { onRsvp(answer) }, enabled = enabled, modifier = tag) {
             Text(text = label, textAlign = TextAlign.Center)
         }
     } else {
         OutlinedButton(
             onClick = { onRsvp(answer) },
             enabled = enabled,
-            modifier = Modifier.weight(1f),
+            modifier = tag,
             colors = ButtonDefaults.outlinedButtonColors(),
         ) {
             Text(text = label, textAlign = TextAlign.Center)
