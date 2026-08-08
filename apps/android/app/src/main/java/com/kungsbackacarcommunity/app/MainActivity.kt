@@ -406,6 +406,20 @@ class MainActivity : ComponentActivity() {
                 if (signedInUid == null) LiveShareStart.clear()
             }
 
+            // Live feature-flag delivery, scoped to the authenticated session.
+            // config/featureFlags requires isAuthenticated() (firestore.rules),
+            // so the realtime listener is only attached once a Firebase session
+            // exists — attaching before sign-in would just hit permission-denied.
+            // Keying on the uid tears the listener down on sign-out / account
+            // switch (the flow's awaitClose removes the Firestore registration —
+            // no leak) and re-attaches for the next session. This is the DURABLE
+            // fix for the "stuck on defaults" bug: unlike the one-shot poll, the
+            // listener auto-reconnects and re-delivers the real value the moment a
+            // read succeeds, so an affected member's crownHuntSpawn flips true.
+            LaunchedEffect(signedInUid) {
+                if (signedInUid != null) featureFlagsStore.observe()
+            }
+
             // Tint the OS bars from the CURRENTLY displayed theme, not once in
             // onCreate: auth-state navigation swaps screens without recreating
             // the Activity, and SignInScreen (signed-out) forces KccTheme's dark

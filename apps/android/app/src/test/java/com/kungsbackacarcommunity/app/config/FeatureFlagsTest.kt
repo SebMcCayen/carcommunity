@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.config
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -44,5 +45,25 @@ class FeatureFlagsTest {
     fun `fromStored ignores non-boolean and unknown values`() {
         val flags = FeatureFlags.fromStored(mapOf("chat" to "nope", "bogusFlag" to true))
         assertTrue(flags.isEnabled(FeatureFlag.CHAT)) // non-boolean → default
+    }
+
+    /**
+     * Structural equality is load-bearing: it lets the store's StateFlow dedupe
+     * identical realtime-listener emissions instead of recomposing every
+     * collectAsState() reader on each unchanged snapshot.
+     */
+    @Test
+    fun `equal values compare equal and unequal values do not`() {
+        assertEquals(
+            FeatureFlags.fromStored(mapOf("crownHuntSpawn" to true)),
+            FeatureFlags.fromStored(mapOf("crownHuntSpawn" to true)),
+        )
+        // An absent flag resolves to its default, so a doc that spells the
+        // default out is equal to one that omits it.
+        assertEquals(FeatureFlags.DEFAULTS, FeatureFlags.fromStored(mapOf("crownHunt" to true)))
+        assertNotEquals(
+            FeatureFlags.fromStored(mapOf("crownHuntSpawn" to true)),
+            FeatureFlags.fromStored(mapOf("crownHuntSpawn" to false)),
+        )
     }
 }
