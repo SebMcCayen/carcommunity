@@ -232,7 +232,7 @@
     <string name="profile_avatarUploading">Uploading…</string>
     <string name="profile_avatarUploadError">Couldn’t upload the image. Please try again.</string>
     <string name="profile_avatarTooLarge">The image is too large.</string>
-    <string name="profile_pointsTitle">Kronpoäng</string>
+    <string name="profile_pointsTitle">Crown Points</string>
     <string name="profile_pointsSubtitle">How active you have been</string>
     <string name="profile_pointsRecentTitle">Recently earned</string>
     <string name="profile_pointsRecentEmpty">Drive, collect crowns and attend meets – your points will show up here.</string>
@@ -946,7 +946,7 @@
     <string name="badgeShowcase_title">My awards</string>
     <string name="badgeShowcase_subtitle">%1$d of %2$d unlocked</string>
     <string name="badgeShowcase_emptyTitle">Your collection starts here</string>
-    <string name="badgeShowcase_emptyBody">Six ladders to climb – every tier pays Kronpoäng. Here is how to unlock the first one:</string>
+    <string name="badgeShowcase_emptyBody">Six ladders to climb – every tier pays Crown Points. Here is how to unlock the first one:</string>
     <string name="badgeShowcase_progressTitle">Next tier</string>
     <string name="badgeShowcase_nextTier">Next: %1$s</string>
     <string name="badgeShowcase_ladderComplete">All tiers complete</string>
@@ -958,7 +958,7 @@
     <string name="badgeShowcase_awardedOn">Unlocked %1$s</string>
     <string name="badgeShowcase_howToEarn">How to unlock it</string>
     <string name="badgeShowcase_close">Close</string>
-    <string name="badgeShowcase_reward">Pays %1$d Kronpoäng</string>
+    <string name="badgeShowcase_reward">Pays %1$d Crown Points</string>
     <string name="badgeShowcase_progressUnavailable">Your standing is counted on the server – the tier appears here as soon as it is earned.</string>
     <string name="badgeShowcase_medallionEarned">%1$s, unlocked</string>
     <string name="badgeShowcase_medallionLocked">%1$s, locked</string>
@@ -966,13 +966,13 @@
     <string name="badgeShowcase_tierNames_silver">Silver</string>
     <string name="badgeShowcase_tierNames_guld">Gold</string>
     <string name="badgeShowcase_tierNames_platina">Platinum</string>
-    <string name="badgeShowcase_ladderNames_kronjagare">Kronjägare</string>
-    <string name="badgeShowcase_ladderNames_vagfarare">Vägfarare</string>
-    <string name="badgeShowcase_ladderNames_traffrav">Träffräv</string>
-    <string name="badgeShowcase_ladderNames_trogen">Trogen</string>
-    <string name="badgeShowcase_ladderNames_konvojledare">Konvojledare</string>
-    <string name="badgeShowcase_ladderNames_samlare">Samlare</string>
-    <string name="badgeShowcase_ladderNames_sasongsmastare">Säsongsmästare</string>
+    <string name="badgeShowcase_ladderNames_kronjagare">Crown Hunter</string>
+    <string name="badgeShowcase_ladderNames_vagfarare">Wayfarer</string>
+    <string name="badgeShowcase_ladderNames_traffrav">Meet Fox</string>
+    <string name="badgeShowcase_ladderNames_trogen">Faithful</string>
+    <string name="badgeShowcase_ladderNames_konvojledare">Convoy Leader</string>
+    <string name="badgeShowcase_ladderNames_samlare">Collector</string>
+    <string name="badgeShowcase_ladderNames_sasongsmastare">Season Champion</string>
     <string name="badgeShowcase_ladderRequirements_kronjagare">Collect %1$s crowns in Kronjakten.</string>
     <string name="badgeShowcase_ladderRequirements_vagfarare">Drive %1$s in total.</string>
     <string name="badgeShowcase_ladderRequirements_traffrav">Attend %1$s meets.</string>
@@ -1073,7 +1073,7 @@
     <string name="crownHunt_statsError">Could not load your Crown Hunt stats. Please try again.</string>
     <string name="crownHunt_myStatsTitle">Your Crown Hunt</string>
     <string name="crownHunt_statCrowns">Crowns collected</string>
-    <string name="crownHunt_statPoints">Kronpoäng</string>
+    <string name="crownHunt_statPoints">Crown Points</string>
     <string name="crownHunt_statSeasonRank">Rank this season</string>
     <string name="crownHunt_statStreak">Day streak</string>
     <string name="crownHunt_statSeasonsWon">Seasons won</string>
