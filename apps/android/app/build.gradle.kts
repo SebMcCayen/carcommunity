@@ -176,8 +176,8 @@ if (file("google-services.json").exists()) {
     // reports and to clear the "no deobfuscation file" upload warning — that path
     // does not involve this plugin.) The plugin's defaults are relied on
     // deliberately — mapping upload on, native symbol upload off (native symbols
-    // already ship via the release `ndk { debugSymbolLevel = "FULL" }` block,
-    // which Play symbolicates).
+    // already ship via the release `ndk { debugSymbolLevel = "SYMBOL_TABLE" }`
+    // block, which Play symbolicates).
     apply(plugin = libs.plugins.firebase.crashlytics.get().pluginId)
 }
 
@@ -302,10 +302,17 @@ android {
                 "proguard-rules.pro",
             )
             // Bundle native debug symbols (Mapbox / Play Services .so files) into
-            // the AAB so Play symbolicates native crashes & ANRs. Clears the Play
-            // Console "native code without debug symbols" upload warning.
+            // the AAB so Play symbolicates native crashes & ANRs, clearing the Play
+            // Console "native code without debug symbols" warning.
+            //
+            // SYMBOL_TABLE, not FULL: the third-party .so files ship pre-stripped of
+            // DWARF debug sections, so FULL finds nothing to extract and the AAB
+            // carries no symbol metadata (warning stays). They DO retain their
+            // dynamic symbol table (.dynsym — thousands of exported function names),
+            // which SYMBOL_TABLE extracts, giving Play function-name-level native
+            // symbolication and satisfying the upload check.
             ndk {
-                debugSymbolLevel = "FULL"
+                debugSymbolLevel = "SYMBOL_TABLE"
             }
             resValue("string", "mapbox_access_token", mapboxAccessToken)
         }
