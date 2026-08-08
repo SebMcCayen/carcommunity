@@ -5,6 +5,12 @@
 agp = "8.13.2"
 kotlin = "2.4.0"
 coreKtx = "1.18.0"
+# AndroidX AppCompat — pulled in ONLY for the per-app language API
+# (AppCompatDelegate.setApplicationLocales / getApplicationLocales) and its
+# autoStoreLocales persistence backport, which work below Android 13 where the
+# framework LocaleManager alone does not (minSdk 26). The app stays a Compose /
+# ComponentActivity app: appcompat is NOT used for its Activity or theme.
+appcompat = "1.6.1"
 lifecycleRuntimeKtx = "2.10.0"
 activityCompose = "1.13.0"
 composeBom = "2026.06.01"
@@ -46,6 +52,8 @@ robolectric = "4.14.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+# AppCompat — per-app language API + autoStoreLocales backport only (see version note).
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
 androidx-lifecycle-process = { group = "androidx.lifecycle", name = "lifecycle-process", version.ref = "lifecycleRuntimeKtx" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }

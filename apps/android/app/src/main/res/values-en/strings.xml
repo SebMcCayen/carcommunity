@@ -175,6 +175,9 @@
     <string name="settingsMenu_themeLightDescription">Always light, whatever the device does</string>
     <string name="settingsMenu_themeDark">Dark</string>
     <string name="settingsMenu_themeDarkDescription">Always dark, whatever the device does</string>
+    <string name="settingsMenu_languageSection">Language</string>
+    <string name="settingsMenu_languageSwedish">Svenska</string>
+    <string name="settingsMenu_languageEnglish">English</string>
     <string name="privacySettings_title">Privacy</string>
     <string name="privacySettings_partnerStatsTitle">Anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsBody">Contribute anonymised partner statistics</string>

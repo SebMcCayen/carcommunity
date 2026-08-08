@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The set of locales this app is translated into, for Android 13+ (API 33+)
+  per-app language support. The OS reads this (referenced from
+  <application android:localeConfig> in the manifest) to populate the system
+  Settings > Apps > KCC > Language screen. AppCompat also consults it so its
+  backport of the per-app-language API on API < 33 offers the same set.
+
+  Swedish is the app's default resource set (res/values/) and is listed first;
+  English is the res/values-en/ override. Keep this in sync with res/xml only —
+  the in-app switcher's own option list is AppLanguage (Kotlin).
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="sv" />
+    <locale android:name="en" />
+</locale-config>

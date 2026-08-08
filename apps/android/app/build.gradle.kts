@@ -347,6 +347,12 @@ kotlin {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // AppCompat — added ONLY for the per-app language API
+    // (AppCompatDelegate.setApplicationLocales / getApplicationLocales) and its
+    // autoStoreLocales persistence backport (Settings language switcher). The app
+    // remains a Compose app on ComponentActivity with the Theme.KCC Compose theme;
+    // appcompat's Activity/theme are deliberately NOT used.
+    implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.activity.compose)
