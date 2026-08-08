@@ -445,10 +445,12 @@ fun EventDetailScreen(
  *    complete. A DWELL COUNTDOWN (progress bar + "m:ss") runs down the ten
  *    minutes since that first sample; while it runs the member is told to stay a
  *    little longer, and once it completes the button becomes a "Confirm
- *    attendance" call-to-action. The countdown is anchored to the persisted
- *    record's createdAt, so it survives leaving the screen or the app, and a
- *    temporary walk out of the fence NEVER restarts it — only the final fix has
- *    to be back inside (see CheckInDwell / functions checkIn.ts).
+ *    attendance" call-to-action. The countdown is anchored to THIS session's
+ *    first-fix capture time (a stable device-clock instant, the same basis the
+ *    backend measures dwell from), falling back to the persisted record's
+ *    createdAt so it survives leaving the screen or the app; a temporary walk out
+ *    of the fence NEVER restarts it — only the final fix has to be back inside
+ *    (see CheckInDwell / functions checkIn.ts).
  *  - AVAILABLE: inside the window, not yet checked in — just the button.
  * Renders nothing when a check-in cannot be attempted and none has happened, so
  * an event outside its window shows no dead control.

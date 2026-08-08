@@ -6,9 +6,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Unit tests for [CheckInDwell] — the pure dwell-countdown maths (remaining time,
- * progress fraction, "can I confirm yet?", and the first-and-last-inside
- * predicate). Pure JVM, no Android/Firebase.
+ * Unit tests for [CheckInDwell] — the pure dwell-countdown maths: remaining time,
+ * progress fraction, the dwell-elapsed boundary ("can I confirm yet?"), and the
+ * m:ss rounding. Pure JVM, no Android/Firebase.
  */
 class CheckInDwellTest {
 
