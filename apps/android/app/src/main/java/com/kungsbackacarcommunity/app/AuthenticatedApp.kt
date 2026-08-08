@@ -2523,10 +2523,6 @@ fun AuthenticatedApp(
             // presence — so the effect must re-run when it flips.
             LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched) {
                 if (isSharing) {
-                    // A running session starts with no self-stop recorded, so the
-                    // NEXT end is judged fresh (a convoy end under the member reads
-                    // as ConvoyEnded, a later Stop as a self-stop).
-                    userEndedSession = false
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
                     if (drivesRepository != null && canRecordDrive) {
@@ -2577,15 +2573,28 @@ fun AuthenticatedApp(
                     // recreation, so a rotation neither stops nor prompts.
                     //
                     // A convoy-auto session that stopped without the member ending
-                    // it themselves was stopped by the convoy ending (functions
-                    // stopConvoyAutoSession), so the summary explains that rather
-                    // than reading the neutral "Drive saved" out of nowhere.
+                    // it themselves — and before its 6h expiry — was stopped by the
+                    // convoy ending (functions stopConvoyAutoSession), so the summary
+                    // explains that rather than reading the neutral "Drive saved" out
+                    // of nowhere. A session that simply hit its expiry (its own clock
+                    // ran out, convoy possibly still running) stays neutral.
+                    val endedByExpiry =
+                        liveSession?.expiresAtMillis?.let { it <= nowMillis() } == true
                     SingleSessionRecording.stop(
                         savePromptReason(
                             convoyAutoStarted = liveSession?.convoyAutoStarted == true,
                             userEndedSession = userEndedSession,
+                            endedByExpiry = endedByExpiry,
                         ),
                     )
+                    // Consume the self-stop marker now the reason is captured, so the
+                    // NEXT session is judged fresh. Reset HERE rather than on session
+                    // start: the convoy-stop dialog flips convoyActiveLatched (a key
+                    // of this effect) mid-stop while isSharing is still true, so a
+                    // reset in the sharing branch could wipe the marker between the
+                    // user's choice and the actual stop. stop() already froze the
+                    // reason, so a re-run reading the cleared flag is a harmless no-op.
+                    userEndedSession = false
                 }
             }
 

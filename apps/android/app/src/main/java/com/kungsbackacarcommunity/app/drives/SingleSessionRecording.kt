@@ -207,7 +207,13 @@ object SingleSessionRecording {
         locationController?.stop()
         locationController = null
         coordinator.stop()
-        if (coordinator.state.value is RecordingState.PromptSave) {
+        // Only capture the reason on the FIRST call that actually raises the prompt.
+        // coordinator.stop() no-ops unless it was Recording, so a re-call (effect
+        // re-run / recreation) leaves it in PromptSave with promptPending already
+        // set — guard on that so the first reason stands and a later call (which may
+        // recompute a different reason, e.g. after the self-stop marker was cleared)
+        // can never overwrite it.
+        if (coordinator.state.value is RecordingState.PromptSave && !promptPendingState.value) {
             stopReasonState.value = reason
             promptPendingState.value = true
         }

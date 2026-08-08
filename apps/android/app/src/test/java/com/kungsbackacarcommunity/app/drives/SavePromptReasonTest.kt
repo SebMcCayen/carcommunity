@@ -19,12 +19,17 @@ import org.junit.Test
 class SavePromptReasonTest {
 
     @Test
-    fun `a convoy-auto session stopped WITHOUT a self-stop reads as convoy ended`() {
-        // The confusing case being fixed: the member did nothing, the convoy ended
-        // under them, and the backend stopped their convoy-auto session.
+    fun `a convoy-auto session stopped WITHOUT a self-stop or expiry reads as convoy ended`() {
+        // The confusing case being fixed: the member did nothing, the session did
+        // not expire, the convoy ended under them, and the backend stopped their
+        // convoy-auto session.
         assertEquals(
             SavePromptReason.ConvoyEnded,
-            savePromptReason(convoyAutoStarted = true, userEndedSession = false),
+            savePromptReason(
+                convoyAutoStarted = true,
+                userEndedSession = false,
+                endedByExpiry = false,
+            ),
         )
     }
 
@@ -33,7 +38,25 @@ class SavePromptReasonTest {
         // They tapped Stop / Hide / chose End or Leave — they know why it stopped.
         assertEquals(
             SavePromptReason.Default,
-            savePromptReason(convoyAutoStarted = true, userEndedSession = true),
+            savePromptReason(
+                convoyAutoStarted = true,
+                userEndedSession = true,
+                endedByExpiry = false,
+            ),
+        )
+    }
+
+    @Test
+    fun `a convoy-auto session that hit its expiry stays neutral`() {
+        // The 6h hard cap: the session's own clock ran out (the convoy may still be
+        // running for others), so "the convoy ended" would be wrong.
+        assertEquals(
+            SavePromptReason.Default,
+            savePromptReason(
+                convoyAutoStarted = true,
+                userEndedSession = false,
+                endedByExpiry = true,
+            ),
         )
     }
 
@@ -43,11 +66,19 @@ class SavePromptReasonTest {
         // self-stop nor the (impossible) remote-stop case may claim ConvoyEnded.
         assertEquals(
             SavePromptReason.Default,
-            savePromptReason(convoyAutoStarted = false, userEndedSession = false),
+            savePromptReason(
+                convoyAutoStarted = false,
+                userEndedSession = false,
+                endedByExpiry = false,
+            ),
         )
         assertEquals(
             SavePromptReason.Default,
-            savePromptReason(convoyAutoStarted = false, userEndedSession = true),
+            savePromptReason(
+                convoyAutoStarted = false,
+                userEndedSession = true,
+                endedByExpiry = false,
+            ),
         )
     }
 

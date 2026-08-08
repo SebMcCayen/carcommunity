@@ -28,21 +28,31 @@ enum class SavePromptReason {
  * Decides the [SavePromptReason] for a session that just ended.
  *
  * Pure so the rule is JVM-unit-testable off the composable (mirroring the other
- * drive seams in this package). The signal is the same one the backend uses to
- * stop the session: a [convoyAutoStarted] session that STOPPED without the member
- * ending it themselves ([userEndedSession] false) can only have been stopped by
- * the convoy ending — nothing else stops a convoy-auto session but the member's
- * own Stop/Hide/exit. A member who stopped it themselves keeps the neutral copy,
- * even on a convoy-auto session, because they already know why it stopped.
+ * drive seams in this package). A [convoyAutoStarted] session that stopped without
+ * the member ending it themselves ([userEndedSession] false) AND before its expiry
+ * ([endedByExpiry] false) can only have been stopped by the convoy ending: that is
+ * the one remaining thing that stops a convoy-auto session (the backend's
+ * `stopConvoyAutoSession`). The two exclusions are why they matter:
+ *  - a member who stopped it themselves already knows why, so keeps the neutral
+ *    copy even on a convoy-auto session;
+ *  - a convoy-auto session that simply hit the 6h hard cap expired on its own —
+ *    the convoy may still be running for others — so "the convoy ended" would be
+ *    wrong, and it too stays neutral.
  *
  * @param convoyAutoStarted the ended session was auto-started BY a convoy
  *   (`LiveSessionInfo.convoyAutoStarted`) — a manually-started solo session is
  *   never stopped by a convoy ending, so it is always [Default].
  * @param userEndedSession the member themselves ended this session (tapped Stop /
  *   Hide me now, or chose End/Leave in the convoy-stop dialog).
+ * @param endedByExpiry the session reached its expiry (the 6h hard cap) rather
+ *   than being stopped early — its own clock ran out, not the convoy ending.
  */
-fun savePromptReason(convoyAutoStarted: Boolean, userEndedSession: Boolean): SavePromptReason =
-    if (convoyAutoStarted && !userEndedSession) {
+fun savePromptReason(
+    convoyAutoStarted: Boolean,
+    userEndedSession: Boolean,
+    endedByExpiry: Boolean,
+): SavePromptReason =
+    if (convoyAutoStarted && !userEndedSession && !endedByExpiry) {
         SavePromptReason.ConvoyEnded
     } else {
         SavePromptReason.Default
