@@ -166,8 +166,8 @@ class FriendsCoordinatorTest {
     // --- Crown Points overlay --------------------------------------------------
     // Each friend's public balance is overlaid onto the loaded list. It is a
     // decorative "how active they have been" number, so it must never fail or
-    // delay the list: an absent uid renders as 0, and a failed read leaves the
-    // list intact without numbers.
+    // delay the list: a failed read leaves status.points empty and the list
+    // intact, and the UI renders any uid missing from the map as 0.
 
     @Test
     fun `load overlays each friends crown points`() = runTest {

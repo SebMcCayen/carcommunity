@@ -1043,13 +1043,13 @@
       "sasongsmastare": "Season Champion"
     },
     "ladderRequirements": {
-      "kronjagare": "Collect %1$s crowns in Kronjakten.",
+      "kronjagare": "Collect %1$s crowns in Crown Hunt.",
       "vagfarare": "Drive %1$s in total.",
       "traffrav": "Attend %1$s meets.",
       "trogen": "Open the app %1$s days in a row.",
       "konvojledare": "Lead %1$s convoys.",
       "samlare": "Keep %1$s vehicles in your garage.",
-      "sasongsmastare": "Win %1$s Kronjakt seasons."
+      "sasongsmastare": "Win %1$s Crown Hunt seasons."
     },
     "ladderTaglines": {
       "kronjagare": "Crowns you have picked up on the map.",

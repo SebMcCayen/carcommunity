@@ -165,9 +165,10 @@ class FriendsCoordinator(
      * Fills in the friends' public Crown Points balances after the list has been
      * published. Deliberately SILENT on failure: the balances are a decorative
      * overlay ("how active they have been"), never load-bearing, so a failed or
-     * empty read simply leaves the list without numbers rather than surfacing an
-     * error or filing a fault. No-ops when no points repository is wired or the
-     * list is empty.
+     * empty read simply leaves [FriendsStatus.Loaded.points] empty — the UI then
+     * renders any uid missing from the map as 0 (0 is the ledger floor) — rather
+     * than surfacing an error or filing a fault. No-ops when no points repository
+     * is wired or the list is empty.
      *
      * The overlay is applied only if [loaded] is still the current status — a
      * mutation (accept/remove/…) that reloaded the snapshot in the meantime wins,

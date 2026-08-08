@@ -973,13 +973,13 @@
     <string name="badgeShowcase_ladderNames_konvojledare">Convoy Leader</string>
     <string name="badgeShowcase_ladderNames_samlare">Collector</string>
     <string name="badgeShowcase_ladderNames_sasongsmastare">Season Champion</string>
-    <string name="badgeShowcase_ladderRequirements_kronjagare">Collect %1$s crowns in Kronjakten.</string>
+    <string name="badgeShowcase_ladderRequirements_kronjagare">Collect %1$s crowns in Crown Hunt.</string>
     <string name="badgeShowcase_ladderRequirements_vagfarare">Drive %1$s in total.</string>
     <string name="badgeShowcase_ladderRequirements_traffrav">Attend %1$s meets.</string>
     <string name="badgeShowcase_ladderRequirements_trogen">Open the app %1$s days in a row.</string>
     <string name="badgeShowcase_ladderRequirements_konvojledare">Lead %1$s convoys.</string>
     <string name="badgeShowcase_ladderRequirements_samlare">Keep %1$s vehicles in your garage.</string>
-    <string name="badgeShowcase_ladderRequirements_sasongsmastare">Win %1$s Kronjakt seasons.</string>
+    <string name="badgeShowcase_ladderRequirements_sasongsmastare">Win %1$s Crown Hunt seasons.</string>
     <string name="badgeShowcase_ladderTaglines_kronjagare">Crowns you have picked up on the map.</string>
     <string name="badgeShowcase_ladderTaglines_vagfarare">The distance you have put behind you.</string>
     <string name="badgeShowcase_ladderTaglines_traffrav">Meets you have taken part in.</string>
