@@ -388,6 +388,39 @@ class EventsScreensTest {
     }
 
     @Test
+    fun detail_checkInPending_dwellElapsed_butNoCta_showsNeutralCopy_notConfirmImperative() {
+        composeTestRule.setContent {
+            KccTheme {
+                EventDetailScreen(
+                    event = event().copy(latitude = 57.4874, longitude = 12.0757),
+                    detail = null,
+                    myRsvp = null,
+                    passesMemberGate = true,
+                    rsvpStatus = RsvpStatusUi.Idle,
+                    onRsvp = {},
+                    onBack = {},
+                    // Dwell elapsed, but NO check-in CTA — e.g. the window closed
+                    // while attendance was still pending.
+                    checkInAvailable = false,
+                    attendance = EventAttendanceStatus(verified = false, sampleCount = 1),
+                    firstSampleAtMillis =
+                        System.currentTimeMillis() - (CheckInDwell.REQUIRED_DWELL_MS + 60_000L),
+                    onCheckIn = null,
+                )
+            }
+        }
+        // Neutral pending guidance, and no imperative "confirm now" copy or CTA
+        // pointing at a button that isn't rendered.
+        composeTestRule
+            .onNodeWithText(str(R.string.events_checkInPending))
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.events_checkInConfirmButton)).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHECK_IN_COUNTDOWN_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHECK_IN_BUTTON_TAG).assertDoesNotExist()
+    }
+
+    @Test
     fun detail_shareButton_isShown_andInvokesCallback() {
         var shared = false
         composeTestRule.setContent {

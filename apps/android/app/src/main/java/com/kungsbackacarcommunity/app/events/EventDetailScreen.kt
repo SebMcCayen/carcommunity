@@ -555,9 +555,19 @@ private fun CheckInSection(
             }
         }
         if (pending) {
+            // Guidance for the pending state, kept coherent with the CTA. The
+            // countdown and "ready to confirm" copy are IMPERATIVE — they tell the
+            // member to check in again — so they only show when the confirm button
+            // is actually on screen (offerButton). The full matrix, with the button
+            // this branch pairs with:
+            //   offerButton & anchor & !elapsed  -> progress bar + "confirm in m:ss"  (button: Check in)
+            //   offerButton & anchor &  elapsed  -> "ready, check in again now"        (button: Confirm attendance)
+            //   offerButton & no anchor          -> generic "stay a bit, check in ~10 min" (button: Check in)
+            //   !offerButton (any anchor/elapsed) -> generic guidance, NO imperative — e.g. the
+            //                                        window closed while pending, so there is no CTA
+            //                                        to point at (the bug this gate fixes).
             when {
-                // Countdown running: a determinate bar plus the remaining "m:ss".
-                anchor != null && !dwellElapsed -> {
+                offerButton && anchor != null && !dwellElapsed -> {
                     val remaining = CheckInDwell.remainingMillis(anchor, now)
                     val (mins, secs) = CheckInDwell.remainingMinutesSeconds(remaining)
                     val progressLabel = stringResource(R.string.events_checkInCountdownLabel)
@@ -580,16 +590,13 @@ private fun CheckInSection(
                         modifier = Modifier.testTag(CHECK_IN_COUNTDOWN_TAG),
                     )
                 }
-                // Dwell complete: invite the confirming check-in.
-                anchor != null && dwellElapsed ->
+                offerButton && anchor != null && dwellElapsed ->
                     Text(
                         text = stringResource(R.string.events_checkInReadyToConfirm),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.testTag(CHECK_IN_COUNTDOWN_TAG),
                     )
-                // Pending but no anchor (a legacy record without createdAt): the
-                // original generic guidance, still correct.
                 else ->
                     Text(
                         text = stringResource(R.string.events_checkInPending),
@@ -601,12 +608,15 @@ private fun CheckInSection(
         (state as? CheckInUiState.Failed)?.let { failed ->
             // A geofence miss on the FINAL (confirming) fix is a different problem
             // from one on the first — the member has already dwelt the full ten
-            // minutes, they just stepped out. Tell them to come back to FINISH.
-            // Only in that confirm phase (dwell elapsed): earlier in the wait
-            // "finish checking in" would be a lie — they still have to wait — so a
-            // geofence miss then falls back to the generic "be at the location".
+            // minutes, they just stepped out. Tell them to come back to FINISH, but
+            // only in the confirm phase AND when the confirm button is on screen
+            // (offerButton): before the dwell elapses "finish checking in" would be
+            // a lie (they still have to wait), and with no CTA there is nothing to
+            // finish. Otherwise fall back to the generic geofence explanation.
             val label =
-                if (failed.error == CheckInError.OUTSIDE_GEOFENCE && pending && dwellElapsed) {
+                if (failed.error == CheckInError.OUTSIDE_GEOFENCE &&
+                    offerButton && pending && dwellElapsed
+                ) {
                     R.string.events_checkInMoveBackToFinish
                 } else {
                     checkInErrorLabel(failed.error)
