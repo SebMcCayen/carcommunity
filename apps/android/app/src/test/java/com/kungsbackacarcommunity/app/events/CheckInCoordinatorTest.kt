@@ -200,4 +200,92 @@ class CheckInCoordinatorTest {
         assertEquals(CheckInResult.UNKNOWN, CheckInResult.fromWire("gibberish"))
         assertEquals(CheckInResult.UNKNOWN, CheckInResult.fromWire(null))
     }
+
+    // --- Dwell-countdown anchor (firstFixAtMillis) ---
+
+    /** A repository that returns a queued sequence of results, one per check-in. */
+    private class SequencedRepo(private vararg val results: CheckInResult) : EventsRepository {
+        var checkInCalls = 0
+            private set
+
+        override fun observePublishedEvents(): Flow<EventsListState> = flowOf(EventsListState.Loading)
+        override fun observePastEvents(): Flow<EventsListState> = flowOf(EventsListState.Loading)
+        override fun observeEvent(eventId: String): Flow<EventSummary?> = flowOf(null)
+        override fun observeEventDetail(eventId: String): Flow<EventDetail?> = flowOf(null)
+        override fun observeMyRsvp(eventId: String, uid: String): Flow<RsvpStatus?> = flowOf(null)
+        override fun observeMyAttendance(
+            eventId: String,
+            uid: String,
+        ): Flow<EventAttendanceStatus?> = flowOf(null)
+
+        override suspend fun checkIn(eventId: String, fix: CheckInFix): CheckInResult {
+            val result = results[checkInCalls.coerceAtMost(results.size - 1)]
+            checkInCalls++
+            return result
+        }
+
+        override suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus) = Unit
+        override suspend fun createEvent(input: CreateEventInput): String = "unused"
+        override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
+            EventAttendeesResult.Unavailable
+    }
+
+    /** A coordinator whose fix carries [capturedAt] as its capture time. */
+    private fun coordinatorWithCapture(
+        repo: EventsRepository,
+        capturedAt: Long,
+    ): CheckInCoordinator =
+        CheckInCoordinator(
+            repository = repo,
+            locationSource = { fix().copy(capturedAtMillis = capturedAt) },
+            clock = { now },
+        )
+
+    @Test
+    fun `a recorded check-in anchors the countdown at the fix's capture time`() = runTest {
+        val c = coordinatorWithCapture(SequencedRepo(CheckInResult.RECORDED), capturedAt = now)
+        c.checkIn(openEvent())
+        assertEquals(now, c.firstFixAtMillis.value)
+    }
+
+    @Test
+    fun `a second recorded check-in does not move the anchor forward`() = runTest {
+        val repo = SequencedRepo(CheckInResult.RECORDED, CheckInResult.RECORDED)
+        // Each fix carries a LATER capture time, so a mistaken re-anchor would show.
+        var capture = now
+        val c =
+            CheckInCoordinator(
+                repository = repo,
+                locationSource = { fix().copy(capturedAtMillis = capture) },
+                clock = { now },
+            )
+        c.checkIn(openEvent())
+        assertEquals(now, c.firstFixAtMillis.value)
+        capture = now + 5 * 60_000L
+        c.checkIn(openEvent())
+        assertEquals("anchor stays the FIRST fix", now, c.firstFixAtMillis.value)
+        assertEquals(2, repo.checkInCalls)
+    }
+
+    @Test
+    fun `a temporary exit (outside geofence) after recording keeps the anchor`() = runTest {
+        val repo = SequencedRepo(CheckInResult.RECORDED, CheckInResult.OUTSIDE_GEOFENCE)
+        val c = coordinatorWithCapture(repo, capturedAt = now)
+        c.checkIn(openEvent())
+        assertEquals(now, c.firstFixAtMillis.value)
+        // Member walked out of the fence and tapped — must NOT reset the countdown.
+        c.checkIn(openEvent())
+        assertEquals(now, c.firstFixAtMillis.value)
+        assertTrue(c.status.value is CheckInUiState.Failed)
+    }
+
+    @Test
+    fun `verifying clears the anchor`() = runTest {
+        val repo = SequencedRepo(CheckInResult.RECORDED, CheckInResult.VERIFIED)
+        val c = coordinatorWithCapture(repo, capturedAt = now)
+        c.checkIn(openEvent())
+        assertEquals(now, c.firstFixAtMillis.value)
+        c.checkIn(openEvent())
+        assertEquals(null, c.firstFixAtMillis.value)
+    }
 }

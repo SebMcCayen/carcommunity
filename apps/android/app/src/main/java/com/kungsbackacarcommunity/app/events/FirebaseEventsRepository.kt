@@ -366,11 +366,13 @@ private fun DocumentSnapshot.toEventSummary(): EventSummary? {
 
 private fun DocumentSnapshot.toAttendanceStatus(): EventAttendanceStatus? {
     if (!exists()) return null
-    // Only the owner-readable fields — `verified` and `sampleCount`. The raw
-    // samples/risk are backend-only and never read here.
+    // Only the owner-readable fields — `verified`, `sampleCount` and the
+    // `createdAt` stamp that anchors the dwell countdown. The raw samples/risk
+    // are backend-only and never read here.
     return EventAttendanceStatus(
         verified = getBoolean("verified") ?: false,
         sampleCount = getLong("sampleCount")?.toInt()?.coerceAtLeast(0) ?: 0,
+        firstSampleAtMillis = getTimestamp("createdAt")?.toDate()?.time,
     )
 }
 

@@ -360,6 +360,11 @@
     <string name="events_checkInErrorMock">Your location couldn\'t be verified. Turn off any mock-location apps and try again.</string>
     <string name="events_checkInErrorGeneric">Check-in failed. Please try again.</string>
     <string name="events_checkInWithinArea">You have to be within the event area (about 150 m) to check in.</string>
+    <string name="events_checkInCountdown">You can confirm your attendance in %1$s.</string>
+    <string name="events_checkInCountdownLabel">Time left before you can confirm your attendance</string>
+    <string name="events_checkInReadyToConfirm">You\'ve stayed long enough. Check in again now to confirm your attendance — you just need to be back in the event area.</string>
+    <string name="events_checkInConfirmButton">Confirm attendance</string>
+    <string name="events_checkInMoveBackToFinish">Move back into the event area to finish checking in.</string>
     <string name="events_navigate">Navigate</string>
     <string name="events_navigateUnavailable">No maps app was found to start navigation.</string>
     <string name="events_addToCalendar">Add to calendar</string>

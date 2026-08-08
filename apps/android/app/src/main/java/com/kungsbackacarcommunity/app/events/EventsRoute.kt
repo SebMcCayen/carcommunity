@@ -386,6 +386,11 @@ fun EventsRoute(
     val attendanceFlow =
         remember(selected, uid) { repository.observeMyAttendance(selected, uid) }
     val attendance by attendanceFlow.collectAsState(initial = null)
+    // Anchor of the dwell countdown: the PERSISTED record's first-sample time
+    // (survives app death / navigation) with this session's first fix as the
+    // fallback for the snapshot lag right after the first check-in.
+    val sessionFirstFixAt by checkInCoordinator.firstFixAtMillis.collectAsState()
+    val firstSampleAtMillis = attendance?.firstSampleAtMillis ?: sessionFirstFixAt
 
     // Re-evaluate the window at its next boundary (opening or closing edge) rather
     // than polling — the same delay-to-boundary shape the map's pin expiry uses.
@@ -521,6 +526,7 @@ fun EventsRoute(
         checkInAvailable = checkInAvailable,
         checkInState = checkInState,
         attendance = attendance,
+        firstSampleAtMillis = firstSampleAtMillis,
         onCheckIn = { event?.let { current -> scope.launch { checkInCoordinator.checkIn(current) } } },
         onNavigate = onNavigate,
         onShareEvent = onShareEvent,

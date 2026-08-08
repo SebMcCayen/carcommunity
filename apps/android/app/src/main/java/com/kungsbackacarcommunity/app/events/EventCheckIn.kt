@@ -24,6 +24,15 @@ package com.kungsbackacarcommunity.app.events
 data class EventAttendanceStatus(
     val verified: Boolean,
     val sampleCount: Int,
+    /**
+     * When the attendance record was first created server-side (its `createdAt`),
+     * in epoch millis, or null when the record predates the field or has not been
+     * created yet. This is the anchor for the client dwell countdown: it is the
+     * moment the FIRST sample landed, it is authoritative, and — being read off
+     * the persisted record — it survives app death, backgrounding and navigation,
+     * so the countdown never restarts just because the member left the screen.
+     */
+    val firstSampleAtMillis: Long? = null,
 ) {
     val checkedIn: Boolean get() = verified || sampleCount > 0
 }
