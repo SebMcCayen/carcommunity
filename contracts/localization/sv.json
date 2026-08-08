@@ -191,7 +191,10 @@
     "themeLight": "Ljust",
     "themeLightDescription": "Alltid ljust, oavsett vad enheten gör",
     "themeDark": "Mörkt",
-    "themeDarkDescription": "Alltid mörkt, oavsett vad enheten gör"
+    "themeDarkDescription": "Alltid mörkt, oavsett vad enheten gör",
+    "languageSection": "Språk",
+    "languageSwedish": "Svenska",
+    "languageEnglish": "English"
   },
   "privacySettings": {
     "title": "Integritet",

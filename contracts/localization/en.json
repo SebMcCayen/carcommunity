@@ -191,7 +191,10 @@
     "themeLight": "Light",
     "themeLightDescription": "Always light, whatever the device does",
     "themeDark": "Dark",
-    "themeDarkDescription": "Always dark, whatever the device does"
+    "themeDarkDescription": "Always dark, whatever the device does",
+    "languageSection": "Language",
+    "languageSwedish": "Svenska",
+    "languageEnglish": "English"
   },
   "privacySettings": {
     "title": "Privacy",

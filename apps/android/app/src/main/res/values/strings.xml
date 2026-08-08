@@ -175,6 +175,9 @@
     <string name="settingsMenu_themeLightDescription">Alltid ljust, oavsett vad enheten gör</string>
     <string name="settingsMenu_themeDark">Mörkt</string>
     <string name="settingsMenu_themeDarkDescription">Alltid mörkt, oavsett vad enheten gör</string>
+    <string name="settingsMenu_languageSection">Språk</string>
+    <string name="settingsMenu_languageSwedish">Svenska</string>
+    <string name="settingsMenu_languageEnglish">English</string>
     <string name="privacySettings_title">Integritet</string>
     <string name="privacySettings_partnerStatsTitle">Anonymiserad partnerstatistik</string>
     <string name="privacySettings_partnerStatsBody">Bidra med anonymiserad partnerstatistik</string>
