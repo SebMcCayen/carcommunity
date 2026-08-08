@@ -16,6 +16,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -149,7 +150,13 @@ fun EventsListScreen(
                 is EventsListState.Loaded -> {
                     // Pure filter (unit tested); ALL / no-location just pass the
                     // list through, so the rows stay in their upstream order.
-                    val rows = EventDistanceFilter.withDistances(state.events, userLocation, distanceBand)
+                    // Memoized on its inputs so the haversine pass runs only when
+                    // the events, the fix, or the band actually change — not on
+                    // every recomposition.
+                    val rows =
+                        remember(state.events, userLocation, distanceBand) {
+                            EventDistanceFilter.withDistances(state.events, userLocation, distanceBand)
+                        }
                     if (rows.isEmpty()) {
                         if (state.events.isEmpty()) {
                             EmptyState(tab)
