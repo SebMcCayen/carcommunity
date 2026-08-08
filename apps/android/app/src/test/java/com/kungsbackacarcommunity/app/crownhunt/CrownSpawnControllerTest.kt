@@ -255,8 +255,8 @@ class CrownSpawnControllerTest {
 
     /**
      * A camera settle that lands on the SAME cells costs nothing. This is what
-     * keeps nudging the map around a car park from costing 25 document reads a
-     * nudge.
+     * keeps nudging the map around a car park from costing a fresh fan-out of
+     * queries a nudge.
      */
     @Test
     fun `a settle inside the same cells is not re-queried`() = runTest {

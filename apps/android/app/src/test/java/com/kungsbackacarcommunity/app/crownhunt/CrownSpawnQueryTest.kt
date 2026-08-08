@@ -108,19 +108,96 @@ class CrownSpawnQueryTest {
         assertEquals(1, CrownSpawnQuery.ringsFor(500.0))
         assertEquals(2, CrownSpawnQuery.ringsFor(2_000.0))
         assertEquals(CrownSpawnQuery.MAX_RING, CrownSpawnQuery.ringsFor(50_000.0))
-        assertEquals(25, CrownSpawnQuery.cellKeysFor(lat, lon, 50_000.0).size)
+        // MAX_RING = 5 → an 11x11 = 121-cell town-sized block, and no wider.
+        assertEquals(121, CrownSpawnQuery.cellKeysFor(lat, lon, 50_000.0).size)
     }
 
-    /** The plan can never exceed Firestore's `in` limit, however MAX_RING is retuned. */
+    /**
+     * A ~9 km town-sized radius reaches the full ring, not just the near block —
+     * the whole point of the widen. It is bounded there by MAX_RING, not the
+     * visible radius, so an even wider zoom adds no more cells.
+     */
     @Test
-    fun `the plan always fits inside Firestore's in-filter limit`() {
-        for (radius in listOf(1.0, 500.0, 2_500.0, 20_000.0, 500_000.0)) {
+    fun `a town-sized radius reaches the full ring and stops`() {
+        assertEquals(CrownSpawnQuery.MAX_RING, CrownSpawnQuery.ringsFor(9_000.0))
+        assertEquals(
+            CrownSpawnQuery.cellKeysFor(lat, lon, 9_000.0),
+            CrownSpawnQuery.cellKeysFor(lat, lon, 40_000.0),
+        )
+    }
+
+    /**
+     * The plan can never exceed the hard cell cap, however MAX_RING is retuned,
+     * and it always splits into legal `in` batches (<= the 30-value limit) that
+     * are themselves bounded in number.
+     */
+    @Test
+    fun `the plan is bounded and batches into legal in-queries`() {
+        for (radius in listOf(1.0, 500.0, 2_500.0, 9_000.0, 20_000.0, 500_000.0)) {
             val keys = CrownSpawnQuery.cellKeysFor(lat, lon, radius)
             assertTrue(
                 "radius=$radius produced ${keys.size} keys",
-                keys.size <= CrownSpawnQuery.FIRESTORE_IN_LIMIT,
+                keys.size <= CrownSpawnQuery.MAX_CELLS,
             )
+            val batches = CrownSpawnQuery.chunkForInQueries(keys)
+            assertTrue(
+                "radius=$radius produced ${batches.size} batches",
+                batches.size <= CrownSpawnQuery.MAX_BATCHES,
+            )
+            for (batch in batches) {
+                assertTrue(
+                    "radius=$radius produced a ${batch.size}-key batch",
+                    batch.isNotEmpty() && batch.size <= CrownSpawnQuery.FIRESTORE_IN_LIMIT,
+                )
+            }
+            // The batches partition the plan exactly — no key dropped, none added.
+            assertEquals(keys, batches.flatten())
         }
+    }
+
+    /**
+     * The full-width plan uses every batch and every key, and the near plan stays
+     * a single small batch — the widen must not cost small-zoom refreshes a
+     * needless second round-trip.
+     */
+    @Test
+    fun `batching matches the plan size at both ends`() {
+        val wide = CrownSpawnQuery.chunkForInQueries(CrownSpawnQuery.cellKeysFor(lat, lon, 9_000.0))
+        assertEquals(CrownSpawnQuery.MAX_BATCHES, wide.size)
+        assertEquals(121, wide.sumOf { it.size })
+
+        val near = CrownSpawnQuery.chunkForInQueries(CrownSpawnQuery.cellKeysFor(lat, lon, 1.0))
+        assertEquals(1, near.size)
+        assertEquals(9, near.first().size)
+    }
+
+    /** An empty plan yields no batches — never a single empty `in` array. */
+    @Test
+    fun `an empty plan chunks into no batches`() {
+        assertTrue(CrownSpawnQuery.chunkForInQueries(emptyList()).isEmpty())
+    }
+
+    /**
+     * The batch bound is enforced by chunkForInQueries itself, not merely
+     * inherited from cellKeysFor: even an over-long input a future caller might
+     * hand it is truncated to MAX_CELLS and so to at most MAX_BATCHES batches, so
+     * no caller can trigger an unbounded fan-out of parallel queries.
+     */
+    @Test
+    fun `an over-long input is bounded, not chunked into an unbounded fan-out`() {
+        val overLong = (0 until CrownSpawnQuery.MAX_CELLS * 3).map { "cell_$it" }
+        val batches = CrownSpawnQuery.chunkForInQueries(overLong)
+        assertTrue(
+            "produced ${batches.size} batches",
+            batches.size <= CrownSpawnQuery.MAX_BATCHES,
+        )
+        assertEquals(CrownSpawnQuery.MAX_CELLS, batches.sumOf { it.size })
+        for (batch in batches) {
+            assertTrue(batch.isNotEmpty() && batch.size <= CrownSpawnQuery.FIRESTORE_IN_LIMIT)
+        }
+        // The bound keeps the FIRST MAX_CELLS keys in order — a stable, prefix
+        // truncation, not an arbitrary sample.
+        assertEquals(overLong.subList(0, CrownSpawnQuery.MAX_CELLS), batches.flatten())
     }
 
     /**
