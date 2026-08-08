@@ -107,11 +107,16 @@ import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
 import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
 import com.kungsbackacarcommunity.app.drives.DriveStatsCalculator
+import com.kungsbackacarcommunity.app.drives.ConvoyEndChoice
+import com.kungsbackacarcommunity.app.drives.ConvoyEndResolution
+import com.kungsbackacarcommunity.app.drives.ConvoyEndSessionChoice
 import com.kungsbackacarcommunity.app.drives.DrivesRepository
 import com.kungsbackacarcommunity.app.drives.DrivesRoute
 import com.kungsbackacarcommunity.app.drives.DrivesState
+import com.kungsbackacarcommunity.app.drives.EndedSessionAction
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
+import com.kungsbackacarcommunity.app.drives.SavePromptReason
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.drives.savePromptReason
@@ -2384,6 +2389,40 @@ fun AuthenticatedApp(
             // so a recreation between the tap and the stop effect can't lose it and
             // mislabel a deliberate stop as a convoy end.
             var userEndedSession by rememberSaveable { mutableStateOf(false) }
+            // A convoy the member was IN was ended by someone else, stopping their
+            // convoy-auto session under them. Instead of stopping the recording and
+            // going straight to the save prompt, we ask: end the session too, or keep
+            // going solo (transfer the session to a standalone single session with no
+            // gap). Holds the ENDED session's id while its choice dialog is open; null
+            // = no choice pending. rememberSaveable so a convoy that ends while the
+            // app is backgrounded still prompts on return, and the dialog survives an
+            // Activity recreation — mirroring the process-scoped save-prompt state.
+            // Keyed by uid (matching the other auth-scoped saveable state in this
+            // file) so an account switch within the same process resets it — a
+            // stopped session id belonging to the previous user must never raise this
+            // prompt for the next one.
+            var convoyEndPromptSessionId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
+            // The convoy-ended session the member has ALREADY answered for (End or
+            // Continue). Because the recording-stop effect re-derives the convoy-ended
+            // condition from the still-stopped session on every re-run/recreation, this
+            // stops the choice dialog re-raising over the save prompt (End) or over the
+            // freshly-transferred solo session before it echoes back (Continue). Keyed
+            // by session id, so a LATER convoy end (a different session) still prompts.
+            var convoyEndDecidedSessionId by rememberSaveable(uid) { mutableStateOf<String?>(null) }
+            // A convoy-ended session for which the member chose "Continue as a single
+            // session" and the transfer (starting a fresh solo session) is IN FLIGHT
+            // but not yet confirmed. Held separately from [convoyEndDecidedSessionId]
+            // because a transfer can still FAIL (the start is refused / returns
+            // Busy/Failed / never echoes a session): marking it decided up front would
+            // permanently suppress the dialog and leave the recording running with no
+            // session. While it is pending the dialog is NOT re-raised, and a
+            // resolution effect below turns it into either "decided" (the new session
+            // was confirmed — the recording carried straight into it) or a clean
+            // stop+save (the start never produced a session), so Continue can never
+            // orphan the recording. Keyed by uid + survives recreation, like the
+            // markers above, so a transfer in flight across a rotation still resolves.
+            var convoyTransferPendingSessionId by
+                rememberSaveable(uid) { mutableStateOf<String?>(null) }
             // Re-evaluate at expiry: a single nowMillis() snapshot would keep
             // isSharing == true if the app stays open past expiresAtMillis with
             // no other recomposition. Schedule one delay-to-expiry that flips
@@ -2580,21 +2619,81 @@ fun AuthenticatedApp(
                     // ran out, convoy possibly still running) stays neutral.
                     val endedByExpiry =
                         liveSession?.expiresAtMillis?.let { it <= nowMillis() } == true
-                    SingleSessionRecording.stop(
+                    val reason =
                         savePromptReason(
                             convoyAutoStarted = liveSession?.convoyAutoStarted == true,
                             userEndedSession = userEndedSession,
                             endedByExpiry = endedByExpiry,
-                        ),
-                    )
-                    // Consume the self-stop marker now the reason is captured, so the
-                    // NEXT session is judged fresh. Reset HERE rather than on session
-                    // start: the convoy-stop dialog flips convoyActiveLatched (a key
-                    // of this effect) mid-stop while isSharing is still true, so a
-                    // reset in the sharing branch could wipe the marker between the
-                    // user's choice and the actual stop. stop() already froze the
-                    // reason, so a re-run reading the cleared flag is a harmless no-op.
-                    userEndedSession = false
+                        )
+                    when (val action = ConvoyEndSessionChoice.onSessionEnded(reason)) {
+                        is EndedSessionAction.StopAndSave -> {
+                            // Use the reason the decision carried, not the recomputed
+                            // one, so the two can't drift if onSessionEnded ever maps
+                            // to a different reason (identical today).
+                            SingleSessionRecording.stop(action.reason)
+                            // Consume the self-stop marker now the reason is captured,
+                            // so the NEXT session is judged fresh. Reset HERE rather
+                            // than on session start: the convoy-stop dialog flips
+                            // convoyActiveLatched (a key of this effect) mid-stop while
+                            // isSharing is still true, so a reset in the sharing branch
+                            // could wipe the marker between the user's choice and the
+                            // actual stop. stop() already froze the reason, so a re-run
+                            // reading the cleared flag is a harmless no-op.
+                            userEndedSession = false
+                        }
+                        EndedSessionAction.AskEndOrContinue -> {
+                            // Someone else ended a convoy the member was in, so the
+                            // backend stopped their convoy-auto session. DON'T stop the
+                            // recording yet: ask first (End vs Continue as a single
+                            // session). Key the prompt on the ended session's id and
+                            // skip it once that session has been answered, so this
+                            // effect re-running (recreation / a further emission of the
+                            // still-stopped session) can't re-open the dialog.
+                            //
+                            // reason == ConvoyEnded here, which requires
+                            // convoyAutoStarted == true and therefore a non-null
+                            // liveSession carrying a non-null sessionId — so this
+                            // `!= null` only exists to smart-cast the nullable local,
+                            // never to guard a real null.
+                            val endedSessionId = liveSession?.sessionId
+                            if (endedSessionId != null &&
+                                endedSessionId != convoyEndDecidedSessionId &&
+                                // Also skip while a Continue transfer for this session
+                                // is still in flight: the old stopped session is still
+                                // what we observe until the new one echoes, so without
+                                // this the dialog would re-open mid-transfer.
+                                endedSessionId != convoyTransferPendingSessionId
+                            ) {
+                                convoyEndPromptSessionId = endedSessionId
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Resolve an in-flight "Continue as a single session" transfer so it can
+            // NEVER leave the recording orphaned. Choosing Continue starts a fresh
+            // solo session but does not mark the convoy-ended session decided — this
+            // effect does, once the outcome is known:
+            //  - the new session is CONFIRMED (isSharing observed true): the recording
+            //    carried straight into it; mark decided so the dialog never re-opens.
+            //  - the start never produced a session (refused / Busy / Failed / timed
+            //    out): [isSharingUi] is observed OR an optimistic attempt still
+            //    pending, so once it reads false the optimistic overlay has already
+            //    given up (its own IN_FLIGHT_TIMEOUT_MS / ECHO_GRACE_MS grace windows).
+            //    Fall back to a clean stop+save with the convoy-ended prompt.
+            // Keyed on both sharing signals AND the pending id, so it re-runs the
+            // moment the transfer resolves either way; a no-op until then (right after
+            // Continue, the just-recorded attempt keeps isSharingUi true).
+            LaunchedEffect(isSharing, isSharingUi, convoyTransferPendingSessionId) {
+                val pending = convoyTransferPendingSessionId ?: return@LaunchedEffect
+                if (isSharing) {
+                    convoyEndDecidedSessionId = pending
+                    convoyTransferPendingSessionId = null
+                } else if (!isSharingUi) {
+                    convoyEndDecidedSessionId = pending
+                    convoyTransferPendingSessionId = null
+                    SingleSessionRecording.stop(SavePromptReason.ConvoyEnded)
                 }
             }
 
@@ -5742,6 +5841,83 @@ fun AuthenticatedApp(
                         dismissButton = {
                             TextButton(onClick = { convoyStopPrompt = null }) {
                                 Text(stringResource(R.string.convoy_stopSessionKeep))
+                            }
+                        },
+                    )
+                }
+
+                // "The convoy ended" — raised when someone ELSE ended a convoy the
+                // member was in, which stopped their convoy-auto session under them.
+                // Rather than ending the drive out from under them, ask: end the
+                // session too (→ the existing stop + #771 save prompt), or keep going
+                // as a standalone single session (transfer the STILL-RUNNING recording
+                // to a fresh solo session — the convoy leg and solo continuation land
+                // in one drive, no gap). Resolving the choice is the ONE place either
+                // outcome is wired, via the pure [ConvoyEndSessionChoice.resolve].
+                val convoyEndSessionId = convoyEndPromptSessionId
+                if (convoyEndSessionId != null) {
+                    val resolveConvoyEnd: (ConvoyEndChoice) -> Unit = { choice ->
+                        // Close the dialog. The Stop branch marks the session decided
+                        // synchronously (it stops+saves right here); the Transfer branch
+                        // must NOT — see below.
+                        convoyEndPromptSessionId = null
+                        // Whether a REAL solo session can be started right now. This is
+                        // exactly requestStartSingleSession's own gate: only when both
+                        // hold does it actually start a session (otherwise it merely
+                        // opens the live screen / shows the unavailable snackbar). It is
+                        // handed to the pure resolve() so Continue with no way to start
+                        // a session falls back to Stop rather than orphaning the drive.
+                        val canStartSingle = liveLocationCoordinator != null && canShareLive
+                        when (
+                            val resolution = ConvoyEndSessionChoice.resolve(choice, canStartSingle)
+                        ) {
+                            is ConvoyEndResolution.Stop -> {
+                                // End branch — and the Continue-but-can't-start fallback:
+                                // stop the recording and raise the Keep/Delete summary
+                                // with the convoy-ended copy (#771). Not a self-stop, so
+                                // userEndedSession stays false and the reason stands.
+                                // Decided now: the stop is synchronous, so the effect
+                                // re-running on the still-stopped session must not
+                                // re-open this dialog.
+                                convoyEndDecidedSessionId = convoyEndSessionId
+                                SingleSessionRecording.stop(resolution.reason)
+                            }
+                            ConvoyEndResolution.TransferToSingle -> {
+                                // Continue branch: do NOT stop — the recording keeps
+                                // running. Start a fresh standalone single session so
+                                // sharing resumes at once; SingleSessionRecording.start
+                                // (fired by the isSharing effect when the new session
+                                // echoes) is a no-op while a recording is in flight, so
+                                // the SAME recording — every point so far — carries into
+                                // the solo session with no data loss and no visible gap.
+                                //
+                                // Marked PENDING, not decided: the start can still fail
+                                // (refused / Busy / Failed / no echo). The resolution
+                                // effect above turns this into "decided" once the new
+                                // session is confirmed, or a clean stop+save if the
+                                // start never lands — so a failed transfer can never
+                                // leave the recording running with no session.
+                                convoyTransferPendingSessionId = convoyEndSessionId
+                                requestStartSingleSession()
+                            }
+                        }
+                    }
+                    AlertDialog(
+                        // Back-press / outside-tap defaults to the conservative,
+                        // data-preserving outcome — end the session and save the drive,
+                        // exactly the pre-choice behaviour — so a dismiss never strands
+                        // a stopped session with an unresolved recording.
+                        onDismissRequest = { resolveConvoyEnd(ConvoyEndChoice.EndSession) },
+                        title = { Text(stringResource(R.string.convoy_endedContinueTitle)) },
+                        text = { Text(stringResource(R.string.convoy_endedContinueBody)) },
+                        confirmButton = {
+                            Button(onClick = { resolveConvoyEnd(ConvoyEndChoice.ContinueAsSingle) }) {
+                                Text(stringResource(R.string.convoy_endedContinueAsSingle))
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { resolveConvoyEnd(ConvoyEndChoice.EndSession) }) {
+                                Text(stringResource(R.string.convoy_endedContinueEnd))
                             }
                         },
                     )

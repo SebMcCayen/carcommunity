@@ -674,6 +674,10 @@
     <string name="convoy_stopSessionLeave">Lämna konvojen</string>
     <string name="convoy_stopSessionLeaveEnds">Lämna (den avslutas då)</string>
     <string name="convoy_stopSessionKeep">Fortsätt dela</string>
+    <string name="convoy_endedContinueTitle">Konvojen avslutades</string>
+    <string name="convoy_endedContinueBody">Någon avslutade konvojen, så din livedelning stoppades. Vill du avsluta din session också, eller fortsätta som egen körning?</string>
+    <string name="convoy_endedContinueAsSingle">Fortsätt som egen körning</string>
+    <string name="convoy_endedContinueEnd">Avsluta sessionen</string>
     <string name="convoy_leftConvoyToast">Du lämnade konvojen.</string>
     <string name="convoy_leftAndEndedToast">Du lämnade konvojen, och den avslutades.</string>
     <string name="convoy_leftAsLeaderToast">Du lämnade konvojen. En annan medlem är nu konvojledare.</string>
