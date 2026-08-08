@@ -669,6 +669,10 @@
     <string name="convoy_stopSessionLeave">Leave convoy</string>
     <string name="convoy_stopSessionLeaveEnds">Leave (ends the convoy)</string>
     <string name="convoy_stopSessionKeep">Keep sharing</string>
+    <string name="convoy_endedContinueTitle">The convoy ended</string>
+    <string name="convoy_endedContinueBody">Someone ended the convoy, so your live session stopped. Do you want to end your session too, or keep going as your own single session?</string>
+    <string name="convoy_endedContinueAsSingle">Continue as a single session</string>
+    <string name="convoy_endedContinueEnd">End session</string>
     <string name="convoy_leftConvoyToast">You left the convoy.</string>
     <string name="convoy_leftAndEndedToast">You left, and the convoy ended.</string>
     <string name="convoy_leftAsLeaderToast">You left. Another member is now the convoy leader.</string>
