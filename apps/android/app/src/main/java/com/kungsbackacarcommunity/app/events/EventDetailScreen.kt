@@ -551,17 +551,19 @@ private fun RsvpCountsBreakdown(counts: RsvpCounts) {
         modifier = Modifier.fillMaxWidth().testTag(RSVP_COUNTS_BREAKDOWN_TAG),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        RsvpCountItem(R.string.events_rsvpGoing, counts.going, Modifier.weight(1f))
-        RsvpCountItem(R.string.events_rsvpMaybe, counts.maybe, Modifier.weight(1f))
-        RsvpCountItem(R.string.events_rsvpNotGoing, counts.notGoing, Modifier.weight(1f))
+        RsvpCountItem(R.string.events_rsvpGoing, counts.going, RsvpStatus.GOING, Modifier.weight(1f))
+        RsvpCountItem(R.string.events_rsvpMaybe, counts.maybe, RsvpStatus.MAYBE, Modifier.weight(1f))
+        RsvpCountItem(R.string.events_rsvpNotGoing, counts.notGoing, RsvpStatus.NOT_GOING, Modifier.weight(1f))
     }
 }
 
-/** One count in the RSVP breakdown: the tally over its answer label. */
+/** One count in the RSVP breakdown: the tally over its answer label. Carries a
+ * per-answer tag so a test targets the count distinctly from the like-labelled
+ * RSVP action button. */
 @Composable
-private fun RsvpCountItem(labelRes: Int, count: Int, modifier: Modifier = Modifier) {
+private fun RsvpCountItem(labelRes: Int, count: Int, answer: RsvpStatus, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier,
+        modifier = modifier.testTag(rsvpCountTag(answer)),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
@@ -801,6 +803,16 @@ const val EVENT_DETAIL_REVEAL_ATTENDEES_TAG = "events_detail_reveal_attendees"
 const val RSVP_COUNTS_BREAKDOWN_TAG = "events_detail_rsvp_counts_breakdown"
 
 /**
+ * Per-answer test tag on an RSVP ACTION button. Distinct from [rsvpCountTag] so a
+ * test can tap the button without colliding with the like-labelled count in the
+ * breakdown (both render "Going" / "Maybe" / "Can't go").
+ */
+fun rsvpButtonTag(answer: RsvpStatus): String = "events_rsvp_button_${answer.wire}"
+
+/** Per-answer test tag on a count in the RSVP breakdown (see [rsvpButtonTag]). */
+fun rsvpCountTag(answer: RsvpStatus): String = "events_rsvp_count_${answer.wire}"
+
+/**
  * Test tag on the PUBLIC place-name line, so a UI test can assert it is rendered
  * outside the member gate (a non-member must still see where the event is).
  */
@@ -880,15 +892,20 @@ private fun RowScope.RsvpButton(
 ) {
     val label = stringResource(labelRes)
     val enabled = rsvpStatus != RsvpStatusUi.Saving
+    // Distinct per-answer tag on the ACTION button, so a test targets the button
+    // unambiguously — its label ("Going" / "Maybe" / "Can't go") now also appears
+    // as a count label in the RSVP breakdown below, so matching by text alone is
+    // ambiguous.
+    val tag = Modifier.weight(1f).testTag(rsvpButtonTag(answer))
     if (answer == myRsvp) {
-        Button(onClick = { onRsvp(answer) }, enabled = enabled, modifier = Modifier.weight(1f)) {
+        Button(onClick = { onRsvp(answer) }, enabled = enabled, modifier = tag) {
             Text(text = label, textAlign = TextAlign.Center)
         }
     } else {
         OutlinedButton(
             onClick = { onRsvp(answer) },
             enabled = enabled,
-            modifier = Modifier.weight(1f),
+            modifier = tag,
             colors = ButtonDefaults.outlinedButtonColors(),
         ) {
             Text(text = label, textAlign = TextAlign.Center)
