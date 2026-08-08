@@ -26,8 +26,11 @@ class FeatureFlagsStore(
     /**
      * Collects the repository's LIVE flag stream into [flags], updating on
      * every emission and keeping the last good value if the stream errors.
-     * Suspends until cancelled (the listener is torn down on cancellation via
-     * the flow's awaitClose), so callers launch it in an authenticated,
+     * Returns when the stream ends or the collecting scope is cancelled; the
+     * production stream ([FirebaseFeatureFlagsRepository.observe]) never
+     * completes on its own, so in practice this suspends for the lifetime of
+     * the authenticated session and its listener is removed (awaitClose) on
+     * cancellation. Callers therefore launch it in an authenticated,
      * lifecycle-bound scope. A null repository (Firebase not configured) is a
      * no-op that leaves the defaults in place.
      */
