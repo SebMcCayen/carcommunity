@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -50,6 +51,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.os.ConfigurationCompat
 import androidx.core.os.LocaleListCompat
 import com.kungsbackacarcommunity.app.BuildConfig
 import com.kungsbackacarcommunity.app.R
@@ -191,7 +193,15 @@ fun SettingsScreen(
         // seeded from the live application locales and updated on tap so the radio
         // reflects the choice under the user's finger, before the recreation.
         SettingsSectionHeader(stringResource(R.string.settingsMenu_languageSection))
-        var selectedLanguage by remember { mutableStateOf(currentAppLanguage()) }
+        // The effective locale the app is actually rendering in — used to seed the
+        // picker when no explicit app-language has been chosen (empty app-locale
+        // list = follow system), so an English-system device shows English selected
+        // rather than defaulting the radio to Swedish while the UI reads English.
+        val configuration = LocalConfiguration.current
+        val systemLanguageTag = ConfigurationCompat.getLocales(configuration).get(0)?.toLanguageTag()
+        var selectedLanguage by remember(systemLanguageTag) {
+            mutableStateOf(currentAppLanguage(systemLanguageTag))
+        }
         LanguageOptionRow(
             label = stringResource(R.string.settingsMenu_languageSwedish),
             selected = selectedLanguage == AppLanguage.SWEDISH,
@@ -263,15 +273,16 @@ const val SETTINGS_LANGUAGE_SWEDISH_TAG = "settings_language_swedish"
 const val SETTINGS_LANGUAGE_ENGLISH_TAG = "settings_language_english"
 
 /**
- * The language the app is currently rendering in, read from the AndroidX per-app
- * application locales. An empty list means the user has made no explicit choice,
- * which [AppLanguage.fromLanguageTag] resolves to the app default (Swedish).
- * Framework glue (AppCompat), kept out of [AppLanguage] so the mapping stays a
- * pure JVM seam.
+ * The language option to show as selected. Prefers the explicit AndroidX per-app
+ * application locale; when that list is empty (no explicit choice = follow
+ * system) it falls back to [systemLanguageTag], the effective locale the app is
+ * actually rendering in — so the radio matches the visible UI instead of always
+ * snapping to Swedish. Framework glue (AppCompat), kept out of [AppLanguage] so
+ * the tag→option mapping stays a pure JVM seam.
  */
-private fun currentAppLanguage(): AppLanguage {
+private fun currentAppLanguage(systemLanguageTag: String?): AppLanguage {
     val locales = AppCompatDelegate.getApplicationLocales()
-    val tag = if (locales.isEmpty) null else locales.get(0)?.toLanguageTag()
+    val tag = if (locales.isEmpty) systemLanguageTag else locales.get(0)?.toLanguageTag()
     return AppLanguage.fromLanguageTag(tag)
 }
 
