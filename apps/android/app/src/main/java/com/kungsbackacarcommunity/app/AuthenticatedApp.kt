@@ -5809,11 +5809,21 @@ fun AuthenticatedApp(
                         // re-running on the still-stopped session can't re-open this.
                         convoyEndDecidedSessionId = convoyEndSessionId
                         convoyEndPromptSessionId = null
-                        when (val resolution = ConvoyEndSessionChoice.resolve(choice)) {
+                        // Whether a REAL solo session can be started right now. This is
+                        // exactly requestStartSingleSession's own gate: only when both
+                        // hold does it actually start a session (otherwise it merely
+                        // opens the live screen / shows the unavailable snackbar). It is
+                        // handed to the pure resolve() so Continue can never mark the
+                        // session decided and leave the recording running with no
+                        // session — when a session can't start, resolve() returns Stop.
+                        val canStartSingle = liveLocationCoordinator != null && canShareLive
+                        when (
+                            val resolution = ConvoyEndSessionChoice.resolve(choice, canStartSingle)
+                        ) {
                             is ConvoyEndResolution.Stop -> {
-                                // End branch: existing behaviour — stop the recording
-                                // and raise the Keep/Delete summary with the
-                                // convoy-ended copy (#771). Not a self-stop, so
+                                // End branch — and the Continue-but-can't-start fallback:
+                                // stop the recording and raise the Keep/Delete summary
+                                // with the convoy-ended copy (#771). Not a self-stop, so
                                 // userEndedSession stays false and the reason stands.
                                 SingleSessionRecording.stop(resolution.reason)
                             }
@@ -5825,6 +5835,8 @@ fun AuthenticatedApp(
                                 // echoes) is a no-op while a recording is in flight, so
                                 // the SAME recording — every point so far — carries into
                                 // the solo session with no data loss and no visible gap.
+                                // Guaranteed startable here (canStartSingle), so this
+                                // can never fall through to the no-session fallback.
                                 requestStartSingleSession()
                             }
                         }

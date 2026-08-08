@@ -38,9 +38,20 @@ class ConvoyEndSessionChoiceTest {
 
     @Test
     fun `choosing End stops the recording with the convoy-ended save copy`() {
+        // End always stops+saves, regardless of whether a solo session could start.
         assertEquals(
             ConvoyEndResolution.Stop(SavePromptReason.ConvoyEnded),
-            ConvoyEndSessionChoice.resolve(ConvoyEndChoice.EndSession),
+            ConvoyEndSessionChoice.resolve(
+                ConvoyEndChoice.EndSession,
+                canStartSingleSession = true,
+            ),
+        )
+        assertEquals(
+            ConvoyEndResolution.Stop(SavePromptReason.ConvoyEnded),
+            ConvoyEndSessionChoice.resolve(
+                ConvoyEndChoice.EndSession,
+                canStartSingleSession = false,
+            ),
         )
     }
 
@@ -50,7 +61,24 @@ class ConvoyEndSessionChoiceTest {
         // a convoy session to a standalone single session.
         assertEquals(
             ConvoyEndResolution.TransferToSingle,
-            ConvoyEndSessionChoice.resolve(ConvoyEndChoice.ContinueAsSingle),
+            ConvoyEndSessionChoice.resolve(
+                ConvoyEndChoice.ContinueAsSingle,
+                canStartSingleSession = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `Continue when no solo session can start falls back to stop-and-save`() {
+        // The orphan-recording guard: if the live coordinator is unwired or the user
+        // can't share live, Continue must NOT leave the recording running with no
+        // session and no dialog — it cleanly stops+saves with the convoy-ended copy.
+        assertEquals(
+            ConvoyEndResolution.Stop(SavePromptReason.ConvoyEnded),
+            ConvoyEndSessionChoice.resolve(
+                ConvoyEndChoice.ContinueAsSingle,
+                canStartSingleSession = false,
+            ),
         )
     }
 }

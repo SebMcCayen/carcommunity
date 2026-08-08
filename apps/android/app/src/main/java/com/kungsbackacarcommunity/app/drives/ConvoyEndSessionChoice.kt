@@ -87,12 +87,27 @@ object ConvoyEndSessionChoice {
 
     /**
      * What the member's [choice] does to the recording. [EndSession] stops with the
-     * convoy-ended copy (the existing #771 save prompt); [ContinueAsSingle] never
-     * stops — it transfers the still-running recording to a solo session.
+     * convoy-ended copy (the existing #771 save prompt).
+     *
+     * [ContinueAsSingle] transfers the still-running recording to a solo session —
+     * but ONLY when one can actually be started ([canStartSingleSession]: the live
+     * coordinator is wired and the caller may share live). When it cannot, Continue
+     * must NOT silently leave the recording running with no session and no dialog:
+     * it falls back to [ConvoyEndResolution.Stop] so the drive is cleanly ended and
+     * the convoy-ended save prompt is shown. The invariant: Continue either genuinely
+     * starts a solo session, or cleanly stops+saves — never an orphaned recording.
      */
-    fun resolve(choice: ConvoyEndChoice): ConvoyEndResolution =
+    fun resolve(
+        choice: ConvoyEndChoice,
+        canStartSingleSession: Boolean,
+    ): ConvoyEndResolution =
         when (choice) {
             ConvoyEndChoice.EndSession -> ConvoyEndResolution.Stop(SavePromptReason.ConvoyEnded)
-            ConvoyEndChoice.ContinueAsSingle -> ConvoyEndResolution.TransferToSingle
+            ConvoyEndChoice.ContinueAsSingle ->
+                if (canStartSingleSession) {
+                    ConvoyEndResolution.TransferToSingle
+                } else {
+                    ConvoyEndResolution.Stop(SavePromptReason.ConvoyEnded)
+                }
         }
 }
