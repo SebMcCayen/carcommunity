@@ -25,14 +25,20 @@ data class EventAttendanceStatus(
     val verified: Boolean,
     val sampleCount: Int,
     /**
-     * When the attendance record was first created server-side (its `createdAt`),
-     * in epoch millis, or null when the record predates the field or has not been
-     * created yet. This is the anchor for the client dwell countdown: it is the
-     * moment the FIRST sample landed, it is authoritative, and — being read off
-     * the persisted record — it survives app death, backgrounding and navigation,
-     * so the countdown never restarts just because the member left the screen.
+     * The attendance record's server `createdAt`, in epoch millis, or null when
+     * the record predates the field or has not been created yet. It is a
+     * CONSERVATIVE, durable anchor for the client dwell countdown — NOT the first
+     * sample's own `capturedAt`. It is a serverTimestamp written when the record
+     * is created, so it can LAG the true first sample by up to the freshness
+     * window (~60 s), and it is a different clock from the device `now` the
+     * countdown ticks against. It is therefore used only as the FALLBACK for when
+     * this session's first-fix `capturedAt` is gone (process restart / returning
+     * to the screen); `CheckInDwell.selectAnchor` takes the EARLIEST of the two,
+     * so the lag can only ever make the countdown slightly conservative, never
+     * confirm earlier than the backend. Being read off the persisted record, it
+     * survives app death, backgrounding and navigation.
      */
-    val firstSampleAtMillis: Long? = null,
+    val recordCreatedAtMillis: Long? = null,
 ) {
     val checkedIn: Boolean get() = verified || sampleCount > 0
 }

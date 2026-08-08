@@ -396,7 +396,7 @@ fun EventsRoute(
     // CheckInDwell.selectAnchor.
     val sessionFirstFixAt by checkInCoordinator.firstFixAtMillis.collectAsState()
     val firstSampleAtMillis =
-        CheckInDwell.selectAnchor(sessionFirstFixAt, attendance?.firstSampleAtMillis)
+        CheckInDwell.selectAnchor(sessionFirstFixAt, attendance?.recordCreatedAtMillis)
 
     // Re-evaluate the window at its next boundary (opening or closing edge) rather
     // than polling — the same delay-to-boundary shape the map's pin expiry uses.

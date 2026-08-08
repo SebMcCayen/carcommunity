@@ -372,7 +372,7 @@ private fun DocumentSnapshot.toAttendanceStatus(): EventAttendanceStatus? {
     return EventAttendanceStatus(
         verified = getBoolean("verified") ?: false,
         sampleCount = getLong("sampleCount")?.toInt()?.coerceAtLeast(0) ?: 0,
-        firstSampleAtMillis = getTimestamp("createdAt")?.toDate()?.time,
+        recordCreatedAtMillis = getTimestamp("createdAt")?.toDate()?.time,
     )
 }
 
