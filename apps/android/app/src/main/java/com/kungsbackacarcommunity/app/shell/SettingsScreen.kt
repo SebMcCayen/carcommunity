@@ -187,11 +187,14 @@ fun SettingsScreen(
         // AndroidX per-app language API — AppCompatDelegate.setApplicationLocales
         // — which persists it (autoStoreLocales, see AndroidManifest) and applies
         // it across the app: the call recreates the activity, so strings switch
-        // immediately with no manual restart. Default (no explicit choice) =
-        // follow the app default (Swedish). The language names are intentionally
-        // shown in their own language, not translated. `selectedLanguage` is
-        // seeded from the live application locales and updated on tap so the radio
-        // reflects the choice under the user's finger, before the recreation.
+        // immediately with no manual restart. Default (no explicit choice = empty
+        // app-locale list) = follow the system locale, which Android resolves to
+        // res/values-en/ on an English device and otherwise to the res/values/
+        // Swedish default. The language names are intentionally shown in their own
+        // language, not translated. `selectedLanguage` is seeded from the effective
+        // locale (explicit app-locale if set, else the system locale) and updated
+        // on tap so the radio reflects the choice under the user's finger, before
+        // the recreation.
         SettingsSectionHeader(stringResource(R.string.settingsMenu_languageSection))
         // The effective locale the app is actually rendering in — used to seed the
         // picker when no explicit app-language has been chosen (empty app-locale
