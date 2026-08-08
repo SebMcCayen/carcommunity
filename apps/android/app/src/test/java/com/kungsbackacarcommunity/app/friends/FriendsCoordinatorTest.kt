@@ -63,8 +63,23 @@ class FriendsCoordinatorTest {
         }
     }
 
+    /** A points source for the Crown Points overlay; configurable per test. */
+    private class FakePointsRepo : FriendPointsRepository {
+        var result: Map<String, Long> = emptyMap()
+        var throwOnRead = false
+        var lastUids: List<String>? = null
+
+        override suspend fun balancesFor(uids: List<String>): Map<String, Long> {
+            lastUids = uids
+            if (throwOnRead) error("points read blew up")
+            return result
+        }
+    }
+
     private fun loaded(friends: List<FriendSummary>) =
         FriendsResult.Loaded(FriendsData(friends, emptyList(), emptyList()))
+
+    private fun friend(uid: String) = FriendSummary(uid, "Name-$uid", null, null)
 
     // --- error reporting -------------------------------------------------------
     // Seb's report was an undiagnosable "Something went wrong" that filed no
@@ -146,6 +161,63 @@ class FriendsCoordinatorTest {
         val status = coordinator.status.value
         assertTrue(status is FriendsStatus.Loaded)
         assertEquals(1, (status as FriendsStatus.Loaded).friends.size)
+    }
+
+    // --- Crown Points overlay --------------------------------------------------
+    // Each friend's public balance is overlaid onto the loaded list. It is a
+    // decorative "how active they have been" number, so it must never fail or
+    // delay the list: a failed read leaves status.points empty and the list
+    // intact, and the UI renders any uid missing from the map as 0.
+
+    @Test
+    fun `load overlays each friends crown points`() = runTest {
+        val repo = FakeRepo().apply { listResult = loaded(listOf(friend("f1"), friend("f2"))) }
+        val points = FakePointsRepo().apply { result = mapOf("f1" to 1_240L) }
+        val coordinator = FriendsCoordinator(repo, pointsRepository = points)
+
+        coordinator.load()
+
+        val status = coordinator.status.value as FriendsStatus.Loaded
+        // f1 carries its balance; f2 has no wallet doc, so it is absent (the
+        // screen renders that as 0) rather than a fabricated zero.
+        assertEquals(mapOf("f1" to 1_240L), status.points)
+        assertEquals(listOf("f1", "f2"), points.lastUids)
+    }
+
+    @Test
+    fun `a points read failure leaves the list intact without points`() = runTest {
+        val repo = FakeRepo().apply { listResult = loaded(listOf(friend("f1"))) }
+        val points = FakePointsRepo().apply { throwOnRead = true }
+        val coordinator = FriendsCoordinator(repo, pointsRepository = points)
+
+        coordinator.load()
+
+        val status = coordinator.status.value as FriendsStatus.Loaded
+        assertEquals(1, status.friends.size)
+        assertTrue("a failed points read must not fail the list", status.points.isEmpty())
+    }
+
+    @Test
+    fun `no points repository yields an empty points map`() = runTest {
+        val repo = FakeRepo().apply { listResult = loaded(listOf(friend("f1"))) }
+        val coordinator = FriendsCoordinator(repo)
+
+        coordinator.load()
+
+        val status = coordinator.status.value as FriendsStatus.Loaded
+        assertTrue(status.points.isEmpty())
+    }
+
+    @Test
+    fun `an empty friends list never reads points`() = runTest {
+        val repo = FakeRepo().apply { listResult = loaded(emptyList()) }
+        val points = FakePointsRepo().apply { result = mapOf("x" to 5L) }
+        val coordinator = FriendsCoordinator(repo, pointsRepository = points)
+
+        coordinator.load()
+
+        assertNull("no friends → no points read", points.lastUids)
+        assertTrue((coordinator.status.value as FriendsStatus.Loaded).points.isEmpty())
     }
 
     @Test

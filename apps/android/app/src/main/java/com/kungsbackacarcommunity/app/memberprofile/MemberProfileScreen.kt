@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -57,7 +58,6 @@ import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
 import com.kungsbackacarcommunity.app.moderation.ReportAvailability
 import com.kungsbackacarcommunity.app.moderation.UnblockConfirmDialog
-import com.kungsbackacarcommunity.app.profile.ProfilePointsSection
 import com.kungsbackacarcommunity.app.profile.ProfileSocialLinksRow
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import java.text.DateFormat
@@ -189,7 +189,7 @@ fun MemberProfileScreen(
                 // Unfriend), not a top status line — so a member profile leads
                 // straight into the content once you're friends.
                 val isFriend = friendState?.relationship == FriendRelationship.Friends
-                ProfileHeader(state.profile)
+                ProfileHeader(state.profile, state.pointsBalance)
                 if (friendState != null) {
                     FriendAction(
                         friendState = friendState,
@@ -200,7 +200,6 @@ fun MemberProfileScreen(
                     )
                 }
                 CarsSection(state.vehicles)
-                PointsSection(state.pointsBalance)
                 BadgesSection(state.badges)
                 StatsSection(state.profile.createdAtMillis)
                 MemberActions(
@@ -439,7 +438,7 @@ private fun MemberActions(
 }
 
 @Composable
-private fun ProfileHeader(profile: MemberProfile) {
+private fun ProfileHeader(profile: MemberProfile, pointsBalance: Long?) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s5),
@@ -458,6 +457,12 @@ private fun ProfileHeader(profile: MemberProfile) {
                 color = MaterialTheme.colorScheme.onSurface,
                 textAlign = TextAlign.Center,
             )
+            // The member's public points, the eye-catching headline of the
+            // profile — a big number directly under the nickname (Seb, 2026-08).
+            // "How active they have been", front and centre rather than buried in
+            // a stats row lower down. A member with no wallet yet has a null
+            // balance, rendered as 0 — they genuinely have no points.
+            PointsHeadline(pointsBalance)
             profile.bio?.takeIf { it.isNotBlank() }?.let { bio ->
                 Text(
                     text = bio,
@@ -467,6 +472,41 @@ private fun ProfileHeader(profile: MemberProfile) {
                 )
             }
         }
+    }
+}
+
+/**
+ * The member's PUBLIC points balance, rendered as the profile's HEADLINE — a
+ * large, emphasised number with the "Crown Points" label beneath it, sitting
+ * directly under the nickname so it is the first thing the eye lands on. This is
+ * the whole of the member's points on their profile: there is no second, lower
+ * card (the owner-only recent-earnings ledger is never shown for another
+ * member). A null balance renders as 0 — a member with no wallet genuinely has
+ * no points.
+ */
+@Composable
+private fun PointsHeadline(balance: Long?) {
+    val value = balance ?: 0L
+    // Merge the number + label so TalkBack reads them as ONE node ("<n> Crown
+    // Points") instead of two separate announcements. mergeDescendants (not
+    // clearAndSetSemantics) keeps both Text nodes in the tree, so UI tests can
+    // still find them by text.
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
+        modifier = Modifier.semantics(mergeDescendants = true) {},
+    ) {
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.displaySmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.profile_pointsTitle),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -498,27 +538,6 @@ private fun Avatar(avatarPath: String?) {
             )
         }
     }
-}
-
-/**
- * The member's PUBLIC Kronpoäng balance — "how active they have been". Reuses
- * the owner's [ProfilePointsSection] with `showDetails = false`, so it renders
- * the labelled headline number ALONE: no recent-earnings list (that is the
- * owner-only ledger), no first-person subtitle, and no ledger tap-through
- * (`onOpenLedger = null`, leaving the card inert). A member with no wallet yet
- * has a null balance, which the shared card renders as "0 p".
- */
-@Composable
-private fun PointsSection(balance: Long?) {
-    // The shared card self-titles ("Kronpoäng"), matching the owner's profile; no
-    // extra section header. showDetails = false → balance only (no owner-only
-    // ledger, no first-person subtitle, no tap-through).
-    ProfilePointsSection(
-        balance = balance,
-        recentEarnings = emptyList(),
-        onOpenLedger = null,
-        showDetails = false,
-    )
 }
 
 /**

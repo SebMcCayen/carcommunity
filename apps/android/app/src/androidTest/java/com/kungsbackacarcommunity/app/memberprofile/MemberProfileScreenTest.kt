@@ -15,11 +15,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * The member (other-user) profile: the Points balance + "Member since" stat that
- * are now shown for another member, and the friend-gated Message + Unfriend
- * actions (Seb, 2026-08). Awards rendering itself is exercised by the badges
- * tests; here we pin the three-section presence, the friend gating, and the
- * empty/zero degradation.
+ * The member (other-user) profile: the Crown Points headline (the prominent
+ * number directly under the nickname) + "Member since" stat shown for another
+ * member, and the friend-gated Message + Unfriend actions (Seb, 2026-08). Awards
+ * rendering itself is exercised by the badges tests; here we pin the headline +
+ * section presence, the friend gating, and the empty/zero degradation.
  */
 @RunWith(AndroidJUnit4::class)
 class MemberProfileScreenTest {
@@ -60,7 +60,8 @@ class MemberProfileScreenTest {
             }
         }
 
-        // Points: the shared Kronpoäng card, showing the public balance.
+        // Points: the prominent Crown Points headline under the nickname, showing
+        // the public balance as a big number with its label.
         composeTestRule.onNodeWithText(str(R.string.profile_pointsTitle)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("150").assertIsDisplayed()
         // Stats: the minimal "Member since" row.
@@ -126,7 +127,7 @@ class MemberProfileScreenTest {
             }
         }
 
-        // Null balance degrades to "0 p".
+        // Null balance degrades to a "0" headline.
         composeTestRule.onNodeWithText(str(R.string.profile_pointsTitle)).performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithText("0").assertIsDisplayed()
         // No join date → no "Member since" row at all (not an empty one).

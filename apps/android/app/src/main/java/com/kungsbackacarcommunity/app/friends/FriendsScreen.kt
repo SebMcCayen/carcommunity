@@ -207,6 +207,9 @@ fun FriendsScreen(
                         items(sortedFriends, key = { "friend-${it.uid}" }) { friend ->
                             FriendRow(
                                 friend = friend,
+                                // Public Crown Points (absent → 0), shown beside
+                                // the name. See FriendsStatus.Loaded.points.
+                                points = status.points[friend.uid],
                                 working = FriendsCoordinator.removeBusyKey(friend.uid) in busyRows,
                                 onViewProfile = { onViewProfile(friend) },
                                 onMessage = { onMessageFriend(friend) },
@@ -400,6 +403,7 @@ private fun OutgoingRequestRow(
 @Composable
 private fun FriendRow(
     friend: FriendSummary,
+    points: Long?,
     working: Boolean,
     onViewProfile: () -> Unit,
     onMessage: () -> Unit,
@@ -410,9 +414,9 @@ private fun FriendRow(
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
-            // Tapping the member (avatar + name) opens their read-only profile.
-            MemberHeader(
-                user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
+            // Tapping the member (avatar + name) opens their read-only profile;
+            // their Crown Points sit at the end of the same row, beside the name.
+            Row(
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -420,7 +424,17 @@ private fun FriendRow(
                         // this it reads as plain text and its tap-to-open-profile
                         // affordance is invisible to accessibility services.
                         .clickable(role = Role.Button, onClick = onViewProfile),
-            )
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            ) {
+                MemberHeader(
+                    user = FriendUser(friend.uid, friend.displayName, friend.avatarPath),
+                    modifier = Modifier.weight(1f),
+                )
+                // Absent balance renders as 0 — a friend with no wallet genuinely
+                // has no points.
+                FriendPointsChip(points ?: 0L)
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3)) {
                 // Opens the 1:1 DM thread with this friend; the conversation is
                 // created on the first message (dm-sendMessage).
@@ -433,6 +447,29 @@ private fun FriendRow(
                 }
             }
         }
+    }
+}
+
+/**
+ * A friend's public Crown Points, as a compact right-aligned mini-stat beside
+ * their name: the grouped balance ("1 240") over the localized "Crown Points"
+ * label (Swedish "Kronpoäng"). Reuses the profile's points title so a friend's
+ * number reads identically wherever it appears; the digit grouping is pure and
+ * unit-tested ([FriendPointsFormat]).
+ */
+@Composable
+private fun FriendPointsChip(points: Long) {
+    Column(horizontalAlignment = Alignment.End) {
+        Text(
+            text = FriendPointsFormat.grouped(points),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Text(
+            text = stringResource(R.string.profile_pointsTitle),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

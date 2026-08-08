@@ -55,9 +55,10 @@ fun badgeNameRes(key: String): Int? =
     }
 
 /**
- * Ladder name (Kronjägare, Vägfarare, …). These are Swedish PRODUCT names and
- * stay Swedish in every locale — the English contract carries the same words on
- * purpose, so a member always recognises the badge they were awarded.
+ * Ladder name (Crown Hunter, Wayfarer, …). Localized per locale: the English
+ * contract now carries English award titles (Seb, 2026-08 — no award should read
+ * Swedish in English), matching the English names in `badges.badgeNames`; Swedish
+ * keeps the original product names (Kronjägare, Vägfarare, …).
  */
 @StringRes
 fun ladderNameRes(id: BadgeLadderId): Int =

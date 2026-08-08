@@ -15,6 +15,16 @@ sealed interface FriendsStatus {
         val friends: List<FriendSummary>,
         val incoming: List<FriendRequestSummary>,
         val outgoing: List<FriendRequestSummary>,
+        /**
+         * Each friend's PUBLIC Crown Points balance (uid → balance), overlaid
+         * onto the list after it loads. A uid ABSENT here has no read yet, no
+         * wallet, or a read that failed — the screen renders that as 0. Starts
+         * empty and stays empty when no points repository is wired (e.g. a
+         * config-less/CI build), in which case every friend simply renders as 0;
+         * otherwise the best-effort read fills it in after the list has already
+         * rendered, so points never block or fail the list.
+         */
+        val points: Map<String, Long> = emptyMap(),
     ) : FriendsStatus
 
     /**
@@ -64,6 +74,7 @@ sealed interface AddFriendState {
 class FriendsCoordinator(
     private val repository: FriendsRepository,
     private val errorReporter: ClientErrorReporter? = null,
+    private val pointsRepository: FriendPointsRepository? = null,
 ) {
     /**
      * Reports a genuine fault; normal, actionable outcomes are skipped.
@@ -125,13 +136,19 @@ class FriendsCoordinator(
     suspend fun load() {
         try {
             when (val result = repository.list()) {
-                is FriendsResult.Loaded ->
-                    statusState.value =
+                is FriendsResult.Loaded -> {
+                    val loaded =
                         FriendsStatus.Loaded(
                             friends = result.data.friends,
                             incoming = result.data.incoming,
                             outgoing = result.data.outgoing,
                         )
+                    // Publish the list FIRST so it renders immediately, then
+                    // overlay each friend's Crown Points as a best-effort second
+                    // step that can never fail or delay the list.
+                    statusState.value = loaded
+                    overlayPoints(loaded)
+                }
                 is FriendsResult.Failed -> {
                     statusState.value = FriendsStatus.Error(result.error)
                     reportIfFault("list", result.error, result.diagnostic)
@@ -142,6 +159,36 @@ class FriendsCoordinator(
         } catch (error: Exception) {
             statusState.value = FriendsStatus.Error(FriendActionError.Generic)
             reportIfFault("list", FriendActionError.Generic, error::class.java.simpleName)
+        }
+    }
+
+    /**
+     * Fills in the friends' public Crown Points balances after the list has been
+     * published. Deliberately SILENT on failure: the balances are a decorative
+     * overlay ("how active they have been"), never load-bearing, so a failed or
+     * empty read simply leaves [FriendsStatus.Loaded.points] empty — the UI then
+     * renders any uid missing from the map as 0 (0 is the ledger floor) — rather
+     * than surfacing an error or filing a fault. No-ops when no points repository
+     * is wired or the list is empty.
+     *
+     * The overlay is applied only if [loaded] is still the current status — a
+     * mutation (accept/remove/…) that reloaded the snapshot in the meantime wins,
+     * so stale points can never clobber a newer list.
+     */
+    private suspend fun overlayPoints(loaded: FriendsStatus.Loaded) {
+        val repo = pointsRepository ?: return
+        if (loaded.friends.isEmpty()) return
+        val balances =
+            try {
+                repo.balancesFor(loaded.friends.map { it.uid })
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                emptyMap<String, Long>()
+            }
+        if (balances.isEmpty()) return
+        statusState.update { current ->
+            if (current === loaded) loaded.copy(points = balances) else current
         }
     }
 
