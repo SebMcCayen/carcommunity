@@ -6761,6 +6761,10 @@ private fun RouteHost(
                             onOpenChat(conversation.otherUser.uid, conversation.otherUser.displayName)
                         }
                     },
+                    // "Start a new dialogue": pick a friend to open a DM thread with,
+                    // reusing the same open-chat path as a conversation-row tap.
+                    friendsRepository = friendsRepository,
+                    onOpenDm = { otherUid, otherName -> onOpenChat(otherUid, otherName) },
                 )
             } else {
                 LoadingScreen()

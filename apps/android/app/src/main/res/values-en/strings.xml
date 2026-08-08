@@ -1278,6 +1278,13 @@
     <string name="dm_sendErrorGeneric">Couldn\'t send your message. Please try again.</string>
     <string name="dm_statusSending">Sending…</string>
     <string name="dm_statusFailedRetry">Not delivered. Tap to retry.</string>
+    <string name="dm_newDialogue_action">New message</string>
+    <string name="dm_newDialogue_title">Start a new message</string>
+    <string name="dm_newDialogue_subtitle">Pick a friend to message</string>
+    <string name="dm_newDialogue_empty">You haven\'t added any friends yet. Add a friend to start a message.</string>
+    <string name="dm_newDialogue_error">Couldn\'t load your friends. Try again.</string>
+    <string name="dm_newDialogue_retry">Try again</string>
+    <string name="dm_newDialogue_unnamedFriend">Friend</string>
     <string name="channel_inputPlaceholder">Write a message…</string>
     <string name="channel_send">Send</string>
     <string name="channel_loadOlder">Load earlier messages</string>

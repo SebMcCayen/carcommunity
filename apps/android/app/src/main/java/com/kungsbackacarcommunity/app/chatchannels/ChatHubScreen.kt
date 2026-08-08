@@ -673,6 +673,14 @@ private fun ChatHubContent(
                                             dmOtherName = conversation.otherUser.displayName
                                         }
                                     },
+                                    // "Start a new dialogue": the picker offers the
+                                    // member's friends; picking one opens the DM
+                                    // thread with them the same way a row tap does.
+                                    friendsRepository = friendsRepository,
+                                    onOpenDm = { otherUid, otherName ->
+                                        dmOtherUid = otherUid
+                                        dmOtherName = otherName
+                                    },
                                 )
                             }
                         } else {

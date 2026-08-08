@@ -1366,7 +1366,16 @@
     "sendErrorCannotDeliver": "This message can't be delivered right now.",
     "sendErrorGeneric": "Couldn't send your message. Please try again.",
     "statusSending": "Sending…",
-    "statusFailedRetry": "Not delivered. Tap to retry."
+    "statusFailedRetry": "Not delivered. Tap to retry.",
+    "newDialogue": {
+      "action": "New message",
+      "title": "Start a new message",
+      "subtitle": "Pick a friend to message",
+      "empty": "You haven't added any friends yet. Add a friend to start a message.",
+      "error": "Couldn't load your friends. Try again.",
+      "retry": "Try again",
+      "unnamedFriend": "Friend"
+    }
   },
   "channel": {
     "inputPlaceholder": "Write a message…",

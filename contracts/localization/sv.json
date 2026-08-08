@@ -1366,7 +1366,16 @@
     "sendErrorCannotDeliver": "Det här meddelandet kan inte levereras just nu.",
     "sendErrorGeneric": "Kunde inte skicka ditt meddelande. Försök igen.",
     "statusSending": "Skickar…",
-    "statusFailedRetry": "Skickades inte. Tryck för att försöka igen."
+    "statusFailedRetry": "Skickades inte. Tryck för att försöka igen.",
+    "newDialogue": {
+      "action": "Nytt meddelande",
+      "title": "Starta ett nytt meddelande",
+      "subtitle": "Välj en vän att skriva till",
+      "empty": "Du har inte lagt till några vänner än. Lägg till en vän för att börja ett meddelande.",
+      "error": "Kunde inte ladda dina vänner. Försök igen.",
+      "retry": "Försök igen",
+      "unnamedFriend": "Vän"
+    }
   },
   "channel": {
     "inputPlaceholder": "Skriv ett meddelande…",
