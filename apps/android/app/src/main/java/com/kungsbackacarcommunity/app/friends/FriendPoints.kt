@@ -47,7 +47,7 @@ object FriendPointsFormat {
         val firstGroup = digits.length % 3
         val sb = StringBuilder()
         for (i in digits.indices) {
-            if (i != 0 && (i - firstGroup) % 3 == 0) sb.append(' ')
+            if (i != 0 && (i - firstGroup) % 3 == 0) sb.append(' ')
             sb.append(digits[i])
         }
         return if (negative) "-$sb" else sb.toString()
