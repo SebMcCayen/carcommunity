@@ -84,6 +84,22 @@ jobs:
           path: apps/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
 
+      # Assemble the RELEASE APK so R8 (minify + resource shrinking) actually
+      # runs on every PR. The debug/lintDebug steps above never exercise R8, so
+      # a missing -keep rule or a resource-shrink break is release-only and would
+      # otherwise stay invisible until a release is cut (bundleRelease in
+      # build-android-release.yml). This is a real gate.
+      #
+      # No secrets required: like assembleDebug, this builds config-less — the
+      # google-services + Crashlytics plugins are guarded behind an existing
+      # google-services.json check, and the release build degrades to UNSIGNED
+      # when keystore.properties is absent. R8 shrinking runs regardless of
+      # either. The unsigned release APK is deliberately NOT uploaded as an
+      # artifact (this is only a build gate, and release artifacts stay private).
+      - name: Assemble release APK (R8 shrink gate)
+        working-directory: apps/android
+        run: ./gradlew --no-daemon :app:assembleRelease
+
   nav-variant-compile:
     name: nav-variant-compile (Mapbox Navigation SDK)
     runs-on: ubuntu-latest
