@@ -196,7 +196,10 @@ jobs:
 
   instrumented-tests:
     name: instrumented-tests (Compose UI)
-    runs-on: ubuntu-latest
+    # Pinned (not ubuntu-latest) so the runner image can't drift between OS
+    # versions under us — a moving image is itself an emulator-boot flake source,
+    # and it keeps the cached AVD snapshot matched to a stable environment.
+    runs-on: ubuntu-24.04
     # Phase 17: Compose UI tests on an emulator. Emulator CI is
     # environment-sensitive (KVM, boot, Compose timing) and cannot be
     # validated outside GitHub Actions, so this job is INFORMATIONAL
@@ -223,22 +226,68 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6.2.0
 
-      # The emulator boot is flaky on hosted runners: it intermittently fails to
-      # bring up adb ("Unable to connect to adb daemon on port: 5037") BEFORE the
-      # test script ever runs — a CI-infra failure, not a test failure. Run it as
-      # two attempts so a transient boot failure re-attempts on a fresh emulator
-      # instead of red-flagging the PR. Attempt 1 is continue-on-error so its
-      # failure doesn't fail the job; the retry runs only if it failed, and the
-      # retry's outcome gates the job (both must fail for a real red).
+      # ROOT-CAUSE FIX for the intermittent "Unable to connect to adb daemon on
+      # port: 5037" → "Failed to start Emulator console" flake: the job used to
+      # COLD-boot the system image every run (-no-snapshot + fresh image install),
+      # and that cold boot occasionally never became adb-ready. Now we cache the
+      # AVD + a warm snapshot so runs boot from a known-good snapshot instead of
+      # cold — THIS is the actual reliability fix. (An earlier attempt used the
+      # google_atd Automated Test Device image; it boots faster but is too minimal
+      # — performTextInput did not register on it, failing UI tests. google_apis
+      # is the full image WITH the Google APIs the app needs — Firebase/Maps — and
+      # a working IME.) Actions cache is FREE (10 GB, auto-evicting) and separate
+      # from the artifact-storage quota.
+      # The runner is PINNED (ubuntu-24.04, above) so the image can't drift across
+      # OS versions — that is what protects the cached snapshot from restoring onto
+      # a different environment (runner.os alone would stay "Linux" across a bump).
+      # The `-v3` suffix lets us hand-bust the cache if the pinned image is ever
+      # rev'd. Cache ONLY the AVD dir (the snapshot lives here) — deliberately NOT
+      # ~/.android/adb* which matches the private `adbkey`; the emulator gets its
+      # adb pubkey injected at boot (androidboot.qemu.adb.pubkey), so the key does
+      # not need caching, and keeping a private key out of the cache avoids any
+      # blast-radius.
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+          key: avd-${{ runner.os }}-google_apis-34-x86_64-v3
+
+      # On a cache miss, create the AVD once and boot it to generate the snapshot
+      # the cache stores. Skipped entirely on a cache hit.
+      # continue-on-error: this step is itself a cold boot (the flaky part). If it
+      # flakes, don't kill the job before the retry-backed test attempts run —
+      # they'll cold-boot without a snapshot as a fallback.
+      - name: Create AVD + snapshot (cache miss only)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: false
+          script: echo "AVD snapshot generated for caching."
+
+      # Run the tests, booting from the cached snapshot (-no-snapshot-save loads
+      # it without re-saving). Two attempts as a backstop: attempt 1 is
+      # continue-on-error so a rare boot flake doesn't fail the job; the retry
+      # runs only if it failed, and the retry's outcome gates the job (both must
+      # fail for a real red).
       - name: Run Compose UI tests on emulator (attempt 1)
         id: emulator_attempt_1
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_apis
           arch: x86_64
+          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
@@ -247,9 +296,11 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_apis
           arch: x86_64
+          force-avd-creation: false
           disable-animations: true
-          emulator-options: -no-snapshot -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
           script: ./gradlew --no-daemon connectedDebugAndroidTest
 
