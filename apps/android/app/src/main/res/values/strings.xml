@@ -349,6 +349,7 @@
     <string name="events_attendeesGroupGoing">Kommer</string>
     <string name="events_attendeesGroupMaybe">Kanske</string>
     <string name="events_attendeesGroupNotGoing">Kommer inte</string>
+    <string name="events_attendeesClose">Stäng</string>
     <string name="events_checkInTitle">Närvaro</string>
     <string name="events_checkInButton">Checka in</string>
     <string name="events_checkInConfirmed">Incheckad — närvaro bekräftad</string>

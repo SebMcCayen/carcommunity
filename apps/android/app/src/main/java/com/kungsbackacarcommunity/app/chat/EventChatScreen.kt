@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -105,14 +106,20 @@ fun EventChatScreen(
 
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(
-            // The IME *and* the navigation-bar inset (their union, so the taller
-            // of the two wins rather than double-counting), matching the group
+            // TOP: the status-bar inset, via the SAME statusBarsPadding() the shared
+            // AeroPage chrome applies, so the title clears the clock/notification
+            // icons like every other top-level screen — it used to sit jammed under
+            // the status bar because this screen self-scaffolds (raw Surface) instead
+            // of going through AeroPage.
+            // BOTTOM: the IME *and* the navigation-bar inset (their union, so the
+            // taller of the two wins rather than double-counting), matching the group
             // channels' and DM composers. Event chat had NO inset handling at all:
             // its composer sat under the nav bar with the keyboard down and behind
             // the keyboard with it up.
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars))
                     .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),

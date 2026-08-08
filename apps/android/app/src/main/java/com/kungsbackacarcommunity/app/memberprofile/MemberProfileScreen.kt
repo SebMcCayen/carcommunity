@@ -641,41 +641,59 @@ private fun MemberVehicleCard(vehicle: Vehicle) {
  */
 @Composable
 private fun BadgesSection(badges: MemberBadges) {
-    Text(
-        text = stringResource(R.string.memberProfile_badgesTitle),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
     when (badges) {
-        MemberBadges.Unavailable ->
+        MemberBadges.Unavailable -> {
+            AwardsSectionHeader()
             Text(
                 text = stringResource(R.string.memberProfile_badgesUnavailable),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
 
-        MemberBadges.Unknown ->
+        MemberBadges.Unknown -> {
+            AwardsSectionHeader()
             Text(
                 text = stringResource(R.string.memberProfile_badgesLoadError),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
 
         is MemberBadges.Available -> {
             // Folded during composition and keyed on the award list, so scrolling
             // the profile doesn't refold the wall on every recomposition.
             val wall = remember(badges.badges) { PublicBadgeWall.from(badges.badges) }
             if (!wall.hasAnyBadge) {
+                AwardsSectionHeader()
                 Text(
                     text = stringResource(R.string.memberProfile_badgesEmpty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
+                // The "Awards" title moves INSIDE the wall card here (it is the
+                // card's first line) so it shares the card's left content edge with
+                // the "Milestones" sub-header below — the two used to be offset by
+                // the card's inner padding because "Awards" sat outside the card and
+                // "Milestones" inside it. Mirrors the owner's own badge card
+                // ([ProfileBadgesSection]), where the title likewise leads the card.
                 MemberBadgeWall(wall)
             }
         }
     }
+}
+
+/** The "Awards" section header at the page's content edge, used for the states
+ * that render no card (unavailable / load-error / no awards yet). When the member
+ * HAS awards the title instead leads the wall card — see [MemberBadgeWall]. */
+@Composable
+private fun AwardsSectionHeader() {
+    Text(
+        text = stringResource(R.string.memberProfile_badgesTitle),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurface,
+    )
 }
 
 @Composable
@@ -685,6 +703,12 @@ private fun MemberBadgeWall(wall: PublicBadgeWall) {
             modifier = Modifier.fillMaxWidth().padding(KccSpacing.s4),
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
+            // Card title — same left edge as the "Milestones" sub-header below.
+            Text(
+                text = stringResource(R.string.memberProfile_badgesTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
             Text(
                 text = stringResource(R.string.badgeShowcase_subtitle, wall.earnedCount, wall.totalCount),
                 style = MaterialTheme.typography.bodySmall,

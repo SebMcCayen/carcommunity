@@ -344,6 +344,7 @@ private fun ProfileScreenPreview() {
                     totalDrives = 42,
                     totalDistanceMeters = 1_234_000.0,
                     totalDurationSeconds = 90_000,
+                    highestMaxSpeedMps = 33.3,
                     badgeCount = 3,
                     pointsBalance = 150,
                     memberSinceMillis = 1_700_000_000_000L,

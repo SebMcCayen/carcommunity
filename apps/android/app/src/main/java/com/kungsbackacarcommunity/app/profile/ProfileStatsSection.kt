@@ -70,6 +70,14 @@ fun ProfileStatsSection(
                 stringResource(R.string.savedDrives_statsTotalTime),
                 DriveFormatters.formatDuration(summary.totalDurationSeconds),
             )
+            // Highest recorded speed across the member's own drives. A neutral fact
+            // at the same weight as the rows above — no record/personal-best framing
+            // (SavedDrive.maxSpeedMetersPerSecond). Renders the missing-value dash
+            // when no drive stored a max (all predate the field / summary-only saves).
+            StatRow(
+                stringResource(R.string.savedDrives_maxSpeed),
+                DriveFormatters.formatSpeed(summary.highestMaxSpeedMps),
+            )
             // Badge count and Kronpoäng balance are NOT repeated here: both now
             // have their own richer sections on this same profile
             // ([ProfileBadgesSection] shows the wall and the next rung,

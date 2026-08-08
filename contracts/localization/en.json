@@ -378,6 +378,7 @@
     "attendeesGroupGoing": "Going",
     "attendeesGroupMaybe": "Maybe",
     "attendeesGroupNotGoing": "Not going",
+    "attendeesClose": "Close",
     "checkInTitle": "Attendance",
     "checkInButton": "Check in",
     "checkInConfirmed": "Checked in — attendance confirmed",
@@ -744,7 +745,7 @@
     "requestPending": "Friend request sent — waiting for a reply.",
     "cancelRequest": "Cancel request",
     "wantsToBeFriends": "This member wants to be your friend.",
-    "statsTitle": "Stats",
+    "statsTitle": "Statistics",
     "statsMemberSince": "Member since"
   },
   "groupDrive": {

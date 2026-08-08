@@ -18,6 +18,7 @@ class ProfileStatsTest {
         totalDrives: Int = 3,
         totalDistanceMeters: Double = 15_000.0,
         totalDurationSeconds: Long = 3_600,
+        highestMaxSpeedMps: Double? = 30.0,
     ) = DriveStats(
         totalDrives = totalDrives,
         totalDistanceMeters = totalDistanceMeters,
@@ -25,6 +26,7 @@ class ProfileStatsTest {
         longestDriveMeters = 8_000.0,
         averageDriveMeters = totalDistanceMeters / totalDrives,
         fastestAverageSpeedMps = 20.0,
+        highestMaxSpeedMps = highestMaxSpeedMps,
         thisMonthDrives = 1,
         thisMonthDistanceMeters = 5_000.0,
     )
@@ -42,6 +44,7 @@ class ProfileStatsTest {
         assertEquals(3, summary.totalDrives)
         assertEquals(15_000.0, summary.totalDistanceMeters, 0.0)
         assertEquals(3_600L, summary.totalDurationSeconds)
+        assertEquals(30.0, summary.highestMaxSpeedMps!!, 0.0001)
         assertEquals(2, summary.badgeCount)
         assertEquals(150L, summary.pointsBalance)
         assertEquals(1_700_000_000_000L, summary.memberSinceMillis)
@@ -49,7 +52,7 @@ class ProfileStatsTest {
     }
 
     @Test
-    fun `null drive stats reads as zero drives`() {
+    fun `null drive stats reads as zero drives and no highest speed`() {
         val summary =
             ProfileStatsSummary.from(
                 driveStats = null,
@@ -61,6 +64,7 @@ class ProfileStatsTest {
         assertEquals(0, summary.totalDrives)
         assertEquals(0.0, summary.totalDistanceMeters, 0.0)
         assertEquals(0L, summary.totalDurationSeconds)
+        assertNull(summary.highestMaxSpeedMps)
         assertNull(summary.memberSinceMillis)
     }
 
