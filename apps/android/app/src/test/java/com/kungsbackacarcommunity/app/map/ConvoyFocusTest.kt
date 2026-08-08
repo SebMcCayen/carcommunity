@@ -192,13 +192,19 @@ class ConvoyFocusTest {
 
     @Test
     fun `a burst of material moves within the interval yields exactly one fit`() {
-        // Simulate five position ticks 300 ms apart, all materially different,
-        // feeding the applied-fit forward only when a fit is allowed — the way the
-        // surface advances lastConvoyFitAtMillis only on a real ease. Just the
-        // first should fit; the rest fall inside the 1.5 s window.
+        // Starting from a fit at t=0, simulate five position ticks 300 ms apart
+        // (t = 300..1500), all materially different, advancing the applied-fit and
+        // the last-fit time only when a fit is allowed — the way the surface stamps
+        // lastConvoyFitAtMillis only on a real ease. The four ticks inside the
+        // 1.5 s window (300, 600, 900, 1200) are all throttled out; only the tick
+        // at t=1500 (== MIN_REFIT_INTERVAL_MS after the last fit) clears the gate.
+        // So the burst collapses to exactly one fit, and it lands at the interval
+        // boundary rather than on the first tick.
+        assertEquals(1500L, ConvoyFocusPlanner.MIN_REFIT_INTERVAL_MS)
         var applied: List<ConvoyLatLng>? = listOf(me, other)
         var lastFitAt: Long? = 0L
         var fits = 0
+        var lastFitTick = -1L
         for (i in 1..5) {
             val now = i * 300L
             val next = listOf(me, other.copy(latitude = other.latitude + 0.05 * i))
@@ -206,9 +212,11 @@ class ConvoyFocusTest {
                 fits++
                 applied = next
                 lastFitAt = now
+                lastFitTick = now
             }
         }
         assertEquals(1, fits)
+        assertEquals(1500L, lastFitTick)
     }
 
     @Test

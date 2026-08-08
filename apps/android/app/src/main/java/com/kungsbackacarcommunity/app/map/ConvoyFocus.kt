@@ -306,9 +306,10 @@ object ConvoyFocusPlanner {
      *   effectively ONE point (a convoy stopped together at a meet), the SDK has
      *   no spread to fit and hands back a degenerate zoom — often a non-finite
      *   value or one pinned at its own ceiling. Both are caught here: a non-finite
-     *   raw zoom falls back to [fallbackZoom] (the ordinary browsing zoom) and the
-     *   result is then capped at [maxZoom], so a stationary huddle frames at a
-     *   readable street level instead of snapping to rooftops.
+     *   raw zoom falls back to [fallbackZoom] and the result is then capped at
+     *   [maxZoom]. The caller passes the camera's CURRENT zoom as [fallbackZoom],
+     *   so a fit the SDK could not compute holds the existing zoom (no jump to a
+     *   fixed level) rather than snapping the stationary huddle to rooftops.
      */
     fun clampFitZoom(
         rawZoom: Double?,

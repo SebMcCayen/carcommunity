@@ -748,6 +748,11 @@ class MapboxMapSurface : MapSurface {
         // the route-overlay fit (which has always framed the whole route) computes
         // flat.
         val currentBearing = map.mapboxMap.cameraState.bearing
+        // The zoom to keep if the SDK cannot give a fit zoom (a single-point /
+        // bunched-up convoy yields a null / non-finite result): the camera's
+        // CURRENT zoom, so a failed fit holds position instead of snapping to a
+        // fixed level. See ConvoyFocusPlanner.clampFitZoom.
+        val currentZoom = map.mapboxMap.cameraState.zoom
         val fitContext = ConvoyFocusPlanner.fitComputationContext(currentBearing)
         runCatching {
             // EdgeInsets expects DEVICE PIXELS, so the dp constants are scaled by
@@ -787,7 +792,7 @@ class MapboxMapSurface : MapSurface {
                     rawZoom = fitted.zoom,
                     minZoom = MIN_CONVOY_FIT_ZOOM,
                     maxZoom = MAX_CONVOY_FIT_ZOOM,
-                    fallbackZoom = MapMarkers.OWN_MARKER_ZOOM,
+                    fallbackZoom = currentZoom,
                 )
             map.camera.easeTo(
                 cameraOptions {
