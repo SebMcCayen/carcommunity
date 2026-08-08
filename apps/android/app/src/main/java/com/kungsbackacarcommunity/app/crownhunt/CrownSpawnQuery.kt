@@ -193,17 +193,24 @@ object CrownSpawnQuery {
     }
 
     /**
-     * Splits a [cellKeysFor] plan into batches of at most [FIRESTORE_IN_LIMIT]
-     * keys, each a legal `in` query the repository runs independently and merges.
+     * Splits a plan into batches of at most [FIRESTORE_IN_LIMIT] keys, each a
+     * legal `in` query the repository runs independently and merges.
      *
-     * Because the plan is capped at [MAX_CELLS], the result is capped at
-     * [MAX_BATCHES] batches — the fan-out a wide zoom can trigger is bounded, not
-     * a function of how far out the user scrolled. Order is preserved so the same
-     * plan always chunks the same way; an empty plan yields no batches (nothing to
-     * ask for), never a single empty `in` array, which Firestore rejects.
+     * The [MAX_CELLS] cap is enforced HERE, not merely inherited from
+     * [cellKeysFor]: the input is truncated to [MAX_CELLS] keys before chunking,
+     * so the result is always at most [MAX_BATCHES] batches no matter what a
+     * caller passes. That makes the fan-out bound a property of this function
+     * rather than of the one caller that happens to feed it a bounded plan — a
+     * future caller cannot trigger an unbounded number of parallel queries.
+     * Order is preserved so the same plan always chunks the same way; an empty
+     * plan yields no batches (nothing to ask for), never a single empty `in`
+     * array, which Firestore rejects.
      */
-    fun chunkForInQueries(cellKeys: List<String>): List<List<String>> =
-        if (cellKeys.isEmpty()) emptyList() else cellKeys.chunked(FIRESTORE_IN_LIMIT)
+    fun chunkForInQueries(cellKeys: List<String>): List<List<String>> {
+        if (cellKeys.isEmpty()) return emptyList()
+        val bounded = if (cellKeys.size > MAX_CELLS) cellKeys.subList(0, MAX_CELLS) else cellKeys
+        return bounded.chunked(FIRESTORE_IN_LIMIT)
+    }
 
     /**
      * Whether a settled camera is worth re-querying, given where we last did.

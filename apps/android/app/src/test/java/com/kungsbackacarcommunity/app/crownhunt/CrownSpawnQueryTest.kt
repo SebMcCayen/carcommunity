@@ -178,6 +178,29 @@ class CrownSpawnQueryTest {
     }
 
     /**
+     * The batch bound is enforced by chunkForInQueries itself, not merely
+     * inherited from cellKeysFor: even an over-long input a future caller might
+     * hand it is truncated to MAX_CELLS and so to at most MAX_BATCHES batches, so
+     * no caller can trigger an unbounded fan-out of parallel queries.
+     */
+    @Test
+    fun `an over-long input is bounded, not chunked into an unbounded fan-out`() {
+        val overLong = (0 until CrownSpawnQuery.MAX_CELLS * 3).map { "cell_$it" }
+        val batches = CrownSpawnQuery.chunkForInQueries(overLong)
+        assertTrue(
+            "produced ${batches.size} batches",
+            batches.size <= CrownSpawnQuery.MAX_BATCHES,
+        )
+        assertEquals(CrownSpawnQuery.MAX_CELLS, batches.sumOf { it.size })
+        for (batch in batches) {
+            assertTrue(batch.isNotEmpty() && batch.size <= CrownSpawnQuery.FIRESTORE_IN_LIMIT)
+        }
+        // The bound keeps the FIRST MAX_CELLS keys in order — a stable, prefix
+        // truncation, not an arbitrary sample.
+        assertEquals(overLong.subList(0, CrownSpawnQuery.MAX_CELLS), batches.flatten())
+    }
+
+    /**
      * A NaN centre produces NO plan rather than the key for (0,0) — which would
      * quietly draw crowns off the Gulf of Guinea and query a cell that has
      * nothing to do with the user.

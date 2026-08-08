@@ -66,10 +66,17 @@ sealed interface CrownClaimStatus {
  *    open therefore costs one small indexed query a minute.
  *  - **[CrownSpawnQuery.shouldRequery]** drops a settle that lands on the same
  *    cells, so nudging the map around a car park costs nothing.
- *  - The query itself is bounded at [CrownSpawnQuery.MAX_CELLS] cells (a
- *    town-sized 11x11 block, fanned out across at most
- *    [CrownSpawnQuery.MAX_BATCHES] parallel `in` queries) and
- *    [CrownSpawnRepository.MAX_SPAWNS_PER_QUERY] documents.
+ *  - The query is bounded at [CrownSpawnQuery.MAX_CELLS] cells (a town-sized
+ *    11x11 block), fanned out across at most [CrownSpawnQuery.MAX_BATCHES]
+ *    parallel `in` queries. Two different caps apply, and they are not the same
+ *    number: each batch carries its own `limit([CrownSpawnRepository.MAX_SPAWNS_PER_QUERY])`,
+ *    so the worst-case READ cost of one refresh is
+ *    [CrownSpawnQuery.MAX_BATCHES] x [CrownSpawnRepository.MAX_SPAWNS_PER_QUERY]
+ *    documents, whereas the DRAWN crowns are capped at
+ *    [CrownSpawnRepository.MAX_SPAWNS_PER_QUERY] after the batches are merged and
+ *    deduped. In practice the spawner's density budget keeps a town far under the
+ *    read ceiling; the ceiling exists so a bug or retune cannot make one pan
+ *    unbounded.
  *
  * Pure-ish Kotlin: the repository, the clock, the centre and the flag are all
  * injected, so the gating and the cadence are unit-tested without a device.
