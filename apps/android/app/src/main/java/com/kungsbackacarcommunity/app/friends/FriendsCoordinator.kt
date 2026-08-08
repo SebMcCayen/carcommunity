@@ -18,10 +18,11 @@ sealed interface FriendsStatus {
         /**
          * Each friend's PUBLIC Crown Points balance (uid → balance), overlaid
          * onto the list after it loads. A uid ABSENT here has no read yet, no
-         * wallet, or a read that failed — the screen renders that as 0. Empty
-         * until the best-effort points read completes (or in a build with no
-         * points repository wired), so the list always renders first and the
-         * numbers fill in without ever blocking or failing it.
+         * wallet, or a read that failed — the screen renders that as 0. Starts
+         * empty and stays empty when no points repository is wired (e.g. a
+         * config-less/CI build), in which case every friend simply renders as 0;
+         * otherwise the best-effort read fills it in after the list has already
+         * rendered, so points never block or fail the list.
          */
         val points: Map<String, Long> = emptyMap(),
     ) : FriendsStatus

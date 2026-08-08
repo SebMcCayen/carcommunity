@@ -72,7 +72,8 @@ private fun defaultClientErrorReporter(): ClientErrorReporter? {
 /**
  * Builds the Firebase-backed [FriendPointsRepository] (public Crown Points
  * balances) from the local context, or null in a config-less build — in which
- * case the friends list simply renders without points.
+ * case no repository is wired, the points overlay stays empty, and every friend
+ * simply renders as 0.
  */
 @Composable
 private fun defaultFriendPointsRepository(): FriendPointsRepository? {
