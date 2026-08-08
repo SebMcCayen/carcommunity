@@ -8,6 +8,9 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import java.time.Instant
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 /**
  * [CrownSpawnRepository] backed by a bounded Firestore query on `crownSpawns`
@@ -23,10 +26,18 @@ class FirebaseCrownSpawnRepository private constructor(
 ) : CrownSpawnRepository {
 
     /**
-     * One query per refresh, shaped to the deployed composite index
-     * (`cellKey ASC, status ASC, expiresAt ASC`).
+     * One or more parallel queries per refresh, each shaped to the deployed
+     * composite index (`cellKey ASC, status ASC, expiresAt ASC`).
      *
-     * All three conditions are on the query, not applied afterwards, because the
+     * A town-sized plan needs more cells than an `in` filter's 30-value limit, so
+     * the plan is split into batches of at most [CrownSpawnQuery.FIRESTORE_IN_LIMIT]
+     * keys ([CrownSpawnQuery.chunkForInQueries]) and each batch is its OWN `in`
+     * query. The batches run in parallel and their results are merged, deduped by
+     * crown id (a crown's cell is unique so overlap is not expected, but the map
+     * de-dupes rather than trusting that). Each batch is an independent `in`
+     * query, so this uses the SAME composite index — no new index is needed.
+     *
+     * All three conditions are on every query, not applied afterwards, because the
      * security rule checks the QUERY: `status == 'live'` and `expiresAt > now`
      * are what make the read legal at all, and dropping either turns the whole
      * call into a permission denial rather than a wider result set.
@@ -36,6 +47,25 @@ class FirebaseCrownSpawnRepository private constructor(
         // nothing to ask for — so this is a local no-op, not a failed round-trip.
         if (cellKeys.isEmpty()) return emptyList()
         val now = Timestamp(Instant.ofEpochMilli(nowMillis))
+        val batches = CrownSpawnQuery.chunkForInQueries(cellKeys)
+        val perBatch =
+            coroutineScope {
+                batches
+                    .map { batch -> async { queryBatch(batch, now) } }
+                    .awaitAll()
+            }
+        // Merge, deduping by crown id and preserving first-seen order, then apply
+        // the same overall draw cap a single query used to enforce — a widened
+        // plan must not turn one pan into an unbounded annotation redraw.
+        val merged = LinkedHashMap<String, CrownSpawn>()
+        for (spawns in perBatch) {
+            for (spawn in spawns) merged.putIfAbsent(spawn.id, spawn)
+        }
+        return merged.values.take(CrownSpawnRepository.MAX_SPAWNS_PER_QUERY.toInt())
+    }
+
+    /** One batch = one legal `in` query on the shared composite index. */
+    private suspend fun queryBatch(cellKeys: List<String>, now: Timestamp): List<CrownSpawn> {
         val snapshot =
             firestore
                 .collection(SPAWNS)

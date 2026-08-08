@@ -22,18 +22,32 @@ import kotlin.math.min
  *
  * ## Why the coverage is capped, and what that costs
  *
- * `in` accepts at most [FIRESTORE_IN_LIMIT] values, so the covered area is
- * bounded no matter how far the user zooms out. [MAX_RING] caps it lower still,
- * at a 5x5 block — roughly 1.2 km east-west and 2.2 km north-south at Swedish
- * latitudes.
+ * `in` accepts at most [FIRESTORE_IN_LIMIT] values, so a single query is bounded
+ * — but a town-sized view needs more cells than that, so the plan emits the FULL
+ * (bounded) key list and the repository splits it into BATCHES of at most
+ * [FIRESTORE_IN_LIMIT] keys, one independent `in` query each, merged by crown id.
+ * Two hard caps keep that from becoming an unbounded scrape however far the user
+ * zooms out: [MAX_RING] fixes the widest block at 11x11 = 121 cells — roughly
+ * 3 km east-west and 5.5 km north-south each way from centre at Swedish latitudes
+ * — and [MAX_CELLS] / [MAX_BATCHES] cap the plan at 150 cells across at most 5
+ * batches even if [MAX_RING] is later retuned upward.
  *
- * That is a deliberate product choice, not only an index workaround. A crown is
- * collectable from 75 m while parked; a crown 40 km away is not something you
- * are going to drive to, and drawing every crown in the country would (a) make
- * the layer a national scrape of the spawn table for anyone with a wide zoom and
- * (b) cost a document read per crown per pan. Zoomed right out, the layer
- * therefore covers the middle of the screen and not the edges — the honest
- * trade, stated here so an empty corner reads as designed rather than broken.
+ * That ceiling is a deliberate product choice, not only an index workaround. A
+ * crown is collectable from 75 m while parked; a crown 40 km away is not
+ * something you are going to drive to, and drawing every crown in the country
+ * would (a) make the layer a national scrape of the spawn table for anyone with a
+ * wide zoom and (b) cost a document read per crown per pan. The widened plan
+ * covers a town, not a county: zoomed right out past that, the layer covers the
+ * middle of the screen and not the far edges — the honest trade, stated here so
+ * an empty corner reads as designed rather than broken.
+ *
+ * ## What a refresh costs
+ *
+ * Each batch is a separate Firestore query, so a full-width plan is at most
+ * [MAX_BATCHES] round-trips (run in parallel). N live crowns in range still cost
+ * N document reads regardless of how the cells are batched; the total is bounded
+ * by [MAX_CELLS] cells and, on the draw side, by
+ * [CrownSpawnRepository.MAX_SPAWNS_PER_QUERY].
  *
  * Pure Kotlin, so the whole plan is unit-tested rather than inferred from an
  * empty map.
@@ -47,16 +61,19 @@ object CrownSpawnQuery {
     const val CELL_DEGREES: Double = 0.01
 
     /**
-     * Firestore's hard limit on the number of values in an `in` filter. The plan
-     * can never exceed this; [MAX_RING] keeps it comfortably below.
+     * Firestore's hard limit on the number of values in an `in` filter, and so
+     * the size of one BATCH. A full-width plan exceeds this, so the repository
+     * chunks [cellKeysFor] into batches of at most this many keys — see
+     * [chunkForInQueries] — and runs one `in` query per batch.
      */
     const val FIRESTORE_IN_LIMIT: Int = 30
 
     /**
-     * Largest ring of cells around the centre one. 2 gives a 5x5 = 25-key query,
-     * inside [FIRESTORE_IN_LIMIT] with headroom.
+     * Largest ring of cells around the centre one. 5 gives an 11x11 = 121-key
+     * plan — a town-sized area — split across at most [MAX_BATCHES] `in` queries.
+     * Sits inside the [MAX_CELLS] hard cap with headroom.
      */
-    const val MAX_RING: Int = 2
+    const val MAX_RING: Int = 5
 
     /**
      * Smallest ring. Never 0: a crown 30 m the other side of a cell boundary is
@@ -66,13 +83,31 @@ object CrownSpawnQuery {
     const val MIN_RING: Int = 1
 
     /**
+     * Hard cap on the number of cells one plan may contain, independent of
+     * [MAX_RING]. At 5 crowns/cell (the spawner's density budget) this bounds a
+     * single refresh's reads, and it means a future bump to [MAX_RING] fails
+     * visibly in a test rather than silently scraping a county. 150 cells is
+     * exactly [MAX_BATCHES] x [FIRESTORE_IN_LIMIT].
+     */
+    const val MAX_CELLS: Int = 150
+
+    /**
+     * Hard cap on how many `in` queries one refresh may fan out into. With
+     * [FIRESTORE_IN_LIMIT] keys each, [MAX_BATCHES] x [FIRESTORE_IN_LIMIT] is the
+     * [MAX_CELLS] ceiling; the 11x11 = 121-cell full-width plan uses all 5.
+     */
+    const val MAX_BATCHES: Int = 5
+
+    /**
      * Cap on how much of a wide viewport the layer tries to cover, in metres.
      *
      * Ring selection is driven by the SMALLER of the visible radius and this, so
      * zooming out past it stops widening the query instead of silently clamping
-     * at [MAX_RING] with no stated intent.
+     * at [MAX_RING] with no stated intent. Widened to a town-sized ~9 km so the
+     * corners of a zoomed-out town view are no longer empty; the actual reach is
+     * then bounded by [MAX_RING] (the ~5.5 km-north/south block).
      */
-    const val MAX_QUERY_RADIUS_METERS: Double = 2_500.0
+    const val MAX_QUERY_RADIUS_METERS: Double = 9_000.0
 
     private const val METERS_PER_DEGREE_LAT: Double = 111_320.0
 
@@ -151,11 +186,24 @@ object CrownSpawnQuery {
                 keys.add("${latIdx + dLat}_${lonIdx + dLon}")
             }
         }
-        // Belt and braces: the ring cap already keeps this inside the limit, but
-        // a future retune of MAX_RING must fail visibly in a test rather than at
-        // runtime with an opaque Firestore rejection.
-        return if (keys.size > FIRESTORE_IN_LIMIT) keys.subList(0, FIRESTORE_IN_LIMIT) else keys
+        // Belt and braces: the ring cap already keeps this inside MAX_CELLS, but
+        // a future retune of MAX_RING must fail visibly (a truncated plan a test
+        // can catch) rather than fan out into an unbounded number of batches.
+        return if (keys.size > MAX_CELLS) keys.subList(0, MAX_CELLS) else keys
     }
+
+    /**
+     * Splits a [cellKeysFor] plan into batches of at most [FIRESTORE_IN_LIMIT]
+     * keys, each a legal `in` query the repository runs independently and merges.
+     *
+     * Because the plan is capped at [MAX_CELLS], the result is capped at
+     * [MAX_BATCHES] batches — the fan-out a wide zoom can trigger is bounded, not
+     * a function of how far out the user scrolled. Order is preserved so the same
+     * plan always chunks the same way; an empty plan yields no batches (nothing to
+     * ask for), never a single empty `in` array, which Firestore rejects.
+     */
+    fun chunkForInQueries(cellKeys: List<String>): List<List<String>> =
+        if (cellKeys.isEmpty()) emptyList() else cellKeys.chunked(FIRESTORE_IN_LIMIT)
 
     /**
      * Whether a settled camera is worth re-querying, given where we last did.

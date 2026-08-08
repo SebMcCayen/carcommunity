@@ -66,7 +66,9 @@ sealed interface CrownClaimStatus {
  *    open therefore costs one small indexed query a minute.
  *  - **[CrownSpawnQuery.shouldRequery]** drops a settle that lands on the same
  *    cells, so nudging the map around a car park costs nothing.
- *  - The query itself is bounded at 25 cells and
+ *  - The query itself is bounded at [CrownSpawnQuery.MAX_CELLS] cells (a
+ *    town-sized 11x11 block, fanned out across at most
+ *    [CrownSpawnQuery.MAX_BATCHES] parallel `in` queries) and
  *    [CrownSpawnRepository.MAX_SPAWNS_PER_QUERY] documents.
  *
  * Pure-ish Kotlin: the repository, the clock, the centre and the flag are all

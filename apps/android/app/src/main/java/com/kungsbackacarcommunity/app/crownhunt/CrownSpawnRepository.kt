@@ -51,12 +51,14 @@ interface CrownSpawnRepository {
         /**
          * Cap on the crowns one refresh will draw.
          *
-         * The query is already bounded by the cell plan (at most 25 cells) and
-         * the spawner's own density budget (at most 5 live crowns per cell), so
-         * ~125 is the theoretical ceiling and this is not expected to bind. It
-         * exists so that a future retune of either bound — or a bug in the
-         * spawner — cannot turn one pan into an unbounded read and an unbounded
-         * annotation redraw.
+         * The query is already bounded by the cell plan (at most
+         * [CrownSpawnQuery.MAX_CELLS] cells, across at most
+         * [CrownSpawnQuery.MAX_BATCHES] parallel `in` queries) and the spawner's
+         * own density budget (at most 5 live crowns per cell). With the widened
+         * town-sized plan this cap can now genuinely bind on a dense town, so it
+         * is what keeps one pan from turning into an unbounded read and an
+         * unbounded annotation redraw. Batches are merged and deduped by crown id
+         * before this cap is applied.
          */
         const val MAX_SPAWNS_PER_QUERY: Long = 150
     }
