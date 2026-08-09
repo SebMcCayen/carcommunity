@@ -239,8 +239,8 @@
     <string name="profile_pointsSubtitle">Så aktiv har du varit</string>
     <string name="profile_pointsRecentTitle">Senast intjänat</string>
     <string name="profile_pointsRecentEmpty">Kör, samla kronor och delta i träffar – dina poäng dyker upp här.</string>
-    <string name="profile_pointsAmount">+%1$d p</string>
-    <string name="profile_pointsUnit">p</string>
+    <string name="profile_pointsAmount">+%1$d XP</string>
+    <string name="profile_pointsUnit">XP</string>
     <string name="profile_pointsViewAll">Visa hela poänghistoriken</string>
     <string name="profile_social_sectionTitle">Sociala medier</string>
     <string name="profile_social_publicNotice">Länkarna visas på din publika profil. Lämna fältet tomt för att ta bort det.</string>

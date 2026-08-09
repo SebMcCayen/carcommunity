@@ -239,8 +239,8 @@
     <string name="profile_pointsSubtitle">How active you have been</string>
     <string name="profile_pointsRecentTitle">Recently earned</string>
     <string name="profile_pointsRecentEmpty">Drive, collect crowns and attend meets – your points will show up here.</string>
-    <string name="profile_pointsAmount">+%1$d p</string>
-    <string name="profile_pointsUnit">p</string>
+    <string name="profile_pointsAmount">+%1$d XP</string>
+    <string name="profile_pointsUnit">XP</string>
     <string name="profile_pointsViewAll">View full points history</string>
     <string name="profile_social_sectionTitle">Social media</string>
     <string name="profile_social_publicNotice">These links are shown on your public profile. Leave a field empty to remove it.</string>

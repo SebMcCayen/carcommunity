@@ -262,8 +262,8 @@
     "pointsSubtitle": "Så aktiv har du varit",
     "pointsRecentTitle": "Senast intjänat",
     "pointsRecentEmpty": "Kör, samla kronor och delta i träffar – dina poäng dyker upp här.",
-    "pointsAmount": "+%1$d p",
-    "pointsUnit": "p",
+    "pointsAmount": "+%1$d XP",
+    "pointsUnit": "XP",
     "pointsViewAll": "Visa hela poänghistoriken",
     "social": {
       "sectionTitle": "Sociala medier",

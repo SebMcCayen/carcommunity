@@ -262,8 +262,8 @@
     "pointsSubtitle": "How active you have been",
     "pointsRecentTitle": "Recently earned",
     "pointsRecentEmpty": "Drive, collect crowns and attend meets – your points will show up here.",
-    "pointsAmount": "+%1$d p",
-    "pointsUnit": "p",
+    "pointsAmount": "+%1$d XP",
+    "pointsUnit": "XP",
     "pointsViewAll": "View full points history",
     "social": {
       "sectionTitle": "Social media",
