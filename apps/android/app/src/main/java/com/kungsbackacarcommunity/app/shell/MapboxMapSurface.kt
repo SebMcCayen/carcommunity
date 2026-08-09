@@ -1623,8 +1623,13 @@ class MapboxMapSurface : MapSurface {
                                         point = MapPoint(point.longitude(), point.latitude()),
                                         // Blank/absent names fall back to the host's
                                         // dropped-pin label rather than previewing an
-                                        // unnamed destination.
-                                        name = poi.name?.trim()?.takeIf { it.isNotEmpty() },
+                                        // unnamed destination. Read through the crash-safe
+                                        // seam: `poi.name` is `Feature.getStringProperty`,
+                                        // which throws UnsupportedOperationException when the
+                                        // basemap serialises a POI's `name` as a literal JSON
+                                        // null (Gson's JsonNull.getAsString) — see
+                                        // [resolvePoiTapName].
+                                        name = resolvePoiTapName { poi.name },
                                     )
                                     true
                                 },
@@ -2989,3 +2994,24 @@ internal fun applyPuckBearingArrowOnce(
     markShown()
     runCatching { applySwap() }.onFailure { markNotShown() }
 }
+
+/**
+ * Crash-safe resolution of a tapped basemap POI's display name.
+ *
+ * The Standard style's `standardPoi` interaction hands back a typed
+ * `StandardPoiFeature` whose `name` accessor is
+ * `com.mapbox.geojson.Feature.getStringProperty("name")`. That method is
+ * `properties().get("name")?.getAsString()` — the `?.` only guards a Kotlin
+ * null (an ABSENT key). When the basemap serialises the property as a LITERAL
+ * JSON null, `get("name")` returns a non-null `com.google.gson.JsonNull`, and
+ * `JsonNull.getAsString()` throws `java.lang.UnsupportedOperationException`.
+ * Tapping such a POI crashed the app (Crashlytics `…JsonNull`, blamed on the
+ * `standardPoi` tap lambda in `Content`).
+ *
+ * Extracted as a pure, Mapbox-free seam so the guard is unit-testable without a
+ * live map: [readName] is the throwing accessor. A throw (or a blank/absent
+ * name) collapses to `null`, which the host renders as its dropped-pin label —
+ * exactly the "unnamed destination" fallback the caller already intended.
+ */
+internal fun resolvePoiTapName(readName: () -> String?): String? =
+    runCatching { readName() }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() }
