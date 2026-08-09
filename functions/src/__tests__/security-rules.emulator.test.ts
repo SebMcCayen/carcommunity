@@ -517,6 +517,7 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
   const CELL = '5933_1807';
   const LIVE = 'cs-spawn-live';
   const CLAIMED = 'cs-spawn-claimed';
+  const EXPIRED = 'cs-spawn-expired';
 
   beforeAll(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -539,6 +540,17 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
         expiresAt,
         latitude: 59.34,
         longitude: 18.08,
+        rewardPoints: 25,
+      });
+      // Still status 'live' but EXPIRED — the sweep has not deleted it yet.
+      // The `get` rule keeps a server-time expiry check precisely so a member
+      // cannot fetch this stale crown by ID.
+      await setDoc(doc(firestore, 'crownSpawns', EXPIRED), {
+        cellKey: CELL,
+        status: 'live',
+        expiresAt: Timestamp.fromMillis(Date.now() - 60 * 60 * 1000),
+        latitude: 59.35,
+        longitude: 18.09,
         rewardPoints: 25,
       });
     });
@@ -595,6 +607,19 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
     );
     // A direct get on the claimed crown is denied too (status gate on `get`).
     await assertFails(getDoc(doc(memberFs, 'crownSpawns', CLAIMED)));
+  });
+
+  it('get-side expiry survives: a member can get a live unexpired crown but NOT an expired one', async () => {
+    // The `get` rule (unlike `list`) keeps `expiresAt > request.time`, because a
+    // single-doc read is evaluated against the ACTUAL document so the server-time
+    // check is verifiable. This stops a member fetching an expired-but-unswept
+    // crown by ID, while the live one is still gettable.
+    const memberFs = testEnv.authenticatedContext('cs-member-3', { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'crownSpawns', LIVE)));
+    await assertFails(getDoc(doc(memberFs, 'crownSpawns', EXPIRED)));
+    // Admin bypass still reaches the expired crown (the admin portal sees all).
+    const adminFs = testEnv.authenticatedContext('cs-admin-2', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'crownSpawns', EXPIRED)));
   });
 
   it('an unauthenticated client cannot read crownSpawns at all', async () => {
