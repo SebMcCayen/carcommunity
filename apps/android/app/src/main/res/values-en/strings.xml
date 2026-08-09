@@ -235,7 +235,7 @@
     <string name="profile_avatarUploading">Uploading…</string>
     <string name="profile_avatarUploadError">Couldn’t upload the image. Please try again.</string>
     <string name="profile_avatarTooLarge">The image is too large.</string>
-    <string name="profile_pointsTitle">Crown Points</string>
+    <string name="profile_pointsTitle">XP</string>
     <string name="profile_pointsSubtitle">How active you have been</string>
     <string name="profile_pointsRecentTitle">Recently earned</string>
     <string name="profile_pointsRecentEmpty">Drive, collect crowns and attend meets – your points will show up here.</string>
@@ -1108,6 +1108,13 @@
     <string name="crownHunt_leaderboardTitle">Top this season</string>
     <string name="crownHunt_leaderboardEmpty">No scores yet this season. Collect a crown to get on the board.</string>
     <string name="crownHunt_noStatsYet">Collect your first crown on the map to start your Crown Hunt stats.</string>
+    <string name="crownHunt_legendTitle">Crowns – how they work</string>
+    <string name="crownHunt_legendPlacedTitle">Placed crowns</string>
+    <string name="crownHunt_legendPlacedBody">Crowns that organisers place on the map, giving a fixed points reward (KP). You can collect each crown once. Some can be collected by several members – once a crown reaches its limit it disappears from the map.</string>
+    <string name="crownHunt_legendSpawnedTitle">Automatic crowns</string>
+    <string name="crownHunt_legendSpawnedBody">Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.</string>
+    <string name="crownHunt_legendDisappearTitle">Does a crown disappear once I collect it?</string>
+    <string name="crownHunt_legendDisappearBody">A crown you have already collected can\'t be collected again. Most crowns can be collected by several members separately and stay on the map until their time runs out or they reach their limit. Exclusive (legendary) crowns disappear for everyone the moment someone takes them.</string>
     <string name="partners_screenTitle">KCC Business Partners</string>
     <string name="partners_statusLabel">Partner</string>
     <string name="partners_markerLabel">Partner</string>

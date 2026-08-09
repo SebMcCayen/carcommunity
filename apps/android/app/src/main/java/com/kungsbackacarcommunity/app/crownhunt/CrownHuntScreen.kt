@@ -84,6 +84,67 @@ fun CrownHuntScreen(
                 SeasonLeaderboardCard(statsState.board)
             }
         }
+
+        // Educational legend: the crown types and their disappear rules, so
+        // testers stop asking "if I collect one, does it disappear afterwards?".
+        // Read-only copy; grounded in the two claim paths (submitClaim /
+        // claimSpawn) and the rarity table.
+        CrownLegendCard()
+    }
+}
+
+/**
+ * Explains the two crown families and what happens after collection. Static,
+ * read-only reference copy — awards nothing. Grounded in the backend:
+ *  - Placed crowns = `crownHuntPoints` (admin/event, fixed `rewardPoints` KP,
+ *    per-user single collect, `status` → `ended` once its collector cap is hit).
+ *  - Automatic crowns = `crownSpawns` (rarity table with rising KP + rising TTL,
+ *    every spawn has an `expiresAt` and vanishes on its own; legendary is the
+ *    `exclusive` mode that the first taker removes for everyone).
+ */
+@Composable
+private fun CrownLegendCard() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_legendTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_legendPlacedTitle),
+                body = stringResource(R.string.crownHunt_legendPlacedBody),
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_legendSpawnedTitle),
+                body = stringResource(R.string.crownHunt_legendSpawnedBody),
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_legendDisappearTitle),
+                body = stringResource(R.string.crownHunt_legendDisappearBody),
+            )
+        }
+    }
+}
+
+/** One "bold heading over a paragraph" block in the crown legend. */
+@Composable
+private fun LegendEntry(title: String, body: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Text(
+            text = body,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
