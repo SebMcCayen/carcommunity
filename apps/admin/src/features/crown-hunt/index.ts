@@ -118,6 +118,7 @@ export {
   adminCreateSpawnArea,
   adminUpdateSpawnArea,
   adminDeleteSpawnArea,
+  adminReingestSpawnAreaPois,
 } from './spawn-areas';
 export type {
   AdminCrownSpawnArea,
@@ -125,6 +126,7 @@ export type {
   AdminCreateCrownSpawnAreaRequest,
   AdminUpdateCrownSpawnAreaRequest,
   AdminDeleteCrownSpawnAreaRequest,
+  AdminReingestSpawnAreaPoisResponse,
   CrownSpawnAreaShape,
   CrownSpawnAreaVertex,
   AreaValidationCode,

@@ -62,7 +62,7 @@ import {
  * code default ships with zero provisioning and can still be overridden from a
  * `.env` file or deploy config to point at a self-hosted/mirror instance.
  */
-function resolveOverpassEndpoint(): string {
+export function resolveOverpassEndpoint(): string {
   const configured = process.env.OVERPASS_ENDPOINT?.trim();
   return configured && configured.length > 0 ? configured : OVERPASS_ENDPOINT_DEFAULT;
 }

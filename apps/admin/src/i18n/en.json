@@ -524,6 +524,11 @@
     "diagPoiValue": "{count} spots",
     "diagPoisRefreshed": "refreshed {time}",
     "diagPoisNever": "never refreshed",
+    "diagReingestButton": "Refresh POIs",
+    "diagReingestLoading": "Fetching safe stops…",
+    "diagReingestSuccess": "{count} safe stops cached.",
+    "diagReingestFailed": "The OpenStreetMap (Overpass) lookup timed out or failed. The previously cached safe stops were kept. Please try again in a moment.",
+    "diagReingestError": "Could not run POI ingestion. Please try again.",
     "diagBlockersTitle": "Why nothing is spawning",
     "diagNoBlockers": "No blockers — this area would receive crowns on its next visit.",
     "diagBlocker": {

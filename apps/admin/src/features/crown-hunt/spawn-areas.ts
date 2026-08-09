@@ -32,6 +32,7 @@ import type {
   AdminDeleteCrownSpawnAreaRequest,
   AdminListCrownSpawnAreasRequest,
   AdminListCrownSpawnAreasResponse,
+  AdminReingestSpawnAreaPoisResponse,
   CrownSpawnAreaShape,
   CrownSpawnAreaVertex,
 } from '@carcommunity/shared/crown-hunt';
@@ -46,6 +47,7 @@ export type {
   AdminCreateCrownSpawnAreaRequest,
   AdminUpdateCrownSpawnAreaRequest,
   AdminDeleteCrownSpawnAreaRequest,
+  AdminReingestSpawnAreaPoisResponse,
   CrownSpawnAreaShape,
   CrownSpawnAreaVertex,
 };
@@ -465,4 +467,19 @@ export async function adminDeleteSpawnArea(
   request: AdminDeleteCrownSpawnAreaRequest,
 ): Promise<AdminCrownSpawnAreaMutationResponse> {
   return callAdmin<AdminCrownSpawnAreaMutationResponse>('crownHunt-deleteSpawnArea', request);
+}
+
+/**
+ * ON-DEMAND re-run of one area's OpenStreetMap safe-stop POI ingestion — the
+ * "Retry POIs" button. Recovers from a transient Overpass timeout without waiting
+ * for the weekly refresh or a deactivate+reactivate. Never throws on an Overpass
+ * failure: the callable returns `{ ok: false, message }` (the previous cache is
+ * kept), which the caller surfaces as a retry prompt rather than an error.
+ */
+export async function adminReingestSpawnAreaPois(
+  areaId: string,
+): Promise<AdminReingestSpawnAreaPoisResponse> {
+  return callAdmin<AdminReingestSpawnAreaPoisResponse>('crownHunt-reingestSpawnAreaPois', {
+    areaId,
+  });
 }

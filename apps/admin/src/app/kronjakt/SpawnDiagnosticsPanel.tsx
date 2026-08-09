@@ -24,6 +24,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   adminSpawnDiagnostics,
+  adminReingestSpawnAreaPois,
   countdownSeconds,
   estimateAreaService,
   type AdminCrownSpawnDiagnosticsResponse,
@@ -87,6 +88,13 @@ export function SpawnDiagnosticsPanel({
   // nextRunAt is a server timestamp). Defaults to 0 until the first load lands.
   const [serverSkewMs, setServerSkewMs] = useState(0);
 
+  // On-demand "Retry POIs" state. The re-ingestion is a distinct action from the
+  // diagnostics reload, so it has its own in-flight flag and its own success /
+  // error line (a transient Overpass timeout comes back as a message, not a throw).
+  const [isReingesting, setIsReingesting] = useState(false);
+  const [reingestOk, setReingestOk] = useState<boolean | null>(null);
+  const [reingestMessage, setReingestMessage] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
@@ -108,6 +116,37 @@ export function SpawnDiagnosticsPanel({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Re-run this area's OSM safe-stop POI ingestion on demand. The callable never
+  // throws on an Overpass failure — it returns { ok:false, message } — so a
+  // timeout shows the "try again" message rather than a hard error; only a real
+  // transport/auth error (a thrown ApiError) falls through to the catch. On
+  // success the diagnostics are reloaded so the new poiCount / blockers show.
+  const handleReingest = useCallback(async () => {
+    setIsReingesting(true);
+    setReingestOk(null);
+    setReingestMessage(null);
+    try {
+      const res = await adminReingestSpawnAreaPois(areaId);
+      if (!mountedRef.current) return;
+      setReingestOk(res.ok);
+      // Success shows the new cached count; a failed Overpass run is surfaced with
+      // the localised "timed out, cache kept, try again" line (the callable's
+      // structured `message` carries the same meaning and is logged server-side).
+      setReingestMessage(
+        res.ok
+          ? fmt('crownHunt.diagReingestSuccess', { count: res.poiCount })
+          : t('crownHunt.diagReingestFailed'),
+      );
+      if (res.ok) await load();
+    } catch {
+      if (!mountedRef.current) return;
+      setReingestOk(false);
+      setReingestMessage(t('crownHunt.diagReingestError'));
+    } finally {
+      if (mountedRef.current) setIsReingesting(false);
+    }
+  }, [areaId, load]);
 
   // Tick the local clock once a second so the countdown recomputes live.
   useEffect(() => {
@@ -200,6 +239,26 @@ export function SpawnDiagnosticsPanel({
                 ? fmt('crownHunt.diagPoisRefreshed', { time: formatTime(data.poisRefreshedAt) })
                 : t('crownHunt.diagPoisNever')}
             </span>
+            {/* On-demand re-ingestion — most prominent when the cache is empty
+                (poiCount 0), which is exactly the transient-Overpass-failure case. */}
+            <button
+              type="button"
+              className={data.areaPoiCount <= 0 ? styles.btnPrimary : styles.btnSecondary}
+              onClick={() => void handleReingest()}
+              disabled={isReingesting}
+            >
+              {isReingesting
+                ? t('crownHunt.diagReingestLoading')
+                : t('crownHunt.diagReingestButton')}
+            </button>
+            {reingestMessage !== null && (
+              <span
+                className={reingestOk ? styles.diagMuted : styles.errorText}
+                role={reingestOk ? undefined : 'alert'}
+              >
+                {reingestMessage}
+              </span>
+            )}
           </div>
           <div className={styles.diagStat}>
             <span className={styles.diagStatLabel}>{t('crownHunt.diagLastServedLabel')}</span>

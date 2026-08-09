@@ -524,6 +524,11 @@
     "diagPoiValue": "{count} platser",
     "diagPoisRefreshed": "uppdaterade {time}",
     "diagPoisNever": "aldrig uppdaterade",
+    "diagReingestButton": "Uppdatera POI:er",
+    "diagReingestLoading": "Hämtar säkra stopp…",
+    "diagReingestSuccess": "{count} säkra stopp cachade.",
+    "diagReingestFailed": "OpenStreetMap-sökningen (Overpass) tog för lång tid eller misslyckades. De tidigare cachade stoppen behölls. Försök igen om en stund.",
+    "diagReingestError": "Kunde inte köra POI-inhämtningen. Försök igen.",
     "diagBlockersTitle": "Varför inget spawnar",
     "diagNoBlockers": "Inga hinder — området skulle få kronor vid nästa besök.",
     "diagBlocker": {
