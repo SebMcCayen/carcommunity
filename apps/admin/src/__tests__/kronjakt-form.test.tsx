@@ -39,7 +39,6 @@ const mocks = vi.hoisted(() => ({
   listClaims: vi.fn(),
   activate: vi.fn(),
   pause: vi.fn(),
-  listSpawnCells: vi.fn(),
 }));
 
 vi.mock('@/features/crown-hunt', () => ({
@@ -50,11 +49,6 @@ vi.mock('@/features/crown-hunt', () => ({
   adminListCrownHuntClaims: mocks.listClaims,
   adminActivateCrownHuntPoint: mocks.activate,
   adminPauseCrownHuntPoint: mocks.pause,
-  adminListSpawnCells: mocks.listSpawnCells,
-  adminApproveSpawnCell: vi.fn(),
-  adminRevokeSpawnCell: vi.fn(),
-  cellKeyForCoords: () => 'cell',
-  formatCellCenter: () => '0, 0',
 }));
 
 import KronjaktPage from '@/app/kronjakt/page';
@@ -173,7 +167,6 @@ beforeEach(() => {
     data: { claims: [] },
     meta: { page: 1, pageSize: 20, total: 0, hasNext: false },
   });
-  mocks.listSpawnCells.mockResolvedValue([]);
   mocks.create.mockResolvedValue({ ok: true, data: makePoint() });
   mocks.update.mockResolvedValue({ ok: true, data: makePoint() });
   mocks.del.mockResolvedValue({ pointId: 'p1', deleted: true, removedCollectors: 0 });

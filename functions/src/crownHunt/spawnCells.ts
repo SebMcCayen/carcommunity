@@ -75,6 +75,13 @@ export interface SetSpawnCellApprovalResponse {
   removedCrowns: number;
 }
 
+// DORMANT / PENDING COORDINATED REMOVAL. The Spawn-celler admin UI and the
+// single-cell spawn pass (runCrownSpawnPass) that consumed the crownSpawnCells
+// allow-list have been removed; only Områden (crownSpawnAreas) spawns crowns
+// now. This callable is deliberately kept EXPORTED and DEPLOYED: deleting a
+// live-deployed function would leave an orphan in prod that aborts the
+// non-interactive auto-deploy. A follow-up can remove it (plus the crownSpawnCells
+// collection + rules) in a coordinated deploy. Until then it is unused by the app.
 export const setSpawnCellApproval = onCall(
   CALLABLE_OPTS,
   async (request): Promise<SetSpawnCellApprovalResponse> => {

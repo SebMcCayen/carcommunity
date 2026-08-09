@@ -32,8 +32,6 @@ import type {
   AdminCreateCrownHuntPointRequest,
   AdminUpdateCrownHuntPointRequest,
   CrownHuntClaimResult,
-  AdminSpawnCellSummary,
-  SpawnCellTarget,
 } from '@/features/crown-hunt';
 import {
   adminActivateCrownHuntPoint,
@@ -43,11 +41,6 @@ import {
   adminListCrownHuntPoints,
   adminPauseCrownHuntPoint,
   adminUpdateCrownHuntPoint,
-  adminListSpawnCells,
-  adminApproveSpawnCell,
-  adminRevokeSpawnCell,
-  cellKeyForCoords,
-  formatCellCenter,
 } from '@/features/crown-hunt';
 import { DateTimePicker } from '@/components/ui/DateTimePicker';
 import { MapLocationPicker } from '@/components/map/MapLocationPicker';
@@ -742,320 +735,10 @@ const ClaimsTab = ({
 );
 
 // ---------------------------------------------------------------------------
-// Spawn cells tab (auto-spawn area allow-list)
-// ---------------------------------------------------------------------------
-
-/** Fully-resolved target for an approval action + display strings. */
-interface ApproveTarget {
-  cellKey: string;
-  center: string;
-  source: SpawnCellTarget;
-}
-
-function spawnCellStateLabel(approved: boolean): string {
-  return approved ? t('crownHunt.spawnCellStateApproved') : t('crownHunt.spawnCellStateRevoked');
-}
-
-interface AddAreaFormProps {
-  onApprove: (target: ApproveTarget) => void;
-  onCancel: () => void;
-}
-
-/** Pick a point on the map; the whole ~1.1 km grid cell it lands in is approved. */
-const AddAreaForm = ({ onApprove, onCancel }: AddAreaFormProps) => {
-  const [lat, setLat] = useState('');
-  const [lng, setLng] = useState('');
-
-  const latNum = Number.parseFloat(lat);
-  const lngNum = Number.parseFloat(lng);
-  const hasPoint =
-    Number.isFinite(latNum) &&
-    Number.isFinite(lngNum) &&
-    latNum >= -90 &&
-    latNum <= 90 &&
-    lngNum >= -180 &&
-    lngNum <= 180;
-  const cellKey = hasPoint ? cellKeyForCoords(latNum, lngNum) : null;
-
-  return (
-    <div className={styles.form}>
-      <MapLocationPicker
-        latitude={lat}
-        longitude={lng}
-        onChange={(nextLat, nextLng) => {
-          setLat(nextLat);
-          setLng(nextLng);
-        }}
-        labelLat={t('crownHunt.formLatitudeLabel')}
-        labelLng={t('crownHunt.formLongitudeLabel')}
-        helpText={t('crownHunt.spawnCellPickLabel')}
-        unavailableText={t('map.unavailable')}
-        loadErrorText={t('map.loadError')}
-        required
-        labelClassName={styles.label}
-        inputClassName={styles.input}
-      />
-
-      {cellKey !== null ? (
-        <p className={styles.introText}>
-          {t('crownHunt.spawnCellResolvedLabel')}:{' '}
-          <span className={styles.cellKey}>{cellKey}</span> — {formatCellCenter(cellKey)}
-          <br />
-          {t('crownHunt.spawnCellResolvedHint')}
-        </p>
-      ) : (
-        <p className={styles.introText}>{t('crownHunt.spawnCellInvalidPoint')}</p>
-      )}
-
-      <div className={styles.formActions}>
-        <button type="button" className={styles.btnSecondary} onClick={onCancel}>
-          {t('crownHunt.cancel')}
-        </button>
-        <button
-          type="button"
-          className={styles.btnPrimary}
-          disabled={cellKey === null}
-          onClick={() => {
-            if (cellKey === null) return;
-            onApprove({
-              cellKey,
-              center: formatCellCenter(cellKey),
-              source: { latitude: latNum, longitude: lngNum },
-            });
-          }}
-        >
-          {t('crownHunt.spawnCellApprove')}
-        </button>
-      </div>
-    </div>
-  );
-};
-
-interface ApproveCellModalProps {
-  target: ApproveTarget;
-  onConfirm: (note: string) => Promise<void>;
-  onCancel: () => void;
-  isConfirming: boolean;
-  error: string | null;
-}
-
-const ApproveCellModal = ({ target, onConfirm, onCancel, isConfirming, error }: ApproveCellModalProps) => {
-  const [note, setNote] = useState('');
-  const [checked, setChecked] = useState(false);
-
-  return (
-    <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
-        <h2 className={styles.modalTitle}>{t('crownHunt.spawnCellApproveConfirmTitle')}</h2>
-        <p className={styles.modalBody}>
-          {t('crownHunt.spawnCellApproveConfirmBody')
-            .replace('{cell}', target.cellKey)
-            .replace('{center}', target.center)}
-        </p>
-        <p className={styles.safetyWarning}>⚠️ {t('crownHunt.spawnCellSafetyWarning')}</p>
-
-        <label className={styles.label}>
-          <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />{' '}
-          {t('crownHunt.spawnCellSafeAreaConfirm')}
-        </label>
-
-        <label className={styles.label} style={{ marginTop: '12px' }}>
-          {t('crownHunt.spawnCellApproveNoteLabel')} *
-          <textarea
-            className={styles.input}
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={t('crownHunt.spawnCellApproveNotePlaceholder')}
-            rows={3}
-            required
-          />
-        </label>
-
-        {error !== null && <p className={styles.errorText}>{error}</p>}
-
-        <div className={styles.formActions}>
-          <button className={styles.btnSecondary} onClick={onCancel} disabled={isConfirming}>
-            {t('crownHunt.cancel')}
-          </button>
-          <button
-            className={styles.btnPrimary}
-            onClick={() => void onConfirm(note)}
-            disabled={isConfirming || !checked || note.trim().length < 3}
-          >
-            {isConfirming ? t('crownHunt.loading') : t('crownHunt.confirm')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface RevokeCellModalProps {
-  cellKey: string;
-  onConfirm: (reason: string) => Promise<void>;
-  onCancel: () => void;
-  isConfirming: boolean;
-  error: string | null;
-}
-
-const RevokeCellModal = ({ cellKey, onConfirm, onCancel, isConfirming, error }: RevokeCellModalProps) => {
-  const [reason, setReason] = useState('');
-
-  return (
-    <div className={styles.modalOverlay} role="dialog" aria-modal="true">
-      <div className={styles.modal}>
-        <h2 className={styles.modalTitle}>{t('crownHunt.spawnCellRevokeConfirmTitle')}</h2>
-        <p className={styles.modalBody}>
-          {t('crownHunt.spawnCellRevokeConfirmBody').replace('{cell}', cellKey)}
-        </p>
-
-        <label className={styles.label}>
-          {t('crownHunt.spawnCellRevokeReasonLabel')}
-          <textarea
-            className={styles.input}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder={t('crownHunt.spawnCellRevokeReasonPlaceholder')}
-            rows={3}
-          />
-        </label>
-
-        {error !== null && <p className={styles.errorText}>{error}</p>}
-
-        <div className={styles.formActions}>
-          <button className={styles.btnSecondary} onClick={onCancel} disabled={isConfirming}>
-            {t('crownHunt.cancel')}
-          </button>
-          <button
-            className={styles.btnSmallWarning}
-            onClick={() => void onConfirm(reason)}
-            disabled={isConfirming}
-          >
-            {isConfirming ? t('crownHunt.loading') : t('crownHunt.spawnCellRevoke')}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface SpawnCellsTabProps {
-  cells: AdminSpawnCellSummary[];
-  isLoading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-  showAddForm: boolean;
-  onToggleAddForm: (show: boolean) => void;
-  onApproveTarget: (target: ApproveTarget) => void;
-  onRevoke: (cellKey: string) => void;
-}
-
-const SpawnCellsTab = ({
-  cells,
-  isLoading,
-  error,
-  onRefresh,
-  showAddForm,
-  onToggleAddForm,
-  onApproveTarget,
-  onRevoke,
-}: SpawnCellsTabProps) => (
-  <section>
-    <p className={styles.introText}>{t('crownHunt.spawnCellsIntro')}</p>
-    <div className={styles.noticeBanner}>{t('crownHunt.spawnCellsFlagNotice')}</div>
-
-    <div className={styles.tabHeader}>
-      {!showAddForm && (
-        <button className={styles.btnPrimary} onClick={() => onToggleAddForm(true)}>
-          {t('crownHunt.spawnCellAddButton')}
-        </button>
-      )}
-    </div>
-
-    {showAddForm && (
-      <div className={styles.formContainer}>
-        <AddAreaForm onApprove={onApproveTarget} onCancel={() => onToggleAddForm(false)} />
-      </div>
-    )}
-
-    {isLoading && <p className={styles.loadingText}>{t('crownHunt.loading')}</p>}
-    {error !== null && (
-      <p className={styles.errorText}>
-        {t('crownHunt.error')}{' '}
-        <button className={styles.linkButton} onClick={onRefresh}>
-          {t('crownHunt.retry')}
-        </button>
-      </p>
-    )}
-
-    {!isLoading && !error && cells.length === 0 && (
-      <p className={styles.emptyText}>{t('crownHunt.spawnCellNoCells')}</p>
-    )}
-
-    {cells.length > 0 && (
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th>{t('crownHunt.spawnCellColumnCell')}</th>
-            <th>{t('crownHunt.spawnCellColumnCenter')}</th>
-            <th>{t('crownHunt.spawnCellColumnState')}</th>
-            <th>{t('crownHunt.spawnCellColumnApprovedBy')}</th>
-            <th>{t('crownHunt.spawnCellColumnApprovedAt')}</th>
-            <th>{t('crownHunt.spawnCellColumnActions')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {cells.map((cell) => (
-            <tr key={cell.cellKey}>
-              <td className={styles.cellKey}>{cell.cellKey}</td>
-              <td>{formatCellCenter(cell.cellKey)}</td>
-              <td>
-                <span
-                  className={`${styles.badge} ${cell.approved ? styles.badge_active : styles.badge_ended}`}
-                >
-                  {spawnCellStateLabel(cell.approved)}
-                </span>
-              </td>
-              <td title={cell.approved ? cell.approvedByUserId ?? '' : cell.revokedByUserId ?? ''}>
-                {(() => {
-                  const who = cell.approved ? cell.approvedByUserId : cell.revokedByUserId;
-                  return who ? `${who.slice(0, 8)}…` : '—';
-                })()}
-              </td>
-              <td>{formatDate(cell.approved ? cell.approvedAt : cell.revokedAt)}</td>
-              <td className={styles.actions}>
-                {cell.approved ? (
-                  <button className={styles.btnSmallWarning} onClick={() => onRevoke(cell.cellKey)}>
-                    {t('crownHunt.spawnCellRevoke')}
-                  </button>
-                ) : (
-                  <button
-                    className={styles.btnSmallPrimary}
-                    onClick={() =>
-                      onApproveTarget({
-                        cellKey: cell.cellKey,
-                        center: formatCellCenter(cell.cellKey),
-                        source: { cellKey: cell.cellKey },
-                      })
-                    }
-                  >
-                    {t('crownHunt.spawnCellReapprove')}
-                  </button>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    )}
-  </section>
-);
-
-// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
-type Tab = 'points' | 'claims' | 'spawnCells' | 'areas' | 'stats';
+type Tab = 'points' | 'claims' | 'areas' | 'stats';
 
 export default function KronjaktPage() {
   const mountedRef = useRef(true);
@@ -1092,18 +775,6 @@ export default function KronjaktPage() {
   const [deletingPoint, setDeletingPoint] = useState<AdminCrownHuntPointSummary | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-
-  // Spawn cells state
-  const [spawnCells, setSpawnCells] = useState<AdminSpawnCellSummary[]>([]);
-  const [spawnCellsLoading, setSpawnCellsLoading] = useState(false);
-  const [spawnCellsError, setSpawnCellsError] = useState<string | null>(null);
-  const [showAddArea, setShowAddArea] = useState(false);
-  const [approveTarget, setApproveTarget] = useState<ApproveTarget | null>(null);
-  const [isApprovingCell, setIsApprovingCell] = useState(false);
-  const [approveCellError, setApproveCellError] = useState<string | null>(null);
-  const [revokeCellKey, setRevokeCellKey] = useState<string | null>(null);
-  const [isRevokingCell, setIsRevokingCell] = useState(false);
-  const [revokeCellError, setRevokeCellError] = useState<string | null>(null);
 
   // Flash messages
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -1143,21 +814,6 @@ export default function KronjaktPage() {
     }
   }, []);
 
-  const loadSpawnCells = useCallback(async () => {
-    setSpawnCellsLoading(true);
-    setSpawnCellsError(null);
-    try {
-      const cells = await adminListSpawnCells();
-      if (!mountedRef.current) return;
-      setSpawnCells(cells);
-    } catch {
-      if (!mountedRef.current) return;
-      setSpawnCellsError(t('crownHunt.error'));
-    } finally {
-      if (mountedRef.current) setSpawnCellsLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     void loadPoints();
   }, [loadPoints]);
@@ -1167,12 +823,6 @@ export default function KronjaktPage() {
       void loadClaims(filterRiskReview);
     }
   }, [activeTab, filterRiskReview, loadClaims]);
-
-  useEffect(() => {
-    if (activeTab === 'spawnCells') {
-      void loadSpawnCells();
-    }
-  }, [activeTab, loadSpawnCells]);
 
   // ---------------------------------------------------------------------------
   // Form handlers
@@ -1288,53 +938,6 @@ export default function KronjaktPage() {
   );
 
   // ---------------------------------------------------------------------------
-  // Spawn cell handlers
-  // ---------------------------------------------------------------------------
-
-  const handleApproveCell = useCallback(
-    async (note: string) => {
-      if (!approveTarget) return;
-      setIsApprovingCell(true);
-      setApproveCellError(null);
-      try {
-        await adminApproveSpawnCell(approveTarget.source, note);
-        if (!mountedRef.current) return;
-        setApproveTarget(null);
-        setShowAddArea(false);
-        showSuccess(t('crownHunt.spawnCellApproveSuccess'));
-        void loadSpawnCells();
-      } catch {
-        if (!mountedRef.current) return;
-        setApproveCellError(t('crownHunt.error'));
-      } finally {
-        if (mountedRef.current) setIsApprovingCell(false);
-      }
-    },
-    [approveTarget, loadSpawnCells],
-  );
-
-  const handleRevokeCell = useCallback(
-    async (reason: string) => {
-      if (!revokeCellKey) return;
-      setIsRevokingCell(true);
-      setRevokeCellError(null);
-      try {
-        await adminRevokeSpawnCell({ cellKey: revokeCellKey }, reason);
-        if (!mountedRef.current) return;
-        setRevokeCellKey(null);
-        showSuccess(t('crownHunt.spawnCellRevokeSuccess'));
-        void loadSpawnCells();
-      } catch {
-        if (!mountedRef.current) return;
-        setRevokeCellError(t('crownHunt.error'));
-      } finally {
-        if (mountedRef.current) setIsRevokingCell(false);
-      }
-    },
-    [revokeCellKey, loadSpawnCells],
-  );
-
-  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -1369,14 +972,6 @@ export default function KronjaktPage() {
           onClick={() => setActiveTab('claims')}
         >
           {t('crownHunt.claimsTab')}
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === 'spawnCells'}
-          className={activeTab === 'spawnCells' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('spawnCells')}
-        >
-          {t('crownHunt.spawnCellsTab')}
         </button>
         <button
           role="tab"
@@ -1453,59 +1048,9 @@ export default function KronjaktPage() {
         />
       )}
 
-      {activeTab === 'spawnCells' && (
-        <SpawnCellsTab
-          cells={spawnCells}
-          isLoading={spawnCellsLoading}
-          error={spawnCellsError}
-          onRefresh={() => void loadSpawnCells()}
-          showAddForm={showAddArea}
-          onToggleAddForm={(show) => {
-            setShowAddArea(show);
-            if (!show) setApproveTarget(null);
-          }}
-          onApproveTarget={(target) => {
-            setApproveTarget(target);
-            setApproveCellError(null);
-          }}
-          onRevoke={(cellKey) => {
-            setRevokeCellKey(cellKey);
-            setRevokeCellError(null);
-          }}
-        />
-      )}
-
       {activeTab === 'areas' && <AreasTab onFlash={showSuccess} />}
 
       {activeTab === 'stats' && <StatsTab />}
-
-      {/* Spawn cell approve confirmation modal */}
-      {approveTarget !== null && (
-        <ApproveCellModal
-          target={approveTarget}
-          onConfirm={handleApproveCell}
-          onCancel={() => {
-            setApproveTarget(null);
-            setApproveCellError(null);
-          }}
-          isConfirming={isApprovingCell}
-          error={approveCellError}
-        />
-      )}
-
-      {/* Spawn cell revoke confirmation modal */}
-      {revokeCellKey !== null && (
-        <RevokeCellModal
-          cellKey={revokeCellKey}
-          onConfirm={handleRevokeCell}
-          onCancel={() => {
-            setRevokeCellKey(null);
-            setRevokeCellError(null);
-          }}
-          isConfirming={isRevokingCell}
-          error={revokeCellError}
-        />
-      )}
 
       {/* Activate confirmation modal */}
       {activatingPoint !== null && (

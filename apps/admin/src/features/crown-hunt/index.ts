@@ -62,36 +62,16 @@ export type {
 };
 export { ApiError };
 
-// Auto-spawn cell approval (spawn-cells.ts) — the admin half of the auto-spawn
-// safety model. Grid helpers, the direct crownSpawnCells read, and the
-// approve/revoke wrappers over crownHunt.setSpawnCellApproval.
-export {
-  CROWN_CELL_DEGREES,
-  cellKeyForCoords,
-  parseSpawnCellKey,
-  spawnCellBounds,
-  spawnCellCenter,
-  formatCellCenter,
-  spawnCellState,
-  toSpawnCellSummary,
-  adminListSpawnCells,
-  adminApproveSpawnCell,
-  adminRevokeSpawnCell,
-} from './spawn-cells';
-export type {
-  AdminSpawnCellSummary,
-  SpawnCellState,
-  SpawnCellTarget,
-  SetSpawnCellApprovalResponse,
-  SpawnCellIndices,
-  SpawnCellBounds,
-  LatLng as SpawnCellLatLng,
-} from './spawn-cells';
+// NOTE: the Spawn-celler (single-cell allow-list) admin feature was removed —
+// the UI, the client wrappers, and the backend single-cell spawn pass are gone.
+// Only Områden (spawn-areas.ts) drives auto-spawn now. The backend
+// `crownHunt.setSpawnCellApproval` callable is intentionally kept deployed but
+// dormant (see functions/src/crownHunt/spawnCells.ts) to avoid an orphan-function
+// deploy abort; a coordinated follow-up removes it.
 
-// Auto-spawn AREAS (spawn-areas.ts) — the wider half of the auto-spawn safety
-// model: admin-drawn polygon/circle/rectangle shapes + the safety-gated
-// create/update/delete/list callable wrappers, plus the pure draw→contract
-// conversion + validation used by the Areas tab.
+// Auto-spawn AREAS (spawn-areas.ts) — admin-drawn polygon/circle/rectangle
+// shapes + the safety-gated create/update/delete/list callable wrappers, plus the
+// pure draw→contract conversion + validation used by the Areas tab.
 export {
   MIN_POLYGON_VERTICES,
   MAX_POLYGON_VERTICES,

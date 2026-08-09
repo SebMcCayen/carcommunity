@@ -270,7 +270,7 @@ export function AreasTab({ onFlash }: AreasTabProps): React.ReactElement {
   return (
     <section>
       <p className={styles.introText}>{t('crownHunt.areasIntro')}</p>
-      <div className={styles.noticeBanner}>{t('crownHunt.spawnCellsFlagNotice')}</div>
+      <div className={styles.noticeBanner}>{t('crownHunt.autoSpawnFlagNotice')}</div>
 
       <div className={styles.tabHeader}>
         {!drawing && (
