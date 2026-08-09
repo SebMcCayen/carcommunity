@@ -87,6 +87,7 @@ import {
 import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
 import { spawnDiagnostics } from './crownHunt/spawnDiagnostics';
 import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIngestion';
+import { reingestSpawnAreaPois } from './crownHunt/reingestAreaPois';
 import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
 import { reviewApplication, submitApplication } from './partners/applications';
@@ -507,6 +508,12 @@ export const crownHunt = {
   // (weekly scheduled refresh). Overpass API, no key/secret required.
   onSpawnAreaWrittenIngestPois,
   refreshAreaPois,
+  // Admin ON-DEMAND re-run of one area's POI ingestion — the "Retry POIs" button
+  // in the diagnostics panel. Recovers from a transient Overpass 504/timeout
+  // without waiting for the weekly refresh or a deactivate+reactivate. Reuses
+  // runAreaPoiIngestion; an Overpass failure returns a structured result, not a
+  // 500. Deployed as crownHunt-reingestSpawnAreaPois.
+  reingestSpawnAreaPois,
   // Stats + leaderboard (this slice). Firestore triggers that maintain the
   // leaderboard/stat aggregates on collection, plus the daily season-rollover
   // aggregator. Deployed as crownHunt-onCrownLedgerEntryForStats,

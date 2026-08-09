@@ -13,11 +13,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { translate } from '@/i18n';
 
 const t = (key: string) => translate('sv', key);
+const fmt = (key: string, params: Record<string, string | number>): string =>
+  Object.entries(params).reduce((acc, [k, v]) => acc.replace(`{${k}}`, String(v)), t(key));
 
-const mocks = vi.hoisted(() => ({ diag: vi.fn() }));
+const mocks = vi.hoisted(() => ({ diag: vi.fn(), reingest: vi.fn() }));
 
 // Cut the crown-hunt barrel's path to lib/firebase (env reads at import) so the
-// REAL pure helpers load via importOriginal; only the network fn is stubbed.
+// REAL pure helpers load via importOriginal; only the network fns are stubbed.
 vi.mock('@/lib/callables', () => ({ callAdmin: vi.fn() }));
 vi.mock('@/lib/firestore', () => ({
   getAdminFirestore: () => ({}),
@@ -26,7 +28,11 @@ vi.mock('@/lib/firestore', () => ({
 
 vi.mock('@/features/crown-hunt', async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
-  return { ...actual, adminSpawnDiagnostics: mocks.diag };
+  return {
+    ...actual,
+    adminSpawnDiagnostics: mocks.diag,
+    adminReingestSpawnAreaPois: mocks.reingest,
+  };
 });
 
 import {
@@ -154,11 +160,20 @@ async function renderPanel() {
   await act(async () => {}); // flush the load effect
 }
 
+function findReingestButton(): HTMLButtonElement | undefined {
+  return [...container.querySelectorAll('button')].find(
+    (b) =>
+      b.textContent === t('crownHunt.diagReingestButton') ||
+      b.textContent === t('crownHunt.diagReingestLoading'),
+  ) as HTMLButtonElement | undefined;
+}
+
 beforeEach(() => {
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
   mocks.diag.mockReset();
+  mocks.reingest.mockReset();
 });
 
 afterEach(() => {
@@ -217,5 +232,98 @@ describe('SpawnDiagnosticsPanel', () => {
     expect(text).toContain(t('crownHunt.diagBlocker.area_inactive'));
     expect(text).toContain(t('crownHunt.diagBlocker.no_area_pois'));
     expect(text).not.toContain(t('crownHunt.diagNoBlockers'));
+  });
+
+  it('renders the Refresh POIs button', async () => {
+    mocks.diag.mockResolvedValue(makeResponse());
+    await renderPanel();
+    expect(findReingestButton()).toBeTruthy();
+  });
+
+  it('re-ingests and shows the cached-count success on click', async () => {
+    // A POI-less area → the button is offered prominently as the recovery action.
+    mocks.diag.mockResolvedValue(makeResponse({ areaPoiCount: 0 }));
+    mocks.reingest.mockResolvedValue({
+      areaId: 'a1',
+      ok: true,
+      poiCount: 5,
+      fetched: 9,
+      removedStale: 0,
+      message: null,
+    });
+    await renderPanel();
+
+    await act(async () => {
+      findReingestButton()!.click();
+    });
+
+    expect(mocks.reingest).toHaveBeenCalledWith('a1');
+    // The new count is surfaced, and the diagnostics are reloaded (a 2nd diag call).
+    expect(container.textContent).toContain(fmt('crownHunt.diagReingestSuccess', { count: 5 }));
+    expect(mocks.diag).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a loading state while the re-ingest is in flight, then success', async () => {
+    mocks.diag.mockResolvedValue(makeResponse({ areaPoiCount: 0 }));
+    let resolveReingest: (value: unknown) => void = () => {};
+    mocks.reingest.mockReturnValue(
+      new Promise((resolve) => {
+        resolveReingest = resolve;
+      }),
+    );
+    await renderPanel();
+
+    await act(async () => {
+      findReingestButton()!.click();
+    });
+    // In flight: the button shows the loading label and is disabled.
+    const loading = findReingestButton()!;
+    expect(loading.textContent).toBe(t('crownHunt.diagReingestLoading'));
+    expect(loading.disabled).toBe(true);
+
+    await act(async () => {
+      resolveReingest({
+        areaId: 'a1',
+        ok: true,
+        poiCount: 3,
+        fetched: 3,
+        removedStale: 0,
+        message: null,
+      });
+    });
+    expect(container.textContent).toContain(fmt('crownHunt.diagReingestSuccess', { count: 3 }));
+  });
+
+  it('shows an error message when the re-ingest fails (Overpass timeout)', async () => {
+    mocks.diag.mockResolvedValue(makeResponse({ areaPoiCount: 0 }));
+    mocks.reingest.mockResolvedValue({
+      areaId: 'a1',
+      ok: false,
+      poiCount: 0,
+      fetched: 0,
+      removedStale: 0,
+      message: 'backend detail',
+    });
+    await renderPanel();
+
+    await act(async () => {
+      findReingestButton()!.click();
+    });
+
+    expect(container.textContent).toContain(t('crownHunt.diagReingestFailed'));
+    // A failed re-ingest does NOT reload the diagnostics (the cache was kept).
+    expect(mocks.diag).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a generic error when the callable throws', async () => {
+    mocks.diag.mockResolvedValue(makeResponse({ areaPoiCount: 0 }));
+    mocks.reingest.mockRejectedValue(new Error('network down'));
+    await renderPanel();
+
+    await act(async () => {
+      findReingestButton()!.click();
+    });
+
+    expect(container.textContent).toContain(t('crownHunt.diagReingestError'));
   });
 });

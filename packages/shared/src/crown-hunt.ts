@@ -622,6 +622,32 @@ export interface AdminListCrownSpawnAreasResponse {
   areas: AdminCrownSpawnArea[];
 }
 
+/** Input for crownHunt.reingestSpawnAreaPois (admin). Names one marked area. */
+export interface AdminReingestSpawnAreaPoisRequest {
+  areaId: string;
+}
+
+/**
+ * Response of crownHunt.reingestSpawnAreaPois — the on-demand "Retry POIs" re-run
+ * of one area's OpenStreetMap safe-stop ingestion. A transient Overpass timeout
+ * does NOT throw: it comes back as `ok: false` with a `message` (the previous
+ * cache is kept, so `poiCount` is the KEPT count), so the admin UI can prompt a
+ * retry instead of showing an opaque error.
+ */
+export interface AdminReingestSpawnAreaPoisResponse {
+  areaId: string;
+  /** True when Overpass answered and the cache was rebuilt; false when it failed. */
+  ok: boolean;
+  /** Cached in-shape POI count after the run (the kept previous count on failure). */
+  poiCount: number;
+  /** Raw POIs Overpass returned before the in-shape filter (0 on failure). */
+  fetched: number;
+  /** Stale cached POIs removed by this run (0 on failure). */
+  removedStale: number;
+  /** A human failure detail on `ok: false`; null on success. */
+  message: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // Marked-area auto-spawn diagnostics (crownHunt.spawnDiagnostics, admin-only)
 // ---------------------------------------------------------------------------
