@@ -403,7 +403,7 @@
     "activateSuccess": "Punkt aktiverad.",
     "pauseSuccess": "Punkt pausad.",
     "deleteSuccess": "Kronan borttagen.",
-    "spawnCellsFlagNotice": "Auto-spawn är avstängd (funktionsflaggan crownHuntSpawn är av). Att godkänna en cell här spawnar ingenting förrän flaggan slås på – det är säkert att förbereda områden i förväg.",
+    "autoSpawnFlagNotice": "Auto-spawn är avstängd (funktionsflaggan crownHuntSpawn är av). Att aktivera ett område här spawnar ingenting förrän flaggan slås på – det är säkert att förbereda områden i förväg.",
     "osmAttribution": "© OpenStreetMap-bidragsgivare",
     "errorAuth": "Du är inte behörig (admininloggning eller App Check misslyckades). Logga in igen och försök på nytt.",
     "areasTab": "Områden",

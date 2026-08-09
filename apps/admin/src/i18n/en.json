@@ -403,7 +403,7 @@
     "activateSuccess": "Point activated.",
     "pauseSuccess": "Point paused.",
     "deleteSuccess": "Crown removed.",
-    "spawnCellsFlagNotice": "Auto-spawn is off (the crownHuntSpawn feature flag is disabled). Approving a cell here spawns nothing until the flag is turned on — it is safe to prepare areas in advance.",
+    "autoSpawnFlagNotice": "Auto-spawn is off (the crownHuntSpawn feature flag is disabled). Activating an area here spawns nothing until the flag is turned on — it is safe to prepare areas in advance.",
     "osmAttribution": "© OpenStreetMap contributors",
     "errorAuth": "You are not authorised (admin sign-in or App Check failed). Sign in again and retry.",
     "areasTab": "Areas",
