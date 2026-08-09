@@ -1163,21 +1163,46 @@ service cloud.firestore {
     // crownHunt-spawnCrowns, and mutated only by crownHunt.claimSpawn and the
     // crownHunt-sweepSpawns TTL sweep — all via the Admin SDK.
     //
-    // Members READ live, unexpired crowns directly (the map layer queries
+    // Members READ live crowns directly (the map layer queries
     // `cellKey in [...] && status == 'live' && expiresAt > now`, served by the
-    // composite index in firestore.indexes.json). The same two conditions are
-    // required HERE, so a claimed or expired crown disappears from every client
-    // the moment it is written — claiming sets expiresAt to the claim instant
-    // precisely so this rule hides it before the sweep gets to it.
+    // composite index in firestore.indexes.json).
+    //
+    // READ is split into `list` and `get` because the two are authorised
+    // differently, and the expiry term is only SAFE on one of them:
+    //
+    //   • LIST is authorised against the QUERY's constraints, not the docs it
+    //     returns. A term `resource.data.expiresAt > request.time` is therefore
+    //     only satisfiable if the query's expiresAt lower bound is provably
+    //     >= request.time (server time). The map query's bound is `now` captured
+    //     on the DEVICE *before* the request is sent, which is always
+    //     < request.time (latency + clock skew), so the term can NEVER be proven
+    //     and the whole query was DENIED for every non-admin — admins slipped
+    //     through `|| isAdmin()`, making auto-spawned crowns admin-only in
+    //     practice. So `list` gates on `status == 'live'` ONLY. Expiry is still
+    //     enforced without it: the client filters `expiresAt > now` itself (so an
+    //     expired crown is never rendered), the crownHunt-sweepSpawns TTL sweep
+    //     deletes expired docs (~15 min), and crownHunt.claimSpawn validates
+    //     expiry server-side and moves a claimed crown off status 'live', which
+    //     this `status == 'live'` gate hides immediately.
+    //
+    //   • GET is a single-doc read evaluated against the ACTUAL document, so
+    //     `resource.data.expiresAt > request.time` IS verifiable and is KEPT —
+    //     it stops a member fetching an expired-but-not-yet-swept crown by ID.
+    //
+    // Regression-guarded by the "crownSpawns auto-spawn member read" suite in
+    // security-rules.emulator.test.ts (list allowed, get-of-expired denied).
     //
     // NO client writes. A crown is a reward-bearing document: a client that
     // could write one could mint Kronpoäng at a coordinate of its choosing.
     // -------------------------------------------------------------------------
     match /crownSpawns/{spawnId} {
-      allow read: if (isActiveMember()
-                      && resource.data.status == 'live'
-                      && resource.data.expiresAt > request.time)
+      allow list: if (isActiveMember()
+                      && resource.data.status == 'live')
                   || isAdmin();
+      allow get: if (isActiveMember()
+                     && resource.data.status == 'live'
+                     && resource.data.expiresAt > request.time)
+                 || isAdmin();
       // No client writes.
     }
 

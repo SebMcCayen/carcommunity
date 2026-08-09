@@ -30,6 +30,7 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -40,6 +41,12 @@ import { resolve } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 const FIREBASE_DIR = resolve(__dirname, '../../../firebase');
+
+// The Firestore instance a rules-unit-testing context hands back (compat type),
+// so a helper can take one without pulling in the modular `Firestore` type.
+type RulesFirestore = ReturnType<
+  ReturnType<RulesTestEnvironment['unauthenticatedContext']>['firestore']
+>;
 
 let testEnv: RulesTestEnvironment;
 
@@ -484,6 +491,159 @@ describe('Firestore – Kronjakt (Phase 9h)', () => {
         result: 'awarded',
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Firestore: crownSpawns – AUTO-SPAWNED crowns, member read (regression)
+//
+// The map layer reads live auto-spawned crowns with the EXACT query in
+// FirebaseCrownSpawnRepository.listNearby:
+//   where cellKey in [...] , where status == 'live', where expiresAt > DEVICE_now
+// DEVICE_now is captured on the DEVICE *before* the request is issued, so it
+// is always a timestamp in the PAST relative to the server's request.time
+// (network latency + any clock skew guarantee DEVICE_now < request.time).
+//
+// A `list` rule is authorised against the QUERY's constraints, not the docs it
+// returns (see the billboards test above). A rule term `resource.data.expiresAt
+// > request.time` is therefore only satisfiable if the query's lower bound on
+// expiresAt is provably >= request.time. The client's bound is DEVICE_now,
+// which is < request.time, so the term can NOT be proven and the whole query
+// is DENIED for non-admins — while admins slip through the `|| isAdmin()`
+// bypass. Net effect in production: auto-spawned crowns are ADMIN-ONLY.
+// ---------------------------------------------------------------------------
+
+describe('Firestore – crownSpawns auto-spawn member read', () => {
+  const CELL = '5933_1807';
+  const LIVE = 'cs-spawn-live';
+  const CLAIMED = 'cs-spawn-claimed';
+  const EXPIRED = 'cs-spawn-expired';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      // Clearly live and unexpired: hours in the future.
+      const expiresAt = Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000);
+      await setDoc(doc(firestore, 'crownSpawns', LIVE), {
+        cellKey: CELL,
+        status: 'live',
+        expiresAt,
+        latitude: 59.33,
+        longitude: 18.07,
+        rewardPoints: 25,
+      });
+      // A crown that is NOT live (claimed) but still in-window — the status
+      // gate, independent of the time clause, must keep hiding it.
+      await setDoc(doc(firestore, 'crownSpawns', CLAIMED), {
+        cellKey: CELL,
+        status: 'claimed',
+        expiresAt,
+        latitude: 59.34,
+        longitude: 18.08,
+        rewardPoints: 25,
+      });
+      // Still status 'live' but EXPIRED — the sweep has not deleted it yet.
+      // The `get` rule keeps a server-time expiry check precisely so a member
+      // cannot fetch this stale crown by ID.
+      await setDoc(doc(firestore, 'crownSpawns', EXPIRED), {
+        cellKey: CELL,
+        status: 'live',
+        expiresAt: Timestamp.fromMillis(Date.now() - 60 * 60 * 1000),
+        latitude: 59.35,
+        longitude: 18.09,
+        rewardPoints: 25,
+      });
+    });
+  });
+
+  // The exact client query. DEVICE_now is deliberately a couple of seconds in
+  // the PAST to deterministically mirror "captured before the request".
+  function clientLiveQuery(fs: RulesFirestore) {
+    const deviceNow = Timestamp.fromMillis(Date.now() - 2000);
+    return query(
+      collection(fs, 'crownSpawns'),
+      where('cellKey', 'in', [CELL]),
+      where('status', '==', 'live'),
+      where('expiresAt', '>', deviceNow),
+    );
+  }
+
+  it('a non-admin member CAN read live auto-spawned crowns with the client query', async () => {
+    // Negative control FIRST: with rules OFF the very same query is well-formed
+    // and returns exactly the one live crown, so the assertion below is a rules
+    // outcome and not a broken query.
+    await testEnv.withSecurityRulesDisabled(async (bypass) => {
+      const snap = await getDocs(clientLiveQuery(bypass.firestore()));
+      expect(snap.size).toBe(1);
+    });
+
+    // The regression: a real signed-in member issuing the production query with
+    // a device-captured (past) `now`. This is the read that was ADMIN-ONLY
+    // before the fix because of the `expiresAt > request.time` rule term.
+    const memberFs = testEnv.authenticatedContext('cs-member', { activeMember: true }).firestore();
+    await assertSucceeds(getDocs(clientLiveQuery(memberFs)));
+  });
+
+  it('an admin can also read live auto-spawned crowns (bypass preserved)', async () => {
+    const adminFs = testEnv.authenticatedContext('cs-admin', { admin: true }).firestore();
+    await assertSucceeds(getDocs(clientLiveQuery(adminFs)));
+  });
+
+  it('status gating survives: a member cannot read a non-live spawn', async () => {
+    // Same shape as the client query but asking for a claimed crown — the
+    // status term (`resource.data.status == 'live'`) must still deny it, so
+    // dropping the time clause did not open non-live crowns.
+    const memberFs = testEnv.authenticatedContext('cs-member-2', { activeMember: true }).firestore();
+    const deviceNow = Timestamp.fromMillis(Date.now() - 2000);
+    await assertFails(
+      getDocs(
+        query(
+          collection(memberFs, 'crownSpawns'),
+          where('cellKey', 'in', [CELL]),
+          where('status', '==', 'claimed'),
+          where('expiresAt', '>', deviceNow),
+        ),
+      ),
+    );
+    // A direct get on the claimed crown is denied too (status gate on `get`).
+    await assertFails(getDoc(doc(memberFs, 'crownSpawns', CLAIMED)));
+  });
+
+  it('get-side expiry survives: a member can get a live unexpired crown but NOT an expired one', async () => {
+    // The `get` rule (unlike `list`) keeps `expiresAt > request.time`, because a
+    // single-doc read is evaluated against the ACTUAL document so the server-time
+    // check is verifiable. This stops a member fetching an expired-but-unswept
+    // crown by ID, while the live one is still gettable.
+    const memberFs = testEnv.authenticatedContext('cs-member-3', { activeMember: true }).firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'crownSpawns', LIVE)));
+    await assertFails(getDoc(doc(memberFs, 'crownSpawns', EXPIRED)));
+    // Admin bypass still reaches the expired crown (the admin portal sees all).
+    const adminFs = testEnv.authenticatedContext('cs-admin-2', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'crownSpawns', EXPIRED)));
+  });
+
+  it('an unauthenticated client cannot read crownSpawns at all (get AND list)', async () => {
+    const anonFs = testEnv.unauthenticatedContext().firestore();
+    // Cover BOTH facets of the split read: a single-doc get…
+    await assertFails(getDoc(doc(anonFs, 'crownSpawns', LIVE)));
+    // …and a list, so a future rule change can't silently reopen `list` to
+    // anonymous clients without this suite catching it.
+    await assertFails(
+      getDocs(query(collection(anonFs, 'crownSpawns'), where('status', '==', 'live'))),
+    );
+  });
+
+  it('no client may write a crownSpawns document — not even an admin', async () => {
+    const adminFs = testEnv.authenticatedContext('cs-admin-w', { admin: true }).firestore();
+    await assertFails(
+      setDoc(doc(adminFs, 'crownSpawns', 'forged'), {
+        cellKey: CELL,
+        status: 'live',
+        expiresAt: Timestamp.fromMillis(Date.now() + 3_600_000),
+        rewardPoints: 999,
+      }),
+    );
+    await assertFails(updateDoc(doc(adminFs, 'crownSpawns', LIVE), { rewardPoints: 999 }));
   });
 });
 
