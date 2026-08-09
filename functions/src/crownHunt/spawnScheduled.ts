@@ -1,12 +1,18 @@
 /**
  * Kronjakt auto-spawn — the scheduled REPLENISHER and SWEEPER.
  *
- * `crownHunt-spawnCrowns` (every 10 min): tops each ADMIN-APPROVED grid cell up
- * toward its per-cell target, respecting the minimum separation between live
- * crowns. The target is BASELINE + activity-derived on the POI-anchored
- * marked-area path (so an approved area populates its safe stops even at zero
- * recent activity) and purely activity-derived on the random-placement
- * single-cell path (which gets no baseline — see below).
+ * `crownHunt-spawnCrowns` (every 10 min): tops each grid cell of an ADMIN-DRAWN
+ * marked area up toward its per-cell target, respecting the minimum separation
+ * between live crowns. The target is BASELINE + activity-derived (so an approved
+ * area populates its safe stops even at zero recent activity), and every crown
+ * is placed AT a cached safe-stop POI inside the area.
+ *
+ * NOTE: the former single-cell random-placement path (`runCrownSpawnPass` over
+ * the `crownSpawnCells` allow-list) has been REMOVED. Only the marked-area
+ * (Områden) path remains. The `setSpawnCellApproval` callable and the
+ * `crownSpawnCells` collection are intentionally left in place, dormant, so
+ * removing a live-deployed function does not create an orphan that aborts the
+ * non-interactive deploy — a coordinated follow-up can delete them.
  *
  * `crownHunt-sweepSpawns` (every 15 min): deletes crowns whose `expiresAt` has
  * passed (including ones marked claimed, whose expiry is set to the claim
@@ -20,25 +26,16 @@
  *  1. the `crownHuntSpawn` feature flag (contract default OFF — nothing here
  *     runs in production until it is deliberately switched on);
  *  2. the ADMIN ALLOW-LIST — the candidate set is always something an admin
- *     approved, never the set of cells that happen to have activity. This file
- *     runs BOTH approval paths in one invocation, each with its OWN allow-list
- *     query:
- *       - the single-cell path (`runCrownSpawnPass`) scans `crownSpawnCells`
- *         where `approved == true` (spawnCells.ts) and places crowns at RANDOM
- *         in-cell coordinates — activity-gated, NO baseline;
- *       - the marked-area path (`runCrownAreaSpawnPass`) scans `crownSpawnAreas`
- *         where `active == true` (with `safeAreaConfirmed` re-checked
- *         defensively per area, spawnAreas.ts) and places crowns AT cached
- *         safe-stop POIs — targeting BASELINE + activity.
- *     A busy cell or area nobody approved is invisible to this function on either
- *     path, however the activity data looks;
- *  3. WITHIN an approved cell/area, what narrows WHERE a crown lands: the
- *     slow-sighting activity filter on both paths, plus POI ANCHORING on the
- *     marked-area path. There, every crown — baseline or activity-derived — is
- *     placed AT a cached safe-stop POI, so a cell with no POI spawns nothing
- *     however it is targeted; on the random single-cell path the activity floor
- *     still zeroes the target (it carries no baseline), so a quiet approved cell
- *     spawns nothing there.
+ *     approved, never the set of cells that happen to have activity. The
+ *     marked-area path (`runCrownAreaSpawnPass`) scans `crownSpawnAreas` where
+ *     `active == true` (with `safeAreaConfirmed` re-checked defensively per
+ *     area, spawnAreas.ts) and places crowns AT cached safe-stop POIs — targeting
+ *     BASELINE + activity. An area nobody approved is invisible to this function,
+ *     however the activity data looks;
+ *  3. WITHIN an approved area, what narrows WHERE a crown lands: the
+ *     slow-sighting activity filter plus POI ANCHORING. Every crown — baseline
+ *     or activity-derived — is placed AT a cached safe-stop POI, so a cell with
+ *     no POI spawns nothing however it is targeted.
  * Each gate is independently sufficient to produce zero spawns. That is
  * deliberate: the failure mode this engine has to be defended against is
  * inviting a member to stop somewhere dangerous, and no single condition should
@@ -47,16 +44,16 @@
  * ## Bounding
  * Every loop in here is bounded twice: by a per-run CELL budget and by a
  * per-run SPAWN budget, plus a per-cell attempt budget inside the rejection
- * sampler. Approved cells are visited LEAST-RECENTLY-SERVED first, so when the
+ * sampler. Approved areas are visited LEAST-RECENTLY-SERVED first, so when the
  * approved list outgrows one run's budget the remainder is served on the next
- * pass rather than starved — a cell that misses a round is at most 10 minutes
+ * pass rather than starved — an area that misses a round is at most 10 minutes
  * below target.
  *
  * ## Cost per run
- * One allow-list query, then per approved cell: one bounded `recentUsers` read
- * and one 9-cell neighbourhood read, and only for cells that are actually short
- * of target, a handful of document creates. Cells already at target cost two
- * reads and one cursor write.
+ * One allow-list query, then per grid cell of an approved area: one bounded
+ * `recentUsers` read and one 9-cell neighbourhood read, and only for cells that
+ * are actually short of target, a bounded POI read plus a handful of document
+ * creates. Cells already at target cost two reads and one cursor write.
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
@@ -74,7 +71,6 @@ import {
   crownExpiresAt,
   neighbourCrownCells,
   pickCrownRarity,
-  sampleCrownPosition,
   targetCrownCount,
   type CrownPosition,
 } from './crown-spawn-core';
@@ -91,20 +87,6 @@ import { withServerErrorReporting } from '../errors/serverErrors';
 // ---------------------------------------------------------------------------
 // Bounds
 // ---------------------------------------------------------------------------
-
-/**
- * Approved cells examined per run, least-recently-served first.
- *
- * A cell only becomes a candidate by being on the admin allow-list, so this is
- * a bound on HUMAN-APPROVED areas, not on map area or on how busy the app gets.
- * 50 per 10-minute run serves 300 approved cells an hour; the round-robin
- * ordering means an allow-list larger than that degrades into a slower refresh
- * cycle rather than a permanently ignored tail.
- */
-const MAX_CELLS_PER_RUN = 50;
-
-/** Crowns created per run, across all cells — the hard write budget. */
-const MAX_SPAWNS_PER_RUN = 100;
 
 /**
  * Distinct-user documents read per cell when computing `A`.
@@ -133,240 +115,6 @@ const WRITE_BATCH_SIZE = 400;
 
 /** Quiet activity cells reaped per sweep (recursiveDelete, so kept small). */
 const MAX_ACTIVITY_CELLS_REAPED = 100;
-
-export interface CrownSpawnLimits {
-  maxCells: number;
-  maxSpawns: number;
-}
-
-export interface CrownSpawnResult {
-  /** Approved cells examined this run. */
-  cellsScanned: number;
-  /** Approved cells whose activity was too low to spawn anything (`A < 1`). */
-  cellsBelowActivityFloor: number;
-  /** Crowns created. */
-  spawned: number;
-  /**
-   * Times the rejection sampler ran out of attempts. Reported rather than kept
-   * internal because it is the only way to see the separation rule biting: a
-   * run that spawns fewer than the deficit is otherwise indistinguishable from
-   * a run with no deficit.
-   */
-  separationRejections: number;
-  /**
-   * Cells whose crowns were NOT written because the cell was revoked after this
-   * pass read the allow-list. Zero in normal operation; a non-zero value is the
-   * mid-pass revocation guard doing its job, and is worth seeing in the logs.
-   */
-  cellsRevokedMidPass: number;
-  /**
-   * Approved cells skipped because their document ID is not a parseable cell
-   * key. Zero in normal operation; a non-zero value means a malformed document
-   * is sitting in `crownSpawnCells` and wants cleaning up.
-   */
-  cellsSkippedInvalidKey: number;
-  /** True when the run stopped on {@link MAX_SPAWNS_PER_RUN}. */
-  capped: boolean;
-  /** True when the feature flag was off and nothing ran. */
-  skipped: boolean;
-}
-
-// ---------------------------------------------------------------------------
-// Replenisher
-// ---------------------------------------------------------------------------
-
-/**
- * Runs one replenish pass against `now`.
- *
- * `limits` and `rng` exist so tests can drive the bounds at a seedable scale;
- * the scheduled entry point passes neither, so production always runs on the
- * constants above with a clock-seeded generator.
- */
-export async function runCrownSpawnPass(
-  now: Date,
-  limits: CrownSpawnLimits = { maxCells: MAX_CELLS_PER_RUN, maxSpawns: MAX_SPAWNS_PER_RUN },
-  rng: () => number = Math.random,
-): Promise<CrownSpawnResult> {
-  const result: CrownSpawnResult = {
-    cellsScanned: 0,
-    cellsBelowActivityFloor: 0,
-    spawned: 0,
-    separationRejections: 0,
-    cellsRevokedMidPass: 0,
-    cellsSkippedInvalidKey: 0,
-    capped: false,
-    skipped: false,
-  };
-
-  if (!(await readFeatureFlag(CROWN_SPAWN_FLAG_KEY))) {
-    result.skipped = true;
-    return result;
-  }
-
-  const nowTs = Timestamp.fromDate(now);
-  const activityCutoff = Timestamp.fromMillis(now.getTime() - ACTIVITY_WINDOW_MS);
-
-  // THE ALLOW-LIST IS THE CANDIDATE SET. Not "active cells, filtered by
-  // approval" — starting from the approved list makes it structurally
-  // impossible for an unapproved cell to be considered at all, however the
-  // activity data looks. Least-recently-served first, so a long allow-list is
-  // served round-robin instead of the tail starving. Cells that have never been
-  // served carry the epoch sentinel (SPAWN_CELL_NEVER_SERVED_AT_MS) and so sort
-  // ahead of every served cell — a freshly approved area is picked up on the
-  // next pass rather than after a full cycle.
-  const cells = await db
-    .collection('crownSpawnCells')
-    .where('approved', '==', true)
-    .orderBy('lastSpawnPassAt', 'asc')
-    .limit(Math.max(1, limits.maxCells))
-    .get();
-
-  for (const cellDoc of cells.docs) {
-    if (result.spawned >= limits.maxSpawns) {
-      result.capped = true;
-      break;
-    }
-    const cellKey = cellDoc.id;
-    const approvedCellBy = (cellDoc.data().approvedByUserId as string | undefined) ?? null;
-    result.cellsScanned += 1;
-
-    // Advance the round-robin cursor for EVERY cell we look at, including ones
-    // that end up spawning nothing: the cursor tracks attention, not output. If
-    // it only moved on a successful spawn, a permanently quiet approved cell
-    // would sit at the head of the queue forever and consume a slot every run.
-    await cellDoc.ref.update({ lastSpawnPassAt: Timestamp.fromDate(now) });
-
-    // A cell key is a DOCUMENT ID, so it is whatever was written there. The
-    // collection is backend-only and `setSpawnCellApproval` validates the key,
-    // but a console edit or a hand-written migration can still leave one that
-    // does not parse — and `neighbourCrownCells` returns [] for those. Firestore
-    // REJECTS an `in` filter with an empty array, so without this guard a single
-    // malformed document would throw and take the WHOLE pass down with it,
-    // every other approved cell included. Skip it loudly instead; the cursor is
-    // already advanced, so a bad cell cannot block the round-robin either.
-    const neighbours = neighbourCrownCells(cellKey);
-    if (neighbours.length === 0) {
-      result.cellsSkippedInvalidKey += 1;
-      logger.warn('Crown spawn skipped: cell key does not parse', { cellKey });
-      continue;
-    }
-
-    // A(cell): one decayed weight per DISTINCT user, distinctness guaranteed by
-    // the document ID (a cell-scoped hash), never by counting rows.
-    const recentUsers = await db
-      .collection('crownCellActivity')
-      .doc(cellKey)
-      .collection('recentUsers')
-      .where('lastSeenAt', '>=', activityCutoff)
-      .orderBy('lastSeenAt', 'desc')
-      .limit(MAX_ACTIVITY_USERS_PER_CELL)
-      .select('lastSeenAt')
-      .get();
-
-    const lastSeenValues = recentUsers.docs
-      .map((doc) => (doc.data().lastSeenAt as Timestamp | undefined)?.toMillis())
-      .filter((value): value is number => typeof value === 'number');
-
-    // NO BASELINE on this path. A hand-approved single cell places crowns at
-    // RANDOM in-cell coordinates (sampleCrownPosition below), and an
-    // unconditional crown at a random point would invite a stop somewhere no
-    // human vetted. The baseline lives only on the POI-anchored marked-area pass
-    // (runCrownAreaSpawnPass), so here the target stays purely activity-derived.
-    const target = targetCrownCount(activityScore(lastSeenValues, now.getTime()));
-    if (target === 0) {
-      // A < 1 — nobody has been here recently enough. Never spawn.
-      result.cellsBelowActivityFloor += 1;
-      continue;
-    }
-
-    // Live crowns across the 3x3 neighbourhood: the count INSIDE this cell sets
-    // the deficit, while every position in the neighbourhood constrains the
-    // separation check (a crown 20 m over the boundary is still a clump).
-    const neighbourhood = await db
-      .collection('crownSpawns')
-      .where('cellKey', 'in', neighbours)
-      .where('status', '==', 'live')
-      .where('expiresAt', '>', nowTs)
-      .limit(MAX_NEIGHBOURHOOD_CROWNS)
-      .get();
-
-    const occupied: CrownPosition[] = [];
-    let liveInCell = 0;
-    for (const doc of neighbourhood.docs) {
-      const data = doc.data();
-      if (typeof data.latitude === 'number' && typeof data.longitude === 'number') {
-        occupied.push({ latitude: data.latitude, longitude: data.longitude });
-      }
-      if (data.cellKey === cellKey) liveInCell += 1;
-    }
-
-    const deficit = Math.min(target - liveInCell, limits.maxSpawns - result.spawned);
-    if (deficit <= 0) continue;
-
-    // Sampled OUTSIDE the transaction below, and against pre-generated document
-    // refs, so that a transaction retry re-commits exactly these crowns instead
-    // of resampling new positions and new IDs on each attempt.
-    const pending: { ref: FirebaseFirestore.DocumentReference; data: DocumentData }[] = [];
-    for (let i = 0; i < deficit; i += 1) {
-      const position = sampleCrownPosition(cellKey, occupied, rng);
-      if (!position) {
-        // Geometrically saturated for now. Leave the cell short rather than
-        // loosening the separation rule; the next run tries again.
-        result.separationRejections += 1;
-        break;
-      }
-      // Newly placed crowns immediately constrain the next sample in this loop,
-      // so a single run cannot create its own clump.
-      occupied.push(position);
-
-      const rarity = pickCrownRarity(rng());
-      pending.push({
-        ref: db.collection('crownSpawns').doc(),
-        data: {
-          ...buildCrownSpawnFields({ cellKey, position, rarity, approvedCellBy }),
-          createdAt: FieldValue.serverTimestamp(),
-          expiresAt: Timestamp.fromDate(crownExpiresAt(rarity, now)),
-          claimedAt: null,
-        },
-      });
-    }
-
-    if (pending.length > 0) {
-      // THE APPROVAL IS RE-CHECKED AT WRITE TIME, TRANSACTIONALLY.
-      //
-      // The approved-cell list was read once at the top of this pass, and a
-      // pass may run for minutes. `setSpawnCellApproval` revokes by flipping
-      // `approved` and then deleting the cell's live crowns — so a revocation
-      // landing mid-pass would drain a cell this loop is still working on, and
-      // the plain batch that used to be here would then commit fresh crowns
-      // into an area an admin had just declared unsafe. Nothing downstream
-      // removes those: the sweeper only takes expired crowns, so they would
-      // stand for their full TTL, up to 48 h for a legendary.
-      //
-      // Reading the cell document inside the transaction closes the window
-      // rather than narrowing it. Firestore aborts and retries a transaction
-      // whose reads were written by someone else before it committed, so the
-      // two possible orderings are both safe: commit-before-revocation means
-      // the revocation's drain deletes these crowns, and revocation-first means
-      // the retry re-reads `approved: false` and writes nothing at all.
-      const committed = await db.runTransaction(async (tx) => {
-        const fresh = await tx.get(cellDoc.ref);
-        if (fresh.get('approved') !== true) return 0;
-        for (const crown of pending) tx.set(crown.ref, crown.data);
-        return pending.length;
-      });
-
-      if (committed === 0) {
-        result.cellsRevokedMidPass += 1;
-        logger.warn('Crown spawn skipped: cell revoked mid-pass', { cellKey });
-      }
-      result.spawned += committed;
-    }
-  }
-
-  logger.info('Crown spawn pass complete', { ...result });
-  return result;
-}
 
 // ---------------------------------------------------------------------------
 // Marked-area replenisher
@@ -451,16 +199,14 @@ export interface CrownAreaSpawnResult {
 /**
  * Runs one MARKED-AREA replenish pass against `now`.
  *
- * The parallel of {@link runCrownSpawnPass} for admin-DRAWN areas
- * (`crownSpawnAreas`) rather than hand-approved single cells (`crownSpawnCells`).
- * It reuses every property of the single-cell engine unchanged — the per-cell
- * activity score `A`, `targetCrownCount`, the 3×3 neighbourhood separation, the
- * rarity table and TTL — with two differences. First, its per-cell target adds a
+ * The auto-spawn engine for admin-DRAWN areas (`crownSpawnAreas`) — the sole
+ * spawn path since the hand-approved single-cell path was removed. Per grid
+ * cell it uses the per-cell activity score `A`, `targetCrownCount`, the 3×3
+ * neighbourhood separation, the rarity table and TTL. Its per-cell target adds a
  * BASELINE ({@link CROWN_BASELINE_TARGET_PER_CELL}) on top of the activity-derived
  * amount, so an approved area receives a few crowns even at `A = 0` (a low-usage
- * area with no recent traffic still populates), clamped to the same per-cell cap.
- * Second, its PLACEMENT is SAFE-STOP-ANCHORED rather than random: instead of
- * drawing a uniform-random in-shape point, a crown is placed
+ * area with no recent traffic still populates), clamped to the per-cell cap.
+ * Its PLACEMENT is SAFE-STOP-ANCHORED: a crown is placed
  * AT a cached OpenStreetMap safe-stop POI (a parking lot, fuel station, or
  * charging station) that lies inside the area — optionally jittered ≤ ~5 m — via
  * {@link samplePoiPlacement}. The POIs are ingested per area into
@@ -469,20 +215,17 @@ export interface CrownAreaSpawnResult {
  *
  * SAFETY-FIRST: an area with NO cached POIs spawns NOTHING (logged), rather than
  * falling back to random placement — the entire point is that crowns appear only
- * at real safe stops. Everything else is preserved: the two engines share the
- * `crownSpawns` collection and its neighbourhood read, so 150 m separation holds
- * ACROSS both sources (and stops two crowns stacking on one POI), and a cell
- * covered by both a manual approval and an area cannot exceed its per-cell target.
+ * at real safe stops. 150 m separation is enforced via the shared `crownSpawns`
+ * neighbourhood read (which also stops two crowns stacking on one POI).
  *
- * The gates are identical in spirit to the single-cell path: the `crownHuntSpawn`
- * flag (this returns `skipped` while off), the admin allow-list (here the
- * candidate set IS `crownSpawnAreas where active == true`, and `active` can only
- * be true while `safeAreaConfirmed` is — enforced by the CRUD callables and
- * re-checked defensively below), and — for the activity BONUS only — the `A < 1`
- * floor plus the slow-sighting filter. The baseline is unconditional, so a cell
- * below the activity floor is no longer skipped here; it still receives the
- * baseline crowns, provided (as always) it has a cached safe-stop POI to anchor
- * them to.
+ * The gates: the `crownHuntSpawn` flag (this returns `skipped` while off), the
+ * admin allow-list (the candidate set IS `crownSpawnAreas where active == true`,
+ * and `active` can only be true while `safeAreaConfirmed` is — enforced by the
+ * CRUD callables and re-checked defensively below), and — for the activity BONUS
+ * only — the `A < 1` floor plus the slow-sighting filter. The baseline is
+ * unconditional, so a cell below the activity floor is not skipped; it still
+ * receives the baseline crowns, provided (as always) it has a cached safe-stop
+ * POI to anchor them to.
  */
 /**
  * Advances an area's round-robin cursor, tolerating a concurrent delete.
@@ -903,7 +646,7 @@ export async function runCrownSpawnCleanup(
 /**
  * Serialization for both schedulers.
  *
- * `runCrownSpawnPass` reads a cell's live neighbourhood, then writes into it.
+ * `runCrownAreaSpawnPass` reads a cell's live neighbourhood, then writes into it.
  * Two passes running at the same time would both read the pre-write state, so
  * each would place crowns the other could not see — and the >= 150 m separation
  * rule, which is a stated property of the feature rather than a nice-to-have,
@@ -968,14 +711,12 @@ const SPAWN_SCHEDULE_CRON = `*/${SPAWN_RUN_INTERVAL_MINUTES} * * * *`;
 export const spawnCrowns = onSchedule(
   { ...SPAWN_SCHEDULE_OPTS, schedule: SPAWN_SCHEDULE_CRON },
   withServerErrorReporting('crownHunt.spawnCrowns', async () => {
-    // Both candidate sources, in one serialized invocation. The single-cell pass
-    // runs first, then the marked-area pass; because the area pass reads the live
-    // neighbourhood fresh per cell, it sees the crowns the cell pass just placed,
-    // so the 150 m separation rule holds across BOTH sources within the tick.
-    // maxInstances:1 + concurrency:1 (SPAWN_SCHEDULE_OPTS) keep the two passes
-    // from ever overlapping another invocation's.
+    // The MARKED-AREA (Områden) pass is the sole candidate source. The former
+    // single-cell random-placement pass (runCrownSpawnPass over crownSpawnCells)
+    // was removed; only admin-drawn areas anchored to cached safe-stop POIs
+    // spawn crowns now. maxInstances:1 + concurrency:1 (SPAWN_SCHEDULE_OPTS) keep
+    // this pass from ever overlapping another invocation's.
     const now = new Date();
-    await runCrownSpawnPass(now);
     await runCrownAreaSpawnPass(now);
   }),
 );

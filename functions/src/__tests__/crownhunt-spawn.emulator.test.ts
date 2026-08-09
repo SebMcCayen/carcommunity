@@ -1,11 +1,15 @@
 /**
  * Kronjakt AUTO-SPAWN emulator integration tests.
  *
- * Exercises the whole spawn engine end to end: the admin cell allow-list, the
- * scheduled replenisher and sweeper (driven directly against an injected `now`,
- * like incidents/scheduled.ts), and the `crownHunt.claimSpawn` callable —
- * including the stationary rule, the once-globally race, and the atomic
- * Kronpoäng award.
+ * Exercises the retained spawn-engine surface: the dormant `setSpawnCellApproval`
+ * allow-list callable (approve/revoke/re-approve + the revocation drain of live
+ * crowns), the scheduled sweeper (driven directly against an injected `now`, like
+ * incidents/scheduled.ts), and the `crownHunt.claimSpawn` callable — including the
+ * stationary rule, the once-globally race, and the atomic Kronpoäng award.
+ *
+ * The single-cell RANDOM-placement replenish pass (`runCrownSpawnPass`) was
+ * removed; the marked-area (Områden) pass is covered by
+ * crownhunt-area-spawn.emulator.test.ts.
  *
  * CI ONLY. Requires the Firebase Emulator Suite (auth + functions + firestore +
  * database), which needs a JVM. Run via:
@@ -35,16 +39,12 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runCrownSpawnCleanup, runCrownSpawnPass } from '../crownHunt/spawnScheduled';
+import { runCrownSpawnCleanup } from '../crownHunt/spawnScheduled';
 import {
   COLLECT_RADIUS_METERS,
-  MIN_CROWN_SEPARATION_METERS,
-  SPAWN_CELL_NEVER_SERVED_AT_MS,
   crownActivityUserHash,
   crownCellKey,
-  createSeededRng,
 } from '../crownHunt/crown-spawn-core';
-import { haversineDistanceMeters } from '../crownHunt/crown-hunt-geo';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -118,9 +118,6 @@ const CELL_LAT = 57.4874;
 const CELL_LON = 12.0757;
 const CELL_KEY = crownCellKey(CELL_LAT, CELL_LON);
 
-// A second, non-adjacent cell used only by the round-robin ordering test.
-const FRESH_CELL_KEY = crownCellKey(57.6012, 12.2013);
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 async function setSpawnFlag(enabled: boolean): Promise<void> {
@@ -149,10 +146,6 @@ async function clearSpawns(): Promise<void> {
   const batch = adminDb.batch();
   for (const doc of snap.docs) batch.delete(doc.ref);
   await batch.commit();
-}
-
-async function clearActivity(cellKey: string): Promise<void> {
-  await adminDb.recursiveDelete(adminDb.collection('crownCellActivity').doc(cellKey));
 }
 
 /** Places one live crown directly, so claim tests do not depend on sampling. */
@@ -285,55 +278,6 @@ describe('spawn cell allow-list', () => {
     expect(audit.empty).toBe(false);
   });
 
-  it('seeds a never-served cell at the FRONT of the round-robin, not the back', async () => {
-    await signInAs(adminUser);
-
-    // Self-contained: approve the base cell here rather than relying on the
-    // previous test, then serve it so it carries a recent cursor to compete
-    // against.
-    await call('crownHunt-setSpawnCellApproval', {
-      approved: true,
-      cellKey: CELL_KEY,
-      safeAreaConfirmed: true,
-      approvalNote: 'Trygg parkeringsficka, god sikt.',
-    });
-    await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
-    const servedAt = (await adminDb.collection('crownSpawnCells').doc(CELL_KEY).get()).data()!
-      .lastSpawnPassAt as Timestamp;
-    expect(servedAt.toMillis()).toBeGreaterThan(0);
-
-    await call('crownHunt-setSpawnCellApproval', {
-      approved: true,
-      cellKey: FRESH_CELL_KEY,
-      safeAreaConfirmed: true,
-      approvalNote: 'Ny godkänd yta, aldrig betjänad.',
-    });
-
-    // A cell the spawner has never looked at must SAY so: epoch, not "now".
-    // Seeding "now" would misstate the field's meaning and sort the new cell
-    // behind every already-served one.
-    const fresh = (await adminDb.collection('crownSpawnCells').doc(FRESH_CELL_KEY).get()).data()!;
-    expect((fresh.lastSpawnPassAt as Timestamp).toMillis()).toBe(SPAWN_CELL_NEVER_SERVED_AT_MS);
-
-    // With room for exactly one cell in the pass, the never-served one wins.
-    await runCrownSpawnPass(new Date(), { maxCells: 1, maxSpawns: 50 });
-    const freshAfter = (
-      await adminDb.collection('crownSpawnCells').doc(FRESH_CELL_KEY).get()
-    ).data()!.lastSpawnPassAt as Timestamp;
-    const oldAfter = (await adminDb.collection('crownSpawnCells').doc(CELL_KEY).get()).data()!
-      .lastSpawnPassAt as Timestamp;
-    expect(freshAfter.toMillis()).toBeGreaterThan(SPAWN_CELL_NEVER_SERVED_AT_MS);
-    expect(oldAfter.toMillis()).toBe(servedAt.toMillis());
-
-    // Leave the allow-list as the rest of the suite expects to find it.
-    await call('crownHunt-setSpawnCellApproval', {
-      approved: false,
-      cellKey: FRESH_CELL_KEY,
-      reason: 'Testupprensning.',
-    });
-    await clearSpawns();
-  });
-
   it('clears the revocation reason when a cell is approved again', async () => {
     await signInAs(adminUser);
     const cellKey = crownCellKey(57.7031, 12.3049);
@@ -374,144 +318,6 @@ describe('spawn cell allow-list', () => {
       cellKey,
       reason: 'Testupprensning.',
     });
-  });
-});
-
-describe('scheduled spawner', () => {
-  it('spawns nothing while the feature flag is off', async () => {
-    await clearSpawns();
-    await setSpawnFlag(false);
-    await seedActivity(CELL_KEY, 6, new Date());
-    const result = await runCrownSpawnPass(new Date());
-    expect(result.skipped).toBe(true);
-    expect(result.spawned).toBe(0);
-    await setSpawnFlag(true);
-  });
-
-  it('spawns nothing in a cell nobody has approved, however busy it is', async () => {
-    await clearSpawns();
-    const unapproved = crownCellKey(58.1, 13.1);
-    await seedActivity(unapproved, 30, new Date());
-    const result = await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
-    const spawnsThere = await adminDb
-      .collection('crownSpawns')
-      .where('cellKey', '==', unapproved)
-      .get();
-    expect(spawnsThere.empty).toBe(true);
-    expect(result.spawned).toBeGreaterThanOrEqual(0);
-    await clearActivity(unapproved);
-  });
-
-  it('survives a malformed approved-cell document instead of aborting the pass', async () => {
-    await clearSpawns();
-    await clearActivity(CELL_KEY);
-    await signInAs(adminUser);
-    await call('crownHunt-setSpawnCellApproval', {
-      approved: true,
-      cellKey: CELL_KEY,
-      safeAreaConfirmed: true,
-      approvalNote: 'Godkänd, ska fortfarande spawna.',
-    });
-    await seedActivity(CELL_KEY, 12, new Date());
-
-    // Written directly, because the callable would (correctly) refuse this key.
-    // A cell key is a document ID, so a console edit or a migration can leave
-    // one that does not parse. neighbourCrownCells returns [] for it and
-    // Firestore rejects an `in` filter with an empty array — so the whole pass
-    // used to throw, taking every other approved cell down with one bad row.
-    const badKeys = ['not-a-cell-key', '99999_0'];
-    for (const bad of badKeys) {
-      await adminDb
-        .collection('crownSpawnCells')
-        .doc(bad)
-        .set({
-          cellKey: bad,
-          approved: true,
-          approvedByUserId: adminUser.uid,
-          lastSpawnPassAt: Timestamp.fromMillis(0),
-        });
-    }
-
-    try {
-      const result = await runCrownSpawnPass(
-        new Date(),
-        { maxCells: 50, maxSpawns: 50 },
-        createSeededRng(11),
-      );
-      expect(result.cellsSkippedInvalidKey).toBe(badKeys.length);
-      // And the healthy cell was still served in the same pass.
-      expect(result.spawned).toBeGreaterThan(0);
-      const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
-      expect(spawns.empty).toBe(false);
-    } finally {
-      for (const bad of badKeys) {
-        await adminDb.collection('crownSpawnCells').doc(bad).delete();
-      }
-      await clearSpawns();
-      await clearActivity(CELL_KEY);
-    }
-  });
-
-  it('spawns nothing in an approved cell with no recent activity (A < 1)', async () => {
-    await clearSpawns();
-    await clearActivity(CELL_KEY);
-    const result = await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
-    expect(result.cellsBelowActivityFloor).toBeGreaterThanOrEqual(1);
-    const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
-    expect(spawns.empty).toBe(true);
-  });
-
-  it('spawns nothing when the only activity is outside the 7-day window', async () => {
-    await clearSpawns();
-    await clearActivity(CELL_KEY);
-    const now = new Date();
-    await seedActivity(CELL_KEY, 20, new Date(now.getTime() - 10 * DAY_MS));
-    // The activity docs exist but every sighting is stale, so A collapses to 0.
-    await runCrownSpawnPass(now, { maxCells: 50, maxSpawns: 50 });
-    const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
-    expect(spawns.empty).toBe(true);
-  });
-
-  it('tops an approved, active cell up to target and respects min separation', async () => {
-    await clearSpawns();
-    await clearActivity(CELL_KEY);
-    const now = new Date();
-    await seedActivity(CELL_KEY, 12, now);
-
-    const first = await runCrownSpawnPass(
-      now,
-      { maxCells: 50, maxSpawns: 50 },
-      createSeededRng(42),
-    );
-    expect(first.spawned).toBeGreaterThan(0);
-
-    const spawns = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
-    // A = 12 → ceil(1.5 * ln 13) = 4.
-    expect(spawns.size).toBe(4);
-
-    const positions = spawns.docs.map((d) => d.data());
-    for (const spawn of positions) {
-      expect(spawn.status).toBe('live');
-      expect(spawn.source).toBe('auto');
-      expect(spawn.safeLocationConfirmed).toBe(false);
-      expect(spawn.approvedCellBy).toBe(adminUser.uid);
-      expect(crownCellKey(spawn.latitude, spawn.longitude)).toBe(CELL_KEY);
-    }
-    for (let i = 0; i < positions.length; i += 1) {
-      for (let j = i + 1; j < positions.length; j += 1) {
-        const distance = haversineDistanceMeters(
-          positions[i]!.latitude,
-          positions[i]!.longitude,
-          positions[j]!.latitude,
-          positions[j]!.longitude,
-        );
-        expect(distance).toBeGreaterThanOrEqual(MIN_CROWN_SEPARATION_METERS);
-      }
-    }
-
-    // Idempotent-ish: a second pass at target adds nothing.
-    const second = await runCrownSpawnPass(now, { maxCells: 50, maxSpawns: 50 });
-    expect(second.spawned).toBe(0);
   });
 });
 
@@ -804,48 +610,7 @@ describe('revoking an area', () => {
       .where('cellKey', '==', CELL_KEY)
       .get();
     expect(remaining.empty).toBe(true);
-
-    // And a revoked cell spawns nothing on the next pass.
-    await seedActivity(CELL_KEY, 20, new Date());
-    await runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 });
-    const after = await adminDb.collection('crownSpawns').where('cellKey', '==', CELL_KEY).get();
-    expect(after.empty).toBe(true);
   });
-
-  it('leaves no crown behind when the revocation lands MID-PASS', async () => {
-    await clearSpawns();
-    await clearActivity(CELL_KEY);
-    await signInAs(adminUser);
-    await call('crownHunt-setSpawnCellApproval', {
-      approved: true,
-      cellKey: CELL_KEY,
-      safeAreaConfirmed: true,
-      approvalNote: 'Godkänd inför kapplöpningstest.',
-    });
-    await seedActivity(CELL_KEY, 12, new Date());
-
-    // A pass reads the allow-list once and then runs for a while. Start one and
-    // revoke the cell underneath it. The assertion deliberately does NOT depend
-    // on which side wins: if the spawn transaction commits first the
-    // revocation's drain deletes those crowns, and if the revocation commits
-    // first the transaction re-reads `approved: false` and writes nothing. The
-    // one thing that must never be true either way is a live crown left
-    // standing in a revoked area — nothing downstream would remove it, since
-    // the sweeper only takes expired crowns.
-    const pass = runCrownSpawnPass(new Date(), { maxCells: 50, maxSpawns: 50 }, createSeededRng(7));
-    const revoke = call('crownHunt-setSpawnCellApproval', {
-      approved: false,
-      cellKey: CELL_KEY,
-      reason: 'Nödstopp mitt under en pågående runda.',
-    });
-    await Promise.all([pass, revoke]);
-
-    const remaining = await adminDb
-      .collection('crownSpawns')
-      .where('cellKey', '==', CELL_KEY)
-      .get();
-    expect(remaining.empty).toBe(true);
-  }, 30_000);
 });
 
 describe('scheduled sweeper', () => {

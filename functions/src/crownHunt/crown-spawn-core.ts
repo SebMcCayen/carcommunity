@@ -327,11 +327,12 @@ export const MIN_ACTIVITY_FOR_SPAWN = 1;
  * the per-cell TARGET; WHERE a crown may be placed is unchanged. A baseline crown
  * is therefore only ever created by the POI-ANCHORED marked-area pass
  * (`runCrownAreaSpawnPass`), AT a cached safe-stop POI inside the drawn area — a
- * cell with no cached POI has nothing to anchor to and still spawns nothing. The
- * hand-approved single-cell path samples RANDOM in-cell coordinates and so is
- * deliberately given NO baseline (it passes the default 0 — see
- * `runCrownSpawnPass`): an unconditional crown at a random point is exactly the
- * "invite a stop somewhere unvetted" outcome the whole engine exists to prevent.
+ * cell with no cached POI has nothing to anchor to and still spawns nothing. (The
+ * former hand-approved single-cell path sampled RANDOM in-cell coordinates and so
+ * was deliberately given NO baseline — an unconditional crown at a random point is
+ * exactly the "invite a stop somewhere unvetted" outcome the whole engine exists
+ * to prevent — but that path has since been removed; only the POI-anchored area
+ * pass remains.)
  *
  * Conservative on purpose: 1 crown. Set to 0 to disable the baseline entirely,
  * which restores the pure activity-derived target for every caller.
@@ -1156,10 +1157,11 @@ export const SPAWN_CELL_NOTE_MAX_LENGTH = 2000;
  * `lastSpawnPassAt` seed for a cell the spawner has never served (epoch, i.e.
  * 1970-01-01T00:00:00Z).
  *
- * The field has to EXIST on approval, because `runCrownSpawnPass` orders the
- * allow-list by it and Firestore excludes documents missing the orderBy field —
- * a cell without it would never be served at all. But the value has to be
- * honest about what it means. `lastSpawnPassAt` records when the spawner last
+ * The field has to EXIST on approval, because the (now-removed) single-cell spawn
+ * pass ordered the allow-list by it and Firestore excludes documents missing the
+ * orderBy field — a cell without it would never be served at all. The single-cell
+ * pass is gone, but `setSpawnCellApproval` still writes this field (it is kept
+ * deployed but dormant), and the value still has to be honest about what it means. `lastSpawnPassAt` records when the spawner last
  * looked at this cell; a brand-new cell has never been looked at, so seeding it
  * with "now" would state the opposite of the truth and sort the cell to the
  * BACK of a least-recently-served queue — the one place a never-served cell
