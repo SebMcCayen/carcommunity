@@ -1110,7 +1110,7 @@
     <string name="crownHunt_noStatsYet">Samla din första krona på kartan för att starta din Kronjakt-statistik.</string>
     <string name="crownHunt_legendTitle">Kronor – så funkar de</string>
     <string name="crownHunt_legendPlacedTitle">Utplacerade kronor</string>
-    <string name="crownHunt_legendPlacedBody">Kronor som arrangörer placerar ut på kartan och som ger en fast poängbelöning (KP). Varje krona kan du samla in en gång. Vissa kan samlas in av flera medlemmar – när en krona nått sin gräns försvinner den från kartan.</string>
+    <string name="crownHunt_legendPlacedBody">Kronor som arrangörer placerar ut på kartan och som ger en fast poängbelöning (KP). Beroende på kronan kan du samla in den en gång, eller om och om igen – varje dag eller varje vecka. Vissa kronor kan bara samlas in av ett begränsat antal medlemmar och försvinner när gränsen nåtts.</string>
     <string name="crownHunt_legendSpawnedTitle">Automatiska kronor</string>
     <string name="crownHunt_legendSpawnedBody">Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.</string>
     <string name="crownHunt_legendDisappearTitle">Försvinner en krona när jag samlat in den?</string>

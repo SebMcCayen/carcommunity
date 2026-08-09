@@ -1187,7 +1187,7 @@
     "noStatsYet": "Collect your first crown on the map to start your Crown Hunt stats.",
     "legendTitle": "Crowns – how they work",
     "legendPlacedTitle": "Placed crowns",
-    "legendPlacedBody": "Crowns that organizers place on the map, giving a fixed points reward (KP). You can collect each crown once. Some can be collected by several members – once a crown reaches its limit it disappears from the map.",
+    "legendPlacedBody": "Crowns that organizers place on the map, giving a fixed points reward (KP). Depending on the crown you can collect it once, or over and over – each day or each week. Some crowns can only be collected by a limited number of members and disappear once that limit is reached.",
     "legendSpawnedTitle": "Automatic crowns",
     "legendSpawnedBody": "Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.",
     "legendDisappearTitle": "Does a crown disappear once I collect it?",

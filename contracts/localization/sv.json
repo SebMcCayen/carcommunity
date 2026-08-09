@@ -1187,7 +1187,7 @@
     "noStatsYet": "Samla din första krona på kartan för att starta din Kronjakt-statistik.",
     "legendTitle": "Kronor – så funkar de",
     "legendPlacedTitle": "Utplacerade kronor",
-    "legendPlacedBody": "Kronor som arrangörer placerar ut på kartan och som ger en fast poängbelöning (KP). Varje krona kan du samla in en gång. Vissa kan samlas in av flera medlemmar – när en krona nått sin gräns försvinner den från kartan.",
+    "legendPlacedBody": "Kronor som arrangörer placerar ut på kartan och som ger en fast poängbelöning (KP). Beroende på kronan kan du samla in den en gång, eller om och om igen – varje dag eller varje vecka. Vissa kronor kan bara samlas in av ett begränsat antal medlemmar och försvinner när gränsen nåtts.",
     "legendSpawnedTitle": "Automatiska kronor",
     "legendSpawnedBody": "Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.",
     "legendDisappearTitle": "Försvinner en krona när jag samlat in den?",
