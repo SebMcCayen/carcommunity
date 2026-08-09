@@ -258,7 +258,7 @@
     "avatarUploading": "Uploading…",
     "avatarUploadError": "Couldn’t upload the image. Please try again.",
     "avatarTooLarge": "The image is too large.",
-    "pointsTitle": "Crown Points",
+    "pointsTitle": "XP",
     "pointsSubtitle": "How active you have been",
     "pointsRecentTitle": "Recently earned",
     "pointsRecentEmpty": "Drive, collect crowns and attend meets – your points will show up here.",
@@ -1184,7 +1184,14 @@
     "rankNone": "Not ranked yet",
     "leaderboardTitle": "Top this season",
     "leaderboardEmpty": "No scores yet this season. Collect a crown to get on the board.",
-    "noStatsYet": "Collect your first crown on the map to start your Crown Hunt stats."
+    "noStatsYet": "Collect your first crown on the map to start your Crown Hunt stats.",
+    "legendTitle": "Crowns – how they work",
+    "legendPlacedTitle": "Placed crowns",
+    "legendPlacedBody": "Crowns that organizers place on the map, giving a fixed points reward (KP). You can collect each crown once. Some can be collected by several members – once a crown reaches its limit it disappears from the map.",
+    "legendSpawnedTitle": "Automatic crowns",
+    "legendSpawnedBody": "Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.",
+    "legendDisappearTitle": "Does a crown disappear once I collect it?",
+    "legendDisappearBody": "A crown you have already collected can't be collected again. Most crowns can be collected by several members separately and stay on the map until their time runs out or they reach their limit. Exclusive (legendary) crowns disappear for everyone the moment someone takes them."
   },
   "partners": {
     "screenTitle": "KCC Business Partners",

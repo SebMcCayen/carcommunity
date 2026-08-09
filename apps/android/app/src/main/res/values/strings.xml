@@ -1114,7 +1114,7 @@
     <string name="crownHunt_legendSpawnedTitle">Automatiska kronor</string>
     <string name="crownHunt_legendSpawnedBody">Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.</string>
     <string name="crownHunt_legendDisappearTitle">Försvinner en krona när jag samlat in den?</string>
-    <string name="crownHunt_legendDisappearBody">En krona du redan samlat in kan du inte ta igen. De flesta kronor kan flera medlemmar samla in var för sig och ligger kvar på kartan tills tiden går ut eller gränsen nås. Exklusiva (legendariska) kronor försvinner direkt för alla så fort någon tagit dem.</string>
+    <string name="crownHunt_legendDisappearBody">En krona du redan samlat in kan du inte ta igen. De flesta kronor kan flera medlemmar samla in var för sig och ligger kvar på kartan tills tiden går ut eller gränsen nås. Exklusiva (legendariska) kronor försvinner direkt för alla så fort någon har tagit dem.</string>
     <string name="partners_screenTitle">KCC Företagspartner</string>
     <string name="partners_statusLabel">Samarbetspartner</string>
     <string name="partners_markerLabel">Samarbetspartner</string>

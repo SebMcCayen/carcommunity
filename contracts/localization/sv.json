@@ -258,7 +258,7 @@
     "avatarUploading": "Laddar upp…",
     "avatarUploadError": "Kunde inte ladda upp bilden. Försök igen.",
     "avatarTooLarge": "Bilden är för stor.",
-    "pointsTitle": "Kronpoäng",
+    "pointsTitle": "XP",
     "pointsSubtitle": "Så aktiv har du varit",
     "pointsRecentTitle": "Senast intjänat",
     "pointsRecentEmpty": "Kör, samla kronor och delta i träffar – dina poäng dyker upp här.",
@@ -1184,7 +1184,14 @@
     "rankNone": "Ingen placering ännu",
     "leaderboardTitle": "Topp denna säsong",
     "leaderboardEmpty": "Inga poäng denna säsong ännu. Samla en krona för att komma med på listan.",
-    "noStatsYet": "Samla din första krona på kartan för att starta din Kronjakt-statistik."
+    "noStatsYet": "Samla din första krona på kartan för att starta din Kronjakt-statistik.",
+    "legendTitle": "Kronor – så funkar de",
+    "legendPlacedTitle": "Utplacerade kronor",
+    "legendPlacedBody": "Kronor som arrangörer placerar ut på kartan och som ger en fast poängbelöning (KP). Varje krona kan du samla in en gång. Vissa kan samlas in av flera medlemmar – när en krona nått sin gräns försvinner den från kartan.",
+    "legendSpawnedTitle": "Automatiska kronor",
+    "legendSpawnedBody": "Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.",
+    "legendDisappearTitle": "Försvinner en krona när jag samlat in den?",
+    "legendDisappearBody": "En krona du redan samlat in kan du inte ta igen. De flesta kronor kan flera medlemmar samla in var för sig och ligger kvar på kartan tills tiden går ut eller gränsen nås. Exklusiva (legendariska) kronor försvinner direkt för alla så fort någon har tagit dem."
   },
   "partners": {
     "screenTitle": "KCC Företagspartner",
