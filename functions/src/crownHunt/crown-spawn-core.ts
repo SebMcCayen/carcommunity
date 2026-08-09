@@ -1161,7 +1161,8 @@ export const SPAWN_CELL_NOTE_MAX_LENGTH = 2000;
  * pass ordered the allow-list by it and Firestore excludes documents missing the
  * orderBy field — a cell without it would never be served at all. The single-cell
  * pass is gone, but `setSpawnCellApproval` still writes this field (it is kept
- * deployed but dormant), and the value still has to be honest about what it means. `lastSpawnPassAt` records when the spawner last
+ * deployed but dormant), and the value still has to be honest about what it
+ * means. `lastSpawnPassAt` records when the spawner last
  * looked at this cell; a brand-new cell has never been looked at, so seeding it
  * with "now" would state the opposite of the truth and sort the cell to the
  * BACK of a least-recently-served queue — the one place a never-served cell
