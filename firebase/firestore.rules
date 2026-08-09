@@ -1163,20 +1163,36 @@ service cloud.firestore {
     // crownHunt-spawnCrowns, and mutated only by crownHunt.claimSpawn and the
     // crownHunt-sweepSpawns TTL sweep — all via the Admin SDK.
     //
-    // Members READ live, unexpired crowns directly (the map layer queries
+    // Members READ live crowns directly (the map layer queries
     // `cellKey in [...] && status == 'live' && expiresAt > now`, served by the
-    // composite index in firestore.indexes.json). The same two conditions are
-    // required HERE, so a claimed or expired crown disappears from every client
-    // the moment it is written — claiming sets expiresAt to the claim instant
-    // precisely so this rule hides it before the sweep gets to it.
+    // composite index in firestore.indexes.json).
+    //
+    // The read rule gates on `status == 'live'` ONLY — it deliberately does NOT
+    // add `resource.data.expiresAt > request.time`. That looks like tighter
+    // defence but it structurally BREAKS the legitimate member query: a `list`
+    // is authorised against the QUERY's constraints, so `expiresAt > request.time`
+    // is only satisfiable if the query's expiresAt lower bound is provably
+    // >= request.time (server time). The client's bound is `now` captured on the
+    // DEVICE *before* the request is sent, which is always < request.time
+    // (latency + clock skew), so the term can never be proven and the query is
+    // DENIED for every non-admin — admins pass only via `|| isAdmin()`, making
+    // auto-spawned crowns admin-only in practice. Regression-guarded by the
+    // "crownSpawns auto-spawn member read" suite in security-rules.emulator.test.ts.
+    //
+    // Expiry is enforced everywhere it actually matters WITHOUT this term:
+    //   • the client already filters `expiresAt > now` itself, so an expired
+    //     crown is never rendered even if the rule would return it;
+    //   • the crownHunt-sweepSpawns TTL sweep deletes expired docs (~15 min);
+    //   • crownHunt.claimSpawn validates expiry server-side and sets expiresAt
+    //     to the claim instant, and the `status == 'live'` gate here hides a
+    //     claimed crown the moment it is written.
     //
     // NO client writes. A crown is a reward-bearing document: a client that
     // could write one could mint Kronpoäng at a coordinate of its choosing.
     // -------------------------------------------------------------------------
     match /crownSpawns/{spawnId} {
       allow read: if (isActiveMember()
-                      && resource.data.status == 'live'
-                      && resource.data.expiresAt > request.time)
+                      && resource.data.status == 'live')
                   || isAdmin();
       // No client writes.
     }
