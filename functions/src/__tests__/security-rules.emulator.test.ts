@@ -622,9 +622,15 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
     await assertSucceeds(getDoc(doc(adminFs, 'crownSpawns', EXPIRED)));
   });
 
-  it('an unauthenticated client cannot read crownSpawns at all', async () => {
+  it('an unauthenticated client cannot read crownSpawns at all (get AND list)', async () => {
     const anonFs = testEnv.unauthenticatedContext().firestore();
+    // Cover BOTH facets of the split read: a single-doc get…
     await assertFails(getDoc(doc(anonFs, 'crownSpawns', LIVE)));
+    // …and a list, so a future rule change can't silently reopen `list` to
+    // anonymous clients without this suite catching it.
+    await assertFails(
+      getDocs(query(collection(anonFs, 'crownSpawns'), where('status', '==', 'live'))),
+    );
   });
 
   it('no client may write a crownSpawns document — not even an admin', async () => {
