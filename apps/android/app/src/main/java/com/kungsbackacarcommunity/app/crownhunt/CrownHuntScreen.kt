@@ -96,8 +96,11 @@ fun CrownHuntScreen(
 /**
  * Explains the two crown families and what happens after collection. Static,
  * read-only reference copy — awards nothing. Grounded in the backend:
- *  - Placed crowns = `crownHuntPoints` (admin/event, fixed `rewardPoints` KP,
- *    per-user single collect, `status` → `ended` once its collector cap is hit).
+ *  - Placed crowns = `crownHuntPoints` (admin/event, fixed `rewardPoints` KP).
+ *    Two independent knobs: a `repeatRule` (once / daily / weekly) sets how often
+ *    the SAME member may re-collect, and a `maxCollectors` cap (null = unlimited)
+ *    bounds how many DISTINCT members may collect — `status` → `ended` (leaves the
+ *    map) once that cap is reached.
  *  - Automatic crowns = `crownSpawns` (rarity table with rising KP + rising TTL,
  *    every spawn has an `expiresAt` and vanishes on its own; legendary is the
  *    `exclusive` mode that the first taker removes for everyone).

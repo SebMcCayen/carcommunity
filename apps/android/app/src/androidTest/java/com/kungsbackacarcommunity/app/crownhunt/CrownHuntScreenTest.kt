@@ -84,6 +84,8 @@ class CrownHuntScreenTest {
         // Season leaderboard block + a top scorer's name.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
+        // The crown legend (types + "does it disappear?" answer) is present.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle)).assertIsDisplayed()
         // The crowns-list collect button is gone.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
     }
