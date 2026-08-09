@@ -59,4 +59,14 @@ describe('toReingestResponse', () => {
     expect(toReingestResponse('area-1', -5, overpassFailure).poiCount).toBe(0);
     expect(toReingestResponse('area-1', 2.9, overpassFailure).poiCount).toBe(2);
   });
+
+  it('clamps a non-finite kept count to 0 so the response stays a valid number', () => {
+    // NaN / ±Infinity (a corrupted stored poiCount) would JSON-serialize to null
+    // and break the `number` contract — they must clamp to 0, not pass through.
+    for (const bad of [NaN, Infinity, -Infinity]) {
+      const res = toReingestResponse('area-1', bad, overpassFailure);
+      expect(res.poiCount).toBe(0);
+      expect(Number.isFinite(res.poiCount)).toBe(true);
+    }
+  });
 });

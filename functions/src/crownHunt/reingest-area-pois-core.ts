@@ -16,6 +16,16 @@ export const REINGEST_OVERPASS_FAILURE_MESSAGE =
   'The OpenStreetMap (Overpass) lookup timed out or failed. The previously cached safe stops were kept. Please try again in a moment.';
 
 /**
+ * Clamp a count to a non-negative integer. A NON-FINITE input (`NaN`/±`Infinity`,
+ * e.g. a console-corrupted stored `poiCount`) becomes 0 rather than passing
+ * through — a non-finite number would JSON-serialize to `null` and break the
+ * response's `number` contract.
+ */
+function clampCount(n: number): number {
+  return Number.isFinite(n) ? Math.max(0, Math.trunc(n)) : 0;
+}
+
+/**
  * Result of an on-demand POI re-ingestion. Mirrors
  * `AdminReingestSpawnAreaPoisResponse` in @carcommunity/shared (the functions
  * package does not depend on shared; kept in sync by hand as spawnAreas.ts does).
@@ -49,7 +59,7 @@ export function toReingestResponse(
     return {
       areaId,
       ok: false,
-      poiCount: Math.max(0, Math.trunc(previousPoiCount)),
+      poiCount: clampCount(previousPoiCount),
       fetched: 0,
       removedStale: 0,
       message: REINGEST_OVERPASS_FAILURE_MESSAGE,

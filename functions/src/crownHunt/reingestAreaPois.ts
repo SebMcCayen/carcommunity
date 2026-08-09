@@ -29,7 +29,7 @@ import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
-import type { CrownSpawnAreaShape } from './crown-area-core';
+import { crownSpawnAreaShapeSchema, type CrownSpawnAreaShape } from './crown-area-core';
 import { httpFetcher, resolveOverpassEndpoint, runAreaPoiIngestion } from './poiIngestion';
 import { toReingestResponse, type ReingestSpawnAreaPoisResponse } from './reingest-area-pois-core';
 
@@ -67,15 +67,27 @@ export const reingestSpawnAreaPois = onCall(
     if (!snap.exists) throw new HttpsError('not-found', 'Marked area not found.');
     const areaData = snap.data() as DocumentData;
 
-    const shape = areaData.shape as CrownSpawnAreaShape | undefined;
-    if (!shape || typeof shape !== 'object' || typeof shape.type !== 'string') {
-      throw new HttpsError('failed-precondition', 'This area has no drawn shape to ingest POIs for.');
+    // Structurally validate the STORED shape against the same schema the CRUD
+    // uses, not just `type`. A console-corrupted doc (e.g. a circle missing
+    // center/radius) would otherwise make `runAreaPoiIngestion` → shapeBoundingBox
+    // throw and surface as an opaque `internal` 500; instead reject it cleanly.
+    const parsedShape = crownSpawnAreaShapeSchema.safeParse(areaData.shape);
+    if (!parsedShape.success) {
+      throw new HttpsError(
+        'failed-precondition',
+        'This area has no valid drawn shape to ingest POIs for.',
+      );
     }
+    const shape = parsedShape.data as CrownSpawnAreaShape;
 
     // The POI count currently cached, so a FAILED run can report the count that
-    // was KEPT (runAreaPoiIngestion returns -1 on failure by design).
+    // was KEPT (runAreaPoiIngestion returns -1 on failure by design). Guard
+    // against a corrupted non-finite stored value (still `typeof === 'number'`)
+    // so it can never flow into the response and JSON-serialize to null.
     const previousPoiCount =
-      typeof areaData.poiCount === 'number' ? Math.max(0, Math.trunc(areaData.poiCount)) : 0;
+      typeof areaData.poiCount === 'number' && Number.isFinite(areaData.poiCount)
+        ? Math.max(0, Math.trunc(areaData.poiCount))
+        : 0;
 
     // REUSE the ingestion verbatim. It never throws on an Overpass failure; it
     // returns { failed: true, poiCount: -1 } and keeps the previous cache. Turn

@@ -183,6 +183,19 @@ describe('crownHunt-reingestSpawnAreaPois (gated entry paths)', () => {
     await ref.delete();
   });
 
+  it('fails-precondition for a structurally corrupt shape (circle missing center/radius)', async () => {
+    await signInAs(adminUser);
+    // A circle whose required fields are absent would make shapeBoundingBox throw
+    // and surface as an opaque internal 500; the callable must instead reject it
+    // cleanly BEFORE any ingestion, via the shape schema.
+    const ref = adminDb.collection('crownSpawnAreas').doc(`crp-badcircle-${Date.now()}`);
+    await ref.set({ areaId: ref.id, name: 'crp bad circle', active: false, shape: { type: 'circle' } });
+    expect(
+      await callableErrorCode(call('crownHunt-reingestSpawnAreaPois', { areaId: ref.id })),
+    ).toBe('functions/failed-precondition');
+    await ref.delete();
+  });
+
   // Sanity: a well-formed active area with a shape exists and is reachable by the
   // admin CRUD (the ingestion itself is covered by crownhunt-osm-poi.emulator.test
   // + the pure reingest-area-pois-core test; not re-run here to avoid a live
