@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.2.0
+        uses: gradle/actions/setup-gradle@v6.3.0
 
       - name: Unit tests
         working-directory: apps/android
@@ -172,7 +172,7 @@ jobs:
           java-version: 17
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.2.0
+        uses: gradle/actions/setup-gradle@v6.3.0
 
       - name: Require the Mapbox downloads token
         env:
@@ -244,7 +244,7 @@ jobs:
           java-version: 17
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v6.2.0
+        uses: gradle/actions/setup-gradle@v6.3.0
 
       # ROOT-CAUSE FIX for the intermittent "Unable to connect to adb daemon on
       # port: 5037" → "Failed to start Emulator console" flake: the job used to
