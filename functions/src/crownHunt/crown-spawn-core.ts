@@ -479,15 +479,16 @@ export const CROWN_RARITY_RANK: Record<CrownRarity, number> = {
  * The cutoff: a crown whose rarity rank is at or above this is EXCLUSIVE, and
  * everything below it is SHARED.
  *
- * Today that makes only `legendary` exclusive and common/uncommon/rare shared,
- * which realises the product model "the top tier is a first-come jackpot,
- * everything else is a shared pickup" against the rarity set that exists in the
- * code. THE CUTOFF IS THIS ONE CONSTANT ON PURPOSE: introduce an `epic` tier
- * above `rare` and it becomes exclusive automatically; drop this to
- * `CROWN_RARITY_RANK.rare` to make rare exclusive too, or raise it to keep only
- * the very top exclusive — a one-line change with no claim-path edits.
+ * Today that makes `rare` and `legendary` exclusive and common/uncommon shared,
+ * which realises the product model "the top tiers are a first-come jackpot,
+ * everyday pickups are shared" against the rarity set that exists in the code.
+ * THE CUTOFF IS THIS ONE CONSTANT ON PURPOSE: introduce an `epic` tier above
+ * `rare` and it becomes exclusive automatically; raise this to
+ * `CROWN_RARITY_RANK.legendary` to make only the top tier exclusive, or lower it
+ * further to make more tiers exclusive — a one-line change with no claim-path
+ * edits.
  */
-export const MIN_EXCLUSIVE_CROWN_RANK = CROWN_RARITY_RANK.legendary;
+export const MIN_EXCLUSIVE_CROWN_RANK = CROWN_RARITY_RANK.rare;
 
 /** Derives a crown's collection mode from its rarity via {@link MIN_EXCLUSIVE_CROWN_RANK}. */
 export function crownCollectMode(rarity: CrownRarity): CrownCollectMode {

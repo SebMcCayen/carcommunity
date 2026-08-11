@@ -22,6 +22,7 @@ import {
   crownActivityUserHash,
   crownCellBounds,
   crownCellKey,
+  crownCollectMode,
   crownExpiresAt,
   crownRewardPoints,
   crownTtlMs,
@@ -1000,6 +1001,15 @@ describe('spawn cell approval input (the admin safety gate)', () => {
   });
 });
 
+describe('collect mode by rarity', () => {
+  it('makes RARE and LEGENDARY exclusive, COMMON and UNCOMMON shared', () => {
+    expect(crownCollectMode('common')).toBe('shared');
+    expect(crownCollectMode('uncommon')).toBe('shared');
+    expect(crownCollectMode('rare')).toBe('exclusive');
+    expect(crownCollectMode('legendary')).toBe('exclusive');
+  });
+});
+
 describe('spawn document builder', () => {
   it('records that NO human confirmed this coordinate', () => {
     const fields = buildCrownSpawnFields({
@@ -1015,5 +1025,17 @@ describe('spawn document builder', () => {
     expect(fields.claimedByUid).toBeNull();
     expect(fields.rewardPoints).toBe(crownRewardPoints('rare'));
     expect(fields.collectRadiusMeters).toBe(COLLECT_RADIUS_METERS);
+    // Rare is now stamped exclusive: removed on first claim.
+    expect(fields.collectMode).toBe('exclusive');
+  });
+
+  it('stamps a shared collect mode on an everyday (common) crown', () => {
+    const fields = buildCrownSpawnFields({
+      cellKey: crownCellKey(LAT, LON),
+      position: { latitude: LAT, longitude: LON },
+      rarity: 'common',
+      approvedCellBy: 'admin-1',
+    });
+    expect(fields.collectMode).toBe('shared');
   });
 });
