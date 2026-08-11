@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -553,6 +554,37 @@ class DriveRecordingTest {
         }
 
     @Test
+    fun `autoSave emits the summary immediately and defers the payload build and save off the caller thread`() =
+        runTest {
+            // The heavy payload build (mapping up to ~20k points) + route snapshot
+            // must NOT run on the caller/UI thread before the summary is shown (#798).
+            // With a deferred StandardTestDispatcher scope, the summary is emitted
+            // synchronously by autoSave while NOTHING of the build/save has run yet
+            // (repo.lastRequest is still null), proving the build is off-thread.
+            val repo = RecordingFakeRepository(shouldFail = false)
+            val c =
+                DriveRecordingCoordinator(
+                    repository = repo,
+                    sourceSessionId = "sess",
+                    uploadScope = CoroutineScope(StandardTestDispatcher(testScheduler)),
+                    delayFn = {},
+                )
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.stop()
+            c.autoSave(title = null)
+
+            // Summary is up immediately; the build + save have not started.
+            assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
+            assertNull("payload build + save must be deferred off the caller thread", repo.lastRequest)
+
+            // Draining the scheduler runs the background build + save.
+            advanceUntilIdle()
+            assertNotNull(repo.lastRequest)
+            assertFalse((c.state.value as RecordingState.SavedPendingChoice).savePending)
+        }
+
+    @Test
     fun `background save reaches SavedPendingChoice and persists the drive`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
         val c = liveCoordinator(repo)
@@ -640,10 +672,12 @@ class DriveRecordingTest {
         assertTrue(c.state.value is RecordingState.KeptPendingSave)
         assertEquals(1, c.recordedPoints().size)
 
-        // The save confirms → terminal Kept.
+        // The save confirms → terminal Kept, and the recorder is released on that
+        // terminal path too (consistent cleanup with the instant keep()).
         release.complete(Unit)
         advanceUntilIdle()
         assertEquals(RecordingState.Kept, c.state.value)
+        assertEquals(0, c.recordedPoints().size)
     }
 
     @Test

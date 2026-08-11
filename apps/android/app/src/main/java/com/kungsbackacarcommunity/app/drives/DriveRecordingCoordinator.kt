@@ -67,6 +67,16 @@ class DriveRecordingCoordinator(
     private val stateFlow = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
 
+    /**
+     * The active recording. Mutated on the MAIN thread while recording (start /
+     * addFix / stop) and read there for the summary preview; the background save
+     * coroutine additionally READS it (to build the payload + snapshot the route)
+     * and, on an early-Keep finalization, WRITES it to null. `@Volatile` so those
+     * cross-thread accesses see a consistent reference. The [DriveRecorder] itself
+     * is only STRUCTURALLY changed (addPoint) while recording — stopped before the
+     * background save runs — so the background reads never race a mutation.
+     */
+    @Volatile
     private var recorder: DriveRecorder? = null
 
     /**
@@ -257,8 +267,15 @@ class DriveRecordingCoordinator(
      *   outlives the composition), so it is never cancelled mid-flight and the
      *   drive is not lost — the reason the old composition-scoped save needed a
      *   cancellation→restore dance that this no longer has;
-     * - the payload and the route snapshot are captured NOW, before [keep] /
-     *   [delete] can release the recorder, so the background job is self-contained.
+     * - the HEAVY work — building the callable payload and snapshotting the route,
+     *   each mapping/copying up to ~20k points — runs INSIDE the background
+     *   coroutine, not on the caller (UI) thread, so the summary is emitted first
+     *   and never blocked behind that build (the whole point of the "immediate"
+     *   summary in #798). Only the cheap values (title / endedAt / elapsed / point
+     *   count) are captured up front; the [recorder] reference is captured so the
+     *   build is unaffected if [this.recorder] is later cleared, and the recorder
+     *   is only mutated on the main thread while RECORDING (stopped by now), so the
+     *   background reads are safe.
      *
      * Valid from [RecordingState.PromptSave] (the state [stop] raises) or a prior
      * [RecordingState.Failed] (a manual retry after the background save gave up) —
@@ -274,28 +291,28 @@ class DriveRecordingCoordinator(
         if (!resumable) return
 
         // Both resumable states are only reachable via stop(), so the captured
-        // stop moment is always present; fall back defensively.
+        // stop moment is always present; fall back defensively. These are all cheap
+        // reads; the up-to-20k-point payload build + snapshot are deferred below.
         val endedAt = stoppedAtMillis ?: clock()
         val elapsedMillis = recorder.elapsedMillis(endedAt)
         val pointCount = recorder.pointCount
-        // Build the payload and snapshot the route BEFORE the summary lets the user
-        // release the recorder (keep/delete): the background job must not depend on
-        // recorder state that can vanish under it. The payload is idempotent per
-        // sourceSessionId, so a retry re-sends the exact same request (and stored
-        // duration). Skip the up-to-20k-point snapshot in a config-less build with
-        // no uploader; startRouteUpload also skips when the save returns no path.
-        val request = recorder.buildSaveRequest(title, endedAt)
-        val pointsForUpload =
-            if (routeUploadRunner != null) recorder.snapshot() else emptyList()
 
-        // The summary opens at once over the local estimate; the save is now the
-        // background job's job.
+        // The summary opens at once over the local estimate; building the payload,
+        // snapshotting the route, and the save are all the background job's work.
         stateFlow.value =
             RecordingState.SavedPendingChoice(elapsedMillis = elapsedMillis, savePending = true)
         savedResult = null
         saveJob =
             uploadScope.launch {
                 try {
+                    // Build the payload + route snapshot HERE (off the UI thread).
+                    // The payload is idempotent per sourceSessionId, so a retry
+                    // re-sends the exact same request (and stored duration). Skip the
+                    // ~20k-point snapshot in a config-less build with no uploader;
+                    // startRouteUpload also skips when the save returns no path.
+                    val request = recorder.buildSaveRequest(title, endedAt)
+                    val pointsForUpload =
+                        if (routeUploadRunner != null) recorder.snapshot() else emptyList()
                     val result = saveWithRetry(request)
                     savedResult = result
                     onBackgroundSaveSucceeded(result, pointsForUpload)
@@ -347,18 +364,24 @@ class DriveRecordingCoordinator(
         // still deciding, or FINALIZE an early Keep now that the save is confirmed
         // (KeptPendingSave → the terminal Kept — the only place an early Keep is
         // allowed to become terminal, so a save that had failed could never have
-        // finalized it).
-        stateFlow.update { current ->
-            when (current) {
-                is RecordingState.SavedPendingChoice -> current.copy(savePending = false)
-                is RecordingState.KeptPendingSave -> RecordingState.Kept
-                else -> current
+        // finalized it). updateAndGet so the resulting state is read atomically.
+        val next =
+            stateFlow.updateAndGet { current ->
+                when (current) {
+                    is RecordingState.SavedPendingChoice -> current.copy(savePending = false)
+                    is RecordingState.KeptPendingSave -> RecordingState.Kept
+                    else -> current
+                }
             }
-        }
+        // An early Keep just finalized to terminal Kept → release the recorder,
+        // mirroring the normal keep() cleanup (only ever reached AFTER the save
+        // definitively succeeded, so this can never lose a drive). The upload uses
+        // its own pre-taken [pointsForUpload], so releasing the recorder here is safe.
+        if (next is RecordingState.Kept) recorder = null
         // Upload the route while the drive is meant to live (still choosing, or
         // kept). A delete in flight has moved off these states and joins this job to
         // remove the ride, so an upload started here would just race that delete.
-        when (stateFlow.value) {
+        when (next) {
             is RecordingState.SavedPendingChoice, RecordingState.Kept ->
                 uploadJob = startRouteUpload(result, pointsForUpload)
             else -> Unit
