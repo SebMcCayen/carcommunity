@@ -50,6 +50,7 @@ import {
 } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
+import { getMyProgress as badgesGetMyProgress } from './badges/getMyProgress';
 import {
   onBadgeProgressWritten,
   onConvoyWritten as onConvoyWrittenForBadges,
@@ -383,8 +384,15 @@ export const garage = {
 
 /**
  * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`,
- * `badges-adminSummary`, the seven Firestore triggers below and the scheduled
- * `badges-evaluateBacklog`).
+ * `badges-adminSummary`, `badges-getMyProgress`, the seven Firestore triggers
+ * below and the scheduled `badges-evaluateBacklog`).
+ *
+ * `badges-getMyProgress` is the one OWNER-ONLY callable in the group: it hands
+ * the signed-in member a read-only projection of their OWN seven ladder
+ * counters from the backend-only `badgeProgress/{uid}` document, so the profile
+ * wall can draw a progress bar on every ladder (issue #799) without the client
+ * ever reading the doc directly and without exposing another member's numbers.
+ * It reads, never writes — a tier still cannot be forged. See getMyProgress.ts.
  *
  * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
  * writes). Flat badges are evaluated inline by their source domains
@@ -406,6 +414,7 @@ export const garage = {
 export const badges = {
   awardHelpfulMember,
   adminSummary: badgesAdminSummary,
+  getMyProgress: badgesGetMyProgress,
   onBadgeProgressWritten,
   onCrownClaimWritten,
   onSpawnClaimWritten,

@@ -17,66 +17,66 @@ package com.kungsbackacarcommunity.app.badges
  * fraction: it cannot carry progress even by accident, because there is nowhere
  * to put it — see `PublicBadgeWallTest`.
  *
- * WHERE THE OWN-PROFILE PROGRESS NUMBERS COME FROM. Since not even the owner can
- * read `badgeProgress`, the client cannot show "34 of 50 crowns" for a ladder
- * whose counter it cannot see. Two things are always known and exact:
+ * WHERE THE OWN-PROFILE PROGRESS NUMBERS COME FROM. Not even the owner can READ
+ * `badgeProgress` directly (the rule denies it to every client), so the seven
+ * authoritative counters are handed to the OWN client by an owner-only callable,
+ * `badges-getMyProgress`, which returns a read-only projection of exactly this
+ * member's document (issue #799 — see functions/src/badges/getMyProgress.ts and
+ * badges/FirebaseBadgeProgressRepository). Two things are additionally always
+ * known and exact from data the client already holds:
  *
  *  - which rungs are held, from the award documents; and
  *  - what the next rung needs, from [BADGE_LADDERS].
  *
- * On top of that, a numeric bar is drawn ONLY for the ladders whose metric the
- * app can observe honestly from data it already reads for this member — see
- * [BadgeCounters]. Every other ladder shows the next rung and its requirement
- * without inventing a number. Nothing here estimates or guesses a counter.
+ * A numeric bar is drawn on every ladder whose counter [BadgeCounters] carries;
+ * when the callable has not resolved (or is unavailable in a config-less build)
+ * the counters are absent and a ladder falls back to showing its next rung and
+ * requirement without inventing a number. Nothing here estimates or guesses.
  *
  * Pure Kotlin — no Android, no Firebase, fully unit-testable.
  */
 
 /**
- * Client-observable stand-ins for the server's ladder counters.
+ * The signed-in member's OWN server-verified ladder counters, one per ladder.
  *
- * A field is non-null only where the app can derive the value from an
- * owner-scoped read it ALREADY makes on the profile route, and where that value
- * tracks the server's counter closely enough to be an honest progress bar:
+ * Sourced from the owner-only `badges-getMyProgress` callable, which projects
+ * the backend-only `badgeProgress/{uid}` document (denied to every client) into
+ * these seven numbers for the caller's own uid. A field is null only when the
+ * value is not yet known — the callable has not resolved, failed, or is absent
+ * in a config-less build — in which case that ladder simply shows no bar; it is
+ * never a fabricated or estimated number.
  *
- *  - [savedDriveDistanceMeters] — the folded total of the member's saved drives.
- *    The server's `lifetimeDistanceMeters` is a monotonic sum that a deleted
- *    drive never decreases, so this reads LOW after a delete, never high: the
- *    bar can lag reality but never overstates progress, and the badge itself is
- *    still awarded by the server the moment the real counter crosses.
- *  - [vehiclesInGarage] — the size of the member's own garage list. The server
- *    stores a running maximum, so this too can only read low (after removing a
- *    car), never high.
- *
- * Crowns collected, meets attended, best day streak and convoys led have no
- * cheap owner-scoped source on the client — each would need a new query (and
- * index), and the streak is not client-readable at all — so they stay null and
- * their ladders render as a goal line without a bar.
- *
- * OWN PROFILE ONLY. Both fields describe the signed-in member's ACTIVITY, not
- * their trophies, and are assembled from their own owner-scoped reads. They must
- * never be built for another uid — which is why [PublicBadgeWall] accepts no
- * counters at all.
+ * OWN PROFILE ONLY. These describe the signed-in member's own progress and are
+ * fetched from their own owner-scoped callable. They must never be built for
+ * another uid — which is why [PublicBadgeWall] accepts no counters at all and
+ * another member's wall stays trophies-only.
  */
 data class BadgeCounters(
-    val savedDriveDistanceMeters: Double? = null,
-    val vehiclesInGarage: Int? = null,
+    val crownsCollected: Long? = null,
+    val lifetimeDistanceMeters: Long? = null,
+    val verifiedEventsAttended: Long? = null,
+    val bestDayStreak: Long? = null,
+    val convoysLed: Long? = null,
+    val vehiclesInGarage: Long? = null,
+    val seasonsWon: Long? = null,
 ) {
-    /** The observable value for [ladder], or null when the client cannot know it. */
+    /**
+     * The observable value for [ladder], or null when the client does not yet
+     * hold that counter. Every ladder now maps to a counter — the server hands
+     * over all seven — so a bar is drawn for each ladder whose number is known.
+     * The counters arrive already sanitised (finite, non-negative, floored) from
+     * the callable; a stray negative is still floored out here as defence.
+     */
     fun observedValue(ladder: BadgeLadderId): Long? =
         when (ladder) {
-            BadgeLadderId.VAGFARARE ->
-                savedDriveDistanceMeters?.takeIf { it.isFinite() && it >= 0 }?.toLong()
-            BadgeLadderId.SAMLARE -> vehiclesInGarage?.takeIf { it >= 0 }?.toLong()
-            BadgeLadderId.KRONJAGARE,
-            BadgeLadderId.TRAFFRAV,
-            BadgeLadderId.TROGEN,
-            BadgeLadderId.KONVOJLEDARE,
-            // seasonsWon lives on crownHuntUserStats, not in these garage/drive
-            // counters, so the showcase cannot observe it here (like the others).
-            BadgeLadderId.SASONGSMASTARE,
-            -> null
-        }
+            BadgeLadderId.KRONJAGARE -> crownsCollected
+            BadgeLadderId.VAGFARARE -> lifetimeDistanceMeters
+            BadgeLadderId.TRAFFRAV -> verifiedEventsAttended
+            BadgeLadderId.TROGEN -> bestDayStreak
+            BadgeLadderId.KONVOJLEDARE -> convoysLed
+            BadgeLadderId.SAMLARE -> vehiclesInGarage
+            BadgeLadderId.SASONGSMASTARE -> seasonsWon
+        }?.takeIf { it >= 0 }
 
     companion object {
         val NONE = BadgeCounters()

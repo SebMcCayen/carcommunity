@@ -357,9 +357,18 @@ private fun ProfileScreenPreview() {
                             Badge("vagfarare_brons", "Vägfarare Brons", 1_700_500_000_000L),
                             Badge("garage_created", "Garageprofil skapad", 1_699_000_000_000L),
                         ),
-                    // Two observable counters → two honest bars; the other four
-                    // ladders show their goal line without one.
-                    counters = BadgeCounters(savedDriveDistanceMeters = 234_000.0, vehiclesInGarage = 2),
+                    // The owner's seven counters (from getMyProgress) → an honest
+                    // bar on every ladder.
+                    counters =
+                        BadgeCounters(
+                            crownsCollected = 22,
+                            lifetimeDistanceMeters = 234_000,
+                            verifiedEventsAttended = 3,
+                            bestDayStreak = 9,
+                            convoysLed = 1,
+                            vehiclesInGarage = 2,
+                            seasonsWon = 0,
+                        ),
                 ),
             pointsBalance = 150,
             recentPointsEarnings =

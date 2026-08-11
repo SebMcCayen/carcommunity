@@ -11,9 +11,10 @@ import org.junit.Test
  * costs, and how far along they are toward it.
  *
  * Every case here is pure — no Android, no Firebase. The wall is assembled from
- * the award documents plus the client-observable counters; the authoritative
- * counters are backend-only, so "how far along" is deliberately absent wherever
- * the client cannot observe it honestly (see [BadgeCounters]).
+ * the award documents plus the owner's seven ladder counters. Those counters are
+ * fetched on the own profile from the owner-only getMyProgress callable (issue
+ * #799), so every ladder draws a bar once they resolve; "how far along" is absent
+ * only until they load, never fabricated (see [BadgeCounters]).
  */
 class BadgeShowcaseTest {
 
@@ -90,22 +91,52 @@ class BadgeShowcaseTest {
     }
 
     @Test
-    fun `an unobservable ladder offers a goal but never a bar`() {
-        // Crowns, meets, streak, convoys and season wins have no honest
-        // client-side counter.
+    fun `until the counters load every ladder offers a goal but no bar`() {
+        // Before the getMyProgress callable resolves the counters are all null,
+        // so no ladder can draw a bar — but each still shows its next goal.
         val showcase = BadgeShowcase.from(badges = emptyList(), counters = BadgeCounters.NONE)
-        for (id in listOf(
-            BadgeLadderId.KRONJAGARE,
-            BadgeLadderId.TRAFFRAV,
-            BadgeLadderId.TROGEN,
-            BadgeLadderId.KONVOJLEDARE,
-            BadgeLadderId.SASONGSMASTARE,
-        )) {
+        for (id in BadgeLadderId.entries) {
             val progress = ladderOf(showcase, id)
             assertNull(progress.observedValue)
             assertNull(progress.fractionToNext)
             // …but the goal itself is always known.
             assertEquals(progress.ladder.rungs.first(), progress.nextRung)
+        }
+    }
+
+    @Test
+    fun `every ladder draws a bar once its counter is present`() {
+        // The server hands over all seven counters; each maps to exactly one
+        // ladder, so every ladder yields an observed value AND a fraction toward
+        // its (unheld) first rung — no ladder is bar-less any more.
+        val counters =
+            BadgeCounters(
+                crownsCollected = 5, // Kronjägare: 5 / 10 to Brons
+                lifetimeDistanceMeters = 50_000, // Vägfarare: 50 / 100 km
+                verifiedEventsAttended = 3, // Träffräv: 3 / 5 to Silver (Brons=1 held? no badges)
+                bestDayStreak = 4, // Trogen
+                convoysLed = 1, // Konvojledare
+                vehiclesInGarage = 2, // Samlare
+                seasonsWon = 1, // Säsongsmästare
+            )
+        val showcase = BadgeShowcase.from(badges = emptyList(), counters = counters)
+
+        val expected =
+            mapOf(
+                BadgeLadderId.KRONJAGARE to 5L,
+                BadgeLadderId.VAGFARARE to 50_000L,
+                BadgeLadderId.TRAFFRAV to 3L,
+                BadgeLadderId.TROGEN to 4L,
+                BadgeLadderId.KONVOJLEDARE to 1L,
+                BadgeLadderId.SAMLARE to 2L,
+                BadgeLadderId.SASONGSMASTARE to 1L,
+            )
+        for ((id, value) in expected) {
+            val progress = ladderOf(showcase, id)
+            assertEquals(value, progress.observedValue)
+            // A bar is drawable: there is a next rung and a fraction toward it.
+            assertTrue("$id should still have a next rung", progress.nextRung != null)
+            assertTrue("$id should draw a bar", progress.fractionToNext != null)
         }
     }
 
@@ -172,7 +203,7 @@ class BadgeShowcaseTest {
                 badges = kronjagare.badgeKeys.map { badge(it) },
                 // Even with a counter present, a finished ladder has no next rung
                 // and therefore no fraction to fill.
-                counters = BadgeCounters(savedDriveDistanceMeters = 1_000_000.0, vehiclesInGarage = 5),
+                counters = BadgeCounters(crownsCollected = 1_000, vehiclesInGarage = 5),
             )
         val progress = ladderOf(showcase, BadgeLadderId.KRONJAGARE)
 
@@ -191,7 +222,10 @@ class BadgeShowcaseTest {
         assertEquals(BadgeTier.GULD, samlare.rungs.last().tier)
 
         val showcase =
-            BadgeShowcase.from(badges = samlare.badgeKeys.map { badge(it) }, counters = BadgeCounters(vehiclesInGarage = 5))
+            BadgeShowcase.from(
+                badges = samlare.badgeKeys.map { badge(it) },
+                counters = BadgeCounters(vehiclesInGarage = 5),
+            )
         val progress = ladderOf(showcase, BadgeLadderId.SAMLARE)
         assertTrue(progress.isComplete)
         assertNull(progress.fractionToNext)
@@ -207,7 +241,7 @@ class BadgeShowcaseTest {
         val showcase =
             BadgeShowcase.from(
                 badges = listOf(badge("vagfarare_brons")),
-                counters = BadgeCounters(savedDriveDistanceMeters = 234_000.0),
+                counters = BadgeCounters(lifetimeDistanceMeters = 234_000),
             )
         val vagfarare = ladderOf(showcase, BadgeLadderId.VAGFARARE)
 
@@ -236,26 +270,23 @@ class BadgeShowcaseTest {
     }
 
     @Test
-    fun `a nonsense counter is ignored rather than drawn`() {
+    fun `a stray negative counter is ignored rather than drawn`() {
+        // The callable sanitises server-side, but the model still floors out a
+        // negative as defence — it reads as "not observed", never a below-zero
+        // bar. (NaN/Infinity/non-numeric are impossible here — the fields are
+        // Long — and are handled by BadgeProgressResponseParser; see its test.)
         val showcase =
             BadgeShowcase.from(
                 badges = emptyList(),
                 counters =
                     BadgeCounters(
-                        savedDriveDistanceMeters = Double.NaN,
+                        lifetimeDistanceMeters = -1,
                         vehiclesInGarage = -3,
                     ),
             )
         assertNull(ladderOf(showcase, BadgeLadderId.VAGFARARE).observedValue)
         assertNull(ladderOf(showcase, BadgeLadderId.VAGFARARE).fractionToNext)
         assertNull(ladderOf(showcase, BadgeLadderId.SAMLARE).observedValue)
-
-        val infinite =
-            BadgeShowcase.from(
-                badges = emptyList(),
-                counters = BadgeCounters(savedDriveDistanceMeters = Double.POSITIVE_INFINITY),
-            )
-        assertNull(ladderOf(infinite, BadgeLadderId.VAGFARARE).observedValue)
     }
 
     @Test
@@ -263,12 +294,16 @@ class BadgeShowcaseTest {
         val showcase =
             BadgeShowcase.from(
                 badges = emptyList(),
-                counters = BadgeCounters(savedDriveDistanceMeters = 90_000.0, vehiclesInGarage = 0),
+                // Only two counters are known here; the rest are still null, so
+                // this exercises the ordering between ladders that have a bar and
+                // ladders that (for now) do not.
+                counters = BadgeCounters(lifetimeDistanceMeters = 90_000, vehiclesInGarage = 0),
             )
         val order = showcase.laddersInProgress.map { it.ladder.id }
 
-        // Vägfarare is 90 % of the way to Brons, Samlare 0 % — both observable,
-        // so both lead the four unobservable ladders, most-complete first.
+        // Vägfarare is 90 % of the way to Brons, Samlare 0 % — both have a bar,
+        // so both lead the ladders whose counter has not loaded, most-complete
+        // first.
         assertEquals(BadgeLadderId.VAGFARARE, order.first())
         assertEquals(BadgeLadderId.SAMLARE, order[1])
         // The remainder keeps catalog order so the list never reshuffles.
