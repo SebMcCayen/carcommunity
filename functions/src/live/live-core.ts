@@ -149,7 +149,7 @@ const startSessionInputSchema = z
     duration: z.enum(LIVE_SESSION_DURATION_KEYS),
     // Which garage car the sharer is driving this session. Optional: the start
     // paths fall back to the main car (then the first car, then no car) when it
-    // is absent or no longer owned — see pickSessionVehicleData. Bounded like a
+    // is absent or no longer owned — see pickSessionVehicle. Bounded like a
     // Firestore doc id; a stray value simply fails the ownership match and falls
     // back rather than erroring the start.
     vehicleId: z.string().trim().min(1).max(300).optional(),

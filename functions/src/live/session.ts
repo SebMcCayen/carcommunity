@@ -103,7 +103,7 @@ export interface SessionResponse {
  *
  * `vehicleId` is the car the sharer chose in the "Start driving" picker. When
  * omitted (or naming a car they no longer own) the selection falls back to the
- * main car, then the first car, then none — see pickSessionVehicleData. The
+ * main car, then the first car, then none — see pickSessionVehicle. The
  * projection onto the session is unchanged (toLiveMainCar), so the registration
  * plate is still never exposed regardless of which car is chosen.
  */
