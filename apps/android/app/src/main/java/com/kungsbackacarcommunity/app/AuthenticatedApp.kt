@@ -2651,10 +2651,12 @@ fun AuthenticatedApp(
                             // this session is active, so its id is present.
                             sessionId = liveSession?.sessionId,
                             // Record which car is being driven (the session's
-                            // denormalized cover photo) so the History card can
-                            // draw a round photo of it. Null when the sharer has
-                            // no car — History then shows no car photo.
+                            // denormalized cover photo + garage id) so the History
+                            // card can draw a round photo of it and the drive links
+                            // back to the vehicle. Null when the sharer has no car —
+                            // History then shows no car photo.
                             carImagePath = liveSession?.mainCar?.imagePath,
+                            vehicleId = liveSession?.vehicleId,
                         ) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way

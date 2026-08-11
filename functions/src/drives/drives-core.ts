@@ -87,7 +87,17 @@ const saveDriveInputSchema = z
      * `carImagePath` is the denormalized cover-photo Storage path the History
      * card renders as a round photo, so the card needs no extra vehicle read.
      */
-    vehicleId: z.string().trim().min(1).max(300).optional(),
+    vehicleId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      // Firestore-safe id (matches rideIdSchema below and garage-core's vehicle
+      // ids): no path separators or reserved '.'/'..', so a bad value is rejected
+      // here rather than stored as an unresolvable reference.
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .refine((id) => id !== '.' && id !== '..')
+      .optional(),
     carImagePath: z.string().trim().min(1).max(500).optional(),
   })
   .strict();

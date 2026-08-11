@@ -110,7 +110,11 @@ export interface SessionResponse {
 async function loadSessionDenorm(
   uid: string,
   vehicleId?: string,
-): Promise<{ displayName: string | null; mainCar: ReturnType<typeof toLiveMainCar> }> {
+): Promise<{
+  displayName: string | null;
+  mainCar: ReturnType<typeof toLiveMainCar>;
+  selectedVehicleId: string | null;
+}> {
   const [profile, ownedVehicles] = await Promise.all([
     db.collection('users').doc(uid).get(),
     db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
@@ -133,8 +137,20 @@ async function loadSessionDenorm(
       if (modelA !== modelB) return modelA < modelB ? -1 : 1;
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
-  const mainCar = toLiveMainCar(pickSessionVehicleData(vehicles, vehicleId));
-  return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
+  const selectedData = pickSessionVehicleData(vehicles, vehicleId);
+  const mainCar = toLiveMainCar(selectedData);
+  // The id of the car actually selected (by reference — pickSessionVehicleData
+  // returns one of these exact decoded objects), so the client can stamp WHICH
+  // car a drive was driven in onto the saved ride. null when the sharer has no
+  // car. Independent of `mainCar` being non-null: mainCar can be null for a
+  // malformed doc even though a car WAS selected, and vice versa.
+  const selectedVehicleId =
+    selectedData === null ? null : (vehicles.find((v) => v.data === selectedData)?.id ?? null);
+  return {
+    displayName: (profile.data()?.displayName as string | undefined) ?? null,
+    mainCar,
+    selectedVehicleId,
+  };
 }
 
 export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
@@ -155,13 +171,17 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   // Denormalize the caller's displayName + main car onto the session so viewers
   // of the live share see who and which car it is (shared with the convoy
   // auto-start producer below).
-  const { displayName, mainCar } = await loadSessionDenorm(actor.uid, parsed.input.vehicleId);
+  const { displayName, mainCar, selectedVehicleId } = await loadSessionDenorm(
+    actor.uid,
+    parsed.input.vehicleId,
+  );
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
     displayName,
     mainCar,
+    selectedVehicleId,
   );
   // Starting while a session is active RESTARTS it (fresh id + expiry).
   // Any previous marker is removed immediately — it carries the OLD
@@ -477,7 +497,7 @@ export async function startConvoyAutoSession(
     return 'skipped-existing';
   }
 
-  const { displayName, mainCar } = await loadSessionDenorm(uid, vehicleId);
+  const { displayName, mainCar, selectedVehicleId } = await loadSessionDenorm(uid, vehicleId);
   const session: LiveSession = {
     ...buildSession(
       db.collection('_ids').doc().id,
@@ -485,6 +505,7 @@ export async function startConvoyAutoSession(
       now,
       displayName,
       mainCar,
+      selectedVehicleId,
     ),
     convoyAutoStarted: true,
     convoyId,

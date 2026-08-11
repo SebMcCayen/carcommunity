@@ -44,9 +44,19 @@
           "maxLength": 128,
           "description": "Client recording identifier used for idempotent save retries."
         },
+        "vehicleId": {
+          "type": ["string", "null"],
+          "maxLength": 300,
+          "description": "The garage car this drive was driven in (the one chosen in the 'Start driving' picker), or null. Not backfilled onto drives saved before the field existed."
+        },
+        "carImagePath": {
+          "type": ["string", "null"],
+          "maxLength": 500,
+          "description": "Denormalized cover-photo Storage path of the driven car, so the History card renders a round photo without a vehicle read. Null when no car was recorded."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
-      "comment": "maxSpeedMetersPerSecond and routeThumbnail are deliberately NOT required: drives.save has written both since 2026-07, but drives saved before that decision are not backfilled and simply lack the keys. Requiring them would describe a shape the collection does not have.",
+      "comment": "maxSpeedMetersPerSecond, routeThumbnail, vehicleId and carImagePath are deliberately NOT required: drives.save writes them, but drives saved before each field existed are not backfilled and simply lack the keys. Requiring them would describe a shape the collection does not have.",
       "required": [
         "userId",
         "title",
@@ -94,6 +104,19 @@
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9._-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "pattern": "^[A-Za-z0-9._-]+$",
+          "description": "Firestore-safe id of the garage car this drive was driven in."
+        },
+        "carImagePath": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "description": "Cover-photo Storage path of the driven car, denormalized onto the ride for the History card."
         }
       },
       "required": ["startedAt", "endedAt"],

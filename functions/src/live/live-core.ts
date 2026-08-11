@@ -336,6 +336,15 @@ export interface LiveSession {
    */
   mainCar: LiveMainCar | null;
   /**
+   * The garage-vehicle id the sharer is driving this session (the car chosen in
+   * the "Start driving" picker, or the resolved main/first-car fallback), or null
+   * when they have no car. A start-time snapshot like {@link mainCar}. NOT read by
+   * viewers or written to the marker — it exists so the client can stamp WHICH car
+   * a drive was driven in onto the saved ride (for the History card) without
+   * exposing it on the public marker.
+   */
+  vehicleId?: string | null;
+  /**
    * True when this session was auto-started BY a convoy (convoy.start /
    * convoy.respond-accept) rather than by the user tapping "share live". Absent
    * on manually-started sessions. Used purely for TEARDOWN: convoy.leave /
@@ -386,6 +395,7 @@ export function buildSession(
   now: Date,
   displayName: string | null,
   mainCar: LiveMainCar | null = null,
+  vehicleId: string | null = null,
 ): LiveSession {
   // The chosen window, clamped to the 6h hard cap. The current client always
   // passes '6h', which equals the cap, so clampExpiryToCap is exactly the
@@ -404,6 +414,7 @@ export function buildSession(
     stoppedAt: null,
     displayName,
     mainCar,
+    vehicleId,
   };
 }
 

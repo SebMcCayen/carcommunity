@@ -235,6 +235,19 @@ describe('live-core session lifecycle', () => {
     expect(node.mainCar).toEqual(mainCar);
   });
 
+  it('carries the driven vehicleId on the session but not the public marker', () => {
+    const session = buildSession('s1', '1h', NOW, 'Seb', null, 'veh-7');
+    expect(session.vehicleId).toBe('veh-7');
+    // Defaults to null when no car was selected.
+    expect(buildSession('s2', '1h', NOW, 'Seb').vehicleId).toBeNull();
+    // The vehicleId is NOT projected onto the marker viewers read — only mainCar.
+    const node = buildLatestNode(
+      { latitude: 59.33, longitude: 18.07, recordedAt: NOW.toISOString() },
+      session,
+    );
+    expect(node).not.toHaveProperty('vehicleId');
+  });
+
   it('detects silent-stale markers numerically (non-canonical ISO safe)', () => {
     expect(isLatestStale('2026-07-05T11:44:59.000Z', NOW)).toBe(true);
     expect(isLatestStale('2026-07-05T11:45:01.000Z', NOW)).toBe(false);

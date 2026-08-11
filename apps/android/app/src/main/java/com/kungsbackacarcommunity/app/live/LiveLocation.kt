@@ -73,6 +73,13 @@ data class LiveSessionInfo(
      * History card. Only display-safe fields (no registration plate).
      */
     val mainCar: LiveMainCar? = null,
+    /**
+     * The garage-vehicle id being driven this session (denormalized onto the
+     * session node at start), or null when the sharer has no car. Not shown to
+     * viewers — carried so the drive recording can stamp WHICH car a drive was
+     * driven in onto the saved ride, linking it back to the garage vehicle.
+     */
+    val vehicleId: String? = null,
 )
 
 object LiveLocation {

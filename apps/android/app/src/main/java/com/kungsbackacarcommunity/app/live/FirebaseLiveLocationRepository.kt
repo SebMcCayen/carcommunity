@@ -223,5 +223,16 @@ private fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
     // marker carries), so the drive recording can stamp its photo onto the saved
     // drive. Absent → null (no car).
     val mainCar = child("mainCar").toLiveMainCar()
-    return LiveSessionInfo(sessionId, status, duration, expiresAtMillis, convoyAutoStarted, mainCar)
+    // The garage-vehicle id being driven (denormalized alongside mainCar), so the
+    // saved drive links back to the exact vehicle. Absent → null.
+    val vehicleId = child("vehicleId").getValue(String::class.java)
+    return LiveSessionInfo(
+        sessionId,
+        status,
+        duration,
+        expiresAtMillis,
+        convoyAutoStarted,
+        mainCar,
+        vehicleId,
+    )
 }
