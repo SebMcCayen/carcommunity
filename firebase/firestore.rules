@@ -971,6 +971,21 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // financeRecurringCosts – operator-entered recurring costs (Finance board)
+    // Real, admin-entered recurring costs (Claude, tooling, domains …), each
+    // with a label + description + amount + currency + period, folded into the
+    // finance board's monthly grand total by finance.estimate. Admin-only on
+    // BOTH read and write: members must never see the operator's cost figures.
+    // The admin UI READS these directly (isAdmin) and MUTATES them through the
+    // audited, field-validating finance.{add,update,delete}RecurringCost
+    // callables (Admin SDK, which bypasses these rules); those are the shape
+    // gatekeeper and write an adminAuditEvents record per change.
+    // -------------------------------------------------------------------------
+    match /financeRecurringCosts/{costId} {
+      allow read, write: if isAdmin();
+    }
+
+    // -------------------------------------------------------------------------
     // hazards – road hazard reports
     // -------------------------------------------------------------------------
     match /hazards/{hazardId} {

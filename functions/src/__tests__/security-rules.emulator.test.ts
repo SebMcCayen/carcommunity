@@ -985,6 +985,74 @@ describe('Firestore – metrics snapshots', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: finance recurring costs (admin-only, operator-entered)
+// ---------------------------------------------------------------------------
+
+describe('Firestore – finance recurring costs', () => {
+  const COST_ID = 'fin-recurring-rules';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'financeRecurringCosts', COST_ID), {
+        label: 'Claude',
+        description: 'Max plan',
+        amount: 200,
+        currency: 'USD',
+        period: 'monthly',
+        createdByUid: 'seed-admin',
+      });
+    });
+  });
+
+  it('an admin can read a recurring cost', async () => {
+    const adminFs = testEnv.authenticatedContext('fin-rc-admin', { admin: true }).firestore();
+    await assertSucceeds(getDoc(doc(adminFs, 'financeRecurringCosts', COST_ID)));
+  });
+
+  it('an admin can write a recurring cost', async () => {
+    const adminFs = testEnv.authenticatedContext('fin-rc-admin-w', { admin: true }).firestore();
+    await assertSucceeds(
+      setDoc(doc(adminFs, 'financeRecurringCosts', 'fin-rc-admin-created'), {
+        label: 'Domain',
+        description: 'carcommunity.se',
+        amount: 120,
+        currency: 'SEK',
+        period: 'yearly',
+        createdByUid: 'fin-rc-admin-w',
+      }),
+    );
+  });
+
+  it('a non-admin member cannot read or write recurring costs', async () => {
+    const memberFs = testEnv
+      .authenticatedContext('fin-rc-member', { activeMember: true })
+      .firestore();
+    await assertFails(getDoc(doc(memberFs, 'financeRecurringCosts', COST_ID)));
+    await assertFails(
+      setDoc(doc(memberFs, 'financeRecurringCosts', 'fin-rc-member-created'), { label: 'X', amount: 1 }),
+    );
+  });
+
+  it('an unauthenticated client cannot read or write recurring costs', async () => {
+    const anonFs = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(anonFs, 'financeRecurringCosts', COST_ID)));
+    await assertFails(
+      setDoc(doc(anonFs, 'financeRecurringCosts', 'fin-rc-anon-created'), { label: 'X', amount: 1 }),
+    );
+  });
+
+  it('a suspended admin cannot access recurring costs (suspension overrides admin)', async () => {
+    const suspendedFs = testEnv
+      .authenticatedContext('fin-rc-suspended-admin', { admin: true, suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedFs, 'financeRecurringCosts', COST_ID)));
+    await assertFails(
+      updateDoc(doc(suspendedFs, 'financeRecurringCosts', COST_ID), { amount: 999 }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore + Storage: digital billboards (Phase 9k)
 // ---------------------------------------------------------------------------
 

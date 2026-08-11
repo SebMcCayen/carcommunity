@@ -443,8 +443,12 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'incidents.remove': 'variable-member',
   'incidents.confirm': 'variable-member',
   'incidents.reportCleared': 'variable-member',
-  // The finance board's own callable — an admin opens it a few times a day.
+  // The finance board's own callables — an admin opens the board a few times a
+  // day and edits the recurring-costs list rarely.
   'finance.estimate': 'admin-rare',
+  'finance.addRecurringCost': 'admin-rare',
+  'finance.updateRecurringCost': 'admin-rare',
+  'finance.deleteRecurringCost': 'admin-rare',
 };
 
 /** Callable names the model has NOT costed (class 'uncosted'). Board flags these. */

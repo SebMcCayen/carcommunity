@@ -1128,7 +1128,34 @@
     {
       "name": "finance.estimate",
       "domain": "finance",
-      "description": "Admin-only on-demand cost estimate in SEK ({} input — takes no client-controlled fields). Computes an IN-APP COST MODEL (estimated, NOT the real Google Cloud bill): a sourced+dated price table (functions/src/finance/pricing.ts), labelled usage assumptions (assumptions.ts), and the function inventory (inventory.ts). Reads the latest metrics/{YYYY-MM-DD} snapshot's totalUsers for the LIVE member count so the variable half tracks community growth (falls back to a labelled default with source:'fallback' when no snapshot exists yet). Splits cost into two honest halves: COMMITTED (scheduled jobs — cadence x per-run work, independent of members; Trafikverket's ~2,775 writes/run x 48 runs/day dominates) and VARIABLE (per-member Firestore/Functions/RTDB/Storage usage). Applies each service's free tier explicitly (gross -> free -> billable -> SEK). Returns a Google Cloud subtotal, a SEPARATE Mapbox vendor estimate (never blended in), and a SEPARATE fixed-subscriptions section (e.g. Claude — placeholder until Seb sets his real plan cost), plus a grand total and any uncosted functions. On-demand rather than scheduled on purpose: no history is needed, so it avoids adding a scheduled Firestore write (a cost of its own). Every figure is a MODEL ESTIMATE; the admin page carries that banner and links to the Google Cloud billing console. Deployed via grouped export as finance-estimate (functions/src/finance/estimate.ts).",
+      "description": "Admin-only on-demand cost estimate in SEK ({} input — takes no client-controlled fields). Computes an IN-APP COST MODEL (estimated, NOT the real Google Cloud bill): a sourced+dated price table (functions/src/finance/pricing.ts), labelled usage assumptions (assumptions.ts), and the function inventory (inventory.ts). Reads the latest metrics/{YYYY-MM-DD} snapshot's totalUsers for the LIVE member count so the variable half tracks community growth (falls back to a labelled default with source:'fallback' when no snapshot exists yet). Splits cost into two honest halves: COMMITTED (scheduled jobs — cadence x per-run work, independent of members; Trafikverket's ~2,775 writes/run x 48 runs/day dominates) and VARIABLE (per-member Firestore/Functions/RTDB/Storage usage). Applies each service's free tier explicitly (gross -> free -> billable -> SEK). Returns a Google Cloud subtotal, a SEPARATE Mapbox vendor estimate (never blended in), and a SEPARATE recurring-costs section (operator-entered ACTUALS read from the financeRecurringCosts collection — Claude, tooling, domains …; a yearly cost is normalised to /12 and USD is converted via the same dated FX rate), plus a grand total and any uncosted functions. On-demand rather than scheduled on purpose: no history is needed, so it avoids adding a scheduled Firestore write (a cost of its own). Every MODELLED figure is a MODEL ESTIMATE; the admin page carries that banner and links to the Google Cloud billing console. Deployed via grouped export as finance-estimate (functions/src/finance/estimate.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "finance.addRecurringCost",
+      "domain": "finance",
+      "description": "Admin-only. Adds one OPERATOR-ENTERED recurring cost to the Finance & Cost board's 'Recurring costs' section — an exact figure Seb enters (Claude, a SaaS tool, a domain …), NOT a model estimate. Input { label, description, amount (major units, finite > 0), currency: SEK|USD, period: monthly|yearly } validated + bounded with zod (recurringCosts-core.ts): non-empty label (<= 80 chars), bounded description (<= 500 chars), amount <= 10,000,000, currency + period enums. Writes financeRecurringCosts/{autoId} = { label, description, amount, currency, period, createdByUid, createdAt, updatedAt } AND an immutable adminAuditEvents record (action finance.addRecurringCost) in one batch. finance.estimate reads the collection and folds every entry into the grand total (yearly /12, USD via the dated FX rate). Replaces the old hardcoded Claude placeholder in assumptions.ts so nothing is double-counted. Admin-gated (requireAdminActor). Deployed via grouped export as finance-addRecurringCost (functions/src/finance/recurringCosts.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "finance.updateRecurringCost",
+      "domain": "finance",
+      "description": "Admin-only. Edits an existing recurring cost. Input { id, label, description, amount (finite > 0), currency: SEK|USD, period: monthly|yearly } validated + bounded like finance.addRecurringCost. Merges the mutable fields onto financeRecurringCosts/{id} (createdByUid/createdAt preserved), bumps updatedAt, and writes an adminAuditEvents record (action finance.updateRecurringCost) in one batch. not-found if the document is missing. Admin-gated (requireAdminActor). Deployed via grouped export as finance-updateRecurringCost (functions/src/finance/recurringCosts.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/api-guidelines.md"
+    },
+    {
+      "name": "finance.deleteRecurringCost",
+      "domain": "finance",
+      "description": "Admin-only. Deletes one recurring cost. Input { id }. Removes financeRecurringCosts/{id} and writes an adminAuditEvents record (action finance.deleteRecurringCost) in one batch; not-found if the document is missing. The board's grand total drops the line on the next estimate. Admin-gated (requireAdminActor). Deployed via grouped export as finance-deleteRecurringCost (functions/src/finance/recurringCosts.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",

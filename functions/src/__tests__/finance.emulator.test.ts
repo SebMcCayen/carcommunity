@@ -37,6 +37,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { RECURRING_COSTS_COLLECTION } from '../finance/recurringCosts-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -154,11 +155,26 @@ afterAll(async () => {
   await deleteApp(app);
 });
 
+interface RecurringCostLineResult {
+  id: string;
+  label: string;
+  description: string;
+  amount: number;
+  currency: string;
+  period: string;
+  sekPerMonth: number;
+  annualSek: number;
+}
+
 interface EstimateResult {
   member: { count: number; source: string; asOf: string | null };
   googleCloud: { totalSekPerMonth: number; trafikverketWritesSekPerMonth: number };
   mapbox: { sekPerMonth: number };
-  fixedSubscriptions: { totalSekPerMonth: number; hasUnset: boolean };
+  recurringCosts: {
+    items: RecurringCostLineResult[];
+    totalSekPerMonth: number;
+    count: number;
+  };
   grandTotalSekPerMonth: number;
   fx: { usdToSek: number };
 }
@@ -185,12 +201,199 @@ describe('finance-estimate', () => {
     expect(result.grandTotalSekPerMonth).toBeCloseTo(
       result.googleCloud.totalSekPerMonth +
         result.mapbox.sekPerMonth +
-        result.fixedSubscriptions.totalSekPerMonth,
+        result.recurringCosts.totalSekPerMonth,
       4,
     );
 
-    // Claude subscription is unset by default → flagged, contributes nothing.
-    expect(result.fixedSubscriptions.hasUnset).toBe(true);
-    expect(result.fixedSubscriptions.totalSekPerMonth).toBe(0);
+    // The recurring-costs section is data-backed now (the hardcoded Claude
+    // placeholder was removed). The emulator suite shares ONE Firestore across
+    // files, so other files (e.g. security-rules) may have seeded rows — assert
+    // the section is well-formed and self-consistent rather than exactly empty.
+    // The empty-list → 0 case is pinned in the pure finance/model.test.ts.
+    expect(result.recurringCosts.count).toBe(result.recurringCosts.items.length);
+    expect(result.recurringCosts.totalSekPerMonth).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(result.recurringCosts.totalSekPerMonth)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Recurring-costs CRUD callables (admin-only, audited)
+// ---------------------------------------------------------------------------
+
+interface AddResult {
+  id: string;
+  label: string;
+  amount: number;
+  currency: string;
+  period: string;
+}
+
+async function latestAuditFor(action: string, targetId: string): Promise<Record<string, unknown> | undefined> {
+  const snap = await adminDb
+    .collection('adminAuditEvents')
+    .where('action', '==', action)
+    .where('targetId', '==', targetId)
+    .limit(1)
+    .get();
+  return snap.empty ? undefined : snap.docs[0]!.data();
+}
+
+describe('finance recurring-costs CRUD', () => {
+  const created: string[] = [];
+
+  afterAll(async () => {
+    for (const id of created) {
+      await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(id).delete().catch(() => undefined);
+    }
+  });
+
+  it('rejects a non-admin caller on every mutation', async () => {
+    await signInAs(memberUser);
+    const add = { label: 'X', description: 'y', amount: 10, currency: 'SEK', period: 'monthly' };
+    expect(await callableErrorCode(call('finance-addRecurringCost', add))).toBe(
+      'functions/permission-denied',
+    );
+    expect(
+      await callableErrorCode(call('finance-updateRecurringCost', { id: 'nope', ...add })),
+    ).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('finance-deleteRecurringCost', { id: 'nope' }))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('adds a cost, persists the shape, and writes an audit event', async () => {
+    await signInAs(adminUser);
+    const add = {
+      label: `Claude ${S}`,
+      description: 'Max plan — operator actual',
+      amount: 200,
+      currency: 'USD',
+      period: 'monthly',
+    };
+    const result = (await call('finance-addRecurringCost', add)).data as AddResult;
+    created.push(result.id);
+
+    expect(result.id).toBeTruthy();
+    expect(result.label).toBe(add.label);
+
+    const doc = await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(result.id).get();
+    expect(doc.exists).toBe(true);
+    const data = doc.data()!;
+    expect(data.label).toBe(add.label);
+    expect(data.amount).toBe(200);
+    expect(data.currency).toBe('USD');
+    expect(data.period).toBe('monthly');
+    expect(data.createdByUid).toBe(adminUser.uid);
+    expect(data.createdAt).toBeTruthy();
+
+    const audit = await latestAuditFor('finance.addRecurringCost', result.id);
+    expect(audit).toBeDefined();
+    expect(audit!.adminId).toBe(adminUser.uid);
+    expect(audit!.targetType).toBe('financeRecurringCost');
+  });
+
+  it('rejects invalid input with invalid-argument', async () => {
+    await signInAs(adminUser);
+    const bad = { label: '', description: 'y', amount: 10, currency: 'SEK', period: 'monthly' };
+    expect(await callableErrorCode(call('finance-addRecurringCost', bad))).toBe(
+      'functions/invalid-argument',
+    );
+    const badAmount = { label: 'Z', description: 'y', amount: -1, currency: 'SEK', period: 'monthly' };
+    expect(await callableErrorCode(call('finance-addRecurringCost', badAmount))).toBe(
+      'functions/invalid-argument',
+    );
+    const badCurrency = { label: 'Z', description: 'y', amount: 1, currency: 'EUR', period: 'monthly' };
+    expect(await callableErrorCode(call('finance-addRecurringCost', badCurrency))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it('the added cost is folded into the estimate grand total', async () => {
+    await signInAs(adminUser);
+    const add = {
+      label: `Domän ${S}`,
+      description: 'annual domain — SEK',
+      amount: 1200,
+      currency: 'SEK',
+      period: 'yearly',
+    };
+    const added = (await call('finance-addRecurringCost', add)).data as AddResult;
+    created.push(added.id);
+
+    const est = (await call('finance-estimate', {})).data as EstimateResult;
+    const line = est.recurringCosts.items.find((l) => l.id === added.id);
+    expect(line).toBeDefined();
+    // 1200 SEK/yr normalises to 100 SEK/month.
+    expect(line!.sekPerMonth).toBeCloseTo(100, 4);
+    expect(line!.annualSek).toBeCloseTo(1200, 4);
+    expect(est.recurringCosts.totalSekPerMonth).toBeGreaterThan(0);
+    expect(est.grandTotalSekPerMonth).toBeCloseTo(
+      est.googleCloud.totalSekPerMonth + est.mapbox.sekPerMonth + est.recurringCosts.totalSekPerMonth,
+      4,
+    );
+  });
+
+  it('updates an existing cost and 404s on a missing id', async () => {
+    await signInAs(adminUser);
+    const added = (
+      await call('finance-addRecurringCost', {
+        label: `Tool ${S}`,
+        description: 'before',
+        amount: 50,
+        currency: 'SEK',
+        period: 'monthly',
+      })
+    ).data as AddResult;
+    created.push(added.id);
+
+    await call('finance-updateRecurringCost', {
+      id: added.id,
+      label: `Tool ${S} v2`,
+      description: 'after',
+      amount: 75,
+      currency: 'SEK',
+      period: 'monthly',
+    });
+    const doc = await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).get();
+    expect(doc.data()!.label).toBe(`Tool ${S} v2`);
+    expect(doc.data()!.amount).toBe(75);
+    expect(doc.data()!.createdByUid).toBe(adminUser.uid); // preserved
+
+    expect(await latestAuditFor('finance.updateRecurringCost', added.id)).toBeDefined();
+
+    expect(
+      await callableErrorCode(
+        call('finance-updateRecurringCost', {
+          id: 'does-not-exist',
+          label: 'X',
+          description: '',
+          amount: 1,
+          currency: 'SEK',
+          period: 'monthly',
+        }),
+      ),
+    ).toBe('functions/not-found');
+  });
+
+  it('deletes an existing cost and 404s on a missing id', async () => {
+    await signInAs(adminUser);
+    const added = (
+      await call('finance-addRecurringCost', {
+        label: `Temp ${S}`,
+        description: 'to delete',
+        amount: 9,
+        currency: 'SEK',
+        period: 'monthly',
+      })
+    ).data as AddResult;
+
+    await call('finance-deleteRecurringCost', { id: added.id });
+    const doc = await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).get();
+    expect(doc.exists).toBe(false);
+    expect(await latestAuditFor('finance.deleteRecurringCost', added.id)).toBeDefined();
+
+    expect(await callableErrorCode(call('finance-deleteRecurringCost', { id: 'does-not-exist' }))).toBe(
+      'functions/not-found',
+    );
   });
 });

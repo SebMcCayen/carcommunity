@@ -24,6 +24,14 @@ import { requireAdminActor } from '../admin/actorContext';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
 import { METRICS_COLLECTION } from '../metrics/metrics-core';
 import { estimateFinance, resolveMemberCount, type FinanceEstimate } from './model';
+import {
+  RECURRING_COSTS_COLLECTION,
+  RECURRING_COST_CURRENCIES,
+  RECURRING_COST_PERIODS,
+  type RecurringCostCurrency,
+  type RecurringCostEntry,
+  type RecurringCostPeriod,
+} from './recurringCosts-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -61,15 +69,57 @@ async function readLatestMemberCount(): Promise<{ totalUsers: number | null; dat
   return { totalUsers, date };
 }
 
+/**
+ * Reads every operator-entered recurring cost from `financeRecurringCosts`.
+ * The collection is small (a handful of admin-entered rows), so an unbounded
+ * read is fine. Defensively validates the currency/period enums so a
+ * hand-edited or partial document can never feed a bad shape into the model —
+ * a row that fails validation is skipped rather than poisoning the total.
+ */
+async function readRecurringCosts(): Promise<RecurringCostEntry[]> {
+  const snap = await db.collection(RECURRING_COSTS_COLLECTION).get();
+  const entries: RecurringCostEntry[] = [];
+  for (const doc of snap.docs) {
+    const data = doc.data();
+    const amount = typeof data.amount === 'number' ? data.amount : NaN;
+    const currency = data.currency as RecurringCostCurrency;
+    const period = data.period as RecurringCostPeriod;
+    if (
+      typeof data.label === 'string' &&
+      data.label.length > 0 &&
+      Number.isFinite(amount) &&
+      amount > 0 &&
+      RECURRING_COST_CURRENCIES.includes(currency) &&
+      RECURRING_COST_PERIODS.includes(period)
+    ) {
+      entries.push({
+        id: doc.id,
+        label: data.label,
+        description: typeof data.description === 'string' ? data.description : '',
+        amount,
+        currency,
+        period,
+      });
+    }
+  }
+  // Stable, deterministic order (most expensive first is applied in the UI; the
+  // model sums regardless, so sort by label for a predictable line order).
+  return entries.sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export const estimate = onCall(CALLABLE_OPTS, async (request): Promise<FinanceEstimate> => {
   await requireAdminActor(request);
 
-  const { totalUsers, date } = await readLatestMemberCount();
+  const [{ totalUsers, date }, recurringCosts] = await Promise.all([
+    readLatestMemberCount(),
+    readRecurringCosts(),
+  ]);
   const member = resolveMemberCount(totalUsers, date);
 
   return estimateFinance({
     memberCount: member.count,
     memberCountSource: member.source,
     memberCountAsOf: member.asOf,
+    recurringCosts,
   });
 });

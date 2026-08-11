@@ -24,6 +24,57 @@
     "unavailable": "Map unavailable — no map is configured. Enter the coordinates manually below.",
     "loadError": "Map unavailable — it failed to load (check the Mapbox token and network). Enter the coordinates manually below."
   },
+  "finance": {
+    "recurringCosts": {
+      "title": "Recurring costs",
+      "subtitle": "Real, operator-entered costs (Claude, tooling, domains …) — not estimates. Each entry is accounted for in the monthly total. A yearly cost is spread per month (/12) and USD is converted via the same dated FX rate.",
+      "addHeading": "Add a cost",
+      "add": "Add",
+      "adding": "Adding …",
+      "edit": "Edit",
+      "save": "Save",
+      "saving": "Saving …",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "deleting": "Deleting …",
+      "deleteConfirm": "Delete this recurring cost? This cannot be undone.",
+      "loading": "Loading …",
+      "empty": "No recurring costs yet. Add your first above (e.g. your Claude subscription).",
+      "form": {
+        "label": "Name",
+        "labelPlaceholder": "e.g. Claude (Anthropic)",
+        "description": "Description",
+        "descriptionPlaceholder": "What the cost is for",
+        "amount": "Amount",
+        "currency": "Currency",
+        "period": "Period"
+      },
+      "period": {
+        "monthly": "Per month",
+        "yearly": "Per year"
+      },
+      "col": {
+        "label": "Name / description",
+        "amount": "Amount",
+        "period": "Period",
+        "monthlySek": "SEK / month",
+        "actions": "Actions"
+      },
+      "errors": {
+        "loadFailed": "Could not load the recurring costs.",
+        "createFailed": "Could not add the cost.",
+        "updateFailed": "Could not save the changes.",
+        "deleteFailed": "Could not delete the cost.",
+        "labelRequired": "Name is required.",
+        "labelTooLong": "The name is too long.",
+        "descriptionTooLong": "The description is too long.",
+        "amountInvalid": "Amount must be a number greater than 0.",
+        "amountTooLarge": "Amount is unrealistically large.",
+        "currencyInvalid": "Currency must be SEK or USD.",
+        "periodInvalid": "Period must be monthly or yearly."
+      }
+    }
+  },
   "announcements": {
     "title": "Announcements",
     "subtitle": "Create and manage announcements shown to members in the app. Retracting (deactivating) is the primary way to hide an announcement.",

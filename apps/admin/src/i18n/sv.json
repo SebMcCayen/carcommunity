@@ -24,6 +24,57 @@
     "unavailable": "Kartan är inte tillgänglig — ingen karta är konfigurerad. Ange koordinaterna manuellt nedan.",
     "loadError": "Kartan är inte tillgänglig — den kunde inte laddas (kontrollera Mapbox-token och nätverket). Ange koordinaterna manuellt nedan."
   },
+  "finance": {
+    "recurringCosts": {
+      "title": "Återkommande kostnader",
+      "subtitle": "Verkliga, operatörsinmatade kostnader (Claude, verktyg, domäner …) — inte uppskattningar. Varje post räknas med i den månatliga totalsumman. En årlig kostnad fördelas per månad (/12) och USD räknas om via samma dagsdaterade växelkurs.",
+      "addHeading": "Lägg till kostnad",
+      "add": "Lägg till",
+      "adding": "Lägger till …",
+      "edit": "Redigera",
+      "save": "Spara",
+      "saving": "Sparar …",
+      "cancel": "Avbryt",
+      "delete": "Ta bort",
+      "deleting": "Tar bort …",
+      "deleteConfirm": "Ta bort den här återkommande kostnaden? Detta går inte att ångra.",
+      "loading": "Laddar …",
+      "empty": "Inga återkommande kostnader ännu. Lägg till din första ovan (t.ex. din Claude-prenumeration).",
+      "form": {
+        "label": "Namn",
+        "labelPlaceholder": "t.ex. Claude (Anthropic)",
+        "description": "Beskrivning",
+        "descriptionPlaceholder": "Vad kostnaden avser",
+        "amount": "Belopp",
+        "currency": "Valuta",
+        "period": "Period"
+      },
+      "period": {
+        "monthly": "Per månad",
+        "yearly": "Per år"
+      },
+      "col": {
+        "label": "Namn / beskrivning",
+        "amount": "Belopp",
+        "period": "Period",
+        "monthlySek": "SEK / månad",
+        "actions": "Åtgärder"
+      },
+      "errors": {
+        "loadFailed": "Kunde inte ladda de återkommande kostnaderna.",
+        "createFailed": "Kunde inte lägga till kostnaden.",
+        "updateFailed": "Kunde inte spara ändringarna.",
+        "deleteFailed": "Kunde inte ta bort kostnaden.",
+        "labelRequired": "Namn krävs.",
+        "labelTooLong": "Namnet är för långt.",
+        "descriptionTooLong": "Beskrivningen är för lång.",
+        "amountInvalid": "Beloppet måste vara ett tal större än 0.",
+        "amountTooLarge": "Beloppet är orimligt stort.",
+        "currencyInvalid": "Valutan måste vara SEK eller USD.",
+        "periodInvalid": "Perioden måste vara per månad eller per år."
+      }
+    }
+  },
   "announcements": {
     "title": "Meddelanden",
     "subtitle": "Skapa och hantera meddelanden som visas för medlemmar i appen. Att dra tillbaka (inaktivera) är det primära sättet att dölja ett meddelande.",

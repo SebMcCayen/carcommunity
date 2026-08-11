@@ -15,6 +15,10 @@
 
 import { callAdmin } from '@/lib/callables';
 
+// Recurring-costs CRUD (operator-entered actuals) — its own module, re-exported
+// so the finance page imports everything from one feature entry point.
+export * from './recurringCosts';
+
 export type MemberCountSource = 'metrics-snapshot' | 'fallback';
 
 /** One row in the detailed per-service table. */
@@ -64,22 +68,30 @@ export interface MapboxEstimate {
   source: string;
 }
 
-export interface SubscriptionLine {
+/**
+ * One operator-entered recurring cost, resolved to SEK/month by the backend.
+ * Mirrors functions/src/finance/model.ts RecurringCostLine (the functions
+ * codebase is standalone, so the shape is declared on both sides — keep in
+ * sync). `sekPerMonth` is the normalised monthly figure (a yearly cost is /12);
+ * `annualSek` is the yearly figure for the line detail; USD amounts are already
+ * FX-converted.
+ */
+export interface RecurringCostLine {
   id: string;
-  name: string;
-  amount: number | null;
+  label: string;
+  description: string;
+  amount: number;
   currency: 'SEK' | 'USD';
-  period: 'monthly' | 'annual';
-  sekPerMonth: number | null;
-  capturedOn: string;
-  note?: string;
+  period: 'monthly' | 'yearly';
+  sekPerMonth: number;
+  annualSek: number;
 }
 
 export interface ProjectionPoint {
   members: number;
   googleCloudSekPerMonth: number;
   mapboxSekPerMonth: number;
-  subscriptionsSekPerMonth: number;
+  recurringCostsSekPerMonth: number;
   grandTotalSekPerMonth: number;
 }
 
@@ -98,10 +110,10 @@ export interface FinanceEstimate {
     totalSekPerMonth: number;
   };
   mapbox: MapboxEstimate;
-  fixedSubscriptions: {
-    items: SubscriptionLine[];
+  recurringCosts: {
+    items: RecurringCostLine[];
     totalSekPerMonth: number;
-    hasUnset: boolean;
+    count: number;
   };
   grandTotalSekPerMonth: number;
   functionInventory: {
