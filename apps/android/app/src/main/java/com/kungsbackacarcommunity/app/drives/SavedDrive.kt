@@ -46,6 +46,13 @@ data class SavedDrive(
      * placeholder.
      */
     val routeThumbnail: String? = null,
+    /**
+     * Storage path of the car this drive was driven in (the live session's
+     * denormalized cover photo), so the History card can draw a round photo of
+     * the car with no extra vehicle read. Null for drives saved before the field
+     * existed, and for drives with no car — the card then shows no car photo.
+     */
+    val carImagePath: String? = null,
 )
 
 object SavedDrives {

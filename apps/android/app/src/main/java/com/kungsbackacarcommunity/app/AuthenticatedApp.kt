@@ -2650,6 +2650,11 @@ fun AuthenticatedApp(
                             // live.cleanupExpired). isSharing is true here BECAUSE
                             // this session is active, so its id is present.
                             sessionId = liveSession?.sessionId,
+                            // Record which car is being driven (the session's
+                            // denormalized cover photo) so the History card can
+                            // draw a round photo of it. Null when the sharer has
+                            // no car — History then shows no car photo.
+                            carImagePath = liveSession?.mainCar?.imagePath,
                         ) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way

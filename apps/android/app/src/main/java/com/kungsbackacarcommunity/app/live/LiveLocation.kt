@@ -65,6 +65,14 @@ data class LiveSessionInfo(
      * bounds it). Absent on a manually-started solo session → false.
      */
     val convoyAutoStarted: Boolean = false,
+    /**
+     * The car this session is being driven in, denormalized onto the session node
+     * at start (the one chosen in the "Start driving" picker, or the main-car
+     * fallback). Null when the sharer has no car. Carried here so the drive
+     * recording can stamp the driven car's photo onto the saved drive for the
+     * History card. Only display-safe fields (no registration plate).
+     */
+    val mainCar: LiveMainCar? = null,
 )
 
 object LiveLocation {

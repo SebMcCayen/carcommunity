@@ -168,5 +168,8 @@ private fun DocumentSnapshot.toSavedDrive(): SavedDrive? {
         // UI's placeholder path (a dash, and the route glyph), not an error.
         maxSpeedMetersPerSecond = getDouble("maxSpeedMetersPerSecond"),
         routeThumbnail = getString("routeThumbnail"),
+        // Absent (null) on drives saved before the driven-car field existed and on
+        // drives with no car — the History card then shows no round car photo.
+        carImagePath = getString("carImagePath"),
     )
 }

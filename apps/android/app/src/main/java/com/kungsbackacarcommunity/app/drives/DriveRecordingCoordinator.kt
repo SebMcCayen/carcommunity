@@ -63,6 +63,12 @@ class DriveRecordingCoordinator(
     private val saveBackoffMillis: (attempt: Int) -> Long = ::defaultSaveBackoffMillis,
     /** Injected so tests drive the backoff deterministically (no real delays). */
     private val delayFn: suspend (Long) -> Unit = { delay(it) },
+    /**
+     * Storage path of the car being driven (the live session's denormalized cover
+     * photo), recorded on the saved drive so History can show a round car photo.
+     * Null on a manual recording or when the sharer has no car.
+     */
+    private val carImagePath: String? = null,
 ) {
     private val stateFlow = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
@@ -148,7 +154,7 @@ class DriveRecordingCoordinator(
     fun start() {
         if (recorder != null) return
         val started = clock()
-        recorder = DriveRecorder(sourceSessionId, started)
+        recorder = DriveRecorder(sourceSessionId, started, carImagePath = carImagePath)
         startedAtMillis = started
         stoppedAtMillis = null
         stateFlow.value = RecordingState.Recording(pointCount = 0, elapsedMillis = 0L)

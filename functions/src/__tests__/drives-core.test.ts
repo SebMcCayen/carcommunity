@@ -124,6 +124,15 @@ describe('drives-core input parsing and guards', () => {
     expect(parseSaveDriveInput({ ...validSave, title: '' }).ok).toBe(false);
     expect(parseSaveDriveInput({ ...validSave, extra: 1 }).ok).toBe(false);
     expect(parseSaveDriveInput({ ...validSave, sourceSessionId: 'has spaces' }).ok).toBe(false);
+    // The driven-car fields are optional and accepted; a blank one is rejected.
+    const withCar = parseSaveDriveInput({
+      ...validSave,
+      vehicleId: 'veh-9',
+      carImagePath: 'vehicleImages/u1/veh-9/photo.jpg',
+    });
+    expect(withCar.ok).toBe(true);
+    expect(parseSaveDriveInput({ ...validSave, vehicleId: '' }).ok).toBe(false);
+    expect(parseSaveDriveInput({ ...validSave, carImagePath: '' }).ok).toBe(false);
     expect(parseDeleteDriveInput({ rideId: 'r1' }).ok).toBe(true);
     expect(parseDeleteDriveInput({}).ok).toBe(false);
     // Firestore-unsafe IDs fail as invalid-argument instead of throwing in doc().
@@ -194,6 +203,10 @@ describe('drives-core stats and document builder', () => {
     expect(docData.routePath).toBe('rideRoutes/u1/r1/route.bin');
     expect(docData.previewImagePath).toBe('rideRoutes/u1/r1/preview.png');
     expect(docData.sourceSessionId).toBe('s1');
+    // No car on this save → both driven-car fields default to null (not absent),
+    // so every ride document carries them for a uniform read shape.
+    expect(docData.vehicleId).toBeNull();
+    expect(docData.carImagePath).toBeNull();
     // REVERSED 2026-07 by an explicit product decision. This line used to read
     //   expect(docData).not.toHaveProperty('topSpeed');
     // and pinned the rule that no top-speed field was ever stored. Maximum
@@ -211,5 +224,22 @@ describe('drives-core stats and document builder', () => {
     expect(rideRoutePath('u1', 'r1')).toBe('rideRoutes/u1/r1/route.bin');
     expect(ridePreviewPath('u1', 'r1')).toBe('rideRoutes/u1/r1/preview.png');
     expect(rideStoragePrefix('u1', 'r1')).toBe('rideRoutes/u1/r1/');
+  });
+
+  it('records the driven car on the ride document when the save carries one', () => {
+    const parsed = parseSaveDriveInput({
+      ...validSave,
+      vehicleId: 'veh-9',
+      carImagePath: 'vehicleImages/u1/veh-9/photo.jpg',
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const stats = computeDriveStats(parsed.input);
+    const docData = buildRideDocument(
+      parsed.input,
+      { userId: 'u1', rideId: 'r1', stats, routeThumbnail: null },
+      serverTimestamp,
+    );
+    expect(docData.vehicleId).toBe('veh-9');
+    expect(docData.carImagePath).toBe('vehicleImages/u1/veh-9/photo.jpg');
   });
 });
