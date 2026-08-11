@@ -8,6 +8,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -198,7 +199,13 @@ fun GarageRoute(
 
     // Report the form-open state up so the host panel can disarm its
     // nested-scroll pull-dismiss while a form is open (issue #796, fix 1).
-    LaunchedEffect(showForm) { onFormOpenChange(showForm) }
+    // SideEffect (commit phase), NOT LaunchedEffect: a coroutine effect updates
+    // the host one frame late, leaving a window right after the form opens/closes
+    // where the gate is stale and a dismiss gesture in that frame is mis-handled —
+    // the exact flakiness this PR fixes. SideEffect lands the flag in the same
+    // commit as the showForm change. Setting the host MutableState to an unchanged
+    // value is a no-op, so running every recomposition costs nothing.
+    SideEffect { onFormOpenChange(showForm) }
 
     // Keep the on-disk draft in step with the open add form. Writing on change is
     // cheap (async apply) and being on disk it outlives a process death — which is
