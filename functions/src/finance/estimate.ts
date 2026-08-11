@@ -10,12 +10,18 @@
  * history, so there is no reason to pay for a scheduled write to snapshot it —
  * and a finance page that itself quietly added a daily Firestore write would be
  * a small irony. So this is computed on demand when an admin opens the page:
- * one admin-gated callable, one cheap read of the latest metrics/{date}
- * snapshot for the live member count, and the model runs in memory. No new
- * collection, no new rules, no new scheduled cost.
+ * one admin-gated callable and two cheap reads — the latest metrics/{date}
+ * snapshot for the live member count, and the `financeRecurringCosts`
+ * collection for the operator-entered recurring costs (both admin-gated by
+ * firestore.rules) — after which the model runs in memory. No scheduled write,
+ * so the board still adds no recurring Firestore cost of its own.
  *
- * ⚠️ Everything returned is a MODEL ESTIMATE, not the real bill. The page shows
- * the banner and the link to the Google Cloud billing console.
+ * NOTE: `financeRecurringCosts` (its admin read/write rules and its CRUD
+ * callables) is added by this PR; the estimate merely reads it here.
+ *
+ * ⚠️ Everything MODELLED is a MODEL ESTIMATE, not the real bill (the
+ * recurring costs are operator-entered actuals). The page shows the banner and
+ * the link to the Google Cloud billing console.
  */
 
 import { onCall } from 'firebase-functions/v2/https';
@@ -102,8 +108,9 @@ async function readRecurringCosts(): Promise<RecurringCostEntry[]> {
       });
     }
   }
-  // Stable, deterministic order (most expensive first is applied in the UI; the
-  // model sums regardless, so sort by label for a predictable line order).
+  // Sort alphabetically by label for a stable, deterministic line order. The
+  // model sums the entries regardless of order, so this only fixes how the
+  // lines are listed (the admin UI applies its own display ordering).
   return entries.sort((a, b) => a.label.localeCompare(b.label));
 }
 

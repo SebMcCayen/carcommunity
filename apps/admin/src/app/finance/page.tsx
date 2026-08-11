@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
 import {
   GCP_BILLING_URL,
@@ -151,22 +151,34 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Guard every setState behind a mounted flag: `reload` is called both on
+  // mount AND after a recurring-cost mutation, so its async resolution can land
+  // after the page unmounts. The ref is flipped false in the effect cleanup
+  // (the metrics page's `active` pattern, generalised to the post-mutation
+  // path). This is the safe path for the double-fire concern too — a stale
+  // resolution simply no-ops.
+  const mountedRef = useRef(true);
   const reload = useCallback(() => {
     loadFinanceEstimate()
       .then((e) => {
+        if (!mountedRef.current) return;
         setEst(e);
         setError(null);
       })
       .catch(() => {
-        setError('Could not load the cost estimate. Try refreshing.');
+        if (mountedRef.current) setError('Could not load the cost estimate. Try refreshing.');
       })
       .finally(() => {
-        setLoading(false);
+        if (mountedRef.current) setLoading(false);
       });
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     reload();
+    return () => {
+      mountedRef.current = false;
+    };
   }, [reload]);
 
   const projectionPoints = useMemo(
