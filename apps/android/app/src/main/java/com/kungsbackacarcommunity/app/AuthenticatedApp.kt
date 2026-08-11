@@ -357,6 +357,7 @@ import com.kungsbackacarcommunity.app.incidents.hasTrafikverketData
 import com.kungsbackacarcommunity.app.incidents.incidentGlyphRes
 import com.kungsbackacarcommunity.app.shell.EventMarkerInfoPopup
 import com.kungsbackacarcommunity.app.shell.MapHome
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
@@ -4330,6 +4331,13 @@ fun AuthenticatedApp(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else if (route != null) {
+                    // Every pushed full-screen sub-route renders through RouteHost.
+                    // Providing LocalAeroBackAvailable = true here — and ONLY here —
+                    // makes each Aero page show its pinned in-app Back arrow, so
+                    // gesture-nav users (no visible system Back button) can always go
+                    // back. Tab roots and the translucent panels don't go through
+                    // RouteHost, so they keep the default (false) and stay arrow-free.
+                    CompositionLocalProvider(LocalAeroBackAvailable provides true) {
                     RouteHost(
                         route = route!!,
                         uid = uid,
@@ -4543,6 +4551,7 @@ fun AuthenticatedApp(
                             shareLocationTarget = ShareableLocation(name, point)
                         },
                     )
+                    }
                 } else {
                     // The shell's page frame. Deliberately a Box + bottom bar
                     // and NOT a Scaffold.

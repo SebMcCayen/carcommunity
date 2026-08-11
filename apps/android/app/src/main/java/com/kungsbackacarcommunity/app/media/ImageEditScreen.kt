@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +52,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -183,11 +185,16 @@ fun ImageEditScreen(
         panY = frameCy - cdy
     }
 
-    AeroPage(
-        title = stringResource(R.string.imageEditor_title),
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
-    ) {
+    // Opt OUT of the pinned in-app Back arrow: the editor renders under RouteHost
+    // (avatar / garage crop), where LocalAeroBackAvailable is true, but it already
+    // owns a bottom Cancel that backs out of the EDIT (not the whole route). A top
+    // arrow would be a confusing duplicate, so re-provide false around this page.
+    CompositionLocalProvider(LocalAeroBackAvailable provides false) {
+        AeroPage(
+            title = stringResource(R.string.imageEditor_title),
+            modifier = modifier,
+            verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        ) {
         Text(
             text = hint,
             style = MaterialTheme.typography.bodyMedium,
@@ -405,6 +412,7 @@ fun ImageEditScreen(
         TextButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) {
             Text(text = stringResource(R.string.imageEditor_cancel))
         }
+    }
     }
 }
 
