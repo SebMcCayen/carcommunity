@@ -71,7 +71,7 @@ export function mapSaveDriveError(
   // The missing observability #800 asked for: the real cause is now greppable in
   // Cloud Logging, keyed by uid/sourceSessionId, so a future occurrence tells us
   // whether it was a server exception or a client-side network drop.
-  log.error('drives.saveDrive: unexpected failure, returning retryable error', {
+  log.error('drives.save: unexpected failure, returning retryable error', {
     uid: context.uid,
     sourceSessionId: context.sourceSessionId,
     pointCount: context.pointCount,

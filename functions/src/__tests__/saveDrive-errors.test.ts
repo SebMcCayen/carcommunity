@@ -38,7 +38,7 @@ describe('mapSaveDriveError', () => {
     // The root cause + triage context is logged server-side (the #800 gap).
     expect(log.error).toHaveBeenCalledTimes(1);
     const [message, data] = log.error.mock.calls[0]!;
-    expect(message).toContain('drives.saveDrive');
+    expect(message).toContain('drives.save');
     expect(data).toMatchObject({
       uid: 'user-1',
       sourceSessionId: 'sess-9',

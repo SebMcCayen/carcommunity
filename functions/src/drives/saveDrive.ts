@@ -66,9 +66,11 @@ export const saveDrive = onCall(
   },
   async (request): Promise<SaveDriveResponse> => {
     // Captured as the handler progresses so an unexpected failure downstream can
-    // be logged with triage context (see mapSaveDriveError). They stay undefined
-    // until the corresponding step succeeds.
-    let uid: string | undefined;
+    // be logged with triage context (see mapSaveDriveError). uid is seeded from
+    // the auth context up front so it is still available if requireMemberActor
+    // throws inside its users/{uid} read — the exact transient case #800 targets;
+    // the rest stay undefined until their step succeeds.
+    let uid: string | undefined = request.auth?.uid;
     let sourceSessionId: string | undefined;
     let pointCount: number | undefined;
     try {
