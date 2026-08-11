@@ -195,12 +195,21 @@ fun GarageRoute(
     // nested-scroll pull-dismiss while a form is open (issue #796, fix 1).
     LaunchedEffect(showForm) { onFormOpenChange(showForm) }
 
-    // Persist the draft on every change while the add form is dirty. Cheap
-    // (async apply), and being on disk it outlives a process death — which is the
-    // whole point: the in-memory addFormCurrent would not.
-    LaunchedEffect(addFormCurrent, showForm, editingVehicleId) {
-        if (showForm && editingVehicleId == null && VehicleFormDraftStore.hasUserContent(addFormCurrent)) {
-            draftStore.write(addFormCurrent, System.currentTimeMillis())
+    // Keep the on-disk draft in step with the open add form. Writing on change is
+    // cheap (async apply) and being on disk it outlives a process death — which is
+    // the whole point: the in-memory addFormCurrent would not. Emptying every
+    // field by hand CLEARS the draft, so a later unclean exit (tab switch /
+    // process death) can never resurrect content the user actually deleted. The
+    // restore prompt is a hands-off window: the empty form rendered underneath it
+    // must not wipe the very draft being offered.
+    LaunchedEffect(addFormCurrent, showForm, editingVehicleId, pendingDraft) {
+        if (showForm && editingVehicleId == null) {
+            when {
+                pendingDraft != null -> Unit
+                VehicleFormDraftStore.hasUserContent(addFormCurrent) ->
+                    draftStore.write(addFormCurrent, System.currentTimeMillis())
+                else -> draftStore.clear()
+            }
         }
     }
 
