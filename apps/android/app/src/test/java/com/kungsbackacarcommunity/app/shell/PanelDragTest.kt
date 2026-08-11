@@ -158,6 +158,41 @@ class PanelDragTest {
         assertEquals(0f, PanelDrag.postScrollConsumption(availableY = -40f), 0f)
     }
 
+    // ── The form dismiss gate (issue #796) ──────────────────────────────────
+    //
+    // While a scrollable form is open inside the panel the nested-scroll
+    // pull-dismiss is DISARMED, so a fast scroll-to-top can no longer over-scroll
+    // into a panel dismiss. The gate is per-panel and opt-in: History/Social pass
+    // the default (enabled) and are unaffected.
+
+    @Test
+    fun withDismissDisabled_theListAtItsTopNeverMovesThePanel() {
+        // The exact bug: the list is at its top, the full downward delta arrives
+        // unconsumed, and WITHOUT the gate the panel would start to move (and then
+        // a downward fling would dismiss it). The gate takes nothing instead.
+        assertEquals(0f, PanelDrag.postScrollConsumption(availableY = 40f, dismissEnabled = false), 0f)
+    }
+
+    @Test
+    fun withDismissEnabled_theGateIsTransparent_soOtherPanelsKeepTodaysBehaviour() {
+        // Calling without the flag (its default) must behave exactly as passing
+        // dismissEnabled = true: the gate is off only for the open form, never for
+        // the other panels.
+        assertEquals(40f, PanelDrag.postScrollConsumption(availableY = 40f, dismissEnabled = true), 0f)
+        assertEquals(
+            PanelDrag.postScrollConsumption(availableY = 40f),
+            PanelDrag.postScrollConsumption(availableY = 40f, dismissEnabled = true),
+            0f,
+        )
+    }
+
+    @Test
+    fun theGateOnlyAffectsDownwardScroll_upwardIsAlwaysLeftToTheList() {
+        // An upward drag is the list's regardless of the gate — disabling dismiss
+        // must not accidentally start consuming upward scroll.
+        assertEquals(0f, PanelDrag.postScrollConsumption(availableY = -40f, dismissEnabled = false), 0f)
+    }
+
     @Test
     fun draggingDownIsNeverTakenBeforeTheList() {
         // Pre-scroll must not pre-empt a downward drag, at rest or otherwise —

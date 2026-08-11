@@ -928,6 +928,14 @@
     <string name="garage_allMakes">All manufacturers</string>
     <string name="garage_legacySavedValue">Saved earlier: %1$s</string>
     <string name="garage_legacyReselectHint">Pick from the list to count your car in the community statistics. Your saved text is kept until you do.</string>
+    <string name="garage_discardNewTitle">Discard new car?</string>
+    <string name="garage_discardNewMessage">The details you\'ve entered won\'t be saved.</string>
+    <string name="garage_discardNewConfirm">Discard</string>
+    <string name="garage_discardNewKeepEditing">Keep editing</string>
+    <string name="garage_draftRestoreTitle">Continue your unsaved car?</string>
+    <string name="garage_draftRestoreMessage">You have an unsaved car you started earlier.</string>
+    <string name="garage_draftRestoreContinue">Continue</string>
+    <string name="garage_draftRestoreStartOver">Start over</string>
     <string name="badges_screenTitle">Awards</string>
     <string name="badges_retry">Try again</string>
     <string name="badges_noticeTitle">New Award</string>

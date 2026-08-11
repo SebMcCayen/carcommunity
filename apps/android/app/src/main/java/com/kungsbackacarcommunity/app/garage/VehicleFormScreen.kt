@@ -67,6 +67,10 @@ enum class VehiclePicker { None, Make, Model, Year }
  *   [photoUrl] so the user sees their pick immediately.
  * @param onChangePhoto opens the picker; null hides the whole photo section
  *   (config-less build with no uploader wired).
+ * @param onFormChange reports the form's current field values on every edit, so a
+ *   host can observe dirtiness and persist a draft (see GarageRoute's new-car
+ *   draft, issue #796). Default no-op — nothing else needs it, and the photo is
+ *   deliberately NOT part of this (its bytes never belong in a draft).
  */
 @Composable
 fun VehicleFormScreen(
@@ -81,6 +85,7 @@ fun VehicleFormScreen(
     photoPreview: ByteArray? = null,
     photoUploadStatus: ImageUploadStatus = ImageUploadStatus.Idle,
     onChangePhoto: (() -> Unit)? = null,
+    onFormChange: (VehicleForm) -> Unit = {},
 ) {
     var makeId by rememberSaveable { mutableStateOf(initial.makeId) }
     var modelId by rememberSaveable { mutableStateOf(initial.modelId) }
@@ -108,6 +113,10 @@ fun VehicleFormScreen(
             legacyMake = initial.legacyMake,
             legacyModel = initial.legacyModel,
         )
+    // Report the live form up on every real change (data-class equality as the
+    // key, so it fires on content changes, not every recomposition). Fires once
+    // on first composition too, seeding the host with the initial values.
+    LaunchedEffect(form) { onFormChange(form) }
     val error = VehicleValidation.validate(form, currentYear)
 
     AeroPage(

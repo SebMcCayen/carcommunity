@@ -928,6 +928,14 @@
     <string name="garage_allMakes">Alla märken</string>
     <string name="garage_legacySavedValue">Sparat tidigare: %1$s</string>
     <string name="garage_legacyReselectHint">Välj i listan för att räkna med bilen i communityts statistik. Din sparade text behålls till dess.</string>
+    <string name="garage_discardNewTitle">Kasta bort ny bil?</string>
+    <string name="garage_discardNewMessage">Uppgifterna du fyllt i sparas inte.</string>
+    <string name="garage_discardNewConfirm">Kasta bort</string>
+    <string name="garage_discardNewKeepEditing">Fortsätt redigera</string>
+    <string name="garage_draftRestoreTitle">Fortsätt med din osparade bil?</string>
+    <string name="garage_draftRestoreMessage">Du har en påbörjad bil som inte sparats.</string>
+    <string name="garage_draftRestoreContinue">Fortsätt</string>
+    <string name="garage_draftRestoreStartOver">Börja om</string>
     <string name="badges_screenTitle">Utmärkelser</string>
     <string name="badges_retry">Försök igen</string>
     <string name="badges_noticeTitle">Ny utmärkelse</string>

@@ -2,18 +2,25 @@ package com.kungsbackacarcommunity.app.garage
 
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.media.ImageCompressor
 import com.kungsbackacarcommunity.app.media.ImageEditFrameShape
 import com.kungsbackacarcommunity.app.media.ImageEditScreen
@@ -40,6 +47,14 @@ import kotlinx.coroutines.launch
  * section holds exactly one vehicles snapshot listener; [onRetry] asks that
  * owner to re-subscribe after a listener error. [repository] remains for the
  * photo-path update callable.
+ *
+ * [onFormOpenChange] reports whether the add/edit form is currently open, so the
+ * host panel can DISARM its nested-scroll pull-dismiss while a form is up (issue
+ * #796) — a fast scroll-to-top must not over-scroll into a panel dismiss.
+ * [dismissRequestTick] is bumped by the host each time a panel-owned dismiss
+ * (drag-handle, outside-tap, accessibility) fires WHILE the form is open, so that
+ * gesture routes through the SAME confirm-if-dirty + cleanup path as Back instead
+ * of tearing the form down and stranding the nav state.
  */
 @Composable
 fun GarageRoute(
@@ -50,6 +65,8 @@ fun GarageRoute(
     onRetry: () -> Unit,
     mediaUploader: MediaUploader? = null,
     currentYear: Int = Year.now().value,
+    onFormOpenChange: (Boolean) -> Unit = {},
+    dismissRequestTick: Int = 0,
 ) {
     val scope = rememberCoroutineScope()
     var showForm by rememberSaveable { mutableStateOf(false) }
@@ -116,6 +133,114 @@ fun GarageRoute(
         photoCoordinator?.reset()
     }
 
+    // ── New-car draft + accidental-dismiss guard (issue #796) ───────────────────
+    //
+    // The add form's text fields and catalogue selections live inside
+    // VehicleFormScreen; they are mirrored up here (via onFormChange) so this
+    // route — which owns showForm and the coordinator — can tell whether the form
+    // is DIRTY, persist a draft, and run one cleanup for every dismissal.
+    val draftStore = remember(photoContext) { VehicleFormDraftStore(photoContext) }
+
+    // The seed the add form opens with. Empty for a normal add; the restored
+    // draft after the user accepts the "continue your unsaved car?" prompt. The
+    // key below is bumped alongside it so VehicleFormScreen re-seeds its fields
+    // (rememberSaveable only reads `initial` on first composition for a given key).
+    var addFormInitial by remember { mutableStateOf(VehicleForm()) }
+    var addFormSeedKey by remember { mutableIntStateOf(0) }
+
+    // The add form's LIVE values, pushed up from VehicleFormScreen on every edit.
+    // Drives the dirty test (discard confirm + whether a draft is worth writing)
+    // and IS what gets serialised to the draft. Not rememberSaveable: the durable
+    // copy is the on-disk draft, which survives process death where this would be
+    // dropped for the exact TransactionTooLarge reason pendingPhoto is.
+    var addFormCurrent by remember { mutableStateOf(VehicleForm()) }
+
+    // Overlay prompts. discard = "throw away the new car you're dismissing?";
+    // restore = "continue the unsaved car from last time?" with the draft to seed.
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+    var pendingDraft by remember { mutableStateOf<VehicleForm?>(null) }
+
+    // Whether a dismissal of the open form should confirm first. Only a dirty NEW
+    // car: edit has a saved vehicle to fall back to, an untouched add has nothing
+    // to lose.
+    val addFormDirty =
+        VehicleFormDraftStore.shouldConfirmDismiss(
+            isAddMode = editingVehicleId == null,
+            form = addFormCurrent,
+        )
+
+    // THE single cleanup, run by every clean exit from the form (save, in-form
+    // Cancel, Back, and a confirmed discard). Resets exactly the nav/coordinator
+    // state the Back path always reset. It ALSO clears the add-draft — but ONLY
+    // when the form being closed was the ADD form: the draft store is add-scoped,
+    // so clearing it on an EDIT cancel would wipe a genuine new-car draft the user
+    // parked earlier. A draft therefore survives an edit close, and the UNCLEAN
+    // exits this is NOT called on (tab switch, process death).
+    val closeAddForm = {
+        // Captured before editingVehicleId is nulled below.
+        val wasAddMode = editingVehicleId == null
+        showForm = false
+        editingVehicleId = null
+        coordinator?.reset()
+        resetPhoto()
+        if (VehicleFormDraftStore.clearsDraftOnClose(wasAddMode)) {
+            draftStore.clear()
+        }
+        addFormCurrent = VehicleForm()
+    }
+
+    // THE one dismiss handler for the open form. A dirty new car asks first
+    // ("Discard new car?"); anything else (clean, or an edit) closes straight
+    // away. Gesture (drag-handle / outside-tap / a11y, via dismissRequestTick),
+    // outside-tap and Back all funnel through here, so they can never diverge.
+    val requestFormDismiss = {
+        if (addFormDirty) showDiscardConfirm = true else closeAddForm()
+    }
+
+    // Report the form-open state up so the host panel can disarm its
+    // nested-scroll pull-dismiss while a form is open (issue #796, fix 1).
+    // SideEffect (commit phase), NOT LaunchedEffect: a coroutine effect updates
+    // the host one frame late, leaving a window right after the form opens/closes
+    // where the gate is stale and a dismiss gesture in that frame is mis-handled —
+    // the exact flakiness this PR fixes. SideEffect lands the flag in the same
+    // commit as the showForm change. Setting the host MutableState to an unchanged
+    // value is a no-op, so running every recomposition costs nothing.
+    SideEffect { onFormOpenChange(showForm) }
+
+    // Keep the on-disk draft in step with the open add form. Writing on change is
+    // cheap (async apply) and being on disk it outlives a process death — which is
+    // the whole point: the in-memory addFormCurrent would not. Emptying every
+    // field by hand CLEARS the draft, so a later unclean exit (tab switch /
+    // process death) can never resurrect content the user actually deleted. The
+    // restore prompt is a hands-off window: the empty form rendered underneath it
+    // must not wipe the very draft being offered.
+    LaunchedEffect(addFormCurrent, showForm, editingVehicleId, pendingDraft) {
+        when (
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = showForm,
+                isAddMode = editingVehicleId == null,
+                restorePromptShowing = pendingDraft != null,
+                form = addFormCurrent,
+            )
+        ) {
+            DraftSyncAction.WRITE -> draftStore.write(addFormCurrent, System.currentTimeMillis())
+            DraftSyncAction.CLEAR -> draftStore.clear()
+            DraftSyncAction.NONE -> Unit
+        }
+    }
+
+    // A panel-owned dismiss (drag-handle, outside-tap, accessibility) arrived
+    // while the form is open: route it through the same confirm/cleanup as Back.
+    // Seeded equal so the initial composition is not treated as a dismiss; only a
+    // genuine host bump (tick change) fires it.
+    var handledDismissTick by remember { mutableIntStateOf(dismissRequestTick) }
+    LaunchedEffect(dismissRequestTick) {
+        if (dismissRequestTick != handledDismissTick) {
+            handledDismissTick = dismissRequestTick
+            if (showForm) requestFormDismiss()
+        }
+    }
+
     // Detail-page "add more photos" pipeline — independent of the form's, so the
     // two never contend on one coordinator. The vehicle already exists on the
     // detail page, so an added photo uploads immediately (no pending-photo dance
@@ -172,17 +297,74 @@ fun GarageRoute(
     BackHandler(enabled = showForm || detailVehicleId != null) {
         when {
             showForm && cropPreview != null -> cancelCrop()
-            showForm -> {
-                showForm = false
-                editingVehicleId = null
-                coordinator?.reset()
-                resetPhoto()
-            }
+            // Same unified handler as the panel gesture/outside-tap: a dirty new
+            // car asks before it is thrown away, everything else cleans up and
+            // closes (issue #796).
+            showForm -> requestFormDismiss()
             // Cropping a detail-page "add more photos" pick: Back cancels the
             // crop and returns to the detail page, not all the way to the list.
             detailCropPreview != null -> cancelDetailCrop()
             else -> detailVehicleId = null
         }
+    }
+
+    // "Discard new car?" — shown when a dismissal is attempted on a dirty add
+    // form. Confirming runs the same cleanup as every other exit (clearing the
+    // draft); dismissing the dialog keeps the user in the form with their input.
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text(text = stringResource(R.string.garage_discardNewTitle)) },
+            text = { Text(text = stringResource(R.string.garage_discardNewMessage)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDiscardConfirm = false
+                    closeAddForm()
+                }) {
+                    Text(text = stringResource(R.string.garage_discardNewConfirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDiscardConfirm = false }) {
+                    Text(text = stringResource(R.string.garage_discardNewKeepEditing))
+                }
+            },
+        )
+    }
+
+    // "Continue your unsaved car?" — offered when the add form is reopened within
+    // the draft TTL. Continue re-seeds the form from the draft; Start over throws
+    // the draft away and keeps the fresh, empty form already on screen.
+    val draftToRestore = pendingDraft
+    if (draftToRestore != null) {
+        AlertDialog(
+            onDismissRequest = {
+                // Treat a scrim tap as "start over": leaving the draft in place
+                // would re-prompt on the next open with no way to have decided.
+                draftStore.clear()
+                pendingDraft = null
+            },
+            title = { Text(text = stringResource(R.string.garage_draftRestoreTitle)) },
+            text = { Text(text = stringResource(R.string.garage_draftRestoreMessage)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    addFormInitial = draftToRestore
+                    addFormCurrent = draftToRestore
+                    addFormSeedKey++
+                    pendingDraft = null
+                }) {
+                    Text(text = stringResource(R.string.garage_draftRestoreContinue))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    draftStore.clear()
+                    pendingDraft = null
+                }) {
+                    Text(text = stringResource(R.string.garage_draftRestoreStartOver))
+                }
+            },
+        )
     }
 
     if (showForm) {
@@ -207,7 +389,9 @@ fun GarageRoute(
                     modifications = it.modifications ?: "",
                     registrationPlate = it.registrationPlate ?: "",
                 )
-            } ?: VehicleForm()
+                // Add mode seeds from addFormInitial (empty, or a restored draft);
+                // a mid-edit vehicle that vanished falls back to an empty form.
+            } ?: if (editingId == null) addFormInitial else VehicleForm()
 
         // Photo upload is available whether ADDING or editing. The 10 MB cap
         // mirrors the storage rules. Wired only when the uploader is present
@@ -315,9 +499,9 @@ fun GarageRoute(
             }
             // The crop step REPLACES the form for as long as it is open rather
             // than stacking on top of it: the form's own fields keep their state
-            // (they are rememberSaveable, and the `key(editingId)` below is
-            // unchanged), so returning from the crop lands the user back on the
-            // vehicle they were filling in.
+            // (they are rememberSaveable, and the `key(editingId, addFormSeedKey)`
+            // below is unchanged), so returning from the crop lands the user back
+            // on the vehicle they were filling in.
             ImageEditScreen(
                 bitmap = cropping,
                 // Vehicle photos are always shown circle-clipped (form preview,
@@ -335,12 +519,18 @@ fun GarageRoute(
                 onCancel = cancelCrop,
             )
         } else {
-        key(editingId) {
+        // addFormSeedKey re-seeds the add form's fields when a draft is restored
+        // (rememberSaveable only reads `initial` on the first composition per key).
+        key(editingId, addFormSeedKey) {
             VehicleFormScreen(
                 initial = initial,
                 isEdit = editingId != null,
                 saveStatus = saveStatus,
                 currentYear = currentYear,
+                // Mirror the add form's live values up so this route can compute
+                // dirtiness and persist the draft. Edit fires this too; it is
+                // ignored because the draft/dirty logic is gated on add mode.
+                onFormChange = { addFormCurrent = it },
                 onSave = { input ->
                     coordinator?.let { c ->
                         // Launched in the ROUTE's scope, not the form's: the form
@@ -367,12 +557,13 @@ fun GarageRoute(
                         }
                     }
                 },
-                onCancel = {
-                    showForm = false
-                    editingVehicleId = null
-                    coordinator?.reset()
-                    resetPhoto()
-                },
+                // The in-form Cancel button AND the post-save auto-close both land
+                // here; closeAddForm runs the shared cleanup and clears the draft
+                // (a successful save and an explicit Cancel are both "done with
+                // this draft"). The accidental gesture/Back paths do NOT reach
+                // here — they go through requestFormDismiss so a dirty new car is
+                // confirmed first.
+                onCancel = closeAddForm,
                 photoUrl = photoUrl,
                 // Local preview of a not-yet-uploaded add-mode pick. Takes
                 // precedence over photoUrl (which is null while adding anyway).
@@ -565,7 +756,16 @@ fun GarageRoute(
                 // pick or upload status (see photoSession).
                 pendingPhoto = null
                 photoSession++
+                // Open on a clean, empty form; re-seed via addFormSeedKey.
+                addFormInitial = VehicleForm()
+                addFormCurrent = VehicleForm()
+                addFormSeedKey++
                 showForm = true
+                // Offer to continue an unsaved car left within the TTL (a tab
+                // switch or process death, since a clean exit clears the draft).
+                // readFresh also sweeps away a stale one.
+                val fresh = draftStore.readFresh(System.currentTimeMillis())
+                if (fresh != null) pendingDraft = fresh.form
             },
             onEdit = { vehicle ->
                 editingVehicleId = vehicle.id

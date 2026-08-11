@@ -5225,6 +5225,20 @@ fun AuthenticatedApp(
                                 }
                             }
 
+                            // Whether the Garage panel currently has its add/edit form
+                            // open. Declared OUTSIDE the Crossfade so it survives the
+                            // branch recomposing, and drives two things below: the
+                            // Garage panel's nested-scroll dismiss is DISARMED while a
+                            // form is open (issue #796), and a panel-owned dismiss is
+                            // routed into GarageRoute instead of leaving the tab.
+                            var garageFormOpen by remember { mutableStateOf(false) }
+                            // Bumped each time the Garage panel is dismissed (drag-handle,
+                            // outside-tap, accessibility) WHILE its form is open, so
+                            // GarageRoute runs the same confirm-if-dirty + cleanup as Back
+                            // rather than the tab being torn out from under a half-filled
+                            // new car.
+                            var garageDismissTick by remember { mutableIntStateOf(0) }
+
                             // The other three tabs render as TRANSLUCENT PANELS pulled down over
                             // the map (see TranslucentShellPanel), crossfaded so panels resolve
                             // into each other instead of snapping. Leaving a tab fades its panel
@@ -5386,7 +5400,23 @@ fun AuthenticatedApp(
                                     // #428); only the repo needs to be wired.
                                     ShellTab.Garage ->
                                         TranslucentShellPanel(
-                                            onDismiss = { selectedTab = ShellTab.Map },
+                                            // While the add/edit form is open a panel
+                                            // dismiss must not silently drop the form:
+                                            // route it into GarageRoute (confirm-if-dirty
+                                            // + cleanup) via the tick. With the form
+                                            // closed the gesture leaves to Map as before.
+                                            onDismiss = {
+                                                if (garageFormOpen) {
+                                                    garageDismissTick++
+                                                } else {
+                                                    selectedTab = ShellTab.Map
+                                                }
+                                            },
+                                            // Disarm the nested-scroll pull-dismiss while a
+                                            // form is open so a fast scroll-to-top cannot
+                                            // over-scroll into a dismiss (issue #796). Every
+                                            // other panel keeps the default (enabled).
+                                            dismissEnabled = !garageFormOpen,
                                             testTag = GARAGE_PANEL_TEST_TAG,
                                         ) {
                                             if (garageRepository != null) {
@@ -5397,6 +5427,8 @@ fun AuthenticatedApp(
                                                     garageState = garageState,
                                                     onRetry = { garageReloadKey++ },
                                                     mediaUploader = mediaUploader,
+                                                    onFormOpenChange = { garageFormOpen = it },
+                                                    dismissRequestTick = garageDismissTick,
                                                 )
                                             } else {
                                                 LoadingScreen()
