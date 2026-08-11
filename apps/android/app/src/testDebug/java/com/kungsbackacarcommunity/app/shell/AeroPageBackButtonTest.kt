@@ -4,6 +4,7 @@ import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -35,16 +36,21 @@ class AeroPageBackButtonTest {
             KccTheme {
                 // Register a back callback so the dispatcher the arrow invokes has a
                 // handler to run — exactly how a pushed route's own BackHandler /
-                // the shell's central BackHandler would receive it.
+                // the shell's central BackHandler would receive it. Registered in a
+                // DisposableEffect keyed on the dispatcher so a recompose can't
+                // double-register it (and it's removed on dispose).
                 val dispatcher =
                     LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
-                dispatcher.addCallback(
-                    object : OnBackPressedCallback(true) {
-                        override fun handleOnBackPressed() {
-                            backInvocations++
+                DisposableEffect(dispatcher) {
+                    val callback =
+                        object : OnBackPressedCallback(true) {
+                            override fun handleOnBackPressed() {
+                                backInvocations++
+                            }
                         }
-                    },
-                )
+                    dispatcher.addCallback(callback)
+                    onDispose { callback.remove() }
+                }
                 // Provided true == a page rendered under the shell's RouteHost.
                 CompositionLocalProvider(LocalAeroBackAvailable provides true) {
                     AeroPage(title = "Settings") { Text("body") }
