@@ -14,7 +14,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
@@ -84,7 +86,7 @@ fun PartnerApplicationScreen(
             Field(contactName, R.string.partners_contactNameLabel) { contactName = it }
             Field(contactEmail, R.string.partners_contactEmailLabel) { contactEmail = it }
             Field(contactPhone, R.string.partners_contactPhoneLabel) { contactPhone = it }
-            Field(website, R.string.partners_websiteLabel) { website = it }
+            Field(website, R.string.partners_websiteLabel, keyboardType = KeyboardType.Uri) { website = it }
             // Free-form optional message — allow multiple lines.
             OutlinedTextField(
                 value = message,
@@ -101,9 +103,18 @@ fun PartnerApplicationScreen(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            if (status == PartnerApplicationStatus.Failed) {
+            if (status is PartnerApplicationStatus.Failed) {
+                val messageRes =
+                    when (status.reason) {
+                        PartnerApplicationFailureReason.INVALID_ARGUMENT ->
+                            R.string.partners_submitErrorInvalid
+                        PartnerApplicationFailureReason.ALREADY_EXISTS ->
+                            R.string.partners_submitErrorDuplicate
+                        PartnerApplicationFailureReason.UNKNOWN ->
+                            R.string.partners_submitError
+                    }
                 Text(
-                    text = stringResource(R.string.partners_error),
+                    text = stringResource(messageRes),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -123,12 +134,18 @@ fun PartnerApplicationScreen(
 }
 
 @Composable
-private fun Field(value: String, labelRes: Int, onChange: (String) -> Unit) {
+private fun Field(
+    value: String,
+    labelRes: Int,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    onChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
         label = { Text(text = stringResource(labelRes)) },
         singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
         modifier = Modifier.fillMaxWidth(),
     )
 }

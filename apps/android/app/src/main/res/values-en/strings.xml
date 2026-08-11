@@ -1140,6 +1140,9 @@
     <string name="partners_messageLabel">Message (optional)</string>
     <string name="partners_fieldRequired">Required field</string>
     <string name="partners_duplicateApplication">You already have an active application.</string>
+    <string name="partners_submitError">Could not submit your application. Please try again.</string>
+    <string name="partners_submitErrorInvalid">Please check that all details are filled in correctly.</string>
+    <string name="partners_submitErrorDuplicate">An application for this email is already under review.</string>
     <string name="partners_submitting">Submitting...</string>
     <string name="partners_close">Close</string>
     <string name="partners_applicationEntryLabel">For businesses</string>

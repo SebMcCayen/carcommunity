@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.partners
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
@@ -16,6 +17,22 @@ interface PartnerApplicationRepository {
     suspend fun submit(input: PartnerApplicationInput)
 }
 
+/**
+ * Reason a partner-application submission failed, derived from the callable's
+ * [FirebaseFunctionsException] code so the UI can show an actionable message
+ * instead of a mislabeled generic error.
+ */
+enum class PartnerApplicationFailureReason {
+    /** Backend rejected the payload (e.g. a malformed field). */
+    INVALID_ARGUMENT,
+
+    /** An application for this user/email is already under review. */
+    ALREADY_EXISTS,
+
+    /** Network error, App Check, or any other non-specific failure. */
+    UNKNOWN,
+}
+
 /** UI-facing status of an application submission. */
 sealed interface PartnerApplicationStatus {
     data object Idle : PartnerApplicationStatus
@@ -24,8 +41,19 @@ sealed interface PartnerApplicationStatus {
 
     data object Done : PartnerApplicationStatus
 
-    data object Failed : PartnerApplicationStatus
+    /** Carries the mapped [reason] so the screen can pick a clear message. */
+    data class Failed(val reason: PartnerApplicationFailureReason) : PartnerApplicationStatus
 }
+
+/** Maps a submission failure to a [PartnerApplicationFailureReason]. */
+fun partnerApplicationFailureReasonOf(failure: Throwable): PartnerApplicationFailureReason =
+    when ((failure as? FirebaseFunctionsException)?.code) {
+        FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
+            PartnerApplicationFailureReason.INVALID_ARGUMENT
+        FirebaseFunctionsException.Code.ALREADY_EXISTS ->
+            PartnerApplicationFailureReason.ALREADY_EXISTS
+        else -> PartnerApplicationFailureReason.UNKNOWN
+    }
 
 /**
  * Orchestrates the partner-application submission (Phase 12 slice 18). Pure
@@ -47,7 +75,7 @@ class PartnerApplicationCoordinator(
             state.value = PartnerApplicationStatus.Idle
             throw cancellation
         } catch (failure: Exception) {
-            state.value = PartnerApplicationStatus.Failed
+            state.value = PartnerApplicationStatus.Failed(partnerApplicationFailureReasonOf(failure))
         }
     }
 
