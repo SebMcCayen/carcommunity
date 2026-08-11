@@ -94,6 +94,7 @@ import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgeCounters
 import com.kungsbackacarcommunity.app.badges.BadgeShowcase
+import com.kungsbackacarcommunity.app.badges.BadgeProgressRepository
 import com.kungsbackacarcommunity.app.badges.BadgesRepository
 import com.kungsbackacarcommunity.app.badges.BadgesState
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
@@ -553,6 +554,7 @@ fun AuthenticatedApp(
     garageCoordinator: GarageCoordinator?,
     mediaUploader: MediaUploader?,
     badgesRepository: BadgesRepository?,
+    badgeProgressRepository: BadgeProgressRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
     memberProfileRepository: MemberProfileRepository?,
@@ -4426,6 +4428,7 @@ fun AuthenticatedApp(
                             selectedTab = ShellTab.Garage
                         },
                         badgesRepository = badgesRepository,
+                        badgeProgressRepository = badgeProgressRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
                         memberProfileRepository = memberProfileRepository,
@@ -4482,7 +4485,6 @@ fun AuthenticatedApp(
                         onOpenChat = openChat,
                         pointsRepository = pointsRepository,
                         drivesRepository = drivesRepository,
-                        garageRepository = garageRepository,
                         partnerApplicationCoordinator = partnerApplicationCoordinator,
                         billboardsRepository = billboardsRepository,
                         accountDeletionCoordinator = accountDeletionCoordinator,
@@ -6329,6 +6331,7 @@ private fun RouteHost(
      */
     onOpenGarageTab: () -> Unit,
     badgesRepository: BadgesRepository?,
+    badgeProgressRepository: BadgeProgressRepository?,
     blockingRepository: BlockingRepository?,
     friendsRepository: FriendsRepository?,
     memberProfileRepository: MemberProfileRepository?,
@@ -6378,10 +6381,6 @@ private fun RouteHost(
     // Owner drives list, folded into the profile's "my stats" summary (same
     // owner query the History tab uses). Null in a config-less build.
     drivesRepository: DrivesRepository?,
-    // Owner garage list. Used ONLY by the Profile route, to put an honest
-    // "3 / 5 vehicles" bar under the Samlare ladder — the same owner query the
-    // Garage tab runs, listened to only while the Profile route is composed.
-    garageRepository: GarageRepository?,
     partnerApplicationCoordinator: PartnerApplicationCoordinator?,
     billboardsRepository: BillboardsRepository?,
     accountDeletionCoordinator: AccountDeletionCoordinator?,
@@ -6481,17 +6480,19 @@ private fun RouteHost(
             }
 
             // "My stats" summary — assembled entirely from owner reads the app
-            // already knows how to make, and scoped to THIS route: the three
-            // listeners below only exist while the Profile route is composed and
-            // tear down on leaving it. No new query or index is added.
+            // already knows how to make, and scoped to THIS route: the listeners
+            // below only exist while the Profile route is composed and tear down
+            // on leaving it. No new query or index is added.
             //   • drives  → the same owner list the History tab folds, run through
             //     the shared DriveStatsCalculator (from the drive-stats page);
             //   • badges  → the owner users/{uid}/badges list (the badge wall);
             //   • points  → the single pointsLedger/{uid}.balance doc, plus the
             //     same bounded newest-first entries listener the Kronpoäng screen
             //     uses (credits only are shown — see Points.recentEarnings);
-            //   • garage  → the owner vehicles list, only so the Samlare ladder
-            //     gets an honest bar; the Garage tab runs the identical query.
+            //   • badge progress → the owner-only badges-getMyProgress callable,
+            //     which hands this member their own seven ladder counters so
+            //     every ladder can draw a bar (issue #799); the backend-only
+            //     badgeProgress doc stays unreadable to clients.
             //   • member since → users/{uid}.createdAt, already on `profile`.
             val drivesState by
                 remember(drivesRepository, uid) {
@@ -6513,11 +6514,20 @@ private fun RouteHost(
                     pointsRepository?.observeEntries(uid) ?: flowOf(PointsEntriesState.Loading)
                 }
                     .collectAsState(initial = PointsEntriesState.Loading)
-            val profileGarageState by
-                remember(garageRepository, uid) {
-                    garageRepository?.observeGarage(uid) ?: flowOf(GarageState.Loading)
+            // The signed-in member's OWN seven ladder counters, fetched once per
+            // route composition from the owner-only badges-getMyProgress callable.
+            // Null until it resolves (or when unavailable in a config-less build),
+            // in which case the wall renders every ladder's goal without a bar —
+            // never a fabricated number. OWN-profile only: the callable derives
+            // the uid from the auth context, so it can only ever be this member.
+            val badgeCounters by
+                produceState<BadgeCounters?>(
+                    initialValue = null,
+                    badgeProgressRepository,
+                    uid,
+                ) {
+                    value = badgeProgressRepository?.fetchMyProgress()
                 }
-                    .collectAsState(initial = GarageState.Loading)
             // Start of the current calendar month (device time zone) — required by
             // the shared fold; the profile summary reads only its all-time fields,
             // but the value is kept correct rather than faked. Computed on each
@@ -6568,20 +6578,16 @@ private fun RouteHost(
 
             // The badge wall. Null until the owner badge list resolves, so the
             // section stays absent rather than flashing an empty wall at a member
-            // who actually holds badges. Counters are the two the client can
-            // observe HONESTLY from reads it already makes here (see
-            // BadgeCounters); every other ladder renders its goal without a bar.
+            // who actually holds badges. Counters come from the owner-only
+            // getMyProgress callable ([badgeCounters]); once they resolve every
+            // ladder draws an honest bar, and until then each ladder still shows
+            // its goal without inventing a number (see BadgeCounters).
             val badgeShowcase =
-                remember(badgesState, driveStats, profileGarageState) {
+                remember(badgesState, badgeCounters) {
                     (badgesState as? BadgesState.Loaded)?.badges?.let { badges ->
                         BadgeShowcase.from(
                             badges = badges,
-                            counters =
-                                BadgeCounters(
-                                    savedDriveDistanceMeters = driveStats?.totalDistanceMeters,
-                                    vehiclesInGarage =
-                                        (profileGarageState as? GarageState.Loaded)?.vehicles?.size,
-                                ),
+                            counters = badgeCounters ?: BadgeCounters.NONE,
                         )
                     }
                 }

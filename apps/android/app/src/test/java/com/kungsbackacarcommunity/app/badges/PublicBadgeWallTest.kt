@@ -172,7 +172,7 @@ class PublicBadgeWallTest {
         val owner =
             BadgeShowcase.from(
                 badges = badges,
-                counters = BadgeCounters(savedDriveDistanceMeters = 900_000.0, vehiclesInGarage = 4),
+                counters = BadgeCounters(lifetimeDistanceMeters = 900_000, vehiclesInGarage = 4),
             )
         val public = PublicBadgeWall.from(badges)
 

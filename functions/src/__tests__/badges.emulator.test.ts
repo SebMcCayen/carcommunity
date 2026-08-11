@@ -620,3 +620,70 @@ describe('tiered badge ladders', () => {
     ).toBe(3);
   }, 120_000);
 });
+
+/**
+ * badges-getMyProgress — the owner-only callable that hands a member a read-only
+ * projection of their OWN seven ladder counters (issue #799). The document it
+ * reads (badgeProgress/{uid}) is denied to every client by the rules, so this
+ * callable is the only client-reachable path to those numbers, and only ever
+ * for the caller's own uid.
+ */
+describe('badges-getMyProgress (owner counters)', () => {
+  it('returns the caller OWN counters, projected through readBadgeCounters', async () => {
+    const owner = await createProvisionedUser('badges-getprogress');
+    await adminDb.collection('users').doc(owner.uid).set({ activeMember: true }, { merge: true });
+
+    // Seed the backend-only progress doc with the raw stored shape: the
+    // completed-event counter is stored under the HISTORIC field name
+    // `completedEventsAttended` and must surface as `verifiedEventsAttended`,
+    // and a nonsense value must sanitise to 0 rather than leak through.
+    await adminDb.collection('badgeProgress').doc(owner.uid).set({
+      crownsCollected: 34,
+      lifetimeDistanceMeters: 234_567.8,
+      completedEventsAttended: 7,
+      bestDayStreak: 12,
+      convoysLed: 3,
+      vehiclesInGarage: 4,
+      seasonsWon: -5, // nonsense → 0
+    });
+
+    await signInAs(owner);
+    const result = (await call('badges-getMyProgress', {})).data as Record<string, number>;
+
+    expect(result).toEqual({
+      crownsCollected: 34,
+      // Fractional metres are floored by the defensive projection.
+      lifetimeDistanceMeters: 234_567,
+      verifiedEventsAttended: 7,
+      bestDayStreak: 12,
+      convoysLed: 3,
+      vehiclesInGarage: 4,
+      seasonsWon: 0,
+    });
+  }, 120_000);
+
+  it('returns all-zero counters when the caller has no progress document', async () => {
+    const fresh = await createProvisionedUser('badges-getprogress-empty');
+    await adminDb.collection('users').doc(fresh.uid).set({ activeMember: true }, { merge: true });
+
+    await signInAs(fresh);
+    const result = (await call('badges-getMyProgress', {})).data as Record<string, number>;
+
+    expect(result).toEqual({
+      crownsCollected: 0,
+      lifetimeDistanceMeters: 0,
+      verifiedEventsAttended: 0,
+      bestDayStreak: 0,
+      convoysLed: 0,
+      vehiclesInGarage: 0,
+      seasonsWon: 0,
+    });
+  }, 120_000);
+
+  it('rejects an unauthenticated caller', async () => {
+    await auth.signOut();
+    expect(await callableErrorCode(call('badges-getMyProgress', {}))).toBe(
+      'functions/unauthenticated',
+    );
+  }, 120_000);
+});

@@ -45,6 +45,7 @@ import com.kungsbackacarcommunity.app.diagnostics.DiagnosticsSignInFailureReport
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
 import com.kungsbackacarcommunity.app.config.FeatureFlagsStore
 import com.kungsbackacarcommunity.app.config.FirebaseFeatureFlagsRepository
+import com.kungsbackacarcommunity.app.badges.FirebaseBadgeProgressRepository
 import com.kungsbackacarcommunity.app.badges.FirebaseBadgesRepository
 import com.kungsbackacarcommunity.app.blocking.FirebaseBlockingRepository
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository
@@ -232,6 +233,8 @@ class MainActivity : ComponentActivity() {
         // Shared Cloud Storage uploader (avatar + vehicle photos); guarded.
         val mediaUploader = FirebaseMediaUploader.createIfAvailable(applicationContext)
         val badgesRepository = FirebaseBadgesRepository.createIfAvailable(applicationContext)
+        val badgeProgressRepository =
+            FirebaseBadgeProgressRepository.createIfAvailable(applicationContext)
         val blockingRepository = FirebaseBlockingRepository.createIfAvailable(applicationContext)
         val friendsRepository = FirebaseFriendsRepository.createIfAvailable(applicationContext)
         val memberProfileRepository =
@@ -488,6 +491,7 @@ class MainActivity : ComponentActivity() {
                         garageCoordinator = garageCoordinator,
                         mediaUploader = mediaUploader,
                         badgesRepository = badgesRepository,
+                        badgeProgressRepository = badgeProgressRepository,
                         blockingRepository = blockingRepository,
                         friendsRepository = friendsRepository,
                         memberProfileRepository = memberProfileRepository,

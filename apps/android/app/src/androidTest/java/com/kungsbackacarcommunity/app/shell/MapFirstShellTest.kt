@@ -124,6 +124,7 @@ class MapFirstShellTest {
                     garageCoordinator = null,
                     mediaUploader = null,
                     badgesRepository = null,
+                    badgeProgressRepository = null,
                     blockingRepository = null,
                     friendsRepository = null,
                     memberProfileRepository = null,

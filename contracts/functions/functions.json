@@ -442,6 +442,15 @@
       "source": "services/api/src/lib/badge-service.ts (getAdminBadgeSummary)"
     },
     {
+      "name": "badges.getMyProgress",
+      "domain": "badges",
+      "description": "OWNER-ONLY. Returns the signed-in member's OWN seven tiered-ladder counters — crownsCollected, lifetimeDistanceMeters, verifiedEventsAttended, bestDayStreak, convoysLed, vehiclesInGarage, seasonsWon — read from the backend-only badgeProgress/{uid} document and projected through readBadgeCounters (functions/src/badges/badge-tiers.ts). The uid is taken exclusively from request.auth.uid, never from the payload, so a caller can only ever read their own numbers and there is no argument that selects another member. Exists so the OWN-profile badge wall can draw a progress bar on every ladder (issue #799): badgeProgress/{uid} is denied to EVERY client (owner included) by firebase/firestore.rules and stays that way — the client previously had a cheap owner-scoped stand-in for only two of the seven ladders (Vägfarare folded drive distance, Samlare garage size), so the other five showed a goal line without a bar. The Admin SDK (which bypasses rules) reads the caller's own document server-side and returns a read-only projection of the seven numeric counters; a missing document projects to all-zero counters and a corrupt field reads as 0 (readBadgeCounters is defensive: finite, non-negative, floored). This does NOT relax the rule and does NOT expose other members' counters — PublicBadgeWall (another member's wall) still receives no counters at all, so progress bars remain an own-profile affordance. Read-only: it never writes badgeProgress or awards, so a tier still cannot be forged by any client request (the ladders remain trigger-derived — see badges.adminSummary). Deployed via grouped export as badges-getMyProgress (functions/src/badges/getMyProgress.ts).",
+      "access": "member",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "functions/src/badges/getMyProgress.ts"
+    },
+    {
       "name": "points.adminAdjust",
       "domain": "points",
       "description": "Admin Kronpoäng adjustment (credit or debit): positive integer amount, mandatory reason (<=500), debits never overdraft, only an owner may adjust another owner. Runs through the internal transaction primitives and writes an adminAuditEvents record. Deployed via grouped export as points-adminAdjust (functions/src/points/adminPoints.ts).",
