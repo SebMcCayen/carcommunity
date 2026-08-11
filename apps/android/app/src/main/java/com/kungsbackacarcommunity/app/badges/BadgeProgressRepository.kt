@@ -3,9 +3,7 @@ package com.kungsbackacarcommunity.app.badges
 import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 
 /**
  * Fetches the signed-in member's OWN server-verified ladder counters, so the
@@ -56,30 +54,24 @@ class FirebaseBadgeProgressRepository private constructor(
             null
         }
 
-    private suspend fun callForData(name: String): Map<String, Any?> =
-        suspendCancellableCoroutine { continuation ->
+    private suspend fun callForData(name: String): Map<String, Any?> {
+        // Same Task->suspend bridge every FirebaseFunctions repo uses (see
+        // firebase/TaskAwait.kt): awaitOrThrow observes a cancelled Task as a
+        // failure rather than hanging, and rethrows the callable's own exception
+        // (FirebaseFunctionsException) so the caller's code/App-Check handling
+        // still applies.
+        val result =
             functions
                 .getHttpsCallable(name)
                 .call(emptyMap<String, Any?>())
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        @Suppress("UNCHECKED_CAST")
-                        val data = task.result?.getData() as? Map<String, Any?>
-                        if (data == null) {
-                            continuation.resumeWithException(
-                                IllegalStateException("$name returned an unexpected or empty payload"),
-                            )
-                        } else {
-                            continuation.resume(data)
-                        }
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$name failed without a cause"),
-                        )
-                    }
-                }
-        }
+                .awaitOrThrow { "$name failed without a cause" }
+        @Suppress("UNCHECKED_CAST")
+        val data = result?.getData() as? Map<String, Any?>
+        // A 2xx carrying no Map payload is a protocol fault, not an answer;
+        // surfacing it (rather than degrading to empty) keeps a broken contract
+        // from silently reading as "no counters".
+        return data ?: throw IllegalStateException("$name returned an unexpected or empty payload")
+    }
 
     companion object {
         private const val REGION = "europe-west1"
