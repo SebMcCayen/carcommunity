@@ -320,10 +320,11 @@ fun GarageRoute(
             // vehicle they were filling in.
             ImageEditScreen(
                 bitmap = cropping,
-                // Vehicle/other photos get the free-form frame (draggable edges),
-                // started at the source's own aspect.
-                frameShape = ImageEditFrameShape.FREEFORM,
-                initialAspect = cropping.width.toFloat() / cropping.height.toFloat(),
+                // Vehicle photos are always shown circle-clipped (form preview,
+                // card, detail gallery), so crop them with the circular frame to
+                // match — the user crops the exact area that will be rendered.
+                frameShape = ImageEditFrameShape.CIRCLE,
+                initialAspect = 1f,
                 onConfirm = { rotationDegrees, crop ->
                     cancelCrop()
                     // Route scope, not the crop screen's: the screen leaves
@@ -448,8 +449,10 @@ fun GarageRoute(
             // (handled in the BackHandler) and returns here.
             ImageEditScreen(
                 bitmap = detailCropping,
-                frameShape = ImageEditFrameShape.FREEFORM,
-                initialAspect = detailCropping.width.toFloat() / detailCropping.height.toFloat(),
+                // Vehicle photos render circle-clipped everywhere, so crop the
+                // detail-page "add more photos" shots with the circular frame too.
+                frameShape = ImageEditFrameShape.CIRCLE,
+                initialAspect = 1f,
                 onConfirm = { rotationDegrees, crop ->
                     cancelDetailCrop()
                     scope.launch {
