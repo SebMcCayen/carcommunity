@@ -12,12 +12,15 @@
  * a small irony. So this is computed on demand when an admin opens the page:
  * one admin-gated callable and two cheap reads — the latest metrics/{date}
  * snapshot for the live member count, and the `financeRecurringCosts`
- * collection for the operator-entered recurring costs (both admin-gated by
- * firestore.rules) — after which the model runs in memory. No scheduled write,
- * so the board still adds no recurring Firestore cost of its own.
+ * collection for the operator-entered recurring costs. This callable runs on
+ * the Admin SDK and is gated by `requireAdminActor` (Security Rules apply to
+ * client SDKs, not to these server reads). After the reads the model runs in
+ * memory. No scheduled write, so the board adds no recurring Firestore cost.
  *
- * NOTE: `financeRecurringCosts` (its admin read/write rules and its CRUD
- * callables) is added by this PR; the estimate merely reads it here.
+ * NOTE: `financeRecurringCosts` is added by this PR. Its rules allow admin
+ * client READS but DENY all client writes (`allow write: if false`); every
+ * mutation goes through the audited CRUD callables, so the audit trail can't
+ * be bypassed. The estimate merely reads the collection here.
  *
  * ⚠️ Everything MODELLED is a MODEL ESTIMATE, not the real bill (the
  * recurring costs are operator-entered actuals). The page shows the banner and
