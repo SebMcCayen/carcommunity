@@ -14,6 +14,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
+  pickSessionVehicleData,
   toLiveMainCar,
 } from '../live/live-core';
 
@@ -49,6 +50,62 @@ describe('live-core inputs', () => {
     expect(parseStopSessionInput({}).ok).toBe(true);
     expect(parseStopSessionInput({ reason: 'hide_me_now' }).ok).toBe(true);
     expect(parseStopSessionInput({ reason: 'panic' }).ok).toBe(false);
+  });
+
+  it('accepts an optional vehicleId on start, rejects a blank one', () => {
+    // The "Start driving" picker sends the chosen car; omitting it is valid
+    // (falls back to the main car server-side).
+    const withVehicle = parseStartSessionInput({ duration: '6h', vehicleId: 'veh-123' });
+    expect(withVehicle.ok).toBe(true);
+    expect(withVehicle.ok && withVehicle.input.vehicleId).toBe('veh-123');
+    expect(parseStartSessionInput({ duration: '6h' }).ok).toBe(true);
+    // A blank id is meaningless — reject rather than silently treat as "no car".
+    expect(parseStartSessionInput({ duration: '6h', vehicleId: '' }).ok).toBe(false);
+    // Strict schema still rejects stray fields alongside the new one.
+    expect(parseStartSessionInput({ duration: '6h', vehicleId: 'v', bogus: 1 }).ok).toBe(false);
+  });
+});
+
+describe('live-core pickSessionVehicleData (Start-driving car selection)', () => {
+  const car = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    data: { make: 'Volvo', model: '240', modelYear: 1989, ...extra },
+  });
+
+  it('returns null when the caller owns no cars', () => {
+    expect(pickSessionVehicleData([])).toBeNull();
+    expect(pickSessionVehicleData([], 'veh-1')).toBeNull();
+  });
+
+  it('honours the explicitly chosen vehicleId when still owned', () => {
+    const vehicles = [car('a'), car('b', { isMainCar: true }), car('c')];
+    expect(pickSessionVehicleData(vehicles, 'c')).toBe(vehicles[2]!.data);
+  });
+
+  it('falls back to the main car when no id is chosen', () => {
+    const vehicles = [car('a'), car('b', { isMainCar: true }), car('c')];
+    expect(pickSessionVehicleData(vehicles)).toBe(vehicles[1]!.data);
+  });
+
+  it('falls back to the main car when the chosen id is no longer owned', () => {
+    const vehicles = [car('a'), car('b', { isMainCar: true })];
+    expect(pickSessionVehicleData(vehicles, 'deleted')).toBe(vehicles[1]!.data);
+  });
+
+  it('falls back to the first car when none is flagged main', () => {
+    const vehicles = [car('a'), car('b'), car('c')];
+    expect(pickSessionVehicleData(vehicles)).toBe(vehicles[0]!.data);
+    expect(pickSessionVehicleData(vehicles, 'missing')).toBe(vehicles[0]!.data);
+  });
+
+  it('flows a chosen car through toLiveMainCar without leaking the plate', () => {
+    const vehicles = [
+      car('a', { isMainCar: true }),
+      car('b', { make: 'Saab', model: '900', modelYear: 1993, registrationPlate: 'ABC 123' }),
+    ];
+    const projected = toLiveMainCar(pickSessionVehicleData(vehicles, 'b'));
+    expect(projected).toEqual({ make: 'Saab', model: '900', modelYear: 1993, imagePath: null });
+    expect(projected).not.toHaveProperty('registrationPlate');
   });
 });
 

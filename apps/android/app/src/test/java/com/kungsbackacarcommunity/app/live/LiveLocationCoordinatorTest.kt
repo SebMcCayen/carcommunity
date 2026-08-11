@@ -16,6 +16,7 @@ class LiveLocationCoordinatorTest {
 
     private class FakeRepo : LiveLocationRepository {
         val started = mutableListOf<LiveSessionDuration>()
+        val startedVehicleIds = mutableListOf<String?>()
         var stops = 0
         var hides = 0
         var failWith: Exception? = null
@@ -23,10 +24,11 @@ class LiveLocationCoordinatorTest {
         /** Holds startSession open so a second command can race it (Busy). */
         var gate: CompletableDeferred<Unit>? = null
 
-        override suspend fun startSession(duration: LiveSessionDuration) {
+        override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) {
             gate?.await()
             failWith?.let { throw it }
             started += duration
+            startedVehicleIds += vehicleId
         }
 
         override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
@@ -56,6 +58,15 @@ class LiveLocationCoordinatorTest {
         coordinator.start(LiveSessionDuration.TWO_HOURS)
         assertEquals(listOf(LiveSessionDuration.TWO_HOURS), repo.started)
         assertEquals(LiveActionStatus.Idle, coordinator.status.value)
+    }
+
+    @Test
+    fun `start forwards the chosen vehicleId, and null when none chosen`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = LiveLocationCoordinator(repo)
+        coordinator.start(LiveSessionDuration.SIX_HOURS, vehicleId = "veh-7")
+        coordinator.start(LiveSessionDuration.SIX_HOURS)
+        assertEquals(listOf("veh-7", null), repo.startedVehicleIds)
     }
 
     @Test

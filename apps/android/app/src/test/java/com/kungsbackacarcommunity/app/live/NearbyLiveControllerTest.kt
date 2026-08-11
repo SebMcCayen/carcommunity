@@ -22,7 +22,7 @@ class NearbyLiveControllerTest {
         var calls = 0
         var lastCenter: LatLng? = null
 
-        override suspend fun startSession(duration: LiveSessionDuration) = Unit
+        override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) = Unit
         override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
         override suspend fun stopSession() = Unit
         override suspend fun hideMeNow() = Unit

@@ -185,6 +185,59 @@ describe('live session lifecycle', () => {
     expect(session.stopReason).toBe('user_stop');
   });
 
+  it('denormalizes the CHOSEN car when the Start-driving picker sends a vehicleId', async () => {
+    await signInAs(member);
+    await adminDb.collection('users').doc(member.uid).set({ displayName: 'Sebbe' }, { merge: true });
+    // Two cars: one is main, the other is the one the user picks in the popup.
+    await adminDb.collection('vehicles').doc('veh-main-2').set({
+      userId: member.uid,
+      make: 'Volvo',
+      model: '242',
+      modelYear: 1980,
+      powertrain: 'petrol',
+      imagePath: `vehicleImages/${member.uid}/veh-main-2/photo.jpg`,
+      isMainCar: true,
+    });
+    await adminDb.collection('vehicles').doc('veh-picked').set({
+      userId: member.uid,
+      make: 'Saab',
+      model: '900',
+      modelYear: 1993,
+      powertrain: 'petrol',
+      imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
+      isMainCar: false,
+    });
+
+    // Picking the non-main car denormalizes IT, not the main car.
+    await call('live-startSession', { duration: '1h', vehicleId: 'veh-picked' });
+    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    let latest = (await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val();
+    expect(latest.mainCar).toMatchObject({
+      make: 'Saab',
+      model: '900',
+      modelYear: 1993,
+      imagePath: `vehicleImages/${member.uid}/veh-picked/photo.jpg`,
+    });
+    // The plate is never exposed onto the live marker, whichever car is chosen.
+    expect(latest.mainCar.registrationPlate).toBeUndefined();
+
+    // Restarting with NO vehicleId falls back to the main car.
+    await call('live-startSession', { duration: '1h' });
+    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    latest = (await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val();
+    expect(latest.mainCar).toMatchObject({ make: 'Volvo', model: '242', modelYear: 1980 });
+
+    // An id for a car the user does not own also falls back to the main car.
+    await call('live-startSession', { duration: '1h', vehicleId: 'not-owned' });
+    await call('live-updatePosition', { coordinate: coordinate(new Date().toISOString()) });
+    latest = (await adminRtdb.ref(`liveLocation/${member.uid}/latest`).get()).val();
+    expect(latest.mainCar).toMatchObject({ make: 'Volvo', model: '242', modelYear: 1980 });
+
+    await call('live-stopSession', {});
+    await adminDb.collection('vehicles').doc('veh-main-2').delete();
+    await adminDb.collection('vehicles').doc('veh-picked').delete();
+  });
+
   it('rejects stale positions and updates without an active session', async () => {
     await signInAs(member);
     // Previous test stopped the session.

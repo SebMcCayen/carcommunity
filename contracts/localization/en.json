@@ -1481,6 +1481,8 @@
     "createChooserSingleBody": "Drive solo and share your live location.",
     "createChooserConvoy": "Convoy",
     "createChooserConvoyBody": "Create a convoy and drive together with friends.",
+    "createChooserCarLabel": "Which car are you driving?",
+    "createChooserNoCars": "Add a car to your garage to show it on the map.",
     "socialTitle": "Social",
     "socialEvents": "Events",
     "socialNotifications": "Notifications",

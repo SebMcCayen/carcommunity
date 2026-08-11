@@ -67,7 +67,11 @@ class ConvoyRouteCreateHandoffTest {
         override fun observeConvoy(convoyId: String, callerUid: String?): Flow<ConvoySummary?> =
             emptyFlow()
 
-        override suspend fun create(inviteeUids: List<String>, title: String?): CreateConvoyResult {
+        override suspend fun create(
+            inviteeUids: List<String>,
+            title: String?,
+            vehicleId: String?,
+        ): CreateConvoyResult {
             createCount++
             return CreateConvoyResult.Created(
                 convoy = summary(),

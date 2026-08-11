@@ -224,6 +224,11 @@ async function forEachAutoSession(
 async function startConvoyAutoSessionsForAccepted(
   data: Record<string, unknown>,
   convoyId: string,
+  // The car the owner picked in the "Start driving" popup, applied to the
+  // owner's OWN auto-session only. Keyed by ownerVehicle.{ownerUid, vehicleId}
+  // so the fan-out passes it to exactly the owner and nobody else — accepted
+  // invitees never went through the picker and keep their own main car.
+  ownerVehicle?: { ownerUid: string; vehicleId: string },
 ): Promise<void> {
   let liveEnabled: boolean;
   try {
@@ -245,7 +250,12 @@ async function startConvoyAutoSessionsForAccepted(
     return;
   }
   await forEachAutoSession(acceptedMemberUids(data), (uid) =>
-    startConvoyAutoSession(uid, convoyId, true),
+    startConvoyAutoSession(
+      uid,
+      convoyId,
+      true,
+      ownerVehicle && ownerVehicle.ownerUid === uid ? ownerVehicle.vehicleId : undefined,
+    ),
   );
 }
 
@@ -567,7 +577,11 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<CreateConvo
   // — rather than waiting for a separate Start tap. At create time the only
   // accepted member is the owner; invitees auto-start when they accept
   // (convoy.respond) into the now-active convoy.
-  await startConvoyAutoSessionsForAccepted(freshData, ref.id);
+  await startConvoyAutoSessionsForAccepted(
+    freshData,
+    ref.id,
+    parsed.input.vehicleId ? { ownerUid: actor.uid, vehicleId: parsed.input.vehicleId } : undefined,
+  );
 
   return {
     convoy: toConvoySummary(ref.id, freshData, actor.uid, toIso),

@@ -331,7 +331,7 @@ class ConvoyCoordinator(
         }
     }
 
-    suspend fun create(inviteeUids: List<String>, title: String?) {
+    suspend fun create(inviteeUids: List<String>, title: String?, vehicleId: String? = null) {
         if (createStateFlow.value == CreateConvoyState.Working) return
         // ITEM 1 client guard: the caller is already an active participant of a
         // convoy, so a new one is refused. Fail locally with the correct reason
@@ -350,7 +350,14 @@ class ConvoyCoordinator(
         createStateFlow.value = CreateConvoyState.Working
         try {
             createStateFlow.value =
-                when (val result = repository.create(invitees, title?.trim()?.takeIf { it.isNotEmpty() })) {
+                when (
+                    val result =
+                        repository.create(
+                            invitees,
+                            title?.trim()?.takeIf { it.isNotEmpty() },
+                            vehicleId?.takeIf { it.isNotBlank() },
+                        )
+                ) {
                     is CreateConvoyResult.Created ->
                         CreateConvoyState.Created(result.convoy.convoyId, result.skipped)
                     is CreateConvoyResult.Failed -> CreateConvoyState.Error(result.error)

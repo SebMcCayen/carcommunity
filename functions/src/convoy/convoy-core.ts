@@ -254,6 +254,11 @@ const createConvoySchema = z
   .object({
     title: z.string().trim().min(1).max(CONVOY_TITLE_MAX_LENGTH).optional(),
     inviteeUids: z.array(uidSchema).min(1).max(MAX_CONVOY_INVITEES),
+    // The car the owner chose in the "Start driving" picker before opening the
+    // convoy flow. Applied only to the owner's own auto-started live session
+    // (see startConvoyAutoSession); a stale/foreign id falls back to their main
+    // car rather than erroring the create. Bounded like a Firestore doc id.
+    vehicleId: z.string().trim().min(1).max(300).optional(),
   })
   .strict();
 

@@ -145,7 +145,15 @@ const coordinateSchema = z
   .strict();
 
 const startSessionInputSchema = z
-  .object({ duration: z.enum(LIVE_SESSION_DURATION_KEYS) })
+  .object({
+    duration: z.enum(LIVE_SESSION_DURATION_KEYS),
+    // Which garage car the sharer is driving this session. Optional: the start
+    // paths fall back to the main car (then the first car, then no car) when it
+    // is absent or no longer owned — see pickSessionVehicleData. Bounded like a
+    // Firestore doc id; a stray value simply fails the ownership match and falls
+    // back rather than erroring the start.
+    vehicleId: z.string().trim().min(1).max(300).optional(),
+  })
   .strict();
 
 const updatePositionInputSchema = z.object({ coordinate: coordinateSchema }).strict();
@@ -272,6 +280,42 @@ export function toLiveMainCar(
   }
   const imagePath = typeof data.imagePath === 'string' ? data.imagePath : null;
   return { make, model, modelYear, imagePath };
+}
+
+/**
+ * Picks WHICH garage car a live session denormalizes, from the caller's owned
+ * vehicles. The order matches the product rule the "Start driving" picker
+ * follows on the client so the two never disagree:
+ *
+ *   1. the explicitly chosen `vehicleId`, when it names a car the caller still
+ *      owns (a stale/foreign id is ignored, not honoured, and never errors);
+ *   2. otherwise the car flagged `isMainCar`;
+ *   3. otherwise the first owned car;
+ *   4. no cars → null (the session carries no car, the generic marker).
+ *
+ * Pure over the decoded docs so the selection is unit-testable without Firestore.
+ * Returns the raw doc data; the caller runs it through {@link toLiveMainCar} for
+ * the display-safe projection.
+ */
+export function pickSessionVehicleData(
+  vehicles: ReadonlyArray<{ id: string; data: Record<string, unknown> }>,
+  vehicleId?: string | null,
+): Record<string, unknown> | null {
+  const first = vehicles[0];
+  if (!first) {
+    return null;
+  }
+  if (vehicleId) {
+    const chosen = vehicles.find((v) => v.id === vehicleId);
+    if (chosen) {
+      return chosen.data;
+    }
+  }
+  const main = vehicles.find((v) => v.data.isMainCar === true);
+  if (main) {
+    return main.data;
+  }
+  return first.data;
 }
 
 export interface LiveSession {

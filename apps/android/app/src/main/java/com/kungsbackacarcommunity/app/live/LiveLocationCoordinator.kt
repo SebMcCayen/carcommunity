@@ -55,9 +55,15 @@ class LiveLocationCoordinator(
      * Starts a session. Returns the command's [LiveCommandResult] so the caller
      * can resolve its optimistic "starting…" UI (see [LiveShareStart]) instead of
      * having to guess from the shared [status] flow.
+     *
+     * [vehicleId] is the garage car the user picked in the "Start driving" popup;
+     * null lets the server fall back to their main car (then first car, then no
+     * car). It is denormalized onto the session so viewers see that car's photo.
      */
-    suspend fun start(duration: LiveSessionDuration): LiveCommandResult =
-        execute { repository.startSession(duration) }
+    suspend fun start(
+        duration: LiveSessionDuration,
+        vehicleId: String? = null,
+    ): LiveCommandResult = execute { repository.startSession(duration, vehicleId) }
 
     suspend fun stop() = execute { repository.stopSession() }
 
