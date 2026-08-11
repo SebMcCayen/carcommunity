@@ -24,9 +24,15 @@
  *    never back to `badgeProgress`, so it cannot retrigger itself.
  *
  * COUNTER SOURCES AND THEIR ANTI-ABUSE PROPERTY
- *  - Kronjägare  ← `crownHuntClaims/{id}` reaching `result: 'awarded'`. A
- *                  `risk_review` claim (the anti-fraud outcome, which also
- *                  awards no Kronpoäng) NEVER counts.
+ *  - Kronjägare  ← `crownHuntClaims/{id}` (hand-placed admin crowns) AND
+ *                  `crownSpawnClaims/{id}` (the live hunt's auto-spawn crowns)
+ *                  reaching `result: 'awarded'`. Both collections feed the one
+ *                  counter — a member collecting only auto-spawn crowns must
+ *                  progress too (issue #793). A `risk_review` claim (the
+ *                  anti-fraud outcome, which also awards no Kronpoäng) NEVER
+ *                  counts on either path. The 6-hour sweep additionally
+ *                  reconciles this counter up to the all-time Kronjakt
+ *                  leaderboard, which self-heals members who predate the fix.
  *  - Vägfarare   ← `rides/{id}.distanceMeters`, computed server-side by
  *                  drives.save from the submitted route.
  *  - Träffräv    ← `badgeProgress/{uid}.completedEventsAttended`, credited by
@@ -68,7 +74,7 @@ import {
 import {
   badgeProgressRef,
   bumpBadgeCounter,
-  reconcileDerivedBadgeCounters,
+  reconcileVehiclesInGarage,
   tryEvaluateBadgeTiers,
 } from './tierAwards';
 import { MAX_INSTANCES_TRIGGER_FANOUT, CPU_TRIGGER_FANOUT } from '../shared/instanceLimits';
@@ -117,7 +123,10 @@ export const onBadgeProgressWritten = onDocumentWritten(
 // Counter sources
 // ---------------------------------------------------------------------------
 
-/** Kronjägare — one crown per claim that actually resolved to `awarded`. */
+/**
+ * Kronjägare — one crown per HAND-PLACED admin claim that resolved to
+ * `awarded`. These land in `crownHuntClaims/{claimId}` (crownHunt.submitClaim).
+ */
 export const onCrownClaimWritten = onDocumentWritten(
   { ...TRIGGER_OPTS, document: 'crownHuntClaims/{claimId}' },
   async (firestoreEvent) => {
@@ -130,6 +139,40 @@ export const onCrownClaimWritten = onDocumentWritten(
     const uid = claimUserId(after);
     if (!uid) {
       logger.warn('Awarded crown claim without a userId', {
+        claimId: firestoreEvent.params.claimId,
+      });
+      return;
+    }
+    await bumpBadgeCounter(uid, 'crownsCollected', delta);
+  },
+);
+
+/**
+ * Kronjägare — one crown per AUTO-SPAWN claim that resolved to `awarded`.
+ *
+ * The live hunt's auto-spawned crowns are collected via crownHunt.claimSpawn,
+ * which writes `crownSpawnClaims/{claimId}` — a DIFFERENT collection from the
+ * hand-placed `crownHuntClaims` above. Without this trigger those collections
+ * never reached the Kronjägare counter, so a member who only ever collected
+ * spawn crowns (i.e. the actual hunt) stayed locked at zero even as the visible
+ * Kronjakt leaderboard climbed past the thresholds (issue #793). The spawn
+ * claim document carries the same `userId` and `result: 'awarded'` shape as a
+ * hand claim, so the pure guards apply unchanged: a `risk_review` (anti-fraud),
+ * `too_far`, `position_too_old` or any other result contributes nothing, and a
+ * replayed write of an already-`awarded` claim credits nothing more.
+ */
+export const onSpawnClaimWritten = onDocumentWritten(
+  { ...TRIGGER_OPTS, document: 'crownSpawnClaims/{claimId}' },
+  async (firestoreEvent) => {
+    const before = firestoreEvent.data?.before.data();
+    const after = firestoreEvent.data?.after.data();
+    const delta = crownClaimCrownDelta(before, after);
+    if (delta === 0) {
+      return;
+    }
+    const uid = claimUserId(after);
+    if (!uid) {
+      logger.warn('Awarded spawn claim without a userId', {
         claimId: firestoreEvent.params.claimId,
       });
       return;
@@ -181,7 +224,11 @@ export const onVehicleCreated = onDocumentCreated(
     if (typeof uid !== 'string' || uid.length === 0) {
       return;
     }
-    await reconcileDerivedBadgeCounters(uid);
+    // Vehicle-only reconciliation: a vehicle create has nothing to do with
+    // crowns, so it must not pay for the Kronjakt leaderboard read (or trigger a
+    // Kronjägare backfill) that the 6-hour sweep's reconcileDerivedBadgeCounters
+    // does. The raised counter cascades into onBadgeProgressWritten for awarding.
+    await reconcileVehiclesInGarage(uid);
   },
 );
 
