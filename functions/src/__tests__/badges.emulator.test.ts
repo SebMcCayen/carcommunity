@@ -629,7 +629,7 @@ describe('tiered badge ladders', () => {
  * for the caller's own uid.
  */
 describe('badges-getMyProgress (owner counters)', () => {
-  it('returns the caller OWN counters, projected through readBadgeCounters', async () => {
+  it("returns the caller's own counters, projected through readBadgeCounters", async () => {
     const owner = await createProvisionedUser('badges-getprogress');
     await adminDb.collection('users').doc(owner.uid).set({ activeMember: true }, { merge: true });
 

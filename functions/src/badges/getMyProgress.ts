@@ -10,8 +10,9 @@
  * their own numbers; there is no argument that selects another member.
  *
  * WHY A CALLABLE AND NOT A RULE. The tiered ladders are measured against
- * server-verified counters on `badgeProgress/{uid}`, which `firebase/firestore
- * .rules` denies to EVERY client, the owner included (the doc is backend-only —
+ * server-verified counters on `badgeProgress/{uid}`, which
+ * `firebase/firestore.rules` denies to EVERY client, the owner included (the
+ * doc is backend-only —
  * a client that could read it could also infer/spoof progress, and it carries
  * cross-domain telemetry the trophies deliberately don't). The profile wall
  * therefore knew a member's held rungs (from their public `users/{uid}/badges`
