@@ -41,6 +41,11 @@ import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { isRestricted, toUserAccessState } from '../shared/access';
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
+import {
+  ALL_TIME_SCOPE,
+  CROWN_LEADERBOARD_COLLECTION,
+  leaderboardEntryDocId,
+} from '../crownHunt/crown-hunt-stats-core';
 import { creditPoints } from '../points/ledger';
 import { type BadgeMetric, type TierBadgeKey } from './badge-core';
 import {
@@ -135,45 +140,66 @@ export async function raiseBadgeCounter(
 }
 
 /**
- * Re-derives the counters that are a SNAPSHOT of current state rather than an
- * accumulated total, and raises the stored running maximum to match.
+ * Re-derives the counters that a stream of increments cannot reconstruct on its
+ * own and raises the stored running maximum to match. Two counters need this,
+ * for two different reasons, and both are reconciled on every sweep pass:
  *
- * Today that is only `vehiclesInGarage`. It cannot be maintained by increments
- * alone: `onVehicleCreated` fires on a vehicle CREATE, so a member whose garage
- * was already populated before the ladders shipped — and above all one sitting
- * at the MAX_VEHICLES_PER_USER cap, who can never create another vehicle and so
- * can never fire that trigger again — would otherwise never earn a Samlare tier
- * at all, however full their garage is. Re-deriving it on the sweep is what
- * makes the Samlare ladder reachable for existing members.
+ *  - `vehiclesInGarage` is a SNAPSHOT of current state. `onVehicleCreated` fires
+ *    on a vehicle CREATE, so a member whose garage predates the ladders — above
+ *    all one at the MAX_VEHICLES_PER_USER cap, who can never create another and
+ *    so can never fire that trigger again — would otherwise never earn a Samlare
+ *    tier however full their garage is. Re-deriving it on the sweep is what
+ *    makes the Samlare ladder reachable for existing members.
+ *  - `crownsCollected` is an ACCUMULATED total maintained by the live
+ *    crown-claim triggers, but those triggers only started counting auto-spawn
+ *    crowns when issue #793 was fixed. Reconciling against the authoritative
+ *    all-time Kronjakt leaderboard (`crownHuntLeaderboardEntries/alltime__{uid}`,
+ *    which has always counted BOTH hand-placed and auto-spawn collections via
+ *    the shared pointsLedger) back-fills every collector who predates the fix,
+ *    within one sweep cycle.
  *
- * Costs one `count()` aggregation read per member per sweep, EXCEPT for a
- * member already recorded at the vehicle cap, where it is skipped entirely (see
- * below). Raising is a running maximum (raiseBadgeCounter), so a member who has
- * since deleted cars keeps the tier they already earned, and this never writes
- * when the stored value is already at or above the real count — no write, hence
- * no evaluation re-trigger, on the steady-state pass.
+ * Both use `raiseBadgeCounter` (a running MAXIMUM), which is why the backfill
+ * cannot double-count against the live increments: it lifts the counter TO the
+ * leaderboard value, it never adds on top, so once the two agree the sweep is a
+ * no-op. A member who has since deleted cars keeps the Samlare tier they earned,
+ * and the `risk_review` invariant is preserved for free — a risk_review claim
+ * writes no pointsLedger entry, so the leaderboard already excludes it.
  *
  * `knownProgress` is the member's already-loaded `badgeProgress` data, passed by
- * callers that have it in hand so the cap shortcut costs no extra read.
+ * callers that have it in hand so the vehicle-cap shortcut costs no extra read.
  *
- * RETURNS the progress data to evaluate from. When this function raises the
+ * RETURNS the progress data to evaluate from. When this function raises a
  * counter it patches the new value into the returned snapshot, because the
- * caller's copy predates that write — evaluating from the stale copy would
- * miss the very Samlare tier this reconciliation just made reachable. Returns
- * `undefined` when the caller supplied nothing, so the evaluator falls back to
- * reading the document itself.
+ * caller's copy predates that write — evaluating from the stale copy would miss
+ * the very tier this reconciliation just made reachable. Returns `undefined`
+ * when the caller supplied nothing, so the evaluator falls back to reading the
+ * document itself.
  */
 export async function reconcileDerivedBadgeCounters(
   uid: string,
   knownProgress?: Record<string, unknown>,
 ): Promise<Record<string, unknown> | undefined> {
+  let progress = await reconcileVehiclesInGarage(uid, knownProgress);
+  progress = await reconcileCrownsCollected(uid, progress);
+  return progress;
+}
+
+/**
+ * Raises `vehiclesInGarage` to the member's real `count()` of vehicles. Costs
+ * one aggregation read per member per sweep, EXCEPT for a member already
+ * recorded at the vehicle cap, where it is skipped entirely: the counter is a
+ * running maximum and the garage is transactionally capped, so once the stored
+ * value reaches MAX_VEHICLES_PER_USER the `count()` can never return anything
+ * higher and is guaranteed wasted. Only callers that ALREADY hold the
+ * badgeProgress document can use that shortcut — the sweep does, and that is
+ * exactly where the read would otherwise repeat every cycle for every maxed-out
+ * member.
+ */
+async function reconcileVehiclesInGarage(
+  uid: string,
+  knownProgress: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
   const field = BADGE_METRIC_FIELD.vehiclesInGarage;
-  // The counter is a running maximum and the garage is transactionally capped
-  // at MAX_VEHICLES_PER_USER, so once the stored value reaches the cap the
-  // `count()` can never return anything higher and is guaranteed wasted. Only
-  // callers that ALREADY hold the badgeProgress document can use this
-  // shortcut — the sweep does, and that is exactly where the read would
-  // otherwise repeat every cycle, forever, for every maxed-out member.
   if (knownProgress !== undefined && toCounter(knownProgress[field]) >= MAX_VEHICLES_PER_USER) {
     return knownProgress;
   }
@@ -186,6 +212,34 @@ export async function reconcileDerivedBadgeCounters(
   return toCounter(knownProgress[field]) >= count
     ? knownProgress
     : { ...knownProgress, [field]: count };
+}
+
+/**
+ * Raises `crownsCollected` to the member's all-time Kronjakt leaderboard total,
+ * back-filling collectors whose auto-spawn crowns never reached the badge
+ * counter before issue #793 was fixed. Reads one leaderboard document per
+ * member per sweep; a member with no crowns (no leaderboard entry) is a no-op.
+ */
+async function reconcileCrownsCollected(
+  uid: string,
+  knownProgress: Record<string, unknown> | undefined,
+): Promise<Record<string, unknown> | undefined> {
+  const field = BADGE_METRIC_FIELD.crownsCollected;
+  const entrySnap = await db
+    .collection(CROWN_LEADERBOARD_COLLECTION)
+    .doc(leaderboardEntryDocId(ALL_TIME_SCOPE, uid))
+    .get();
+  const collected = toCounter(entrySnap.data()?.crownsCollected);
+  if (collected <= 0) {
+    return knownProgress;
+  }
+  await raiseBadgeCounter(uid, 'crownsCollected', collected);
+  if (knownProgress === undefined) {
+    return undefined;
+  }
+  return toCounter(knownProgress[field]) >= collected
+    ? knownProgress
+    : { ...knownProgress, [field]: collected };
 }
 
 async function isEligibleForAwards(uid: string): Promise<boolean> {

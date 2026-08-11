@@ -458,6 +458,110 @@ describe('tiered badge ladders', () => {
   }, 120_000);
 
   /**
+   * The live-hunt regression (issue #793): auto-spawn crowns land in
+   * `crownSpawnClaims`, a DIFFERENT collection from the hand-placed
+   * `crownHuntClaims`. Before badges-onSpawnClaimWritten existed nothing counted
+   * them, so a member collecting only auto-spawn crowns stayed locked at zero.
+   * This pins that an awarded spawn claim now reaches Kronjägare, and that a
+   * risk_review spawn claim is still excluded.
+   */
+  it('counts an auto-spawn Kronjakt crown toward Kronjägare (issue #793)', async () => {
+    const hunter = await createProvisionedUser('badges-spawn-crown');
+    await adminDb.collection('users').doc(hunter.uid).set({ activeMember: true }, { merge: true });
+
+    // One spawn claim the anti-fraud path sent to review, plus exactly ten
+    // awarded — the same shape claimSpawn writes (userId + result).
+    await adminDb.collection('crownSpawnClaims').doc(`${hunter.uid}__spawn_risk`).set({
+      userId: hunter.uid,
+      spawnId: 's-risk',
+      result: 'risk_review',
+      createdAt: new Date(),
+    });
+    for (let index = 0; index < 10; index += 1) {
+      await adminDb.collection('crownSpawnClaims').doc(`${hunter.uid}__spawn_ok${index}`).set({
+        userId: hunter.uid,
+        spawnId: `s-${index}`,
+        result: 'awarded',
+        createdAt: new Date(),
+      });
+    }
+
+    await pollUntil(async () => {
+      const snap = await badgeDoc(hunter.uid, 'kronjagare_brons').get();
+      return snap.exists ? true : undefined;
+    });
+    // Exactly ten — the risk_review spawn claim contributed nothing.
+    await pollUntil(async () => {
+      const progress = await adminDb.collection('badgeProgress').doc(hunter.uid).get();
+      return progress.data()?.crownsCollected === 10 ? true : undefined;
+    });
+    expect(
+      (await adminDb.collection('badgeProgress').doc(hunter.uid).get()).data()!.crownsCollected,
+    ).toBe(10);
+  }, 120_000);
+
+  /**
+   * The self-heal for members who predate the #793 fix: the 6-hour sweep
+   * reconciles `crownsCollected` UP to the authoritative all-time Kronjakt
+   * leaderboard, which has always counted both hand-placed and auto-spawn
+   * collections. It is a running-MAX raise, so once the counter already agrees
+   * with the leaderboard the sweep is a no-op and cannot double-count against
+   * the live increments.
+   */
+  it('reconciles crownsCollected from the all-time leaderboard without double-counting', async () => {
+    const collector = await createProvisionedUser('badges-spawn-reconcile');
+    await adminDb
+      .collection('users')
+      .doc(collector.uid)
+      .set({ activeMember: true }, { merge: true });
+
+    // A member who collected 12 crowns before the fix: the leaderboard recorded
+    // them, but the badge counter never did. Their badgeProgress document
+    // exists from other activity (a login streak) — which is what the sweep
+    // pages over — but has no crownsCollected field yet. No Kronjägare badge.
+    await adminDb
+      .collection('crownHuntLeaderboardEntries')
+      .doc(`alltime__${collector.uid}`)
+      .set({ scope: 'alltime', uid: collector.uid, crownsCollected: 12, points: 120 });
+    await adminDb
+      .collection('badgeProgress')
+      .doc(collector.uid)
+      .set({ currentDayStreak: 1, bestDayStreak: 1, updatedAt: new Date() }, { merge: true });
+    expect(
+      (await adminDb.collection('badgeProgress').doc(collector.uid).get()).data()?.crownsCollected,
+    ).toBeUndefined();
+
+    // Run the sweep until it wraps, so this member is visited wherever the
+    // shared cursor happened to be.
+    await adminDb.collection('badgeSweepState').doc('backlog').delete();
+    for (let pass = 0; pass < 10; pass += 1) {
+      const { wrapped } = await runBadgeBacklogSweep();
+      if (wrapped) break;
+    }
+
+    // Counter raised to 12 → Brons (10) awarded, Silver (50) not.
+    await pollUntil(async () => {
+      const snap = await badgeDoc(collector.uid, 'kronjagare_brons').get();
+      return snap.exists ? true : undefined;
+    });
+    expect(
+      (await adminDb.collection('badgeProgress').doc(collector.uid).get()).data()!.crownsCollected,
+    ).toBe(12);
+    expect((await badgeDoc(collector.uid, 'kronjagare_silver').get()).exists).toBe(false);
+
+    // No double-count: the counter now equals the leaderboard, so another sweep
+    // leaves it at 12 (running-max raise, not an add).
+    await adminDb.collection('badgeSweepState').doc('backlog').delete();
+    for (let pass = 0; pass < 10; pass += 1) {
+      const { wrapped } = await runBadgeBacklogSweep();
+      if (wrapped) break;
+    }
+    expect(
+      (await adminDb.collection('badgeProgress').doc(collector.uid).get()).data()!.crownsCollected,
+    ).toBe(12);
+  }, 120_000);
+
+  /**
    * The backlog sweep is the ONLY path by which a garage that predates the
    * ladders ever earns a Samlare tier: `vehiclesInGarage` is a snapshot counter
    * re-derived on a vehicle CREATE, so a member already sitting at the

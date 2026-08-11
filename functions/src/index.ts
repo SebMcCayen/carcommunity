@@ -54,6 +54,7 @@ import {
   onBadgeProgressWritten,
   onConvoyWritten as onConvoyWrittenForBadges,
   onCrownClaimWritten,
+  onSpawnClaimWritten,
   onRideCreated,
   onUserLifecycleWritten,
   onVehicleCreated as onVehicleCreatedForBadges,
@@ -382,7 +383,7 @@ export const garage = {
 
 /**
  * Badges domain (grouped export → deployed as `badges-awardHelpfulMember`,
- * `badges-adminSummary`, the six Firestore triggers below and the scheduled
+ * `badges-adminSummary`, the seven Firestore triggers below and the scheduled
  * `badges-evaluateBacklog`).
  *
  * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
@@ -394,17 +395,20 @@ export const garage = {
  *
  * The six TIERED LADDERS (Kronjägare / Vägfarare / Träffräv / Trogen /
  * Konvojledare / Samlare — badges/badge-core.ts) are awarded from TRIGGERS, not
- * callables, so a tier cannot be forged: five source triggers bump
- * server-verified counters on badgeProgress/{uid} (a `risk_review` Kronjakt
- * claim never counts), and the single badges-onBadgeProgressWritten trigger
- * evaluates every ladder for that one member. badges-evaluateBacklog is the
- * bounded, cursor-paged self-healing sweep. See badges/progressTriggers.ts.
+ * callables, so a tier cannot be forged: six source triggers bump
+ * server-verified counters on badgeProgress/{uid} (Kronjägare has two —
+ * hand-placed crownHuntClaims AND auto-spawn crownSpawnClaims — both gated so a
+ * `risk_review` Kronjakt claim never counts), and the single
+ * badges-onBadgeProgressWritten trigger evaluates every ladder for that one
+ * member. badges-evaluateBacklog is the bounded, cursor-paged self-healing
+ * sweep. See badges/progressTriggers.ts.
  */
 export const badges = {
   awardHelpfulMember,
   adminSummary: badgesAdminSummary,
   onBadgeProgressWritten,
   onCrownClaimWritten,
+  onSpawnClaimWritten,
   onRideCreated,
   onConvoyWritten: onConvoyWrittenForBadges,
   onVehicleCreated: onVehicleCreatedForBadges,
