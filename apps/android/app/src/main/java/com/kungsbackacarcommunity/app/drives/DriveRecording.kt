@@ -67,23 +67,53 @@ sealed interface RecordingState {
     data object Saved : RecordingState
 
     /**
-     * A LIVE session ended and its drive was AUTO-saved; the user is now asked
-     * whether to KEEP it or DELETE it. This is the auto-save flow's replacement
-     * for the old forced Save/Discard prompt: the drive is already persisted (so
-     * it can never be lost by missing the save), and the choice is only whether
-     * to keep the just-saved ride or remove it again.
+     * A LIVE session ended: the end-of-session summary is shown IMMEDIATELY over
+     * the client-side estimate while the `drives-save` callable runs in the
+     * BACKGROUND (#798 — stopping must feel instant). The user is asked whether to
+     * KEEP the drive or DELETE it while (or after) that background save settles:
+     * - KEEP resolves instantly — the background save carries on fire-and-forget
+     *   (it retries transient faults) so a slow save can never make the summary
+     *   wait.
+     * - DELETE waits for the background save to finish (so it knows the rideId and
+     *   cannot race a save that would recreate the drive) and then removes it.
      *
-     * @property rideId the id of the ride the `drives-save` callable created, so
-     *   DELETE can remove exactly that ride via `drives-delete`.
+     * The created ride's id is held by the coordinator (not carried here) because
+     * this state is reached BEFORE the save has produced one; DELETE reads it off
+     * the coordinator after joining the background save.
+     *
      * @property elapsedMillis the frozen recording duration, for the summary.
      * @property deleteFailed true after a delete attempt failed, so the prompt
      *   re-shows with a delete-error line and the choice still stands (the drive
      *   is still safely saved).
+     * @property savePending true while the background save is still in flight, so
+     *   the summary can show a small inline "saving…" indicator instead of the old
+     *   full-screen blocking modal. Flips false the moment the save lands; a save
+     *   that ultimately fails moves to [Failed] instead (while still on this
+     *   state — once the user has chosen Keep/Delete the choice stands).
      */
     data class SavedPendingChoice(
-        val rideId: String,
         val elapsedMillis: Long,
         val deleteFailed: Boolean = false,
+        val savePending: Boolean = false,
+    ) : RecordingState
+
+    /**
+     * A LIVE session's drive was KEPT while its background save was STILL in
+     * flight. KEEP does not wait on the network, but the drive must not be
+     * finalized until the save DEFINITIVELY succeeds — otherwise a save that then
+     * fails after the terminal [Kept] (which releases everything) would silently
+     * lose the drive, the exact never-lose-a-drive failure #798 guards against. So
+     * an early Keep parks HERE and the background save resolves it: success →
+     * terminal [Kept]; a definitive failure → [Failed], which re-raises the retry
+     * prompt so the drive can still be saved.
+     *
+     * Only reached when Keep is tapped BEFORE the save lands; once the save has
+     * landed ([SavedPendingChoice.savePending] is false) Keep goes straight to
+     * [Kept]. The summary renders this as the small "saving…" indicator, not a
+     * Keep/Delete choice (the choice is already made).
+     */
+    data class KeptPendingSave(
+        val elapsedMillis: Long,
     ) : RecordingState
 
     /** The `drives-delete` callable is in flight (deleting the auto-saved ride). */
@@ -125,6 +155,27 @@ sealed interface RecordingState {
     companion object {
         /** Firebase Functions status for a backend refusal (the member gate). */
         const val PERMISSION_DENIED: String = "PERMISSION_DENIED"
+
+        /**
+         * Callable status codes for TRANSIENT `drives-save` faults — a server
+         * hiccup, an unreachable backend, a call that ran out of time — that a
+         * retry can plausibly clear. `drives-save` is idempotent per
+         * `sourceSessionId` (functions/src/drives/saveDrive.ts), so re-issuing the
+         * same request is safe: at worst it returns the already-created drive.
+         *
+         * This is deliberately a CLOSED allow-list, not "everything that isn't
+         * PERMISSION_DENIED": a `PERMISSION_DENIED` (the member gate) or an
+         * `INVALID_ARGUMENT` (a malformed payload — a client bug) can NEVER be
+         * fixed by trying again, so retrying them would just loop. A null
+         * (unclassified) code is likewise not retried — the background save
+         * surfaces it as a failure the user can retry by hand rather than spinning
+         * on an error we cannot reason about. #798/#800.
+         */
+        val TRANSIENT_SAVE_CODES: Set<String> =
+            setOf("INTERNAL", "UNAVAILABLE", "DEADLINE_EXCEEDED")
+
+        /** Whether a `drives-save` failure [code] is worth an automatic retry. */
+        fun isTransientSaveCode(code: String?): Boolean = code != null && code in TRANSIENT_SAVE_CODES
     }
 }
 

@@ -247,7 +247,9 @@ import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionLoad
 import com.kungsbackacarcommunity.app.live.LiveSessionRecordingLifecycle
 import com.kungsbackacarcommunity.app.live.LiveShareStart
+import com.kungsbackacarcommunity.app.live.LiveShareStop
 import com.kungsbackacarcommunity.app.live.LiveStartAttempt
+import com.kungsbackacarcommunity.app.live.OptimisticLiveStop
 import com.kungsbackacarcommunity.app.live.LiveMapLayers
 import com.kungsbackacarcommunity.app.live.NearbyLiveController
 import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
@@ -2481,7 +2483,40 @@ fun AuthenticatedApp(
                     snackbarHostState.showSnackbar(liveErrorText)
                 }
             }
-            val isSharingUi = OptimisticLiveStart.isSharing(isSharing, startAttempt, nowMillis())
+
+            // --- Optimistic STOP (instant hide of STOP sign + live bar + dot) -
+            // The exact mirror of the optimistic START above, for #798: tapping
+            // Stop used to leave the sharing chrome up for the whole server round
+            // trip while the stopped session echoed back. The tap now records a
+            // stop attempt in [LiveShareStop], and everything the user LOOKS at
+            // treats "sharing MINUS a live stop attempt" as sharing, so the chrome
+            // clears on the next frame. Like the start overlay it does NOT drive the
+            // session-bound side effects (the drive Keep/Delete summary, the
+            // publisher) — those stay on the observed session, so a stop that fails
+            // can never tear a still-live recording/service down.
+            val stopAttempt by LiveShareStop.attempt.collectAsState()
+            // Truth landed (the session is no longer observed sharing) → drop the
+            // overlay. AND drop it the moment a start overlay appears: a fresh start
+            // (manual OR convoy-auto, which never runs through stopLiveShare) must
+            // not be masked by a stale stop attempt from the previous session, which
+            // would force isSharingUi false until the stop attempt expired.
+            LaunchedEffect(isSharing, startAttempt, stopAttempt) {
+                if (!isSharing) LiveShareStop.reconcile(false)
+                if (startAttempt != LiveStartAttempt.None) LiveShareStop.clear()
+            }
+            // Expiry backstop: no stop attempt may outlive its deadline, so a hung
+            // or silently-unechoed stop always lets the observed truth show through
+            // again rather than hiding a session that may still be live.
+            LaunchedEffect(stopAttempt) {
+                val until = OptimisticLiveStop.pendingUntilMillis(stopAttempt) ?: return@LaunchedEffect
+                val remaining = until - nowMillis()
+                if (remaining > 0) delay(remaining)
+                LiveShareStop.clearIf(stopAttempt)
+            }
+            // Observed-or-optimistically-started sharing, MINUS a live stop attempt.
+            val isSharingUi =
+                OptimisticLiveStart.isSharing(isSharing, startAttempt, nowMillis()) &&
+                    !OptimisticLiveStop.isStopping(stopAttempt, nowMillis())
 
             // --- Single-session drive recording -----------------------------
             // A Single (solo live-sharing) session records the drive alongside
@@ -2926,6 +2961,10 @@ fun AuthenticatedApp(
             fun startSingleSession(duration: LiveSessionDuration) {
                 val c = liveLocationCoordinator ?: return
                 if (!LiveShareStart.request(nowMillis(), observedSharing = isSharing)) return
+                // A fresh start must never be hidden by a stale optimistic-stop
+                // overlay from the session the user just ended: clear it so the new
+                // STOP sign shows at once (isSharingUi subtracts a live stop attempt).
+                LiveShareStop.clear()
                 scope.launch {
                     val result =
                         try {
@@ -2995,7 +3034,53 @@ fun AuthenticatedApp(
                 LiveShareStart.clear()
                 val c = liveLocationCoordinator
                 if (c != null) {
-                    scope.launch { c.stop() }
+                    // Optimistic STOP: hide the sharing chrome on the NEXT frame
+                    // (#798) instead of after the stopped session echoes back — BUT
+                    // only claim the overlay when this tap can actually INITIATE a
+                    // stop. If a live command is already in flight, c.stop() will
+                    // short-circuit as Busy without issuing anything; hiding the
+                    // chrome for it would say "not sharing" while the session is
+                    // still live (a privacy leak — e.g. tapping Stop while a Start is
+                    // in flight). A genuine stop double-tap already claimed the
+                    // overlay on its first tap, so the chrome stays correctly hidden.
+                    val initiatedStop = OptimisticLiveStop.claimsStop(c.status.value == LiveActionStatus.Working)
+                    if (initiatedStop) LiveShareStop.request(nowMillis())
+                    scope.launch {
+                        val result =
+                            try {
+                                c.stop()
+                            } catch (cancellation: CancellationException) {
+                                // The scope died mid-stop (sign-out, Activity
+                                // teardown): nothing will resolve this attempt, so
+                                // drop it rather than hide a session on a stop that
+                                // never ran.
+                                if (initiatedStop) LiveShareStop.failed()
+                                throw cancellation
+                            }
+                        when (result) {
+                            LiveCommandResult.Success ->
+                                // Issued and accepted: hold the overlay for the
+                                // short echo window while the stopped session finds
+                                // its way down.
+                                if (initiatedStop) LiveShareStop.settled(nowMillis())
+                            LiveCommandResult.Failed ->
+                                // The stop genuinely failed: revert so the STOP sign
+                                // returns rather than hiding a still-live session.
+                                // Only speak up if the attempt was still ours.
+                                if (initiatedStop && LiveShareStop.failed()) {
+                                    snackbarHostState.showSnackbar(liveErrorText)
+                                }
+                            LiveCommandResult.Busy ->
+                                // No stop was issued (a command was already in
+                                // flight). Never leave the chrome hidden over a
+                                // still-live session: revert our optimistic attempt
+                                // if a rare race (Working between the check and
+                                // c.stop()) let us claim one. When we did not claim
+                                // (initiatedStop == false) there is nothing to
+                                // revert — the first tap's overlay, if any, stands.
+                                if (initiatedStop) LiveShareStop.failed()
+                        }
+                    }
                 } else {
                     openLiveShareFallback()
                 }

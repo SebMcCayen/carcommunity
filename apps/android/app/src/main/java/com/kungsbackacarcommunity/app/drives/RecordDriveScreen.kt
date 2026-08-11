@@ -252,6 +252,7 @@ fun RecordDriveScreen(
                 // Live-session auto-save states (SingleSessionRecording): the
                 // manual recorder never enters them, so render nothing.
                 is RecordingState.SavedPendingChoice,
+                is RecordingState.KeptPendingSave,
                 RecordingState.Deleting,
                 RecordingState.Kept,
                 RecordingState.Deleted,

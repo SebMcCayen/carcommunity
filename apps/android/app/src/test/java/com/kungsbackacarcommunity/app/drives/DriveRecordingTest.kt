@@ -7,6 +7,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
@@ -487,33 +488,154 @@ class DriveRecordingTest {
     }
 
     // ---------------------------------------------------------------------
-    // Live auto-save → keep / delete. A finished LIVE session AUTO-saves the
-    // drive (so it can never be lost by a missed Save), then the summary asks
-    // KEEP (it stays) or DELETE (removed again via drives-delete).
+    // Live end-of-session (#798/#800): stopping shows the Keep/Delete summary
+    // IMMEDIATELY over the local estimate while drives-save runs in the
+    // BACKGROUND with bounded retry on transient faults. KEEP resolves instantly;
+    // DELETE waits for the pending save to finish, then removes the ride.
     // ---------------------------------------------------------------------
 
+    /**
+     * A live coordinator whose BACKGROUND save runs EAGERLY on the test scheduler
+     * ([UnconfinedTestDispatcher] runs the launched save synchronously up to its
+     * first real suspension) with no real backoff — the same proven pattern the
+     * route-upload tests use. A non-suspending fake save therefore completes during
+     * `autoSave`; a GATED fake save parks at its gate, leaving the summary pending
+     * so a test can observe the in-flight state.
+     */
+    private fun kotlinx.coroutines.test.TestScope.liveCoordinator(
+        repo: DrivesRepository,
+        uploader: MediaUploader? = null,
+        maxSaveAttempts: Int = DriveRecordingCoordinator.DEFAULT_MAX_SAVE_ATTEMPTS,
+    ): DriveRecordingCoordinator =
+        DriveRecordingCoordinator(
+            repository = repo,
+            sourceSessionId = "sess",
+            routeUploadRunner = uploader?.let { RouteUploadRunner(it, delayFn = {}) },
+            uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+            maxSaveAttempts = maxSaveAttempts,
+            delayFn = {},
+        )
+
     @Test
-    fun `autoSave persists the drive and lands in SavedPendingChoice with the rideId`() = runTest {
+    fun `stop shows the summary immediately, over the local estimate, before the save lands`() =
+        runTest {
+            // A GATED save, so we can observe the summary while it is still in flight.
+            val release = CompletableDeferred<Unit>()
+            val repo =
+                object : DrivesRepository {
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+                        release.await()
+                        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+                    }
+
+                    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+                }
+            val c = liveCoordinator(repo)
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.addFix(57.001, 12.0, 2_000L)
+            c.stop()
+            c.autoSave(title = null)
+
+            // The summary is shown at once — savePending, so it renders the inline
+            // indicator — and the local estimate's points are still available.
+            // Nothing waited on the network.
+            val pending = c.state.value as RecordingState.SavedPendingChoice
+            assertTrue("the save is still in flight", pending.savePending)
+            assertEquals(2, c.recordedPoints().size)
+
+            // Once the background save lands, the pending flag clears in place.
+            release.complete(Unit)
+            advanceUntilIdle()
+            val settled = c.state.value as RecordingState.SavedPendingChoice
+            assertFalse("the save landed, so the indicator clears", settled.savePending)
+        }
+
+    @Test
+    fun `autoSave emits the summary immediately and defers the payload build and save off the caller thread`() =
+        runTest {
+            // The heavy payload build (mapping up to ~20k points) + route snapshot
+            // must NOT run on the caller/UI thread before the summary is shown (#798).
+            // With a deferred StandardTestDispatcher scope, the summary is emitted
+            // synchronously by autoSave while NOTHING of the build/save has run yet
+            // (repo.lastRequest is still null), proving the build is off-thread.
+            val repo = RecordingFakeRepository(shouldFail = false)
+            val c =
+                DriveRecordingCoordinator(
+                    repository = repo,
+                    sourceSessionId = "sess",
+                    uploadScope = CoroutineScope(StandardTestDispatcher(testScheduler)),
+                    delayFn = {},
+                )
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.stop()
+            c.autoSave(title = null)
+
+            // Summary is up immediately; the build + save have not started.
+            assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
+            assertNull("payload build + save must be deferred off the caller thread", repo.lastRequest)
+
+            // Draining the scheduler runs the background build + save.
+            advanceUntilIdle()
+            assertNotNull(repo.lastRequest)
+            assertFalse((c.state.value as RecordingState.SavedPendingChoice).savePending)
+        }
+
+    @Test
+    fun `background save skips the route snapshot and upload when the save returns no route path`() =
+        runTest {
+            // Even with fixes recorded, a save whose result has routePath == null has
+            // nowhere to upload the route, so no upload is attempted (and the ~20k
+            // point snapshot is not wasted).
+            val uploader = CapturingUploader()
+            val repo =
+                object : DrivesRepository {
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+                        DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+
+                    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+                }
+            val c = liveCoordinator(repo, uploader = uploader)
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.addFix(57.001, 12.0, 2_000L)
+            c.stop()
+            c.autoSave(title = null)
+            advanceUntilIdle()
+
+            assertTrue(c.state.value is RecordingState.SavedPendingChoice)
+            assertEquals("no route path → no upload", 0, uploader.attempts)
+        }
+
+    @Test
+    fun `background save reaches SavedPendingChoice and persists the drive`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
-        val c = DriveRecordingCoordinator(repo, "sess")
+        val c = liveCoordinator(repo)
         c.start()
         c.addFix(57.0, 12.0, 1_000L)
         c.stop()
         c.autoSave(title = null)
+        advanceUntilIdle()
         val state = c.state.value as RecordingState.SavedPendingChoice
-        assertEquals("ride", state.rideId)
+        assertFalse(state.savePending)
         assertNotNull("the drive must reach the repository", repo.lastRequest)
     }
 
     @Test
     fun `autoSave keeps the recorder so the summary preview still resolves`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
-        val c = DriveRecordingCoordinator(repo, "sess")
+        val c = liveCoordinator(repo)
         c.start()
         c.addFix(57.0, 12.0, 1_000L)
         c.addFix(57.001, 12.0, 2_000L)
         c.stop()
         c.autoSave(title = null)
+        advanceUntilIdle()
         // Unlike the manual save(), the recorder is NOT released here — the
         // Keep/Delete summary still shows the client-side distance/speed estimate.
         assertTrue(c.state.value is RecordingState.SavedPendingChoice)
@@ -523,49 +645,206 @@ class DriveRecordingTest {
     @Test
     fun `autoSave is only valid from the prompt or a prior failure`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
-        val c = DriveRecordingCoordinator(repo, "sess")
+        val c = liveCoordinator(repo)
         // No stop() first: still Recording, so autoSave is a no-op and nothing saves.
         c.start()
         c.autoSave(title = null)
+        advanceUntilIdle()
         assertTrue(c.state.value is RecordingState.Recording)
         assertNull(repo.lastRequest)
     }
 
     @Test
-    fun `keep resolves to Kept and deletes nothing`() = runTest {
-        val repo = RecordingFakeRepository(shouldFail = false)
-        val c = DriveRecordingCoordinator(repo, "sess")
+    fun `keep after the save has landed resolves to Kept instantly and releases the recorder`() =
+        runTest {
+            // The common, fast case: the background save has already landed
+            // (savePending false), so keeping is truly instant.
+            val repo = RecordingFakeRepository(shouldFail = false)
+            val c = liveCoordinator(repo)
+            c.start()
+            c.stop()
+            c.autoSave(title = null)
+            assertFalse((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
+            c.keep()
+            assertEquals(RecordingState.Kept, c.state.value)
+            assertEquals(0, c.recordedPoints().size)
+        }
+
+    @Test
+    fun `early KEEP parks until the background save confirms, then finalizes to Kept`() = runTest {
+        // KEEP tapped BEFORE the save lands must NOT finalize/lose the drive: it
+        // parks in KeptPendingSave (recorder retained) and only becomes the terminal
+        // Kept once the save is CONFIRMED. Never-lose-a-drive across an early keep.
+        val release = CompletableDeferred<Unit>()
+        val repo =
+            object : DrivesRepository {
+                override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+                    release.await()
+                    return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+                }
+
+                override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+            }
+        val c = liveCoordinator(repo)
         c.start()
+        c.addFix(57.0, 12.0, 1_000L)
         c.stop()
         c.autoSave(title = null)
+        assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
         c.keep()
+        // Parked, NOT terminal, and the recorder is retained for a possible retry.
+        assertTrue(c.state.value is RecordingState.KeptPendingSave)
+        assertEquals(1, c.recordedPoints().size)
+
+        // The save confirms → terminal Kept, and the recorder is released on that
+        // terminal path too (consistent cleanup with the instant keep()).
+        release.complete(Unit)
+        advanceUntilIdle()
         assertEquals(RecordingState.Kept, c.state.value)
-        assertTrue("keep must not delete", repo.deletedRideIds.isEmpty())
-        // Recorder released on keep.
         assertEquals(0, c.recordedPoints().size)
     }
 
     @Test
+    fun `early KEEP then a definitive save failure surfaces Failed, never silently dropping the drive`() =
+        runTest {
+            // The critical #798 regression Copilot flagged: an early KEEP followed by
+            // a save that gives up must NOT silently lose the drive. It re-raises the
+            // retry prompt (Failed), with the recorder still alive to rebuild the save.
+            val release = CompletableDeferred<Unit>()
+            val repo =
+                object : DrivesRepository {
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+                        release.await()
+                        // Permanent → the background save fails fast (no retry).
+                        throw DriveSaveException(code = "PERMISSION_DENIED")
+                    }
+
+                    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+                }
+            val c = liveCoordinator(repo)
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.stop()
+            c.autoSave(title = null)
+            c.keep()
+            assertTrue(c.state.value is RecordingState.KeptPendingSave)
+
+            release.complete(Unit)
+            advanceUntilIdle()
+            val failed = c.state.value as RecordingState.Failed
+            assertTrue("the drive must be recoverable, not lost", failed.isPermanentRefusal)
+            // The recorder is still alive so a retry can rebuild the payload.
+            assertEquals(1, c.recordedPoints().size)
+        }
+
+    @Test
     fun `delete removes the auto-saved ride and lands in Deleted`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
-        val c = DriveRecordingCoordinator(repo, "sess")
+        val c = liveCoordinator(repo)
         c.start()
         c.stop()
         c.autoSave(title = null)
-        val rideId = (c.state.value as RecordingState.SavedPendingChoice).rideId
+        advanceUntilIdle()
         c.delete()
         assertEquals(RecordingState.Deleted, c.state.value)
-        assertEquals(listOf(rideId), repo.deletedRideIds)
+        assertEquals(listOf("ride"), repo.deletedRideIds)
     }
+
+    @Test
+    fun `delete waits for a still-pending background save, then removes the created ride`() =
+        runTest {
+            // DELETE tapped while the save is still in flight must WAIT for it (so it
+            // knows the rideId and cannot race a save that lands after the delete),
+            // then remove exactly that ride. Owner-chosen wait-then-delete.
+            val releaseSave = CompletableDeferred<Unit>()
+            val order = mutableListOf<String>()
+            val repo =
+                object : DrivesRepository {
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+                        releaseSave.await()
+                        order.add("save")
+                        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+                    }
+
+                    override suspend fun deleteDrive(rideId: String) {
+                        order.add("delete:$rideId")
+                    }
+                }
+            // Eager unconfined scope: the save runs at autoSave and parks at its
+            // gate, leaving the summary pending-save.
+            val c =
+                DriveRecordingCoordinator(
+                    repository = repo,
+                    sourceSessionId = "sess",
+                    uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+                    delayFn = {},
+                )
+            c.start()
+            c.stop()
+            c.autoSave(title = null)
+            // The save is gated, so the summary is still pending-save.
+            assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
+            val deleteJob = launch { c.delete() }
+            advanceUntilIdle()
+            // Delete is blocked on the pending save — nothing removed yet.
+            assertTrue("delete must wait for the pending save", order.isEmpty())
+            assertEquals(RecordingState.Deleting, c.state.value)
+
+            releaseSave.complete(Unit)
+            advanceUntilIdle()
+            deleteJob.join()
+            assertEquals(listOf("save", "delete:ride"), order)
+            assertEquals(RecordingState.Deleted, c.state.value)
+        }
+
+    @Test
+    fun `delete after a failed background save has nothing to remove and still reaches Deleted`() =
+        runTest {
+            // A permanent refusal persisted nothing; a DELETE tapped after it has no
+            // ride to remove and must still resolve cleanly to Deleted.
+            val repo =
+                object : DrivesRepository {
+                    val deleted = mutableListOf<String>()
+
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+                        throw DriveSaveException(code = "PERMISSION_DENIED")
+
+                    override suspend fun deleteDrive(rideId: String) {
+                        deleted += rideId
+                    }
+                }
+            val c = liveCoordinator(repo)
+            c.start()
+            c.stop()
+            c.autoSave(title = null)
+            advanceUntilIdle()
+            // A failed background save surfaces as Failed while still deciding; a
+            // delete is only reachable from SavedPendingChoice, so this asserts the
+            // failure path instead — the drive was never created.
+            assertTrue(c.state.value is RecordingState.Failed)
+            assertTrue(repo.deleted.isEmpty())
+        }
 
     @Test
     fun `delete failure returns to SavedPendingChoice with deleteFailed, then a retry deletes`() =
         runTest {
             val repo = RecordingFakeRepository(shouldFail = false).apply { deleteShouldFail = true }
-            val c = DriveRecordingCoordinator(repo, "sess")
+            val c = liveCoordinator(repo)
             c.start()
             c.stop()
             c.autoSave(title = null)
+            advanceUntilIdle()
             c.delete()
             val failed = c.state.value as RecordingState.SavedPendingChoice
             assertTrue("the drive stays saved and the choice stands", failed.deleteFailed)
@@ -579,19 +858,74 @@ class DriveRecordingTest {
         }
 
     @Test
-    fun `an auto-save failure is retryable and the retry lands in SavedPendingChoice`() = runTest {
-        // First save fails, the retry succeeds — the live retry must land in
-        // SavedPendingChoice (NOT the manual save()'s terminal Saved).
-        val repo = RetryFakeRepository()
-        val c = DriveRecordingCoordinator(repo, "sess")
+    fun `the background save retries a transient fault and lands in SavedPendingChoice`() = runTest {
+        // The #800 shape: an INTERNAL fault on the first attempt. The idempotent
+        // save auto-retries (bounded) and the second attempt succeeds — no manual
+        // retry, the summary just settles.
+        val repo = TransientThenOkRepository(failCode = "INTERNAL", failTimes = 1)
+        val c = liveCoordinator(repo)
         c.start()
         c.addFix(57.0, 12.0, 1_000L)
         c.stop()
         c.autoSave(title = null)
-        assertTrue(c.state.value is RecordingState.Failed)
-        c.autoSave(title = null)
-        assertTrue(c.state.value is RecordingState.SavedPendingChoice)
+        advanceUntilIdle()
+        assertEquals(2, repo.attempts)
+        val state = c.state.value as RecordingState.SavedPendingChoice
+        assertFalse("the retry landed", state.savePending)
     }
+
+    @Test
+    fun `the background save gives up after the bounded transient retries and surfaces Failed`() =
+        runTest {
+            // Every attempt is a transient INTERNAL fault: the retries are BOUNDED,
+            // so it must stop after maxSaveAttempts and surface a retryable Failure.
+            val repo = TransientThenOkRepository(failCode = "INTERNAL", failTimes = Int.MAX_VALUE)
+            val c = liveCoordinator(repo, maxSaveAttempts = 3)
+            c.start()
+            c.stop()
+            c.autoSave(title = null)
+            advanceUntilIdle()
+            assertEquals(3, repo.attempts)
+            val failed = c.state.value as RecordingState.Failed
+            assertEquals("INTERNAL", failed.code)
+            assertFalse(failed.isPermanentRefusal)
+        }
+
+    @Test
+    fun `the background save does NOT retry a permanent refusal`() = runTest {
+        // A member-gate PERMISSION_DENIED can never succeed on a retry, so the
+        // background save must fail FAST (one attempt) and surface it as permanent.
+        val repo = TransientThenOkRepository(failCode = "PERMISSION_DENIED", failTimes = Int.MAX_VALUE)
+        val c = liveCoordinator(repo, maxSaveAttempts = 3)
+        c.start()
+        c.stop()
+        c.autoSave(title = null)
+        advanceUntilIdle()
+        assertEquals("a permanent refusal is not retried", 1, repo.attempts)
+        val failed = c.state.value as RecordingState.Failed
+        assertTrue(failed.isPermanentRefusal)
+    }
+
+    @Test
+    fun `a manual retry after a background failure re-runs the save and lands in SavedPendingChoice`() =
+        runTest {
+            // The background save exhausted its transient retries → Failed. The
+            // summary's Retry re-invokes autoSave, which must run the save again
+            // (now succeeding) and land back in SavedPendingChoice, NOT the manual
+            // save()'s terminal Saved.
+            val repo = TransientThenOkRepository(failCode = "INTERNAL", failTimes = 3)
+            val c = liveCoordinator(repo, maxSaveAttempts = 3)
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.stop()
+            c.autoSave(title = null)
+            advanceUntilIdle()
+            assertTrue(c.state.value is RecordingState.Failed)
+
+            c.autoSave(title = null)
+            advanceUntilIdle()
+            assertTrue(c.state.value is RecordingState.SavedPendingChoice)
+        }
 
     @Test
     fun `delete waits for the in-flight route upload before removing the drive`() = runTest {
@@ -625,20 +959,23 @@ class DriveRecordingTest {
                     order.add("delete:$rideId")
                 }
             }
-        // backgroundScope runs on the test scheduler and is auto-cancelled when
-        // the test ends, so the gated upload never leaks a live coroutine.
+        // Eager unconfined scope so the (non-suspending) save runs at autoSave and
+        // launches the gated upload; the upload then parks on [releaseUpload].
         val c =
             DriveRecordingCoordinator(
                 repository = repo,
                 sourceSessionId = "sess",
                 routeUploadRunner = RouteUploadRunner(uploader, delayFn = {}),
-                uploadScope = backgroundScope,
+                uploadScope = CoroutineScope(UnconfinedTestDispatcher(testScheduler)),
+                delayFn = {},
             )
         c.start()
         c.addFix(57.0, 12.0, 1_000L)
         c.addFix(57.001, 12.0, 2_000L)
         c.stop()
         c.autoSave(title = null)
+        // The save has completed and launched the (gated) route upload.
+        advanceUntilIdle()
 
         // Delete in the background — it must block on the upload join.
         val deleteJob = launch { c.delete() }
@@ -672,10 +1009,11 @@ class DriveRecordingTest {
                     deleteGate.await()
                 }
             }
-        val c = DriveRecordingCoordinator(repo, "sess")
+        val c = liveCoordinator(repo)
         c.start()
         c.stop()
         c.autoSave(title = null)
+        advanceUntilIdle()
         val pending = c.state.value as RecordingState.SavedPendingChoice
 
         val deleteJob = launch { c.delete() }
@@ -685,7 +1023,7 @@ class DriveRecordingTest {
         deleteJob.cancelAndJoin()
         val restored = c.state.value as RecordingState.SavedPendingChoice
         assertFalse("cancellation must not show a delete error", restored.deleteFailed)
-        assertEquals(pending.rideId, restored.rideId)
+        assertEquals(pending.elapsedMillis, restored.elapsedMillis)
     }
 
     // ---------------------------------------------------------------------
@@ -802,6 +1140,30 @@ private class RetryFakeRepository : DrivesRepository {
         lastRequest = request
         attempts++
         if (attempts == 1) throw IllegalStateException("save failed")
+        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+    }
+
+    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+}
+
+/**
+ * Fails the first [failTimes] saves with a callable [failCode], then succeeds —
+ * so a test can pin the BACKGROUND save's retry behaviour (retry a transient code,
+ * fail fast on a permanent one, give up after the bound). [attempts] counts every
+ * saveDrive call the coordinator made.
+ */
+private class TransientThenOkRepository(
+    private val failCode: String,
+    private val failTimes: Int,
+) : DrivesRepository {
+    var attempts = 0
+        private set
+
+    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+        attempts++
+        if (attempts <= failTimes) throw DriveSaveException(code = failCode)
         return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
     }
 
