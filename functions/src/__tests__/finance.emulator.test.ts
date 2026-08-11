@@ -379,7 +379,7 @@ describe('finance recurring-costs CRUD', () => {
     expect(ghost.exists).toBe(false);
   });
 
-  it('updating a cost deleted mid-flight fails and does not resurrect it', async () => {
+  it('updating an already-deleted cost fails not-found and does not resurrect it', async () => {
     await signInAs(adminUser);
     const added = (
       await call('finance-addRecurringCost', {
@@ -391,7 +391,13 @@ describe('finance recurring-costs CRUD', () => {
       })
     ).data as AddResult;
 
-    // Simulate the delete landing before the update commits.
+    // Delete the row, THEN update it. This deterministically exercises the
+    // callable's existence pre-check (the doc is gone before the callable runs),
+    // which returns not-found. The narrower true race — a delete landing between
+    // that read and the batch commit, where the NOT_FOUND is instead caught and
+    // remapped by the try/catch around batch.commit() in the callable — can't be
+    // injected deterministically in the emulator; this test covers the reachable,
+    // common path (and proves no ghost row is recreated either way).
     await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).delete();
 
     expect(

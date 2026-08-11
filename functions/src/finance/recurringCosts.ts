@@ -150,7 +150,23 @@ export const updateRecurringCost = onCall(
         serverTimestamp,
       ),
     );
-    await batch.commit();
+    try {
+      await batch.commit();
+    } catch (err) {
+      // If the row is deleted in the window between the existence read above and
+      // this commit, update() rejects the batch with Firestore NOT_FOUND (gRPC
+      // code 5). Surface that as the SAME not-found the pre-check raises — without
+      // this, onCall would wrap the raw error as `internal`, contradicting the
+      // guarantee documented on the batch.update() above.
+      // Match the repo's established NOT_FOUND check (numeric gRPC 5 or the
+      // normalized 'not-found' string) — see crownHunt/poiIngestion.ts,
+      // events/onRsvpWrite.ts et al.
+      const code = (err as { code?: number | string } | null)?.code;
+      if (code === 5 || code === 'not-found') {
+        throw new HttpsError('not-found', 'Recurring cost not found.');
+      }
+      throw err;
+    }
 
     return { id, ...fields };
   },
