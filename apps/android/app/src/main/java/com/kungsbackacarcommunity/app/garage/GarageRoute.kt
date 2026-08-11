@@ -170,16 +170,21 @@ fun GarageRoute(
 
     // THE single cleanup, run by every clean exit from the form (save, in-form
     // Cancel, Back, and a confirmed discard). Resets exactly the nav/coordinator
-    // state the Back path always reset, PLUS the draft — so a clean exit never
-    // leaves showForm stranded (the stuck-menu bug) and never leaves a draft to
-    // be offered again. A draft therefore only survives the UNCLEAN exits this is
-    // NOT called on: a tab switch or process death.
+    // state the Back path always reset. It ALSO clears the add-draft — but ONLY
+    // when the form being closed was the ADD form: the draft store is add-scoped,
+    // so clearing it on an EDIT cancel would wipe a genuine new-car draft the user
+    // parked earlier. A draft therefore survives an edit close, and the UNCLEAN
+    // exits this is NOT called on (tab switch, process death).
     val closeAddForm = {
+        // Captured before editingVehicleId is nulled below.
+        val wasAddMode = editingVehicleId == null
         showForm = false
         editingVehicleId = null
         coordinator?.reset()
         resetPhoto()
-        draftStore.clear()
+        if (VehicleFormDraftStore.clearsDraftOnClose(wasAddMode)) {
+            draftStore.clear()
+        }
         addFormCurrent = VehicleForm()
     }
 

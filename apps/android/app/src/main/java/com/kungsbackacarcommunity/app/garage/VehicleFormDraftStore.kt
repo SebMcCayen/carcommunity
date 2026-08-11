@@ -148,6 +148,15 @@ class VehicleFormDraftStore(context: Context) {
             isAddMode && hasUserContent(form)
 
         /**
+         * Whether closing a form should clear the add-draft. The store is
+         * ADD-scoped, so closing an EDIT form must NOT touch it: otherwise
+         * cancelling an edit would wipe a genuine new-car draft the user had
+         * parked earlier. Only an ADD-mode close (a successful new-car save, an
+         * explicit cancel/discard of the new car) clears.
+         */
+        fun clearsDraftOnClose(isAddMode: Boolean): Boolean = isAddMode
+
+        /**
          * What the draft-sync effect should do this frame.
          *
          * - Only an OPEN, ADD-mode form syncs at all — an edit has a saved vehicle

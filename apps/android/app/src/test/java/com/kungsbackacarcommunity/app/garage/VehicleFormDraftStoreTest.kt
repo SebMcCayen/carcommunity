@@ -221,6 +221,15 @@ class VehicleFormDraftStoreTest {
     }
 
     @Test
+    fun `closing an EDIT form does not clear a parked add-draft`() {
+        // The store is add-scoped. Sequence: user parks a new-car draft, later
+        // edits an existing vehicle and cancels — that edit-close must NOT wipe
+        // the add-draft. Only an add-mode close clears.
+        assertFalse(VehicleFormDraftStore.clearsDraftOnClose(isAddMode = false))
+        assertTrue(VehicleFormDraftStore.clearsDraftOnClose(isAddMode = true))
+    }
+
+    @Test
     fun `edit mode and a closed form never touch the draft`() {
         // Edit has a saved vehicle and never drafts.
         assertEquals(
