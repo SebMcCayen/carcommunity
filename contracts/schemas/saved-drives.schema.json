@@ -109,8 +109,8 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 300,
-          "pattern": "^[A-Za-z0-9._-]+$",
-          "description": "Firestore-safe id of the garage car this drive was driven in."
+          "pattern": "^(?!\\.\\.?$)[A-Za-z0-9._-]+$",
+          "description": "Firestore-safe id of the garage car this drive was driven in. Mirrors the backend zod: character class excludes '/', and the leading lookahead rejects the reserved '.' and '..' ids."
         },
         "carImagePath": {
           "type": "string",

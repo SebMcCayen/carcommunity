@@ -294,13 +294,15 @@ export function toLiveMainCar(
  *   4. no cars → null (the session carries no car, the generic marker).
  *
  * Pure over the decoded docs so the selection is unit-testable without Firestore.
- * Returns the raw doc data; the caller runs it through {@link toLiveMainCar} for
- * the display-safe projection.
+ * Returns the whole `{ id, data }` ENTRY (not just `data`) so the caller reads
+ * BOTH the id it denormalizes (the drive record links to it) AND the data it runs
+ * through {@link toLiveMainCar} from ONE selection — the id and the projection can
+ * never come from different cars, and neither depends on object identity.
  */
-export function pickSessionVehicleData(
+export function pickSessionVehicle(
   vehicles: ReadonlyArray<{ id: string; data: Record<string, unknown> }>,
   vehicleId?: string | null,
-): Record<string, unknown> | null {
+): { id: string; data: Record<string, unknown> } | null {
   const first = vehicles[0];
   if (!first) {
     return null;
@@ -308,14 +310,14 @@ export function pickSessionVehicleData(
   if (vehicleId) {
     const chosen = vehicles.find((v) => v.id === vehicleId);
     if (chosen) {
-      return chosen.data;
+      return chosen;
     }
   }
   const main = vehicles.find((v) => v.data.isMainCar === true);
   if (main) {
-    return main.data;
+    return main;
   }
-  return first.data;
+  return first;
 }
 
 export interface LiveSession {

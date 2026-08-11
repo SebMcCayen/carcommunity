@@ -49,7 +49,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
-  pickSessionVehicleData,
+  pickSessionVehicle,
   toLiveMainCar,
   type LiveSession,
   type LiveSessionDuration,
@@ -137,15 +137,14 @@ async function loadSessionDenorm(
       if (modelA !== modelB) return modelA < modelB ? -1 : 1;
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
-  const selectedData = pickSessionVehicleData(vehicles, vehicleId);
-  const mainCar = toLiveMainCar(selectedData);
-  // The id of the car actually selected (by reference — pickSessionVehicleData
-  // returns one of these exact decoded objects), so the client can stamp WHICH
-  // car a drive was driven in onto the saved ride. null when the sharer has no
-  // car. Independent of `mainCar` being non-null: mainCar can be null for a
-  // malformed doc even though a car WAS selected, and vice versa.
-  const selectedVehicleId =
-    selectedData === null ? null : (vehicles.find((v) => v.data === selectedData)?.id ?? null);
+  // ONE selection yields both the id (stamped on the session so the drive record
+  // links to it) and the data (projected onto the marker via toLiveMainCar), so
+  // the two can never come from different cars and neither depends on object
+  // identity. selectedVehicleId is independent of mainCar being non-null: a
+  // malformed doc projects to a null mainCar even though a car WAS selected.
+  const selected = pickSessionVehicle(vehicles, vehicleId);
+  const mainCar = toLiveMainCar(selected?.data ?? null);
+  const selectedVehicleId = selected?.id ?? null;
   return {
     displayName: (profile.data()?.displayName as string | undefined) ?? null,
     mainCar,
