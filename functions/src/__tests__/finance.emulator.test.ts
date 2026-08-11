@@ -394,10 +394,10 @@ describe('finance recurring-costs CRUD', () => {
     // Delete the row, THEN update it. This deterministically exercises the
     // callable's existence pre-check (the doc is gone before the callable runs),
     // which returns not-found. The narrower true race — a delete landing between
-    // that read and the batch commit, which instead trips batch.update()'s own
-    // NOT_FOUND-to-not-found mapping — can't be injected deterministically in the
-    // emulator; this test covers the reachable, common path (and proves no ghost
-    // row is recreated either way).
+    // that read and the batch commit, where the NOT_FOUND is instead caught and
+    // remapped by the try/catch around batch.commit() in the callable — can't be
+    // injected deterministically in the emulator; this test covers the reachable,
+    // common path (and proves no ghost row is recreated either way).
     await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).delete();
 
     expect(
