@@ -1112,9 +1112,9 @@
     <string name="crownHunt_legendPlacedTitle">Placed crowns</string>
     <string name="crownHunt_legendPlacedBody">Crowns that organizers place on the map, giving a fixed points reward (KP). Depending on the crown you can collect it once, or over and over – each day or each week. Some crowns can only be collected by a limited number of members and disappear once that limit is reached.</string>
     <string name="crownHunt_legendSpawnedTitle">Automatic crowns</string>
-    <string name="crownHunt_legendSpawnedBody">Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.</string>
+    <string name="crownHunt_legendSpawnedBody">Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A rare or legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.</string>
     <string name="crownHunt_legendDisappearTitle">Does a crown disappear once I collect it?</string>
-    <string name="crownHunt_legendDisappearBody">A crown you have already collected can\'t be collected again. Most crowns can be collected by several members separately and stay on the map until their time runs out or they reach their limit. Exclusive (legendary) crowns disappear for everyone the moment someone takes them.</string>
+    <string name="crownHunt_legendDisappearBody">A crown you have already collected can\'t be collected again. Common and uncommon crowns can be collected by several members separately and stay on the map until their time runs out or they reach their limit. Exclusive crowns (rare and legendary) disappear for everyone the moment someone takes them.</string>
     <string name="partners_screenTitle">KCC Business Partners</string>
     <string name="partners_statusLabel">Partner</string>
     <string name="partners_markerLabel">Partner</string>
