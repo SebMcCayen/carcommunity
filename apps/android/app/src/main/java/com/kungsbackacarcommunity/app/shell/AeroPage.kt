@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -89,9 +90,9 @@ private val AeroBackIconInset: Dp = 12.dp
  * scrolling content) so it stays visible while the page scrolls.
  *
  * [horizontalGutter] is the page's own horizontal content gutter — the arrow is
- * shifted in by `gutter - `[AeroBackIconInset] so its visible glyph starts flush
- * with the [AeroPageTitle] text below it (and with the content), consistent on
- * every page, rather than sitting flush against the screen edge.
+ * shifted in by (`horizontalGutter` − [AeroBackIconInset]) so its visible glyph
+ * starts flush with the [AeroPageTitle] text below it (and with the content),
+ * consistent on every page, rather than sitting flush against the screen edge.
  *
  * It invokes the back DISPATCHER — the same entry point the system Back gesture
  * hits — rather than any page-level close callback, so it re-runs the exact same
@@ -105,10 +106,12 @@ private fun AeroBackButton(
     modifier: Modifier = Modifier,
 ) {
     val dispatcherOwner = LocalOnBackPressedDispatcherOwner.current
-    val startPadding = (horizontalGutter - AeroBackIconInset).coerceAtLeast(0.dp)
+    // offset (not start padding): shift the button without shrinking it, so the
+    // full 48dp touch target is preserved while the glyph still lands on the gutter.
+    val startOffset = (horizontalGutter - AeroBackIconInset).coerceAtLeast(0.dp)
     IconButton(
         onClick = { dispatcherOwner?.onBackPressedDispatcher?.onBackPressed() },
-        modifier = modifier.padding(start = startPadding).size(48.dp).testTag(AeroBackButtonTag),
+        modifier = modifier.offset(x = startOffset).size(48.dp).testTag(AeroBackButtonTag),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
