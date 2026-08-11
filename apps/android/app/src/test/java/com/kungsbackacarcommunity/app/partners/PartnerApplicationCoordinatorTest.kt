@@ -45,7 +45,13 @@ class PartnerApplicationCoordinatorTest {
         val repo = FakeRepo().apply { failWith = IllegalStateException("dup") }
         val coordinator = PartnerApplicationCoordinator(repo)
         coordinator.submit(input)
-        assertEquals(PartnerApplicationStatus.Failed, coordinator.status.value)
+        val status = coordinator.status.value
+        assertTrue(status is PartnerApplicationStatus.Failed)
+        // A non-Firebase exception maps to UNKNOWN.
+        assertEquals(
+            PartnerApplicationFailureReason.UNKNOWN,
+            (status as PartnerApplicationStatus.Failed).reason,
+        )
         coordinator.reset()
         assertEquals(PartnerApplicationStatus.Idle, coordinator.status.value)
     }

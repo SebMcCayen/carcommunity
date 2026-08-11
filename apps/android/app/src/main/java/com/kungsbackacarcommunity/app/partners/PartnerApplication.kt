@@ -38,6 +38,21 @@ enum class PartnerApplicationError {
 }
 
 object PartnerApplications {
+    /**
+     * Normalizes an optional website field for submission. A blank value maps
+     * to null (the field is optional). A scheme-less value like `www.foretag.se`
+     * gets `https://` prepended so it passes the backend's strict URL schema
+     * (zod `.url()` rejects bare domains). A value that already has an
+     * http(s) scheme is left untouched.
+     */
+    fun normalizeWebsiteUrl(raw: String): String? {
+        val trimmed = raw.trim()
+        if (trimmed.isEmpty()) return null
+        val hasScheme = trimmed.startsWith("http://", ignoreCase = true) ||
+            trimmed.startsWith("https://", ignoreCase = true)
+        return if (hasScheme) trimmed else "https://$trimmed"
+    }
+
     private fun looksLikeEmail(value: String): Boolean {
         val at = value.indexOf('@')
         return at > 0 && value.indexOf('@', at + 1) == -1 && value.substring(at + 1).contains('.') &&
@@ -60,7 +75,7 @@ object PartnerApplications {
             contactName = form.contactName.trim(),
             contactEmail = form.contactEmail.trim(),
             contactPhone = form.contactPhone.trim().takeIf { it.isNotEmpty() },
-            websiteUrl = form.websiteUrl.trim().takeIf { it.isNotEmpty() },
+            websiteUrl = normalizeWebsiteUrl(form.websiteUrl),
             message = form.message.trim().takeIf { it.isNotEmpty() },
         )
     }

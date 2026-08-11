@@ -1140,6 +1140,9 @@
     <string name="partners_messageLabel">Meddelande (valfritt)</string>
     <string name="partners_fieldRequired">Obligatoriskt fält</string>
     <string name="partners_duplicateApplication">Du har redan en aktiv ansökan.</string>
+    <string name="partners_submitError">Kunde inte skicka ansökan. Försök igen.</string>
+    <string name="partners_submitErrorInvalid">Kontrollera att alla uppgifter är korrekt ifyllda.</string>
+    <string name="partners_submitErrorDuplicate">En ansökan för denna e-post granskas redan.</string>
     <string name="partners_submitting">Skickar...</string>
     <string name="partners_close">Stäng</string>
     <string name="partners_applicationEntryLabel">För företag</string>

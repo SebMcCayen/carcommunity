@@ -44,4 +44,33 @@ class PartnerApplicationTest {
         assertNull(input.websiteUrl)
         assertNull(input.message)
     }
+
+    @Test
+    fun `toInput prepends https to a scheme-less website`() {
+        val input = PartnerApplications.toInput(valid().copy(websiteUrl = "www.foretag.se"))
+        assertEquals("https://www.foretag.se", input!!.websiteUrl)
+    }
+
+    @Test
+    fun `toInput leaves an http or https website untouched`() {
+        assertEquals(
+            "https://example.com",
+            PartnerApplications.toInput(valid().copy(websiteUrl = "https://example.com"))!!.websiteUrl,
+        )
+        assertEquals(
+            "http://example.com",
+            PartnerApplications.toInput(valid().copy(websiteUrl = "http://example.com"))!!.websiteUrl,
+        )
+        // Scheme match is case-insensitive.
+        assertEquals(
+            "HTTPS://example.com",
+            PartnerApplications.toInput(valid().copy(websiteUrl = "HTTPS://example.com"))!!.websiteUrl,
+        )
+    }
+
+    @Test
+    fun `toInput keeps an empty website empty (null), not https`() {
+        assertNull(PartnerApplications.toInput(valid().copy(websiteUrl = ""))!!.websiteUrl)
+        assertNull(PartnerApplications.toInput(valid().copy(websiteUrl = "   "))!!.websiteUrl)
+    }
 }
