@@ -163,4 +163,84 @@ class VehicleFormDraftStoreTest {
         // Edit, even dirty -> has a saved vehicle to fall back to, no confirm.
         assertFalse(VehicleFormDraftStore.shouldConfirmDismiss(isAddMode = false, form = fullForm))
     }
+
+    // ── draft-sync decision (write / clear / none) ─────────────────────────────
+
+    @Test
+    fun `an open add form with content is written`() {
+        assertEquals(
+            DraftSyncAction.WRITE,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = true,
+                isAddMode = true,
+                restorePromptShowing = false,
+                form = fullForm,
+            ),
+        )
+    }
+
+    @Test
+    fun `typing then clearing every field back to empty CLEARS the draft`() {
+        // The Copilot edge: a user typed something (a draft was written), then
+        // deleted it all. The now-empty add form must CLEAR the stale draft so an
+        // unclean exit (tab switch / process death) can't offer it again.
+        assertEquals(
+            DraftSyncAction.CLEAR,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = true,
+                isAddMode = true,
+                restorePromptShowing = false,
+                form = VehicleForm(),
+            ),
+        )
+    }
+
+    @Test
+    fun `the restore prompt is a hands-off window - neither write nor clear`() {
+        // While "continue your unsaved car?" is up, the empty form underneath it
+        // must NOT wipe the draft being offered.
+        assertEquals(
+            DraftSyncAction.NONE,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = true,
+                isAddMode = true,
+                restorePromptShowing = true,
+                form = VehicleForm(),
+            ),
+        )
+        // Even with content on screen, the prompt window still defers to the user.
+        assertEquals(
+            DraftSyncAction.NONE,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = true,
+                isAddMode = true,
+                restorePromptShowing = true,
+                form = fullForm,
+            ),
+        )
+    }
+
+    @Test
+    fun `edit mode and a closed form never touch the draft`() {
+        // Edit has a saved vehicle and never drafts.
+        assertEquals(
+            DraftSyncAction.NONE,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = true,
+                isAddMode = false,
+                restorePromptShowing = false,
+                form = fullForm,
+            ),
+        )
+        // A closed form is not syncing anything.
+        assertEquals(
+            DraftSyncAction.NONE,
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = false,
+                isAddMode = true,
+                restorePromptShowing = false,
+                form = fullForm,
+            ),
+        )
+    }
 }

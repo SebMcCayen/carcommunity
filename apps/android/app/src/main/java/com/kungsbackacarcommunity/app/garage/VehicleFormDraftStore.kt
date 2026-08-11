@@ -21,6 +21,26 @@ data class VehicleFormDraft(
 )
 
 /**
+ * What keeping the on-disk draft in step with the open add form should do this
+ * frame — the pure decision behind GarageRoute's draft-sync effect, pulled out so
+ * it is JVM-unit-testable rather than only reachable through Compose.
+ */
+enum class DraftSyncAction {
+    /** Persist the current form as the draft (it has user content). */
+    WRITE,
+
+    /**
+     * Forget any draft: the add form is open but empty. Clearing here is what
+     * stops an emptied-by-hand form resurrecting stale content on a later unclean
+     * exit (tab switch / process death).
+     */
+    CLEAR,
+
+    /** Leave the draft untouched (not an open add form, or the restore prompt is up). */
+    NONE,
+}
+
+/**
  * Device-local persistence for the add-car [VehicleFormDraft].
  *
  * SharedPreferences, no Firebase — mirroring
@@ -126,6 +146,31 @@ class VehicleFormDraftStore(context: Context) {
          */
         fun shouldConfirmDismiss(isAddMode: Boolean, form: VehicleForm): Boolean =
             isAddMode && hasUserContent(form)
+
+        /**
+         * What the draft-sync effect should do this frame.
+         *
+         * - Only an OPEN, ADD-mode form syncs at all — an edit has a saved vehicle
+         *   and never drafts.
+         * - While the restore prompt is up ([restorePromptShowing]) it does
+         *   NOTHING: the empty form rendered underneath the prompt must not wipe
+         *   the very draft being offered before the user has chosen.
+         * - Otherwise content is [WRITE]-n and an empty form is [CLEAR]-ed, so a
+         *   form emptied back out by hand cannot resurrect stale content on a later
+         *   unclean exit (tab switch / process death).
+         */
+        fun draftSyncAction(
+            formOpen: Boolean,
+            isAddMode: Boolean,
+            restorePromptShowing: Boolean,
+            form: VehicleForm,
+        ): DraftSyncAction =
+            when {
+                !formOpen || !isAddMode -> DraftSyncAction.NONE
+                restorePromptShowing -> DraftSyncAction.NONE
+                hasUserContent(form) -> DraftSyncAction.WRITE
+                else -> DraftSyncAction.CLEAR
+            }
 
         /** Serialises [form] + [savedAtMillis] to the stored JSON string. */
         fun encode(form: VehicleForm, savedAtMillis: Long): String {

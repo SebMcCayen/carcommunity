@@ -203,13 +203,17 @@ fun GarageRoute(
     // restore prompt is a hands-off window: the empty form rendered underneath it
     // must not wipe the very draft being offered.
     LaunchedEffect(addFormCurrent, showForm, editingVehicleId, pendingDraft) {
-        if (showForm && editingVehicleId == null) {
-            when {
-                pendingDraft != null -> Unit
-                VehicleFormDraftStore.hasUserContent(addFormCurrent) ->
-                    draftStore.write(addFormCurrent, System.currentTimeMillis())
-                else -> draftStore.clear()
-            }
+        when (
+            VehicleFormDraftStore.draftSyncAction(
+                formOpen = showForm,
+                isAddMode = editingVehicleId == null,
+                restorePromptShowing = pendingDraft != null,
+                form = addFormCurrent,
+            )
+        ) {
+            DraftSyncAction.WRITE -> draftStore.write(addFormCurrent, System.currentTimeMillis())
+            DraftSyncAction.CLEAR -> draftStore.clear()
+            DraftSyncAction.NONE -> Unit
         }
     }
 
