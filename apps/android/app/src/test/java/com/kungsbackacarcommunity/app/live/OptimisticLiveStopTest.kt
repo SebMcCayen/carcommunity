@@ -119,4 +119,23 @@ class OptimisticLiveStopTest {
         assertNull(OptimisticLiveStop.pendingUntilMillis(LiveStopAttempt.None))
         assertFalse(OptimisticLiveStop.isStopping(LiveStopAttempt.None, t0))
     }
+
+    // The privacy rule: a STOP tap may only CLAIM the optimistic "not sharing"
+    // overlay when it can genuinely initiate a stop. If a live command is already in
+    // flight (a Start in flight, or the first tap of a stop double-tap), the stop
+    // short-circuits as Busy and issues nothing — hiding the chrome for it would say
+    // "not sharing" while still broadcasting.
+
+    @Test
+    fun stopTapClaimsTheOverlay_onlyWhenNoCommandIsInFlight() {
+        assertTrue("an idle coordinator can initiate a stop", OptimisticLiveStop.claimsStop(coordinatorWorking = false))
+    }
+
+    @Test
+    fun stopTapDoesNotClaimTheOverlay_whileACommandIsInFlight() {
+        assertFalse(
+            "tapping Stop while a Start (or any command) is in flight must NOT hide the sharing chrome",
+            OptimisticLiveStop.claimsStop(coordinatorWorking = true),
+        )
+    }
 }

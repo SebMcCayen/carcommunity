@@ -585,6 +585,34 @@ class DriveRecordingTest {
         }
 
     @Test
+    fun `background save skips the route snapshot and upload when the save returns no route path`() =
+        runTest {
+            // Even with fixes recorded, a save whose result has routePath == null has
+            // nowhere to upload the route, so no upload is attempted (and the ~20k
+            // point snapshot is not wasted).
+            val uploader = CapturingUploader()
+            val repo =
+                object : DrivesRepository {
+                    override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                    override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult =
+                        DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+
+                    override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+                }
+            val c = liveCoordinator(repo, uploader = uploader)
+            c.start()
+            c.addFix(57.0, 12.0, 1_000L)
+            c.addFix(57.001, 12.0, 2_000L)
+            c.stop()
+            c.autoSave(title = null)
+            advanceUntilIdle()
+
+            assertTrue(c.state.value is RecordingState.SavedPendingChoice)
+            assertEquals("no route path → no upload", 0, uploader.attempts)
+        }
+
+    @Test
     fun `background save reaches SavedPendingChoice and persists the drive`() = runTest {
         val repo = RecordingFakeRepository(shouldFail = false)
         val c = liveCoordinator(repo)

@@ -95,6 +95,19 @@ object OptimisticLiveStop {
         if (isStopping(current, nowMillis)) current else LiveStopAttempt.InFlight(nowMillis)
 
     /**
+     * Whether a STOP tap may CLAIM the optimistic "not sharing" overlay. Only when
+     * the live coordinator is NOT already running a command: if one is in flight,
+     * `stop()` short-circuits as `LiveCommandResult.Busy` and issues nothing, so
+     * hiding the sharing chrome for it would falsely say "not sharing" while the
+     * session is still live — a privacy leak (the user is still broadcasting). This
+     * is what stops tapping STOP while a START is still in flight from hiding the
+     * chrome. A genuine stop DOUBLE-TAP likewise finds the coordinator Working (its
+     * first tap's command), so it does not claim a second time — the first tap's
+     * overlay already correctly hides the chrome and stands.
+     */
+    fun claimsStop(coordinatorWorking: Boolean): Boolean = !coordinatorWorking
+
+    /**
      * The stop command returned successfully: hold the optimistic state for the
      * short echo window. An attempt already dropped ([LiveStopAttempt.None] — the
      * session was observed stopped, or a new start took over) stays dropped so a

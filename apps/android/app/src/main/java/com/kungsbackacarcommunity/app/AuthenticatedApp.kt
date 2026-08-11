@@ -3032,12 +3032,16 @@ fun AuthenticatedApp(
                 val c = liveLocationCoordinator
                 if (c != null) {
                     // Optimistic STOP: hide the sharing chrome on the NEXT frame
-                    // (#798) instead of after the stopped session echoes back. The
-                    // attempt is resolved by the callable's result — settled (wait
-                    // for the stopped echo) or failed (bring the STOP sign back and
-                    // say so) — and, as a backstop, by the observed session and the
-                    // expiry effect above.
-                    LiveShareStop.request(nowMillis())
+                    // (#798) instead of after the stopped session echoes back — BUT
+                    // only claim the overlay when this tap can actually INITIATE a
+                    // stop. If a live command is already in flight, c.stop() will
+                    // short-circuit as Busy without issuing anything; hiding the
+                    // chrome for it would say "not sharing" while the session is
+                    // still live (a privacy leak — e.g. tapping Stop while a Start is
+                    // in flight). A genuine stop double-tap already claimed the
+                    // overlay on its first tap, so the chrome stays correctly hidden.
+                    val initiatedStop = OptimisticLiveStop.claimsStop(c.status.value == LiveActionStatus.Working)
+                    if (initiatedStop) LiveShareStop.request(nowMillis())
                     scope.launch {
                         val result =
                             try {
@@ -3047,7 +3051,7 @@ fun AuthenticatedApp(
                                 // teardown): nothing will resolve this attempt, so
                                 // drop it rather than hide a session on a stop that
                                 // never ran.
-                                LiveShareStop.failed()
+                                if (initiatedStop) LiveShareStop.failed()
                                 throw cancellation
                             }
                         when (result) {
@@ -3055,21 +3059,23 @@ fun AuthenticatedApp(
                                 // Issued and accepted: hold the overlay for the
                                 // short echo window while the stopped session finds
                                 // its way down.
-                                LiveShareStop.settled(nowMillis())
+                                if (initiatedStop) LiveShareStop.settled(nowMillis())
                             LiveCommandResult.Failed ->
                                 // The stop genuinely failed: revert so the STOP sign
                                 // returns rather than hiding a still-live session.
                                 // Only speak up if the attempt was still ours.
-                                if (LiveShareStop.failed()) {
+                                if (initiatedStop && LiveShareStop.failed()) {
                                     snackbarHostState.showSnackbar(liveErrorText)
                                 }
                             LiveCommandResult.Busy ->
-                                // A live command was already in flight, so this stop
-                                // was deduped. Leave the optimistic overlay in place
-                                // — the in-flight command's stopped session (or the
-                                // expiry backstop) resolves it; reverting here would
-                                // just flash the chrome back on.
-                                Unit
+                                // No stop was issued (a command was already in
+                                // flight). Never leave the chrome hidden over a
+                                // still-live session: revert our optimistic attempt
+                                // if a rare race (Working between the check and
+                                // c.stop()) let us claim one. When we did not claim
+                                // (initiatedStop == false) there is nothing to
+                                // revert — the first tap's overlay, if any, stands.
+                                if (initiatedStop) LiveShareStop.failed()
                         }
                     }
                 } else {

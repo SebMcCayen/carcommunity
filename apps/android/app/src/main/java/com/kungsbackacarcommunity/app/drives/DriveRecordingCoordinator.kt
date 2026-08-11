@@ -305,16 +305,23 @@ class DriveRecordingCoordinator(
         saveJob =
             uploadScope.launch {
                 try {
-                    // Build the payload + route snapshot HERE (off the UI thread).
-                    // The payload is idempotent per sourceSessionId, so a retry
-                    // re-sends the exact same request (and stored duration). Skip the
-                    // ~20k-point snapshot in a config-less build with no uploader;
-                    // startRouteUpload also skips when the save returns no path.
+                    // Build the payload HERE (off the UI thread). The payload is
+                    // idempotent per sourceSessionId, so a retry re-sends the exact
+                    // same request (and stored duration).
                     val request = recorder.buildSaveRequest(title, endedAt)
-                    val pointsForUpload =
-                        if (routeUploadRunner != null) recorder.snapshot() else emptyList()
                     val result = saveWithRetry(request)
                     savedResult = result
+                    // Snapshot the route (a copy of up to ~20k points) ONLY once we
+                    // know there is somewhere to upload it — an uploader exists AND
+                    // the save returned a route path. This skips the copy on a
+                    // summary-only save (no path) and a config-less build (no
+                    // uploader), rather than taking it up front and discarding it.
+                    val pointsForUpload =
+                        if (routeUploadRunner != null && result.routePath != null) {
+                            recorder.snapshot()
+                        } else {
+                            emptyList()
+                        }
                     onBackgroundSaveSucceeded(result, pointsForUpload)
                 } catch (cancellation: CancellationException) {
                     // Scope teardown (sign-out / account switch cancels uploadScope):
