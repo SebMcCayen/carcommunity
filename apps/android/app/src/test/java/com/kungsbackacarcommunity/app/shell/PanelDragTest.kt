@@ -175,8 +175,9 @@ class PanelDragTest {
 
     @Test
     fun withDismissEnabled_theGateIsTransparent_soOtherPanelsKeepTodaysBehaviour() {
-        // Default/enabled must behave exactly as the single-arg overload: the gate
-        // is off only for the open form, never for the other panels.
+        // Calling without the flag (its default) must behave exactly as passing
+        // dismissEnabled = true: the gate is off only for the open form, never for
+        // the other panels.
         assertEquals(40f, PanelDrag.postScrollConsumption(availableY = 40f, dismissEnabled = true), 0f)
         assertEquals(
             PanelDrag.postScrollConsumption(availableY = 40f),
