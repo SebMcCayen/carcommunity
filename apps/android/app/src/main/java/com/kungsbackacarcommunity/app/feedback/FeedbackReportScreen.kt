@@ -2,8 +2,12 @@ package com.kungsbackacarcommunity.app.feedback
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,6 +51,17 @@ fun FeedbackReportScreen(
         title = stringResource(R.string.feedback_title),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Consume the IME (and nav-bar) inset so the multi-line description field
+        // near the bottom isn't hidden behind the keyboard. The app is edge-to-edge
+        // (MainActivity calls enableEdgeToEdge()), so each screen must apply the keyboard
+        // inset itself; without this the page's viewport ran under the IME and the
+        // field the user was typing in vanished (issue #797). The union takes the
+        // taller of IME / nav bar rather than double-counting, matching ChatScreen.
+        // AeroPage stays scrollable (default) so Compose's bring-into-view keeps the
+        // focused field visible within the now-shrunk viewport. Passed as
+        // contentWindowInsets rather than folded into `modifier`: AeroPage applies it
+        // inside its background Surface, so the Surface still draws full-bleed.
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             if (status is FeedbackStatus.Done) {
                 Text(
