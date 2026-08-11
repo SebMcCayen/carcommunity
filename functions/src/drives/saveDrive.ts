@@ -37,6 +37,7 @@ import {
   rideRoutePath,
   type DriveStats,
 } from './drives-core';
+import { mapSaveDriveError } from './saveDrive-errors';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
 /**
@@ -64,74 +65,93 @@ export const saveDrive = onCall(
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
   },
   async (request): Promise<SaveDriveResponse> => {
-    const actor = await requireMemberActor(request);
+    // Captured as the handler progresses so an unexpected failure downstream can
+    // be logged with triage context (see mapSaveDriveError). uid is seeded from
+    // the auth context up front so it is still available if requireMemberActor
+    // throws inside its users/{uid} read — the exact transient case #800 targets;
+    // the rest stay undefined until their step succeeds.
+    let uid: string | undefined = request.auth?.uid;
+    let sourceSessionId: string | undefined;
+    let pointCount: number | undefined;
+    try {
+      const actor = await requireMemberActor(request);
+      uid = actor.uid;
 
-    const parsed = parseSaveDriveInput(request.data);
-    if (!parsed.ok) {
-      throw new HttpsError('invalid-argument', parsed.message);
-    }
-    const input = parsed.input;
-
-    const timesGuard = guardDriveTimes(input.startedAt, input.endedAt);
-    if (!timesGuard.ok) {
-      throw new HttpsError(timesGuard.code, timesGuard.message);
-    }
-    const pointsGuard = guardRoutePoints(input.routePoints);
-    if (!pointsGuard.ok) {
-      throw new HttpsError(pointsGuard.code, pointsGuard.message);
-    }
-
-    const ridesRef = db.collection('rides');
-    const stats = computeDriveStats(input);
-    // Derived once, here, from points the client already sent: the History list
-    // then draws the drive's shape straight off the document it already reads.
-    const routeThumbnail = computeRouteThumbnail(input);
-
-    // Idempotency: a sourceSessionId maps to a DETERMINISTIC document ID, and
-    // the create runs in a transaction — concurrent retries serialize on the
-    // same document instead of racing a query-then-create into duplicates.
-    const rideRef = input.sourceSessionId
-      ? ridesRef.doc(`${actor.uid}_${input.sourceSessionId}`)
-      : ridesRef.doc();
-
-    const alreadySaved = await db.runTransaction(async (tx) => {
-      const existing = await tx.get(rideRef);
-      if (existing.exists) {
-        return true;
+      const parsed = parseSaveDriveInput(request.data);
+      if (!parsed.ok) {
+        throw new HttpsError('invalid-argument', parsed.message);
       }
-      tx.set(
-        rideRef,
-        buildRideDocument(
-          input,
-          { userId: actor.uid, rideId: rideRef.id, stats, routeThumbnail },
-          () => FieldValue.serverTimestamp(),
-        ),
-      );
-      return false;
-    });
+      const input = parsed.input;
+      sourceSessionId = input.sourceSessionId ?? undefined;
+      pointCount = input.routePoints?.length ?? 0;
 
-    if (alreadySaved) {
-      const data = (await rideRef.get()).data()!;
+      const timesGuard = guardDriveTimes(input.startedAt, input.endedAt);
+      if (!timesGuard.ok) {
+        throw new HttpsError(timesGuard.code, timesGuard.message);
+      }
+      const pointsGuard = guardRoutePoints(input.routePoints);
+      if (!pointsGuard.ok) {
+        throw new HttpsError(pointsGuard.code, pointsGuard.message);
+      }
+
+      const ridesRef = db.collection('rides');
+      const stats = computeDriveStats(input);
+      // Derived once, here, from points the client already sent: the History list
+      // then draws the drive's shape straight off the document it already reads.
+      const routeThumbnail = computeRouteThumbnail(input);
+
+      // Idempotency: a sourceSessionId maps to a DETERMINISTIC document ID, and
+      // the create runs in a transaction — concurrent retries serialize on the
+      // same document instead of racing a query-then-create into duplicates.
+      const rideRef = input.sourceSessionId
+        ? ridesRef.doc(`${actor.uid}_${input.sourceSessionId}`)
+        : ridesRef.doc();
+
+      const alreadySaved = await db.runTransaction(async (tx) => {
+        const existing = await tx.get(rideRef);
+        if (existing.exists) {
+          return true;
+        }
+        tx.set(
+          rideRef,
+          buildRideDocument(
+            input,
+            { userId: actor.uid, rideId: rideRef.id, stats, routeThumbnail },
+            () => FieldValue.serverTimestamp(),
+          ),
+        );
+        return false;
+      });
+
+      if (alreadySaved) {
+        const data = (await rideRef.get()).data()!;
+        return {
+          rideId: rideRef.id,
+          durationSeconds: data.durationSeconds as number,
+          distanceMeters: (data.distanceMeters as number | null) ?? null,
+          averageSpeedMetersPerSecond: (data.averageSpeedMetersPerSecond as number | null) ?? null,
+          // Absent on drives saved before maxSpeedMetersPerSecond existed (there
+          // is no backfill), which reads as null exactly like a summary-only save.
+          maxSpeedMetersPerSecond: (data.maxSpeedMetersPerSecond as number | null) ?? null,
+          routePath: data.routePath as string,
+          previewImagePath: data.previewImagePath as string,
+          alreadySaved: true,
+        };
+      }
+
       return {
         rideId: rideRef.id,
-        durationSeconds: data.durationSeconds as number,
-        distanceMeters: (data.distanceMeters as number | null) ?? null,
-        averageSpeedMetersPerSecond: (data.averageSpeedMetersPerSecond as number | null) ?? null,
-        // Absent on drives saved before maxSpeedMetersPerSecond existed (there
-        // is no backfill), which reads as null exactly like a summary-only save.
-        maxSpeedMetersPerSecond: (data.maxSpeedMetersPerSecond as number | null) ?? null,
-        routePath: data.routePath as string,
-        previewImagePath: data.previewImagePath as string,
-        alreadySaved: true,
+        ...stats,
+        routePath: rideRoutePath(actor.uid, rideRef.id),
+        previewImagePath: ridePreviewPath(actor.uid, rideRef.id),
+        alreadySaved: false,
       };
+    } catch (error) {
+      // Deliberate HttpsError outcomes pass through unchanged; an unexpected
+      // throw (e.g. a transient Firestore UNAVAILABLE/ABORTED/DEADLINE from the
+      // users read or the transaction) is logged and re-thrown as a RETRYABLE
+      // HttpsError('unavailable') instead of an opaque INTERNAL/500 (#800).
+      throw mapSaveDriveError(error, { uid, sourceSessionId, pointCount });
     }
-
-    return {
-      rideId: rideRef.id,
-      ...stats,
-      routePath: rideRoutePath(actor.uid, rideRef.id),
-      previewImagePath: ridePreviewPath(actor.uid, rideRef.id),
-      alreadySaved: false,
-    };
   },
 );
