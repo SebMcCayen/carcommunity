@@ -309,18 +309,35 @@ export default function FinancePage() {
           {/* Mapbox — separate vendor */}
           <section className={styles.section}>
             <h2 className={styles.sectionTitle}>Mapbox — separate vendor</h2>
+            <p className={styles.sectionNote}>
+              The member app is a <strong>mobile app</strong> (Maps SDK + Navigation SDK for
+              Android), so Mapbox bills by <strong>Monthly Active Users (MAU)</strong> and navigation
+              trips — <em>not</em> per web map load. The basemap is free up to 25,000 MAU, so it costs
+              nothing at this scale; <strong>Navigation is the real, growing cost driver</strong>. Nav
+              usage assumes {Math.round(est.mapbox.assumptions.navUsingFraction * 100)}% of members
+              navigate, {est.mapbox.assumptions.navTripsPerNavigatingMemberPerMonth} trips each per
+              month. Billed by Mapbox on its own dashboard — never part of the Google Cloud total.
+            </p>
             <div className={styles.vendorCard}>
               <div className={styles.vendorHead}>
-                <span className={styles.vendorTitle}>Map loads</span>
+                <span className={styles.vendorTitle}>Mapbox subtotal</span>
                 <span className={styles.vendorAmount}>{formatSek(est.mapbox.sekPerMonth)}/mo</span>
               </div>
-              <p className={styles.sectionNote}>
-                Estimated {formatCount(est.mapbox.loadsPerMonth)} web map loads/month
-                ({est.mapbox.loadsPerMemberPerDay} loads per member per day × {formatCount(est.member.count)} members).
-                First {formatCount(est.mapbox.freeLoadsPerMonth)} loads/month are free →{' '}
-                {formatCount(est.mapbox.billableLoads)} billable. Billed by Mapbox on its own
-                dashboard — never part of the Google Cloud total.
-              </p>
+              {est.mapbox.lines.map((l) => (
+                <div key={l.id} className={styles.subRow}>
+                  <div>
+                    <div>{l.label}</div>
+                    <div className={styles.rowDriver} title={l.note}>
+                      {l.driver} · {l.usage}
+                    </div>
+                  </div>
+                  <div>
+                    <span className={l.free ? styles.free : styles.cost}>
+                      {l.free ? 'Free' : `${formatSek(l.sekPerMonth)}/mo`}
+                    </span>
+                  </div>
+                </div>
+              ))}
               <p className={styles.vendorMeta}>
                 Source: {est.mapbox.source} · captured {est.mapbox.capturedOn}
               </p>

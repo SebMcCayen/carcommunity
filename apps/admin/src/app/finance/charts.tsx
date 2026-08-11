@@ -27,22 +27,32 @@ function niceCeil(value: number): number {
 export function ProjectionChart({ points }: { points: ProjPoint[] }) {
   const width = 640;
   const height = 240;
-  const padL = 56;
   const padR = 12;
   const padT = 12;
   const padB = 34;
+
+  const maxValue = niceCeil(Math.max(...points.map((p) => p.total), 1));
+  const gridLines = [0, 0.25, 0.5, 0.75, 1];
+
+  // Reserve enough left padding for the WIDEST formatted y-axis label, so kr
+  // values are never clipped at the SVG edge (the old fixed padL=56 chopped
+  // "100 000 kr" → "00 000 kr"). Labels are right-anchored 8px inside padL, so
+  // padL must clear the widest label's width + that 8px gap + a small margin.
+  // Estimate width from character count at fontSize 11 (~6.5px/char, tabular
+  // digits + grouping spaces); 7px/char plus 16px slack is a safe over-reserve.
+  const yLabels = gridLines.map((g) => formatSek(Math.round(g * maxValue)));
+  const widestLabel = Math.max(...yLabels.map((s) => s.length));
+  const padL = Math.max(56, Math.ceil(widestLabel * 7) + 16);
+
   const plotW = width - padL - padR;
   const plotH = height - padT - padB;
 
-  const maxValue = niceCeil(Math.max(...points.map((p) => p.total), 1));
   const n = points.length;
   const x = (i: number) => padL + (n === 1 ? plotW / 2 : (i / (n - 1)) * plotW);
   const y = (v: number) => padT + plotH - (v / maxValue) * plotH;
 
   const path = (key: 'total' | 'mapbox') =>
     points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p[key])}`).join(' ');
-
-  const gridLines = [0, 0.25, 0.5, 0.75, 1];
 
   return (
     <svg

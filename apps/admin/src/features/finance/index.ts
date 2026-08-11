@@ -42,12 +42,24 @@ export interface CommittedJobLine {
   note: string;
 }
 
-export interface MapboxEstimate {
-  loadsPerMemberPerDay: number;
-  loadsPerMonth: number;
-  freeLoadsPerMonth: number;
-  billableLoads: number;
+/** One Mapbox product line (Maps SDK MAU, Nav MAU, Nav trips, or admin web). */
+export interface MapboxLine {
+  id: string;
+  label: string;
+  driver: string;
+  usage: string;
   sekPerMonth: number;
+  free: boolean;
+  note: string;
+}
+
+export interface MapboxEstimate {
+  lines: MapboxLine[];
+  sekPerMonth: number;
+  assumptions: {
+    navUsingFraction: number;
+    navTripsPerNavigatingMemberPerMonth: number;
+  };
   capturedOn: string;
   source: string;
 }
