@@ -98,15 +98,18 @@ const firestoreIdSchema = z
  * Partner-application website field. Accepts a scheme-less domain like
  * `www.foretag.se` by prepending `https://` before URL validation — zod
  * `.url()` rejects bare domains, which used to make the callable reject a
- * perfectly reasonable value with a misleading `invalid-argument`. Empty
- * input is left untouched so the surrounding `.nullable().optional()` keeps
- * the field optional; max-length is enforced on the normalized value.
+ * perfectly reasonable value with a misleading `invalid-argument`. A
+ * blank/whitespace-only string is treated as missing (normalized to
+ * `undefined`) so an accidental "" from any client stays optional rather
+ * than triggering `invalid-argument`; max-length is enforced on the
+ * normalized value. Wrapped with `.nullable().optional()` at the call site.
  */
-const partnerWebsiteUrlSchema = z
-  .string()
-  .trim()
-  .transform((v) => (v && !/^https?:\/\//i.test(v) ? `https://${v}` : v))
-  .pipe(z.string().url().max(MAX_PARTNER_WEBSITE_URL_LENGTH));
+const partnerWebsiteUrlSchema = z.preprocess((v) => {
+  if (typeof v !== 'string') return v;
+  const trimmed = v.trim();
+  if (trimmed === '') return undefined;
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}, z.string().url().max(MAX_PARTNER_WEBSITE_URL_LENGTH).optional());
 
 const companyFieldsSchema = z.object({
   name: z.string().trim().min(1).max(MAX_PARTNER_COMPANY_NAME_LENGTH),

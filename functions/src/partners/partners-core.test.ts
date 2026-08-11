@@ -54,10 +54,13 @@ describe('parseSubmitApplicationInput websiteUrl normalization', () => {
     expect(result.ok).toBe(false);
   });
 
-  it('still rejects an empty website string', () => {
-    // Empty string is not a valid URL even after trimming — clients omit the
-    // field instead of sending "".
+  it('treats a blank/whitespace website string as missing (optional)', () => {
+    // Defense-in-depth: a client that accidentally sends "" (or spaces)
+    // should not get invalid-argument — it is normalized to undefined.
     const result = parseSubmitApplicationInput({ ...base, websiteUrl: '   ' });
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.input.websiteUrl).toBeUndefined();
+    }
   });
 });
