@@ -974,15 +974,20 @@ service cloud.firestore {
     // financeRecurringCosts – operator-entered recurring costs (Finance board)
     // Real, admin-entered recurring costs (Claude, tooling, domains …), each
     // with a label + description + amount + currency + period, folded into the
-    // finance board's monthly grand total by finance.estimate. Admin-only on
-    // BOTH read and write: members must never see the operator's cost figures.
-    // The admin UI READS these directly (isAdmin) and MUTATES them through the
-    // audited, field-validating finance.{add,update,delete}RecurringCost
-    // callables (Admin SDK, which bypasses these rules); those are the shape
-    // gatekeeper and write an adminAuditEvents record per change.
+    // finance board's monthly grand total by finance.estimate.
+    //
+    // Admin-only READ (members must never see the operator's cost figures);
+    // NO client writes AT ALL — not even an admin. Every mutation goes through
+    // the audited, field-validating finance.{add,update,delete}RecurringCost
+    // callables (Admin SDK, which bypasses these rules). Denying direct writes
+    // here is what makes "every change is audited" an invariant rather than a
+    // convention: a client cannot skip the callable to write unvalidated,
+    // unaudited data. Same server-owned pattern as metrics/ and
+    // config/featureFlags.
     // -------------------------------------------------------------------------
     match /financeRecurringCosts/{costId} {
-      allow read, write: if isAdmin();
+      allow read: if isAdmin();
+      allow write: if false;
     }
 
     // -------------------------------------------------------------------------

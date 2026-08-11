@@ -263,7 +263,7 @@ export function RecurringCostsSection({
             id={`${idPrefix}-amount`}
             className={styles.formInput}
             type="number"
-            min="0"
+            min="0.01"
             step="0.01"
             max={RECURRING_COST_AMOUNT_MAX}
             value={fields.amount}

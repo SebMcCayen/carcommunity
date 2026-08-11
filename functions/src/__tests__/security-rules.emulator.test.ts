@@ -1009,9 +1009,9 @@ describe('Firestore – finance recurring costs', () => {
     await assertSucceeds(getDoc(doc(adminFs, 'financeRecurringCosts', COST_ID)));
   });
 
-  it('an admin can write a recurring cost', async () => {
+  it('NO client may write a recurring cost — not even an admin (writes go via the audited callable)', async () => {
     const adminFs = testEnv.authenticatedContext('fin-rc-admin-w', { admin: true }).firestore();
-    await assertSucceeds(
+    await assertFails(
       setDoc(doc(adminFs, 'financeRecurringCosts', 'fin-rc-admin-created'), {
         label: 'Domain',
         description: 'carcommunity.se',
@@ -1021,6 +1021,8 @@ describe('Firestore – finance recurring costs', () => {
         createdByUid: 'fin-rc-admin-w',
       }),
     );
+    await assertFails(updateDoc(doc(adminFs, 'financeRecurringCosts', COST_ID), { amount: 999 }));
+    await assertFails(deleteDoc(doc(adminFs, 'financeRecurringCosts', COST_ID)));
   });
 
   it('a non-admin member cannot read or write recurring costs', async () => {
@@ -1041,7 +1043,7 @@ describe('Firestore – finance recurring costs', () => {
     );
   });
 
-  it('a suspended admin cannot access recurring costs (suspension overrides admin)', async () => {
+  it('a suspended admin cannot read recurring costs (suspension overrides admin)', async () => {
     const suspendedFs = testEnv
       .authenticatedContext('fin-rc-suspended-admin', { admin: true, suspended: true })
       .firestore();
