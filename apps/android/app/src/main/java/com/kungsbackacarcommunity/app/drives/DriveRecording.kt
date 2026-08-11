@@ -97,6 +97,25 @@ sealed interface RecordingState {
         val savePending: Boolean = false,
     ) : RecordingState
 
+    /**
+     * A LIVE session's drive was KEPT while its background save was STILL in
+     * flight. KEEP does not wait on the network, but the drive must not be
+     * finalized until the save DEFINITIVELY succeeds — otherwise a save that then
+     * fails after the terminal [Kept] (which releases everything) would silently
+     * lose the drive, the exact never-lose-a-drive failure #798 guards against. So
+     * an early Keep parks HERE and the background save resolves it: success →
+     * terminal [Kept]; a definitive failure → [Failed], which re-raises the retry
+     * prompt so the drive can still be saved.
+     *
+     * Only reached when Keep is tapped BEFORE the save lands; once the save has
+     * landed ([SavedPendingChoice.savePending] is false) Keep goes straight to
+     * [Kept]. The summary renders this as the small "saving…" indicator, not a
+     * Keep/Delete choice (the choice is already made).
+     */
+    data class KeptPendingSave(
+        val elapsedMillis: Long,
+    ) : RecordingState
+
     /** The `drives-delete` callable is in flight (deleting the auto-saved ride). */
     data object Deleting : RecordingState
 

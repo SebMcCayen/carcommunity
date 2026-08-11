@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
 
 /**
@@ -76,7 +77,15 @@ class DriveRecordingCoordinator(
      * `route.bin` orphaned. Joining first makes delete wait the upload out so the
      * blobs it removes are the final ones. Null when nothing is (or was)
      * uploading (config-less build, summary-only save, or before the first save).
+     *
+     * `@Volatile`: with the background live save, [startRouteUpload] now runs from
+     * the save coroutine (on [uploadScope], typically Dispatchers.IO) while
+     * [delete] reads and joins this from the main thread — so the write must be
+     * visible cross-thread, exactly like [saveJob] / [savedResult], or delete could
+     * observe a stale null and skip joining an in-flight upload (the race this join
+     * exists to prevent).
      */
+    @Volatile
     private var uploadJob: Job? = null
 
     /**
@@ -334,9 +343,21 @@ class DriveRecordingCoordinator(
      * starting an upload here would just race that delete.
      */
     private fun onBackgroundSaveSucceeded(result: DriveSaveResult, pointsForUpload: List<RecordedPoint>) {
+        // Settle the summary in place: clear the "saving…" indicator if the user is
+        // still deciding, or FINALIZE an early Keep now that the save is confirmed
+        // (KeptPendingSave → the terminal Kept — the only place an early Keep is
+        // allowed to become terminal, so a save that had failed could never have
+        // finalized it).
         stateFlow.update { current ->
-            if (current is RecordingState.SavedPendingChoice) current.copy(savePending = false) else current
+            when (current) {
+                is RecordingState.SavedPendingChoice -> current.copy(savePending = false)
+                is RecordingState.KeptPendingSave -> RecordingState.Kept
+                else -> current
+            }
         }
+        // Upload the route while the drive is meant to live (still choosing, or
+        // kept). A delete in flight has moved off these states and joins this job to
+        // remove the ride, so an upload started here would just race that delete.
         when (stateFlow.value) {
             is RecordingState.SavedPendingChoice, RecordingState.Kept ->
                 uploadJob = startRouteUpload(result, pointsForUpload)
@@ -354,7 +375,13 @@ class DriveRecordingCoordinator(
      */
     private fun onBackgroundSaveFailed(failure: Exception, elapsedMillis: Long, pointCount: Int) {
         stateFlow.update { current ->
-            if (current is RecordingState.SavedPendingChoice) {
+            // Surface the failure while the user is still deciding (SavedPendingChoice)
+            // OR after an EARLY Keep (KeptPendingSave) — the latter is the critical
+            // never-lose-a-drive path: a drive kept before the save landed must NOT be
+            // silently dropped when the save then gives up; it re-raises the retry
+            // prompt instead. Once a delete has committed (Deleting/Deleted) the choice
+            // stands.
+            if (current is RecordingState.SavedPendingChoice || current is RecordingState.KeptPendingSave) {
                 RecordingState.Failed(
                     pointCount = pointCount,
                     elapsedMillis = elapsedMillis,
@@ -367,17 +394,40 @@ class DriveRecordingCoordinator(
     }
 
     /**
-     * KEEP the drive: resolve to the terminal [RecordingState.Kept] INSTANTLY and
-     * release the recorder, without waiting on the network. If the background save
-     * is still in flight it carries on fire-and-forget — its bounded retry makes a
-     * transient fault self-heal (#800), and on success it still uploads the route
-     * ([onBackgroundSaveSucceeded] sees [RecordingState.Kept]). Valid only from
-     * [RecordingState.SavedPendingChoice].
+     * KEEP the drive. When the background save has ALREADY landed
+     * ([RecordingState.SavedPendingChoice.savePending] false) this resolves to the
+     * terminal [RecordingState.Kept] instantly and releases the recorder — the
+     * common, fast case.
+     *
+     * When the save is STILL in flight, keeping must NOT finalize yet: going
+     * terminal (which lets the host release everything) while a save could still
+     * fail would silently lose the drive — the never-lose-a-drive failure #798
+     * guards against. So an early Keep parks in [RecordingState.KeptPendingSave],
+     * and the background save resolves it — success → [RecordingState.Kept]
+     * ([onBackgroundSaveSucceeded]); a definitive failure → [RecordingState.Failed]
+     * ([onBackgroundSaveFailed]), re-raising the retry prompt so the drive can still
+     * be saved. The recorder is kept until then so a retry can rebuild the payload.
+     *
+     * Done via [updateAndGet] so the whole decision is atomic against the
+     * background save's concurrent state transition (both use the same StateFlow),
+     * and the recorder is released only when the FINAL state is the terminal Kept.
+     * Valid only from [RecordingState.SavedPendingChoice].
      */
     fun keep() {
-        if (stateFlow.value !is RecordingState.SavedPendingChoice) return
-        recorder = null
-        stateFlow.value = RecordingState.Kept
+        val next =
+            stateFlow.updateAndGet { current ->
+                when {
+                    current is RecordingState.SavedPendingChoice && current.savePending ->
+                        RecordingState.KeptPendingSave(elapsedMillis = current.elapsedMillis)
+                    current is RecordingState.SavedPendingChoice ->
+                        RecordingState.Kept
+                    else -> current
+                }
+            }
+        // Release the recorder ONLY on the terminal Kept (the save had already
+        // landed). An early Keep parked in KeptPendingSave keeps the recorder so a
+        // post-failure retry can rebuild the payload.
+        if (next is RecordingState.Kept) recorder = null
     }
 
     /**

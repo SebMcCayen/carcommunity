@@ -595,11 +595,63 @@ class DriveRecordingTest {
     }
 
     @Test
-    fun `keep resolves to Kept instantly, even while the background save is still in flight`() =
+    fun `keep after the save has landed resolves to Kept instantly and releases the recorder`() =
         runTest {
-            // The save is GATED so it is still in flight when Keep is tapped: KEEP
-            // must still resolve at once (the save carries on fire-and-forget),
-            // which is the whole point of the instant-stop behaviour.
+            // The common, fast case: the background save has already landed
+            // (savePending false), so keeping is truly instant.
+            val repo = RecordingFakeRepository(shouldFail = false)
+            val c = liveCoordinator(repo)
+            c.start()
+            c.stop()
+            c.autoSave(title = null)
+            assertFalse((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
+            c.keep()
+            assertEquals(RecordingState.Kept, c.state.value)
+            assertEquals(0, c.recordedPoints().size)
+        }
+
+    @Test
+    fun `early KEEP parks until the background save confirms, then finalizes to Kept`() = runTest {
+        // KEEP tapped BEFORE the save lands must NOT finalize/lose the drive: it
+        // parks in KeptPendingSave (recorder retained) and only becomes the terminal
+        // Kept once the save is CONFIRMED. Never-lose-a-drive across an early keep.
+        val release = CompletableDeferred<Unit>()
+        val repo =
+            object : DrivesRepository {
+                override fun observeDrives(uid: String) = throw UnsupportedOperationException()
+
+                override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
+                    release.await()
+                    return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+                }
+
+                override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
+            }
+        val c = liveCoordinator(repo)
+        c.start()
+        c.addFix(57.0, 12.0, 1_000L)
+        c.stop()
+        c.autoSave(title = null)
+        assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
+        c.keep()
+        // Parked, NOT terminal, and the recorder is retained for a possible retry.
+        assertTrue(c.state.value is RecordingState.KeptPendingSave)
+        assertEquals(1, c.recordedPoints().size)
+
+        // The save confirms → terminal Kept.
+        release.complete(Unit)
+        advanceUntilIdle()
+        assertEquals(RecordingState.Kept, c.state.value)
+    }
+
+    @Test
+    fun `early KEEP then a definitive save failure surfaces Failed, never silently dropping the drive`() =
+        runTest {
+            // The critical #798 regression Copilot flagged: an early KEEP followed by
+            // a save that gives up must NOT silently lose the drive. It re-raises the
+            // retry prompt (Failed), with the recorder still alive to rebuild the save.
             val release = CompletableDeferred<Unit>()
             val repo =
                 object : DrivesRepository {
@@ -607,27 +659,26 @@ class DriveRecordingTest {
 
                     override suspend fun saveDrive(request: Map<String, Any?>): DriveSaveResult {
                         release.await()
-                        return DriveSaveResult(rideId = "ride", routePath = null, alreadySaved = false)
+                        // Permanent → the background save fails fast (no retry).
+                        throw DriveSaveException(code = "PERMISSION_DENIED")
                     }
 
                     override suspend fun deleteDrive(rideId: String) = throw UnsupportedOperationException()
                 }
             val c = liveCoordinator(repo)
             c.start()
+            c.addFix(57.0, 12.0, 1_000L)
             c.stop()
             c.autoSave(title = null)
-            assertTrue((c.state.value as RecordingState.SavedPendingChoice).savePending)
-
             c.keep()
-            assertEquals(RecordingState.Kept, c.state.value)
-            // Recorder released on keep.
-            assertEquals(0, c.recordedPoints().size)
+            assertTrue(c.state.value is RecordingState.KeptPendingSave)
 
-            // Let the fire-and-forget save finish so no coroutine is left parked;
-            // it must not disturb the terminal Kept state.
             release.complete(Unit)
             advanceUntilIdle()
-            assertEquals(RecordingState.Kept, c.state.value)
+            val failed = c.state.value as RecordingState.Failed
+            assertTrue("the drive must be recoverable, not lost", failed.isPermanentRefusal)
+            // The recorder is still alive so a retry can rebuild the payload.
+            assertEquals(1, c.recordedPoints().size)
         }
 
     @Test

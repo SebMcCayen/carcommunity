@@ -2493,10 +2493,13 @@ fun AuthenticatedApp(
             // can never tear a still-live recording/service down.
             val stopAttempt by LiveShareStop.attempt.collectAsState()
             // Truth landed (the session is no longer observed sharing) → drop the
-            // overlay. Also drop it the moment a start overlay appears: a fresh
-            // start must not be hidden by a stale stop attempt from a prior session.
-            LaunchedEffect(isSharing, stopAttempt) {
+            // overlay. AND drop it the moment a start overlay appears: a fresh start
+            // (manual OR convoy-auto, which never runs through stopLiveShare) must
+            // not be masked by a stale stop attempt from the previous session, which
+            // would force isSharingUi false until the stop attempt expired.
+            LaunchedEffect(isSharing, startAttempt, stopAttempt) {
                 if (!isSharing) LiveShareStop.reconcile(false)
+                if (startAttempt != LiveStartAttempt.None) LiveShareStop.clear()
             }
             // Expiry backstop: no stop attempt may outlive its deadline, so a hung
             // or silently-unechoed stop always lets the observed truth show through

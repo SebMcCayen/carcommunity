@@ -139,6 +139,12 @@ fun SessionSummaryDialog(
         // runs is fine (it is an explicit, destructive action, not the stop path).
         RecordingState.Deleting -> ProgressDialog(R.string.savedDrives_deletingProgress)
 
+        // KEEP was tapped before the background save landed: the choice is made, so
+        // show a brief "saving…" while the save is confirmed. It resolves itself to
+        // Kept (dismisses) or, on a definitive failure, to the retry prompt below —
+        // the drive is never finalized (and so never lost) on an unconfirmed save.
+        is RecordingState.KeptPendingSave -> ProgressDialog(R.string.savedDrives_savingProgress)
+
         // PromptSave is transient for the live flow — the UI auto-saves from it the
         // same frame, moving straight to SavedPendingChoice — so render nothing for
         // that single frame rather than flashing a full-screen "Saving…" modal (the
