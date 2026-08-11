@@ -35,11 +35,14 @@ import {
   STORAGE,
   USD_TO_SEK,
   USD_TO_SEK_CAPTURED_ON,
+  type PricingTier,
 } from './pricing';
 import {
+  ADMIN_WEB_MAP_LOADS_PER_MONTH,
   FALLBACK_MEMBER_COUNT,
   FIXED_SUBSCRIPTIONS,
-  MAPBOX_LOADS_PER_MEMBER_PER_DAY,
+  NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
+  NAV_USING_FRACTION,
   PER_MEMBER_PER_DAY,
   RTDB_STORAGE_BYTES,
   SECRET_MANAGER_ACTIVE_VERSIONS,
@@ -112,13 +115,48 @@ export interface CommittedJobLine {
   note: string;
 }
 
-/** Mapbox estimate — its own vendor section, never in the Google Cloud total. */
-export interface MapboxEstimate {
-  loadsPerMemberPerDay: number;
-  loadsPerMonth: number;
-  freeLoadsPerMonth: number;
-  billableLoads: number;
+/**
+ * One Mapbox product line — a single SKU (Maps SDK MAU, Nav MAU, Nav trips, or
+ * the admin web loads). Each is costed on its own real pricing, then summed
+ * into the vendor subtotal. Kept as separate lines so the board can show that
+ * the basemap is ~free while Navigation is the line that actually grows.
+ */
+export interface MapboxLine {
+  /** Stable id (React keys). */
+  id: string;
+  /** Product, e.g. "Maps SDK for Mobile (basemap)". */
+  label: string;
+  /** Billing driver, e.g. "Monthly Active Users" / "Trips". */
+  driver: string;
+  /** Human usage summary, e.g. "500 MAU (free ≤ 25,000)". */
+  usage: string;
+  /** Cost in SEK per month for this line. */
   sekPerMonth: number;
+  /** True when this line is entirely inside its free tier (0 SEK). */
+  free: boolean;
+  /** Short explanatory note (rates / free tier). */
+  note: string;
+}
+
+/**
+ * Mapbox estimate — its own vendor section, never in the Google Cloud total.
+ *
+ * ⚠️ CORRECTED 2026-08-05 from a WEB per-load model to the real MOBILE billing:
+ * Maps SDK (MAU-tiered basemap) + Navigation SDK (MAU + trips, the real driver)
+ * + the admin web picker (per-load, negligible). `sekPerMonth` is the vendor
+ * subtotal (sum of `lines`) — the field name is unchanged so the projection and
+ * the grand-total composition keep working.
+ */
+export interface MapboxEstimate {
+  /** The per-product lines (basemap, nav MAU, nav trips, admin web). */
+  lines: MapboxLine[];
+  /** Vendor subtotal, SEK/month (sum of `lines`). */
+  sekPerMonth: number;
+  /** The two labelled navigation assumptions, surfaced for transparency. */
+  assumptions: {
+    navUsingFraction: number;
+    navTripsPerNavigatingMemberPerMonth: number;
+  };
   capturedOn: string;
   source: string;
 }
@@ -492,18 +530,13 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     note: j.note,
   })).sort((a, b) => b.writesPerMonth - a.writesPerMonth);
 
-  // ---- Mapbox (separate vendor) --------------------------------------------
-  const mapboxLoads = members * MAPBOX_LOADS_PER_MEMBER_PER_DAY * DAYS_PER_MONTH;
-  const mapboxBillable = Math.max(0, mapboxLoads - MAPBOX.freeLoadsPerMonth);
-  const mapbox: MapboxEstimate = {
-    loadsPerMemberPerDay: MAPBOX_LOADS_PER_MEMBER_PER_DAY,
-    loadsPerMonth: mapboxLoads,
-    freeLoadsPerMonth: MAPBOX.freeLoadsPerMonth,
-    billableLoads: mapboxBillable,
-    sekPerMonth: usdToSek(mapboxBillable * MAPBOX.usdPerLoad),
-    capturedOn: MAPBOX.capturedOn,
-    source: MAPBOX.source,
-  };
+  // ---- Mapbox (separate vendor) — MOBILE SDK billing (MAU + trips) ----------
+  // The app is a mobile app, so the basemap is billed by Monthly Active Users
+  // (≈ the active-member count) and turn-by-turn navigation is billed by Nav
+  // MAU + trips. Each product is costed on its own tiered SKU (pricing.ts) and
+  // summed into the vendor subtotal. The admin web picker is genuinely per-load
+  // but admin-only and negligible.
+  const mapbox = estimateMapbox(members);
 
   // ---- Fixed subscriptions (separate section) ------------------------------
   const subscriptionLines: SubscriptionLine[] = FIXED_SUBSCRIPTIONS.map(resolveSubscription);
@@ -583,6 +616,109 @@ function estimateFirestoreStorageGiB(members: number): number {
   const incidentsBytes = TRAFIKVERKET_SITUATIONS_CAP * 2_000; // ~2 KB/incident doc
   const perMemberBytes = 200_000; // ~200 KB of docs per member (profile, garage, drives…)
   return (incidentsBytes + members * perMemberBytes) / BYTES_PER_GIB;
+}
+
+/**
+ * Marginal tiered cost in USD. `tiers` are cumulative bands sorted ascending by
+ * `upTo`; each band's `usdPerUnit` is charged only on the units that fall inside
+ * it. A leading $0 band expresses the free tier. Example (Maps SDK MAU): the
+ * first 25,000 units cost $0, the next 100,000 cost $0.004 each, and so on — so
+ * a total of 130,000 MAU costs 100,000×$0.004 + 5,000×$0.0032, never a flat
+ * rate on the whole amount.
+ */
+function tieredUsd(units: number, tiers: readonly PricingTier[]): number {
+  let cost = 0;
+  let lower = 0;
+  for (const tier of tiers) {
+    if (units <= lower) break;
+    const upper = Math.min(units, tier.upTo);
+    cost += (upper - lower) * tier.usdPerUnit;
+    lower = upper;
+  }
+  return cost;
+}
+
+/** Format an integer count for the usage summaries (thousands-grouped). */
+function fmtInt(n: number): string {
+  return Math.round(n).toLocaleString('en');
+}
+
+/**
+ * Mapbox estimate — the corrected MOBILE model. Three products, four lines:
+ *   1. Maps SDK for Mobile (basemap)   — MAU ≈ active-member count, 25k free.
+ *   2. Navigation SDK — active users   — a NAV_USING_FRACTION subset, 100 free.
+ *   3. Navigation SDK — trips          — nav members × trips/member, 1k free.
+ *   4. Admin web map picker            — per-load GL JS, admin-only, ~0.
+ * Navigation (2+3) is the real, growing cost driver; the basemap is free at
+ * this app's scale and the admin picker is a rounding error. The vendor
+ * subtotal is the sum, kept separate from the Google Cloud total.
+ */
+function estimateMapbox(members: number): MapboxEstimate {
+  // 1. Maps SDK for Mobile — one MAU per active member (map-first app).
+  const mapsMau = members;
+  const mapsUsd = tieredUsd(mapsMau, MAPBOX.mapsSdkMobile.tiers);
+  const mapsLine: MapboxLine = {
+    id: 'maps-sdk-mau',
+    label: 'Maps SDK for Mobile (basemap)',
+    driver: 'Monthly Active Users',
+    usage: `${fmtInt(mapsMau)} MAU (free ≤ ${fmtInt(MAPBOX.mapsSdkMobile.freeMau)})`,
+    sekPerMonth: usdToSek(mapsUsd),
+    free: mapsUsd === 0,
+    note: `1 MAU per active member. Free up to ${fmtInt(MAPBOX.mapsSdkMobile.freeMau)} MAU/month, then $4.00 / 1,000 (tiered). Free at current scale.`,
+  };
+
+  // 2 + 3. Navigation SDK — a subset of members navigate; they are Nav MAU and
+  // generate trips. This is the line that actually grows with the community.
+  const navMau = Math.round(members * NAV_USING_FRACTION);
+  const navTrips = navMau * NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH;
+  const navMauUsd = tieredUsd(navMau, MAPBOX.navigationSdk.mauTiers);
+  const navTripsUsd = tieredUsd(navTrips, MAPBOX.navigationSdk.tripTiers);
+
+  const navMauLine: MapboxLine = {
+    id: 'nav-sdk-mau',
+    label: 'Navigation SDK — active users',
+    driver: 'Navigating MAU',
+    usage: `${fmtInt(navMau)} nav MAU (${Math.round(NAV_USING_FRACTION * 100)}% of members, free ≤ ${fmtInt(MAPBOX.navigationSdk.freeMau)})`,
+    sekPerMonth: usdToSek(navMauUsd),
+    free: navMauUsd === 0,
+    note: `Turn-by-turn users — ${Math.round(NAV_USING_FRACTION * 100)}% of members (NAV_USING_FRACTION). Free ${fmtInt(MAPBOX.navigationSdk.freeMau)} MAU, then $0.30/user. The real growing Mapbox cost.`,
+  };
+  const navTripsLine: MapboxLine = {
+    id: 'nav-sdk-trips',
+    label: 'Navigation SDK — trips',
+    driver: 'Trips',
+    usage: `${fmtInt(navTrips)} trips (${NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH}/nav member, free ≤ ${fmtInt(MAPBOX.navigationSdk.freeTrips)})`,
+    sekPerMonth: usdToSek(navTripsUsd),
+    free: navTripsUsd === 0,
+    note: `${NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH} trips per navigating member (NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH). Free ${fmtInt(MAPBOX.navigationSdk.freeTrips)} trips, then $0.08/trip (tiered down at scale).`,
+  };
+
+  // 4. Admin web map picker (GL JS) — genuinely per-load, admin-only, ~0.
+  const adminLoads = ADMIN_WEB_MAP_LOADS_PER_MONTH;
+  const adminUsd = tieredUsd(adminLoads, MAPBOX.webGlJs.tiers);
+  const adminLine: MapboxLine = {
+    id: 'admin-web-loads',
+    label: 'Admin web map picker (GL JS)',
+    driver: 'Web map loads',
+    usage: `${fmtInt(adminLoads)} loads (free ≤ ${fmtInt(MAPBOX.webGlJs.freeLoadsPerMonth)})`,
+    sekPerMonth: usdToSek(adminUsd),
+    free: adminUsd === 0,
+    note: `Admin-only picker (Seb placing pins). $5 / 1,000 web loads, first ${fmtInt(MAPBOX.webGlJs.freeLoadsPerMonth)} free — negligible.`,
+  };
+
+  const lines = [mapsLine, navMauLine, navTripsLine, adminLine];
+  const sekPerMonth = lines.reduce((sum, l) => sum + l.sekPerMonth, 0);
+
+  return {
+    lines,
+    sekPerMonth,
+    assumptions: {
+      navUsingFraction: NAV_USING_FRACTION,
+      navTripsPerNavigatingMemberPerMonth: NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
+    },
+    capturedOn: MAPBOX.capturedOn,
+    source: MAPBOX.source,
+  };
 }
 
 /**

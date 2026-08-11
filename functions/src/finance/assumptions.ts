@@ -97,16 +97,45 @@ export const STORAGE_BYTES_PER_MEMBER = 15 * 1024 * 1024;
 export const RTDB_STORAGE_BYTES = 20 * 1024 * 1024;
 
 // ---------------------------------------------------------------------------
-// Mapbox (separate vendor).
+// Mapbox (separate vendor) — MOBILE SDK usage, billed by Monthly Active Users.
+//
+// ⚠️ The old MAPBOX_LOADS_PER_MEMBER_PER_DAY (30 web-GL loads/day) was DELETED
+// on 2026-08-05: the member app is a mobile app (Maps SDK + Navigation SDK), so
+// it is billed by MAU + trips, not per web load. The two constants below are
+// the only Mapbox usage guesses now, both surfaced on the board.
 // ---------------------------------------------------------------------------
 
 /**
- * Mapbox web-GL map loads per ACTIVE member per day. The app is map-first, so a
- * member typically triggers several loads a day (opening the map, navigating
- * back to it). 30/day is a generous map-first estimate; a "load" is a session
- * initialisation, not every pan.
+ * Fraction of active members who use turn-by-turn NAVIGATION in a given month
+ * (and so count as a Navigation-SDK MAU + generate trips). The basemap is used
+ * by everyone who opens the map; navigation is a smaller, opt-in subset — you
+ * only pay Nav rates for members who actually route somewhere.
+ *
+ * 0.5 (half) is a deliberately CAUTIOUS (cost-erring-high, not savings-erring)
+ * default for a driving-focused community: it does not pretend navigation is
+ * rare, so the model does NOT understate the one Mapbox line that actually
+ * grows. Tune down as real telemetry shows the true share. Justification dated
+ * 2026-08-05.
  */
-export const MAPBOX_LOADS_PER_MEMBER_PER_DAY = 30;
+export const NAV_USING_FRACTION = 0.5;
+
+/**
+ * Trips per NAVIGATING member per month. A "trip" is one turn-by-turn session
+ * (start → arrive). A member who navigates does so a couple of times a week;
+ * 8/month is a round, slightly-generous figure so the trip line is not
+ * understated. Only members counted by NAV_USING_FRACTION generate these.
+ * Justification dated 2026-08-05.
+ */
+export const NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH = 8;
+
+/**
+ * Admin web map-picker loads per month (Mapbox GL JS, #673). This is the ONLY
+ * genuinely per-load Mapbox surface, and it is admin-only — Seb placing event
+ * and contract-area pins. ~50 loads/month is a generous estimate for one
+ * operator; it sits far under the 50,000/month free web tier, so it costs
+ * nothing and must never dominate the member-app MAU lines. Dated 2026-08-05.
+ */
+export const ADMIN_WEB_MAP_LOADS_PER_MONTH = 50;
 
 // ---------------------------------------------------------------------------
 // Infrastructure counts (near-measured, not per-member).

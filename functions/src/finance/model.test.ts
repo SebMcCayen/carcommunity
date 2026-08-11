@@ -17,7 +17,8 @@ import {
 } from './pricing';
 import {
   FALLBACK_MEMBER_COUNT,
-  MAPBOX_LOADS_PER_MEMBER_PER_DAY,
+  NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
+  NAV_USING_FRACTION,
   TRAFIKVERKET_SITUATIONS_PER_RUN,
 } from './assumptions';
 import { SCHEDULED_JOBS, unknownCallables, uncostedCallables } from './inventory';
@@ -107,28 +108,99 @@ describe('estimateFinance — Cloud Scheduler committed line', () => {
   });
 });
 
-describe('estimateFinance — Mapbox is separate and free-tiered', () => {
-  it('stays free under 50k loads and never joins the Google Cloud total', () => {
-    const est = estimateFinance({ ...baseInput, memberCount: 16 });
-    const loads = 16 * MAPBOX_LOADS_PER_MEMBER_PER_DAY * DAYS_PER_MONTH;
-    expect(est.mapbox.loadsPerMonth).toBeCloseTo(loads, 3);
-    expect(loads).toBeLessThan(MAPBOX.freeLoadsPerMonth);
-    expect(est.mapbox.billableLoads).toBe(0);
-    expect(est.mapbox.sekPerMonth).toBe(0);
+describe('estimateFinance — Mapbox is the corrected MOBILE (MAU + trip) model', () => {
+  /** Marginal tiered USD — mirrors the model helper, to pin the pricing wiring. */
+  function tiered(units: number, tiers: readonly { upTo: number; usdPerUnit: number }[]): number {
+    let cost = 0;
+    let lower = 0;
+    for (const t of tiers) {
+      if (units <= lower) break;
+      const upper = Math.min(units, t.upTo);
+      cost += (upper - lower) * t.usdPerUnit;
+      lower = upper;
+    }
+    return cost;
+  }
+  const mapLine = (est: ReturnType<typeof estimateFinance>, id: string) => {
+    const found = est.mapbox.lines.find((l) => l.id === id);
+    if (!found) throw new Error(`no mapbox line ${id}`);
+    return found;
+  };
 
-    // Mapbox is NOT part of the Google Cloud subtotal.
+  it('keeps the Maps SDK basemap FREE below 25,000 MAU and out of the Google Cloud total', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 2_500 });
+    const maps = mapLine(est, 'maps-sdk-mau');
+    // 2,500 members = 2,500 Maps MAU, well under the 25k free tier.
+    expect(2_500).toBeLessThan(MAPBOX.mapsSdkMobile.freeMau);
+    expect(maps.free).toBe(true);
+    expect(maps.sekPerMonth).toBe(0);
+
+    // Mapbox is NOT part of the Google Cloud subtotal (still a separate vendor).
     const gcHasMapbox = est.googleCloud.services.some((l) => /mapbox/i.test(l.service));
     expect(gcHasMapbox).toBe(false);
   });
 
-  it('bills Mapbox once loads exceed the free tier', () => {
-    const est = estimateFinance({ ...baseInput, memberCount: 500 });
-    expect(est.mapbox.loadsPerMonth).toBeGreaterThan(MAPBOX.freeLoadsPerMonth);
-    expect(est.mapbox.billableLoads).toBeGreaterThan(0);
-    expect(est.mapbox.sekPerMonth).toBeCloseTo(
-      est.mapbox.billableLoads * MAPBOX.usdPerLoad * USD_TO_SEK,
-      6,
+  it('bills the Maps SDK basemap with correct MARGINAL tiers above 25,000 MAU', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 130_000 });
+    const maps = mapLine(est, 'maps-sdk-mau');
+    // 130,000 MAU: (125k−25k)×$0.004 + (130k−125k)×$0.0032 — never a flat rate.
+    const expectedUsd = tiered(130_000, MAPBOX.mapsSdkMobile.tiers);
+    expect(expectedUsd).toBeCloseTo(100_000 * 0.004 + 5_000 * 0.0032, 6); // = $416
+    expect(maps.free).toBe(false);
+    expect(maps.sekPerMonth).toBeCloseTo(expectedUsd * USD_TO_SEK, 6);
+  });
+
+  it('models Navigation SDK as the real driver: MAU + trips from the labelled assumptions', () => {
+    const members = 500;
+    const est = estimateFinance({ ...baseInput, memberCount: members });
+    const navMauLine = mapLine(est, 'nav-sdk-mau');
+    const navTripsLine = mapLine(est, 'nav-sdk-trips');
+
+    const navMau = Math.round(members * NAV_USING_FRACTION); // 250
+    const navTrips = navMau * NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH; // 2,000
+    const expectedMauUsd = tiered(navMau, MAPBOX.navigationSdk.mauTiers); // (250−100)×0.30
+    const expectedTripsUsd = tiered(navTrips, MAPBOX.navigationSdk.tripTiers); // (2000−1000)×0.08
+
+    expect(expectedMauUsd).toBeCloseTo(150 * 0.3, 6);
+    expect(expectedTripsUsd).toBeCloseTo(1_000 * 0.08, 6);
+    expect(navMauLine.sekPerMonth).toBeCloseTo(expectedMauUsd * USD_TO_SEK, 6);
+    expect(navTripsLine.sekPerMonth).toBeCloseTo(expectedTripsUsd * USD_TO_SEK, 6);
+
+    // Navigation is the dominant Mapbox cost at this scale (basemap is free).
+    const navSek = navMauLine.sekPerMonth + navTripsLine.sekPerMonth;
+    expect(navSek).toBeGreaterThan(0);
+    expect(navSek).toBeGreaterThan(mapLine(est, 'maps-sdk-mau').sekPerMonth);
+
+    // The two assumptions are surfaced for transparency.
+    expect(est.mapbox.assumptions.navUsingFraction).toBe(NAV_USING_FRACTION);
+    expect(est.mapbox.assumptions.navTripsPerNavigatingMemberPerMonth).toBe(
+      NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
     );
+  });
+
+  it('keeps the admin web map picker negligible (free) and the subtotal = sum of lines', () => {
+    const est = estimateFinance({ ...baseInput, memberCount: 2_500 });
+    const admin = mapLine(est, 'admin-web-loads');
+    expect(admin.free).toBe(true);
+    expect(admin.sekPerMonth).toBe(0);
+
+    const sumOfLines = est.mapbox.lines.reduce((s, l) => s + l.sekPerMonth, 0);
+    expect(est.mapbox.sekPerMonth).toBeCloseTo(sumOfLines, 6);
+    // Four lines: basemap, nav MAU, nav trips, admin web.
+    expect(est.mapbox.lines.map((l) => l.id)).toEqual([
+      'maps-sdk-mau',
+      'nav-sdk-mau',
+      'nav-sdk-trips',
+      'admin-web-loads',
+    ]);
+  });
+
+  it('is dramatically cheaper than the old per-load web model would have been', () => {
+    // Sanity floor: at 2,500 members the corrected Mapbox subtotal is a few
+    // thousand kr, NOT the six-figure the web per-load model produced.
+    const est = estimateFinance({ ...baseInput, memberCount: 2_500 });
+    expect(est.mapbox.sekPerMonth).toBeGreaterThan(0);
+    expect(est.mapbox.sekPerMonth).toBeLessThan(50_000);
   });
 });
 

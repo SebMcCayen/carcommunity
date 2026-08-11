@@ -171,13 +171,101 @@ export const SECRET_MANAGER = {
 } as const;
 
 // ---------------------------------------------------------------------------
-// Mapbox — SEPARATE VENDOR. Web GL JS map loads: $5 / 1,000 loads, first
-// 50,000 loads/month free. Source: mapbox.com/pricing, captured 2026-07-31.
-// Kept out of the Google Cloud total on purpose — a different invoice.
+// Mapbox — SEPARATE VENDOR (its own invoice, never in the Google Cloud total).
+//
+// ⚠️ CORRECTED 2026-08-05: the member app is a MOBILE app (Mapbox Maps SDK +
+// Navigation SDK for Android). Mobile SDKs are billed by MONTHLY ACTIVE USERS
+// (MAU) — NOT by web GL-JS "map loads". The old per-load figure was the WEB
+// pricing model and massively overstated cost for a mobile app; it is gone.
+//
+// The board now models THREE distinct Mapbox products, each on its real SKU:
+//   1. Maps SDK for Mobile (the basemap)   — MAU-tiered, 25k free.
+//   2. Navigation SDK v3 (turn-by-turn)    — MAU + per-trip, the real driver.
+//   3. Admin web map picker (GL JS, #673)  — genuinely per-load, admin-only,
+//                                            negligible (~50 loads/month, Seb).
+//
+// Every tier below is a marginal per-unit rate on the units that fall inside
+// that cumulative band (charged only above the free band). Tiers are captured
+// from the public pricing page — verify before treating any figure as exact.
+// Source: mapbox.com/pricing, captured 2026-08-05.
 // ---------------------------------------------------------------------------
+
+/** One marginal pricing tier: charge `usdPerUnit` on units up to `upTo` (cumulative). */
+export interface PricingTier {
+  /** Upper bound of this cumulative band (inclusive). Use Infinity for the top band. */
+  upTo: number;
+  /** USD per unit charged on the units that fall inside this band. */
+  usdPerUnit: number;
+}
+
 export const MAPBOX = {
-  capturedOn: '2026-07-31' as CaptureDate,
-  source: 'mapbox.com/pricing (Maps — web GL JS map loads)',
-  usdPerLoad: 5 / 1_000,
-  freeLoadsPerMonth: 50_000,
+  capturedOn: '2026-08-05' as CaptureDate,
+  source: 'mapbox.com/pricing',
+
+  /**
+   * Maps SDK for Mobile — the Android basemap. Billed per MONTHLY ACTIVE USER
+   * (a member counts as 1 MAU the first time they view a map that month).
+   *   Free: up to 25,000 MAU/month
+   *   25,001–125,000: $4.00 / 1,000 MAU
+   *   125,001–250,000: $3.20 / 1,000
+   *   250,001+:        $2.40 / 1,000
+   * The app is map-first, so Maps SDK MAU ≈ the active-member count. At the
+   * app's current scale (≤2,500 members) this is entirely inside the 25k free
+   * band = 0 kr — the projection should reflect that honestly.
+   */
+  mapsSdkMobile: {
+    freeMau: 25_000,
+    /** Marginal MAU tiers (per-unit = per-1,000 rate ÷ 1,000). */
+    tiers: [
+      { upTo: 25_000, usdPerUnit: 0 },
+      { upTo: 125_000, usdPerUnit: 4.0 / 1_000 },
+      { upTo: 250_000, usdPerUnit: 3.2 / 1_000 },
+      { upTo: Infinity, usdPerUnit: 2.4 / 1_000 },
+    ] as PricingTier[],
+  },
+
+  /**
+   * Navigation SDK v3 (turn-by-turn) — the REAL cost driver, and it bites far
+   * sooner than the basemap. Metered Trips model: billed on BOTH active users
+   * and the number of trips.
+   *   Free: 100 MAU AND 1,000 trips/month
+   *   MAU:   $0.30 per user (101+)
+   *   Trips: $0.08/trip (1,001–50,000), $0.064 (50,001–100,000),
+   *          $0.048 (100,001+)
+   * A member who uses navigation counts as a Nav MAU + generates their trips.
+   * The 50,001–100,000 trip tier ($0.064) sits between the two rates the
+   * pricing page lists as endpoints; it never binds at this app's scale but is
+   * included so the high end is not understated.
+   */
+  navigationSdk: {
+    freeMau: 100,
+    freeTrips: 1_000,
+    /** Marginal MAU tiers. */
+    mauTiers: [
+      { upTo: 100, usdPerUnit: 0 },
+      { upTo: Infinity, usdPerUnit: 0.3 },
+    ] as PricingTier[],
+    /** Marginal trip tiers. */
+    tripTiers: [
+      { upTo: 1_000, usdPerUnit: 0 },
+      { upTo: 50_000, usdPerUnit: 0.08 },
+      { upTo: 100_000, usdPerUnit: 0.064 },
+      { upTo: Infinity, usdPerUnit: 0.048 },
+    ] as PricingTier[],
+  },
+
+  /**
+   * Admin web map picker (Mapbox GL JS, from #673) — this ONE genuinely is web
+   * per-load pricing ($5 / 1,000 loads, first 50,000/month free), but it is
+   * admin-only (Seb placing event/area pins) so it is a rounding error. Kept as
+   * its own labelled line so it is visible, never folded into the member-app
+   * MAU maths and never allowed to dominate.
+   */
+  webGlJs: {
+    freeLoadsPerMonth: 50_000,
+    tiers: [
+      { upTo: 50_000, usdPerUnit: 0 },
+      { upTo: Infinity, usdPerUnit: 5 / 1_000 },
+    ] as PricingTier[],
+  },
 } as const;
