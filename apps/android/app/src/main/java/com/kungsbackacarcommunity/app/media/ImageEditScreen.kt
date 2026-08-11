@@ -64,11 +64,11 @@ const val ImageEditConfirmTag: String = "imageEditConfirm"
 
 /**
  * The crop-frame shape the shared editor draws, and how it may be reshaped:
- *  - [CIRCLE]: a fixed SQUARE frame masked as a circle (the avatar default — the
- *    profile renders avatars round, so a square cut fills that circle edge to
- *    edge). Not resizable; the aspect is locked to 1:1.
+ *  - [CIRCLE]: a fixed SQUARE frame masked as a circle (the default for avatars
+ *    AND vehicle photos — both render round everywhere, so a square cut fills that
+ *    circle edge to edge). Not resizable; the aspect is locked to 1:1.
  *  - [FREEFORM]: a rectangular frame whose edges the user can drag (via the four
- *    corner handles) to reshape it — the car/other-photo default.
+ *    corner handles) to reshape it — available for any future non-circular surface.
  */
 enum class ImageEditFrameShape {
     CIRCLE,
@@ -104,8 +104,9 @@ enum class ImageEditFrameShape {
  * @param bitmap the EXIF-oriented preview decode from
  *   [ImageCompressor.decodeForCrop]. Display only; the uploaded pixels are
  *   re-derived from the original pick.
- * @param frameShape [ImageEditFrameShape.CIRCLE] for avatars (square + circle
- *   mask), [ImageEditFrameShape.FREEFORM] for car/other photos.
+ * @param frameShape [ImageEditFrameShape.CIRCLE] for avatars and vehicle photos
+ *   (square + circle mask), [ImageEditFrameShape.FREEFORM] for any non-circular
+ *   surface.
  * @param initialAspect the frame's starting width/height. Forced to 1f for
  *   [ImageEditFrameShape.CIRCLE].
  * @param onConfirm receives the free rotation (degrees) and the crop window in
