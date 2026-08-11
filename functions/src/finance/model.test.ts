@@ -204,26 +204,94 @@ describe('estimateFinance — Mapbox is the corrected MOBILE (MAU + trip) model'
   });
 });
 
-describe('estimateFinance — fixed subscriptions (separate section)', () => {
-  it('leaves an unset subscription as null (never a fabricated number)', () => {
+describe('estimateFinance — recurring costs (operator-entered actuals)', () => {
+  it('an empty list contributes 0 and shows an empty section (no fabricated placeholder)', () => {
     const est = estimateFinance({ ...baseInput, memberCount: 16 });
-    const claude = est.fixedSubscriptions.items.find((s) => s.id === 'claude');
-    expect(claude).toBeDefined();
-    expect(claude!.amount).toBeNull();
-    expect(claude!.sekPerMonth).toBeNull();
-    expect(est.fixedSubscriptions.hasUnset).toBe(true);
-    // An unset sub contributes 0 to the total (not a guess).
-    expect(est.fixedSubscriptions.totalSekPerMonth).toBe(0);
+    expect(est.recurringCosts.items).toEqual([]);
+    expect(est.recurringCosts.count).toBe(0);
+    expect(est.recurringCosts.totalSekPerMonth).toBe(0);
+  });
+
+  it('passes a SEK monthly cost straight through (no FX, no /12)', () => {
+    const est = estimateFinance({
+      ...baseInput,
+      memberCount: 16,
+      recurringCosts: [
+        { id: 'a', label: 'Domän', description: 'carcommunity.se', amount: 120, currency: 'SEK', period: 'monthly' },
+      ],
+    });
+    const line = est.recurringCosts.items[0]!;
+    expect(line.sekPerMonth).toBeCloseTo(120, 6);
+    expect(line.annualSek).toBeCloseTo(120 * 12, 6);
+    expect(est.recurringCosts.totalSekPerMonth).toBeCloseTo(120, 6);
+    expect(est.recurringCosts.count).toBe(1);
+  });
+
+  it('normalises a YEARLY cost to /12 for the monthly figure and keeps the annual in detail', () => {
+    const est = estimateFinance({
+      ...baseInput,
+      memberCount: 16,
+      recurringCosts: [
+        { id: 'b', label: 'Domän (år)', description: 'annual domain', amount: 1200, currency: 'SEK', period: 'yearly' },
+      ],
+    });
+    const line = est.recurringCosts.items[0]!;
+    expect(line.sekPerMonth).toBeCloseTo(1200 / 12, 6);
+    expect(line.annualSek).toBeCloseTo(1200, 6);
+    expect(est.recurringCosts.totalSekPerMonth).toBeCloseTo(100, 6);
+  });
+
+  it('converts a USD cost through the SAME dated FX rate the board uses', () => {
+    const est = estimateFinance({
+      ...baseInput,
+      memberCount: 16,
+      recurringCosts: [
+        { id: 'c', label: 'Claude', description: 'Max plan', amount: 200, currency: 'USD', period: 'monthly' },
+      ],
+    });
+    const line = est.recurringCosts.items[0]!;
+    expect(line.sekPerMonth).toBeCloseTo(200 * USD_TO_SEK, 6);
+    expect(line.annualSek).toBeCloseTo(200 * 12 * USD_TO_SEK, 6);
+    expect(est.recurringCosts.totalSekPerMonth).toBeCloseTo(200 * USD_TO_SEK, 6);
+  });
+
+  it('a USD YEARLY cost is BOTH /12 and FX-converted', () => {
+    const est = estimateFinance({
+      ...baseInput,
+      memberCount: 16,
+      recurringCosts: [
+        { id: 'd', label: 'Annual tool', description: 'billed yearly in USD', amount: 1200, currency: 'USD', period: 'yearly' },
+      ],
+    });
+    const line = est.recurringCosts.items[0]!;
+    expect(line.sekPerMonth).toBeCloseTo((1200 / 12) * USD_TO_SEK, 6);
+    expect(line.annualSek).toBeCloseTo(1200 * USD_TO_SEK, 6);
+  });
+
+  it('sums multiple mixed-currency, mixed-period entries into the subtotal and grand total', () => {
+    const recurringCosts = [
+      { id: 'e1', label: 'A', description: '', amount: 100, currency: 'SEK' as const, period: 'monthly' as const },
+      { id: 'e2', label: 'B', description: '', amount: 1200, currency: 'SEK' as const, period: 'yearly' as const },
+      { id: 'e3', label: 'C', description: '', amount: 200, currency: 'USD' as const, period: 'monthly' as const },
+    ];
+    const est = estimateFinance({ ...baseInput, memberCount: 250, recurringCosts });
+    const expectedSubtotal = 100 + 1200 / 12 + 200 * USD_TO_SEK;
+    expect(est.recurringCosts.totalSekPerMonth).toBeCloseTo(expectedSubtotal, 6);
+    // The subtotal flows into the grand total alongside the modelled sections.
+    expect(est.grandTotalSekPerMonth).toBeCloseTo(
+      est.googleCloud.totalSekPerMonth + est.mapbox.sekPerMonth + expectedSubtotal,
+      6,
+    );
   });
 });
 
 describe('estimateFinance — grand total composition', () => {
-  it('grand total = Google Cloud + Mapbox + fixed subscriptions', () => {
+  it('grand total = Google Cloud + Mapbox + recurring costs', () => {
     const est = estimateFinance({ ...baseInput, memberCount: 250 });
     expect(est.grandTotalSekPerMonth).toBeCloseTo(
       est.googleCloud.totalSekPerMonth +
         est.mapbox.sekPerMonth +
-        est.fixedSubscriptions.totalSekPerMonth,
+        est.recurringCosts.totalSekPerMonth,
       6,
     );
     // Committed + variable partitions the Google Cloud total.

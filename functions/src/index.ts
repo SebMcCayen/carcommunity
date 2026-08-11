@@ -156,6 +156,11 @@ import { syncTrafikverket } from './incidents/trafikverket';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import { estimate as financeEstimate } from './finance/estimate';
 import {
+  addRecurringCost as financeAddRecurringCost,
+  updateRecurringCost as financeUpdateRecurringCost,
+  deleteRecurringCost as financeDeleteRecurringCost,
+} from './finance/recurringCosts';
+import {
   cancelRequest as cancelFriendRequest,
   list as listFriends,
   remove as removeFriend,
@@ -1193,11 +1198,20 @@ export const metrics = {
  * pricing.ts), labelled usage assumptions, and the function inventory. It reads
  * the latest metrics/{date} snapshot for the live member count so the variable
  * half tracks community growth, applies each service's free tier, and returns a
- * Google Cloud subtotal, a separate Mapbox estimate, and a separate fixed-
- * subscriptions section. Every figure is a MODEL ESTIMATE, not the real bill —
- * the admin page carries that banner and links to the billing console. No
- * scheduled write (and so no added cost) — see finance/estimate.ts for why.
+ * Google Cloud subtotal, a separate Mapbox estimate, and a separate
+ * RECURRING-COSTS section. Every modelled figure is a MODEL ESTIMATE, not the
+ * real bill — the admin page carries that banner and links to the billing
+ * console. No scheduled write (and so no added cost) — see finance/estimate.ts.
+ *
+ * The recurring-costs section is DATA-BACKED: admins add/update/delete
+ * operator-entered actuals (Claude, tooling, domains …) via the three audited
+ * CRUD callables below, stored in `financeRecurringCosts` and folded into the
+ * grand total. Deployed as finance-addRecurringCost / finance-updateRecurringCost
+ * / finance-deleteRecurringCost (functions/src/finance/recurringCosts.ts).
  */
 export const finance = {
   estimate: financeEstimate,
+  addRecurringCost: financeAddRecurringCost,
+  updateRecurringCost: financeUpdateRecurringCost,
+  deleteRecurringCost: financeDeleteRecurringCost,
 };

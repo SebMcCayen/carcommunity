@@ -22,8 +22,6 @@
  * which is what makes it track growth.
  */
 
-import type { CaptureDate } from './pricing';
-
 // ---------------------------------------------------------------------------
 // Trafikverket import — the dominant committed line.
 // ---------------------------------------------------------------------------
@@ -158,53 +156,17 @@ export const SECRET_MANAGER_ACTIVE_VERSIONS = 1;
 export const FALLBACK_MEMBER_COUNT = 16;
 
 // ---------------------------------------------------------------------------
-// Fixed subscriptions / tooling (a THIRD section — neither Google Cloud usage
-// nor Mapbox). Flat recurring vendor costs; never blended into any per-member
-// or free-tier maths. Designed as a LIST so more tooling can be added later.
+// Recurring costs (a THIRD section — neither Google Cloud usage nor Mapbox).
+//
+// These used to live here as a HARDCODED list (a single Claude placeholder).
+// They are now DATA-BACKED and admin-editable: real recurring costs live in the
+// `financeRecurringCosts` Firestore collection, are managed from the Finance &
+// Cost board's "Recurring costs" section (finance.addRecurringCost /
+// updateRecurringCost / deleteRecurringCost), read by finance/estimate.ts, and
+// folded into the grand total by finance/model.ts (see recurringCosts-core.ts).
+//
+// The Claude placeholder that lived here was REMOVED deliberately so nothing is
+// double-counted — Seb re-adds Claude as a normal entry via the new UI. There
+// is intentionally no constant to replace it: an empty collection contributes 0
+// and the board shows an empty-state rather than a fabricated number.
 // ---------------------------------------------------------------------------
-
-/** Billing period of a fixed subscription. */
-export type SubscriptionPeriod = 'monthly' | 'annual';
-
-/** One fixed recurring subscription. `amount === null` means "not set yet". */
-export interface FixedSubscription {
-  /** Stable id (for React keys / future editing). */
-  id: string;
-  /** Vendor + plan, e.g. "Claude (Anthropic)". */
-  name: string;
-  /**
-   * The price Seb pays. `null` until Seb fills in his REAL figure — the board
-   * shows "set your plan cost" rather than inventing a number.
-   */
-  amount: number | null;
-  /** Currency the amount is in. Converted via USD_TO_SEK when 'USD'. */
-  currency: 'SEK' | 'USD';
-  /** Whether `amount` is per month or per year (annual is /12 for the board). */
-  period: SubscriptionPeriod;
-  /** Date the amount was last confirmed, for the "as of" stamp. */
-  capturedOn: CaptureDate;
-  /** Optional note shown under the line. */
-  note?: string;
-}
-
-/**
- * Fixed subscriptions. ⚠️ The Claude amount is a PLACEHOLDER (null) on purpose:
- * the model does not know Seb's real plan or price, so it must not fabricate
- * one. Seb: set `amount` to your actual figure and `currency`/`period` to match
- * your invoice, then bump `capturedOn`. Add more tooling rows here as you take
- * them on (GitHub, Figma, etc.) — the board renders the list generically.
- */
-export const FIXED_SUBSCRIPTIONS: FixedSubscription[] = [
-  {
-    id: 'claude',
-    name: 'Claude (Anthropic)',
-    // TODO(Seb): set your real plan cost here (e.g. amount: 200, currency: 'USD',
-    // period: 'monthly' for a $200/mo Max plan) and bump capturedOn. Left null
-    // so the board shows "set your plan cost" instead of a guessed number.
-    amount: null,
-    currency: 'USD',
-    period: 'monthly',
-    capturedOn: '2026-07-31',
-    note: 'Set your actual Claude plan cost in functions/src/finance/assumptions.ts.',
-  },
-];

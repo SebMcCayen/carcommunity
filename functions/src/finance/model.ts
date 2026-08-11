@@ -40,7 +40,6 @@ import {
 import {
   ADMIN_WEB_MAP_LOADS_PER_MONTH,
   FALLBACK_MEMBER_COUNT,
-  FIXED_SUBSCRIPTIONS,
   NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
   NAV_USING_FRACTION,
   PER_MEMBER_PER_DAY,
@@ -49,8 +48,12 @@ import {
   STORAGE_BYTES_PER_MEMBER,
   TRAFIKVERKET_SITUATIONS_CAP,
   TRAFIKVERKET_SITUATIONS_PER_RUN,
-  type FixedSubscription,
 } from './assumptions';
+import {
+  annualAmountInSourceCurrency,
+  monthlyAmountInSourceCurrency,
+  type RecurringCostEntry,
+} from './recurringCosts-core';
 import { CALLABLE_COST_CLASS, SCHEDULED_JOBS, uncostedCallables, type ScheduledJob } from './inventory';
 
 // --- Compute-time assumptions kept local (clearly labelled, not buried) ------
@@ -161,18 +164,26 @@ export interface MapboxEstimate {
   source: string;
 }
 
-/** One fixed-subscription line, resolved to SEK/month (or null if unset). */
-export interface SubscriptionLine {
+/**
+ * One operator-entered recurring cost, resolved to SEK/month. Unlike the
+ * modelled Google Cloud / Mapbox sections these are EXACT figures Seb enters
+ * (Claude, a domain, a SaaS tool …) with a description, stored in Firestore
+ * and folded into the grand total. A `yearly` cost is normalised to /12 for
+ * `sekPerMonth`; `annualSek` carries the ×12 (or as-entered) yearly figure for
+ * the line detail. USD amounts are converted through the same dated FX rate.
+ */
+export interface RecurringCostLine {
   id: string;
-  name: string;
-  /** Raw amount as entered, or null if not set. */
-  amount: number | null;
+  label: string;
+  description: string;
+  /** Amount as entered, in `currency` major units (always set — validated > 0). */
+  amount: number;
   currency: 'SEK' | 'USD';
-  period: 'monthly' | 'annual';
-  /** Normalised SEK/month, or null if `amount` is unset. */
-  sekPerMonth: number | null;
-  capturedOn: string;
-  note?: string;
+  period: 'monthly' | 'yearly';
+  /** Normalised SEK/month (a yearly cost is /12). */
+  sekPerMonth: number;
+  /** Annualised SEK (a monthly cost ×12) — shown in the line detail. */
+  annualSek: number;
 }
 
 /**
@@ -186,7 +197,7 @@ export interface ProjectionPoint {
   members: number;
   googleCloudSekPerMonth: number;
   mapboxSekPerMonth: number;
-  subscriptionsSekPerMonth: number;
+  recurringCostsSekPerMonth: number;
   grandTotalSekPerMonth: number;
 }
 
@@ -215,15 +226,19 @@ export interface FinanceEstimate {
   /** Mapbox — separate vendor. */
   mapbox: MapboxEstimate;
 
-  /** Fixed subscriptions / tooling — separate section. */
-  fixedSubscriptions: {
-    items: SubscriptionLine[];
+  /**
+   * Recurring costs — operator-entered ACTUALS (Claude, tooling, domains …),
+   * data-backed and admin-editable. A separate section, never blended into the
+   * modelled Google Cloud or Mapbox estimates.
+   */
+  recurringCosts: {
+    items: RecurringCostLine[];
     totalSekPerMonth: number;
-    /** True if any subscription has no amount set (board shows "set your plan cost"). */
-    hasUnset: boolean;
+    /** How many entries exist (the board shows an empty-state at 0). */
+    count: number;
   };
 
-  /** Grand total = Google Cloud + Mapbox + fixed subscriptions (SEK/month). */
+  /** Grand total = Google Cloud (est) + Mapbox (est) + recurring costs (SEK/month). */
   grandTotalSekPerMonth: number;
 
   /** Function inventory summary, incl. anything uncosted (needs a driver). */
@@ -248,6 +263,12 @@ export interface EstimateInput {
   memberCountSource: MemberCountSource;
   /** The snapshot date the count came from, or null on fallback. */
   memberCountAsOf: string | null;
+  /**
+   * Operator-entered recurring costs read from `financeRecurringCosts` (the
+   * caller reads them; the model just folds them into the total). Omitted/empty
+   * means the section is empty and contributes 0 — no fabricated placeholder.
+   */
+  recurringCosts?: RecurringCostEntry[];
   /** Clock (injectable for tests). */
   now?: Date;
 }
@@ -538,10 +559,11 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
   // but admin-only and negligible.
   const mapbox = estimateMapbox(members);
 
-  // ---- Fixed subscriptions (separate section) ------------------------------
-  const subscriptionLines: SubscriptionLine[] = FIXED_SUBSCRIPTIONS.map(resolveSubscription);
-  const subsTotal = subscriptionLines.reduce((sum, s) => sum + (s.sekPerMonth ?? 0), 0);
-  const subsHasUnset = subscriptionLines.some((s) => s.sekPerMonth === null);
+  // ---- Recurring costs (operator-entered actuals, separate section) --------
+  const recurringCostLines: RecurringCostLine[] = (input.recurringCosts ?? []).map(
+    resolveRecurringCost,
+  );
+  const recurringCostsTotal = recurringCostLines.reduce((sum, s) => sum + s.sekPerMonth, 0);
 
   // ---- Function inventory summary ------------------------------------------
   const byClass: Record<string, number> = {};
@@ -549,7 +571,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     byClass[cls] = (byClass[cls] ?? 0) + 1;
   }
 
-  const grandTotal = googleCloudTotal + mapbox.sekPerMonth + subsTotal;
+  const grandTotal = googleCloudTotal + mapbox.sekPerMonth + recurringCostsTotal;
 
   // Forward projection — recompute the totals at a spread of member counts.
   // Computed with includeProjection=false so this does not recurse.
@@ -566,7 +588,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
             members: m,
             googleCloudSekPerMonth: point.googleCloud.totalSekPerMonth,
             mapboxSekPerMonth: point.mapbox.sekPerMonth,
-            subscriptionsSekPerMonth: point.fixedSubscriptions.totalSekPerMonth,
+            recurringCostsSekPerMonth: point.recurringCosts.totalSekPerMonth,
             grandTotalSekPerMonth: point.grandTotalSekPerMonth,
           };
         })
@@ -591,10 +613,10 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
       totalSekPerMonth: googleCloudTotal,
     },
     mapbox,
-    fixedSubscriptions: {
-      items: subscriptionLines,
-      totalSekPerMonth: subsTotal,
-      hasUnset: subsHasUnset,
+    recurringCosts: {
+      items: recurringCostLines,
+      totalSekPerMonth: recurringCostsTotal,
+      count: recurringCostLines.length,
     },
     grandTotalSekPerMonth: grandTotal,
     functionInventory: {
@@ -782,22 +804,24 @@ function monthlyLine(
   };
 }
 
-/** Normalises a fixed subscription to SEK/month (null stays null → "set your plan cost"). */
-function resolveSubscription(sub: FixedSubscription): SubscriptionLine {
-  let sekPerMonth: number | null = null;
-  if (sub.amount !== null) {
-    const monthlyAmount = sub.period === 'annual' ? sub.amount / 12 : sub.amount;
-    sekPerMonth = sub.currency === 'USD' ? usdToSek(monthlyAmount) : monthlyAmount;
-  }
+/**
+ * Normalises one operator-entered recurring cost to SEK/month (and an annual
+ * SEK figure for the detail). A `yearly` cost is spread /12 for the monthly
+ * figure; a USD amount is converted through the SAME dated FX rate the rest of
+ * the board uses (usdToSek), so SEK and USD entries fold into one honest total.
+ */
+function resolveRecurringCost(entry: RecurringCostEntry): RecurringCostLine {
+  const toSek = (amount: number): number =>
+    entry.currency === 'USD' ? usdToSek(amount) : amount;
   return {
-    id: sub.id,
-    name: sub.name,
-    amount: sub.amount,
-    currency: sub.currency,
-    period: sub.period,
-    sekPerMonth,
-    capturedOn: sub.capturedOn,
-    note: sub.note,
+    id: entry.id,
+    label: entry.label,
+    description: entry.description,
+    amount: entry.amount,
+    currency: entry.currency,
+    period: entry.period,
+    sekPerMonth: toSek(monthlyAmountInSourceCurrency(entry)),
+    annualSek: toSek(annualAmountInSourceCurrency(entry)),
   };
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatCard } from '@/components/ui/StatCard';
 import {
   GCP_BILLING_URL,
@@ -11,6 +11,7 @@ import {
   type ServiceLine,
 } from '@/features/finance';
 import { CompositionBars, ProjectionChart } from './charts';
+import { RecurringCostsSection } from './RecurringCostsSection';
 import styles from './page.module.css';
 
 type SortKey = 'service' | 'gross' | 'billable' | 'sekPerMonth';
@@ -150,22 +151,35 @@ export default function FinancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let active = true;
+  // Guard every setState behind a mounted flag: `reload` is called both on
+  // mount AND after a recurring-cost mutation, so its async resolution can land
+  // after the page unmounts. The ref is flipped false in the effect cleanup
+  // (the metrics page's `active` pattern, generalised to the post-mutation
+  // path). This is the safe path for the double-fire concern too — a stale
+  // resolution simply no-ops.
+  const mountedRef = useRef(true);
+  const reload = useCallback(() => {
     loadFinanceEstimate()
       .then((e) => {
-        if (active) setEst(e);
+        if (!mountedRef.current) return;
+        setEst(e);
+        setError(null);
       })
       .catch(() => {
-        if (active) setError('Could not load the cost estimate. Try refreshing.');
+        if (mountedRef.current) setError('Could not load the cost estimate. Try refreshing.');
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (mountedRef.current) setLoading(false);
       });
-    return () => {
-      active = false;
-    };
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    reload();
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [reload]);
 
   const projectionPoints = useMemo(
     () =>
@@ -185,7 +199,7 @@ export default function FinancePage() {
         ? [
             { label: 'Google Cloud (estimated)', sek: est.googleCloud.totalSekPerMonth },
             { label: 'Mapbox (estimated)', sek: est.mapbox.sekPerMonth },
-            { label: 'Fixed subscriptions', sek: est.fixedSubscriptions.totalSekPerMonth },
+            { label: 'Recurring costs (actual)', sek: est.recurringCosts.totalSekPerMonth },
           ].sort((a, b) => b.sek - a.sek)
         : [],
     [est],
@@ -241,7 +255,7 @@ export default function FinancePage() {
               <StatCard
                 label="Estimated total / month"
                 value={formatSek(est.grandTotalSekPerMonth)}
-                note="Google Cloud + Mapbox + subscriptions"
+                note="Google Cloud (est) + Mapbox (est) + recurring costs (actual)"
               />
               <StatCard
                 label="Google Cloud (estimated)"
@@ -255,10 +269,13 @@ export default function FinancePage() {
                 variant={est.mapbox.sekPerMonth > 0 ? 'warning' : 'default'}
               />
               <StatCard
-                label="Fixed subscriptions"
-                value={est.fixedSubscriptions.hasUnset ? 'Set your plan cost' : formatSek(est.fixedSubscriptions.totalSekPerMonth)}
-                note="Claude & tooling"
-                variant={est.fixedSubscriptions.hasUnset ? 'warning' : 'default'}
+                label="Recurring costs (actual)"
+                value={formatSek(est.recurringCosts.totalSekPerMonth)}
+                note={
+                  est.recurringCosts.count === 0
+                    ? 'None yet — add below'
+                    : `${formatCount(est.recurringCosts.count)} operator-entered`
+                }
               />
             </div>
             <div className={styles.chartCard}>
@@ -344,38 +361,8 @@ export default function FinancePage() {
             </div>
           </section>
 
-          {/* Fixed subscriptions — separate section */}
-          <section className={styles.section}>
-            <h2 className={styles.sectionTitle}>Fixed subscriptions &amp; tooling</h2>
-            <p className={styles.sectionNote}>
-              Flat recurring vendor costs — not usage-driven, never blended into the Google Cloud or
-              Mapbox estimates. Edit the amounts in{' '}
-              <code>functions/src/finance/assumptions.ts</code>.
-            </p>
-            <div className={styles.vendorCard}>
-              {est.fixedSubscriptions.items.map((s) => (
-                <div key={s.id} className={styles.subRow}>
-                  <div>
-                    <div>{s.name}</div>
-                    {s.note && <div className={styles.rowDriver}>{s.note}</div>}
-                  </div>
-                  <div>
-                    {s.sekPerMonth === null ? (
-                      <span className={styles.subUnset}>Set your plan cost</span>
-                    ) : (
-                      <span className={styles.cost}>
-                        {formatSek(s.sekPerMonth)}/mo
-                        <span className={styles.rowDriver}>
-                          {' '}
-                          ({s.amount} {s.currency}/{s.period === 'annual' ? 'yr' : 'mo'})
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
+          {/* Recurring costs — operator-entered actuals (admin CRUD) */}
+          <RecurringCostsSection usdToSek={est.fx.usdToSek} onChanged={reload} />
 
           {/* Function inventory / uncosted flag */}
           <section className={styles.section}>

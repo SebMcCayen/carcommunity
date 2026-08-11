@@ -300,3 +300,153 @@
   gap: var(--space-4);
   margin-bottom: var(--space-6);
 }
+
+/* ---------------------------------------------------------------------------
+   Recurring costs — admin CRUD (add/edit form + row actions).
+   Layout only; fill/border/focus come from the global input baseline.
+   --------------------------------------------------------------------------- */
+.formHeading {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.formLabel {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-primary);
+}
+
+.formInput,
+.formTextarea {
+  width: 100%;
+}
+
+.formTextarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.formRow {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.formCol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  flex: 1 1 120px;
+  min-width: 120px;
+}
+
+.formActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.rowActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.formError {
+  margin: var(--space-1) 0 0;
+  color: var(--status-error);
+  font-size: var(--text-sm);
+}
+
+.primaryButton {
+  padding: var(--space-2) var(--space-4);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    box-shadow var(--motion-fast) var(--ease-out);
+}
+
+.primaryButton:hover:not(:disabled) {
+  background: var(--accent-strong);
+  box-shadow: var(--glow-accent-strong);
+}
+
+.primaryButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.primaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondaryButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.secondaryButton:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+.secondaryButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.secondaryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dangerButton {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--status-error);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--status-error);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  transition:
+    background-color var(--motion-fast) var(--ease-out),
+    border-color var(--motion-fast) var(--ease-out);
+}
+
+.dangerButton:hover:not(:disabled) {
+  background: var(--error-bg);
+}
+
+.dangerButton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.dangerButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
