@@ -373,6 +373,79 @@ describe('finance recurring-costs CRUD', () => {
         }),
       ),
     ).toBe('functions/not-found');
+    // A failed update must NOT resurrect the missing doc (update(), not
+    // set(merge:true)) — the id stays absent.
+    const ghost = await adminDb.collection(RECURRING_COSTS_COLLECTION).doc('does-not-exist').get();
+    expect(ghost.exists).toBe(false);
+  });
+
+  it('updating a cost deleted mid-flight fails and does not resurrect it', async () => {
+    await signInAs(adminUser);
+    const added = (
+      await call('finance-addRecurringCost', {
+        label: `Race ${S}`,
+        description: 'to be deleted before update',
+        amount: 42,
+        currency: 'SEK',
+        period: 'monthly',
+      })
+    ).data as AddResult;
+
+    // Simulate the delete landing before the update commits.
+    await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).delete();
+
+    expect(
+      await callableErrorCode(
+        call('finance-updateRecurringCost', {
+          id: added.id,
+          label: `Race ${S} v2`,
+          description: 'resurrected?',
+          amount: 99,
+          currency: 'SEK',
+          period: 'monthly',
+        }),
+      ),
+    ).toBe('functions/not-found');
+
+    const doc = await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(added.id).get();
+    expect(doc.exists).toBe(false); // update() did not recreate it
+  });
+
+  it('read-side defence: skips an over-max amount and clamps an over-long label', async () => {
+    await signInAs(adminUser);
+
+    // A row that could only arrive via the console/Admin SDK (client writes are
+    // rules-denied): amount above the sane cap. It must be SKIPPED, never
+    // inflating the total.
+    const overMaxId = `rc-overmax-${S}`;
+    await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(overMaxId).set({
+      label: `OverMax ${S}`,
+      description: 'too big',
+      amount: 999_999_999,
+      currency: 'SEK',
+      period: 'monthly',
+    });
+    created.push(overMaxId);
+
+    // A row with an over-long label — must be CLAMPED (truncated), not dropped.
+    const longLabelId = `rc-longlabel-${S}`;
+    const longLabel = `L${S}`.padEnd(300, 'x');
+    await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(longLabelId).set({
+      label: longLabel,
+      description: 'd'.repeat(1000),
+      amount: 10,
+      currency: 'SEK',
+      period: 'monthly',
+    });
+    created.push(longLabelId);
+
+    const est = (await call('finance-estimate', {})).data as EstimateResult;
+    expect(est.recurringCosts.items.some((l) => l.id === overMaxId)).toBe(false);
+    const clamped = est.recurringCosts.items.find((l) => l.id === longLabelId);
+    expect(clamped).toBeDefined();
+    expect(clamped!.label.length).toBeLessThanOrEqual(80);
+    expect(clamped!.description.length).toBeLessThanOrEqual(500);
+    expect(Number.isFinite(est.recurringCosts.totalSekPerMonth)).toBe(true);
   });
 
   it('deletes an existing cost and 404s on a missing id', async () => {

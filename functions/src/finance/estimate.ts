@@ -35,7 +35,10 @@ import { METRICS_COLLECTION } from '../metrics/metrics-core';
 import { estimateFinance, resolveMemberCount, type FinanceEstimate } from './model';
 import {
   RECURRING_COSTS_COLLECTION,
+  RECURRING_COST_AMOUNT_MAX,
   RECURRING_COST_CURRENCIES,
+  RECURRING_COST_DESCRIPTION_MAX_LENGTH,
+  RECURRING_COST_LABEL_MAX_LENGTH,
   RECURRING_COST_PERIODS,
   type RecurringCostCurrency,
   type RecurringCostEntry,
@@ -81,9 +84,20 @@ async function readLatestMemberCount(): Promise<{ totalUsers: number | null; dat
 /**
  * Reads every operator-entered recurring cost from `financeRecurringCosts`.
  * The collection is small (a handful of admin-entered rows), so an unbounded
- * read is fine. Defensively validates the currency/period enums so a
- * hand-edited or partial document can never feed a bad shape into the model —
- * a row that fails validation is skipped rather than poisoning the total.
+ * read is fine.
+ *
+ * READ-SIDE DEFENCE (parity with the write-side zod). The callables are the
+ * only sanctioned writer and firestore.rules deny all client writes, so a
+ * well-formed row is the norm — but a row could still arrive via the console /
+ * Admin SDK. So this mirrors the SAME bounds the write path enforces
+ * (recurringCosts-core.ts) rather than trusting the stored shape:
+ *  - currency/period must be valid enums, amount finite and > 0, label present
+ *    — a row failing any of these is SKIPPED (never poisons the total);
+ *  - amount ABOVE the sane upper bound is skipped too, so a fat-fingered
+ *    console edit can't inflate the grand total;
+ *  - label/description are CLAMPED to their caps (truncated, not rejected) so an
+ *    over-long field can't bloat the payload.
+ * Clamp/skip, never throw — one bad row must not break the whole board.
  */
 async function readRecurringCosts(): Promise<RecurringCostEntry[]> {
   const snap = await db.collection(RECURRING_COSTS_COLLECTION).get();
@@ -98,13 +112,17 @@ async function readRecurringCosts(): Promise<RecurringCostEntry[]> {
       data.label.length > 0 &&
       Number.isFinite(amount) &&
       amount > 0 &&
+      amount <= RECURRING_COST_AMOUNT_MAX &&
       RECURRING_COST_CURRENCIES.includes(currency) &&
       RECURRING_COST_PERIODS.includes(period)
     ) {
+      const description = typeof data.description === 'string' ? data.description : '';
       entries.push({
         id: doc.id,
-        label: data.label,
-        description: typeof data.description === 'string' ? data.description : '',
+        // Clamp to the write-side caps so a hand-edited over-long field is
+        // truncated rather than passed through wholesale.
+        label: data.label.slice(0, RECURRING_COST_LABEL_MAX_LENGTH),
+        description: description.slice(0, RECURRING_COST_DESCRIPTION_MAX_LENGTH),
         amount,
         currency,
         period,

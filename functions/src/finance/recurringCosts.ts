@@ -129,8 +129,13 @@ export const updateRecurringCost = onCall(
 
     const serverTimestamp = () => FieldValue.serverTimestamp();
     const batch = db.batch();
-    // Merge the mutable fields; createdByUid/createdAt are preserved.
-    batch.set(ref, { ...fields, updatedAt: serverTimestamp() }, { merge: true });
+    // Use update(), NOT set(merge:true): update() requires the document to
+    // still exist at commit time. If the row is DELETED between the existence
+    // read above and this commit (a concurrent delete), update() fails the
+    // batch instead of RESURRECTING the deleted cost — set(merge:true) would
+    // silently recreate it. createdByUid/createdAt are left untouched by
+    // update() (only the named fields change).
+    batch.update(ref, { ...fields, updatedAt: serverTimestamp() });
     batch.set(
       db.collection('adminAuditEvents').doc(),
       buildAdminAuditEvent(
