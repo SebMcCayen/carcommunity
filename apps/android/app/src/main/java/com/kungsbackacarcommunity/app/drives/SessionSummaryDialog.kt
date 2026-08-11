@@ -61,29 +61,36 @@ const val SESSION_ROUTE_TOGGLE_TAG = "session_summary_route_toggle"
 /** Test tag on the expanded route area (the map, or the note standing in for it). */
 const val SESSION_ROUTE_AREA_TAG = "session_summary_route_area"
 
+/** Test tag on the inline "saving…" indicator shown while the background save runs. */
+const val SESSION_SAVING_INDICATOR_TAG = "session_summary_saving_indicator"
+
 /**
  * The end-of-session summary shown when a Single / Convoy live session ends. The
- * drive was recorded alongside the live session and is AUTO-SAVED the instant the
- * session ends (via the `drives-save` callable, which recomputes the
- * authoritative stats server-side), so it can never be lost by the user missing a
- * Save. This dialog then asks whether to KEEP the just-saved drive (it stays in
- * History) or DELETE it again (removed via the `drives-delete` callable).
+ * drive was recorded alongside the live session and is AUTO-SAVED via the
+ * `drives-save` callable (which recomputes the authoritative stats server-side),
+ * so it can never be lost by the user missing a Save. To make stopping feel
+ * INSTANT (#798), this summary opens IMMEDIATELY over the client-side estimate
+ * while that save runs in the BACKGROUND — it no longer waits behind a full-screen
+ * "Saving…" modal. It asks whether to KEEP the drive (it stays in History) or
+ * DELETE it again (removed via the `drives-delete` callable).
  *
  * DELETE is destructive, so it is guarded by a second are-you-sure confirmation
  * ([DELETE_CONFIRM_DIALOG_TAG]); KEEP is not, since it only dismisses.
  *
  * Driven entirely by the [DriveRecordingCoordinator] state:
- * - [RecordingState.PromptSave] (transient — the UI auto-saves from it) and
- *   [RecordingState.Saving] → a non-dismissible "saving" progress dialog.
- * - [RecordingState.SavedPendingChoice] → the summary + Keep/Delete actions
- *   (with a delete-failed error line after a failed delete).
+ * - [RecordingState.SavedPendingChoice] → the summary + Keep/Delete actions, with
+ *   a small inline "saving…" indicator while `savePending` (the background save is
+ *   still in flight) and a delete-failed error line after a failed delete.
  * - [RecordingState.Deleting] → a non-dismissible "deleting" progress dialog.
  * - [RecordingState.Failed] → the summary + an error line; a retryable fault
- *   offers Retry, a permanent member-gate refusal (which nothing was saved for)
- *   offers Close, which discards.
- * - any other state → nothing (the host dismisses on Kept / Deleted / Discarded).
+ *   (including a background save that exhausted its retries) offers Retry, a
+ *   permanent member-gate refusal (which nothing was saved for) offers Close,
+ *   which discards.
+ * - [RecordingState.PromptSave] is transient (the UI auto-saves from it the same
+ *   frame) and renders nothing; any other state → nothing (the host dismisses on
+ *   Kept / Deleted / Discarded).
  *
- * The summary and progress dialogs are intentionally NOT dismissible by
+ * The summary and the delete progress dialog are intentionally NOT dismissible by
  * back/outside tap: ending a session forces an explicit Keep/Delete choice, and a
  * transient save failure must not let the drive slip away. The route map added
  * below the stats does not change that: expanding it is an in-place toggle, and
@@ -109,6 +116,11 @@ fun SessionSummaryDialog(
                 elapsedMillis = state.elapsedMillis,
                 pointsProvider = pointsProvider,
                 deleteFailed = state.deleteFailed,
+                // While the background save is still in flight the summary shows a
+                // small inline "saving…" indicator instead of a blocking modal —
+                // the whole point of #798's instant-stop: the choice is usable at
+                // once and Keep/Delete no longer wait on the network.
+                savePending = state.savePending,
                 reason = reason,
                 onKeep = onKeep,
                 onDelete = onDelete,
@@ -123,15 +135,17 @@ fun SessionSummaryDialog(
                 onDiscard = onDiscard,
             )
 
-        // The drive is being written. PromptSave is transient for the live flow
-        // (the UI auto-saves from it immediately), so render the same saving
-        // indicator rather than flashing Save/Discard buttons for a frame.
-        RecordingState.Saving,
-        is RecordingState.PromptSave,
-        -> ProgressDialog(R.string.savedDrives_savingProgress)
-
+        // Delete removes the just-saved drive; a brief modal while drives-delete
+        // runs is fine (it is an explicit, destructive action, not the stop path).
         RecordingState.Deleting -> ProgressDialog(R.string.savedDrives_deletingProgress)
 
+        // PromptSave is transient for the live flow — the UI auto-saves from it the
+        // same frame, moving straight to SavedPendingChoice — so render nothing for
+        // that single frame rather than flashing a full-screen "Saving…" modal (the
+        // modal #798 replaced). Saving belongs to the MANUAL recorder, which uses
+        // its own screen, never this dialog.
+        RecordingState.Saving,
+        is RecordingState.PromptSave,
         RecordingState.Idle,
         is RecordingState.Recording,
         RecordingState.Saved,
@@ -147,6 +161,7 @@ private fun KeepOrDeletePrompt(
     elapsedMillis: Long,
     pointsProvider: () -> List<RecordedPoint>,
     deleteFailed: Boolean,
+    savePending: Boolean,
     reason: SavePromptReason,
     onKeep: () -> Unit,
     onDelete: () -> Unit,
@@ -192,6 +207,30 @@ private fun KeepOrDeletePrompt(
                     onToggle = { routeExpanded = !routeExpanded },
                     onOpenFullscreen = { routeFullscreen = true },
                 )
+                // Small inline "saving…" indicator while the drive is written in
+                // the BACKGROUND (#798): the choice is already usable, so this only
+                // says the save is still landing — it never blocks the dialog the
+                // way the old full-screen modal did.
+                if (savePending) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .testTag(SESSION_SAVING_INDICATOR_TAG),
+                        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(KccSpacing.s4),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(
+                            text = stringResource(R.string.savedDrives_savingProgress),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
                 if (deleteFailed) {
                     Text(
                         text = stringResource(R.string.savedDrives_deleteError),

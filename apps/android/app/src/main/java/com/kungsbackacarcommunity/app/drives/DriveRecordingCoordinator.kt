@@ -5,9 +5,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
@@ -21,9 +23,13 @@ import kotlinx.coroutines.launch
  *   and a drive is persisted only when [save] is called ([RecordingState.Saved]);
  *   [discard] stores nothing. This is the product's explicit-save rule.
  * - the LIVE session ([SingleSessionRecording]): [stop] opens the same prompt but
- *   the UI immediately [autoSave]s it, so the drive is persisted the instant the
- *   session ends and can never be lost by a missed Save; the summary then asks
- *   KEEP ([keep]) or DELETE ([delete]) over the already-saved ride.
+ *   the UI immediately [autoSave]s it. To make stopping feel INSTANT (#798), the
+ *   Keep/Delete summary opens straight away over the client-side estimate while
+ *   the `drives-save` callable runs in the BACKGROUND on the process-scoped
+ *   [uploadScope] with bounded retry on transient faults (#800); the drive is
+ *   still never lost by a missed Save. [keep] resolves instantly (the save carries
+ *   on fire-and-forget); [delete] waits the background save out before removing the
+ *   ride.
  */
 class DriveRecordingCoordinator(
     private val repository: DrivesRepository,
@@ -46,6 +52,16 @@ class DriveRecordingCoordinator(
      * / direct construction; injectable so tests can drive it deterministically.
      */
     private val uploadScope: CoroutineScope = processUploadScope,
+    /**
+     * Total attempts the BACKGROUND live-session save makes before giving up on a
+     * transient fault (1 initial + retries). Mirrors [RouteUploadRunner]; injected
+     * so tests can pin the retry count. Production uses [DEFAULT_MAX_SAVE_ATTEMPTS].
+     */
+    private val maxSaveAttempts: Int = DEFAULT_MAX_SAVE_ATTEMPTS,
+    /** Backoff before background-save retry N (0-based). Coarse — this is background. */
+    private val saveBackoffMillis: (attempt: Int) -> Long = ::defaultSaveBackoffMillis,
+    /** Injected so tests drive the backoff deterministically (no real delays). */
+    private val delayFn: suspend (Long) -> Unit = { delay(it) },
 ) {
     private val stateFlow = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
@@ -62,6 +78,27 @@ class DriveRecordingCoordinator(
      * uploading (config-less build, summary-only save, or before the first save).
      */
     private var uploadJob: Job? = null
+
+    /**
+     * The BACKGROUND live-session save started by [autoSave], so [delete] can JOIN
+     * it before removing the drive (it must know the created rideId, and must not
+     * race a save that would recreate a just-deleted drive). Runs on the
+     * process-scoped [uploadScope] so dismissing the summary — or an Activity
+     * recreation — cannot cancel it and lose the drive. `@Volatile`: written from
+     * the background save coroutine, read from the main thread ([delete]).
+     */
+    @Volatile
+    private var saveJob: Job? = null
+
+    /**
+     * The result of the successful background save (rideId + route path), or null
+     * until it lands / if it ultimately failed. [delete] reads the rideId off this
+     * after joining [saveJob]; the background completion reads the route path to
+     * kick the route upload. `@Volatile` for the same cross-thread reason as
+     * [saveJob].
+     */
+    @Volatile
+    private var savedResult: DriveSaveResult? = null
 
     /**
      * The wall-clock moment recording actually STOPPED, captured once in [stop].
@@ -198,71 +235,144 @@ class DriveRecordingCoordinator(
     }
 
     /**
-     * Live-session end: AUTO-SAVE the just-finished recording, so a drive can
-     * never be lost by the user missing an explicit Save. Unlike the manual
-     * [save] (which lands in the terminal [RecordingState.Saved]), this lands in
-     * [RecordingState.SavedPendingChoice] carrying the created rideId, so the
-     * end-of-session summary can offer KEEP or DELETE over an already-persisted
-     * drive rather than the forced Save/Discard.
+     * Live-session end: show the Keep/Delete summary IMMEDIATELY (over the
+     * client-side estimate) and persist the drive in the BACKGROUND, so stopping
+     * feels instant and a drive can never be lost by a missed Save (#798). Unlike
+     * the manual [save] (which blocks in [RecordingState.Saving] until the callable
+     * returns), this transitions straight to [RecordingState.SavedPendingChoice]
+     * with `savePending = true` and runs `drives-save` fire-and-forget on the
+     * process-scoped [uploadScope] with bounded retry on TRANSIENT faults (#800).
+     *
+     * Because the save runs in the background:
+     * - it survives dismissing the summary AND an Activity recreation (the scope
+     *   outlives the composition), so it is never cancelled mid-flight and the
+     *   drive is not lost — the reason the old composition-scoped save needed a
+     *   cancellation→restore dance that this no longer has;
+     * - the payload and the route snapshot are captured NOW, before [keep] /
+     *   [delete] can release the recorder, so the background job is self-contained.
      *
      * Valid from [RecordingState.PromptSave] (the state [stop] raises) or a prior
-     * [RecordingState.Failed] (a retry) — the same two states the manual [save]
-     * accepts — so the caller can auto-trigger it the moment the prompt opens and
-     * retry it after a transient failure. The recorder is deliberately NOT
-     * released here (the summary still shows the client-side distance/speed
-     * estimate, and a retry needs the points); [keep] / [delete] / [discard]
-     * release it. On failure → [RecordingState.Failed]; cancellation restores
-     * [RecordingState.PromptSave] so the auto-trigger re-fires after a recreation.
+     * [RecordingState.Failed] (a manual retry after the background save gave up) —
+     * the same two states the manual [save] accepts. Idempotent from
+     * [RecordingState.SavedPendingChoice] (a re-fire after a recreation is a no-op
+     * — the surviving background job is still running / done).
      */
-    suspend fun autoSave(title: String?) {
+    fun autoSave(title: String?) {
         val recorder = recorder ?: return
         val resumable =
             stateFlow.value is RecordingState.PromptSave ||
                 stateFlow.value is RecordingState.Failed
         if (!resumable) return
 
+        // Both resumable states are only reachable via stop(), so the captured
+        // stop moment is always present; fall back defensively.
         val endedAt = stoppedAtMillis ?: clock()
-        stateFlow.value = RecordingState.Saving
-        try {
-            val result = repository.saveDrive(recorder.buildSaveRequest(title, endedAt))
-            // Snapshot only when an upload can actually run (skips the ~20k-point
-            // copy on a summary-only / config-less save). Taken before any release.
-            val points =
-                if (routeUploadRunner != null && result.routePath != null) {
-                    recorder.snapshot()
-                } else {
-                    emptyList()
+        val elapsedMillis = recorder.elapsedMillis(endedAt)
+        val pointCount = recorder.pointCount
+        // Build the payload and snapshot the route BEFORE the summary lets the user
+        // release the recorder (keep/delete): the background job must not depend on
+        // recorder state that can vanish under it. The payload is idempotent per
+        // sourceSessionId, so a retry re-sends the exact same request (and stored
+        // duration). Skip the up-to-20k-point snapshot in a config-less build with
+        // no uploader; startRouteUpload also skips when the save returns no path.
+        val request = recorder.buildSaveRequest(title, endedAt)
+        val pointsForUpload =
+            if (routeUploadRunner != null) recorder.snapshot() else emptyList()
+
+        // The summary opens at once over the local estimate; the save is now the
+        // background job's job.
+        stateFlow.value =
+            RecordingState.SavedPendingChoice(elapsedMillis = elapsedMillis, savePending = true)
+        savedResult = null
+        saveJob =
+            uploadScope.launch {
+                try {
+                    val result = saveWithRetry(request)
+                    savedResult = result
+                    onBackgroundSaveSucceeded(result, pointsForUpload)
+                } catch (cancellation: CancellationException) {
+                    // Scope teardown (sign-out / account switch cancels uploadScope):
+                    // the holder that owns the scope also drops the recording, so
+                    // leave the state to it and preserve cooperative cancellation.
+                    throw cancellation
+                } catch (failure: Exception) {
+                    onBackgroundSaveFailed(failure, elapsedMillis, pointCount)
                 }
-            uploadJob = startRouteUpload(result, points)
-            stateFlow.value =
-                RecordingState.SavedPendingChoice(
-                    rideId = result.rideId,
-                    elapsedMillis = recorder.elapsedMillis(endedAt),
-                )
-        } catch (cancellation: CancellationException) {
-            // A recreation cancels the composition-scoped auto-save; this is not a
-            // failure. Restore the prompt (recorder intact) so the auto-trigger
-            // re-fires and the drive is still saved, then rethrow.
-            stateFlow.value =
-                RecordingState.PromptSave(
-                    pointCount = recorder.pointCount,
-                    elapsedMillis = recorder.elapsedMillis(endedAt),
-                )
-            throw cancellation
-        } catch (failure: Exception) {
-            stateFlow.value =
-                RecordingState.Failed(
-                    pointCount = recorder.pointCount,
-                    elapsedMillis = recorder.elapsedMillis(endedAt),
-                    code = (failure as? DriveSaveException)?.code,
-                )
+            }
+    }
+
+    /**
+     * Runs `drives-save`, retrying up to [maxSaveAttempts] with backoff on
+     * TRANSIENT faults only ([RecordingState.isTransientSaveCode]). The save is
+     * idempotent per `sourceSessionId`, so re-issuing the same request is safe. A
+     * permanent refusal (member gate), a malformed payload, or an unclassified
+     * error is rethrown at once — retrying it would only loop.
+     */
+    private suspend fun saveWithRetry(request: Map<String, Any?>): DriveSaveResult {
+        var attempt = 0
+        while (true) {
+            try {
+                return repository.saveDrive(request)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (failure: Exception) {
+                attempt++
+                val code = (failure as? DriveSaveException)?.code
+                if (attempt >= maxSaveAttempts || !RecordingState.isTransientSaveCode(code)) {
+                    throw failure
+                }
+                delayFn(saveBackoffMillis(attempt - 1))
+            }
         }
     }
 
     /**
-     * KEEP the auto-saved drive: it is already persisted, so this simply resolves
-     * the prompt to the terminal [RecordingState.Kept] and releases the recorder.
-     * Valid only from [RecordingState.SavedPendingChoice].
+     * The background save landed. Drop the inline "saving…" indicator if the user
+     * is still deciding, then upload the route — but ONLY while the drive is meant
+     * to live (still choosing, or Kept). A [delete] in flight has already moved off
+     * [RecordingState.SavedPendingChoice] and joins this job to remove the ride, so
+     * starting an upload here would just race that delete.
+     */
+    private fun onBackgroundSaveSucceeded(result: DriveSaveResult, pointsForUpload: List<RecordedPoint>) {
+        stateFlow.update { current ->
+            if (current is RecordingState.SavedPendingChoice) current.copy(savePending = false) else current
+        }
+        when (stateFlow.value) {
+            is RecordingState.SavedPendingChoice, RecordingState.Kept ->
+                uploadJob = startRouteUpload(result, pointsForUpload)
+            else -> Unit
+        }
+    }
+
+    /**
+     * The background save gave up (transient retries exhausted, or a permanent /
+     * unclassified fault). Surface it as [RecordingState.Failed] — reusing the
+     * summary's retry/close prompt — but ONLY while the user is still deciding.
+     * Once they have committed the choice stands: Keep trusts the (now failed)
+     * save, and a Delete has nothing to remove. Mirrors the manual [save]'s Failed
+     * mapping so the code is carried for the retry gate and the auto error report.
+     */
+    private fun onBackgroundSaveFailed(failure: Exception, elapsedMillis: Long, pointCount: Int) {
+        stateFlow.update { current ->
+            if (current is RecordingState.SavedPendingChoice) {
+                RecordingState.Failed(
+                    pointCount = pointCount,
+                    elapsedMillis = elapsedMillis,
+                    code = (failure as? DriveSaveException)?.code,
+                )
+            } else {
+                current
+            }
+        }
+    }
+
+    /**
+     * KEEP the drive: resolve to the terminal [RecordingState.Kept] INSTANTLY and
+     * release the recorder, without waiting on the network. If the background save
+     * is still in flight it carries on fire-and-forget — its bounded retry makes a
+     * transient fault self-heal (#800), and on success it still uploads the route
+     * ([onBackgroundSaveSucceeded] sees [RecordingState.Kept]). Valid only from
+     * [RecordingState.SavedPendingChoice].
      */
     fun keep() {
         if (stateFlow.value !is RecordingState.SavedPendingChoice) return
@@ -271,25 +381,34 @@ class DriveRecordingCoordinator(
     }
 
     /**
-     * DELETE the just-auto-saved drive again via the `drives-delete` callable
-     * (the SavedPendingChoice's Delete). WAITS for the background route upload to
-     * settle first ([uploadJob].join()) so the delete removes the just-uploaded
-     * `route.bin`/preview rather than racing a slow upload that would recreate
-     * them after the doc is gone (`drives-delete` clears the whole
-     * `rideRoutes/{uid}/{rideId}/` prefix then the doc). On success → the terminal
-     * [RecordingState.Deleted]; on failure → back to
-     * [RecordingState.SavedPendingChoice] with `deleteFailed` set — the drive
-     * stays safely saved and the choice still stands. Valid only from
+     * DELETE the drive again via the `drives-delete` callable (the
+     * SavedPendingChoice's Delete). WAITS for the pending work to settle first, in
+     * order, so the delete can never race the writers that would resurrect it:
+     *  1. the background SAVE ([saveJob].join()) — Delete may be tapped while the
+     *     save is still in flight, and it must know the created rideId AND make sure
+     *     no save lands AFTER the doc is deleted;
+     *  2. the route UPLOAD ([uploadJob].join()) — so a slow upload cannot recreate
+     *     `route.bin` after `drives-delete` cleared the whole
+     *     `rideRoutes/{uid}/{rideId}/` prefix and then the doc.
+     *
+     * If the background save ultimately FAILED (no [savedResult]), nothing was ever
+     * persisted, so there is nothing to remove and this resolves straight to
+     * [RecordingState.Deleted]. On a delete-callable failure → back to
+     * [RecordingState.SavedPendingChoice] with `deleteFailed` set — the drive stays
+     * safely saved and the choice still stands. Valid only from
      * [RecordingState.SavedPendingChoice]; cancellation restores it too.
      */
     suspend fun delete() {
         val current = stateFlow.value as? RecordingState.SavedPendingChoice ?: return
         stateFlow.value = RecordingState.Deleting
         try {
-            // Let the route upload finish before removing the blobs, so it cannot
-            // recreate route.bin after drives-delete cleared the prefix.
+            // Wait the background save out first so we know the rideId and no save
+            // can create the drive after we delete it; then let the route upload
+            // finish so it cannot recreate route.bin after the prefix is cleared.
+            saveJob?.join()
             uploadJob?.join()
-            repository.deleteDrive(current.rideId)
+            // A failed background save persisted nothing — nothing to delete.
+            savedResult?.let { repository.deleteDrive(it.rideId) }
             recorder = null
             uploadJob = null
             stateFlow.value = RecordingState.Deleted
@@ -338,6 +457,7 @@ class DriveRecordingCoordinator(
     fun discard() {
         recorder = null
         stoppedAtMillis = null
+        savedResult = null
         stateFlow.value = RecordingState.Discarded
     }
 
@@ -345,10 +465,11 @@ class DriveRecordingCoordinator(
     fun reset() {
         recorder = null
         stoppedAtMillis = null
+        savedResult = null
         stateFlow.value = RecordingState.Idle
     }
 
-    private companion object {
+    companion object {
         /**
          * Fallback scope for background route uploads when none is injected
          * (tests / direct construction): process-scoped and supervisor-jobbed so
@@ -366,5 +487,18 @@ class DriveRecordingCoordinator(
          */
         private val processUploadScope: CoroutineScope =
             CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+        /**
+         * Total background-save attempts before giving up on a transient fault
+         * (1 initial + 2 retries). Same shape as [RouteUploadRunner]; the save is
+         * idempotent per `sourceSessionId`, so the retries are safe.
+         */
+        const val DEFAULT_MAX_SAVE_ATTEMPTS = 3
+
+        /** Backoff before background-save retry N (0-based). Coarse — background. */
+        private val SAVE_BACKOFF_MILLIS = longArrayOf(1_000L, 4_000L)
+
+        fun defaultSaveBackoffMillis(attempt: Int): Long =
+            SAVE_BACKOFF_MILLIS.getOrElse(attempt) { SAVE_BACKOFF_MILLIS.last() }
     }
 }

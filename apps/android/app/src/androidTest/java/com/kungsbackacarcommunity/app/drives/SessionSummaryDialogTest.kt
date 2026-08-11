@@ -39,7 +39,7 @@ class SessionSummaryDialogTest {
 
     private fun setDialog(
         state: RecordingState =
-            RecordingState.SavedPendingChoice(rideId = "ride", elapsedMillis = 60_000L),
+            RecordingState.SavedPendingChoice(elapsedMillis = 60_000L),
         onKeep: () -> Unit = {},
         onDelete: () -> Unit = {},
         onRetry: () -> Unit = {},
@@ -119,7 +119,6 @@ class SessionSummaryDialogTest {
         setDialog(
             state =
                 RecordingState.SavedPendingChoice(
-                    rideId = "ride",
                     elapsedMillis = 60_000L,
                     deleteFailed = true,
                 ),
@@ -129,6 +128,32 @@ class SessionSummaryDialogTest {
         composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteError)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteSessionAction)).assertIsDisplayed()
+    }
+
+    @Test
+    fun savePending_showsInlineIndicatorAndTheChoiceIsAlreadyUsable() {
+        // #798: while the background save is still in flight the summary is shown
+        // over the local estimate with a small INLINE indicator — not a blocking
+        // full-screen "Saving…" modal — and Keep/Delete are already tappable.
+        var kept = 0
+        setDialog(
+            state = RecordingState.SavedPendingChoice(elapsedMillis = 60_000L, savePending = true),
+            onKeep = { kept += 1 },
+        )
+
+        composeTestRule.onNodeWithTag(SESSION_SAVING_INDICATOR_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
+        // Keep resolves instantly, even though the save has not landed yet.
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).performClick()
+        assertEquals(1, kept)
+    }
+
+    @Test
+    fun saveSettled_hidesTheInlineIndicator() {
+        setDialog(
+            state = RecordingState.SavedPendingChoice(elapsedMillis = 60_000L, savePending = false),
+        )
+        composeTestRule.onNodeWithTag(SESSION_SAVING_INDICATOR_TAG).assertDoesNotExist()
     }
 
     @Test
