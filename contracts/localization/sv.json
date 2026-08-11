@@ -986,7 +986,15 @@
     "commonMakes": "Vanliga i Sverige",
     "allMakes": "Alla märken",
     "legacySavedValue": "Sparat tidigare: %1$s",
-    "legacyReselectHint": "Välj i listan för att räkna med bilen i communityts statistik. Din sparade text behålls till dess."
+    "legacyReselectHint": "Välj i listan för att räkna med bilen i communityts statistik. Din sparade text behålls till dess.",
+    "discardNewTitle": "Kasta bort ny bil?",
+    "discardNewMessage": "Uppgifterna du fyllt i sparas inte.",
+    "discardNewConfirm": "Kasta bort",
+    "discardNewKeepEditing": "Fortsätt redigera",
+    "draftRestoreTitle": "Fortsätt med din osparade bil?",
+    "draftRestoreMessage": "Du har en påbörjad bil som inte sparats.",
+    "draftRestoreContinue": "Fortsätt",
+    "draftRestoreStartOver": "Börja om"
   },
   "badges": {
     "screenTitle": "Utmärkelser",

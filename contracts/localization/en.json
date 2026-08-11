@@ -986,7 +986,15 @@
     "commonMakes": "Common in Sweden",
     "allMakes": "All manufacturers",
     "legacySavedValue": "Saved earlier: %1$s",
-    "legacyReselectHint": "Pick from the list to count your car in the community statistics. Your saved text is kept until you do."
+    "legacyReselectHint": "Pick from the list to count your car in the community statistics. Your saved text is kept until you do.",
+    "discardNewTitle": "Discard new car?",
+    "discardNewMessage": "The details you've entered won't be saved.",
+    "discardNewConfirm": "Discard",
+    "discardNewKeepEditing": "Keep editing",
+    "draftRestoreTitle": "Continue your unsaved car?",
+    "draftRestoreMessage": "You have an unsaved car you started earlier.",
+    "draftRestoreContinue": "Continue",
+    "draftRestoreStartOver": "Start over"
   },
   "badges": {
     "screenTitle": "Awards",

@@ -151,9 +151,16 @@ internal object PanelDrag {
      * the list is at its top it can consume no more, the full delta arrives here
      * unconsumed, and the panel starts to move. The user never has to think
      * about which one they are dragging.
+     *
+     * [dismissEnabled] gates this OFF (returns 0) when the host opts out of the
+     * nested-scroll pull-dismiss — used while a scrollable FORM is open inside
+     * the panel, so a fast scroll-to-top can no longer over-scroll into the
+     * card's pull-away and dismiss the form by accident (issue #796). The
+     * drag-handle, outside-tap and Back exits are unaffected: they never route
+     * through this connection.
      */
-    fun postScrollConsumption(availableY: Float): Float =
-        if (availableY > 0f) availableY else 0f
+    fun postScrollConsumption(availableY: Float, dismissEnabled: Boolean = true): Float =
+        if (dismissEnabled && availableY > 0f) availableY else 0f
 }
 
 /**
@@ -218,6 +225,14 @@ val LocalInTranslucentPanel = staticCompositionLocalOf { false }
  *
  * @param onDismiss invoked once when the panel is dismissed by any route this
  *   composable owns (drag or outside tap). Back is handled by the shell.
+ * @param dismissEnabled whether the NESTED-SCROLL pull-dismiss is armed. Default
+ *   true — every panel dismisses by pulling its content down. Set false while a
+ *   scrollable form is open inside the panel (the Garage add/edit form) so a
+ *   fast scroll-to-top can no longer over-scroll into the pull-away and dismiss
+ *   the form by accident (issue #796). Opt-in and per-panel: History/Social keep
+ *   today's behaviour. The drag-handle, outside-tap, Back and accessibility
+ *   `dismiss` exits stay live regardless — they never route through the
+ *   nested-scroll connection this flag gates.
  * @param testTag applied to the CARD, so tests can measure its bounds and prove
  *   an uncovered strip exists above it.
  * @param content the page body, composed with [LocalInTranslucentPanel] set so
@@ -229,6 +244,7 @@ fun TranslucentShellPanel(
     onDismiss: () -> Unit,
     testTag: String,
     modifier: Modifier = Modifier,
+    dismissEnabled: Boolean = true,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -237,9 +253,13 @@ fun TranslucentShellPanel(
     val offset = remember { Animatable(0f) }
     var cardHeightPx by remember { mutableIntStateOf(0) }
     // rememberUpdatedState so the gesture callbacks below — which are captured
-    // once by draggable/nestedScroll — always call the CURRENT lambda rather
+    // once by draggable/nestedScroll — always call the CURRENT lambda/flag rather
     // than the one that happened to be in scope when the gesture started.
     val currentOnDismiss by rememberUpdatedState(onDismiss)
+    // Same reason: the nestedScrollConnection is remember{}'d once, so it must
+    // read the LATEST dismissEnabled (which flips as the form opens/closes), not
+    // the value captured at first composition.
+    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
 
     // Shared by the handle drag and the nested-scroll drag so the two paths can
     // never settle differently: whichever moved the card, releasing runs this.
@@ -250,14 +270,17 @@ fun TranslucentShellPanel(
                 dismissThresholdPx = PanelDrag.dismissThresholdPx(cardHeightPx),
             )
         ) {
-            // No bespoke exit animation: the shell already crossfades between
-            // tabs, and dismissing IS a tab change (back to Map), so the
-            // crossfade is the panel's exit. A second animation here would run
-            // against it.
             currentOnDismiss()
-        } else {
-            scope.launch { offset.animateTo(0f) }
         }
+        // Spring back to rest in EVERY case. When the dismiss really happens the
+        // shell crossfades this panel away and the panel leaves composition
+        // mid-spring (this scope is cancelled), so the crossfade is still the
+        // exit — no competing animation survives. But onDismiss is now
+        // interceptable: the host may keep the panel up instead (the Garage form
+        // routes a dismiss through a "discard new car?" confirm, issue #796), and
+        // a card dragged part-way down by the handle must not be left stranded
+        // off-screen behind that dialog when the user chooses to keep editing.
+        scope.launch { offset.animateTo(0f) }
     }
 
     val nestedScrollConnection =
@@ -293,7 +316,7 @@ fun TranslucentShellPanel(
                     available: Offset,
                     source: NestedScrollSource,
                 ): Offset {
-                    val taken = PanelDrag.postScrollConsumption(available.y)
+                    val taken = PanelDrag.postScrollConsumption(available.y, currentDismissEnabled)
                     if (taken == 0f) return Offset.Zero
                     scope.launch(start = CoroutineStart.UNDISPATCHED) {
                         offset.snapTo(offset.value + taken)
@@ -303,9 +326,12 @@ fun TranslucentShellPanel(
 
                 // A fling that starts while the card is off its rest position
                 // belongs to the CARD, not to the list: settle it and swallow
-                // the velocity so the list does not also fling underneath.
+                // the velocity so the list does not also fling underneath. Gated
+                // on dismissEnabled too: with the pull-dismiss disarmed the card
+                // never leaves rest via scroll, so a content fling must be left
+                // entirely to the list (issue #796).
                 override suspend fun onPreFling(available: Velocity): Velocity =
-                    if (offset.value > 0f) {
+                    if (currentDismissEnabled && offset.value > 0f) {
                         settle(available.y)
                         available
                     } else {
