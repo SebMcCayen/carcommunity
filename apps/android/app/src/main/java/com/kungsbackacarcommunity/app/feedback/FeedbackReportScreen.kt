@@ -53,7 +53,7 @@ fun FeedbackReportScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         // Consume the IME (and nav-bar) inset so the multi-line description field
         // near the bottom isn't hidden behind the keyboard. The app is edge-to-edge
-        // (MainActivity.enableEdgeToEdge), so each screen must apply the keyboard
+        // (MainActivity calls enableEdgeToEdge()), so each screen must apply the keyboard
         // inset itself; without this the page's viewport ran under the IME and the
         // field the user was typing in vanished (issue #797). The union takes the
         // taller of IME / nav bar rather than double-counting, matching ChatScreen.
