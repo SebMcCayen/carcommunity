@@ -33,8 +33,17 @@ class FirebaseLiveLocationRepository private constructor(
     private val database: FirebaseDatabase,
 ) : LiveLocationRepository {
 
-    override suspend fun startSession(duration: LiveSessionDuration) {
-        call(START_SESSION, mapOf("duration" to duration.key))
+    override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) {
+        call(
+            START_SESSION,
+            buildMap {
+                put("duration", duration.key)
+                // Only send the car when one was chosen; omitting it lets the
+                // server fall back to the main car (the callable schema treats a
+                // blank string as invalid, so never send an empty one).
+                vehicleId?.takeIf { it.isNotBlank() }?.let { put("vehicleId", it) }
+            },
+        )
     }
 
     override suspend fun updatePosition(coordinate: LiveCoordinate) {

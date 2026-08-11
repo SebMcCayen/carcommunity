@@ -33,9 +33,15 @@ interface ConvoyRepository {
 
     /**
      * Creates a convoy inviting [inviteeUids] (must be the owner's friends;
-     * non-friends/blocked are skipped). [title] is optional.
+     * non-friends/blocked are skipped). [title] is optional. [vehicleId] is the
+     * car the owner picked in the "Start driving" popup, applied to the owner's
+     * auto-started convoy session; null falls back to their main car server-side.
      */
-    suspend fun create(inviteeUids: List<String>, title: String?): CreateConvoyResult
+    suspend fun create(
+        inviteeUids: List<String>,
+        title: String?,
+        vehicleId: String? = null,
+    ): CreateConvoyResult
 
     /** Accepts or declines the caller's pending invite to [convoyId]. */
     suspend fun respond(convoyId: String, accept: Boolean): ConvoyMutationResult

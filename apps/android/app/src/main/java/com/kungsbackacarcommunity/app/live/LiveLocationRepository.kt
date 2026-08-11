@@ -114,8 +114,13 @@ data class NearbyLiveSession(
  * Map layer.
  */
 interface LiveLocationRepository {
-    /** live.startSession — (re)starts the caller's session with a duration. */
-    suspend fun startSession(duration: LiveSessionDuration)
+    /**
+     * live.startSession — (re)starts the caller's session with a duration.
+     *
+     * [vehicleId] is the garage car chosen in the "Start driving" popup; null
+     * lets the server pick the caller's main car (then first car, then none).
+     */
+    suspend fun startSession(duration: LiveSessionDuration, vehicleId: String? = null)
 
     /** live.updatePosition — publishes one sample (requires an active session). */
     suspend fun updatePosition(coordinate: LiveCoordinate)

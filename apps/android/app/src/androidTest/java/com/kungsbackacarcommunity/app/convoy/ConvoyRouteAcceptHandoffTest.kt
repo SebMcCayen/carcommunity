@@ -119,7 +119,8 @@ class ConvoyRouteAcceptHandoffTest {
             )
         }
 
-        override suspend fun create(inviteeUids: List<String>, title: String?) = error("unused")
+        override suspend fun create(inviteeUids: List<String>, title: String?, vehicleId: String?) =
+            error("unused")
 
         override suspend fun invite(convoyId: String, inviteeUids: List<String>) = error("unused")
 

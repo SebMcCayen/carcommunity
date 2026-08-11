@@ -107,6 +107,10 @@ fun ConvoyRoute(
     liveShareEnabled: Boolean = false,
     inviteDeepLinkConvoyId: String? = null,
     onInviteDeepLinkConsumed: () -> Unit = {},
+    // The car the owner picked in the "Start driving" popup before choosing
+    // Convoy. Sent with convoy-create so the owner's auto-started convoy session
+    // denormalizes it; null lets the server fall back to their main car.
+    createVehicleId: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     // Refreshes the roster's denormalized member profiles from live users/{uid}
@@ -413,7 +417,7 @@ fun ConvoyRoute(
                     // Convoys are unnamed — the title is always absent and the
                     // list/detail fall back to the neutral "untitled" label.
                     scope.launch {
-                        coordinator.create(selectedUids.toList(), null)
+                        coordinator.create(selectedUids.toList(), null, createVehicleId)
                         resolveLiveStarting(
                             marked,
                             coordinator.createState.value is CreateConvoyState.Created,

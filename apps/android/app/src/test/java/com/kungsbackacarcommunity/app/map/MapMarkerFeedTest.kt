@@ -36,7 +36,7 @@ class MapMarkerFeedTest {
         fun flowFor(uid: String): MutableStateFlow<LiveMarker?> =
             latest.getOrPut(uid) { MutableStateFlow(null) }
 
-        override suspend fun startSession(duration: LiveSessionDuration) = Unit
+        override suspend fun startSession(duration: LiveSessionDuration, vehicleId: String?) = Unit
 
         override suspend fun updatePosition(coordinate: LiveCoordinate) = Unit
 

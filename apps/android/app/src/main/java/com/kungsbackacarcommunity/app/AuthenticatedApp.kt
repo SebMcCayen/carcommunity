@@ -246,6 +246,7 @@ import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionLoad
 import com.kungsbackacarcommunity.app.live.LiveSessionRecordingLifecycle
+import com.kungsbackacarcommunity.app.live.defaultStartDrivingVehicleId
 import com.kungsbackacarcommunity.app.live.LiveShareStart
 import com.kungsbackacarcommunity.app.live.LiveShareStop
 import com.kungsbackacarcommunity.app.live.LiveStartAttempt
@@ -922,6 +923,13 @@ fun AuthenticatedApp(
             // it one-shot, so it never re-forces Create after a back-out.
             var convoyOpenCreate by rememberSaveable { mutableStateOf(false) }
 
+            // The car the owner picked in the "Start driving" popup before choosing
+            // Convoy, carried into the create-convoy flow so the owner's auto-started
+            // convoy session denormalizes the SAME car as a Single session would.
+            // Consumed one-shot by the convoy create call (cleared once handed over);
+            // null → the server falls back to the owner's main car.
+            var pendingConvoyVehicleId by rememberSaveable { mutableStateOf<String?>(null) }
+
             // Group-drive "show on map": stash roster uids, switch to the Map
             // tab. Preserved for the real Mapbox impl (the stub surfaces only a
             // count); mirrors the old MapRoute participant wiring.
@@ -1493,6 +1501,31 @@ fun AuthenticatedApp(
                     }
                 }
                     .collectAsState(initial = GarageState.Loading)
+
+            // The user's cars for the "Start driving" popup's round-photo picker.
+            // Observed ONLY while the chooser is open (one short-lived listener),
+            // separate from the Garage-tab stream above so opening the chooser from
+            // any tab shows the cars without navigating to the Garage. Degrades to a
+            // constant Loading (→ empty list) when closed or unwired.
+            val createChooserGarageState by
+                remember(garageRepository, uid, showCreateChooser) {
+                    if (garageRepository != null && showCreateChooser) {
+                        garageRepository.observeGarage(uid)
+                    } else {
+                        flowOf(GarageState.Loading)
+                    }
+                }
+                    .collectAsState(initial = GarageState.Loading)
+            val createChooserVehicles =
+                (createChooserGarageState as? GarageState.Loaded)?.vehicles ?: emptyList()
+            // The car the user tapped in the picker; null means "not yet chosen",
+            // which resolves to the default (main car → first car → none) so the
+            // preselection matches the server fallback. Reset when the chooser
+            // closes so the next open starts from the default again.
+            var startDrivingCarId by remember { mutableStateOf<String?>(null) }
+            val effectiveStartDrivingCarId =
+                startDrivingCarId ?: defaultStartDrivingVehicleId(createChooserVehicles)
+
             // Resolved in composition (lint: resource lookups must not use
             // LocalContext.current) so the click lambdas can show them.
             val comingSoonText = stringResource(R.string.shell_comingSoon)
@@ -2958,7 +2991,13 @@ fun AuthenticatedApp(
             // the session to echo back) or failed (take the STOP sign back and say
             // so). [LiveShareStart.request] returning false is the double-tap
             // guard: a second tap while the first is in flight issues nothing.
-            fun startSingleSession(duration: LiveSessionDuration) {
+            fun startSingleSession(
+                duration: LiveSessionDuration,
+                // The garage car the user picked in the "Start driving" popup;
+                // null (the default for every other caller — the map toggle, the
+                // convoy-end transfer) lets the server pick their main car.
+                vehicleId: String? = null,
+            ) {
                 val c = liveLocationCoordinator ?: return
                 if (!LiveShareStart.request(nowMillis(), observedSharing = isSharing)) return
                 // A fresh start must never be hidden by a stale optimistic-stop
@@ -2968,7 +3007,7 @@ fun AuthenticatedApp(
                 scope.launch {
                     val result =
                         try {
-                            c.start(duration)
+                            c.start(duration, vehicleId)
                         } catch (cancellation: CancellationException) {
                             // The scope died mid-start (sign-out, Activity teardown):
                             // nothing will resolve this attempt, so drop it rather
@@ -3003,9 +3042,9 @@ fun AuthenticatedApp(
             // unavailable snackbar (same gate as the toggle). The session
             // auto-stops at 6h with no prolong prompt, and Stop is always
             // available, so a fixed default is fine.
-            fun requestStartSingleSession() {
+            fun requestStartSingleSession(vehicleId: String? = null) {
                 if (liveLocationCoordinator != null && canShareLive) {
-                    startSingleSession(LiveLocation.DEFAULT_SESSION_DURATION)
+                    startSingleSession(LiveLocation.DEFAULT_SESSION_DURATION, vehicleId)
                 } else {
                     openLiveShareFallback()
                 }
@@ -4530,12 +4569,17 @@ fun AuthenticatedApp(
                         dmRepository = dmRepository,
                         convoyRepository = convoyRepository,
                         convoyOpenCreate = convoyOpenCreate,
+                        convoyCreateVehicleId = pendingConvoyVehicleId,
                         // A newly created convoy shows no confirmation page: close the
                         // convoy overlay and land on the map, where the bar reflects
                         // the new (active) convoy. Clear the deep-link flag so a later
                         // re-entry from the Social hub opens list-first as normal.
                         onConvoyCreated = {
                             convoyOpenCreate = false
+                            // The picked car has been handed to the create call; drop
+                            // it so a later convoy created without the popup falls
+                            // back to the owner's main car.
+                            pendingConvoyVehicleId = null
                             clearRoutes()
                             selectedTab = ShellTab.Map
                         },
@@ -5789,17 +5833,31 @@ fun AuthenticatedApp(
                             // the default window — no time/duration is chosen.
                             // Guard on the UI sharing state so confirming can never
                             // disturb an active — or just-requested — session; the
-                            // fallback still runs when unwired.
-                            if (!isSharingUi) requestStartSingleSession()
+                            // fallback still runs when unwired. The picked car (or
+                            // the default main car) rides along as the session's
+                            // denormalized car.
+                            val chosen = effectiveStartDrivingCarId
+                            startDrivingCarId = null
+                            if (!isSharingUi) requestStartSingleSession(chosen)
                         },
                         onConvoy = {
                             showCreateChooser = false
                             // Deep-link straight into #417's create-convoy flow;
-                            // the owner can start the convoy from its detail.
+                            // the owner can start the convoy from its detail. The
+                            // car picked here is carried into the convoy-create call
+                            // so the convoy honours the same choice as Single.
+                            pendingConvoyVehicleId = effectiveStartDrivingCarId
+                            startDrivingCarId = null
                             convoyOpenCreate = true
                             openRootRoute(ShellRoute.Convoys)
                         },
-                        onDismiss = { showCreateChooser = false },
+                        onDismiss = {
+                            showCreateChooser = false
+                            startDrivingCarId = null
+                        },
+                        vehicles = createChooserVehicles,
+                        selectedVehicleId = effectiveStartDrivingCarId,
+                        onSelectVehicle = { startDrivingCarId = it },
                     )
                 }
 
@@ -6335,6 +6393,13 @@ private fun CreateChooserDialog(
     onSingleSession: () -> Unit,
     onConvoy: () -> Unit,
     onDismiss: () -> Unit,
+    // The user's garage cars, the currently-selected one, and the tap handler —
+    // the round-photo picker at the top of the chooser. The chosen car applies to
+    // BOTH the Single and Convoy option below it (it is threaded into whichever
+    // start the user then taps). Empty list → the picker shows its "no cars" hint.
+    vehicles: List<com.kungsbackacarcommunity.app.garage.Vehicle> = emptyList(),
+    selectedVehicleId: String? = null,
+    onSelectVehicle: (String) -> Unit = {},
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -6345,6 +6410,11 @@ private fun CreateChooserDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
                 Text(stringResource(R.string.shell_createChooserBody))
+                com.kungsbackacarcommunity.app.live.StartDrivingCarPicker(
+                    vehicles = vehicles,
+                    selectedVehicleId = selectedVehicleId,
+                    onSelectVehicle = onSelectVehicle,
+                )
                 CreateChooserOption(
                     icon = Icons.Filled.DirectionsCar,
                     title = stringResource(R.string.shell_createChooserSingle),
@@ -6466,6 +6536,10 @@ private fun RouteHost(
     dmRepository: DmRepository?,
     convoyRepository: ConvoyRepository?,
     convoyOpenCreate: Boolean,
+    // The car the owner picked in the "Start driving" popup before choosing
+    // Convoy, forwarded to the create-convoy call so the convoy honours the same
+    // choice as a Single session; null falls back to the owner's main car.
+    convoyCreateVehicleId: String?,
     // Invoked once a convoy is successfully created: the create flow shows no
     // confirmation page — it dismisses the convoy surface and lands on the Map
     // tab, where the convoy bar shows the new (active) convoy.
@@ -7051,6 +7125,7 @@ private fun RouteHost(
                     liveShareEnabled = canShareLive,
                     inviteDeepLinkConvoyId = convoyInviteDeepLinkId,
                     onInviteDeepLinkConsumed = onConvoyInviteDeepLinkConsumed,
+                    createVehicleId = convoyCreateVehicleId,
                 )
             } else {
                 LoadingScreen()

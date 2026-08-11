@@ -1481,6 +1481,8 @@
     "createChooserSingleBody": "Kör själv och dela din liveplats.",
     "createChooserConvoy": "Konvoj",
     "createChooserConvoyBody": "Skapa en konvoj och kör tillsammans med vänner.",
+    "createChooserCarLabel": "Vilken bil kör du?",
+    "createChooserNoCars": "Lägg till en bil i ditt garage för att visa den på kartan.",
     "socialTitle": "Socialt",
     "socialEvents": "Event",
     "socialNotifications": "Aviseringar",

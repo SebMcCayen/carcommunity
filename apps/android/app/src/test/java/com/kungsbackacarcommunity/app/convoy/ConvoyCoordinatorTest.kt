@@ -80,10 +80,17 @@ class ConvoyCoordinatorTest {
             return listResult
         }
 
-        override suspend fun create(inviteeUids: List<String>, title: String?): CreateConvoyResult {
+        var lastVehicleId: String? = null
+
+        override suspend fun create(
+            inviteeUids: List<String>,
+            title: String?,
+            vehicleId: String?,
+        ): CreateConvoyResult {
             createCalls++
             lastInvitees = inviteeUids
             lastTitle = title
+            lastVehicleId = vehicleId
             return createResult
         }
 
@@ -228,7 +235,22 @@ class ConvoyCoordinatorTest {
         assertEquals("new", (state as CreateConvoyState.Created).convoyId)
         assertEquals(listOf("a", "b"), repo.lastInvitees)
         assertNull(repo.lastTitle)
+        assertNull(repo.lastVehicleId) // no car picked → server falls back to main
         assertEquals(1, repo.listCalls) // reloaded after create
+    }
+
+    @Test
+    fun `create forwards the owner's picked car, and drops a blank one`() = runTest {
+        val repo = FakeRepo()
+        val coordinator = ConvoyCoordinator(repo)
+        coordinator.create(inviteeUids = listOf("a"), title = null, vehicleId = "veh-42")
+        assertEquals("veh-42", repo.lastVehicleId)
+
+        // A blank vehicleId is coerced to null so the callable schema (which rejects
+        // an empty string) never sees one.
+        repo.lastVehicleId = "sentinel"
+        coordinator.create(inviteeUids = listOf("a"), title = null, vehicleId = "  ")
+        assertNull(repo.lastVehicleId)
     }
 
     @Test

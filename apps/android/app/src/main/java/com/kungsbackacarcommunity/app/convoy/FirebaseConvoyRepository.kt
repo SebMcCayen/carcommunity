@@ -77,12 +77,19 @@ class FirebaseConvoyRepository private constructor(
             onFailure = { ConvoyListResult.Failed(ConvoyErrorMapper.mapList(it.toErrorCode())) },
         )
 
-    override suspend fun create(inviteeUids: List<String>, title: String?): CreateConvoyResult =
+    override suspend fun create(
+        inviteeUids: List<String>,
+        title: String?,
+        vehicleId: String?,
+    ): CreateConvoyResult =
         callForData(
             CREATE,
             buildMap {
                 put("inviteeUids", inviteeUids)
                 if (!title.isNullOrBlank()) put("title", title)
+                // Only send the owner's chosen car when one was picked; the
+                // callable schema rejects a blank string.
+                if (!vehicleId.isNullOrBlank()) put("vehicleId", vehicleId)
             },
         ).fold(
             onSuccess = { ConvoyResponseParser.parseCreate(it) },

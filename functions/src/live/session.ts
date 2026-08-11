@@ -49,6 +49,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
+  pickSessionVehicleData,
   toLiveMainCar,
   type LiveSession,
   type LiveSessionDuration,
@@ -93,25 +94,46 @@ export interface SessionResponse {
 
 /**
  * Loads the two fields a live session denormalizes at start — the caller's
- * displayName and their main car — shared by the manual startSession callable
- * and the convoy auto-start producer so both build identical sessions. The
- * profile read and the vehicles query are independent, so they run in parallel.
- * The garage is capped at MAX_VEHICLES_PER_USER, so the owner query (single-field
- * userId index) is cheap and .limit() bounds it even against corrupt data.
+ * displayName and the car they are driving — shared by the manual startSession
+ * callable and the convoy auto-start producer so both build identical sessions.
+ * The profile read and the vehicles query are independent, so they run in
+ * parallel. The garage is capped at MAX_VEHICLES_PER_USER, so the owner query
+ * (single-field userId index) is cheap and .limit() bounds it even against
+ * corrupt data.
+ *
+ * `vehicleId` is the car the sharer chose in the "Start driving" picker. When
+ * omitted (or naming a car they no longer own) the selection falls back to the
+ * main car, then the first car, then none — see pickSessionVehicleData. The
+ * projection onto the session is unchanged (toLiveMainCar), so the registration
+ * plate is still never exposed regardless of which car is chosen.
  */
 async function loadSessionDenorm(
   uid: string,
+  vehicleId?: string,
 ): Promise<{ displayName: string | null; mainCar: ReturnType<typeof toLiveMainCar> }> {
   const [profile, ownedVehicles] = await Promise.all([
     db.collection('users').doc(uid).get(),
     db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
   ]);
-  // Decode each vehicle doc once, then pick the main car — no double .data() on
-  // the matched doc.
-  const mainCarData = ownedVehicles.docs
-    .map((doc) => doc.data())
-    .find((data) => data.isMainCar === true);
-  const mainCar = toLiveMainCar(mainCarData);
+  // Decode each vehicle doc once (keeping its id for the chosen-car match), then
+  // pick the driven car: chosen → main → first → none. The vehicles query has no
+  // orderBy, so sort deterministically by make/model/id — case-folded to match
+  // the Android garage's own ordering (FirebaseGarageRepository sorts by
+  // make.lowercase() then model.lowercase()) — before selecting. This keeps the
+  // "first car" fallback (no chosen id AND no main car) identical between the
+  // client's preselected default and what the server denormalizes.
+  const vehicles = ownedVehicles.docs
+    .map((doc) => ({ id: doc.id, data: doc.data() }))
+    .sort((a, b) => {
+      const makeA = String(a.data.make ?? '').toLowerCase();
+      const makeB = String(b.data.make ?? '').toLowerCase();
+      if (makeA !== makeB) return makeA < makeB ? -1 : 1;
+      const modelA = String(a.data.model ?? '').toLowerCase();
+      const modelB = String(b.data.model ?? '').toLowerCase();
+      if (modelA !== modelB) return modelA < modelB ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
+  const mainCar = toLiveMainCar(pickSessionVehicleData(vehicles, vehicleId));
   return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
 }
 
@@ -133,7 +155,7 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   // Denormalize the caller's displayName + main car onto the session so viewers
   // of the live share see who and which car it is (shared with the convoy
   // auto-start producer below).
-  const { displayName, mainCar } = await loadSessionDenorm(actor.uid);
+  const { displayName, mainCar } = await loadSessionDenorm(actor.uid, parsed.input.vehicleId);
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
@@ -437,6 +459,11 @@ export async function startConvoyAutoSession(
   // Firestore read of config/featureFlags per member. Omitted on the single-call
   // path (convoy.respond late-join), where reading it here is one read.
   liveEnabled?: boolean,
+  // The car the OWNER chose in the "Start driving" picker when creating the
+  // convoy. Only ever passed for the owner's own auto-session (convoy.create
+  // fans out to just the owner at create time); accepted invitees never go
+  // through the picker, so their auto-session falls back to their own main car.
+  vehicleId?: string,
 ): Promise<ConvoyAutoStartOutcome> {
   const enabled = liveEnabled ?? (await isLiveShareEnabled());
   if (!enabled) {
@@ -450,7 +477,7 @@ export async function startConvoyAutoSession(
     return 'skipped-existing';
   }
 
-  const { displayName, mainCar } = await loadSessionDenorm(uid);
+  const { displayName, mainCar } = await loadSessionDenorm(uid, vehicleId);
   const session: LiveSession = {
     ...buildSession(
       db.collection('_ids').doc().id,

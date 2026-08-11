@@ -1382,6 +1382,8 @@
     <string name="shell_createChooserSingleBody">Drive solo and share your live location.</string>
     <string name="shell_createChooserConvoy">Convoy</string>
     <string name="shell_createChooserConvoyBody">Create a convoy and drive together with friends.</string>
+    <string name="shell_createChooserCarLabel">Which car are you driving?</string>
+    <string name="shell_createChooserNoCars">Add a car to your garage to show it on the map.</string>
     <string name="shell_socialTitle">Social</string>
     <string name="shell_socialEvents">Events</string>
     <string name="shell_socialNotifications">Notifications</string>

@@ -45,6 +45,11 @@ describe('convoy-core parsing', () => {
     });
     // title is optional.
     expect(parseCreateConvoyInput({ inviteeUids: ['a'] }).ok).toBe(true);
+    // vehicleId (the owner's "Start driving" car) is optional and carried through.
+    const withVehicle = parseCreateConvoyInput({ inviteeUids: ['a'], vehicleId: 'veh-9' });
+    expect(withVehicle.ok && withVehicle.input.vehicleId).toBe('veh-9');
+    // a blank vehicleId is rejected.
+    expect(parseCreateConvoyInput({ inviteeUids: ['a'], vehicleId: '' }).ok).toBe(false);
     // must invite at least one.
     expect(parseCreateConvoyInput({ inviteeUids: [] }).ok).toBe(false);
     // too many invitees.
