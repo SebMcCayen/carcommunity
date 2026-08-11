@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 34,
+      "versionName": "0.8.23",
+      "releaseDate": "2026-08-11",
+      "highlights": [
+        "Live-rutt: avslutet sker nu direkt – rutten sparas i bakgrunden så du slipper vänta",
+        "Ny tillbaka-knapp högst upp på sidorna så du enkelt kan gå bakåt",
+        "Nya bil-formuläret stängs inte lika lätt av misstag och sparar det du börjat fylla i"
+      ],
+      "changes": [
+        "Live-delning: när du avslutar en rutt stängs den av direkt och du kan välja Behåll eller Ta bort med en gång – sparandet sker i bakgrunden",
+        "Ny tillbaka-knapp högst upp på helskärmssidorna – särskilt praktiskt på telefoner med gestnavigering utan systemknappar",
+        "Formuläret för ny bil: stängs inte lika lätt av misstag, frågar innan ifyllda uppgifter kastas, och sparar ett utkast en kort stund så du kan fortsätta",
+        "Bilens huvudfoto beskärs nu cirkulärt redan i förhandsvisningen, precis som det sedan visas",
+        "Buggrapportformuläret går nu att scrolla så textrutan inte göms bakom tangentbordet",
+        "Utmärkelser: alla belöningar visar nu en förloppsstapel mot nästa nivå på din egen profil",
+        "Kronjakten: sällsynta kronor tas nu av den första som samlar in dem och försvinner då för övriga (samma som legendariska); Kronjägare-märket räknar nu även automatiskt utplacerade kronor",
+        "Bli partner: ansökan accepterar nu webbadresser utan \"https://\" och visar tydligare felmeddelanden om något går fel"
+      ]
+    },
+    {
       "versionCode": 33,
       "versionName": "0.8.22",
       "releaseDate": "2026-08-09",
