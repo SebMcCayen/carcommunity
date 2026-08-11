@@ -174,6 +174,13 @@ export async function raiseBadgeCounter(
  * the very tier this reconciliation just made reachable. Returns `undefined`
  * when the caller supplied nothing, so the evaluator falls back to reading the
  * document itself.
+ *
+ * This full reconciliation runs ONLY on the 6-hour sweep. The `onVehicleCreated`
+ * trigger deliberately calls `reconcileVehiclesInGarage` directly instead, so a
+ * vehicle create pays for only the garage `count()` and never the unrelated
+ * leaderboard read — crowns are already handled instantly by
+ * `onSpawnClaimWritten`/`onCrownClaimWritten` and, for pre-fix collectors, by
+ * this sweep within one cycle.
  */
 export async function reconcileDerivedBadgeCounters(
   uid: string,
@@ -194,10 +201,15 @@ export async function reconcileDerivedBadgeCounters(
  * badgeProgress document can use that shortcut — the sweep does, and that is
  * exactly where the read would otherwise repeat every cycle for every maxed-out
  * member.
+ *
+ * Exported so the `onVehicleCreated` trigger can reconcile ONLY the vehicle
+ * counter: a vehicle create has nothing to do with crowns, so it must not pay
+ * for the leaderboard read (or trigger a Kronjägare backfill) that the full
+ * `reconcileDerivedBadgeCounters` does on the 6-hour sweep.
  */
-async function reconcileVehiclesInGarage(
+export async function reconcileVehiclesInGarage(
   uid: string,
-  knownProgress: Record<string, unknown> | undefined,
+  knownProgress?: Record<string, unknown>,
 ): Promise<Record<string, unknown> | undefined> {
   const field = BADGE_METRIC_FIELD.vehiclesInGarage;
   if (knownProgress !== undefined && toCounter(knownProgress[field]) >= MAX_VEHICLES_PER_USER) {

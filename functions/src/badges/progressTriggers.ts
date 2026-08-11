@@ -74,7 +74,7 @@ import {
 import {
   badgeProgressRef,
   bumpBadgeCounter,
-  reconcileDerivedBadgeCounters,
+  reconcileVehiclesInGarage,
   tryEvaluateBadgeTiers,
 } from './tierAwards';
 import { MAX_INSTANCES_TRIGGER_FANOUT, CPU_TRIGGER_FANOUT } from '../shared/instanceLimits';
@@ -224,7 +224,11 @@ export const onVehicleCreated = onDocumentCreated(
     if (typeof uid !== 'string' || uid.length === 0) {
       return;
     }
-    await reconcileDerivedBadgeCounters(uid);
+    // Vehicle-only reconciliation: a vehicle create has nothing to do with
+    // crowns, so it must not pay for the Kronjakt leaderboard read (or trigger a
+    // Kronjägare backfill) that the 6-hour sweep's reconcileDerivedBadgeCounters
+    // does. The raised counter cascades into onBadgeProgressWritten for awarding.
+    await reconcileVehiclesInGarage(uid);
   },
 );
 
