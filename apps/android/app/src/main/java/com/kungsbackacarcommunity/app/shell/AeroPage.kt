@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.shell
 
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -9,19 +10,28 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /**
@@ -31,9 +41,11 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
  * comfortable top spacing so content is never jammed under the status bar, and a
  * single consistent title treatment.
  *
- * The Android system Back button (handled once, centrally, by the shell's
- * `BackHandler`) is the only way back — pages no longer render their own Back
- * affordance.
+ * Going back is handled once, centrally, by the shell's `BackHandler`. On top of
+ * the system Back button/gesture, pushed full-screen sub-routes also render a
+ * pinned in-app Back arrow (see [LocalAeroBackAvailable]) so gesture-navigation
+ * users — who have no visible system Back button — are never stranded; it simply
+ * re-fires the same back dispatcher the system gesture would.
  */
 
 /** Extra breathing room above the title, on top of the status-bar inset. */
@@ -42,6 +54,52 @@ val AeroPageTopSpacing: Dp = KccSpacing.s6
 /** Default gutters + comfortable content spacing shared by every Aero page. */
 val AeroPageHorizontalPadding: Dp = KccSpacing.s6
 val AeroPageBottomPadding: Dp = KccSpacing.s6
+
+/**
+ * Whether an Aero page should render its own pinned in-app Back affordance.
+ *
+ * Gesture-navigation users have no visible system Back button, so a full-screen
+ * pushed sub-route (Settings, Events detail, a member profile, …) can otherwise
+ * be a dead end. This local is provided as `true` ONLY around the shell's
+ * `RouteHost` — the single place every pushed sub-route renders — so every such
+ * page gets the arrow. The five tab roots and the History/Social/Garage
+ * translucent panels do NOT go through `RouteHost`, so they never see `true`
+ * (the default) and stay arrow-free, exactly as intended.
+ *
+ * A screen that already owns a back/cancel affordance (the image editor, which
+ * has its own bottom Cancel) opts back out by re-providing `false` around its
+ * [AeroPage] so no duplicate top arrow appears.
+ */
+val LocalAeroBackAvailable = staticCompositionLocalOf { false }
+
+/** testTag on the pinned Back [IconButton], for UI tests. */
+const val AeroBackButtonTag = "aeroBackButton"
+
+/**
+ * The pinned in-app Back affordance: a leading arrow in a 48dp touch target,
+ * sitting in an Aero page's FIXED chrome (below the status bar, above the
+ * scrolling content) so it stays visible while the page scrolls.
+ *
+ * It invokes the back DISPATCHER — the same entry point the system Back gesture
+ * hits — rather than any page-level close callback, so it re-runs the exact same
+ * chain: a route that registers its own nested `BackHandler` (Events detail →
+ * list, Convoys, Partners, Drives) is honoured and a multi-level route steps
+ * back one level at a time instead of being dismissed wholesale.
+ */
+@Composable
+private fun AeroBackButton(modifier: Modifier = Modifier) {
+    val dispatcherOwner = LocalOnBackPressedDispatcherOwner.current
+    IconButton(
+        onClick = { dispatcherOwner?.onBackPressedDispatcher?.onBackPressed() },
+        modifier = modifier.size(48.dp).testTag(AeroBackButtonTag),
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = stringResource(R.string.shell_back),
+            tint = MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
 
 /**
  * A scrollable Aero page: page background, top spacing, the [AeroPageTitle],
@@ -127,6 +185,12 @@ fun AeroPage(
                     )
                     .padding(top = AeroPageTopSpacing),
         ) {
+            // Pinned Back affordance: rendered in the FIXED chrome (outside the
+            // scroll viewport below), so it stays visible while the page scrolls.
+            // Only pushed sub-routes see LocalAeroBackAvailable == true.
+            if (LocalAeroBackAvailable.current) {
+                AeroBackButton()
+            }
             // Scrollable content: only the title + caller content (and the gutter /
             // bottom padding around them) move when the user scrolls.
             Column(
@@ -178,6 +242,12 @@ fun AeroLazyPage(
                     .aeroPageStatusBarInset()
                     .padding(top = AeroPageTopSpacing),
         ) {
+            // Pinned Back affordance in the FIXED chrome, above the caller's
+            // scrolling LazyColumn (parity with AeroPage). Only pushed sub-routes
+            // see LocalAeroBackAvailable == true.
+            if (LocalAeroBackAvailable.current) {
+                AeroBackButton()
+            }
             content()
         }
     }

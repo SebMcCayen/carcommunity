@@ -1352,6 +1352,7 @@
     <string name="shell_participantsSharing">%1$d delar</string>
     <string name="shell_recenter">Centrera</string>
     <string name="shell_menu">Meny</string>
+    <string name="shell_back">Tillbaka</string>
     <string name="shell_panelDragHandle">Dra nedåt för att stänga</string>
     <string name="shell_panelDismiss">Stäng</string>
     <string name="shell_tabMap">Karta</string>
