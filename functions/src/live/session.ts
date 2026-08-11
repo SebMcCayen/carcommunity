@@ -116,8 +116,23 @@ async function loadSessionDenorm(
     db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
   ]);
   // Decode each vehicle doc once (keeping its id for the chosen-car match), then
-  // pick the driven car: chosen → main → first → none.
-  const vehicles = ownedVehicles.docs.map((doc) => ({ id: doc.id, data: doc.data() }));
+  // pick the driven car: chosen → main → first → none. The vehicles query has no
+  // orderBy, so sort deterministically by make/model/id — case-folded to match
+  // the Android garage's own ordering (FirebaseGarageRepository sorts by
+  // make.lowercase() then model.lowercase()) — before selecting. This keeps the
+  // "first car" fallback (no chosen id AND no main car) identical between the
+  // client's preselected default and what the server denormalizes.
+  const vehicles = ownedVehicles.docs
+    .map((doc) => ({ id: doc.id, data: doc.data() }))
+    .sort((a, b) => {
+      const makeA = String(a.data.make ?? '').toLowerCase();
+      const makeB = String(b.data.make ?? '').toLowerCase();
+      if (makeA !== makeB) return makeA < makeB ? -1 : 1;
+      const modelA = String(a.data.model ?? '').toLowerCase();
+      const modelB = String(b.data.model ?? '').toLowerCase();
+      if (modelA !== modelB) return modelA < modelB ? -1 : 1;
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+    });
   const mainCar = toLiveMainCar(pickSessionVehicleData(vehicles, vehicleId));
   return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
 }
