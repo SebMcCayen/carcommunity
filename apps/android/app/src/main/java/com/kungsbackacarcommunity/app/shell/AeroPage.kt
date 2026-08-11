@@ -76,9 +76,22 @@ val LocalAeroBackAvailable = staticCompositionLocalOf { false }
 const val AeroBackButtonTag = "aeroBackButton"
 
 /**
+ * The 48dp Back [IconButton] centres its 24dp arrow, leaving this much internal
+ * padding between the touch-target edge and the visible glyph. Subtracted from
+ * the page gutter so the arrow's VISUAL start lines up with the title text start
+ * (aligning the 48dp box to the gutter would push the glyph 12dp past it).
+ */
+private val AeroBackIconInset: Dp = 12.dp
+
+/**
  * The pinned in-app Back affordance: a leading arrow in a 48dp touch target,
  * sitting in an Aero page's FIXED chrome (below the status bar, above the
  * scrolling content) so it stays visible while the page scrolls.
+ *
+ * [horizontalGutter] is the page's own horizontal content gutter — the arrow is
+ * shifted in by `gutter - `[AeroBackIconInset] so its visible glyph starts flush
+ * with the [AeroPageTitle] text below it (and with the content), consistent on
+ * every page, rather than sitting flush against the screen edge.
  *
  * It invokes the back DISPATCHER — the same entry point the system Back gesture
  * hits — rather than any page-level close callback, so it re-runs the exact same
@@ -87,11 +100,15 @@ const val AeroBackButtonTag = "aeroBackButton"
  * back one level at a time instead of being dismissed wholesale.
  */
 @Composable
-private fun AeroBackButton(modifier: Modifier = Modifier) {
+private fun AeroBackButton(
+    horizontalGutter: Dp,
+    modifier: Modifier = Modifier,
+) {
     val dispatcherOwner = LocalOnBackPressedDispatcherOwner.current
+    val startPadding = (horizontalGutter - AeroBackIconInset).coerceAtLeast(0.dp)
     IconButton(
         onClick = { dispatcherOwner?.onBackPressedDispatcher?.onBackPressed() },
-        modifier = modifier.size(48.dp).testTag(AeroBackButtonTag),
+        modifier = modifier.padding(start = startPadding).size(48.dp).testTag(AeroBackButtonTag),
     ) {
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -187,9 +204,10 @@ fun AeroPage(
         ) {
             // Pinned Back affordance: rendered in the FIXED chrome (outside the
             // scroll viewport below), so it stays visible while the page scrolls.
-            // Only pushed sub-routes see LocalAeroBackAvailable == true.
+            // Its gutter matches the content's [horizontalPadding] so the arrow
+            // aligns with the title. Only pushed sub-routes see it (== true).
             if (LocalAeroBackAvailable.current) {
-                AeroBackButton()
+                AeroBackButton(horizontalGutter = horizontalPadding)
             }
             // Scrollable content: only the title + caller content (and the gutter /
             // bottom padding around them) move when the user scrolls.
@@ -243,10 +261,12 @@ fun AeroLazyPage(
                     .padding(top = AeroPageTopSpacing),
         ) {
             // Pinned Back affordance in the FIXED chrome, above the caller's
-            // scrolling LazyColumn (parity with AeroPage). Only pushed sub-routes
-            // see LocalAeroBackAvailable == true.
+            // scrolling LazyColumn (parity with AeroPage). Its gutter is the shared
+            // AeroPageHorizontalPadding — the same gutter aeroLazyContentPadding()
+            // insets the list by — so the arrow aligns with the title. Only pushed
+            // sub-routes see LocalAeroBackAvailable == true.
             if (LocalAeroBackAvailable.current) {
-                AeroBackButton()
+                AeroBackButton(horizontalGutter = AeroPageHorizontalPadding)
             }
             content()
         }
