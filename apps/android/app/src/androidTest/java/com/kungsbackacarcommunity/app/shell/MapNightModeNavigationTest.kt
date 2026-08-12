@@ -21,10 +21,9 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.ShellBottomBarHeight
 import com.kungsbackacarcommunity.app.design.KccTheme
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -48,15 +47,10 @@ import org.junit.runner.RunWith
  * behaviour, so the pair proves this test can actually detect the bug rather
  * than passing either way.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class MapNightModeNavigationTest {
-    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
-
-    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
-    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
-    // launch" flake. See RetryRule.
     @get:Rule
-    val rules = RetryRule.around(composeTestRule)
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     private companion object {
         const val OPEN_ROUTE = "open route"

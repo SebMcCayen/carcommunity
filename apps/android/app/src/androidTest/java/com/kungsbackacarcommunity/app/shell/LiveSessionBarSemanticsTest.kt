@@ -6,13 +6,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.drives.DriveFormatters
 import com.kungsbackacarcommunity.app.location.SpeedSample
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -49,15 +48,10 @@ import org.junit.runner.RunWith
  * RELATIONSHIP means any future reordering of the row keeps working only if the
  * sentence is reordered with it.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class LiveSessionBarSemanticsTest {
-    val composeTestRule = createComposeRule()
-
-    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
-    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
-    // launch" flake. See RetryRule.
     @get:Rule
-    val rules = RetryRule.around(composeTestRule)
+    val composeTestRule = createComposeRule()
 
     private companion object {
         const val SESSION_START_MILLIS = 1_700_000_000_000L

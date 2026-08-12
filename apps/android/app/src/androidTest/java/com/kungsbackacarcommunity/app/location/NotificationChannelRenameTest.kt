@@ -2,9 +2,8 @@ package com.kungsbackacarcommunity.app.location
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -25,14 +24,10 @@ import org.junit.runner.RunWith
  * after creation. Asserting it on a real device rather than trusting either
  * reading — the whole question is what the framework actually does.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class NotificationChannelRenameTest {
 
     // No compose rule to wrap here (this drives NotificationManager directly), so
-    // the per-test RetryRule stands alone — additive to the job-level retry.
-    @get:Rule
-    val retry = RetryRule()
-
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val manager = context.getSystemService(NotificationManager::class.java)
 

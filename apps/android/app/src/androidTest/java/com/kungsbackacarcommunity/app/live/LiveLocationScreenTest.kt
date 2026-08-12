@@ -5,11 +5,10 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -19,15 +18,10 @@ import org.junit.runner.RunWith
 /**
  * Compose UI tests for the live-location control surface (Phase 12 slice 5).
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class LiveLocationScreenTest {
-    val composeTestRule = createComposeRule()
-
-    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
-    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
-    // launch" flake. See RetryRule.
     @get:Rule
-    val rules = RetryRule.around(composeTestRule)
+    val composeTestRule = createComposeRule()
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)

@@ -4,11 +4,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -21,15 +20,10 @@ import org.junit.runner.RunWith
  * blocked, this decides only what to say about it — so every branch is
  * reachable here without simulating a real permission state on the device.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class LocationAccessPromptTest {
-    val composeTestRule = createComposeRule()
-
-    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
-    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
-    // launch" flake. See RetryRule.
     @get:Rule
-    val rules = RetryRule.around(composeTestRule)
+    val composeTestRule = createComposeRule()
 
     private fun str(id: Int) =
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)

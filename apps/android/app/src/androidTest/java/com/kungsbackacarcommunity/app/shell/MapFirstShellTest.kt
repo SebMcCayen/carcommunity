@@ -23,7 +23,6 @@ import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.unit.dp
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
@@ -36,7 +35,7 @@ import com.kungsbackacarcommunity.app.profile.ProfileRepository
 import com.kungsbackacarcommunity.app.profile.ProfileState
 import com.kungsbackacarcommunity.app.profile.SocialHandles
 import com.kungsbackacarcommunity.app.profile.UserProfile
-import com.kungsbackacarcommunity.app.testutil.RetryRule
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import com.kungsbackacarcommunity.app.update.AppUpdateAvailability
 import com.kungsbackacarcommunity.app.update.AppUpdateSource
 import com.kungsbackacarcommunity.app.welcome.WelcomeStore
@@ -58,16 +57,10 @@ import org.junit.runner.RunWith
  * still reaches the Main shell (see authedDestination). CI-run in the
  * instrumented-tests emulator job.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class MapFirstShellTest {
-    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
-
-    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
-    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
-    // launch" flake (surrounded by GPU "Failed to find ColorBuffer" noise). See
-    // RetryRule.
     @get:Rule
-    val rules = RetryRule.around(composeTestRule)
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     /**
      * The device's status-bar height in px, read from the platform resource. Used to
