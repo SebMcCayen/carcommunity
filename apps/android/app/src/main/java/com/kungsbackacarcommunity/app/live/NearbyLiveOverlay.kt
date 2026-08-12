@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
+import com.kungsbackacarcommunity.app.map.NearbyChipVisibility
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlin.math.roundToInt
@@ -94,18 +96,41 @@ fun NearbyLiveOverlay(
         // the settled snapshot rather than memoised on the sharers alone. Only
         // sharers whose projected point lands inside the viewport (with a
         // half-chip margin, so a marker is not clipped by the edge) are drawn.
+        //
+        // The visibility test is NOT a plain rectangle check: on the default
+        // pitched (45°) map, a sharer the owner has panned OFF the screen is
+        // behind the tilted camera, and `pixelForCoordinate` folds that point
+        // back into view near the top of the screen. A bare bounds test accepts
+        // the folded pixel and pins the chip to the corner — the reported bug.
+        // [NearbyChipVisibility.isVisible] cross-examines the projection against
+        // the sharer's true bearing and hides a folded (or NaN/off-screen) one.
         val onScreen =
             remember(snapshot, sharers, viewportSize, marginPx) {
                 sharers.mapNotNull { sharer ->
                     val point =
                         mapSurface.screenPositionFor(sharer.latitude, sharer.longitude)
                             ?: return@mapNotNull null
-                    val inside =
-                        point.x >= -marginPx &&
-                            point.y >= -marginPx &&
-                            point.x <= viewportSize.width + marginPx &&
-                            point.y <= viewportSize.height + marginPx
-                    if (inside) sharer to point else null
+                    val geographicBearing =
+                        ConvoyEdgeGeometry.initialBearingDegrees(
+                            fromLatitude = snapshot.latitude,
+                            fromLongitude = snapshot.longitude,
+                            toLatitude = sharer.latitude,
+                            toLongitude = sharer.longitude,
+                        )
+                    val screenAngle =
+                        ConvoyEdgeGeometry.screenAngleDegrees(
+                            geographicBearing = geographicBearing,
+                            cameraBearing = snapshot.bearing,
+                        )
+                    val visible =
+                        NearbyChipVisibility.isVisible(
+                            projected = ConvoyEdgeGeometry.ProjectedPoint(point.x, point.y),
+                            viewportWidth = viewportSize.width.toFloat(),
+                            viewportHeight = viewportSize.height.toFloat(),
+                            marginPx = marginPx,
+                            expectedScreenAngle = screenAngle,
+                        )
+                    if (visible) sharer to point else null
                 }
             }
 
