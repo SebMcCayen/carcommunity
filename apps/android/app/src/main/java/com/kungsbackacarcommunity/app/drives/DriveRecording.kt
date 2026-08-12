@@ -235,6 +235,19 @@ class DriveRecorder(
     /** Stable identifier for idempotent retries of the same recording. */
     val sourceSessionId: String,
     private val startedAtMillis: Long,
+    /**
+     * The Storage path of the car this drive is being driven in — the live
+     * session's denormalized cover photo — recorded on the saved drive so the
+     * History card can draw a round photo of the car with no extra read. Null
+     * when the sharer has no car (generic marker) or on a manual recording.
+     */
+    private val carImagePath: String? = null,
+    /**
+     * The garage-vehicle id this drive is being driven in, recorded on the saved
+     * drive so it links back to the exact vehicle. Null when the sharer has no car
+     * or on a manual recording.
+     */
+    private val vehicleId: String? = null,
 ) {
     private val points = ArrayList<RecordedPoint>()
 
@@ -339,6 +352,12 @@ class DriveRecorder(
         }
 
         request["sourceSessionId"] = sourceSessionId
+        // Record which car was driven — its garage id (links back to the vehicle)
+        // and its cover-photo path (what the History card renders) — when the
+        // session carried one. Only sent when present: the backend fields are
+        // optional and a blank string would be rejected by the callable schema.
+        vehicleId?.takeIf { it.isNotBlank() }?.let { request["vehicleId"] = it }
+        carImagePath?.takeIf { it.isNotBlank() }?.let { request["carImagePath"] = it }
         return request
     }
 

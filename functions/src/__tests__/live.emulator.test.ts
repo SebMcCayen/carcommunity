@@ -220,6 +220,11 @@ describe('live session lifecycle', () => {
     });
     // The plate is never exposed onto the live marker, whichever car is chosen.
     expect(latest.mainCar.registrationPlate).toBeUndefined();
+    // The chosen vehicleId is stamped on the SESSION node (for the drive record),
+    // but never on the public marker.
+    const session = (await adminRtdb.ref(`liveLocation/${member.uid}/session`).get()).val();
+    expect(session.vehicleId).toBe('veh-picked');
+    expect(latest.vehicleId).toBeUndefined();
 
     // Restarting with NO vehicleId falls back to the main car.
     await call('live-startSession', { duration: '1h' });

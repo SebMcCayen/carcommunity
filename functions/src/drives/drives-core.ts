@@ -80,6 +80,25 @@ const saveDriveInputSchema = z
       .max(SOURCE_SESSION_ID_MAX_LENGTH)
       .regex(/^[A-Za-z0-9._-]+$/)
       .optional(),
+    /**
+     * The garage car this drive was driven in (the one chosen in the "Start
+     * driving" picker). Both optional and backward-compatible — drives saved by
+     * older clients simply omit them. `vehicleId` links back to the car;
+     * `carImagePath` is the denormalized cover-photo Storage path the History
+     * card renders as a round photo, so the card needs no extra vehicle read.
+     */
+    vehicleId: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      // Firestore-safe id (matches rideIdSchema below and garage-core's vehicle
+      // ids): no path separators or reserved '.'/'..', so a bad value is rejected
+      // here rather than stored as an unresolvable reference.
+      .regex(/^[A-Za-z0-9._-]+$/)
+      .refine((id) => id !== '.' && id !== '..')
+      .optional(),
+    carImagePath: z.string().trim().min(1).max(500).optional(),
   })
   .strict();
 
@@ -253,6 +272,10 @@ export function buildRideDocument(
     routePath: rideRoutePath(context.userId, context.rideId),
     previewImagePath: ridePreviewPath(context.userId, context.rideId),
     sourceSessionId: input.sourceSessionId ?? null,
+    // Which car this drive was driven in — null on saves from older clients or
+    // when no car was chosen. carImagePath is what the History card renders.
+    vehicleId: input.vehicleId ?? null,
+    carImagePath: input.carImagePath ?? null,
     createdAt: serverTimestamp(),
   };
 }

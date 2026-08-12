@@ -134,6 +134,13 @@ object SingleSessionRecording {
         repository: DrivesRepository,
         routeUploadRunner: RouteUploadRunner? = null,
         sessionId: String? = null,
+        // Storage path of the car being driven — the live session's denormalized
+        // cover photo — recorded on the saved drive so History shows a round car
+        // photo. Null when the sharer has no car.
+        carImagePath: String? = null,
+        // Garage-vehicle id of the car being driven, recorded on the saved drive so
+        // it links back to the exact vehicle. Null when the sharer has no car.
+        vehicleId: String? = null,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
@@ -158,6 +165,8 @@ object SingleSessionRecording {
                 sessionId ?: ("single-" + UUID.randomUUID().toString()),
                 routeUploadRunner = routeUploadRunner,
                 uploadScope = scope,
+                carImagePath = carImagePath,
+                vehicleId = vehicleId,
             )
         ownerUid = uid
         uploadScope = scope

@@ -14,7 +14,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
-  pickSessionVehicleData,
+  pickSessionVehicle,
   toLiveMainCar,
 } from '../live/live-core';
 
@@ -66,36 +66,53 @@ describe('live-core inputs', () => {
   });
 });
 
-describe('live-core pickSessionVehicleData (Start-driving car selection)', () => {
+describe('live-core pickSessionVehicle (Start-driving car selection)', () => {
   const car = (id: string, extra: Record<string, unknown> = {}) => ({
     id,
     data: { make: 'Volvo', model: '240', modelYear: 1989, ...extra },
   });
 
   it('returns null when the caller owns no cars', () => {
-    expect(pickSessionVehicleData([])).toBeNull();
-    expect(pickSessionVehicleData([], 'veh-1')).toBeNull();
+    expect(pickSessionVehicle([])).toBeNull();
+    expect(pickSessionVehicle([], 'veh-1')).toBeNull();
   });
 
-  it('honours the explicitly chosen vehicleId when still owned', () => {
+  it('honours the explicitly chosen vehicleId when still owned (id + data)', () => {
     const vehicles = [car('a'), car('b', { isMainCar: true }), car('c')];
-    expect(pickSessionVehicleData(vehicles, 'c')).toBe(vehicles[2]!.data);
+    const picked = pickSessionVehicle(vehicles, 'c');
+    expect(picked?.id).toBe('c');
+    expect(picked?.data).toBe(vehicles[2]!.data);
   });
 
   it('falls back to the main car when no id is chosen', () => {
     const vehicles = [car('a'), car('b', { isMainCar: true }), car('c')];
-    expect(pickSessionVehicleData(vehicles)).toBe(vehicles[1]!.data);
+    expect(pickSessionVehicle(vehicles)?.id).toBe('b');
   });
 
   it('falls back to the main car when the chosen id is no longer owned', () => {
     const vehicles = [car('a'), car('b', { isMainCar: true })];
-    expect(pickSessionVehicleData(vehicles, 'deleted')).toBe(vehicles[1]!.data);
+    expect(pickSessionVehicle(vehicles, 'deleted')?.id).toBe('b');
   });
 
   it('falls back to the first car when none is flagged main', () => {
     const vehicles = [car('a'), car('b'), car('c')];
-    expect(pickSessionVehicleData(vehicles)).toBe(vehicles[0]!.data);
-    expect(pickSessionVehicleData(vehicles, 'missing')).toBe(vehicles[0]!.data);
+    expect(pickSessionVehicle(vehicles)?.id).toBe('a');
+    expect(pickSessionVehicle(vehicles, 'missing')?.id).toBe('a');
+  });
+
+  it('returns the id and data from the SAME car, without relying on identity', () => {
+    // Guard the fix for the reference-equality fragility: even if the caller
+    // decodes/clones each doc into fresh objects (so no `data` instance is shared
+    // with anything external), the returned id and data still describe the SAME
+    // selected car — the id is never derived by matching object identity.
+    const vehicles = [
+      { id: 'a', data: { make: 'Volvo', model: '240', modelYear: 1989 } },
+      { id: 'b', data: { make: 'Saab', model: '900', modelYear: 1993, isMainCar: true } },
+    ].map((v) => ({ id: v.id, data: JSON.parse(JSON.stringify(v.data)) }));
+    const picked = pickSessionVehicle(vehicles, 'a');
+    expect(picked?.id).toBe('a');
+    expect(picked?.data).toBe(vehicles[0]!.data);
+    expect(toLiveMainCar(picked?.data ?? null)).toMatchObject({ make: 'Volvo', model: '240' });
   });
 
   it('flows a chosen car through toLiveMainCar without leaking the plate', () => {
@@ -103,7 +120,7 @@ describe('live-core pickSessionVehicleData (Start-driving car selection)', () =>
       car('a', { isMainCar: true }),
       car('b', { make: 'Saab', model: '900', modelYear: 1993, registrationPlate: 'ABC 123' }),
     ];
-    const projected = toLiveMainCar(pickSessionVehicleData(vehicles, 'b'));
+    const projected = toLiveMainCar(pickSessionVehicle(vehicles, 'b')?.data ?? null);
     expect(projected).toEqual({ make: 'Saab', model: '900', modelYear: 1993, imagePath: null });
     expect(projected).not.toHaveProperty('registrationPlate');
   });
@@ -233,6 +250,19 @@ describe('live-core session lifecycle', () => {
       session,
     );
     expect(node.mainCar).toEqual(mainCar);
+  });
+
+  it('carries the driven vehicleId on the session but not the public marker', () => {
+    const session = buildSession('s1', '1h', NOW, 'Seb', null, 'veh-7');
+    expect(session.vehicleId).toBe('veh-7');
+    // Defaults to null when no car was selected.
+    expect(buildSession('s2', '1h', NOW, 'Seb').vehicleId).toBeNull();
+    // The vehicleId is NOT projected onto the marker viewers read — only mainCar.
+    const node = buildLatestNode(
+      { latitude: 59.33, longitude: 18.07, recordedAt: NOW.toISOString() },
+      session,
+    );
+    expect(node).not.toHaveProperty('vehicleId');
   });
 
   it('detects silent-stale markers numerically (non-canonical ISO safe)', () => {

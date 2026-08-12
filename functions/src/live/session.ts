@@ -49,7 +49,7 @@ import {
   parseStartSessionInput,
   parseStopSessionInput,
   parseUpdatePositionInput,
-  pickSessionVehicleData,
+  pickSessionVehicle,
   toLiveMainCar,
   type LiveSession,
   type LiveSessionDuration,
@@ -103,14 +103,18 @@ export interface SessionResponse {
  *
  * `vehicleId` is the car the sharer chose in the "Start driving" picker. When
  * omitted (or naming a car they no longer own) the selection falls back to the
- * main car, then the first car, then none — see pickSessionVehicleData. The
+ * main car, then the first car, then none — see pickSessionVehicle. The
  * projection onto the session is unchanged (toLiveMainCar), so the registration
  * plate is still never exposed regardless of which car is chosen.
  */
 async function loadSessionDenorm(
   uid: string,
   vehicleId?: string,
-): Promise<{ displayName: string | null; mainCar: ReturnType<typeof toLiveMainCar> }> {
+): Promise<{
+  displayName: string | null;
+  mainCar: ReturnType<typeof toLiveMainCar>;
+  selectedVehicleId: string | null;
+}> {
   const [profile, ownedVehicles] = await Promise.all([
     db.collection('users').doc(uid).get(),
     db.collection('vehicles').where('userId', '==', uid).limit(MAX_VEHICLES_PER_USER).get(),
@@ -133,8 +137,19 @@ async function loadSessionDenorm(
       if (modelA !== modelB) return modelA < modelB ? -1 : 1;
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
     });
-  const mainCar = toLiveMainCar(pickSessionVehicleData(vehicles, vehicleId));
-  return { displayName: (profile.data()?.displayName as string | undefined) ?? null, mainCar };
+  // ONE selection yields both the id (stamped on the session so the drive record
+  // links to it) and the data (projected onto the marker via toLiveMainCar), so
+  // the two can never come from different cars and neither depends on object
+  // identity. selectedVehicleId is independent of mainCar being non-null: a
+  // malformed doc projects to a null mainCar even though a car WAS selected.
+  const selected = pickSessionVehicle(vehicles, vehicleId);
+  const mainCar = toLiveMainCar(selected?.data ?? null);
+  const selectedVehicleId = selected?.id ?? null;
+  return {
+    displayName: (profile.data()?.displayName as string | undefined) ?? null,
+    mainCar,
+    selectedVehicleId,
+  };
 }
 
 export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<SessionResponse> => {
@@ -155,13 +170,17 @@ export const startSession = onCall(CALLABLE_OPTS, async (request): Promise<Sessi
   // Denormalize the caller's displayName + main car onto the session so viewers
   // of the live share see who and which car it is (shared with the convoy
   // auto-start producer below).
-  const { displayName, mainCar } = await loadSessionDenorm(actor.uid, parsed.input.vehicleId);
+  const { displayName, mainCar, selectedVehicleId } = await loadSessionDenorm(
+    actor.uid,
+    parsed.input.vehicleId,
+  );
   const session = buildSession(
     db.collection('_ids').doc().id, // Firestore auto-ID as a cheap unique id
     parsed.input.duration,
     new Date(),
     displayName,
     mainCar,
+    selectedVehicleId,
   );
   // Starting while a session is active RESTARTS it (fresh id + expiry).
   // Any previous marker is removed immediately — it carries the OLD
@@ -477,7 +496,7 @@ export async function startConvoyAutoSession(
     return 'skipped-existing';
   }
 
-  const { displayName, mainCar } = await loadSessionDenorm(uid, vehicleId);
+  const { displayName, mainCar, selectedVehicleId } = await loadSessionDenorm(uid, vehicleId);
   const session: LiveSession = {
     ...buildSession(
       db.collection('_ids').doc().id,
@@ -485,6 +504,7 @@ export async function startConvoyAutoSession(
       now,
       displayName,
       mainCar,
+      selectedVehicleId,
     ),
     convoyAutoStarted: true,
     convoyId,

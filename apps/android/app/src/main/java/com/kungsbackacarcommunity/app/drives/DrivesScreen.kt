@@ -12,6 +12,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -56,6 +57,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -64,10 +67,12 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.map.DriveRouteFullscreenDialog
 import com.kungsbackacarcommunity.app.map.DriveRouteMap
+import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroLazyPage
 import com.kungsbackacarcommunity.app.shell.AeroPage
 import com.kungsbackacarcommunity.app.shell.AeroPageTitle
@@ -710,6 +715,11 @@ private fun DriveCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                // A round photo of the car this drive was driven in, at the row's
+                // trailing edge. Renders nothing when the drive recorded no car
+                // (older drives, or a drive with no car), so the layout is
+                // unchanged for those.
+                DrivenCarPhoto(imagePath = drive.carImagePath)
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -733,6 +743,36 @@ private fun DriveCard(
             },
             onCancel = { showConfirm = false },
         )
+    }
+}
+
+/**
+ * A round photo of the car a drive was driven in, resolved from its Storage
+ * [imagePath] at render time (the same circular treatment the garage cards and
+ * live markers use). Renders NOTHING when [imagePath] is null — drives saved
+ * before the driven-car field existed, and drives with no car — so those cards
+ * are laid out exactly as before. A neutral circle holds the space while the URL
+ * resolves so the row never jumps.
+ */
+@Composable
+private fun DrivenCarPhoto(imagePath: String?) {
+    if (imagePath.isNullOrBlank()) return
+    val url = rememberStorageImageUrl(LocalContext.current, imagePath)
+    Box(
+        modifier =
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = stringResource(R.string.savedDrives_carPhotoDescription),
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
     }
 }
 

@@ -219,5 +219,20 @@ private fun DataSnapshot.toSessionInfo(): LiveSessionInfo? {
     // session". Read as a boxed Boolean and default to false.
     val convoyAutoStarted =
         child("convoyAutoStarted").getValue(Boolean::class.java) == true
-    return LiveSessionInfo(sessionId, status, duration, expiresAtMillis, convoyAutoStarted)
+    // The car denormalized onto the session node at start (same projection the
+    // marker carries), so the drive recording can stamp its photo onto the saved
+    // drive. Absent → null (no car).
+    val mainCar = child("mainCar").toLiveMainCar()
+    // The garage-vehicle id being driven (denormalized alongside mainCar), so the
+    // saved drive links back to the exact vehicle. Absent → null.
+    val vehicleId = child("vehicleId").getValue(String::class.java)
+    return LiveSessionInfo(
+        sessionId,
+        status,
+        duration,
+        expiresAtMillis,
+        convoyAutoStarted,
+        mainCar,
+        vehicleId,
+    )
 }

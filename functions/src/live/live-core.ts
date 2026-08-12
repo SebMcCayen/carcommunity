@@ -149,7 +149,7 @@ const startSessionInputSchema = z
     duration: z.enum(LIVE_SESSION_DURATION_KEYS),
     // Which garage car the sharer is driving this session. Optional: the start
     // paths fall back to the main car (then the first car, then no car) when it
-    // is absent or no longer owned — see pickSessionVehicleData. Bounded like a
+    // is absent or no longer owned — see pickSessionVehicle. Bounded like a
     // Firestore doc id; a stray value simply fails the ownership match and falls
     // back rather than erroring the start.
     vehicleId: z.string().trim().min(1).max(300).optional(),
@@ -294,13 +294,15 @@ export function toLiveMainCar(
  *   4. no cars → null (the session carries no car, the generic marker).
  *
  * Pure over the decoded docs so the selection is unit-testable without Firestore.
- * Returns the raw doc data; the caller runs it through {@link toLiveMainCar} for
- * the display-safe projection.
+ * Returns the whole `{ id, data }` ENTRY (not just `data`) so the caller reads
+ * BOTH the id it denormalizes (the drive record links to it) AND the data it runs
+ * through {@link toLiveMainCar} from ONE selection — the id and the projection can
+ * never come from different cars, and neither depends on object identity.
  */
-export function pickSessionVehicleData(
+export function pickSessionVehicle(
   vehicles: ReadonlyArray<{ id: string; data: Record<string, unknown> }>,
   vehicleId?: string | null,
-): Record<string, unknown> | null {
+): { id: string; data: Record<string, unknown> } | null {
   const first = vehicles[0];
   if (!first) {
     return null;
@@ -308,14 +310,14 @@ export function pickSessionVehicleData(
   if (vehicleId) {
     const chosen = vehicles.find((v) => v.id === vehicleId);
     if (chosen) {
-      return chosen.data;
+      return chosen;
     }
   }
   const main = vehicles.find((v) => v.data.isMainCar === true);
   if (main) {
-    return main.data;
+    return main;
   }
-  return first.data;
+  return first;
 }
 
 export interface LiveSession {
@@ -335,6 +337,15 @@ export interface LiveSession {
    * next session start.
    */
   mainCar: LiveMainCar | null;
+  /**
+   * The garage-vehicle id the sharer is driving this session (the car chosen in
+   * the "Start driving" picker, or the resolved main/first-car fallback), or null
+   * when they have no car. A start-time snapshot like {@link mainCar}. NOT read by
+   * viewers or written to the marker — it exists so the client can stamp WHICH car
+   * a drive was driven in onto the saved ride (for the History card) without
+   * exposing it on the public marker.
+   */
+  vehicleId?: string | null;
   /**
    * True when this session was auto-started BY a convoy (convoy.start /
    * convoy.respond-accept) rather than by the user tapping "share live". Absent
@@ -386,6 +397,7 @@ export function buildSession(
   now: Date,
   displayName: string | null,
   mainCar: LiveMainCar | null = null,
+  vehicleId: string | null = null,
 ): LiveSession {
   // The chosen window, clamped to the 6h hard cap. The current client always
   // passes '6h', which equals the cap, so clampExpiryToCap is exactly the
@@ -404,6 +416,7 @@ export function buildSession(
     stoppedAt: null,
     displayName,
     mainCar,
+    vehicleId,
   };
 }
 

@@ -800,6 +800,7 @@
     "topSpeed": "Toppfart",
     "maxSpeed": "Högsta hastighet",
     "maxSpeedShort": "Max %1$s",
+    "carPhotoDescription": "Bil som kördes",
     "date": "Datum",
     "timeRange": "Tid",
     "shareAction": "Dela körning",

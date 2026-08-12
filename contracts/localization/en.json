@@ -800,6 +800,7 @@
     "topSpeed": "Top speed",
     "maxSpeed": "Highest speed",
     "maxSpeedShort": "Max %1$s",
+    "carPhotoDescription": "Car that was driven",
     "date": "Date",
     "timeRange": "Time",
     "shareAction": "Share drive",

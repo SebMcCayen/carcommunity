@@ -745,6 +745,7 @@
     <string name="savedDrives_topSpeed">Top speed</string>
     <string name="savedDrives_maxSpeed">Highest speed</string>
     <string name="savedDrives_maxSpeedShort">Max %1$s</string>
+    <string name="savedDrives_carPhotoDescription">Car that was driven</string>
     <string name="savedDrives_date">Date</string>
     <string name="savedDrives_timeRange">Time</string>
     <string name="savedDrives_shareAction">Share drive</string>

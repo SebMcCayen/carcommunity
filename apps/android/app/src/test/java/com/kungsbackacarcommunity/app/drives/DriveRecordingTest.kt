@@ -118,6 +118,35 @@ class DriveRecordingTest {
         assertFalse(request.containsKey("title"))
         assertFalse(request.containsKey("routePoints"))
         assertEquals("sess-2", request["sourceSessionId"])
+        // No car → the car keys are omitted entirely (backward compatible).
+        assertFalse(request.containsKey("carImagePath"))
+        assertFalse(request.containsKey("vehicleId"))
+    }
+
+    @Test
+    fun `buildSaveRequest carries the driven car's id and image path when present`() {
+        val recorder =
+            DriveRecorder(
+                sourceSessionId = "sess-car",
+                startedAtMillis = 0L,
+                carImagePath = "vehicleImages/u1/veh-9/photo.jpg",
+                vehicleId = "veh-9",
+            )
+        val withCar = recorder.buildSaveRequest(title = null, endedAtMillis = 1_000L)
+        assertEquals("vehicleImages/u1/veh-9/photo.jpg", withCar["carImagePath"])
+        assertEquals("veh-9", withCar["vehicleId"])
+
+        // Blank values are treated as "no car" and dropped.
+        val blank =
+            DriveRecorder(
+                sourceSessionId = "sess-b",
+                startedAtMillis = 0L,
+                carImagePath = "  ",
+                vehicleId = "  ",
+            )
+        val blankReq = blank.buildSaveRequest(title = null, endedAtMillis = 1_000L)
+        assertFalse(blankReq.containsKey("carImagePath"))
+        assertFalse(blankReq.containsKey("vehicleId"))
     }
 
     @Test
