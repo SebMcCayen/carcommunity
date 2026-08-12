@@ -308,7 +308,9 @@ export default function EventDetailPage() {
         </div>
       )}
 
-      <div className={styles.metaSection} aria-label="Eventinformation">
+      {/* No aria-label here: a hardcoded-locale label adds nothing (plain div,
+          no role) and every field below carries its own visible label. */}
+      <div className={styles.metaSection}>
         <div className={styles.metaRow}>
           <div className={styles.metaItem}>
             <span className={styles.metaLabel}>{t('events.meta.createdBy')}</span>
