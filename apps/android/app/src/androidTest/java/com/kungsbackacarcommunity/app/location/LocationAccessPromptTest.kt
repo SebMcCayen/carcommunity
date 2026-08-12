@@ -4,10 +4,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -20,7 +20,7 @@ import org.junit.runner.RunWith
  * blocked, this decides only what to say about it — so every branch is
  * reachable here without simulating a real permission state on the device.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class LocationAccessPromptTest {
     @get:Rule
     val composeTestRule = createComposeRule()

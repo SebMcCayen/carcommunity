@@ -2,8 +2,8 @@ package com.kungsbackacarcommunity.app.location
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -23,9 +23,10 @@ import org.junit.runner.RunWith
  * after creation. Asserting it on a real device rather than trusting either
  * reading — the whole question is what the framework actually does.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class NotificationChannelRenameTest {
 
+    // A non-Compose instrumentation test: it drives NotificationManager directly.
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val manager = context.getSystemService(NotificationManager::class.java)
 

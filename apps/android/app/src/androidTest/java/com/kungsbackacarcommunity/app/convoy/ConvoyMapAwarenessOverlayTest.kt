@@ -9,11 +9,13 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import androidx.compose.ui.semantics.SemanticsProperties
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
 
 /**
  * The overlay's TIME behaviour — the one thing the pure planner tests cannot
@@ -32,6 +34,7 @@ import org.junit.Test
  * So every test here holds the camera and the roster fixed and moves ONLY the
  * clock.
  */
+@RunWith(RetryRunner::class)
 class ConvoyMapAwarenessOverlayTest {
 
     @get:Rule

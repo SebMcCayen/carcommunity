@@ -9,8 +9,8 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  * ConvoyStatusBarTest did (issue #759 Batch 3). Same GPU/rendering reason
  * ConvoyMapAwarenessOverlayTest stays on-device.
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class ConvoyStatusBarDestructiveColorTest {
     @get:Rule
     val composeTestRule = createComposeRule()

@@ -10,11 +10,11 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import com.kungsbackacarcommunity.app.testutil.RetryRunner
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -25,7 +25,7 @@ import org.junit.runner.RunWith
  * [MapboxSearchClient] + the [StubMapSurface] so no token, network, or GPS is
  * needed (mirrors the config-less/CI path).
  */
-@RunWith(AndroidJUnit4::class)
+@RunWith(RetryRunner::class)
 class NavigationSearchScreenTest {
     @get:Rule
     val composeTestRule = createComposeRule()
