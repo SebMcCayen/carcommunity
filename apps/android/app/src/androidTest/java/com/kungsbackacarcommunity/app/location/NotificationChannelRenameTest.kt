@@ -4,9 +4,11 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import com.kungsbackacarcommunity.app.testutil.RetryRule
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -25,6 +27,11 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class NotificationChannelRenameTest {
+
+    // No compose rule to wrap here (this drives NotificationManager directly), so
+    // the per-test RetryRule stands alone — additive to the job-level retry.
+    @get:Rule
+    val retry = RetryRule()
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val manager = context.getSystemService(NotificationManager::class.java)

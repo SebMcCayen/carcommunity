@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.testutil.RetryRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -38,8 +39,13 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ImageEditScreenTest {
-    @get:Rule
     val composeTestRule = createComposeRule()
+
+    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
+    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
+    // launch" flake. See RetryRule.
+    @get:Rule
+    val rules = RetryRule.around(composeTestRule)
 
     private fun previewBitmap(): Bitmap =
         // A non-square oriented preview, like a real photo decode.

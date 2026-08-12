@@ -9,6 +9,7 @@ import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import com.kungsbackacarcommunity.app.shell.StubMapSurface
+import com.kungsbackacarcommunity.app.testutil.RetryRule
 import androidx.compose.ui.semantics.SemanticsProperties
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -34,8 +35,13 @@ import org.junit.Test
  */
 class ConvoyMapAwarenessOverlayTest {
 
-    @get:Rule
     val composeTestRule = createComposeRule()
+
+    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
+    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
+    // launch" flake. See RetryRule.
+    @get:Rule
+    val rules = RetryRule.around(composeTestRule)
 
     private val cameraLat = 57.4874
     private val cameraLng = 12.0757

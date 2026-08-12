@@ -12,6 +12,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.drives.DriveFormatters
 import com.kungsbackacarcommunity.app.location.SpeedSample
+import com.kungsbackacarcommunity.app.testutil.RetryRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -50,8 +51,13 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class LiveSessionBarSemanticsTest {
-    @get:Rule
     val composeTestRule = createComposeRule()
+
+    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
+    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
+    // launch" flake. See RetryRule.
+    @get:Rule
+    val rules = RetryRule.around(composeTestRule)
 
     private companion object {
         const val SESSION_START_MILLIS = 1_700_000_000_000L

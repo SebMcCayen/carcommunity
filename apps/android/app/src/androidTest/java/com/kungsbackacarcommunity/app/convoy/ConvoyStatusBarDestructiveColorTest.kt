@@ -11,6 +11,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.testutil.RetryRule
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -27,8 +28,13 @@ import org.junit.runner.RunWith
  */
 @RunWith(AndroidJUnit4::class)
 class ConvoyStatusBarDestructiveColorTest {
-    @get:Rule
     val composeTestRule = createComposeRule()
+
+    // RetryRule OUTSIDE the compose rule: a retry relaunches the Activity /
+    // rebuilds the compose hierarchy, self-healing the emulator "Activity did not
+    // launch" flake. See RetryRule.
+    @get:Rule
+    val rules = RetryRule.around(composeTestRule)
 
     private val twoMembers =
         listOf(
