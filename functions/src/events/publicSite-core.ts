@@ -155,6 +155,18 @@ export function stockholmDateTimeParts(instant: Date): { date: string; time: str
 export const HOMEPAGE_DESC_MAX_LENGTH = 160;
 
 /**
+ * The trimmed value when it has any non-whitespace content, else null. The
+ * event schemas bound string LENGTH only, so '' and '   ' are storable — a
+ * fallback chain must treat those as absent or a blank value beats a real
+ * fallback (nullish-coalescing alone would emit `place: ""` while a usable
+ * approximateArea exists).
+ */
+function trimmedOrNull(text: string | null | undefined): string | null {
+  const trimmed = text?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
  * Collapses all whitespace runs (including newlines) to single spaces and
  * truncates to [HOMEPAGE_DESC_MAX_LENGTH] with a single-character ellipsis.
  * The homepage renders desc as a one-line card teaser; the full text lives in
@@ -222,8 +234,11 @@ export function selectHomepageEvents(
         title: event.title,
         date,
         time,
-        place: event.locationName ?? event.approximateArea ?? '',
-        desc: homepageDesc(event.summary ?? event.description),
+        // Trimmed-non-empty preference on BOTH fallback chains: '' and '   '
+        // are storable (schemas bound length only), so a blank value must
+        // never beat a real fallback (see trimmedOrNull).
+        place: trimmedOrNull(event.locationName) ?? trimmedOrNull(event.approximateArea) ?? '',
+        desc: homepageDesc(trimmedOrNull(event.summary) ?? event.description),
         url: publicEventUrl(event.eventId),
         source: 'app' as const,
       };

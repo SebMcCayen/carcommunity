@@ -114,8 +114,11 @@ export function PublicSiteDialog({
 
         <p className={styles.description}>{t(`${keyBase}.description`)}</p>
 
-        <div className={styles.eventSummary} aria-label="Eventinformation">
-          <div className={styles.eventTitle}>{event.title}</div>
+        {/* Labelled by its own visible event title (aria-labelledby) rather
+            than a hardcoded-locale aria-label, so screen readers announce the
+            same text sighted users see. */}
+        <div className={styles.eventSummary} role="group" aria-labelledby="public-site-dialog-event-title">
+          <div id="public-site-dialog-event-title" className={styles.eventTitle}>{event.title}</div>
           <div className={styles.eventMeta}>{formatDate(event.startsAt)}</div>
         </div>
 

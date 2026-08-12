@@ -225,6 +225,16 @@ describe('selectHomepageEvents', () => {
   it('falls back place → approximateArea → empty and desc summary → description', () => {
     const [noLocation] = selectHomepageEvents([source({ locationName: null })], NOW);
     expect(noLocation!.place).toBe('Kungsbacka');
+    // An EMPTY/blank locationName must not beat a real approximateArea — the
+    // schema allows '' (max-length only), so nullish-coalescing alone would
+    // ship a blank place while a fallback exists (Copilot review find, PR #840).
+    const [emptyLocation] = selectHomepageEvents([source({ locationName: '' })], NOW);
+    expect(emptyLocation!.place).toBe('Kungsbacka');
+    const [blankLocation] = selectHomepageEvents([source({ locationName: '   ' })], NOW);
+    expect(blankLocation!.place).toBe('Kungsbacka');
+    // A real place name is emitted trimmed.
+    const [padded] = selectHomepageEvents([source({ locationName: '  Stationen  ' })], NOW);
+    expect(padded!.place).toBe('Stationen');
     const [noPlaceAtAll] = selectHomepageEvents(
       [source({ locationName: null, approximateArea: null })],
       NOW,
@@ -232,6 +242,9 @@ describe('selectHomepageEvents', () => {
     expect(noPlaceAtAll!.place).toBe('');
     const [noSummary] = selectHomepageEvents([source({ summary: null })], NOW);
     expect(noSummary!.desc).toBe('Lång medlemsbeskrivning.');
+    // Same rule for desc: a blank summary must not mask the description.
+    const [blankSummary] = selectHomepageEvents([source({ summary: '  ' })], NOW);
+    expect(blankSummary!.desc).toBe('Lång medlemsbeskrivning.');
     const [nothing] = selectHomepageEvents([source({ summary: null, description: null })], NOW);
     expect(nothing!.desc).toBe('');
   });
