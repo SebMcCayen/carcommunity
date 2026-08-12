@@ -12,6 +12,7 @@
 
 import { onRequest } from 'firebase-functions/v2/https';
 import { handleHealth } from './health';
+import { eventPage } from './public/eventPage';
 import { completeOnboarding } from './auth/completeOnboarding';
 import { onUserCreate } from './auth/onUserCreate';
 import { recordLogin } from './auth/recordLogin';
@@ -219,6 +220,23 @@ export const health = onRequest(
   },
   (req, res) => handleHealth(req, res),
 );
+
+/**
+ * Public web domain (grouped export → deployed as `publicweb-eventPage`).
+ *
+ * The server-rendered public event page (issue #768): /e/{eventId} and
+ * /e/{eventId}.ics on the DEDICATED public hosting site (target `events`,
+ * site `kcc-events` — firebase.json rewrites both paths to this function).
+ * Serves ONLY publicly-enabled (events/{eventId}.publicSiteEnabled), still
+ * published, not-yet-ended events; sanitized public-safe fields only —
+ * attendee COUNT, place name + static-map pin, never the roster, the
+ * organizer or the street address (functions/src/public/eventPage.ts).
+ * An onRequest endpoint like `health`, deliberately absent from the callable
+ * registry (contracts/functions/functions.json).
+ */
+export const publicweb = {
+  eventPage,
+};
 
 /**
  * Auth domain (grouped export → deployed as `auth-completeOnboarding` and
