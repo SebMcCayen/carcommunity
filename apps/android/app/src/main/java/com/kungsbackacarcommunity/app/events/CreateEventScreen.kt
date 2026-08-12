@@ -268,6 +268,9 @@ fun CreateEventScreen(
                 checked = publicSiteEnabled,
                 // Handled by the row's toggleable so the label is tappable too.
                 onCheckedChange = null,
+                // Mirror the row's disabled state so the checkbox looks (and
+                // reads to accessibility services) as disabled while saving.
+                enabled = !saving,
             )
             Column(modifier = Modifier.padding(start = 8.dp)) {
                 Text(
