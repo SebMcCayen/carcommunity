@@ -215,17 +215,41 @@ jobs:
           echo "NAV_SDK_ENABLED = true — app/src/nav was compiled."
 
   instrumented-tests:
-    name: instrumented-tests (Compose UI)
+    name: instrumented-tests (Compose UI) [shard ${{ matrix.shard }}]
     # Pinned (not ubuntu-latest) so the runner image can't drift between OS
     # versions under us — a moving image is itself an emulator-boot flake source,
     # and it keeps the cached AVD snapshot matched to a stable environment.
     runs-on: ubuntu-24.04
+    # DURABLE FIX for the gfxstream host-side GL ColorBuffer leak (#759).
+    # Every Compose-activity launch leaks a host ColorBuffer under
+    # `-gpu swiftshader_indirect`; across a single-emulator run the count climbs
+    # monotonically (1124 → 2341) until the gfxstream host runs dry and activity
+    # launches start failing ("No compose hierarchies found … Activity did not
+    # launch"), with shell/MapFirstShellTest's ~42 activity launches the tipping
+    # point. Splitting the class or shrinking the suite does NOT help (total host
+    # launches are unchanged). The reset only happens on a FRESH emulator boot =
+    # a fresh GL host. So we shard the instrumentation run across matrix legs:
+    # each leg boots its OWN emulator (own fresh GL host) and runs only its slice
+    # via the runner's numShards/shardIndex, bounding per-emulator launches well
+    # under the buffer limit. Sharding auto-rebalances as the app grows, so it
+    # stays the durable fix rather than a one-off count tweak.
+    #
+    # 3 shards: the un-sharded run exhausted at ~test 55 with MapFirstShellTest's
+    # ~42 launches dominating; round-robin across 3 emulators drops that to ~14
+    # launches each plus a third of everything else — comfortable headroom under
+    # the buffer limit. Do not go below 3 (that is the proven-green floor).
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]
     # Phase 17: Compose UI tests on an emulator. Emulator CI is
     # environment-sensitive (KVM, boot, Compose timing) and cannot be
     # validated outside GitHub Actions, so this job is INFORMATIONAL
     # (non-blocking) until it has a proven track record — it still runs
     # and surfaces results, but does not gate the PR. Promote to required
-    # once green across several runs.
+    # once green across several runs. NOTE: the check is now a matrix, so the
+    # eventual flip-to-required must gate on ALL shard legs
+    # ("instrumented-tests (Compose UI) [shard 0..2]"), not a single name.
     continue-on-error: true
     steps:
       - name: Checkout
@@ -309,7 +333,10 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: >-
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.numShards=3
+            -Pandroid.testInstrumentationRunnerArguments.shardIndex=${{ matrix.shard }}
 
       - name: Run Compose UI tests on emulator (retry)
         if: steps.emulator_attempt_1.outcome == 'failure'
@@ -322,12 +349,18 @@ jobs:
           disable-animations: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           working-directory: apps/android
-          script: ./gradlew --no-daemon connectedDebugAndroidTest
+          script: >-
+            ./gradlew --no-daemon connectedDebugAndroidTest
+            -Pandroid.testInstrumentationRunnerArguments.numShards=3
+            -Pandroid.testInstrumentationRunnerArguments.shardIndex=${{ matrix.shard }}
 
       - name: Upload instrumentation results on failure
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: connected-test-reports
+          # Per-shard artifact name: upload-artifact v4+ errors on duplicate
+          # names, and every matrix leg would otherwise upload "connected-test-
+          # reports" and collide. Suffix with the shard index to keep them.
+          name: connected-test-reports-shard-${{ matrix.shard }}
           path: apps/android/app/build/reports/androidTests/
           retention-days: 14
