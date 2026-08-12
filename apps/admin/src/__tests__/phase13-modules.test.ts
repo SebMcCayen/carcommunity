@@ -42,6 +42,7 @@ import {
   loadAdminEvents,
   publishAdminEvent,
   resolveEventCreatorName,
+  setEventPublicSite,
   updateAdminEvent,
 } from '../features/events';
 import { loadAdminGroupDriveSummary } from '../features/group-drive';
@@ -393,6 +394,35 @@ describe('events module', () => {
     const response = await publishAdminEvent('e1');
     expect(callAdminMock).toHaveBeenCalledWith('events-publish', { eventId: 'e1' });
     expect(response.data.event.status).toBe('published');
+  });
+
+  it('toggles the public page via events-setPublicSite with { eventId, enabled } then re-reads', async () => {
+    callAdminMock.mockResolvedValue({ eventId: 'e1', publicSiteEnabled: false });
+    getDocMock
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'e1',
+        data: () => ({
+          title: 'Träff',
+          status: 'published',
+          publicSiteEnabled: false,
+          publicSiteEnabledAt: null,
+          startsAt: ts('2026-08-01T18:00:00Z'),
+          approximateArea: 'Kungsbacka',
+          rsvpCounts: { going: 0, maybe: 0, not_going: 0 },
+          createdAt: ts('2026-07-01T10:00:00Z'),
+          updatedAt: ts('2026-07-06T10:00:00Z'),
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({}) });
+
+    const response = await setEventPublicSite('e1', false);
+    expect(callAdminMock).toHaveBeenCalledWith('events-setPublicSite', {
+      eventId: 'e1',
+      enabled: false,
+    });
+    expect(response.data.event.publicSiteEnabled).toBe(false);
+    expect(response.data.event.publicSiteEnabledAt).toBeNull();
   });
 });
 

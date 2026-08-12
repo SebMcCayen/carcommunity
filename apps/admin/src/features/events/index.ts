@@ -124,6 +124,7 @@ function toAdminEventSummary(id: string, data: DocumentData): AdminEventSummary 
     title: (data.title as string | undefined) ?? '',
     status: data.status as EventStatus,
     isOfficial: Boolean(data.isOfficial),
+    publicSiteEnabled: Boolean(data.publicSiteEnabled),
     startsAt: toIsoRequired(data.startsAt),
     endsAt: toIso(data.endsAt),
     approximateArea: (data.approximateArea as string | undefined) ?? '',
@@ -158,6 +159,8 @@ function toAdminEventDetail(
     latitude: (priv.latitude as number | null | undefined) ?? null,
     longitude: (priv.longitude as number | null | undefined) ?? null,
     isOfficial: Boolean(data.isOfficial),
+    publicSiteEnabled: Boolean(data.publicSiteEnabled),
+    publicSiteEnabledAt: toIso(data.publicSiteEnabledAt),
     createdByUserId: (data.createdByUserId as string | null | undefined) ?? null,
     createdAt: toIsoRequired(data.createdAt),
     updatedAt: toIsoRequired(data.updatedAt),
@@ -306,5 +309,25 @@ export async function cancelAdminEvent(
   _token?: string,
 ): Promise<AdminEventResponse> {
   await callAdmin<EventIdResponse>('events-cancel', { eventId, reason: request.reason });
+  return loadAdminEvent(eventId);
+}
+
+/**
+ * Toggles the event's public-page flag via events.setPublicSite.
+ *
+ * Publication is the CREATOR's decision (the app's create-form checkbox) — the
+ * admin surface exists as a moderation safety valve (see which events are
+ * public; force-unpublish one) and for enabling an event whose creator asks
+ * for it after the fact. An admin toggle is audited server-side.
+ */
+export async function setEventPublicSite(
+  eventId: string,
+  enabled: boolean,
+  _token?: string,
+): Promise<AdminEventResponse> {
+  await callAdmin<{ eventId: string; publicSiteEnabled: boolean }>('events-setPublicSite', {
+    eventId,
+    enabled,
+  });
   return loadAdminEvent(eventId);
 }

@@ -5,12 +5,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { EventForm } from '@/components/events/EventForm';
 import { EventStatusBadge } from '@/components/events/EventStatusBadge';
-import { CancelDialog, PublishDialog } from '@/components/events/EventDialogs';
+import { CancelDialog, PublicSiteDialog, PublishDialog } from '@/components/events/EventDialogs';
 import {
   cancelAdminEvent,
   loadAdminEvent,
   publishAdminEvent,
   resolveEventCreatorName,
+  setEventPublicSite,
   updateAdminEvent,
   type AdminEventDetail,
   type ApiError,
@@ -51,8 +52,15 @@ export default function EventDetailPage() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
+  // Public-site toggle (homepage listing + public event page). `showPublicSite`
+  // holds the direction the dialog confirms: true = enable, false = disable.
+  const [showPublicSite, setShowPublicSite] = useState<boolean | null>(null);
+  const [publicSiteLoading, setPublicSiteLoading] = useState(false);
+  const [publicSiteError, setPublicSiteError] = useState<string | null>(null);
+
   const publishingRef = useRef(false);
   const cancellingRef = useRef(false);
+  const publicSiteRef = useRef(false);
 
   const fetchEvent = useCallback(async () => {
     if (!eventId) return;
@@ -130,6 +138,24 @@ export default function EventDetailPage() {
     }
   }
 
+  async function handlePublicSiteConfirm() {
+    if (!event || showPublicSite === null || publicSiteRef.current) return;
+    publicSiteRef.current = true;
+    setPublicSiteLoading(true);
+    setPublicSiteError(null);
+    try {
+      const result = await setEventPublicSite(event.id, showPublicSite);
+      setEvent(result.data.event);
+      setShowPublicSite(null);
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setPublicSiteError(apiErr.message ?? t('events.publicSite.error'));
+    } finally {
+      setPublicSiteLoading(false);
+      publicSiteRef.current = false;
+    }
+  }
+
   async function handleCancelConfirm(reason: string) {
     if (!event || cancellingRef.current) return;
     cancellingRef.current = true;
@@ -171,6 +197,11 @@ export default function EventDetailPage() {
   const canEdit = event.status === 'draft' || event.status === 'published';
   const canPublish = event.status === 'draft';
   const canCancel = event.status === 'draft' || event.status === 'published';
+  // Mirrors the backend guard (guardPublicSiteTogglable): enabling is only
+  // meaningful for draft/published events; disabling is always allowed so an
+  // event can never be stuck publicly listed. UX-only — the callable enforces.
+  const canEnablePublicSite = !event.publicSiteEnabled && canEdit;
+  const canDisablePublicSite = event.publicSiteEnabled;
 
   // Only use the resolved name when it was resolved for THIS event's creator
   // uid. On navigating between events the resolved state briefly belongs to the
@@ -208,6 +239,42 @@ export default function EventDetailPage() {
               onClick={() => { setPublishError(null); setShowPublish(true); }}
             >
               {t('events.publish.button')}
+            </button>
+          )}
+          {canEnablePublicSite && (
+            <button
+              type="button"
+              style={{
+                padding: 'var(--space-2) var(--space-5)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-strong, var(--text-secondary))',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--fw-medium)',
+                cursor: 'pointer',
+              }}
+              onClick={() => { setPublicSiteError(null); setShowPublicSite(true); }}
+            >
+              {t('events.publicSite.enable.button')}
+            </button>
+          )}
+          {canDisablePublicSite && (
+            <button
+              type="button"
+              style={{
+                padding: 'var(--space-2) var(--space-5)',
+                backgroundColor: 'transparent',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-strong, var(--text-secondary))',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 'var(--text-sm)',
+                fontWeight: 'var(--fw-medium)',
+                cursor: 'pointer',
+              }}
+              onClick={() => { setPublicSiteError(null); setShowPublicSite(false); }}
+            >
+              {t('events.publicSite.disable.button')}
             </button>
           )}
           {canCancel && (
@@ -257,7 +324,18 @@ export default function EventDetailPage() {
             <span className={styles.metaLabel}>{t('events.meta.updatedAt')}</span>
             <span className={styles.metaValue}>{formatDate(event.updatedAt)}</span>
           </div>
+          <div className={styles.metaItem}>
+            <span className={styles.metaLabel}>{t('events.publicSite.stateLabel')}</span>
+            <span className={styles.metaValue}>
+              {event.publicSiteEnabled
+                ? t('events.publicSite.stateOn')
+                : t('events.publicSite.stateOff')}
+            </span>
+          </div>
         </div>
+        <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-xs)', marginTop: 'var(--space-2)' }}>
+          {t('events.publicSite.creatorNote')}
+        </p>
       </div>
 
       <h2 className={styles.sectionTitle}>{t('events.rsvpSection')}</h2>
@@ -337,6 +415,17 @@ export default function EventDetailPage() {
           onClose={() => setShowCancel(false)}
           isSubmitting={cancelLoading}
           error={cancelError}
+        />
+      )}
+
+      {showPublicSite !== null && (
+        <PublicSiteDialog
+          event={event}
+          enable={showPublicSite}
+          onConfirm={handlePublicSiteConfirm}
+          onClose={() => setShowPublicSite(null)}
+          isSubmitting={publicSiteLoading}
+          error={publicSiteError}
         />
       )}
     </div>

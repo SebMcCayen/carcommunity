@@ -75,6 +75,83 @@ export function PublishDialog({ event, onConfirm, onClose, isSubmitting, error }
 }
 
 // ---------------------------------------------------------------------------
+// Public-site dialog (enable/disable the homepage listing + public page)
+// ---------------------------------------------------------------------------
+
+interface PublicSiteDialogProps {
+  event: Pick<AdminEventSummary, 'id' | 'title' | 'startsAt'>;
+  /** True = the dialog confirms ENABLING; false = confirms DISABLING. */
+  enable: boolean;
+  onConfirm: () => Promise<void>;
+  onClose: () => void;
+  isSubmitting: boolean;
+  error?: string | null;
+}
+
+/**
+ * Confirmation dialog for toggling an event's public page + homepage listing
+ * (events.setPublicSite). Publication is normally the CREATOR's decision made
+ * in the app; this admin control is the moderation safety valve (disable) and
+ * the after-the-fact assist (enable on the creator's request). No optimistic
+ * update — backend confirmation is required, and the confirm button is
+ * disabled while in flight to prevent duplicate submissions.
+ */
+export function PublicSiteDialog({
+  event,
+  enable,
+  onConfirm,
+  onClose,
+  isSubmitting,
+  error,
+}: PublicSiteDialogProps) {
+  const keyBase = enable ? 'events.publicSite.enable' : 'events.publicSite.disable';
+  return (
+    <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="public-site-dialog-title">
+      <div className={styles.dialog}>
+        <h2 id="public-site-dialog-title" className={styles.title}>
+          {t(`${keyBase}.title`)}
+        </h2>
+
+        <p className={styles.description}>{t(`${keyBase}.description`)}</p>
+
+        <div className={styles.eventSummary} aria-label="Eventinformation">
+          <div className={styles.eventTitle}>{event.title}</div>
+          <div className={styles.eventMeta}>{formatDate(event.startsAt)}</div>
+        </div>
+
+        <p className={styles.description}>{t(`${keyBase}.confirm`)}</p>
+
+        {error && (
+          <div className={styles.errorBanner} role="alert">
+            {error}
+          </div>
+        )}
+
+        <div className={styles.actions}>
+          <button
+            type="button"
+            className={styles.buttonSecondary}
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
+            {t('events.publicSite.cancel')}
+          </button>
+          <button
+            type="button"
+            className={enable ? styles.buttonPrimary : styles.buttonDanger}
+            onClick={onConfirm}
+            disabled={isSubmitting}
+            aria-busy={isSubmitting}
+          >
+            {isSubmitting ? '...' : t(`${keyBase}.button`)}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Cancel dialog
 // ---------------------------------------------------------------------------
 

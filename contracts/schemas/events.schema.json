@@ -138,6 +138,10 @@
         "title": { "type": "string", "minLength": 1 },
         "status": { "$ref": "#/$defs/eventStatus" },
         "isOfficial": { "type": "boolean" },
+        "publicSiteEnabled": {
+          "type": "boolean",
+          "description": "Creator-controlled opt-in to the public community homepage feed and the event's public /e/{eventId} page. Set on create (createEventRequest) or via events.setPublicSite (creator-or-admin); an admin unsetting it is the moderation safety valve. Takes effect only while the event is published and upcoming."
+        },
         "startsAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "endsAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "approximateArea": { "type": ["string", "null"], "minLength": 1 },
@@ -151,6 +155,7 @@
         "title",
         "status",
         "isOfficial",
+        "publicSiteEnabled",
         "startsAt",
         "endsAt",
         "approximateArea",
@@ -178,6 +183,14 @@
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
         "isOfficial": { "type": "boolean" },
+        "publicSiteEnabled": {
+          "type": "boolean",
+          "description": "Creator-controlled opt-in to the public community homepage feed and the event's public /e/{eventId} page (see adminEventSummary.publicSiteEnabled)."
+        },
+        "publicSiteEnabledAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "When the public page was last enabled; null while disabled."
+        },
         "createdByUserId": {
           "oneOf": [{ "$ref": "common.schema.json#/$defs/uid" }, { "type": "null" }]
         },
@@ -200,6 +213,8 @@
         "latitude",
         "longitude",
         "isOfficial",
+        "publicSiteEnabled",
+        "publicSiteEnabledAt",
         "createdByUserId",
         "createdAt",
         "updatedAt",
@@ -210,7 +225,7 @@
     },
     "createEventRequest": {
       "type": "object",
-      "description": "Event creation payload for events.create — sent by an active member or an admin/owner. `isOfficial` is honoured only for an admin caller; it is forced false on a member-created event. `publishNow` publishes the event on create (the community app, which has no draft/publish UI, always sends it); it only lifts an admin-created event from draft to published and is a no-op for a member. Omitted by admin-web, which keeps its draft-then-publish flow.",
+      "description": "Event creation payload for events.create — sent by an active member or an admin/owner. `isOfficial` is honoured only for an admin caller; it is forced false on a member-created event. `publishNow` publishes the event on create (the community app, which has no draft/publish UI, always sends it); it only lifts an admin-created event from draft to published and is a no-op for a member. Omitted by admin-web, which keeps its draft-then-publish flow. `publicSiteEnabled` opts the event onto the public community homepage feed + its public /e/{eventId} page (the creator's call for their own event; defaults false); it is toggled later via events.setPublicSite and is deliberately NOT part of updateEventRequest — events.update is admin-only and must not become a second toggle path.",
       "properties": {
         "title": { "type": "string", "minLength": 1 },
         "summary": { "type": ["string", "null"] },
@@ -223,7 +238,8 @@
         "latitude": { "type": ["number", "null"], "minimum": -90, "maximum": 90 },
         "longitude": { "type": ["number", "null"], "minimum": -180, "maximum": 180 },
         "isOfficial": { "type": "boolean" },
-        "publishNow": { "type": "boolean" }
+        "publishNow": { "type": "boolean" },
+        "publicSiteEnabled": { "type": "boolean" }
       },
       "required": ["title", "startsAt"],
       "additionalProperties": false
@@ -253,6 +269,16 @@
         "reason": { "type": "string", "minLength": 1 }
       },
       "required": ["reason"],
+      "additionalProperties": false
+    },
+    "setPublicSiteRequest": {
+      "type": "object",
+      "description": "Creator-or-admin toggle for events/{eventId}.publicSiteEnabled (events.setPublicSite). Enabling requires a draft or published event; disabling is always allowed — an event must never be stuck publicly listed.",
+      "properties": {
+        "eventId": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" }
+      },
+      "required": ["eventId", "enabled"],
       "additionalProperties": false
     }
   }

@@ -181,6 +181,27 @@
       "reasonRequired": "Anledning krävs.",
       "error": "Inställning misslyckades."
     },
+    "publicSite": {
+      "badge": "Publik sida",
+      "stateLabel": "Publik sida",
+      "stateOn": "Synlig på hemsidan och den publika eventsidan",
+      "stateOff": "Inte publicerad publikt",
+      "creatorNote": "Publicering styrs normalt av eventskaparen i appen. Den här kontrollen är för moderering.",
+      "cancel": "Avbryt",
+      "error": "Kunde inte ändra den publika sidan. Försök igen.",
+      "enable": {
+        "title": "Publicera på hemsidan",
+        "description": "Eventet visas i eventlistan på den publika hemsidan och får en publik eventsida. Endast titel, datum/tid, platsnamn och en kort beskrivning visas — aldrig deltagare eller exakt adress.",
+        "confirm": "Vill du publicera eventet publikt?",
+        "button": "Publicera på hemsidan"
+      },
+      "disable": {
+        "title": "Ta bort från hemsidan",
+        "description": "Eventet tas bort från den publika hemsidan och dess publika eventsida slutar visas.",
+        "confirm": "Vill du ta bort eventet från hemsidan?",
+        "button": "Ta bort från hemsidan"
+      }
+    },
     "form": {
       "titleLabel": "Titel",
       "summaryLabel": "Kort sammanfattning",

@@ -23,6 +23,12 @@ export interface AdminEventSummary {
   title: string;
   status: EventStatus;
   isOfficial: boolean;
+  /**
+   * Creator-controlled opt-in to the public community homepage feed and the
+   * event's public /e/{eventId} page. Toggled via events.setPublicSite
+   * (creator-or-admin); an admin unsetting it is the moderation safety valve.
+   */
+  publicSiteEnabled: boolean;
   startsAt: string;
   endsAt: string | null;
   approximateArea: string | null;
@@ -50,6 +56,10 @@ export interface AdminEventDetail {
   latitude: number | null;
   longitude: number | null;
   isOfficial: boolean;
+  /** See AdminEventSummary.publicSiteEnabled. */
+  publicSiteEnabled: boolean;
+  /** When the public page was last enabled; null while disabled. */
+  publicSiteEnabledAt: string | null;
   createdByUserId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +111,16 @@ export interface CreateEventRequest {
   // lifts an admin-created event from draft to published and is a no-op for a
   // member. Admin-web omits it and keeps its draft-then-publish flow.
   publishNow?: boolean;
+  // Creator opt-in to the public community homepage feed + the event's public
+  // /e/{eventId} page (defaults false). Admin-web omits it — an admin toggles
+  // the flag afterwards via events.setPublicSite (setEventPublicSite).
+  publicSiteEnabled?: boolean;
+}
+
+/** events.setPublicSite request — the creator-or-admin public-page toggle. */
+export interface SetPublicSiteRequest {
+  eventId: string;
+  enabled: boolean;
 }
 
 export interface UpdateEventRequest {

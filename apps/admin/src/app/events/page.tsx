@@ -200,6 +200,11 @@ export default function EventsPage() {
                             {t('events.table.officialBadge')}
                           </div>
                       )}
+                      {event.publicSiteEnabled && (
+                        <div className={styles.officialBadge} aria-label={t('events.publicSite.stateLabel')}>
+                          {t('events.publicSite.badge')}
+                        </div>
+                      )}
                     </td>
                     <td>
                       <EventStatusBadge status={event.status} />
