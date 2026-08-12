@@ -1,7 +1,11 @@
 package com.kungsbackacarcommunity.app.partners
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -47,6 +51,17 @@ fun PartnerApplicationScreen(
         title = stringResource(R.string.partners_applicationTitle),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Consume the IME (and nav-bar) inset so the lower fields and the submit
+        // button aren't hidden behind the keyboard or the phone's navigation bar.
+        // The app is edge-to-edge (MainActivity calls enableEdgeToEdge()), so each
+        // screen must apply the keyboard inset itself; without this the form's
+        // viewport ran under the IME and the focused field / Submit button vanished
+        // behind the keyboard and nav buttons (issue #818). This mirrors the fix
+        // already applied to the "Report a problem" form (FeedbackReportScreen).
+        // The union takes the taller of IME / nav bar rather than double-counting;
+        // AeroPage stays scrollable (default) so Compose's bring-into-view keeps the
+        // focused field visible within the now-shrunk viewport.
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             if (status == PartnerApplicationStatus.Done) {
                 Text(
