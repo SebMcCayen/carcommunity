@@ -105,8 +105,8 @@ class PartnersScreensTest {
             }
         }
         // Saved → shows the unsave label, and the revealed code is visible.
-        composeTestRule.onNodeWithText(str(R.string.partnerOffers_unsaveOffer)).assertIsDisplayed()
-        composeTestRule.onNodeWithText("SAVE20", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.partnerOffers_unsaveOffer)).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("SAVE20", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Test
