@@ -36,7 +36,8 @@ object NearbyChipVisibility {
      *
      * @param projected the sharer's coordinate as the map SDK projected it into
      *   view pixels, or null when there is no map to project with. Null → hidden.
-     * @param viewportWidth / [viewportHeight] the map surface size in pixels.
+     * @param viewportWidth the map surface width in pixels.
+     * @param viewportHeight the map surface height in pixels.
      * @param marginPx how far OUTSIDE the viewport a chip's centre may still sit
      *   and be drawn (half the chip, so a marker straddling the edge is not
      *   clipped away the instant its centre crosses). Expands the accepted
