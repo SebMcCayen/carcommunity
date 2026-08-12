@@ -3,10 +3,14 @@ package com.kungsbackacarcommunity.app.profile
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -106,6 +110,10 @@ fun ProfileScreen(
         title = stringResource(R.string.profile_title),
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
+        // Consume the IME (and nav-bar) inset so the save button and lower fields
+        // aren't hidden behind the keyboard/navigation bar on edge-to-edge devices
+        // (matches FeedbackReportScreen / issue #818).
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             AvatarSection(
                 avatarUrl = avatarUrl,

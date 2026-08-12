@@ -4,8 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -135,7 +139,14 @@ fun CreateEventScreen(
         return
     }
 
-    AeroPage(title = stringResource(R.string.events_createTitle), modifier = modifier) {
+    AeroPage(
+        title = stringResource(R.string.events_createTitle),
+        modifier = modifier,
+        // Consume the IME (and nav-bar) inset so the create button and lower fields
+        // aren't hidden behind the keyboard/navigation bar on edge-to-edge devices
+        // (matches FeedbackReportScreen / issue #818).
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
+    ) {
         Text(
             text = stringResource(R.string.events_createSubtitle),
             style = MaterialTheme.typography.bodyMedium,
