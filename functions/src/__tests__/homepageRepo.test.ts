@@ -6,6 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   HOMEPAGE_EVENTS_FILE_URL,
+  HOMEPAGE_REPO_BRANCH,
   HOMEPAGE_SYNC_COMMIT_MESSAGE,
   syncHomepageEventsFile,
 } from '../events/homepageRepo';
@@ -59,7 +60,7 @@ describe('syncHomepageEventsFile', () => {
     expect(putCalls()).toHaveLength(0);
   });
 
-  it('commits with the current sha when the feed changed', async () => {
+  it('commits with the current sha when the feed changed, pinned to the deploy branch', async () => {
     const stored = buildHomepageEventsFile([], new Date('2026-08-11T04:40:00Z'));
     fetchMock
       .mockResolvedValueOnce(githubFileResponse(stored, 'old-sha'))
@@ -67,10 +68,21 @@ describe('syncHomepageEventsFile', () => {
 
     expect(await syncHomepageEventsFile(NEXT_CONTENT, TOKEN)).toBe('committed');
 
+    // The READ is pinned to the deploy branch (?ref=) — never the repo default.
+    const [getUrl] = fetchMock.mock.calls[0] as [string];
+    expect(getUrl).toBe(`${HOMEPAGE_EVENTS_FILE_URL}?ref=${HOMEPAGE_REPO_BRANCH}`);
+
     const [url, init] = putCalls()[0] as [string, RequestInit];
     expect(url).toBe(HOMEPAGE_EVENTS_FILE_URL);
-    const body = JSON.parse(String(init.body)) as { message: string; content: string; sha?: string };
+    const body = JSON.parse(String(init.body)) as {
+      message: string;
+      branch: string;
+      content: string;
+      sha?: string;
+    };
     expect(body.message).toBe(HOMEPAGE_SYNC_COMMIT_MESSAGE);
+    // The WRITE is pinned too (body.branch) — the cPanel sync deploys main.
+    expect(body.branch).toBe(HOMEPAGE_REPO_BRANCH);
     expect(body.sha).toBe('old-sha');
     expect(Buffer.from(body.content, 'base64').toString('utf8')).toBe(NEXT_CONTENT);
   });
@@ -82,7 +94,9 @@ describe('syncHomepageEventsFile', () => {
 
     expect(await syncHomepageEventsFile(NEXT_CONTENT, TOKEN)).toBe('committed');
     const [, init] = putCalls()[0] as [string, RequestInit];
-    expect(JSON.parse(String(init.body))).not.toHaveProperty('sha');
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body).not.toHaveProperty('sha');
+    expect(body.branch).toBe(HOMEPAGE_REPO_BRANCH);
   });
 
   it('retries ONCE on a 409 sha conflict with a fresh sha', async () => {

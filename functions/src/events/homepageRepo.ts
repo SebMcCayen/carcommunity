@@ -37,6 +37,14 @@ import { homepageFileEquivalent } from './publicSite-core';
 export const HOMEPAGE_EVENTS_FILE_URL =
   'https://api.github.com/repos/SebMcCayen/kungsbacka-car-community-homepage/contents/data/app-events.json';
 
+/**
+ * The branch the homepage deploys from (cPanel syncs main). Pinned explicitly
+ * on BOTH the read (?ref=) and the write (body.branch) rather than relying on
+ * the repo's default branch — a default-branch change must never silently
+ * redirect the sync.
+ */
+export const HOMEPAGE_REPO_BRANCH = 'main';
+
 /** Commit message used for every sync commit on the homepage repo. */
 export const HOMEPAGE_SYNC_COMMIT_MESSAGE = 'chore: sync app events to homepage';
 
@@ -66,7 +74,9 @@ async function getCurrentFile(
   token: string,
   logContext: Record<string, string | number>,
 ): Promise<{ sha: string; content: string } | null | 'error'> {
-  const response = await fetch(HOMEPAGE_EVENTS_FILE_URL, { headers: githubHeaders(token) });
+  const response = await fetch(`${HOMEPAGE_EVENTS_FILE_URL}?ref=${HOMEPAGE_REPO_BRANCH}`, {
+    headers: githubHeaders(token),
+  });
   if (response.status === 404) {
     return null;
   }
@@ -97,6 +107,7 @@ async function putFile(
     headers: { ...githubHeaders(token), 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message: HOMEPAGE_SYNC_COMMIT_MESSAGE,
+      branch: HOMEPAGE_REPO_BRANCH,
       content: Buffer.from(content, 'utf8').toString('base64'),
       ...(sha ? { sha } : {}),
     }),
