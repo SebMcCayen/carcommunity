@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.auth.AuthState
+import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,7 +26,9 @@ class AppRootTest {
     @Test
     fun signedIn_showsHomeWithNameAndSignOut() {
         composeTestRule.setContent {
-            AppRoot(authState = AuthState.SignedIn(uid = "u1", displayName = "Sebbe"))
+            KccTheme {
+                AppRoot(authState = AuthState.SignedIn(uid = "u1", displayName = "Sebbe"))
+            }
         }
         composeTestRule.onNodeWithText(str(R.string.home_communityStatusTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Sebbe").assertIsDisplayed()
@@ -36,14 +39,14 @@ class AppRootTest {
 
     @Test
     fun signedOut_showsSignInScreen() {
-        composeTestRule.setContent { AppRoot(authState = AuthState.SignedOut) }
+        composeTestRule.setContent { KccTheme { AppRoot(authState = AuthState.SignedOut) } }
         composeTestRule.onNodeWithText(str(R.string.auth_loginTitle)).assertIsDisplayed()
     }
 
     @Test
     fun unavailable_showsHomeShellWithoutSignOut() {
         // Default AuthState.Unavailable — the CI / no-Firebase build.
-        composeTestRule.setContent { AppRoot() }
+        composeTestRule.setContent { KccTheme { AppRoot() } }
         composeTestRule.onNodeWithText(str(R.string.home_title)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.auth_signOut)).assertDoesNotExist()
     }
