@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -152,8 +153,11 @@ class ConvoyDetailScreenTest {
             onLeave = { left = true },
         )
 
-        composeTestRule.onNodeWithTag(CONVOY_DETAIL_END_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(CONVOY_DETAIL_LEAVE_TAG).performClick()
+        // Robolectric's default viewport is short: with three roster rows plus both
+        // exit buttons, End is laid out below the fold, so scroll it into view before
+        // asserting it is displayed (on-device the taller screen showed it directly).
+        composeTestRule.onNodeWithTag(CONVOY_DETAIL_END_TAG).performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CONVOY_DETAIL_LEAVE_TAG).performScrollTo().performClick()
         composeTestRule.waitForIdle()
         // Leaving confirms first, exactly like the bar does.
         composeTestRule
