@@ -4,6 +4,7 @@ import android.util.Log
 import org.junit.AssumptionViolatedException
 import org.junit.runner.notification.Failure
 import org.junit.runner.notification.RunNotifier
+import org.junit.runner.notification.StoppedByUserException
 import org.junit.runners.BlockJUnit4ClassRunner
 import org.junit.runners.model.FrameworkMethod
 import org.junit.runners.model.InitializationError
@@ -75,6 +76,10 @@ constructor(klass: Class<*>) : BlockJUnit4ClassRunner(klass) {
                         return
                     }
                     break
+                } catch (stopped: StoppedByUserException) {
+                    // A user/CI-requested run cancellation — never retry it; let it
+                    // propagate immediately so the run stops promptly.
+                    throw stopped
                 } catch (t: Throwable) {
                     lastFailure = t
                     if (attempt < totalAttempts) {
