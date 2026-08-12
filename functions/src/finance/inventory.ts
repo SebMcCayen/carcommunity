@@ -124,6 +124,18 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Hourly transition of events between statuses.',
   },
   {
+    id: 'events-syncHomepage',
+    label: 'Homepage events sync',
+    schedule: '40 4 * * *',
+    runsPerDay: 1,
+    writesPerRun: 0,
+    readsPerRun: 10,
+    deletesPerRun: 0,
+    avgSeconds: 5,
+    memoryGiB: 0.25,
+    note: 'Daily regeneration of the public homepage event feed (GitHub commit only when changed; no Firestore writes).',
+  },
+  {
     id: 'billboards-visibilitySweep',
     label: 'Billboard visibility sweep',
     schedule: '*/10 * * * *',
@@ -358,6 +370,10 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'events.resolveChatReport': 'admin-rare',
   'events.listAttendees': 'variable-member',
   'events.checkIn': 'variable-member',
+  // A creator flips their event's public-page flag a handful of times over
+  // the event's whole life — admin-rare traffic shape even though members
+  // may call it.
+  'events.setPublicSite': 'admin-rare',
   'garage.addVehicle': 'variable-member',
   'garage.updateVehicle': 'variable-member',
   'garage.setMainVehicle': 'variable-member',

@@ -10,9 +10,11 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -30,9 +32,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
@@ -70,6 +74,9 @@ fun CreateEventScreen(
     var title by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var address by rememberSaveable { mutableStateOf("") }
+    // Creator opt-in to the public homepage + public event page. OFF by
+    // default — an event never reaches the open web unless its creator asks.
+    var publicSiteEnabled by rememberSaveable { mutableStateOf(false) }
     var startsAtMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     // Map-pin coordinates captured by the location picker (both set or both null).
     var latitude by rememberSaveable { mutableStateOf<Double?>(null) }
@@ -241,6 +248,41 @@ fun CreateEventScreen(
             }
         }
 
+        // Public homepage opt-in. The whole row toggles (checkbox + label are
+        // one touch target via toggleable), and the helper text spells out
+        // exactly what becomes public — the creator is putting their event on
+        // the open web, so the decision must be informed.
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .toggleable(
+                        value = publicSiteEnabled,
+                        role = Role.Checkbox,
+                        enabled = !saving,
+                        onValueChange = { publicSiteEnabled = it },
+                    ),
+            verticalAlignment = Alignment.Top,
+        ) {
+            Checkbox(
+                checked = publicSiteEnabled,
+                // Handled by the row's toggleable so the label is tappable too.
+                onCheckedChange = null,
+            )
+            Column(modifier = Modifier.padding(start = 8.dp)) {
+                Text(
+                    text = stringResource(R.string.events_createPublicSiteLabel),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = stringResource(R.string.events_createPublicSiteHelp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
         if (showValidation) {
             Text(
                 text = stringResource(R.string.events_createValidation),
@@ -280,6 +322,7 @@ fun CreateEventScreen(
                             address = address.ifBlank { null },
                             latitude = latitude,
                             longitude = longitude,
+                            publicSiteEnabled = publicSiteEnabled,
                         )
                     }
                 if (input == null || !Events.isValidForCreate(input)) {

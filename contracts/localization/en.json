@@ -366,6 +366,8 @@
     "createDialogNext": "Next",
     "createDialogConfirm": "OK",
     "createRateLimited": "You can create %1$d events per day. You've reached that limit — please try again later.",
+    "createPublicSiteLabel": "Show on the homepage",
+    "createPublicSiteHelp": "The event appears in the event list on kungsbackacarcommunity.se and gets a public event page you can share with non-members. Only the title, date/time, place name and description are shown — never attendees or the exact address. You can change your mind later.",
     "attendeesTitle": "Who answered",
     "attendeesReveal": "Check who answered",
     "attendeesCount": "%1$d going",

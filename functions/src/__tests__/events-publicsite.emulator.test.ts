@@ -106,7 +106,6 @@ async function createMemberUser(prefix: string): Promise<TestUser> {
 const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
 
 let adminUser: TestUser;
-let creatorUser: TestUser;
 
 const futureStart = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -117,11 +116,20 @@ const validCreate = {
   locationName: 'Testparkeringen',
 };
 
-/** Creates a published event owned by `creatorUser` (member create path). */
-async function createCreatorEvent(overrides: Record<string, unknown> = {}): Promise<string> {
-  await signInAs(creatorUser);
+/**
+ * Creates a published event via the member create path, owned by a FRESH
+ * member (returned alongside the id, signed in). A new creator per event —
+ * never a shared one — so the 3-per-rolling-24h member creation cap can
+ * never leak from one test into another (same rule the events emulator
+ * suite follows).
+ */
+async function createCreatorEvent(
+  overrides: Record<string, unknown> = {},
+): Promise<{ eventId: string; creator: TestUser }> {
+  const creator = await createMemberUser('publicsite-creator');
+  await signInAs(creator);
   const result = await call('events-create', { ...validCreate, ...overrides });
-  return (result.data as { eventId: string }).eventId;
+  return { eventId: (result.data as { eventId: string }).eventId, creator };
 }
 
 beforeAll(async () => {
@@ -137,7 +145,6 @@ beforeAll(async () => {
   adminUser = await createProvisionedUser('publicsite-admin');
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
   await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
-  creatorUser = await createMemberUser('publicsite-creator');
 }, 120_000);
 
 afterAll(async () => {
@@ -146,7 +153,7 @@ afterAll(async () => {
 
 describe('events-create – creator opt-in flag', () => {
   it('persists publicSiteEnabled + publicSiteEnabledAt when the creator opts in', async () => {
-    const eventId = await createCreatorEvent({ publicSiteEnabled: true });
+    const { eventId } = await createCreatorEvent({ publicSiteEnabled: true });
     const snap = await adminDb.collection('events').doc(eventId).get();
     expect(snap.get('publicSiteEnabled')).toBe(true);
     expect(snap.get('publicSiteEnabledAt')).not.toBeNull();
@@ -154,7 +161,7 @@ describe('events-create – creator opt-in flag', () => {
   });
 
   it('defaults to NOT publicly enabled', async () => {
-    const eventId = await createCreatorEvent();
+    const { eventId } = await createCreatorEvent();
     const snap = await adminDb.collection('events').doc(eventId).get();
     expect(snap.get('publicSiteEnabled')).toBe(false);
     expect(snap.get('publicSiteEnabledAt')).toBeNull();
@@ -170,9 +177,9 @@ describe('events-setPublicSite – authorization', () => {
   });
 
   it('lets the CREATOR enable and disable their own event', async () => {
-    const eventId = await createCreatorEvent();
+    const { eventId, creator } = await createCreatorEvent();
 
-    await signInAs(creatorUser);
+    await signInAs(creator);
     const enabled = (await call('events-setPublicSite', { eventId, enabled: true })).data as {
       eventId: string;
       publicSiteEnabled: boolean;
@@ -189,7 +196,7 @@ describe('events-setPublicSite – authorization', () => {
   });
 
   it('denies ANY OTHER member — publishing someone else’s event is not theirs to decide', async () => {
-    const eventId = await createCreatorEvent();
+    const { eventId } = await createCreatorEvent();
     const otherMember = await createMemberUser('publicsite-other');
     await signInAs(otherMember);
     expect(
@@ -200,7 +207,7 @@ describe('events-setPublicSite – authorization', () => {
   });
 
   it('lets an ADMIN force-unpublish someone else’s event (moderation safety valve) with an audit record', async () => {
-    const eventId = await createCreatorEvent({ publicSiteEnabled: true });
+    const { eventId } = await createCreatorEvent({ publicSiteEnabled: true });
 
     await signInAs(adminUser);
     await call('events-setPublicSite', { eventId, enabled: false });
@@ -218,8 +225,8 @@ describe('events-setPublicSite – authorization', () => {
   });
 
   it('writes NO admin audit record for a creator toggling their own event', async () => {
-    const eventId = await createCreatorEvent();
-    await signInAs(creatorUser);
+    const { eventId, creator } = await createCreatorEvent();
+    await signInAs(creator);
     await call('events-setPublicSite', { eventId, enabled: true });
     const audit = await adminDb
       .collection('adminAuditEvents')
@@ -231,11 +238,11 @@ describe('events-setPublicSite – authorization', () => {
 
 describe('events-setPublicSite – lifecycle guards', () => {
   it('refuses ENABLING a cancelled event but always allows disabling', async () => {
-    const eventId = await createCreatorEvent({ publicSiteEnabled: true });
+    const { eventId, creator } = await createCreatorEvent({ publicSiteEnabled: true });
     await signInAs(adminUser);
     await call('events-cancel', { eventId, reason: 'Testnedtagning.' });
 
-    await signInAs(creatorUser);
+    await signInAs(creator);
     expect(
       await callableErrorCode(call('events-setPublicSite', { eventId, enabled: true })),
     ).toBe('functions/failed-precondition');
@@ -247,14 +254,14 @@ describe('events-setPublicSite – lifecycle guards', () => {
   });
 
   it('answers not-found for a missing event', async () => {
-    await signInAs(creatorUser);
+    await signInAs(await createMemberUser('publicsite-caller'));
     expect(
       await callableErrorCode(call('events-setPublicSite', { eventId: 'does-not-exist', enabled: true })),
     ).toBe('functions/not-found');
   });
 
   it('rejects a malformed payload', async () => {
-    await signInAs(creatorUser);
+    await signInAs(await createMemberUser('publicsite-caller'));
     expect(await callableErrorCode(call('events-setPublicSite', { eventId: 'x' }))).toBe(
       'functions/invalid-argument',
     );
