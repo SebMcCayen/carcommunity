@@ -7,6 +7,9 @@
       "hosting": {
         "admin": [
           "kungsbacka-car-community"
+        ],
+        "events": [
+          "kcc-events"
         ]
       }
     },
@@ -14,6 +17,9 @@
       "hosting": {
         "admin": [
           "demo-test"
+        ],
+        "events": [
+          "demo-test-events"
         ]
       }
     }
