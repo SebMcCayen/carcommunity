@@ -26,7 +26,7 @@ import org.junit.runner.RunWith
 @RunWith(RetryRunner::class)
 class NotificationChannelRenameTest {
 
-    // No compose rule to wrap here (this drives NotificationManager directly), so
+    // A non-Compose instrumentation test: it drives NotificationManager directly.
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
     private val manager = context.getSystemService(NotificationManager::class.java)
 

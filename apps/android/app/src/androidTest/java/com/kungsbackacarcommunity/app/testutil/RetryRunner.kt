@@ -66,10 +66,15 @@ constructor(klass: Class<*>) : BlockJUnit4ClassRunner(klass) {
                     lastFailure = null
                     break
                 } catch (assumption: AssumptionViolatedException) {
-                    // An assumption failure means "skip", not "flake": never retry
-                    // it and never convert it into a hard failure.
-                    notifier.fireTestAssumptionFailed(Failure(description, assumption))
-                    return
+                    // An assumption failure means "skip", not "flake". Honour it as
+                    // a skip ONLY when no earlier attempt hard-failed — otherwise a
+                    // late, non-deterministic assumption would mask a real failure,
+                    // so stop retrying and report that earlier failure below.
+                    if (lastFailure == null) {
+                        notifier.fireTestAssumptionFailed(Failure(description, assumption))
+                        return
+                    }
+                    break
                 } catch (t: Throwable) {
                     lastFailure = t
                     if (attempt < totalAttempts) {
