@@ -337,6 +337,8 @@
     <string name="events_createDialogNext">Next</string>
     <string name="events_createDialogConfirm">OK</string>
     <string name="events_createRateLimited">You can create %1$d events per day. You\'ve reached that limit — please try again later.</string>
+    <string name="events_createPublicSiteLabel">Show on the homepage</string>
+    <string name="events_createPublicSiteHelp">The event appears in the event list on kungsbackacarcommunity.se and gets a public event page you can share with non-members. Only the title, date/time, place name and description are shown — never attendees or the exact address. You can change your mind later.</string>
     <string name="events_attendeesTitle">Who answered</string>
     <string name="events_attendeesReveal">Check who answered</string>
     <string name="events_attendeesCount">%1$d going</string>

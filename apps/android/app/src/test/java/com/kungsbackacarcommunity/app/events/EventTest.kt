@@ -321,6 +321,20 @@ class EventTest {
         assertFalse(payload.containsKey("longitude"))
     }
 
+    // ---- Public homepage opt-in ---------------------------------------------
+
+    @Test
+    fun `createPayload sends publicSiteEnabled only when the creator opted in`() {
+        // Opted in → the flag travels.
+        assertEquals(
+            true,
+            Events.createPayload(createInput().copy(publicSiteEnabled = true))["publicSiteEnabled"],
+        )
+        // Default (not ticked) → omitted; the backend default is false, so the
+        // event never reaches the open web without the creator's explicit choice.
+        assertFalse(Events.createPayload(createInput()).containsKey("publicSiteEnabled"))
+    }
+
     // ---- Map pin filtering (event -> marker) --------------------------------
 
     @Test

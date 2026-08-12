@@ -133,6 +133,13 @@ data class CreateEventInput(
     // (guardCoordinatePair). Public teaser data once created.
     val latitude: Double? = null,
     val longitude: Double? = null,
+    // Creator opt-in to the PUBLIC community homepage (the event list on
+    // kungsbackacarcommunity.se) + the event's public web page. The creator's
+    // own call for their own event — the backend honours it for any creator
+    // and it can be changed later via `events-setPublicSite` (creator-or-admin;
+    // an admin unsetting it is the moderation safety valve). Defaults OFF: an
+    // event never reaches the open web unless its creator ticks the box.
+    val publicSiteEnabled: Boolean = false,
 )
 
 /**
@@ -329,6 +336,11 @@ object Events {
         if (lat != null && lng != null) {
             payload["latitude"] = lat
             payload["longitude"] = lng
+        }
+        // Only sent when the creator opted IN — the backend default is false,
+        // so omitting it for the common case keeps the payload minimal.
+        if (input.publicSiteEnabled) {
+            payload["publicSiteEnabled"] = true
         }
         return payload
     }

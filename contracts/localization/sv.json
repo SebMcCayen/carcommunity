@@ -366,6 +366,8 @@
     "createDialogNext": "Nästa",
     "createDialogConfirm": "OK",
     "createRateLimited": "Du kan skapa %1$d träffar per dygn. Du har nått gränsen — försök igen senare.",
+    "createPublicSiteLabel": "Visa på hemsidan",
+    "createPublicSiteHelp": "Eventet visas i eventlistan på kungsbackacarcommunity.se och får en publik eventsida som kan delas med icke-medlemmar. Endast titel, datum/tid, platsnamn och beskrivning visas — aldrig deltagare eller exakt adress. Du kan ångra dig senare.",
     "attendeesTitle": "Vilka har svarat",
     "attendeesReveal": "Se vilka som svarat",
     "attendeesCount": "%1$d kommer",

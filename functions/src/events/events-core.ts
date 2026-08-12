@@ -75,6 +75,14 @@ const createEventInputSchema = z
     // Admin-web omits it and keeps its deliberate draft-then-publish flow; a
     // member is published either way, so the flag is a no-op for them.
     publishNow: z.boolean().optional(),
+    // Creator opt-in to the PUBLIC community homepage + the event's public web
+    // page (the app create form's "Skapa publik sida" checkbox). Honoured for
+    // any creator — publishing their own event to the open web is the
+    // creator's call (see events/publicSite-core.ts); toggling it later goes
+    // through events.setPublicSite (creator-or-admin). Deliberately NOT part
+    // of updateEventInputSchema below: events.update is admin-only and must
+    // not become a second, unaudited toggle path.
+    publicSiteEnabled: z.boolean().optional(),
   })
   .strict();
 
@@ -579,6 +587,13 @@ export function buildEventDocuments(
       latitude: input.latitude ?? null,
       longitude: input.longitude ?? null,
       isOfficial: creatorRole === 'admin' ? (input.isOfficial ?? false) : false,
+      // Creator opt-in to the public homepage feed + public event page. Takes
+      // effect only while the event is also `published` and upcoming (see
+      // events/publicSite-core.ts selectHomepageEvents); toggled later via
+      // events.setPublicSite. publicSiteEnabledAt is the operator trace of the
+      // last enable (null while disabled).
+      publicSiteEnabled: input.publicSiteEnabled ?? false,
+      publicSiteEnabledAt: input.publicSiteEnabled === true ? serverTimestamp() : null,
       status: initialEventStatus(creatorRole, publishNow),
       cancelledAt: null,
       rsvpCounts: { going: 0, maybe: 0, not_going: 0 },

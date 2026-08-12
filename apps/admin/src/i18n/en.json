@@ -181,6 +181,27 @@
       "reasonRequired": "Reason is required.",
       "error": "Cancellation failed."
     },
+    "publicSite": {
+      "badge": "Public page",
+      "stateLabel": "Public page",
+      "stateOn": "Visible on the homepage and the public event page",
+      "stateOff": "Not publicly published",
+      "creatorNote": "Publication is normally controlled by the event creator in the app. This control is for moderation.",
+      "cancel": "Cancel",
+      "error": "Could not change the public page. Please try again.",
+      "enable": {
+        "title": "Publish to the homepage",
+        "description": "The event appears in the public homepage's event list and gets a public event page. Only the title, date/time, place name and a short description are shown — never attendees or the exact address.",
+        "confirm": "Publish the event publicly?",
+        "button": "Publish to the homepage"
+      },
+      "disable": {
+        "title": "Remove from the homepage",
+        "description": "The event is removed from the public homepage and its public event page stops being served.",
+        "confirm": "Remove the event from the homepage?",
+        "button": "Remove from the homepage"
+      }
+    },
     "form": {
       "titleLabel": "Title",
       "summaryLabel": "Short summary",

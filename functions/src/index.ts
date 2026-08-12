@@ -36,6 +36,7 @@ import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { onEventPublished } from './events/onEventPublished';
 import { checkIn } from './events/checkIn';
+import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
 import { block as blockUser, unblock as unblockUser } from './blocking/manageBlocks';
 import { onBlockWrite } from './blocking/onBlockWrite';
@@ -285,6 +286,13 @@ export const admin = {
  * events-remindUpcoming nudges going-RSVP attendees a couple of hours before an
  * event starts (events/eventReminders.ts).
  *
+ * PUBLIC SITE (events-setPublicSite + events-onPublicSiteWrite +
+ * events-syncHomepage; events/publicSite.ts): the creator's opt-in switch
+ * putting an upcoming published event on the public community homepage and
+ * behind its /e/{eventId} page, plus the trigger + daily sweep that keep the
+ * homepage repo's generated data/app-events.json in sync (GitHub Contents
+ * API, HOMEPAGE_REPO_TOKEN secret, no commit when unchanged).
+ *
  * CHAT AUTO-MODERATION (events-onMessageReportCreate + events-allowChatMessage):
  * a message has a moderation state machine — visible → auto_hidden (trigger,
  * when >= CHAT_AUTO_HIDE_REPORTER_THRESHOLD DISTINCT reporters have reported it)
@@ -331,6 +339,21 @@ export const events = {
   // sample. Two taps ten minutes apart inside a 150 m fence verify attendance
   // and earn `event_attend_verified` (events/checkIn.ts).
   checkIn,
+  // Public-site publishing (events/publicSite.ts): the creator-or-admin
+  // toggle for events/{eventId}.publicSiteEnabled — the ONE switch that puts
+  // an upcoming published event on the community homepage feed
+  // (data/app-events.json in the homepage repo, committed via the GitHub
+  // Contents API with the HOMEPAGE_REPO_TOKEN secret) and behind its public
+  // /e/{eventId} page. An admin unsetting it is the moderation safety valve.
+  setPublicSite,
+  // Firestore trigger regenerating the homepage feed when a write can change
+  // it (flag flip, cancel/complete — autoClose included — reschedule, edit);
+  // any other write is a no-op. Writes only to GitHub, so no trigger loop.
+  onPublicSiteWrite,
+  // Daily scheduled regen: past events fall out of the generated file even
+  // with zero Firestore activity, and any failed trigger sync self-heals.
+  // Commits nothing when the feed is unchanged.
+  syncHomepage,
 };
 
 /**
