@@ -1,7 +1,11 @@
 package com.kungsbackacarcommunity.app.garage
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -128,6 +132,10 @@ fun VehicleFormScreen(
         // Tighter than the Aero default: a form of stacked fields reads better
         // at the 12dp rhythm it has always used.
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+        // Consume the IME (and nav-bar) inset so the save button and lower fields
+        // aren't hidden behind the keyboard/navigation bar on edge-to-edge devices
+        // (matches FeedbackReportScreen / issue #818).
+        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             if (onChangePhoto != null) {
                 VehiclePhotoSection(
