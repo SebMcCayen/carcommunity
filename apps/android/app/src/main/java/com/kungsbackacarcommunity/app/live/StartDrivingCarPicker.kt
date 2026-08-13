@@ -18,13 +18,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -41,6 +44,9 @@ import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
  */
 fun defaultStartDrivingVehicleId(vehicles: List<Vehicle>): String? =
     vehicles.firstOrNull { it.isMainCar }?.id ?: vehicles.firstOrNull()?.id
+
+/** Diameter of one round car photo in the picker; also the item's full width. */
+private val CarPickerDiameter: Dp = 64.dp
 
 /**
  * A horizontal row of round garage-car photos shown in the "Start driving"
@@ -76,8 +82,26 @@ fun StartDrivingCarPicker(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         } else {
+            val scrollState = rememberScrollState()
+            // Bring the preselected car into view when the picker opens (and again
+            // whenever the selection changes). The row scrolls horizontally, so a
+            // preselected MAIN car that sorts after the cars that fit on screen
+            // would otherwise sit off to the right — the popup would open showing
+            // only unselected cars, making it look as though nothing (or the wrong
+            // car) is preselected even though the ring is correctly on the main car.
+            // Items are fixed-width (CarPickerDiameter) with a uniform gap, so the
+            // target offset is exact; scrollState clamps a past-the-end target.
+            // Index 0 (and "no match", -1) map to the start, so selecting the first
+            // car after the row was scrolled right brings it back into view too.
+            val selectedIndex = vehicles.indexOfFirst { it.id == selectedVehicleId }
+            val itemStridePx =
+                with(LocalDensity.current) { (CarPickerDiameter + KccSpacing.s3).toPx() }
+            LaunchedEffect(selectedIndex, vehicles.size) {
+                val targetIndex = selectedIndex.coerceAtLeast(0)
+                scrollState.scrollTo((targetIndex * itemStridePx).toInt())
+            }
             Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                modifier = Modifier.horizontalScroll(scrollState),
                 horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
             ) {
                 vehicles.forEach { vehicle ->
@@ -98,7 +122,7 @@ private fun CarPickerItem(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val diameter = 64.dp
+    val diameter = CarPickerDiameter
     val ringColor =
         if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val ringWidth = if (selected) 3.dp else 1.dp
