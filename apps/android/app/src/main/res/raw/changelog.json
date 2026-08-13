@@ -2,6 +2,17 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 36,
+      "versionName": "0.8.25",
+      "releaseDate": "2026-08-13",
+      "highlights": [
+        "Starta körning: din förvalda huvudbil rullas nu fram automatiskt i bilväljaren"
+      ],
+      "changes": [
+        "Starta körning: när du öppnar bilväljaren rullas din förvalda huvudbil automatiskt in i vy så att du ser den direkt"
+      ]
+    },
+    {
       "versionCode": 35,
       "versionName": "0.8.24",
       "releaseDate": "2026-08-12",
