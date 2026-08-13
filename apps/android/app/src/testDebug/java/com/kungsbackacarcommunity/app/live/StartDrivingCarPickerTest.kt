@@ -1,10 +1,17 @@
 package com.kungsbackacarcommunity.app.live
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -64,6 +71,54 @@ class StartDrivingCarPickerTest {
         // Tapping the non-selected car reports its id up to the caller.
         composeTestRule.onNodeWithContentDescription("Volvo 240").performClick()
         assertEquals("a", picked)
+    }
+
+    @Test
+    fun preselectedMainCar_isRenderedAsTheSelectedItem() {
+        // The main car ("b") is NOT the first car in garage order, so this guards
+        // the end-to-end path: the default id from defaultStartDrivingVehicleId is
+        // applied to the picker and lands the selected ring on the MAIN car, not
+        // the first one.
+        val vehicles = listOf(car("a", "240"), car("b", "740", isMainCar = true))
+        val default = defaultStartDrivingVehicleId(vehicles)
+        composeTestRule.setContent {
+            KccTheme {
+                StartDrivingCarPicker(
+                    vehicles = vehicles,
+                    selectedVehicleId = default,
+                    onSelectVehicle = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithContentDescription("Volvo 740").assertIsSelected()
+        composeTestRule.onNodeWithContentDescription("Volvo 240").assertIsNotSelected()
+    }
+
+    @Test
+    fun preselectedCarOffScreen_isScrolledIntoView() {
+        // Six fixed-width round photos in a narrow (single-item) viewport: the
+        // preselected MAIN car is last, so at scroll 0 it sits well off the right
+        // edge. The picker must scroll it into view on open, otherwise the popup
+        // would open showing only unselected cars — the reported "main car isn't
+        // preselected" symptom. The first car must then be scrolled out of view.
+        val vehicles = (0..5).map { i -> car("v$i", "model$i", isMainCar = i == 5) }
+        val default = defaultStartDrivingVehicleId(vehicles)
+        composeTestRule.setContent {
+            KccTheme {
+                Box(Modifier.width(120.dp)) {
+                    StartDrivingCarPicker(
+                        vehicles = vehicles,
+                        selectedVehicleId = default,
+                        onSelectVehicle = {},
+                    )
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Volvo model5").assertIsDisplayed()
+        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsNotDisplayed()
     }
 
     @Test
