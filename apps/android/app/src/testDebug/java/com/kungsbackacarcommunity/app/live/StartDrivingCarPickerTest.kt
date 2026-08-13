@@ -2,6 +2,9 @@ package com.kungsbackacarcommunity.app.live
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -119,6 +122,33 @@ class StartDrivingCarPickerTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithContentDescription("Volvo model5").assertIsDisplayed()
         composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsNotDisplayed()
+    }
+
+    @Test
+    fun selectingFirstCarAfterScrolling_bringsItBackIntoView() {
+        // Start with the last car selected (row scrolls to the end, so the first
+        // car is off-screen). Selecting the first car must scroll the row back so
+        // it is visible again — index 0 is not treated as "nothing to do".
+        val vehicles = (0..5).map { i -> car("v$i", "model$i") }
+        var selected by mutableStateOf("v5")
+        composeTestRule.setContent {
+            KccTheme {
+                Box(Modifier.width(120.dp)) {
+                    StartDrivingCarPicker(
+                        vehicles = vehicles,
+                        selectedVehicleId = selected,
+                        onSelectVehicle = { selected = it },
+                    )
+                }
+            }
+        }
+
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsNotDisplayed()
+
+        selected = "v0"
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithContentDescription("Volvo model0").assertIsDisplayed()
     }
 
     @Test

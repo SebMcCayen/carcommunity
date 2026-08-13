@@ -91,13 +91,14 @@ fun StartDrivingCarPicker(
             // car) is preselected even though the ring is correctly on the main car.
             // Items are fixed-width (CarPickerDiameter) with a uniform gap, so the
             // target offset is exact; scrollState clamps a past-the-end target.
+            // Index 0 (and "no match", -1) map to the start, so selecting the first
+            // car after the row was scrolled right brings it back into view too.
             val selectedIndex = vehicles.indexOfFirst { it.id == selectedVehicleId }
             val itemStridePx =
                 with(LocalDensity.current) { (CarPickerDiameter + KccSpacing.s3).toPx() }
             LaunchedEffect(selectedIndex, vehicles.size) {
-                if (selectedIndex > 0) {
-                    scrollState.scrollTo((selectedIndex * itemStridePx).toInt())
-                }
+                val targetIndex = selectedIndex.coerceAtLeast(0)
+                scrollState.scrollTo((targetIndex * itemStridePx).toInt())
             }
             Row(
                 modifier = Modifier.horizontalScroll(scrollState),
