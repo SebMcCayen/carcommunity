@@ -170,7 +170,7 @@ describe('ladder definitions', () => {
       traffrav: [1, 5, 25, 100],
       trogen: [7, 30, 100],
       konvojledare: [1, 5, 25, 100],
-      samlare: [1, 3, 5],
+      samlare: [1, 3, 6, 10],
       sasongsmastare: [1, 3, 5, 10],
     });
   });
@@ -186,10 +186,18 @@ describe('ladder definitions', () => {
     }
   });
 
-  it('caps Samlare at three tiers because the garage caps at five vehicles', () => {
+  it('gives Samlare all four tiers, with Platina at the raised garage cap (10)', () => {
     const samlare = BADGE_LADDERS.find((ladder) => ladder.ladder === 'samlare')!;
-    expect(samlare.tiers).toHaveLength(3);
-    expect(samlare.tiers.at(-1)!.threshold).toBe(5);
+    expect(samlare.tiers).toHaveLength(4);
+    expect(samlare.tiers.map((tier) => tier.tier)).toEqual([
+      'brons',
+      'silver',
+      'guld',
+      'platina',
+    ]);
+    // Platina sits exactly at MAX_VEHICLES_PER_USER, so it is reachable but only
+    // by a fully maxed-out garage.
+    expect(samlare.tiers.at(-1)!.threshold).toBe(10);
   });
 
   it('awards 25/75/200/500 Kronpoäng per tier', () => {
@@ -269,13 +277,24 @@ describe('threshold boundaries', () => {
     expect(TIER_BADGE_KEYS).not.toContain('trogen_platina');
   });
 
-  it('Samlare: the first car earns Brons and five cars earn all three tiers', () => {
+  it('Samlare: the first car earns Brons and a maxed garage (10) earns all four tiers', () => {
     expect(qualifiedTierBadges(counters({ vehiclesInGarage: 0 }))).toEqual([]);
     expect(qualifiedTierBadges(counters({ vehiclesInGarage: 1 }))).toEqual(['samlare_brons']);
+    // Guld now sits at 6, so five cars stop at Silver.
     expect(qualifiedTierBadges(counters({ vehiclesInGarage: 5 }))).toEqual([
       'samlare_brons',
       'samlare_silver',
+    ]);
+    expect(qualifiedTierBadges(counters({ vehiclesInGarage: 6 }))).toEqual([
+      'samlare_brons',
+      'samlare_silver',
       'samlare_guld',
+    ]);
+    expect(qualifiedTierBadges(counters({ vehiclesInGarage: 10 }))).toEqual([
+      'samlare_brons',
+      'samlare_silver',
+      'samlare_guld',
+      'samlare_platina',
     ]);
   });
 
@@ -866,16 +885,16 @@ describe('agrees with docs/gamification-system.md §7.2', () => {
     expect(TIER_POINTS_REWARD).toEqual({ brons: 25, silver: 75, guld: 200, platina: 500 });
   });
 
-  it('documents both ladders that deliberately stop short of Platina', () => {
+  it('documents the one ladder that deliberately stops short of Platina', () => {
     const shortLadders = BADGE_LADDERS.filter((ladder) => ladder.tiers.length < 4).map(
       (ladder) => ladder.ladder,
     );
-    expect(shortLadders.sort()).toEqual(['samlare', 'trogen']);
+    // Samlare gained its Platina rung when the garage cap rose 5 → 10; only
+    // Trogen still deliberately stops at Guld.
+    expect(shortLadders.sort()).toEqual(['trogen']);
     const doc = readFileSync(repoFile('docs/gamification-system.md'), 'utf8');
     const structure = doc.slice(doc.indexOf('### 7.1 Structure'), doc.indexOf('### 7.2'));
-    // §7.1 must name each exception, so the rung counts are never a surprise.
+    // §7.1 must name the exception, so the rung count is never a surprise.
     expect(structure).toContain('**Trogen**');
-    expect(structure).toContain('**Samlare**');
-    expect(structure).toContain('MAX_VEHICLES_PER_USER');
   });
 });

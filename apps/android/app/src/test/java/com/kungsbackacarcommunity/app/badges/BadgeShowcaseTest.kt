@@ -29,14 +29,15 @@ class BadgeShowcaseTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun `catalog is 8 milestones plus 26 ladder rungs`() {
+    fun `catalog is 8 milestones plus 27 ladder rungs`() {
         // 8 standalone: the five original milestones + the three season PODIUM
         // badges (sasong_guld/silver/brons), awarded by rank, not a ladder.
         assertEquals(8, BADGE_MILESTONE_KEYS.size)
-        // 26, not 28: Trogen and Samlare have three rungs each (no Platina) —
-        // see BadgeLadderCatalogParityTest, which pins this to badge-core.ts.
-        assertEquals(26, BADGE_LADDERS.sumOf { it.rungs.size })
-        assertEquals(34, BADGE_TOTAL_COUNT)
+        // 27, not 28: only Trogen has three rungs (no Platina). Samlare gained its
+        // Platina rung when the garage cap rose 5 → 10 — see
+        // BadgeLadderCatalogParityTest, which pins this to badge-core.ts.
+        assertEquals(27, BADGE_LADDERS.sumOf { it.rungs.size })
+        assertEquals(35, BADGE_TOTAL_COUNT)
     }
 
     @Test
@@ -73,7 +74,7 @@ class BadgeShowcaseTest {
 
         assertFalse(showcase.hasAnyBadge)
         assertEquals(0, showcase.earnedCount)
-        assertEquals(34, showcase.totalCount)
+        assertEquals(35, showcase.totalCount)
         assertTrue(showcase.milestones.isEmpty())
         // All six ladders are still rendered — an empty wall is a menu of goals,
         // never a gap.
@@ -216,15 +217,16 @@ class BadgeShowcaseTest {
     }
 
     @Test
-    fun `Samlare tops out at Guld — its Platina rung would be unreachable`() {
+    fun `Samlare completes at Platina — reachable now the garage cap is 10`() {
         val samlare = ladderById(BadgeLadderId.SAMLARE)
-        assertEquals(3, samlare.rungs.size)
-        assertEquals(BadgeTier.GULD, samlare.rungs.last().tier)
+        assertEquals(4, samlare.rungs.size)
+        assertEquals(BadgeTier.PLATINA, samlare.rungs.last().tier)
+        assertEquals(10L, samlare.rungs.last().threshold)
 
         val showcase =
             BadgeShowcase.from(
                 badges = samlare.badgeKeys.map { badge(it) },
-                counters = BadgeCounters(vehiclesInGarage = 5),
+                counters = BadgeCounters(vehiclesInGarage = 10),
             )
         val progress = ladderOf(showcase, BadgeLadderId.SAMLARE)
         assertTrue(progress.isComplete)
@@ -354,7 +356,7 @@ class BadgeShowcaseTest {
             )
 
         // Four earned, fewer than the cap → the strip shows all four, so its size
-        // equals the "x of 34" numerator. This is the reported bug fixed.
+        // equals the "x of 35" numerator. This is the reported bug fixed.
         assertEquals(4, showcase.earnedCount)
         assertEquals(showcase.earnedCount, showcase.recentAwards.size)
 

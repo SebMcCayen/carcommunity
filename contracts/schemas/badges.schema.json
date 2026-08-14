@@ -7,7 +7,7 @@
     "badgeTier": {
       "type": "string",
       "enum": ["brons", "silver", "guld", "platina"],
-      "description": "Ladder rung. Two ladders stop at guld: Samlare, because the garage caps at five vehicles so a higher rung would be unreachable; and Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9)."
+      "description": "Ladder rung. One ladder stops at guld: Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9). Samlare gained its platina rung when the garage cap rose to ten vehicles, making the top rung reachable."
     },
     "badgeLadder": {
       "type": "string",
@@ -50,7 +50,8 @@
         "konvojledare_platina",
         "samlare_brons",
         "samlare_silver",
-        "samlare_guld"
+        "samlare_guld",
+        "samlare_platina"
       ],
       "description": "Canonical badge keys. The first five are FROZEN — members already hold documents at those IDs, so a key is never renamed or remapped. helpful_member is the only manually awardable key; every other key is awarded automatically by the backend. garage_created is HISTORIC: it is still awarded on the first vehicle and is superseded for new design work by samlare_brons, which measures the same moment as the bottom rung of the Samlare ladder — both are kept so existing holders are untouched, and garage_created carries no points so holding both is not a double payout."
     },

@@ -22,9 +22,17 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
+ * Maximum vehicles a member may keep in their garage. Mirrors
+ * MAX_VEHICLES_PER_USER in functions/src/garage/garage-core.ts, which is the
+ * source of truth and enforces the cap inside the addVehicle transaction; this
+ * client copy only decides whether to show the "Add vehicle" button.
+ */
+private const val MAX_VEHICLES_PER_USER = 10
+
+/**
  * Garage list (Phase 12 slice 13). Stateless apart from the delete-confirm
  * dialog. Any signed-in user may add/manage their own cars (no longer
- * member-gated); adding is limited only by the max-5 cap (backend-enforced).
+ * member-gated); adding is limited only by the max-vehicle cap (backend-enforced).
  *
  * This is what the Garage TAB shows: the user's cars and the "Add vehicle"
  * button are visible on landing, with no hub screen in between. Back is handled
@@ -89,8 +97,9 @@ fun GarageScreen(
                             )
                         }
                     }
-                    // Max 5 vehicles per user (backend-enforced).
-                    if (state.vehicles.size < 5) {
+                    // Mirrors MAX_VEHICLES_PER_USER in functions/src/garage/garage-core.ts
+                    // (backend enforces the cap inside the addVehicle transaction).
+                    if (state.vehicles.size < MAX_VEHICLES_PER_USER) {
                         Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
                             Text(text = stringResource(R.string.garage_addVehicle))
                         }

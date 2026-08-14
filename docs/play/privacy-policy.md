@@ -102,7 +102,7 @@ actually stores.
 
 ### 4.2 Vehicles (Garage)
 - Vehicle **make, model, year, powertrain, engine description, free-text description**, and
-  **photos** you upload (up to 5 vehicles).
+  **photos** you upload (up to 10 vehicles).
 - **Registration number (optional).** You may add your vehicle's registration plate. This
   field is **public by design** — it is stored on the shared vehicle record, which **any
   signed-in user of the App can read**. That is broader than "members": the read permission

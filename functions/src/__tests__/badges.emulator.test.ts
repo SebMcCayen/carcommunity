@@ -565,7 +565,7 @@ describe('tiered badge ladders', () => {
    * The backlog sweep is the ONLY path by which a garage that predates the
    * ladders ever earns a Samlare tier: `vehiclesInGarage` is a snapshot counter
    * re-derived on a vehicle CREATE, so a member already sitting at the
-   * five-vehicle cap can never fire that trigger again. Without the
+   * vehicle cap can never fire that trigger again. Without the
    * reconciliation step in badges/scheduled.ts they would hold a full garage
    * and no Samlare badge, forever.
    */
@@ -607,7 +607,7 @@ describe('tiered badge ladders', () => {
       }
     }
 
-    // Re-derived to 3 → Brons (1) and Silver (3), but not Guld (5).
+    // Re-derived to 3 → Brons (1) and Silver (3), but not Guld (6).
     await pollUntil(async () => {
       const snap = await badgeDoc(collector.uid, 'samlare_silver').get();
       return snap.exists ? true : undefined;

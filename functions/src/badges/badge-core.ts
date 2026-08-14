@@ -116,6 +116,7 @@ export const TIER_BADGE_KEYS = [
   'samlare_brons',
   'samlare_silver',
   'samlare_guld',
+  'samlare_platina',
   // Säsongsmästare — the SCALING lifetime-championship ladder. Measures
   // `seasonsWon` (first-place season finishes), so the badge grows with the
   // number of championships; the exact count (×N) is carried in the Kronjakt
@@ -343,8 +344,10 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
     metric: 'vehiclesInGarage',
     descriptionTemplate: 'Har {n} fordon i sitt garage.',
     formatThreshold: (n) => String(n),
-    // Three tiers only: the garage caps at MAX_VEHICLES_PER_USER (5), so a
-    // Platina tier would be unreachable.
+    // Full four-rung ladder: the garage cap is MAX_VEHICLES_PER_USER (10, raised
+    // from 5 in 2026-08), so a Platina tier at the cap is now reachable. Tuned to
+    // reality (most members own 1–2 cars): Brons at the first car keeps the entry
+    // rung inclusive, while Guld (6) and Platina (10) stay aspirational.
     glyphBrief:
       'A garage arch — a wide semicircular roofline on two short legs — with ' +
       'three round dots in a row underneath, one per collected car. Arch-over-pips ' +
@@ -352,7 +355,8 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
     tiers: [
       { tier: 'brons', key: 'samlare_brons', threshold: 1 },
       { tier: 'silver', key: 'samlare_silver', threshold: 3 },
-      { tier: 'guld', key: 'samlare_guld', threshold: 5 },
+      { tier: 'guld', key: 'samlare_guld', threshold: 6 },
+      { tier: 'platina', key: 'samlare_platina', threshold: 10 },
     ],
   },
   {
