@@ -97,6 +97,7 @@ import { reingestSpawnAreaPois } from './crownHunt/reingestAreaPois';
 import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
 import { generateLeaderboards } from './leaderboard/generator';
+import { detectClaimLag } from './crownHunt/claimLagDetector';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
@@ -593,6 +594,14 @@ export const crownHunt = {
   // Deployed as crownHunt-buyPerk and crownHunt-seedPerkCatalog.
   buyPerk,
   seedPerkCatalog,
+  // Scheduled COLLECT-LAG detector (every 20 min, Europe/Stockholm). Reads the
+  // per-attempt claim docs the two collect paths already write (crownSpawnClaims
+  // / crownHuntClaims — no hot-path writes added) and auto-files ONE deduplicated
+  // GitHub issue per retry-lag SHAPE (dominant rejection + distance/accuracy
+  // bucket) when members are tapping a collect 3+ times in 2 min. Uses the shared
+  // autoIssueFiling pipeline + GITHUB_ISSUE_TOKEN. Deployed as
+  // crownHunt-detectClaimLag (functions/src/crownHunt/claimLagDetector.ts).
+  detectClaimLag,
 };
 
 /**

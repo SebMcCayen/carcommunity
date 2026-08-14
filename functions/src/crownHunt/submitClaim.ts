@@ -230,6 +230,24 @@ export const submitClaim = onCall(
     const scopedKey = scopeClaimIdempotencyKey(uid, input.idempotencyKey);
     const claimsRef = db.collection('crownHuntClaims');
 
+    // Structured rejection log — ONE line per refusal (mirrors claimSpawn), so the
+    // hand-placed collect path's edge-of-geofence / rolling-too-fast retry lag is
+    // visible in Cloud Logging and to the scheduled crownHunt-detectClaimLag
+    // detector. NO COORDINATES are ever logged (crown-hunt-geo.ts).
+    const logRejection = (
+      result: CrownHuntClaimResult,
+      extra: { distanceMeters?: number | null } = {},
+    ): void => {
+      logger.info('crownHunt.submitClaim rejected', {
+        uid,
+        pointId: input.pointId,
+        result,
+        distanceMeters: extra.distanceMeters ?? null,
+        accuracyMeters: input.accuracyMeters ?? null,
+        reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+      });
+    };
+
     // 1. Feature flag (legacy step 1 — no attempt record).
     if (!(await isCrownHuntEnabled())) {
       return respond('feature_disabled');
@@ -262,6 +280,7 @@ export const submitClaim = onCall(
       point!.status !== 'active' ||
       !isPointCurrentlyAvailable(availability!, now)
     ) {
+      logRejection('point_inactive');
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
@@ -283,12 +302,14 @@ export const submitClaim = onCall(
     // 7. Position freshness.
     const positionStale = !isPositionFresh(input.recordedAt, now.getTime());
     if (positionStale) {
+      logRejection('position_too_old');
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
         result: 'position_too_old',
         claimedAt: Timestamp.fromDate(now),
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
+        accuracyMeters: input.accuracyMeters ?? null,
       });
       if (existing) {
         return replayStoredClaim(existing, input.pointId);
@@ -306,6 +327,7 @@ export const submitClaim = onCall(
     if (
       !isWithinGeofence(distanceMeters, point!.geofenceRadiusMeters as number, input.accuracyMeters)
     ) {
+      logRejection('outside_geofence', { distanceMeters });
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
@@ -314,6 +336,7 @@ export const submitClaim = onCall(
         distanceMeters,
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
         reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+        accuracyMeters: input.accuracyMeters ?? null,
       });
       if (existing) {
         return replayStoredClaim(existing, input.pointId);
@@ -323,6 +346,7 @@ export const submitClaim = onCall(
 
     // 10. Speed check — claiming requires being safely stopped.
     if (!isSpeedSafe(input.speedMetersPerSecond, MAX_CLAIM_SPEED_MPS)) {
+      logRejection('moving_too_fast', { distanceMeters });
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
@@ -331,6 +355,7 @@ export const submitClaim = onCall(
         distanceMeters,
         positionRecordedAt: Timestamp.fromDate(recordedAtDate),
         reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+        accuracyMeters: input.accuracyMeters ?? null,
       });
       if (existing) {
         return replayStoredClaim(existing, input.pointId);
@@ -348,6 +373,7 @@ export const submitClaim = onCall(
       repeatQuery = repeatQuery.where('claimedAt', '>=', Timestamp.fromDate(windowStart));
     }
     if ((await repeatQuery.limit(1).get()).size > 0) {
+      logRejection('already_claimed', { distanceMeters });
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
@@ -370,6 +396,7 @@ export const submitClaim = onCall(
       .count()
       .get();
     if (dailyCount.data().count >= MAX_DAILY_SUCCESSFUL_CLAIMS) {
+      logRejection('daily_limit_reached', { distanceMeters });
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
@@ -436,6 +463,7 @@ export const submitClaim = onCall(
     });
 
     if (riskEval.isHighRisk) {
+      logRejection('risk_review', { distanceMeters });
       const existing = await recordAttempt(
         scopedKey,
         {
@@ -675,6 +703,7 @@ export const submitClaim = onCall(
       }
       // Lost the race: record the attempt with the authoritative result and
       // replay it, mirroring the non-transactional steps 11/12.
+      logRejection(guarded, { distanceMeters });
       const existing = await recordAttempt(scopedKey, {
         pointId: input.pointId,
         userId: uid,
