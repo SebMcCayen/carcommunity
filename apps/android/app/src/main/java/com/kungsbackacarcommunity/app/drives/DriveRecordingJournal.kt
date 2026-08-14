@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.drives
 
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * A recording rehydrated from its on-disk journal: the ORIGINAL start moment plus
@@ -86,6 +87,12 @@ class DriveRecordingJournal(private val directory: File) {
         if (!target.exists()) return
         runCatching {
             val builder = StringBuilder()
+            // If a PRIOR mid-write kill left the file without a trailing newline,
+            // its last line is a truncated partial. Start this batch with a newline
+            // so that partial stays on its OWN line (where load() harmlessly skips
+            // it) instead of FUSING with our first point into one corrupt record —
+            // which would silently drop a good fix, defeating the whole journal.
+            if (!endsWithNewline(target)) builder.append('\n')
             for (p in points) {
                 builder.append(POINT_PREFIX)
                     .append(p.latitude).append(',')
@@ -132,6 +139,22 @@ class DriveRecordingJournal(private val directory: File) {
     /** Removes the journal for [sourceSessionId] (called on save / delete / discard). */
     fun clear(sourceSessionId: String) {
         runCatching { fileFor(sourceSessionId).delete() }
+    }
+
+    /**
+     * Whether [file] already ends with a newline. Reads only the LAST byte (via a
+     * seek) so it stays cheap even for a long journal. An empty file counts as
+     * "terminated" — there is no partial line to protect.
+     */
+    private fun endsWithNewline(file: File): Boolean {
+        val length = file.length()
+        if (length == 0L) return true
+        return runCatching {
+            RandomAccessFile(file, "r").use { raf ->
+                raf.seek(length - 1)
+                raf.read() == '\n'.code
+            }
+        }.getOrDefault(true)
     }
 
     private fun pruneOthers(keep: File) {

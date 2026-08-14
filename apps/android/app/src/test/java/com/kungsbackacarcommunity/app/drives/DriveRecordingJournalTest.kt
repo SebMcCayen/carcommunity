@@ -68,6 +68,39 @@ class DriveRecordingJournalTest {
     }
 
     @Test
+    fun `appending after a truncated last line keeps every whole record intact`() {
+        val dir = tempFolder.newFolder("journals")
+        val j = DriveRecordingJournal(dir)
+        j.begin(session, startedAtMillis = 500L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 600L)))
+        // A process kill mid-write leaves a truncated partial line (no newline).
+        val file = dir.listFiles()!!.single { it.name.endsWith(".journal") }
+        file.appendText("P,57.1,12.")
+
+        // The session resumes and keeps recording: more fixes are appended. The
+        // truncated partial must NOT fuse with the first new point into one corrupt
+        // record — every WHOLE record must still parse, losing only the partial.
+        j.appendPoints(
+            session,
+            listOf(
+                RecordedPoint(57.2, 12.2, 700L),
+                RecordedPoint(57.3, 12.3, 800L),
+            ),
+        )
+
+        val snapshot = j.load(session)!!
+        assertEquals(500L, snapshot.startedAtMillis)
+        assertEquals(
+            listOf(
+                RecordedPoint(57.0, 12.0, 600L),
+                RecordedPoint(57.2, 12.2, 700L),
+                RecordedPoint(57.3, 12.3, 800L),
+            ),
+            snapshot.points,
+        )
+    }
+
+    @Test
     fun `load returns null when the header is unreadable`() {
         val dir = tempFolder.newFolder("journals")
         val j = DriveRecordingJournal(dir)
