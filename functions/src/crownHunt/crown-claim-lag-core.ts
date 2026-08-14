@@ -160,8 +160,11 @@ function groupKey(a: ClaimAttemptRecord): string {
  * threshold inside the window. Single rejections and rejections spread wider than
  * the window are ignored.
  *
- * @param attempts  per-attempt records (any results; non-lag results are ignored
- *                  by the pattern but still bound the before-success count).
+ * @param attempts  per-attempt records for the `(source, uid, targetId)` groups
+ *                  to consider. Only lag results and `awarded` matter: lag results
+ *                  form the burst, and an `awarded` after the first burst rejection
+ *                  ends the episode and fixes `attemptsBeforeSuccess`. Records with
+ *                  any other result are inert (safe to pass or omit).
  * @param lagOrder  the lag-result vocabulary, in tie-break order (earlier wins a
  *                  tie in the dominant-result vote). Defaults to both flows.
  */
@@ -500,7 +503,7 @@ export function buildRetryLagIssueBody(cluster: RetryLagCluster, meta: RetryLagI
     `- First seen: ${meta.firstSeenIso}`,
     `- Occurrences: ${meta.count}`,
     '',
-    `A burst is ${RETRY_LAG_MIN_REJECTIONS}+ lag-rejections (outside-radius / not-stationary / position-too-old) for one member on one crown within ${RETRY_LAG_WINDOW_MS / 1000}s. This is DETECTION only — the client-side collect UX fix (clearer "move closer / hold still" guidance, edge tolerance) is tracked separately.`,
+    `A burst is ${RETRY_LAG_MIN_REJECTIONS}+ lag-rejections for one member on one crown within ${RETRY_LAG_WINDOW_MS / 1000}s. Lag results are the retryable edge-condition codes each collect flow emits: \`${SPAWN_LAG_RESULTS.join('` / `')}\` (auto-spawn crowns, claimSpawn) and \`${HUNT_LAG_RESULTS.join('` / `')}\` (hand-placed points, submitClaim). This is DETECTION only — the client-side collect UX fix (clearer "move closer / hold still" guidance, edge tolerance) is tracked separately.`,
     '',
     '_Filed by crownHunt-detectClaimLag. This issue is public and never includes account identifiers, coordinates, raw distances or GPS accuracies — only coarse buckets and counts._',
   ].join('\n');
