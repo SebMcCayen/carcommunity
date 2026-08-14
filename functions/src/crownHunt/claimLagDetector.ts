@@ -157,6 +157,12 @@ function toAttemptRecord(
  * pattern. Filtered in memory (a single range read stays on the automatic
  * `createdAt` index; adding an `in` filter would force a composite index for no
  * real saving at this volume).
+ *
+ * Ordered `createdAt` DESCENDING before the cap, then restored to ascending in
+ * memory: when the window holds more than {@link MAX_CLAIMS_SCANNED} docs the cap
+ * must keep the NEWEST ones (an ascending cap would keep the oldest and drop the
+ * current bursts this detector exists to catch). The detector needs chronological
+ * order, so the kept page is reversed back to ascending on the way out.
  */
 async function loadRecentAttempts(
   collection: string,
@@ -168,12 +174,14 @@ async function loadRecentAttempts(
   const snap = await db
     .collection(collection)
     .where('createdAt', '>=', cutoff)
-    .orderBy('createdAt', 'asc')
+    .orderBy('createdAt', 'desc')
     .limit(MAX_CLAIMS_SCANNED)
     .get();
   const records: ClaimAttemptRecord[] = [];
-  for (const doc of snap.docs) {
-    const data = doc.data();
+  // snap.docs is newest-first; walk it in reverse so `records` ends up
+  // oldest-first (ascending), which is the chronological order detection wants.
+  for (let i = snap.docs.length - 1; i >= 0; i -= 1) {
+    const data = snap.docs[i]!.data();
     if (typeof data.result !== 'string' || !keep.has(data.result)) continue;
     const record = toAttemptRecord(source, data);
     if (record) records.push(record);

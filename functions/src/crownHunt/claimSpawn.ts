@@ -341,9 +341,10 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     claimedAt: Timestamp.fromDate(now),
     positionRecordedAt: Timestamp.fromDate(recordedAtDate),
     reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
-    // Persisted on EVERY attempt (no extra write — this is a field on the record
-    // recordAttempt/the award already writes) so the scheduled collect-lag
-    // detector can bucket bursts by reported GPS accuracy. Never a coordinate.
+    // Persisted on EVERY attempt (no extra write — just another field on the
+    // attempt doc that recordAttempt / the award transaction already writes) so
+    // the scheduled collect-lag detector can bucket bursts by reported GPS
+    // accuracy. Never a coordinate.
     accuracyMeters: input.accuracyMeters ?? null,
   };
 

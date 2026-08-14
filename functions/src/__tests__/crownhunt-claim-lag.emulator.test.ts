@@ -23,6 +23,11 @@
 
 process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
 process.env.GCLOUD_PROJECT ??= 'demo-test';
+// Force createGitHubIssue's emulator short-circuit: it returns null BEFORE using
+// the token, so no run of this test can ever reach api.github.com even though a
+// non-empty token is passed below. (The suite already runs under the emulator, but
+// set it explicitly so the guarantee does not depend on the harness's env.)
+process.env.FUNCTIONS_EMULATOR = 'true';
 
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
@@ -95,12 +100,13 @@ describe('runClaimLagDetection (emulator)', () => {
     expect(result.clusters).toBeGreaterThanOrEqual(1);
     expect(result.attemptsScanned).toBeGreaterThanOrEqual(4);
 
-    // Every detected cluster received a filing outcome, and the pass never threw
-    // (GitHub is unreachable from the emulator, so these resolve to failed —
-    // retriable — rather than created).
+    // Every detected cluster received a filing outcome, and the pass never threw.
     expect(result.filed + result.deduped + result.budgetSkipped + result.failed).toBe(
       result.clusters,
     );
+    // The emulator short-circuit is exercised: createGitHubIssue returns null, so
+    // NO issue is ever created (and no network call to api.github.com is made).
+    expect(result.filed).toBe(0);
   });
 
   it('stored each attempt with the scalars the detector reads (no coordinates)', async () => {

@@ -250,6 +250,7 @@ export const submitClaim = onCall(
 
     // 1. Feature flag (legacy step 1 — no attempt record).
     if (!(await isCrownHuntEnabled())) {
+      logRejection('feature_disabled');
       return respond('feature_disabled');
     }
 
@@ -259,6 +260,7 @@ export const submitClaim = onCall(
     const userSnap = await db.collection('users').doc(uid).get();
     const state = toUserAccessState(userSnap.data());
     if (!memberGateAllows(state)) {
+      logRejection('not_eligible');
       return respond('not_eligible');
     }
 

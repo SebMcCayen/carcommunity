@@ -119,6 +119,22 @@ describe('detectRetryLagGroups', () => {
     expect(detectRetryLagGroups(attempts)).toHaveLength(0);
   });
 
+  it('is insensitive to input ordering (records may arrive newest-first)', () => {
+    // The DB read pages createdAt DESC (so the cap keeps the NEWEST docs) and
+    // reverses to ascending; detection also sorts internally, so a newest-first
+    // or shuffled input must yield the same match.
+    const ascending = [
+      rec({ claimedAtMs: T0 }),
+      rec({ claimedAtMs: T0 + 20_000 }),
+      rec({ claimedAtMs: T0 + 40_000 }),
+    ];
+    const descending = [...ascending].reverse();
+    const shuffled = [ascending[1]!, ascending[2]!, ascending[0]!];
+    expect(detectRetryLagGroups(descending)).toEqual(detectRetryLagGroups(ascending));
+    expect(detectRetryLagGroups(shuffled)).toEqual(detectRetryLagGroups(ascending));
+    expect(detectRetryLagGroups(descending)[0]!.rejectionsInWindow).toBe(3);
+  });
+
   it('picks the most frequent lag-result as dominant', () => {
     const attempts = [
       rec({ result: 'must_be_stationary', distanceMeters: 30, claimedAtMs: T0 }),
