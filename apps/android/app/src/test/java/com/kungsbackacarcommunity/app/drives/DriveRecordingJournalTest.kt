@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -112,13 +113,14 @@ class DriveRecordingJournalTest {
 
         // Force the last-byte newline check to FAIL: strip read permission so
         // opening it for the check throws (an I/O error, the real trigger). The
-        // file stays APPENDABLE so the resumed session can keep writing. On a
-        // platform that won't enforce this (e.g. root), the check simply succeeds
-        // and still reads a non-newline last byte — either way the guard must
-        // insert a separator, so this asserts the fallback is `false`, never the
-        // old `true` that would fuse the partial with the next point.
+        // file stays APPENDABLE so the resumed session can keep writing.
         file.setReadable(false, false)
         file.setWritable(true, false)
+        // Some platforms/filesystems (e.g. running as root, or a permissionless
+        // FS) ignore setReadable, in which case the check would NOT fail and the
+        // fallback is never exercised — SKIP rather than pass silently, so a
+        // regression to getOrDefault(true) is caught wherever this can run.
+        assumeTrue("filesystem ignores read-permission removal", !file.canRead())
         try {
             j.appendPoints(session, listOf(RecordedPoint(57.2, 12.2, 700L)))
         } finally {

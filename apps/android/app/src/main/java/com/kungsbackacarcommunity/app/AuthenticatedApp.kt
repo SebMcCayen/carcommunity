@@ -727,8 +727,8 @@ fun AuthenticatedApp(
             // Drives the auto-keep "Drive saved" confirmation dialog (#856): the drive
             // is already saved in the background, so this is a purely informational
             // window with OK (dismiss) and History (open Drives/History) — NOT a
-            // Keep/Delete decision. `visible` is what the drive is saved; the id (if
-            // any) is which drive the History action deep-links to.
+            // Keep/Delete decision. `visible` is SET once the drive is saved; the id
+            // (if any) is which drive the History action deep-links to.
             var driveSavedDialogVisible by rememberSaveable { mutableStateOf(false) }
             var driveSavedDialogRideId by rememberSaveable { mutableStateOf<String?>(null) }
             // Initialised from any route a welcome-flow CTA requested (membership /
@@ -6218,9 +6218,10 @@ fun AuthenticatedApp(
                         historyLabel = driveSavedHistoryText,
                         onDismiss = { driveSavedDialogVisible = false },
                         onHistory = {
+                            // Just navigate — DriveSavedDialog closes itself (calls
+                            // onDismiss) after this, so no dismiss is needed here.
                             driveSavedDialogRideId?.let { pendingDriveDetailRideId = it }
                             selectedTab = ShellTab.History
-                            driveSavedDialogVisible = false
                         },
                     )
                 }

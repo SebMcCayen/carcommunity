@@ -57,10 +57,14 @@ class DriveSavedDialogTest {
     }
 
     @Test
-    fun history_triggersTheHistoryCallback() {
+    fun history_navigatesAndClosesTheDialog() {
         var history = 0
-        show(onHistory = { history += 1 })
+        var dismiss = 0
+        // History is self-contained: it navigates AND closes, so the caller never
+        // has to dismiss it and the dialog can't be left open.
+        show(onDismiss = { dismiss += 1 }, onHistory = { history += 1 })
         composeTestRule.onNodeWithTag(DRIVE_SAVED_DIALOG_HISTORY_TAG).performClick()
         assertEquals(1, history)
+        assertEquals(1, dismiss)
     }
 }

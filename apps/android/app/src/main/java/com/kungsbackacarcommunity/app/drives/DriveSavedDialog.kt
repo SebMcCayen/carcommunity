@@ -52,7 +52,12 @@ fun DriveSavedDialog(
         },
         dismissButton = {
             TextButton(
-                onClick = onHistory,
+                // Self-contained: navigate, then always close — so the dialog can
+                // never be left open, and no caller has to remember to dismiss it.
+                onClick = {
+                    onHistory()
+                    onDismiss()
+                },
                 modifier = Modifier.testTag(DRIVE_SAVED_DIALOG_HISTORY_TAG),
             ) {
                 Text(historyLabel)
