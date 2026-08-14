@@ -688,14 +688,13 @@ The proxy path awards **badge progress but not `event_attend_verified` KP.** Oth
 
 Tiered badges use the ladder **Brons → Silver → Guld → Platina**, with a KP milestone bonus of **25 / 75 / 200 / 500**, credited via ledger source `badge` and exempt from the daily cap (§5.3).
 
-Four rungs is the default, not an invariant. A ladder stops short where a fourth rung would be **unreachable** or **undesirable**, and exactly two do:
+Four rungs is the default, not an invariant. A ladder stops short where a fourth rung would be **unreachable** or **undesirable**, and exactly one does:
 
 | Ladder | Rungs | Why it stops early |
 |---|---|---|
 | **Trogen** | 3 | A 365-day Platina rung is the loss-aversion hook §9 rules out (**Q6**). |
-| **Samlare** | 3 | The garage is hard-capped at `MAX_VEHICLES_PER_USER` = 5, so any rung above 5 cars could never be earned by anyone. |
 
-Every other ladder has all four.
+Every other ladder has all four — including **Samlare**, whose Platina rung became reachable when `MAX_VEHICLES_PER_USER` was raised 5 → 10 (2026-08).
 
 All user-facing names are **Swedish**, matching the existing catalog convention. English names below are for internal reference and design briefs only; they never appear in the app.
 
@@ -777,11 +776,12 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 |---|---|
 | Brons | 1 car in garage |
 | Silver | 3 cars |
-| Guld | 5 cars |
+| Guld | 6 cars |
+| Platina | 10 cars |
 
 *How to earn:* Complete vehicle profiles in Mitt garage.
 
-*Three rungs, capped by the product:* `MAX_VEHICLES_PER_USER` is **5** (`packages/shared/src/garage.ts`, enforced inside a transaction in `garage/manageVehicle.ts`). Guld at 6 cars and Platina at 10 — as this section originally specified — are unreachable by construction: no member could ever hold that many. Guld therefore sits at the cap itself.
+*Four rungs, tuned to reality:* `MAX_VEHICLES_PER_USER` is **10** (`functions/src/garage/garage-core.ts`, enforced inside a transaction in `garage/manageVehicle.ts`), raised from 5 in 2026-08. Platina now sits at the cap, so the full ladder is reachable. Because most members own 1–2 cars, Brons stays at the first car (inclusive entry rung) while Guld (6) and Platina (10) are deliberately aspirational.
 
 *Icon design:* A roller garage door raised to two-thirds, with the noses of cars visible in the darkness behind it. Tier is the number of visible noses (1/2/3 — abstracted, not literal counts). Warm interior light spilling from under the door; this is the "home" badge of the set and should feel like it.
 

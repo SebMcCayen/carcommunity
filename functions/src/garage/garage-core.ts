@@ -64,8 +64,14 @@ import {
   offeredModelYearRange,
 } from './vehicle-catalogue';
 
-/** Legacy limits (packages/shared/src/garage.ts). */
-export const MAX_VEHICLES_PER_USER = 5;
+/**
+ * Maximum vehicles a single member may keep in their garage. Raised 5 → 10
+ * (2026-08) so multi-car owners are not squeezed; the Samlare badge ladder was
+ * re-tuned to match (Brons 1 / Silver 3 / Guld 6 / Platina 10). This is the ONE
+ * source of truth for the cap: the addVehicle callable enforces it inside a
+ * transaction and the Android client mirrors it (GarageScreen.kt).
+ */
+export const MAX_VEHICLES_PER_USER = 10;
 /**
  * Cap on photos per vehicle. Ten is generous for a car profile (exterior +
  * interior + engine + detail shots) while bounding worst-case storage at

@@ -196,7 +196,7 @@ describe('garage-addVehicle', () => {
     expect(docData.make).toBe('Volvo');
     expect(docData.model).toBe('740');
     expect(typeof docData.catalogueVersion).toBe('string');
-    await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+    await call('garage-deleteVehicle', { vehicleId }); // keep under the 10-car cap
   });
 
   it('rejects ids the catalogue does not know, and a mixed request', async () => {
@@ -251,7 +251,7 @@ describe('garage-addVehicle', () => {
     expect(docData.modelId).toBe('other');
     expect(docData.make).toBe('Volvo');
     expect(docData.model).toBe('Duett');
-    await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+    await call('garage-deleteVehicle', { vehicleId }); // keep under the 10-car cap
   });
 
   it('stores the intentionally-public registration plate, normalised', async () => {
@@ -277,7 +277,7 @@ describe('garage-addVehicle', () => {
       ).data as { vehicleId: string };
       const docData = (await adminDb.collection('vehicles').doc(vehicleId).get()).data()!;
       expect(docData.powertrain).toBe(powertrain);
-      await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+      await call('garage-deleteVehicle', { vehicleId }); // keep under the 10-car cap
     }
   });
 
@@ -306,15 +306,16 @@ describe('garage-addVehicle', () => {
       expect((await adminDb.collection('vehicles').doc(vehicleId).get()).data()!.powertrain).toBe(
         'hybrid',
       );
-      await call('garage-deleteVehicle', { vehicleId }); // keep under the 5-car cap
+      await call('garage-deleteVehicle', { vehicleId }); // keep under the 10-car cap
     }
   });
 
-  it('enforces the per-user cap of 5 vehicles', async () => {
+  it('enforces the per-user cap of 10 vehicles', async () => {
     await signInAs(otherMember);
-    for (let i = 0; i < 5; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       await call('garage-addVehicle', { ...validAdd, model: `Model ${i}` });
     }
+    // The 11th add is rejected by the transactional cap.
     expect(await callableErrorCode(call('garage-addVehicle', validAdd))).toBe(
       'functions/failed-precondition',
     );

@@ -147,8 +147,9 @@ val BADGE_LADDERS: List<BadgeLadder> =
                     BadgeRung(BadgeTier.PLATINA, "konvojledare_platina", 100),
                 ),
         ),
-        // Three rungs only: the garage caps at five vehicles, so a Platina rung
-        // would be unreachable (matches the backend catalog).
+        // Four rungs 1/3/6/10: the garage cap rose 5 → 10 (2026-08), so Platina at
+        // the cap is now reachable (matches the backend catalog). Brons stays at
+        // the first car; Guld and Platina are deliberately aspirational.
         BadgeLadder(
             id = BadgeLadderId.SAMLARE,
             unit = BadgeLadderUnit.COUNT,
@@ -156,7 +157,8 @@ val BADGE_LADDERS: List<BadgeLadder> =
                 listOf(
                     BadgeRung(BadgeTier.BRONS, "samlare_brons", 1),
                     BadgeRung(BadgeTier.SILVER, "samlare_silver", 3),
-                    BadgeRung(BadgeTier.GULD, "samlare_guld", 5),
+                    BadgeRung(BadgeTier.GULD, "samlare_guld", 6),
+                    BadgeRung(BadgeTier.PLATINA, "samlare_platina", 10),
                 ),
         ),
         // Säsongsmästare — the SCALING lifetime-championship ladder (metric
