@@ -70,10 +70,7 @@ import {
   resolveAdminChatReport,
 } from '../features/event-chat';
 import { adminSendNotification } from '../features/notifications';
-import {
-  adminGetPartnerInsightsSummary,
-  periodToBucket,
-} from '../features/partner-insights';
+import { adminGetPartnerInsightsSummary, periodToBucket } from '../features/partner-insights';
 import {
   adminGetUserSubscription,
   adminGrantMembership,
@@ -347,7 +344,10 @@ describe('events module', () => {
       })
       .mockResolvedValueOnce({ data: () => ({}) });
 
-    const response = await updateAdminEvent('e1', { title: 'Uppdaterad', approximateArea: 'Onsala' });
+    const response = await updateAdminEvent('e1', {
+      title: 'Uppdaterad',
+      approximateArea: 'Onsala',
+    });
     expect(callAdminMock).toHaveBeenCalledWith('events-update', {
       eventId: 'e1',
       title: 'Uppdaterad',
@@ -519,7 +519,11 @@ describe('digital-billboards module', () => {
   it('pauses through billboards-setStatus with action pause', async () => {
     callAdminMock.mockResolvedValue({ billboardId: 'b1', status: 'paused' });
     getDocMock
-      .mockResolvedValueOnce({ exists: () => true, id: 'b1', data: () => billboardData({ status: 'paused' }) })
+      .mockResolvedValueOnce({
+        exists: () => true,
+        id: 'b1',
+        data: () => billboardData({ status: 'paused' }),
+      })
       .mockResolvedValueOnce({ data: () => ({ name: 'Acme AB' }) });
 
     await adminPauseBillboard('b1', 'Kampanj slut');
@@ -761,7 +765,11 @@ describe('partners module', () => {
   });
 
   it('throws when approve returns no partner company id', async () => {
-    callAdminMock.mockResolvedValue({ applicationId: 'ap1', status: 'approved', partnerCompanyId: null });
+    callAdminMock.mockResolvedValue({
+      applicationId: 'ap1',
+      status: 'approved',
+      partnerCompanyId: null,
+    });
     await expect(adminApproveApplication('ap1')).rejects.toMatchObject({ statusCode: 500 });
   });
 
@@ -935,7 +943,12 @@ describe('notifications module', () => {
     });
     expect(response).toEqual({
       ok: true,
-      data: { batchId: 'b1', audience: 'members', recipientCount: 42, createdAt: '2026-07-06T10:00:00.000Z' },
+      data: {
+        batchId: 'b1',
+        audience: 'members',
+        recipientCount: 42,
+        createdAt: '2026-07-06T10:00:00.000Z',
+      },
     });
   });
 
@@ -986,7 +999,12 @@ describe('partner-insights module', () => {
       periodType: 'month',
       periodStart: '2026-07-01',
       metrics: [
-        { interactionType: 'map_view', totalCount: 42, uniqueContributorCount: null, status: 'available' },
+        {
+          interactionType: 'map_view',
+          totalCount: 42,
+          uniqueContributorCount: null,
+          status: 'available',
+        },
         {
           interactionType: 'anonymous_pass_by',
           totalCount: 0,
@@ -1155,16 +1173,19 @@ describe('users module', () => {
         },
       ],
     });
-    const users = await adminListUsers();
+    const { users, truncated } = await adminListUsers();
     expect(users).toHaveLength(1);
+    expect(truncated).toBe(false);
     expect(users[0]).toEqual({
       uid: 'u1',
       displayName: 'Anna',
+      email: null,
       role: 'admin',
       activeMember: true,
       suspended: false,
       deleted: false,
       createdAt: '2026-07-01T10:00:00.000Z',
+      lastLoginAt: null,
       onboardingCompletedAt: '2026-07-01T10:05:00.000Z',
     });
   });
@@ -1186,17 +1207,52 @@ describe('users module', () => {
         },
       ],
     });
-    const users = await adminListUsers();
+    const { users } = await adminListUsers();
     expect(users[0]).toEqual({
       uid: 'u2',
       displayName: '',
+      email: null,
       role: 'user',
       activeMember: false,
       suspended: false,
       deleted: false,
       createdAt: null,
+      lastLoginAt: null,
       onboardingCompletedAt: null,
     });
+  });
+
+  it('joins last activity from userLifecycle and email from the user doc', async () => {
+    // First getDocs = users, second = userLifecycle (Promise.all order).
+    getDocsMock
+      .mockResolvedValueOnce({
+        docs: [
+          {
+            id: 'u3',
+            data: () => ({
+              displayName: 'Cecilia',
+              email: 'cecilia@example.com',
+              role: 'user',
+              activeMember: true,
+              createdAt: ts('2026-06-01T09:00:00Z'),
+            }),
+          },
+          {
+            id: 'u4',
+            data: () => ({ displayName: 'David', role: 'user' }),
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        docs: [{ id: 'u3', data: () => ({ lastLoginAt: ts('2026-08-14T20:00:00Z') }) }],
+      });
+    const { users } = await adminListUsers();
+    const u3 = users.find((u) => u.uid === 'u3');
+    const u4 = users.find((u) => u.uid === 'u4');
+    expect(u3?.email).toBe('cecilia@example.com');
+    expect(u3?.lastLoginAt).toBe('2026-08-14T20:00:00.000Z');
+    // u4 has no lifecycle doc → last activity is null (never logged in).
+    expect(u4?.lastLoginAt).toBeNull();
   });
 
   it('maps the user detail (users/{uid} only) with the safe fields', async () => {

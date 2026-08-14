@@ -848,11 +848,13 @@
     "title": "Users",
     "subtitle": "Search and moderate users. Actions are logged and verified on the backend.",
     "searchLabel": "Search users",
-    "searchPlaceholder": "Search by name or user ID…",
+    "searchPlaceholder": "Search by name, email or user ID…",
     "loading": "Loading users…",
     "loadError": "Could not load users.",
     "empty": "No users found.",
-    "emptyFiltered": "No users match the search.",
+    "emptyFiltered": "No users match the filters.",
+    "capNotice": "Showing the first 1000 users. More may exist but are not shown.",
+    "countSummary": "Showing {shown} of {total} users.",
     "unnamed": "(unnamed)",
     "noNickname": "No nickname registered",
     "columns": {
@@ -860,7 +862,24 @@
       "role": "Role",
       "member": "Member",
       "status": "Status",
+      "lastActivity": "Last activity",
       "created": "Created"
+    },
+    "filters": {
+      "roleLabel": "Role",
+      "allRoles": "All roles",
+      "statusLabel": "Status",
+      "allStatuses": "All statuses",
+      "memberLabel": "Member",
+      "allMembers": "All",
+      "sortLabel": "Sort"
+    },
+    "sort": {
+      "lastActivityDesc": "Last activity (newest first)",
+      "lastActivityAsc": "Last activity (oldest first)",
+      "createdDesc": "Created (newest first)",
+      "createdAsc": "Created (oldest first)",
+      "nameAsc": "Name (A–Z)"
     },
     "role": {
       "user": "User",

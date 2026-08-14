@@ -46,6 +46,41 @@ export function formatDate(date: Date | string | null | undefined): string {
   return `${formatDateOnly(d)}, ${formatTimeOnly(d)}`;
 }
 
+/**
+ * Format a date+time pinned to the `Europe/Stockholm` wall clock as
+ * `YYYY-MM-DD, HH:mm` (e.g. `2026-08-14, 23:12`). Unlike [formatDate], which
+ * renders in the viewer's local time zone, this always shows Stockholm time so
+ * admin-facing activity timestamps are unambiguous regardless of where the
+ * admin is. Invalid or empty values yield the empty-date placeholder.
+ *
+ * Assembled from `Intl.DateTimeFormat` parts (not the joined string) so the
+ * separator spacing stays fixed across ICU versions — the parts themselves are
+ * stable numeric fields.
+ */
+const STOCKHOLM_PARTS = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'Europe/Stockholm',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+});
+
+export function formatDateTimeStockholm(date: Date | string | null | undefined): string {
+  const d = toValidDate(date);
+  if (!d) return EMPTY_DATE;
+  const parts = STOCKHOLM_PARTS.formatToParts(d).reduce<Record<string, string>>((acc, part) => {
+    if (part.type !== 'literal') acc[part.type] = part.value;
+    return acc;
+  }, {});
+  const { year, month, day, hour, minute } = parts;
+  if (!year || !month || !day || hour == null || minute == null) return EMPTY_DATE;
+  // `hourCycle: 'h23'` can still emit "24" for midnight on some ICU builds.
+  const hh = hour === '24' ? '00' : hour;
+  return `${year}-${month}-${day}, ${hh}:${minute}`;
+}
+
 /** Truncate a string to a max length with ellipsis. */
 export function truncate(str: string, maxLength: number): string {
   if (str.length <= maxLength) return str;

@@ -23,28 +23,50 @@
   font-size: var(--text-sm);
 }
 
-.searchRow {
+/* Filter bar: search + facet selects, wrapping on narrow viewports. */
+.filters {
   display: flex;
-  gap: var(--space-2);
-  max-width: 420px;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: flex-end;
 }
 
-.srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+.filterGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-sm);
+  font-weight: var(--fw-medium);
+  color: var(--text-primary);
+}
+
+/* Layout only — fill, border, colour, focus and disabled states come from the
+   global `input, textarea, select` baseline in globals.css. */
+.select {
+  min-width: 180px;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+
+.capNotice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--text-primary);
+  font-size: var(--text-sm);
 }
 
 /* Fill, border, colour, focus and disabled come from the global
  * `input, textarea, select` baseline in globals.css. Only layout here. */
 .input {
   flex: 1;
+  min-width: 260px;
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-sm);
   font-size: var(--text-sm);
