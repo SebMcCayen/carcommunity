@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.drives
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -13,6 +14,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.kungsbackacarcommunity.app.diagnostics.ClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import kotlinx.coroutines.launch
 
 /**
@@ -109,26 +111,39 @@ fun DrivesRoute(
         )
     when (level) {
         DrivesLevel.DETAIL ->
-            // `selected` is non-null on this branch (see [drivesLevel]); the
-            // null-check re-establishes the smart cast for the compiler.
-            selected?.let { drive ->
-                SavedDriveDetailScreen(
-                    drive = drive,
-                    deleteStatus = deleteStatus,
-                    onDelete = { rideId -> scope.launch { coordinator.delete(rideId) } },
-                    onBack = {
-                        selectedRideId = null
-                        coordinator.reset()
-                    },
-                    routeRepository = routeRepository,
-                    uid = uid,
-                )
+            // Drill-in level: provide the pinned in-app Back arrow (#807) around
+            // the AeroPage this screen renders, so gesture-nav users (no visible
+            // system Back button) can return to the History list. The arrow fires
+            // the back dispatcher -> this route's BackHandler above -> unwind one
+            // level to the list. The List root deliberately stays arrow-free.
+            CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+                // `selected` is non-null on this branch (see [drivesLevel]); the
+                // null-check re-establishes the smart cast for the compiler.
+                selected?.let { drive ->
+                    SavedDriveDetailScreen(
+                        drive = drive,
+                        deleteStatus = deleteStatus,
+                        onDelete = { rideId -> scope.launch { coordinator.delete(rideId) } },
+                        onBack = {
+                            selectedRideId = null
+                            coordinator.reset()
+                        },
+                        routeRepository = routeRepository,
+                        uid = uid,
+                    )
+                }
             }
 
         DrivesLevel.STATS ->
-            // `loaded` is non-null on this branch (see [drivesLevel]); never fed
-            // an empty fold when the drives have left the Loaded state.
-            loaded?.let { DriveStatsScreen(drives = it.drives) }
+            // Drill-in level: provide the pinned in-app Back arrow (#807) so the
+            // Statistics page has a visible way back to the History list (#844).
+            // The arrow fires the back dispatcher -> this route's BackHandler ->
+            // clears `showStats` -> unwind to the list.
+            CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+                // `loaded` is non-null on this branch (see [drivesLevel]); never
+                // fed an empty fold when the drives have left the Loaded state.
+                loaded?.let { DriveStatsScreen(drives = it.drives) }
+            }
 
         DrivesLevel.LIST ->
             DrivesListScreen(
