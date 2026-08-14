@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Canonical feature flag registry: key, default value, operator-facing label, what the flag controls (and what turning it off stops), and how sensitive flipping it is. THIS FILE is the single source of truth. Every surface must carry exactly these keys — no more, no fewer: functions/src/shared/featureFlags-core.ts (mirrored, sync-tested), apps/android/.../config/FeatureFlags.kt (mirrored, sync-tested), and the admin portal's feature-flags page, which reads this file directly so it can never fall behind. Keys are camelCase. Defaults are the fallback when the backend document (or an individual field) is absent, and the initial static backend response. Flag values are backend-managed (admin.setFeatureFlag); clients never persist flag changes locally as authoritative. `sensitivity` drives the admin UI's warning treatment: \"safety\" = flipping it changes what members are invited to physically drive to and stop at, \"privacy\" = it governs data collected about members, \"standard\" = ordinary product surface.",
   "flags": [
     {
@@ -78,6 +78,13 @@
       "label": "Partner pass-by recording",
       "sensitivity": "privacy",
       "description": "Anonymous partner pass-by interaction recording (Phase 9j privacy gate). Default OFF; contributions additionally require the user's explicit anonymousPartnerStatsOptIn — the flag alone never enables recording. Off stops recording new pass-by interactions immediately."
+    },
+    {
+      "key": "crownHuntPerks",
+      "default": false,
+      "label": "Kronjakt shop (perks)",
+      "sensitivity": "standard",
+      "description": "Kronjakt SHOP — the first member-facing Kronpoäng SINK. On lets members spend Kronpoäng to buy perks (crownHunt.buyPerk), which are granted to a backend-only inventory. Default OFF: the shop stays dark until it is deliberately turned on, and while off buyPerk rejects so no Kronpoäng is spent. Buying is all this flag governs today; deploying and activating perks (traps, shields, the boost multiplier) arrive in later releases behind their own gating."
     }
   ]
 }
