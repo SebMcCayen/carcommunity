@@ -507,6 +507,28 @@ private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
 private const val CROWN_RANGE_LOCATION_INTERVAL_MS = 10_000L
 
 /**
+ * Chooses the (current, previous) fixes that drive the crown popup from [tracker]
+ * at wall-clock [nowMillis].
+ *
+ * Prefers a valid dwell PAIR ([CrownFixTracker.proofPair]) so Collect goes live
+ * whenever a claim is actually possible — never stranded in "confirming" while a
+ * usable pair sits in the buffer. When no pair is achievable yet it still returns
+ * a fresh best-accuracy current for the distance line, with a null partner so the
+ * gate honestly shows the confirming state.
+ */
+private fun applyCrownFix(
+    tracker: CrownFixTracker,
+    nowMillis: Long,
+): Pair<CrownFix?, CrownFix?> {
+    val pair = tracker.proofPair(nowMillis)
+    return if (pair != null) {
+        pair.current to pair.previous
+    } else {
+        tracker.bestRecent(nowMillis) to null
+    }
+}
+
+/**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
  * auto-filed issues on this plus the error code, so it must not drift).
  */
@@ -2062,25 +2084,21 @@ fun AuthenticatedApp(
                 val appContext = context.applicationContext
                 // Seed from the PRE-WARMED tracker before the first fresh read, so
                 // the distance line — and, when the range poll already warmed a
-                // partner, a live Collect button — are there the instant the popup
-                // opens rather than a fix cadence later. Freshness-gated: a warm fix
-                // left over from before a long idle is treated as absent, so Collect
-                // is never seeded/enabled off a stale position.
-                crownFixTracker.bestRecent(System.currentTimeMillis())?.let { warm ->
-                    crownCurrentFix = warm
-                    crownPreviousFix = crownFixTracker.proofPartnerFor(warm)
+                // pair, a live Collect button — are there the instant the popup
+                // opens rather than a fix cadence later.
+                applyCrownFix(crownFixTracker, System.currentTimeMillis()).let { (cur, prev) ->
+                    crownCurrentFix = cur
+                    crownPreviousFix = prev
                 }
                 while (true) {
                     val fix = CrownLocation.currentFix(appContext)
                     if (fix != null) {
                         crownFixTracker.record(fix)
-                        // Prefer the best-accuracy recent sample over the raw
-                        // latest, so a single jittery reading does not compute as
-                        // outside_radius and fail the pair. Freshness-gated on the
-                        // wall clock so a stale fix never enables Collect.
-                        val best = crownFixTracker.bestRecent(System.currentTimeMillis())
-                        crownCurrentFix = best
-                        crownPreviousFix = crownFixTracker.proofPartnerFor(best)
+                        applyCrownFix(crownFixTracker, System.currentTimeMillis())
+                            .let { (cur, prev) ->
+                                crownCurrentFix = cur
+                                crownPreviousFix = prev
+                            }
                     }
                     delay(CROWN_FIX_INTERVAL_MS)
                 }
@@ -2103,16 +2121,16 @@ fun AuthenticatedApp(
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
                 // Already warm from an earlier pass — nothing to poll for. Uses the
-                // FRESH readiness check (proofPartner(now)), so a stale pair from a
+                // FRESH pair-readiness check (proofPair(now)), so a stale pair from a
                 // previous visit does not skip the warm-up.
-                if (crownFixTracker.proofPartner(System.currentTimeMillis()) != null) {
+                if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) {
                     return@LaunchedEffect
                 }
                 val appContext = context.applicationContext
-                while (crownFixTracker.proofPartner(System.currentTimeMillis()) == null) {
+                while (crownFixTracker.proofPair(System.currentTimeMillis()) == null) {
                     CrownLocation.currentFix(appContext, highAccuracy = false)
                         ?.let { crownFixTracker.record(it) }
-                    if (crownFixTracker.proofPartner(System.currentTimeMillis()) != null) break
+                    if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) break
                     delay(CROWN_PREWARM_FIX_INTERVAL_MS)
                 }
             }

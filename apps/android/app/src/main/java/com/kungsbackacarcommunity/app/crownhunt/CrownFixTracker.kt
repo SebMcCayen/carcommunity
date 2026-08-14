@@ -40,6 +40,14 @@ package com.kungsbackacarcommunity.app.crownhunt
  *
  * Not thread-safe; it is driven from a single location callback.
  */
+/**
+ * A chosen stationary proof: the [current] fix (fresh, describes "now") and its
+ * [previous] partner ([CrownSpawnLimits.MIN_DWELL_SECONDS]..[CrownSpawnLimits.MAX_DWELL_SECONDS]
+ * older). The server re-derives its own speed from the two; this is only which
+ * two the client submits.
+ */
+data class CrownProofPair(val current: CrownFix, val previous: CrownFix)
+
 class CrownFixTracker {
     private val recent = ArrayDeque<CrownFix>()
 
@@ -132,16 +140,48 @@ class CrownFixTracker {
     fun proofPartner(): CrownFix? = proofPartnerFor(bestRecent())
 
     /**
-     * [proofPartner], but freshness-gated on [nowMillis]: a partner only counts
-     * when there is a FRESH current fix to pair it with (see [bestRecent]).
+     * The best (current, previous) dwell pair achievable from the recorded fixes,
+     * or null when none is — the ONE readiness answer everything downstream uses.
      *
-     * This is the readiness check the pre-warm loop and the seed path use, so a
-     * stale pair left over from an earlier visit never short-circuits the warm-up
-     * or seeds Collect with old data. (The partner itself may legitimately be up to
-     * [CrownSpawnLimits.MAX_DWELL_SECONDS] old — it is the CURRENT half that must
-     * be recent.)
+     * ## Why a pair, not "best current then its partner"
+     *
+     * Choosing the current fix purely by accuracy and THEN looking for a partner
+     * can strand a usable pair: if the most-accurate fresh sample happens to be the
+     * OLDEST, it has no fix older than it to pair with, so readiness reads false —
+     * even though a different fresh current (e.g. [latest]) DOES have a valid
+     * partner. That leaves Collect stuck in "confirming" while a collectable pair
+     * sits in the buffer, which is exactly the lag this feature exists to kill.
+     *
+     * So the choice is made over PAIRS: among fresh currents that HAVE a valid
+     * partner, pick the most-accurate current (ties → newest), and take that
+     * current's best-accuracy partner. Accuracy is preferred only among currents
+     * that keep a pair achievable, never at the cost of one.
+     *
+     * Freshness ([CrownSpawnLimits.MAX_POSITION_AGE_SECONDS], the server's own
+     * bound) applies to the CURRENT half only — the partner may legitimately be up
+     * to [CrownSpawnLimits.MAX_DWELL_SECONDS] old, which is the whole point of the
+     * dwell. A stale [latest] therefore yields no fresh current and null here.
      */
-    fun proofPartner(nowMillis: Long): CrownFix? = proofPartnerFor(bestRecent(nowMillis))
+    fun proofPair(nowMillis: Long): CrownProofPair? {
+        val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
+        var best: CrownProofPair? = null
+        // Newest first, so equal-accuracy currents resolve to the newest.
+        for (current in recent.asReversed()) {
+            if (current.recordedAtMillis < freshCutoff) continue
+            val partner = proofPartnerFor(current) ?: continue
+            if (best == null || accuracyRank(current) < accuracyRank(best.current)) {
+                best = CrownProofPair(current, partner)
+            }
+        }
+        return best
+    }
+
+    /**
+     * The earlier half of the best achievable dwell pair for [nowMillis], or null
+     * — [proofPair] restated for callers that only need the partner. Never strands
+     * a usable pair the way pairing off a fixed "best current" could.
+     */
+    fun proofPartner(nowMillis: Long): CrownFix? = proofPair(nowMillis)?.previous
 
     /**
      * The proof partner for a specific [current] fix: the best-accuracy sample
@@ -178,17 +218,25 @@ class CrownFixTracker {
      * use everywhere else ([System.currentTimeMillis], or an injected one in
      * tests).
      *
-     * Returns 0 once a fresh partner is available. When there is no FRESH current
-     * ([bestRecent] with this clock is null — no fix yet, or the latest has aged
-     * out) the wait is the full [CrownSpawnLimits.MIN_DWELL_SECONDS] again — the
-     * honest "you have the whole minimum dwell ahead of you".
+     * Returns 0 once a pair is achievable ([proofPair] is non-null). When there is
+     * no FRESH current at all (no fix yet, or [latest] has aged out) the wait is
+     * the full [CrownSpawnLimits.MIN_DWELL_SECONDS] again — the honest "you have
+     * the whole minimum dwell ahead of you".
+     *
+     * Otherwise it estimates the wait for the NEWEST fix against the oldest sample
+     * that could become its partner — the shortest genuine wait, so the countdown
+     * never over-promises.
      *
      * Used only to put a friendly "about N s left" on the confirming button; it is
-     * a hint, never a gate — the gate is [proofPartner] being non-null.
+     * a hint, never a gate — the gate is [proofPair] being non-null.
      */
     fun secondsUntilProofReady(nowMillis: Long): Int {
-        val current = bestRecent(nowMillis) ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
-        if (proofPartnerFor(current) != null) return 0
+        if (proofPair(nowMillis) != null) return 0
+        val current = latest ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
+        val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
+        if (current.recordedAtMillis < freshCutoff) {
+            return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
+        }
         val oldest = recent.firstOrNull() ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val ageSeconds = (current.recordedAtMillis - oldest.recordedAtMillis) / 1000.0
         val remaining = CrownSpawnLimits.MIN_DWELL_SECONDS - ageSeconds

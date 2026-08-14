@@ -270,4 +270,112 @@ class CrownFixTrackerTest {
             0.0,
         )
     }
+
+    /**
+     * The accuracy preference must never STRAND a usable pair: if the most-accurate
+     * fresh sample has no partner but another fresh current does, the tracker must
+     * still find the valid pair rather than leaving Collect stuck in "confirming".
+     * The round-5 regression this whole selection was re-designed around.
+     */
+    @Test
+    fun `a valid pair is never stranded by preferring an accurate but partnerless current`() {
+        val tracker = CrownFixTracker()
+        // The MORE accurate fix is the OLDEST — it has nothing older to pair with.
+        tracker.record(CrownFix(57.5, 12.0, base + 0, accuracyMeters = 5.0))
+        // The newer, less accurate fix DOES have a partner (the t0 fix).
+        tracker.record(CrownFix(57.5, 12.0, base + 6_000, accuracyMeters = 50.0))
+
+        val pair = tracker.proofPair(base + 6_000)
+        assertNotNull("the achievable pair must not be stranded", pair)
+        assertEquals(
+            "current must be the fix that yields a valid pair, not the partnerless accurate one",
+            base + 6_000,
+            pair!!.current.recordedAtMillis,
+        )
+        assertEquals(base + 0, pair.previous.recordedAtMillis)
+    }
+
+    // ---- The whole selection, as one matrix ------------------------------
+
+    /**
+     * `proofPair` / `bestRecent` / readiness across every case that has bitten this
+     * function, asserted together so no future edge case regresses one while fixing
+     * another. Each row lists the recorded fixes (offset ms, accuracy), the wall
+     * clock, and what the selection must produce.
+     */
+    @Test
+    fun theSelectionMatrix() {
+        data class Fx(val offsetMs: Long, val acc: Double?)
+        data class Case(
+            val name: String,
+            val fixes: List<Fx>,
+            val nowMs: Long,
+            val expectReady: Boolean,
+            // Expected "current" offset for the popup (pair.current when ready,
+            // else the fresh distance fix), or null for "no current position".
+            val expectCurrentOffsetMs: Long?,
+        )
+
+        val cases =
+            listOf(
+                // 1. Stale latest (minutes old) — no trustworthy current, not ready.
+                Case("stale latest", listOf(Fx(0, null), Fx(6_000, null)), 200_000, false, null),
+                // 2. One fresh fix — a current for distance, but no partner yet.
+                Case("single fresh fix", listOf(Fx(0, null)), 0, false, 0),
+                // 3. Fresh latest WITH a partner, plus an older MORE-accurate fix
+                //    that has NO partner — must NOT strand the pair.
+                Case(
+                    "accurate-but-partnerless older fix",
+                    listOf(Fx(0, 5.0), Fx(6_000, 50.0)),
+                    6_000,
+                    true,
+                    6_000,
+                ),
+                // 4. Fresh latest, older best-accuracy sample is STALE — usable pair
+                //    (stale fix is only the PARTNER), current is the fresh fix.
+                Case(
+                    "older accurate sample is stale",
+                    listOf(Fx(39_000, 5.0), Fx(45_000, 50.0)),
+                    100_000,
+                    true,
+                    45_000,
+                ),
+                // 5. Steady state — two fresh fixes >= MIN_DWELL apart, ready.
+                Case(
+                    "steady state",
+                    listOf(Fx(0, 10.0), Fx(5_000, 8.0)),
+                    5_000,
+                    true,
+                    5_000,
+                ),
+            )
+
+        for (case in cases) {
+            val tracker = CrownFixTracker()
+            case.fixes.forEach {
+                tracker.record(CrownFix(57.5, 12.0, base + it.offsetMs, accuracyMeters = it.acc))
+            }
+            val now = base + case.nowMs
+            val pair = tracker.proofPair(now)
+            assertEquals("${case.name}: readiness", case.expectReady, pair != null)
+
+            val current = pair?.current ?: tracker.bestRecent(now)
+            if (case.expectCurrentOffsetMs == null) {
+                assertNull("${case.name}: expected no current", current)
+            } else {
+                assertEquals(
+                    "${case.name}: current fix",
+                    base + case.expectCurrentOffsetMs,
+                    current!!.recordedAtMillis,
+                )
+            }
+
+            if (pair != null) {
+                assertTrue(
+                    "${case.name}: the chosen pair must be a usable dwell proof",
+                    CrownCollectGate.isDwellProofUsable(pair.previous, pair.current),
+                )
+            }
+        }
+    }
 }
