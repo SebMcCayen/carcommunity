@@ -10,18 +10,20 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Compose UI tests for the end-of-session Keep/Delete summary.
+ * Compose UI tests for the end-of-session dialog.
  *
- * The drive is AUTO-saved when a live session ends, so the load-bearing claims
- * here are the Delete branch's: deleting the just-saved drive must ask before it
- * removes it, cancelling must remove nothing, and a save failure must never let
- * the drive vanish silently.
+ * Since #853 a finished live session's drive is auto-saved AND auto-kept, so the
+ * normal stop path shows NO prompt — the user removes an unwanted drive from
+ * History instead. This dialog is now purely the never-lose-a-drive safety net:
+ * it renders only on [RecordingState.Failed]. The load-bearing claims here are
+ * therefore that the normal (non-failure) states render nothing, and that a save
+ * failure never lets the drive vanish silently — it offers Retry, or Close on a
+ * refusal no retry can fix.
  */
 @RunWith(AndroidJUnit4::class)
 class SessionSummaryDialogTest {
@@ -38,10 +40,7 @@ class SessionSummaryDialogTest {
         )
 
     private fun setDialog(
-        state: RecordingState =
-            RecordingState.SavedPendingChoice(elapsedMillis = 60_000L),
-        onKeep: () -> Unit = {},
-        onDelete: () -> Unit = {},
+        state: RecordingState,
         onRetry: () -> Unit = {},
         onDiscard: () -> Unit = {},
     ) {
@@ -50,8 +49,6 @@ class SessionSummaryDialogTest {
                 SessionSummaryDialog(
                     state = state,
                     pointsProvider = { points },
-                    onKeep = onKeep,
-                    onDelete = onDelete,
                     onRetry = onRetry,
                     onDiscard = onDiscard,
                 )
@@ -60,164 +57,17 @@ class SessionSummaryDialogTest {
     }
 
     @Test
-    fun delete_asksForConfirmationBeforeRemovingTheSavedDrive() {
-        var deleted = false
-        setDialog(onDelete = { deleted = true })
-
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteSessionAction)).performClick()
-
-        // The confirmation is up and NOTHING has been deleted yet.
-        composeTestRule.onNodeWithTag(DELETE_CONFIRM_DIALOG_TAG).assertIsDisplayed()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_deleteSessionConfirmTitle))
-            .assertIsDisplayed()
-        assertFalse("Delete must not fire until confirmed", deleted)
+    fun savedPendingChoice_showsNoPrompt() {
+        // The drive is auto-kept, so the choice state must render nothing at all —
+        // no dialog, no Keep/Delete buttons.
+        setDialog(state = RecordingState.SavedPendingChoice(elapsedMillis = 60_000L, savePending = true))
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
     }
 
     @Test
-    fun delete_confirmed_deletesTheDrive() {
-        var deleted = 0
-        setDialog(onDelete = { deleted += 1 })
-
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteSessionAction)).performClick()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_deleteSessionConfirmAction))
-            .performClick()
-
-        assertEquals(1, deleted)
-    }
-
-    @Test
-    fun delete_cancelled_keepsTheSummaryAndDeletesNothing() {
-        var deleted = false
-        setDialog(onDelete = { deleted = true })
-
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteSessionAction)).performClick()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_deleteSessionConfirmCancel))
-            .performClick()
-
-        assertFalse("Cancelling the confirmation must not delete", deleted)
-        // Back to the Keep/Delete choice — the just-saved drive is still there.
-        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).assertIsDisplayed()
-    }
-
-    @Test
-    fun keep_isNotGuardedByTheConfirmation() {
-        var kept = 0
-        setDialog(onKeep = { kept += 1 })
-
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).performClick()
-
-        // Keeping only dismisses — it goes straight through.
-        assertEquals(1, kept)
-    }
-
-    @Test
-    fun deleteFailed_showsTheErrorAndKeepsTheChoice() {
-        setDialog(
-            state =
-                RecordingState.SavedPendingChoice(
-                    elapsedMillis = 60_000L,
-                    deleteFailed = true,
-                ),
-        )
-
-        // The drive stays safely saved; the delete error is shown and the choice stands.
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteError)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_deleteSessionAction)).assertIsDisplayed()
-    }
-
-    @Test
-    fun savePending_showsInlineIndicatorAndTheChoiceIsAlreadyUsable() {
-        // #798: while the background save is still in flight the summary is shown
-        // over the local estimate with a small INLINE indicator — not a blocking
-        // full-screen "Saving…" modal — and Keep/Delete are already tappable.
-        var kept = 0
-        setDialog(
-            state = RecordingState.SavedPendingChoice(elapsedMillis = 60_000L, savePending = true),
-            onKeep = { kept += 1 },
-        )
-
-        composeTestRule.onNodeWithTag(SESSION_SAVING_INDICATOR_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
-        // Keep resolves instantly, even though the save has not landed yet.
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).performClick()
-        assertEquals(1, kept)
-    }
-
-    @Test
-    fun saveSettled_hidesTheInlineIndicator() {
-        setDialog(
-            state = RecordingState.SavedPendingChoice(elapsedMillis = 60_000L, savePending = false),
-        )
-        composeTestRule.onNodeWithTag(SESSION_SAVING_INDICATOR_TAG).assertDoesNotExist()
-    }
-
-    @Test
-    fun routeMap_startsCollapsedAndTogglesOpenAndShutAgain() {
-        setDialog()
-
-        // Collapsed by default: only the "show" control is offered, so the
-        // Keep/Delete choice is never pushed down by an unasked-for map.
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
-            .assertIsDisplayed()
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertDoesNotExist()
-
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
-
-        // Expanded: the route area is up and the control now offers to hide it.
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertIsDisplayed()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_sessionRouteHide))
-            .assertIsDisplayed()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
-            .assertDoesNotExist()
-
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
-
-        // Minimized again, back to the starting state.
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_AREA_TAG).assertDoesNotExist()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_sessionRouteShow))
-            .assertIsDisplayed()
-    }
-
-    @Test
-    fun routeMap_expandingDoesNotDismissTheDialogOrResolveTheChoice() {
-        var kept = 0
-        var deleted = 0
-        setDialog(onKeep = { kept += 1 }, onDelete = { deleted += 1 })
-
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).performClick()
-
-        // The forced Keep/Delete choice still stands with the map open.
-        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.savedDrives_keepAction)).assertIsDisplayed()
-        composeTestRule
-            .onNodeWithText(str(R.string.savedDrives_deleteSessionAction))
-            .assertIsDisplayed()
-        assertEquals(0, kept)
-        assertEquals(0, deleted)
-    }
-
-    @Test
-    fun routeMap_isNotOfferedOnTheSaveFailedPrompt() {
-        // Nothing was stored, so the question is save-or-not, not where you drove.
-        setDialog(
-            state =
-                RecordingState.Failed(
-                    pointCount = 2,
-                    elapsedMillis = 60_000L,
-                    code = "UNAVAILABLE",
-                ),
-        )
-
-        composeTestRule.onNodeWithTag(SESSION_ROUTE_TOGGLE_TAG).assertDoesNotExist()
+    fun keptPendingSave_showsNoPrompt() {
+        setDialog(state = RecordingState.KeptPendingSave(elapsedMillis = 60_000L))
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertDoesNotExist()
     }
 
     @Test
@@ -253,6 +103,7 @@ class SessionSummaryDialogTest {
             onRetry = { retried += 1 },
         )
 
+        composeTestRule.onNodeWithTag(SESSION_SUMMARY_DIALOG_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_saveError)).assertIsDisplayed()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_memberRequired)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_retryAction)).performClick()

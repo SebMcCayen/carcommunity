@@ -2572,9 +2572,6 @@ fun AuthenticatedApp(
                 remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
             val activeRecording by SingleSessionRecording.active.collectAsState()
             val showSessionSummary by SingleSessionRecording.promptPending.collectAsState()
-            // Why the summary opened, so it can explain a convoy that ended under
-            // the member rather than reading the neutral copy out of nowhere.
-            val sessionStopReason by SingleSessionRecording.stopReason.collectAsState()
             val recordingState by
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
@@ -2821,18 +2818,35 @@ fun AuthenticatedApp(
             }
 
             // Auto-save a finished LIVE session's drive so it can never be lost by
-            // a missed Save. When the session-end summary opens (PromptSave), the
-            // drive is immediately persisted; the summary then asks Keep or Delete
-            // over the already-saved ride. Launched on the composition [scope]
-            // (NOT this effect's own coroutine) so moving off PromptSave — which
-            // this very save causes — cannot cancel it mid-flight. Keyed on the
-            // boolean so it fires once on entering PromptSave; an Activity
+            // a missed Save. When the session ends (PromptSave), the drive is
+            // immediately persisted in the background. Launched on the composition
+            // [scope] (NOT this effect's own coroutine) so moving off PromptSave —
+            // which this very save causes — cannot cancel it mid-flight. Keyed on
+            // the boolean so it fires once on entering PromptSave; an Activity
             // recreation that cancelled an in-flight save restored PromptSave, and
             // the re-created effect re-fires it (the drive is never left unsaved).
             val awaitingAutoSave = recordingState is RecordingState.PromptSave
             LaunchedEffect(awaitingAutoSave) {
                 if (awaitingAutoSave) {
                     scope.launch { activeRecording?.autoSave(null) }
+                }
+            }
+
+            // Keep every drive by default (#853). A finished live session's drive
+            // is already auto-saved above; rather than opening a Keep/Delete prompt
+            // over the already-saved ride, KEEP it automatically the moment the
+            // background save is under way. The user removes an unwanted drive from
+            // the History list instead (DrivesScreen delete). keep() resolves to the
+            // terminal Kept instantly when the save has already landed, or parks in
+            // KeptPendingSave until it does — never finalizing on an unconfirmed
+            // save, so a drive is never lost; a definitive save failure still
+            // surfaces the retry prompt (SessionSummaryDialog) rather than being
+            // silently kept. Keyed on the boolean so it fires once on entering
+            // SavedPendingChoice, matching the auto-save effect above.
+            val awaitingAutoKeep = recordingState is RecordingState.SavedPendingChoice
+            LaunchedEffect(awaitingAutoKeep) {
+                if (awaitingAutoKeep) {
+                    activeRecording?.keep()
                 }
             }
 
@@ -6116,21 +6130,18 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // End-of-session summary: shown when a Single session ends with a
-                // recording active. The drive is AUTO-SAVED (see the auto-save
-                // effect above), and this dialog asks Keep (it stays in History)
-                // or Delete (removed via drives-delete). Retry re-runs the save
-                // after a transient failure; Discard closes a permanent (member-
-                // gate) refusal, where nothing was saved.
+                // End-of-session safety net: a finished Single/Convoy session's
+                // drive is AUTO-SAVED and AUTO-KEPT (see the effects above), so the
+                // normal stop path shows no prompt. This dialog now renders ONLY on
+                // a save FAILURE — Retry re-runs the save after a transient fault;
+                // Discard closes a permanent (member-gate) refusal, where nothing
+                // was saved — so a drive is never lost silently (#853).
                 if (showSessionSummary && activeRecording != null) {
                     SessionSummaryDialog(
                         state = recordingState,
                         pointsProvider = { activeRecording?.recordedPoints() ?: emptyList() },
-                        onKeep = { activeRecording?.keep() },
-                        onDelete = { scope.launch { activeRecording?.delete() } },
                         onRetry = { scope.launch { activeRecording?.autoSave(null) } },
                         onDiscard = { activeRecording?.discard() },
-                        reason = sessionStopReason,
                     )
                 }
 
