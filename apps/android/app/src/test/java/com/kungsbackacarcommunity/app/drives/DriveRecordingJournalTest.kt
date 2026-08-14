@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
@@ -95,6 +96,45 @@ class DriveRecordingJournalTest {
                 RecordedPoint(57.0, 12.0, 600L),
                 RecordedPoint(57.2, 12.2, 700L),
                 RecordedPoint(57.3, 12.3, 800L),
+            ),
+            snapshot.points,
+        )
+    }
+
+    @Test
+    fun `when the newline check can't be read, appending still separates records`() {
+        val dir = tempFolder.newFolder("journals")
+        val j = DriveRecordingJournal(dir)
+        j.begin(session, startedAtMillis = 500L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 600L)))
+        // A process kill mid-write leaves a truncated partial line (no newline).
+        val file = dir.listFiles()!!.single { it.name.endsWith(".journal") }
+        file.appendText("P,57.1,12.")
+
+        // Force the last-byte newline check to FAIL: strip read permission so
+        // opening it for the check throws (an I/O error, the real trigger). The
+        // file stays APPENDABLE so the resumed session can keep writing.
+        file.setReadable(false, false)
+        file.setWritable(true, false)
+        // Some platforms/filesystems (e.g. running as root, or a permissionless
+        // FS) ignore setReadable, in which case the check would NOT fail and the
+        // fallback is never exercised — SKIP rather than pass silently, so a
+        // regression to getOrDefault(true) is caught wherever this can run.
+        assumeTrue("filesystem ignores read-permission removal", !file.canRead())
+        try {
+            j.appendPoints(session, listOf(RecordedPoint(57.2, 12.2, 700L)))
+        } finally {
+            file.setReadable(true, false)
+        }
+
+        val snapshot = j.load(session)!!
+        assertEquals(500L, snapshot.startedAtMillis)
+        // The truncated partial ("P,57.1,12.") did NOT fuse with the new point:
+        // both whole records parse, only the partial is dropped.
+        assertEquals(
+            listOf(
+                RecordedPoint(57.0, 12.0, 600L),
+                RecordedPoint(57.2, 12.2, 700L),
             ),
             snapshot.points,
         )

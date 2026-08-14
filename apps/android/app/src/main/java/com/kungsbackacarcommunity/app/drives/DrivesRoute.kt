@@ -44,7 +44,7 @@ fun DrivesRoute(
     // config-less / CI build) so callers and tests need not supply it.
     routeRepository: RouteReplayRepository? = rememberRouteReplayRepository(),
     // A ride to open straight to its detail on entry — set by the auto-keep
-    // "Drive saved" snackbar's View action (#856). Consumed via
+    // "Drive saved" dialog's History action (#856). Consumed via
     // [onInitialRideConsumed] so returning to the list and re-entering History
     // does not re-open it.
     initialRideId: String? = null,
@@ -75,7 +75,7 @@ fun DrivesRoute(
 
     var selectedRideId by remember { mutableStateOf<String?>(null) }
     // Deep-link into a specific drive's detail once, when the shell hands one in
-    // (the "Drive saved" snackbar's View action, #856). Keyed on the id so a new
+    // (the "Drive saved" dialog's History action, #856). Keyed on the id so a new
     // request re-opens; consumed immediately so it fires exactly once and a manual
     // back-out to the list is not overridden on the next recomposition.
     LaunchedEffect(initialRideId) {
