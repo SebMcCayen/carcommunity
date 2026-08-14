@@ -9,10 +9,11 @@
  *
  * SOURCES, one per category:
  *  - crownPoints  crownHuntLeaderboardEntries where scope == 'alltime', field
- *    `points` — read via the existing (scope, points desc, crownsCollected desc)
- *    index. Every all-time entry is scanned; the collection is one document per
- *    member who has ever collected, small enough to page in one pass (the same
- *    approach as seasonRollover.readScopeEntries).
+ *    `points` — a SINGLE unordered scoped get (`.where('scope','==','alltime')`)
+ *    read into memory and ranked here, no ordered index or paging needed. The
+ *    collection is one small document per member who has ever collected, so the
+ *    whole all-time scope fits one query (the same approach as
+ *    seasonRollover.readScopeEntries).
  *  - distance / events / convoys / streak — the four badgeProgress counters
  *    (lifetimeDistanceMeters, completedEventsAttended, convoysLed, bestDayStreak).
  *    `badgeProgress` is BACKEND-ONLY (denied to every client in firestore.rules),
@@ -65,7 +66,7 @@ import {
 /** The client-readable board collection. One document per scope. */
 export const LEADERBOARD_COLLECTION = 'leaderboards';
 
-/** Members read per badgeProgress page. Matches the badge sweep's page size. */
+/** Members read per badgeProgress page during the full scan. */
 export const LEADERBOARD_SCAN_PAGE_SIZE = 500;
 
 /** The badgeProgress field each badge-backed category ranks on. */
