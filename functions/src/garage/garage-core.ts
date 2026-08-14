@@ -16,8 +16,9 @@
  *   authenticated-readable doc on purpose. Be precise about the audience — the
  *   `vehicles` read rule is `isAuthenticated()`, so ANY signed-in user can read
  *   the plate; it is gated on neither an active membership nor a suspension
- *   check, and "shown to other users" understates it. It is the one exception — VIN, insurance
- *   data, and vehicle location remain unrepresentable and must never be added,
+ *   check, and "shown to other users" understates it. It is the one exception —
+ *   VIN, insurance data, and vehicle location remain unrepresentable and must
+ *   never be added,
  *   as those were never intended to be public. The plate is a free-form,
  *   normalised string (trim/collapse-whitespace/uppercase, no country regex) so
  *   imports and personalised plates are accepted.
