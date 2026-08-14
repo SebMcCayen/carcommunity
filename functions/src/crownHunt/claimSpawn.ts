@@ -230,6 +230,33 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   const scopedKey = scopeSpawnClaimKey(uid, input.idempotencyKey);
   const claimsRef = db.collection('crownSpawnClaims');
 
+  // Structured rejection log — ONE line per refusal, using whatever scalars are
+  // in scope at that outcome. This is what makes the "tap a few times to finally
+  // collect" lag visible to Cloud Logging (and the scheduled crownHunt-detectClaimLag
+  // detector reads the per-attempt docs the same refusals already write). NO
+  // COORDINATES are ever logged (crown-hunt-geo.ts: "No coordinates are logged").
+  const logRejection = (
+    result: CrownSpawnClaimResult,
+    extra: {
+      distanceMeters?: number | null;
+      accuracyMeters?: number | null;
+      collectRadiusMeters?: number | null;
+      dwellSeconds?: number | null;
+      derivedSpeed?: number | null;
+    } = {},
+  ): void => {
+    logger.info('crownHunt.claimSpawn rejected', {
+      uid,
+      spawnId: input.spawnId,
+      result,
+      distanceMeters: extra.distanceMeters ?? null,
+      accuracyMeters: extra.accuracyMeters ?? null,
+      collectRadiusMeters: extra.collectRadiusMeters ?? null,
+      dwellSeconds: extra.dwellSeconds ?? null,
+      derivedSpeed: extra.derivedSpeed ?? null,
+    });
+  };
+
   // 1. Feature flags. BOTH must be on: `crownHunt` is the domain switch, and
   // `crownHuntSpawn` is the auto-spawn switch that also gates the spawner — a
   // member must never be able to collect from a system that is officially off.
@@ -238,6 +265,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     readFeatureFlag(CROWN_SPAWN_FLAG_KEY),
   ]);
   if (!huntEnabled || !spawnEnabled) {
+    logRejection('feature_disabled');
     return respond('feature_disabled');
   }
 
@@ -246,6 +274,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // (shared/memberGating.ts); suspended and deleted accounts still fail.
   const userSnap = await db.collection('users').doc(uid).get();
   if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
+    logRejection('not_eligible');
     return respond('not_eligible');
   }
 
@@ -261,14 +290,17 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   const spawnSnap = await spawnRef.get();
   const spawn = spawnSnap.data();
   if (!spawnSnap.exists) {
+    logRejection('crown_expired');
     return respond('crown_expired');
   }
   const rarity = (spawn!.rarity as string | undefined) ?? null;
   if (spawn!.status !== 'live') {
+    logRejection('already_taken');
     return respond('already_taken', rarity);
   }
   const expiresAt = spawn!.expiresAt as Timestamp | undefined;
   if (!expiresAt || expiresAt.toMillis() <= now.getTime()) {
+    logRejection('crown_expired');
     return respond('crown_expired', rarity);
   }
 
@@ -287,6 +319,7 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   if (collectMode === 'shared') {
     const alreadyCollected = await collectorRef.get();
     if (alreadyCollected.exists) {
+      logRejection('already_collected');
       return respond('already_collected', rarity);
     }
   }
@@ -308,12 +341,18 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     claimedAt: Timestamp.fromDate(now),
     positionRecordedAt: Timestamp.fromDate(recordedAtDate),
     reportedSpeedMetersPerSecond: input.speedMetersPerSecond ?? null,
+    // Persisted on EVERY attempt (no extra write — just another field on the
+    // attempt doc that recordAttempt / the award transaction already writes) so
+    // the scheduled collect-lag detector can bucket bursts by reported GPS
+    // accuracy. Never a coordinate.
+    accuracyMeters: input.accuracyMeters ?? null,
   };
 
   // 6. Freshness of the CURRENT fix (the previous one is allowed to be older —
   // that is the whole point of a dwell window; MAX_DWELL_SECONDS bounds it).
   const positionStale = !isPositionFresh(input.recordedAt, now.getTime());
   if (positionStale) {
+    logRejection('position_too_old', { accuracyMeters: input.accuracyMeters ?? null });
     const existing = await recordAttempt(scopedKey, {
       ...attemptBase,
       result: 'position_too_old',
@@ -371,10 +410,19 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     collectRadiusMeters: collectRadius,
   });
   if (!stationary.ok) {
+    const dwellSeconds = (recordedAtDate.getTime() - previousRecordedAt.getTime()) / 1000;
+    logRejection(stationary.result, {
+      distanceMeters,
+      accuracyMeters: input.accuracyMeters ?? null,
+      collectRadiusMeters: collectRadius,
+      dwellSeconds,
+      derivedSpeed: dwellSeconds > 0 ? movedMeters / dwellSeconds : null,
+    });
     const existing = await recordAttempt(scopedKey, {
       ...attemptBase,
       result: stationary.result,
       distanceMeters,
+      collectRadiusMeters: collectRadius,
     });
     return existing
       ? replayStoredClaim(existing, input.spawnId)
@@ -426,6 +474,11 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   });
 
   if (riskEval.isHighRisk) {
+    logRejection('risk_review', {
+      distanceMeters,
+      accuracyMeters: input.accuracyMeters ?? null,
+      collectRadiusMeters: collectRadius,
+    });
     const existing = await recordAttempt(
       scopedKey,
       { ...attemptBase, result: 'risk_review', distanceMeters },
@@ -609,6 +662,11 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
     }
     // Lost the race (or hit the cap): record the authoritative result and reply
     // with it, exactly as the fast-path checks above would have.
+    logRejection(error.result, {
+      distanceMeters,
+      accuracyMeters: input.accuracyMeters ?? null,
+      collectRadiusMeters: collectRadius,
+    });
     const existing = await recordAttempt(scopedKey, {
       ...attemptBase,
       result: error.result,
