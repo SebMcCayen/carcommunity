@@ -244,6 +244,19 @@ private fun CrownCollectBody(
         )
     }
     val collecting = status == CrownClaimStatus.Collecting
+    // The confirming state is the honest "hold on a moment" that replaces a button
+    // that looked live and then refused with NeedsPosition. It carries an optional
+    // seconds hint; when present the button counts it down, otherwise it just says
+    // it is confirming. The label choice for every OTHER case lives in
+    // [CrownSpawnMessages.collectActionLabelRes], so it is unit-tested.
+    val confirmingSeconds =
+        (state as? CrownCollectState.Confirming)?.secondsRemaining?.takeIf { it > 0 }
+    val buttonText =
+        if (!collecting && confirmingSeconds != null) {
+            stringResource(R.string.crownHunt_spawnConfirmingSeconds, confirmingSeconds)
+        } else {
+            stringResource(CrownSpawnMessages.collectActionLabelRes(state, collecting))
+        }
     Button(
         onClick = onCollect,
         modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_COLLECT_TAG),
@@ -251,16 +264,7 @@ private fun CrownCollectBody(
         // guard is the only thing added here, so one press is one call.
         enabled = CrownCollectGate.isCollectEnabled(state) && !collecting,
     ) {
-        Text(
-            text =
-                stringResource(
-                    if (collecting) {
-                        R.string.crownHunt_spawnCollecting
-                    } else {
-                        R.string.crownHunt_spawnCollect
-                    },
-                ),
-        )
+        Text(text = buttonText)
     }
     // Directly BELOW Collect: drive to the crown. Offered whatever the gate says —
     // a member who is too far or moving needs exactly this to get parked beside

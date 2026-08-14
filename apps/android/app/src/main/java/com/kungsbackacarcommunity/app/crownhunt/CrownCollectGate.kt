@@ -55,6 +55,22 @@ sealed interface CrownCollectState {
     data object NoPosition : CrownCollectState
 
     /**
+     * Close enough and not moving, but the two-fix stationary PROOF (or a settled
+     * position) is not ready YET.
+     *
+     * This is the honest name for the few seconds the server's dwell rule needs:
+     * a claim wants two fixes at least [CrownSpawnLimits.MIN_DWELL_SECONDS] apart,
+     * so for a moment after arriving there is no partner old enough. The button is
+     * disabled and SAYS "confirming you're stopped" instead of looking live and
+     * silently refusing with `NeedsPosition` — the re-tap loop that made
+     * collection feel like "tap, tap, then it works".
+     *
+     * @property secondsRemaining a whole-second hint for the button, or null when
+     *   the wait is a settling fix rather than a countable dwell.
+     */
+    data class Confirming(val secondsRemaining: Int?) : CrownCollectState
+
+    /**
      * The automatic half of Kronjakt is switched off.
      *
      * Unreachable through the normal UI (the whole layer is gated before a
@@ -78,6 +94,7 @@ object CrownCollectGate {
             is CrownCollectState.TooFar -> false
             CrownCollectState.Moving -> false
             CrownCollectState.NoPosition -> false
+            is CrownCollectState.Confirming -> false
             CrownCollectState.FeatureOff -> false
         }
 
@@ -110,12 +127,33 @@ object CrownCollectGate {
      * A NEGATIVE or non-finite speed is treated as unknown for the same reason;
      * it is a broken reading, and inventing a verdict from it would be worse
      * than deferring.
+     *
+     * ## Why a "confirming" step, and why it cannot lock anyone out
+     *
+     * @param dwellProofReady whether the caller already holds a usable two-fix
+     *   stationary proof. When the member is in range and stopped but this is
+     *   still false, the state is [CrownCollectState.Confirming] rather than
+     *   [CrownCollectState.Ready] — an honest "hold on a moment" in place of a
+     *   button that looks live and then refuses. Defaults to true, so every caller
+     *   that does not track the pair (and every existing test) keeps the old
+     *   behaviour.
+     * @param dwellSecondsRemaining a hint for the confirming button, passed
+     *   straight through to [CrownCollectState.Confirming].
+     * @param accuracyMeters the current fix's reported radius, if any. A KNOWN
+     *   accuracy worse than the collect radius means the distance reading cannot
+     *   be trusted, so the state is [CrownCollectState.Confirming] until GPS
+     *   settles — but a null/absent accuracy defers (it never blocks), exactly as
+     *   an unknown speed does, so a device that never reports accuracy is never
+     *   locked out.
      */
     fun evaluate(
         featureEnabled: Boolean,
         distanceMeters: Double?,
         speedMetersPerSecond: Double?,
         collectRadiusMeters: Double = CrownSpawnLimits.COLLECT_RADIUS_METERS,
+        dwellProofReady: Boolean = true,
+        dwellSecondsRemaining: Int? = null,
+        accuracyMeters: Double? = null,
     ): CrownCollectState {
         if (!featureEnabled) return CrownCollectState.FeatureOff
         if (distanceMeters == null || !distanceMeters.isFinite()) {
@@ -132,7 +170,30 @@ object CrownCollectGate {
         // a nonsense instruction that also happens to be advice to stop on a
         // road for no reason.
         if (isMoving(speedMetersPerSecond)) return CrownCollectState.Moving
+        // In range and stopped, but the position is too coarse to trust the
+        // distance yet — wait for GPS to settle rather than sending a pair one bad
+        // sample would fail as `outside_radius`. Known-and-too-coarse only; an
+        // absent accuracy defers, like an absent speed.
+        if (isPositionUnsettled(accuracyMeters, radius)) {
+            return CrownCollectState.Confirming(dwellSecondsRemaining)
+        }
+        // In range and stopped, but no two-fix proof has aged in yet — the honest
+        // "confirming you're stopped" step that removes the re-tap loop.
+        if (!dwellProofReady) return CrownCollectState.Confirming(dwellSecondsRemaining)
         return CrownCollectState.Ready
+    }
+
+    /**
+     * Whether a KNOWN accuracy is too coarse to trust the distance against
+     * [radius]. Null, non-finite and negative all answer false — an unknown
+     * accuracy defers to the server rather than blocking, so it can never lock a
+     * device out.
+     */
+    fun isPositionUnsettled(accuracyMeters: Double?, radius: Double): Boolean {
+        if (accuracyMeters == null) return false
+        if (!accuracyMeters.isFinite()) return false
+        if (accuracyMeters < 0.0) return false
+        return accuracyMeters > radius
     }
 
     /**

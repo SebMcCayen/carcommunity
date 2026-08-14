@@ -1096,6 +1096,8 @@
     <string name="crownHunt_spawnStopFirstDetail">Kronor kan bara hämtas när du står parkerad. Parkera på ett säkert ställe och hämta sedan — det är ingen brådska och ingen tid som tickar.</string>
     <string name="crownHunt_spawnNoPosition">Väntar på din position</string>
     <string name="crownHunt_spawnNoPositionDetail">Stå stilla några sekunder så vi hinner se att du står still.</string>
+    <string name="crownHunt_spawnConfirming">Bekräftar att du står stilla…</string>
+    <string name="crownHunt_spawnConfirmingSeconds">Bekräftar att du står stilla… (%1$d s)</string>
     <string name="crownHunt_spawnResultAwarded">Kronan är din!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
     <string name="crownHunt_spawnResultAlreadyTaken">Någon hann före — den här kronan är redan hämtad.</string>
