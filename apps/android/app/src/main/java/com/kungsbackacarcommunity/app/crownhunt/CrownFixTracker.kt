@@ -88,6 +88,24 @@ class CrownFixTracker {
     }
 
     /**
+     * [bestRecent], but with a WALL-CLOCK freshness gate: if the newest fix is
+     * older than [FRESH_CURRENT_SECONDS] relative to [nowMillis], there is no
+     * trustworthy "current" position and this returns null.
+     *
+     * The tracker only prunes on [record], so after a long idle a stale [latest]
+     * (and the pair built on it) would otherwise still read as usable — which is
+     * exactly the wrong-state class of bug this feature is trying to remove:
+     * seeding a popup, and enabling/labelling Collect, off a minutes-old position.
+     * Passing the clock in makes "is there a current fix" answer honestly, and it
+     * stays pure/testable.
+     */
+    fun bestRecent(nowMillis: Long): CrownFix? {
+        val current = latest ?: return null
+        if (nowMillis - current.recordedAtMillis > FRESH_CURRENT_SECONDS * 1000) return null
+        return bestRecent()
+    }
+
+    /**
      * The earlier half of the stationary proof, or null when no fix in the
      * window is old enough yet.
      *
@@ -98,6 +116,18 @@ class CrownFixTracker {
      * chosen consistently.
      */
     fun proofPartner(): CrownFix? = proofPartnerFor(bestRecent())
+
+    /**
+     * [proofPartner], but freshness-gated on [nowMillis]: a partner only counts
+     * when there is a FRESH current fix to pair it with (see [bestRecent]).
+     *
+     * This is the readiness check the pre-warm loop and the seed path use, so a
+     * stale pair left over from an earlier visit never short-circuits the warm-up
+     * or seeds Collect with old data. (The partner itself may legitimately be up to
+     * [CrownSpawnLimits.MAX_DWELL_SECONDS] old — it is the CURRENT half that must
+     * be recent.)
+     */
+    fun proofPartner(nowMillis: Long): CrownFix? = proofPartnerFor(bestRecent(nowMillis))
 
     /**
      * The proof partner for a specific [current] fix: the best-accuracy sample
@@ -134,8 +164,16 @@ class CrownFixTracker {
      * Used only to put a friendly "about N s left" on the confirming button; it is
      * a hint, never a gate — the gate is [proofPartner] being non-null.
      */
-    fun secondsUntilProofReady(): Int {
-        val current = bestRecent() ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
+    fun secondsUntilProofReady(): Int = secondsUntilProofReady(latest?.recordedAtMillis ?: 0L)
+
+    /**
+     * [secondsUntilProofReady] with a wall-clock, so a stale current fix is not
+     * mistaken for "already timing": if there is no FRESH current
+     * ([bestRecent(nowMillis)] is null) the wait is the full
+     * [CrownSpawnLimits.MIN_DWELL_SECONDS] again.
+     */
+    fun secondsUntilProofReady(nowMillis: Long): Int {
+        val current = bestRecent(nowMillis) ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         if (proofPartnerFor(current) != null) return 0
         val oldest = recent.firstOrNull() ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val ageSeconds = (current.recordedAtMillis - oldest.recordedAtMillis) / 1000.0
@@ -165,5 +203,15 @@ class CrownFixTracker {
          * while staying comfortably inside the server's freshness window.
          */
         const val SETTLE_WINDOW_SECONDS = 6L
+
+        /**
+         * How recent the newest fix must be to count as a usable "current"
+         * position ([bestRecent]/[proofPartner] with a clock). Twice the minimum
+         * dwell: comfortably longer than the fix cadence (so a fix one poll old is
+         * never wrongly rejected) yet far inside the server's own ~60 s freshness
+         * refusal — so a partner left over from before a long idle no longer reads
+         * as ready.
+         */
+        const val FRESH_CURRENT_SECONDS = CrownSpawnLimits.MIN_DWELL_SECONDS * 2
     }
 }

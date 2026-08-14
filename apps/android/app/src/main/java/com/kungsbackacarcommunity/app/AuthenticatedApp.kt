@@ -2063,8 +2063,10 @@ fun AuthenticatedApp(
                 // Seed from the PRE-WARMED tracker before the first fresh read, so
                 // the distance line — and, when the range poll already warmed a
                 // partner, a live Collect button — are there the instant the popup
-                // opens rather than a fix cadence later.
-                crownFixTracker.bestRecent()?.let { warm ->
+                // opens rather than a fix cadence later. Freshness-gated: a warm fix
+                // left over from before a long idle is treated as absent, so Collect
+                // is never seeded/enabled off a stale position.
+                crownFixTracker.bestRecent(System.currentTimeMillis())?.let { warm ->
                     crownCurrentFix = warm
                     crownPreviousFix = crownFixTracker.proofPartnerFor(warm)
                 }
@@ -2074,8 +2076,9 @@ fun AuthenticatedApp(
                         crownFixTracker.record(fix)
                         // Prefer the best-accuracy recent sample over the raw
                         // latest, so a single jittery reading does not compute as
-                        // outside_radius and fail the pair.
-                        val best = crownFixTracker.bestRecent()
+                        // outside_radius and fail the pair. Freshness-gated on the
+                        // wall clock so a stale fix never enables Collect.
+                        val best = crownFixTracker.bestRecent(System.currentTimeMillis())
                         crownCurrentFix = best
                         crownPreviousFix = crownFixTracker.proofPartnerFor(best)
                     }
@@ -2099,13 +2102,17 @@ fun AuthenticatedApp(
                 crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
-                // Already warm from an earlier pass — nothing to poll for.
-                if (crownFixTracker.proofPartner() != null) return@LaunchedEffect
+                // Already warm from an earlier pass — nothing to poll for. Uses the
+                // FRESH readiness check (proofPartner(now)), so a stale pair from a
+                // previous visit does not skip the warm-up.
+                if (crownFixTracker.proofPartner(System.currentTimeMillis()) != null) {
+                    return@LaunchedEffect
+                }
                 val appContext = context.applicationContext
-                while (crownFixTracker.proofPartner() == null) {
+                while (crownFixTracker.proofPartner(System.currentTimeMillis()) == null) {
                     CrownLocation.currentFix(appContext, highAccuracy = false)
                         ?.let { crownFixTracker.record(it) }
-                    if (crownFixTracker.proofPartner() != null) break
+                    if (crownFixTracker.proofPartner(System.currentTimeMillis()) != null) break
                     delay(CROWN_PREWARM_FIX_INTERVAL_MS)
                 }
             }
@@ -2122,7 +2129,11 @@ fun AuthenticatedApp(
                 }
             val crownDwellSecondsRemaining =
                 remember(crownDwellReady, crownCurrentFix) {
-                    if (crownDwellReady) null else crownFixTracker.secondsUntilProofReady()
+                    if (crownDwellReady) {
+                        null
+                    } else {
+                        crownFixTracker.secondsUntilProofReady(System.currentTimeMillis())
+                    }
                 }
             // Distance from the member to the open crown, or null with no fix. The
             // same haversine the rest of the app uses (via ViewportRadius), so a
@@ -2965,9 +2976,11 @@ fun AuthenticatedApp(
                     errorReporter?.report(
                         feature = CrownCollectSignalTracker.SIGNAL_FEATURE,
                         // App-generated and PII-free: a bare refusal count, no
-                        // coordinates, no crown id, no uid.
+                        // coordinates, no crown id, no uid. Worded to be true AT
+                        // REPORT TIME — the member may close the popup without ever
+                        // succeeding, so it makes no "resolved" claim.
                         message =
-                            "Crown collect refused for a stationary proof $count times before it resolved",
+                            "Crown collect refused $count times (stationary proof not ready)",
                         code = CrownCollectSignalTracker.SIGNAL_CODE,
                     )
                 }

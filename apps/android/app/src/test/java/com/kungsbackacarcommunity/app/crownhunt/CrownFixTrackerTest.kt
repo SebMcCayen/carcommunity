@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -188,5 +189,40 @@ class CrownFixTrackerTest {
         val tracker = CrownFixTracker()
         assertNull(tracker.bestRecent())
         assertNull(tracker.proofPartnerFor(null))
+    }
+
+    // ---- Wall-clock freshness --------------------------------------------
+
+    /**
+     * The tracker only prunes on record(), so after a long idle a stale pair still
+     * exists. The clock-aware readiness check must treat it as ABSENT, so a
+     * minutes-old position can never seed the popup or enable Collect — the
+     * wrong-state bug this feature exists to remove.
+     */
+    @Test
+    fun `a stale pair is ignored once the current fix ages past the freshness window`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0))
+        tracker.record(fix(6))
+        // At the time of the last fix the pair is fresh and ready.
+        val freshNow = base + 6_000
+        assertNotNull(tracker.bestRecent(freshNow))
+        assertNotNull(tracker.proofPartner(freshNow))
+
+        // A minute later, with no new fix, the current is stale — nothing is ready.
+        val staleNow = base + 66_000
+        assertNull("a stale current must read as no fix", tracker.bestRecent(staleNow))
+        assertNull("a stale pair must not read as ready", tracker.proofPartner(staleNow))
+        assertEquals(
+            "the wait resets to the full minimum dwell",
+            CrownSpawnLimits.MIN_DWELL_SECONDS.toInt(),
+            tracker.secondsUntilProofReady(staleNow),
+        )
+
+        // A fresh fix restores readiness immediately (the old partner is still in
+        // the dwell window relative to it).
+        tracker.record(CrownFix(57.5, 12.0, staleNow))
+        assertNotNull(tracker.bestRecent(staleNow))
+        assertNotNull(tracker.proofPartner(staleNow))
     }
 }
