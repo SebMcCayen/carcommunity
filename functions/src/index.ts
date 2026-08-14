@@ -584,11 +584,12 @@ export const crownHunt = {
   rolloverSeason,
   // Kronjakt SHOP (Crown Hunt Shop PR1, backend core). buyPerk is the first
   // member-facing Kronpoäng SINK — a member spends KP to buy a perk, granted
-  // atomically to the backend-only perkInventory. seedPerkCatalog (admin) writes
-  // the member-readable display mirror config/perkCatalog from the constants.
-  // Both gated on the contract-default-OFF crownHuntPerks flag; perks are not
-  // deployed/used until later PRs. Deployed as crownHunt-buyPerk and
-  // crownHunt-seedPerkCatalog.
+  // atomically to the backend-only perkInventory; it is gated on the
+  // contract-default-OFF crownHuntPerks flag (rejects while off). seedPerkCatalog
+  // (admin-gated, NOT flag-gated) writes the member-readable display mirror
+  // config/perkCatalog from the constants — an operator runs it to seed the doc
+  // while the flag is still OFF. Perks are not deployed/used until later PRs.
+  // Deployed as crownHunt-buyPerk and crownHunt-seedPerkCatalog.
   buyPerk,
   seedPerkCatalog,
 };
