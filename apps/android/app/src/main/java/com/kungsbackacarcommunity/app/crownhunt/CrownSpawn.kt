@@ -157,6 +157,22 @@ object CrownSpawnLimits {
     const val MAX_DWELL_SECONDS: Long = 300
 
     /**
+     * `MAX_POSITION_AGE_SECONDS` — how old the CURRENT fix may be and still be
+     * accepted. Mirrored from `MAX_POSITION_AGE_SECONDS` in
+     * `functions/src/crownHunt/crownhunt-core.ts` (the value `isPositionFresh` in
+     * `crown-hunt-geo.ts` enforces on `crownHunt.claimSpawn`).
+     *
+     * Only the CURRENT half is bound by this — the earlier proof fix is allowed to
+     * be up to [MAX_DWELL_SECONDS] old, which is the whole point of the dwell
+     * window. The client uses it to reject a genuinely STALE leftover fix (minutes
+     * old, from before a long idle) while still treating a normal slightly-old
+     * sample as usable, so the client's "is there a current position" answer
+     * agrees with the server's rather than being stricter and re-blocking a
+     * collect the server would accept.
+     */
+    const val MAX_POSITION_AGE_SECONDS: Long = 60
+
+    /**
      * `MAX_STORED_COLLECT_RADIUS_METERS` — the widest gate a crown DOCUMENT is
      * allowed to ask for.
      *

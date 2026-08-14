@@ -197,12 +197,12 @@ class CrownFixTrackerTest {
 
     /**
      * The tracker only prunes on record(), so after a long idle a stale pair still
-     * exists. The clock-aware readiness check must treat it as ABSENT, so a
-     * minutes-old position can never seed the popup or enable Collect — the
-     * wrong-state bug this feature exists to remove.
+     * exists. The clock-aware readiness check must treat a MINUTES-old leftover as
+     * ABSENT, so it can never seed the popup or enable Collect — the wrong-state
+     * bug this feature exists to remove.
      */
     @Test
-    fun `a stale pair is ignored once the current fix ages past the freshness window`() {
+    fun `a minutes-old idle-leftover pair is ignored as stale`() {
         val tracker = CrownFixTracker()
         tracker.record(fix(0))
         tracker.record(fix(6))
@@ -211,8 +211,8 @@ class CrownFixTrackerTest {
         assertNotNull(tracker.bestRecent(freshNow))
         assertNotNull(tracker.proofPartner(freshNow))
 
-        // A minute later, with no new fix, the current is stale — nothing is ready.
-        val staleNow = base + 66_000
+        // Minutes later, with no new fix, the current is stale — nothing is ready.
+        val staleNow = base + 200_000
         assertNull("a stale current must read as no fix", tracker.bestRecent(staleNow))
         assertNull("a stale pair must not read as ready", tracker.proofPartner(staleNow))
         assertEquals(
@@ -226,5 +226,48 @@ class CrownFixTrackerTest {
         tracker.record(CrownFix(57.5, 12.0, staleNow))
         assertNotNull(tracker.bestRecent(staleNow))
         assertNotNull(tracker.proofPartner(staleNow))
+    }
+
+    /**
+     * A normal slightly-old fix (well inside the server's own freshness window)
+     * must read as READY — the client threshold mirrors the server's, so it never
+     * blocks a collect the server would accept. This is the over-correction guard:
+     * a stricter cutoff would re-create the collect lag on slow-GPS devices.
+     */
+    @Test
+    fun `a fix a few tens of seconds old is still usable, matching the server`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0))
+        tracker.record(fix(6))
+        // 30 s after the last fix: comfortably inside the 60 s server window.
+        val now = base + 36_000
+        assertNotNull("a 30 s-old fix must still be a current", tracker.bestRecent(now))
+        assertNotNull("a 30 s-old pair must still be ready", tracker.proofPartner(now))
+    }
+
+    /**
+     * bestRecent(now) prefers a more-accurate EARLIER sample, so freshness must
+     * apply to the sample RETURNED — not only to `latest`. A fresh latest with a
+     * stale (but more accurate) older sample in the settle window must NOT hand
+     * back the stale one.
+     */
+    @Test
+    fun `a stale but more accurate older sample is not returned as current`() {
+        val tracker = CrownFixTracker()
+        // Very accurate but about to age out of the freshness window.
+        tracker.record(CrownFix(57.5, 12.0, base + 39_000, accuracyMeters = 5.0))
+        // Less accurate, but fresh, and within a settle window of the stale one.
+        tracker.record(CrownFix(57.5, 12.0, base + 45_000, accuracyMeters = 50.0))
+
+        // now: latest (base+45s) is 55 s old = fresh; the 5 m sample (base+39s) is
+        // 61 s old = stale. The stale accurate sample must be rejected.
+        val now = base + 100_000
+        val best = tracker.bestRecent(now)!!
+        assertEquals(
+            "a stale older sample must not win on accuracy",
+            50.0,
+            best.accuracyMeters!!,
+            0.0,
+        )
     }
 }

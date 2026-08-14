@@ -88,21 +88,35 @@ class CrownFixTracker {
     }
 
     /**
-     * [bestRecent], but with a WALL-CLOCK freshness gate: if the newest fix is
-     * older than [FRESH_CURRENT_SECONDS] relative to [nowMillis], there is no
-     * trustworthy "current" position and this returns null.
+     * [bestRecent], but with a WALL-CLOCK freshness gate at
+     * [CrownSpawnLimits.MAX_POSITION_AGE_SECONDS] — the SAME age the server accepts
+     * for the current fix, so the client never rejects a fix the server would take.
      *
      * The tracker only prunes on [record], so after a long idle a stale [latest]
      * (and the pair built on it) would otherwise still read as usable — which is
      * exactly the wrong-state class of bug this feature is trying to remove:
      * seeding a popup, and enabling/labelling Collect, off a minutes-old position.
-     * Passing the clock in makes "is there a current fix" answer honestly, and it
-     * stays pure/testable.
+     * But the threshold must NOT be stricter than the server's, or a device with a
+     * slow location cadence whose newest fix is a routine 10–30 s old would be
+     * blocked from a collect the server would happily accept — re-creating the very
+     * lag this PR fixes. So it rejects only genuinely stale (minutes-old) leftovers.
+     *
+     * The freshness filter is applied to the sample actually RETURNED, not just to
+     * [latest]: [bestRecent] may prefer a more-accurate EARLIER sample from the
+     * settle window, and that one has to be fresh too — otherwise a stale older fix
+     * could be handed back as "recent". Passing the clock in keeps it pure/testable.
      */
     fun bestRecent(nowMillis: Long): CrownFix? {
         val current = latest ?: return null
-        if (nowMillis - current.recordedAtMillis > FRESH_CURRENT_SECONDS * 1000) return null
-        return bestRecent()
+        val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
+        // A stale newest fix means there is no trustworthy current position at all.
+        if (current.recordedAtMillis < freshCutoff) return null
+        val settleStart = current.recordedAtMillis - SETTLE_WINDOW_SECONDS * 1000
+        return recent
+            .asReversed()
+            .filter { it.recordedAtMillis >= settleStart && it.recordedAtMillis >= freshCutoff }
+            .minByOrNull { accuracyRank(it) }
+            ?: current
     }
 
     /**
@@ -203,15 +217,5 @@ class CrownFixTracker {
          * while staying comfortably inside the server's freshness window.
          */
         const val SETTLE_WINDOW_SECONDS = 6L
-
-        /**
-         * How recent the newest fix must be to count as a usable "current"
-         * position ([bestRecent]/[proofPartner] with a clock). Twice the minimum
-         * dwell: comfortably longer than the fix cadence (so a fix one poll old is
-         * never wrongly rejected) yet far inside the server's own ~60 s freshness
-         * refusal — so a partner left over from before a long idle no longer reads
-         * as ready.
-         */
-        const val FRESH_CURRENT_SECONDS = CrownSpawnLimits.MIN_DWELL_SECONDS * 2
     }
 }
