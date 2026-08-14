@@ -798,9 +798,9 @@
     <string name="savedDrives_discardError">Could not discard the drive. Please try again.</string>
     <string name="savedDrives_noDriveSaved">No drive was saved.</string>
     <string name="savedDrives_saveSuccess">Drive saved.</string>
-    <string name="savedDrives_savedSnackbarMessage">Drive saved</string>
-    <string name="savedDrives_savedSnackbarUndo">Undo</string>
-    <string name="savedDrives_savedSnackbarView">View</string>
+    <string name="savedDrives_savedDialogMessage">Your drive has been saved.</string>
+    <string name="savedDrives_savedDialogOk">OK</string>
+    <string name="savedDrives_savedDialogHistory">History</string>
     <string name="savedDrives_autoSavedTitle">Drive saved</string>
     <string name="savedDrives_autoSavedBody">Your drive was saved automatically. Keep it in your history, or delete it if you don\'t want it.</string>
     <string name="savedDrives_convoyEndedTitle">The convoy ended</string>

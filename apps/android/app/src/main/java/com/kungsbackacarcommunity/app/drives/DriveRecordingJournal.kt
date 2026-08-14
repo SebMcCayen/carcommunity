@@ -145,6 +145,14 @@ class DriveRecordingJournal(private val directory: File) {
      * Whether [file] already ends with a newline. Reads only the LAST byte (via a
      * seek) so it stays cheap even for a long journal. An empty file counts as
      * "terminated" — there is no partial line to protect.
+     *
+     * When the last-byte check itself FAILS (I/O error), fall back to `false` —
+     * "not newline-terminated, so insert one". Assuming `true` when uncertain is
+     * the dangerous default: if the file is in fact truncated mid-line, skipping
+     * the separator fuses the next append onto the partial line into one
+     * unparseable record — the very corruption this guard exists to prevent. A
+     * spurious extra blank line (the cost of `false` on a file that WAS already
+     * terminated) is harmless — readLine() skips it and parsePoint() drops it.
      */
     private fun endsWithNewline(file: File): Boolean {
         val length = file.length()
@@ -154,7 +162,7 @@ class DriveRecordingJournal(private val directory: File) {
                 raf.seek(length - 1)
                 raf.read() == '\n'.code
             }
-        }.getOrDefault(true)
+        }.getOrDefault(false)
     }
 
     private fun pruneOthers(keep: File) {

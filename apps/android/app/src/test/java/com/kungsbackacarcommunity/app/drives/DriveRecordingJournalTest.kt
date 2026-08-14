@@ -101,6 +101,44 @@ class DriveRecordingJournalTest {
     }
 
     @Test
+    fun `when the newline check can't be read, appending still separates records`() {
+        val dir = tempFolder.newFolder("journals")
+        val j = DriveRecordingJournal(dir)
+        j.begin(session, startedAtMillis = 500L)
+        j.appendPoints(session, listOf(RecordedPoint(57.0, 12.0, 600L)))
+        // A process kill mid-write leaves a truncated partial line (no newline).
+        val file = dir.listFiles()!!.single { it.name.endsWith(".journal") }
+        file.appendText("P,57.1,12.")
+
+        // Force the last-byte newline check to FAIL: strip read permission so
+        // opening it for the check throws (an I/O error, the real trigger). The
+        // file stays APPENDABLE so the resumed session can keep writing. On a
+        // platform that won't enforce this (e.g. root), the check simply succeeds
+        // and still reads a non-newline last byte — either way the guard must
+        // insert a separator, so this asserts the fallback is `false`, never the
+        // old `true` that would fuse the partial with the next point.
+        file.setReadable(false, false)
+        file.setWritable(true, false)
+        try {
+            j.appendPoints(session, listOf(RecordedPoint(57.2, 12.2, 700L)))
+        } finally {
+            file.setReadable(true, false)
+        }
+
+        val snapshot = j.load(session)!!
+        assertEquals(500L, snapshot.startedAtMillis)
+        // The truncated partial ("P,57.1,12.") did NOT fuse with the new point:
+        // both whole records parse, only the partial is dropped.
+        assertEquals(
+            listOf(
+                RecordedPoint(57.0, 12.0, 600L),
+                RecordedPoint(57.2, 12.2, 700L),
+            ),
+            snapshot.points,
+        )
+    }
+
+    @Test
     fun `load returns null when the header is unreadable`() {
         val dir = tempFolder.newFolder("journals")
         val j = DriveRecordingJournal(dir)
