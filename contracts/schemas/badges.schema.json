@@ -7,7 +7,7 @@
     "badgeTier": {
       "type": "string",
       "enum": ["brons", "silver", "guld", "platina"],
-      "description": "Ladder rung. Two ladders stop at guld: Samlare, because the garage caps at five vehicles so a higher rung would be unreachable; and Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9)."
+      "description": "Ladder rung. One ladder stops at guld: Trogen, because a 365-day-streak rung is ruled out on wellbeing grounds (docs/gamification-system.md Q6 and §9). Samlare gained its platina rung when the garage cap rose to ten vehicles, making the top rung reachable."
     },
     "badgeLadder": {
       "type": "string",

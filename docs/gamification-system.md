@@ -781,7 +781,7 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 *How to earn:* Complete vehicle profiles in Mitt garage.
 
-*Four rungs, tuned to reality:* `MAX_VEHICLES_PER_USER` is **10** (`functions/src/garage/garage-core.ts`, enforced inside a transaction in `garage/manageVehicle.ts`), raised from 5 in 2026-08. Platina now sits at the cap, so the full ladder is reachable. Because most members own 1–2 cars, Brons stays at the first car (inclusive entry rung) while Guld (6) and Platina (10) are deliberately aspirational.
+*Four rungs, tuned to reality:* `MAX_VEHICLES_PER_USER` is **10** (`functions/src/garage/garage-core.ts`, enforced inside a transaction in `functions/src/garage/manageVehicle.ts`), raised from 5 in 2026-08. Platina now sits at the cap, so the full ladder is reachable. Because most members own 1–2 cars, Brons stays at the first car (inclusive entry rung) while Guld (6) and Platina (10) are deliberately aspirational.
 
 *Icon design:* A roller garage door raised to two-thirds, with the noses of cars visible in the darkness behind it. Tier is the number of visible noses (1/2/3 — abstracted, not literal counts). Warm interior light spilling from under the door; this is the "home" badge of the set and should feel like it.
 

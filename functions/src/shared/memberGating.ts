@@ -69,8 +69,8 @@
  * check also dropped the bundled suspension check. Encoding isRestricted()
  * separately here means the switch cannot take suspension down with it.
  *
- * Also untouched: ownership checks, rate limits, the 5-car cap, admin-role
- * gates (requireAdminActor), and App Check.
+ * Also untouched: ownership checks, rate limits, the per-user vehicle cap
+ * (MAX_VEHICLES_PER_USER), admin-role gates (requireAdminActor), and App Check.
  *
  * ===========================================================================
  * TRAP FOR FUTURE-YOU: canShareLive / drives.save must be re-locked TOGETHER
