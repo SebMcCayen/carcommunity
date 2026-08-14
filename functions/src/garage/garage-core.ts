@@ -5,8 +5,9 @@
  * packages/shared/src/garage.ts to the Firestore model
  * (docs/firebase-data-model.md `vehicles`):
  *
- * - Garage features are member-only (legacy canAccessGarage): adding,
- *   editing, and deleting vehicles all require an active member.
+ * - Garage features are NOT member-gated (the legacy canAccessGarage gate is
+ *   retired): adding, editing, and deleting vehicles only require
+ *   requireActiveActor — any authenticated, non-suspended, non-deleted user.
  * - Each user is limited to MAX_VEHICLES_PER_USER vehicles.
  * - The vehicles document is authenticated-readable by design
  *   (docs/firebase-data-model.md). `registrationPlate` is a DELIBERATELY
@@ -15,7 +16,7 @@
  *   authenticated-readable doc on purpose. Be precise about the audience — the
  *   `vehicles` read rule is `isAuthenticated()`, so ANY signed-in user can read
  *   the plate; it is gated on neither an active membership nor a suspension
- *   check, and "shown to other members" understates it. It is the one exception — VIN, insurance
+ *   check, and "shown to other users" understates it. It is the one exception — VIN, insurance
  *   data, and vehicle location remain unrepresentable and must never be added,
  *   as those were never intended to be public. The plate is a free-form,
  *   normalised string (trim/collapse-whitespace/uppercase, no country regex) so
@@ -65,7 +66,7 @@ import {
 } from './vehicle-catalogue';
 
 /**
- * Maximum vehicles a single member may keep in their garage. Raised 5 → 10
+ * Maximum vehicles a single user may keep in their garage. Raised 5 → 10
  * (2026-08) so multi-car owners are not squeezed; the Samlare badge ladder was
  * re-tuned to match (Brons 1 / Silver 3 / Guld 6 / Platina 10). This is the ONE
  * source of truth for the cap: the addVehicle callable enforces it inside a

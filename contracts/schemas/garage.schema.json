@@ -18,7 +18,7 @@
     },
     "vehicle": {
       "type": "object",
-      "description": "Firestore `vehicles/{vehicleId}`. Any authenticated user can read; all writes go through the member-only garage.* callables.",
+      "description": "Firestore `vehicles/{vehicleId}`. Any authenticated user can read; all writes go through the garage.* callables (requireActiveActor — signed-in, not suspended, not deleted — NOT member-gated).",
       "properties": {
         "userId": { "$ref": "common.schema.json#/$defs/uid" },
         "make": {

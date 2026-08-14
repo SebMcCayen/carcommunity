@@ -22,7 +22,7 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.shell.AeroPage
 
 /**
- * Maximum vehicles a member may keep in their garage. Mirrors
+ * Maximum vehicles a user may keep in their garage. Mirrors
  * MAX_VEHICLES_PER_USER in functions/src/garage/garage-core.ts, which is the
  * source of truth and enforces the cap inside the addVehicle transaction; this
  * client copy only decides whether to show the "Add vehicle" button.
