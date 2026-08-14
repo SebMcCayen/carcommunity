@@ -2590,6 +2590,7 @@ fun AuthenticatedApp(
             val driveSavedUndoText = stringResource(R.string.savedDrives_savedSnackbarUndo)
             val driveSavedViewText = stringResource(R.string.savedDrives_savedSnackbarView)
             val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
+            val driveDeleteErrorText = stringResource(R.string.savedDrives_deleteError)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
             // Uploads the recorded route.bin to Cloud Storage after drives-save
@@ -2912,11 +2913,18 @@ fun AuthenticatedApp(
                                         viewLabel = driveSavedViewText,
                                         // Undo = delete the just-saved ride via the
                                         // same drives-delete path History uses, then
-                                        // confirm it was removed.
+                                        // report the ACTUAL outcome — a confirmation
+                                        // on success, the delete-error string on
+                                        // failure (never a false "deleted").
                                         onUndo = {
                                             scope.launch {
-                                                runCatching { drivesRepository.deleteDrive(rideId) }
-                                                snackbarHostState.showSnackbar(driveDeletedText)
+                                                val deleted =
+                                                    runCatching {
+                                                        drivesRepository.deleteDrive(rideId)
+                                                    }.isSuccess
+                                                snackbarHostState.showSnackbar(
+                                                    if (deleted) driveDeletedText else driveDeleteErrorText,
+                                                )
                                             }
                                         },
                                         // View = open that ride's detail in History.
