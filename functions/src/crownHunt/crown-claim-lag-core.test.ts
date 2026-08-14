@@ -11,6 +11,7 @@ import {
   buildRetryLagFingerprint,
   buildRetryLagIssueBody,
   buildRetryLagIssuePayload,
+  buildRetryLagIssueTitle,
   clusterRetryLagGroups,
   detectRetryLagGroups,
   type ClaimAttemptRecord,
@@ -286,6 +287,19 @@ describe('issue payload — no PII, buckets + counts only', () => {
   it('labels with crown-hunt + auto-generated', () => {
     const payload = buildRetryLagIssuePayload(cluster, { firstSeenIso: 'x', count: 1 });
     expect(payload.labels).toEqual(['crown-hunt', 'auto-generated']);
+  });
+
+  it('formats title bucket units cleanly (spaced m; no unit on unknown)', () => {
+    const title = buildRetryLagIssuePayload(cluster, { firstSeenIso: 'x', count: 1 }).title;
+    expect(title).toContain('at 75-100 m (acc 10-20 m)');
+    expect(title).not.toMatch(/\d\d?m\b/); // never "100m" jammed together
+
+    const openEnded = buildRetryLagIssueTitle({ ...cluster, distanceBucket: '150+', accuracyBucket: '100+' });
+    expect(openEnded).toContain('at 150+ m (acc 100+ m)');
+
+    const unknown = buildRetryLagIssueTitle({ ...cluster, distanceBucket: 'unknown', accuracyBucket: 'unknown' });
+    expect(unknown).toContain('at unknown (acc unknown)');
+    expect(unknown).not.toContain('unknownm');
   });
 });
 

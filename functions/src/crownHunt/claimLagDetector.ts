@@ -105,6 +105,13 @@ export interface ClaimLagDetectionResult {
   failed: number;
   /** True when the per-run issue cap dropped remaining clusters. */
   capped: boolean;
+  /**
+   * True when filing was skipped entirely because GITHUB_ISSUE_TOKEN was
+   * missing/empty. Detection still ran (episodes/clusters are populated), but no
+   * issue was attempted — so a token misconfig cannot silently burn the global
+   * hourly GitHub budget on every 20-minute run.
+   */
+  filingSkippedMissingToken: boolean;
 }
 
 /**
@@ -230,7 +237,25 @@ export async function runClaimLagDetection(
     budgetSkipped: 0,
     failed: 0,
     capped: false,
+    filingSkippedMissingToken: false,
   };
+
+  // GUARD: with no token, createGitHubIssue can only fail — but fileAutoIssue
+  // charges the GLOBAL hourly GitHub budget BEFORE it bails, so calling it on
+  // every 20-minute run under a token misconfig would silently drain the budget
+  // shared with the error-report and feedback pipelines. Skip filing entirely
+  // (detection above has already run and logged episodes) and surface it.
+  if (!token) {
+    result.filingSkippedMissingToken = true;
+    if (clusters.length > 0) {
+      logger.warn('crownHunt.detectClaimLag: GITHUB_ISSUE_TOKEN missing, skipping issue filing', {
+        clusters: clusters.length,
+        episodesMatched: groups.length,
+      });
+    }
+    logger.info('crownHunt.detectClaimLag pass complete', { ...result });
+    return result;
+  }
 
   let issuesConsidered = 0;
   for (const cluster of clusters) {

@@ -465,14 +465,25 @@ function inlineCodeScalar(value: string): string {
 
 /**
  * Issue title: `[Auto-crown-hunt] collect-lag: <dominantResult> at <distance>m
- * (acc <accuracy>m)`. Every token is a bucket name or a controlled constant — no
+ * (acc <accuracy> m)`. Every token is a bucket name or a controlled constant — no
  * uid, no coordinate, no raw distance.
  */
 export function buildRetryLagIssueTitle(cluster: RetryLagCluster): string {
   return (
     `${CROWN_RETRY_LAG_TITLE_TAG} collect-lag: ${cluster.dominantResult} ` +
-    `at ${cluster.distanceBucket}m (acc ${cluster.accuracyBucket}m)`
+    `at ${formatBucketWithUnit(cluster.distanceBucket)} (acc ${formatBucketWithUnit(cluster.accuracyBucket)})`
   );
+}
+
+/**
+ * Renders a distance/accuracy bucket for the title with its unit. A range or
+ * `NNN+` bucket gets a spaced `m` (`75-100` → `75-100 m`, `150+` → `150+ m`); the
+ * sentinel `unknown` bucket carries no unit (`unknown`, never `unknownm`). The
+ * space keeps titles readable and consistent with the body, which describes the
+ * bucket in metres separately.
+ */
+function formatBucketWithUnit(bucket: string): string {
+  return bucket === 'unknown' ? 'unknown' : `${bucket} m`;
 }
 
 /**

@@ -107,6 +107,19 @@ describe('runClaimLagDetection (emulator)', () => {
     // The emulator short-circuit is exercised: createGitHubIssue returns null, so
     // NO issue is ever created (and no network call to api.github.com is made).
     expect(result.filed).toBe(0);
+    expect(result.filingSkippedMissingToken).toBe(false);
+  });
+
+  it('skips filing entirely when the token is missing (budget-safe)', async () => {
+    // With no token, filing must NOT run at all (fileAutoIssue would charge the
+    // global hourly budget before bailing), but detection still runs.
+    const result = await runClaimLagDetection(now, { scanHunt: false, token: '' });
+    expect(result.episodesMatched).toBeGreaterThanOrEqual(1);
+    expect(result.filingSkippedMissingToken).toBe(true);
+    expect(result.filed).toBe(0);
+    expect(result.deduped).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(result.budgetSkipped).toBe(0);
   });
 
   it('stored each attempt with the scalars the detector reads (no coordinates)', async () => {
