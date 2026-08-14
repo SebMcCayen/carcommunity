@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -118,6 +119,8 @@ import com.kungsbackacarcommunity.app.drives.EndedSessionAction
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SavePromptReason
+import com.kungsbackacarcommunity.app.drives.DriveSavedSnackbar
+import com.kungsbackacarcommunity.app.drives.DriveSavedSnackbarVisuals
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.drives.savePromptReason
@@ -716,6 +719,10 @@ fun AuthenticatedApp(
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
+            // A drive to open in History straight away — set by the "View" action on
+            // the auto-keep "Drive saved" snackbar (#856), which also switches to the
+            // History tab; DrivesRoute pre-selects it and clears it back to null.
+            var pendingDriveDetailRideId by rememberSaveable { mutableStateOf<String?>(null) }
             // Initialised from any route a welcome-flow CTA requested (membership /
             // profile / garage), so finishing the welcome deep-links straight into
             // that screen; null (skip / "Get started") lands on the Map home. Only
@@ -2572,15 +2579,15 @@ fun AuthenticatedApp(
                 remember { MutableStateFlow<RecordingState>(RecordingState.Idle) }
             val activeRecording by SingleSessionRecording.active.collectAsState()
             val showSessionSummary by SingleSessionRecording.promptPending.collectAsState()
-            // Why the summary opened, so it can explain a convoy that ended under
-            // the member rather than reading the neutral copy out of nowhere.
-            val sessionStopReason by SingleSessionRecording.stopReason.collectAsState()
             val recordingState by
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
                 )
-            val driveKeptText = stringResource(R.string.savedDrives_driveKept)
+            val driveSavedText = stringResource(R.string.savedDrives_savedSnackbarMessage)
+            val driveSavedUndoText = stringResource(R.string.savedDrives_savedSnackbarUndo)
+            val driveSavedViewText = stringResource(R.string.savedDrives_savedSnackbarView)
             val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
+            val driveDeleteErrorText = stringResource(R.string.savedDrives_deleteError)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
             // Uploads the recorded route.bin to Cloud Storage after drives-save
@@ -2821,18 +2828,35 @@ fun AuthenticatedApp(
             }
 
             // Auto-save a finished LIVE session's drive so it can never be lost by
-            // a missed Save. When the session-end summary opens (PromptSave), the
-            // drive is immediately persisted; the summary then asks Keep or Delete
-            // over the already-saved ride. Launched on the composition [scope]
-            // (NOT this effect's own coroutine) so moving off PromptSave — which
-            // this very save causes — cannot cancel it mid-flight. Keyed on the
-            // boolean so it fires once on entering PromptSave; an Activity
+            // a missed Save. When the session ends (PromptSave), the drive is
+            // immediately persisted in the background. Launched on the composition
+            // [scope] (NOT this effect's own coroutine) so moving off PromptSave —
+            // which this very save causes — cannot cancel it mid-flight. Keyed on
+            // the boolean so it fires once on entering PromptSave; an Activity
             // recreation that cancelled an in-flight save restored PromptSave, and
             // the re-created effect re-fires it (the drive is never left unsaved).
             val awaitingAutoSave = recordingState is RecordingState.PromptSave
             LaunchedEffect(awaitingAutoSave) {
                 if (awaitingAutoSave) {
                     scope.launch { activeRecording?.autoSave(null) }
+                }
+            }
+
+            // Keep every drive by default (#853). A finished live session's drive
+            // is already auto-saved above; rather than opening a Keep/Delete prompt
+            // over the already-saved ride, KEEP it automatically the moment the
+            // background save is under way. The user removes an unwanted drive from
+            // the History list instead (DrivesScreen delete). keep() resolves to the
+            // terminal Kept instantly when the save has already landed, or parks in
+            // KeptPendingSave until it does — never finalizing on an unconfirmed
+            // save, so a drive is never lost; a definitive save failure still
+            // surfaces the retry prompt (SessionSummaryDialog) rather than being
+            // silently kept. Keyed on the boolean so it fires once on entering
+            // SavedPendingChoice, matching the auto-save effect above.
+            val awaitingAutoKeep = recordingState is RecordingState.SavedPendingChoice
+            LaunchedEffect(awaitingAutoKeep) {
+                if (awaitingAutoKeep) {
+                    activeRecording?.keep()
                 }
             }
 
@@ -2843,8 +2867,50 @@ fun AuthenticatedApp(
             LaunchedEffect(recordingState) {
                 when (recordingState) {
                     RecordingState.Kept -> {
+                        // Capture the saved ride id BEFORE clear() releases the
+                        // coordinator, so the confirmation's Undo/View can act on it.
+                        val rideId = activeRecording?.savedRideId
                         SingleSessionRecording.clear()
-                        snackbarHostState.showSnackbar(driveKeptText)
+                        // Show the "Drive saved" confirmation on the composition
+                        // [scope], NOT this effect's own coroutine: clear() flips
+                        // recordingState to Idle, which re-keys and cancels THIS
+                        // effect — a snackbar shown here would be cancelled with it.
+                        // With a ride id, it is the actionable Undo/View snackbar
+                        // (#856); without one (defensive) it is a plain confirmation.
+                        scope.launch {
+                            if (rideId != null && drivesRepository != null) {
+                                snackbarHostState.showSnackbar(
+                                    DriveSavedSnackbarVisuals(
+                                        message = driveSavedText,
+                                        undoLabel = driveSavedUndoText,
+                                        viewLabel = driveSavedViewText,
+                                        // Undo = delete the just-saved ride via the
+                                        // same drives-delete path History uses, then
+                                        // report the ACTUAL outcome — a confirmation
+                                        // on success, the delete-error string on
+                                        // failure (never a false "deleted").
+                                        onUndo = {
+                                            scope.launch {
+                                                val deleted =
+                                                    runCatching {
+                                                        drivesRepository.deleteDrive(rideId)
+                                                    }.isSuccess
+                                                snackbarHostState.showSnackbar(
+                                                    if (deleted) driveDeletedText else driveDeleteErrorText,
+                                                )
+                                            }
+                                        },
+                                        // View = open that ride's detail in History.
+                                        onView = {
+                                            pendingDriveDetailRideId = rideId
+                                            selectedTab = ShellTab.History
+                                        },
+                                    ),
+                                )
+                            } else {
+                                snackbarHostState.showSnackbar(driveSavedText)
+                            }
+                        }
                     }
                     RecordingState.Deleted -> {
                         SingleSessionRecording.clear()
@@ -5403,6 +5469,13 @@ fun AuthenticatedApp(
                                                 DrivesRoute(
                                                     repository = drivesRepository,
                                                     uid = uid,
+                                                    // Opened straight to a drive by the
+                                                    // "Drive saved" snackbar's View action
+                                                    // (#856); consumed back to null.
+                                                    initialRideId = pendingDriveDetailRideId,
+                                                    onInitialRideConsumed = {
+                                                        pendingDriveDetailRideId = null
+                                                    },
                                                 )
                                             } else {
                                                 HubScreen(
@@ -6116,21 +6189,18 @@ fun AuthenticatedApp(
                     )
                 }
 
-                // End-of-session summary: shown when a Single session ends with a
-                // recording active. The drive is AUTO-SAVED (see the auto-save
-                // effect above), and this dialog asks Keep (it stays in History)
-                // or Delete (removed via drives-delete). Retry re-runs the save
-                // after a transient failure; Discard closes a permanent (member-
-                // gate) refusal, where nothing was saved.
+                // End-of-session safety net: a finished Single/Convoy session's
+                // drive is AUTO-SAVED and AUTO-KEPT (see the effects above), so the
+                // normal stop path shows no prompt. This dialog now renders ONLY on
+                // a save FAILURE — Retry re-runs the save after a transient fault;
+                // Discard closes a permanent (member-gate) refusal, where nothing
+                // was saved — so a drive is never lost silently (#853).
                 if (showSessionSummary && activeRecording != null) {
                     SessionSummaryDialog(
                         state = recordingState,
                         pointsProvider = { activeRecording?.recordedPoints() ?: emptyList() },
-                        onKeep = { activeRecording?.keep() },
-                        onDelete = { scope.launch { activeRecording?.delete() } },
                         onRetry = { scope.launch { activeRecording?.autoSave(null) } },
                         onDiscard = { activeRecording?.discard() },
-                        reason = sessionStopReason,
                     )
                 }
 
@@ -6231,7 +6301,15 @@ fun AuthenticatedApp(
                     hostState = snackbarHostState,
                     modifier =
                         Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
-                )
+                ) { data ->
+                    // The auto-keep "Drive saved" confirmation carries two custom
+                    // actions (Undo / View) the default snackbar can't express;
+                    // every other snackbar renders with the default look (#856).
+                    when (val visuals = data.visuals) {
+                        is DriveSavedSnackbarVisuals -> DriveSavedSnackbar(data, visuals)
+                        else -> Snackbar(data)
+                    }
+                }
               }
             }
             }
