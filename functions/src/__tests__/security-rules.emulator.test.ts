@@ -405,6 +405,56 @@ describe('Firestore – points ledger (Phase 9g)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: Kronjakt SHOP (Crown Hunt Shop) — perkInventory + config/perkCatalog
+// ---------------------------------------------------------------------------
+
+describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () => {
+  const OWNER = 'perk-rules-owner';
+  const OTHER = 'perk-rules-other';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'perkInventory', OWNER), { shield: 2, boost: 1 });
+      await setDoc(doc(ctx.firestore(), 'config', 'perkCatalog'), {
+        version: 1,
+        perks: [{ perkId: 'shield', kind: 'shield', name: 'Sköld', iconKey: 'x', costKp: 100 }],
+      });
+    });
+  });
+
+  it('owner reads their own inventory by id; nobody else can, and there is no list', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(getDoc(doc(ownerFs, 'perkInventory', OWNER)));
+
+    const otherFs = testEnv.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(otherFs, 'perkInventory', OWNER)));
+    // `get`, not `read`: a collection query is denied so inventories cannot be scraped.
+    await assertFails(getDocs(collection(ownerFs, 'perkInventory')));
+  });
+
+  it('no client can write inventory — not even the owner', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER, { activeMember: true }).firestore();
+    await assertFails(updateDoc(doc(ownerFs, 'perkInventory', OWNER), { shield: 999 }));
+    await assertFails(setDoc(doc(ownerFs, 'perkInventory', OWNER), { boost: 999 }));
+    await assertFails(deleteDoc(doc(ownerFs, 'perkInventory', OWNER)));
+  });
+
+  it('active members read the display catalog; suspended members and clients cannot write it', async () => {
+    const memberFs = testEnv.authenticatedContext('perk-catalog-reader').firestore();
+    await assertSucceeds(getDoc(doc(memberFs, 'config', 'perkCatalog')));
+
+    const suspendedFs = testEnv
+      .authenticatedContext('perk-catalog-suspended', { suspended: true })
+      .firestore();
+    await assertFails(getDoc(doc(suspendedFs, 'config', 'perkCatalog')));
+
+    await assertFails(
+      setDoc(doc(memberFs, 'config', 'perkCatalog'), { version: 2, perks: [] }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: Kronjakt (Phase 9h)
 // ---------------------------------------------------------------------------
 

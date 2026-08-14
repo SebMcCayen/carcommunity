@@ -1,0 +1,282 @@
+/**
+ * Kronjakt SHOP emulator integration tests (Crown Hunt Shop PR1, backend core).
+ *
+ * Exercises crownHunt.buyPerk (the first member-facing Kronpoäng SINK) and the
+ * admin crownHunt.seedPerkCatalog display-mirror writer against the emulator:
+ *
+ *  - a buy debits KP and increments perkInventory ATOMICALLY;
+ *  - an insufficient balance is rejected and leaves the inventory untouched;
+ *  - the crownHuntPerks flag OFF rejects every buy;
+ *  - an unknown perk and a bad quantity are rejected;
+ *  - a replayed idempotency key debits once and grants once;
+ *  - a suspended member cannot buy;
+ *  - seedPerkCatalog writes config/perkCatalog for admins and rejects members.
+ *
+ * CI ONLY. Requires the Firebase Emulator Suite (auth + functions + firestore).
+ * Run via: pnpm --dir functions emulators:test
+ */
+
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099';
+process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+process.env.GCLOUD_PROJECT ??= 'demo-test';
+
+import { deleteApp, FirebaseError, initializeApp, type FirebaseApp } from 'firebase/app';
+import {
+  connectAuthEmulator,
+  createUserWithEmailAndPassword,
+  getAuth,
+  signInWithEmailAndPassword,
+  type Auth,
+} from 'firebase/auth';
+import {
+  connectFunctionsEmulator,
+  getFunctions,
+  httpsCallable,
+  type Functions,
+} from 'firebase/functions';
+import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { PERK_CATALOG } from '../crownHunt/perks-core';
+
+const PROJECT_ID = 'demo-test';
+const EMULATOR_HOST = '127.0.0.1';
+const REGION = 'europe-west1';
+
+const adminApp =
+  getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'perks-emulator-tests');
+const adminAuth = getAdminAuth(adminApp);
+const adminDb = getAdminFirestore(adminApp);
+
+let app: FirebaseApp;
+let auth: Auth;
+let functions: Functions;
+
+interface TestUser {
+  uid: string;
+  email: string;
+  password: string;
+}
+
+async function pollUntil<T>(
+  read: () => Promise<T | undefined>,
+  timeoutMs = 30_000,
+  intervalMs = 250,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await read();
+    if (value !== undefined) return value;
+    if (Date.now() > deadline) throw new Error('Timed out waiting for condition');
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+}
+
+async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+    return 'no-error';
+  } catch (error) {
+    if (error instanceof FirebaseError) return error.code;
+    throw error;
+  }
+}
+
+async function createProvisionedUser(prefix: string): Promise<TestUser> {
+  const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
+  const password = 'password-123';
+  const credential = await createUserWithEmailAndPassword(auth, email, password);
+  const uid = credential.user.uid;
+  await pollUntil(async () => {
+    const snap = await adminDb.collection('users').doc(uid).get();
+    return snap.exists ? true : undefined;
+  });
+  return { uid, email, password };
+}
+
+async function signInAs(user: TestUser): Promise<void> {
+  await signInWithEmailAndPassword(auth, user.email, user.password);
+  await auth.currentUser?.getIdToken(true);
+}
+
+const call = (name: string, data: unknown) => httpsCallable(functions, name)(data);
+
+async function setPerksFlag(enabled: boolean): Promise<void> {
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ crownHunt: true, crownHuntPerks: enabled }, { merge: true });
+}
+
+/** Seeds a member's KP balance directly on the ledger document. */
+async function setBalance(uid: string, balance: number): Promise<void> {
+  await adminDb.collection('pointsLedger').doc(uid).set({ balance }, { merge: true });
+}
+
+async function readBalance(uid: string): Promise<number> {
+  const snap = await adminDb.collection('pointsLedger').doc(uid).get();
+  return (snap.data()?.balance as number | undefined) ?? 0;
+}
+
+async function readInventory(uid: string): Promise<Record<string, number>> {
+  const snap = await adminDb.collection('perkInventory').doc(uid).get();
+  return (snap.data() as Record<string, number> | undefined) ?? {};
+}
+
+interface BuyPerkResponse {
+  perkId: string;
+  qty: number;
+  costKp: number;
+  newBalance: number;
+  inventoryCount: number;
+  alreadyPurchased: boolean;
+}
+
+let keyCounter = 0;
+function buyInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  keyCounter += 1;
+  return {
+    perkId: 'shield',
+    qty: 1,
+    idempotencyKey: `buy-${Date.now()}-${keyCounter}`,
+    ...overrides,
+  };
+}
+
+let adminUser: TestUser;
+let member: TestUser;
+
+beforeAll(async () => {
+  app = initializeApp(
+    { projectId: PROJECT_ID, apiKey: 'demo-api-key', appId: 'demo-app-id' },
+    'perks-emulator-client',
+  );
+  auth = getAuth(app);
+  connectAuthEmulator(auth, `http://${EMULATOR_HOST}:9099`, { disableWarnings: true });
+  functions = getFunctions(app, REGION);
+  connectFunctionsEmulator(functions, EMULATOR_HOST, 5001);
+
+  adminUser = await createProvisionedUser('perk-admin');
+  await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
+  await adminDb.collection('users').doc(adminUser.uid).set({ role: 'admin' }, { merge: true });
+  member = await createProvisionedUser('perk-member');
+  await adminDb.collection('users').doc(member.uid).set({ activeMember: true }, { merge: true });
+
+  await setPerksFlag(true);
+}, 120_000);
+
+afterAll(async () => {
+  await deleteApp(app);
+});
+
+describe('crownHunt.seedPerkCatalog', () => {
+  it('requires an admin', async () => {
+    await signInAs(member);
+    expect(await callableErrorCode(call('crownHunt-seedPerkCatalog', {}))).toBe(
+      'functions/permission-denied',
+    );
+  });
+
+  it('writes the member-readable display mirror from the constants', async () => {
+    await signInAs(adminUser);
+    const res = (await call('crownHunt-seedPerkCatalog', {})).data as {
+      version: number;
+      perkCount: number;
+    };
+    expect(res.perkCount).toBe(3);
+
+    const snap = await adminDb.collection('config').doc('perkCatalog').get();
+    const doc = snap.data() as { version: number; perks: Array<{ perkId: string; costKp: number }> };
+    expect(doc.perks).toHaveLength(3);
+    const shield = doc.perks.find((p) => p.perkId === 'shield');
+    expect(shield?.costKp).toBe(PERK_CATALOG.shield.costKp);
+    // Effect params never reach the mirror.
+    expect(JSON.stringify(doc)).not.toContain('drainKp');
+  });
+});
+
+describe('crownHunt.buyPerk', () => {
+  it('debits KP and increments inventory atomically', async () => {
+    await setBalance(member.uid, 500);
+    await signInAs(member);
+    const res = (await call('crownHunt-buyPerk', buyInput({ perkId: 'boost', qty: 2 }))).data as
+      BuyPerkResponse;
+    // boost = 120 KP each; 2 => 240 spent; 500 - 240 = 260.
+    expect(res.costKp).toBe(240);
+    expect(res.newBalance).toBe(260);
+    expect(res.inventoryCount).toBe(2);
+    expect(res.alreadyPurchased).toBe(false);
+    expect(await readBalance(member.uid)).toBe(260);
+    expect((await readInventory(member.uid)).boost).toBe(2);
+  });
+
+  it('rejects an insufficient balance and leaves the inventory untouched', async () => {
+    await setBalance(member.uid, 50); // spike_strip costs 150
+    await signInAs(member);
+    const before = await readInventory(member.uid);
+    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'spike_strip' })))).toBe(
+      'functions/failed-precondition',
+    );
+    const after = await readInventory(member.uid);
+    expect(after.spike_strip ?? 0).toBe(before.spike_strip ?? 0);
+    expect(await readBalance(member.uid)).toBe(50);
+  });
+
+  it('is idempotent: a replayed key debits once and grants once', async () => {
+    await setBalance(member.uid, 1000);
+    await signInAs(member);
+    const input = buyInput({ perkId: 'shield' });
+    const first = (await call('crownHunt-buyPerk', input)).data as BuyPerkResponse;
+    const balanceAfterFirst = await readBalance(member.uid);
+    const shieldAfterFirst = (await readInventory(member.uid)).shield;
+
+    const second = (await call('crownHunt-buyPerk', input)).data as BuyPerkResponse;
+    expect(second.alreadyPurchased).toBe(true);
+    expect(first.alreadyPurchased).toBe(false);
+    // No second debit, no second grant.
+    expect(await readBalance(member.uid)).toBe(balanceAfterFirst);
+    expect((await readInventory(member.uid)).shield).toBe(shieldAfterFirst);
+  });
+
+  it('rejects an unknown perk and a bad quantity', async () => {
+    await setBalance(member.uid, 1000);
+    await signInAs(member);
+    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'nope' })))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ qty: 0 })))).toBe(
+      'functions/invalid-argument',
+    );
+    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ qty: 999 })))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it('rejects every buy when the flag is off', async () => {
+    await setPerksFlag(false);
+    await setBalance(member.uid, 1000);
+    await signInAs(member);
+    try {
+      expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput()))).toBe(
+        'functions/failed-precondition',
+      );
+    } finally {
+      await setPerksFlag(true);
+    }
+  });
+
+  it('rejects a suspended member', async () => {
+    const suspended = await createProvisionedUser('perk-suspended');
+    await adminDb
+      .collection('users')
+      .doc(suspended.uid)
+      .set({ activeMember: true, suspended: true }, { merge: true });
+    await setBalance(suspended.uid, 1000);
+    await signInAs(suspended);
+    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput()))).toBe(
+      'functions/failed-precondition',
+    );
+    expect(await readInventory(suspended.uid)).toEqual({});
+  });
+});

@@ -418,6 +418,17 @@ service cloud.firestore {
       // No client writes: admin.setFeatureFlag only.
     }
 
+    // config/perkCatalog is the member-readable DISPLAY MIRROR of the Kronjakt
+    // shop (perkId, kind, name, icon key, cost, blurb). The authoritative costs
+    // and effect parameters live server-side in functions perks-core.ts; this
+    // doc is written ONLY by the admin crownHunt.seedPerkCatalog callable
+    // (Admin SDK) and the buy path never trusts a price read from it. Active
+    // members read it to render the shop; no client writes.
+    match /config/perkCatalog {
+      allow read: if isActiveMember();
+      // No client writes: crownHunt.seedPerkCatalog only.
+    }
+
     // -------------------------------------------------------------------------
     // events – community calendar (Phase 9b)
     // Split-document model: events/{eventId} holds teaser-safe + operational
@@ -1469,6 +1480,21 @@ service cloud.firestore {
         allow read: if isOwner(userId);
         // No client writes: append-only via backend transactions.
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // perkInventory – Kronjakt shop inventory (Crown Hunt Shop)
+    // One document per member, a map { perkId: count } of perks they own. The
+    // FIRST member-facing Kronpoäng SINK: crownHunt.buyPerk debits KP and
+    // increments a perk count in the SAME ledger transaction (Admin SDK), so a
+    // grant can never land without its debit. Owner-READ only (by id — a member
+    // may see what they own), and NO client writes ever: a member must not be
+    // able to forge or top up their own inventory. `get`, not `read`, so
+    // granting read cannot also authorise a collection-wide query.
+    // -------------------------------------------------------------------------
+    match /perkInventory/{userId} {
+      allow get: if isOwner(userId);
+      allow write: if false;
     }
 
     // -------------------------------------------------------------------------

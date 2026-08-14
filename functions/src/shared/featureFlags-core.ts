@@ -28,6 +28,11 @@ import { z } from 'zod';
  * carry a named admin's safe-location confirmation; an auto-spawned crown
  * cannot, so it stays dark until someone deliberately turns it on AND has
  * approved the areas it may use (`crownSpawnCells`).
+ *
+ * `crownHuntPerks` is default OFF for a different reason: it is the Kronjakt
+ * SHOP switch — the FIRST member-facing Kronpoäng SINK (buying perks with KP).
+ * It stays off until the shop is deliberately turned on; while off, buyPerk
+ * rejects and members spend nothing.
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
@@ -41,6 +46,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   externalDataSources: true,
   digitalBillboards: true,
   partnerInsightsPassBy: false,
+  crownHuntPerks: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;

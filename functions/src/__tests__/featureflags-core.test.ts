@@ -27,6 +27,10 @@ import {
   CROWN_HUNT_FLAG_KEY,
 } from '../crownHunt/crownhunt-core';
 import {
+  CROWN_HUNT_PERKS_FLAG_DEFAULT,
+  CROWN_HUNT_PERKS_FLAG_KEY,
+} from '../crownHunt/perks-core';
+import {
   PASS_BY_FLAG_DEFAULT,
   PASS_BY_FLAG_KEY,
 } from '../partnerInsights/insights-core';
@@ -48,6 +52,7 @@ describe('featureFlags-core contract sync', () => {
   it('agrees with every per-domain flag constant', () => {
     for (const [key, fallback] of [
       [CROWN_HUNT_FLAG_KEY, CROWN_HUNT_FLAG_DEFAULT],
+      [CROWN_HUNT_PERKS_FLAG_KEY, CROWN_HUNT_PERKS_FLAG_DEFAULT],
       [PASS_BY_FLAG_KEY, PASS_BY_FLAG_DEFAULT],
       [BILLBOARDS_FLAG_KEY, BILLBOARDS_FLAG_DEFAULT],
       [PUSH_NOTIFICATIONS_FLAG_KEY, PUSH_NOTIFICATIONS_FLAG_DEFAULT],

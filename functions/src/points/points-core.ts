@@ -45,6 +45,12 @@ export const POINTS_TRANSACTION_SOURCES = [
   'system',
   'crown_hunt',
   'future_crown_hunt',
+  // Kronjakt SHOP sinks (Crown Hunt Shop). `perk_shop` is the debit source when
+  // a member buys a perk (crownHunt.buyPerk). `perk_trap` is the debit source a
+  // later PvP PR uses when a deployed trap drains a rival's KP — added now so
+  // the source enum is stable, though nothing writes it until that PR.
+  'perk_shop',
+  'perk_trap',
 ] as const;
 export type PointsTransactionSource = (typeof POINTS_TRANSACTION_SOURCES)[number];
 
@@ -55,6 +61,8 @@ export const ACTIVE_POINTS_TRANSACTION_SOURCES: readonly PointsTransactionSource
   'admin_adjustment',
   'system',
   'crown_hunt',
+  'perk_shop',
+  // `perk_trap` is intentionally omitted until the PvP PR wires the drain.
 ];
 
 export const POINTS_REASON_MAX_LENGTH = 500;
