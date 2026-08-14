@@ -259,9 +259,25 @@ class DriveRecordingCoordinator(
         lastJournalFlushMillis = now
     }
 
-    /** Removes the on-disk journal for this recording; the drive is now safe. */
+    /**
+     * Removes the on-disk journal AND the in-memory batch buffer. MAIN-THREAD
+     * ONLY — [pendingJournalPoints] is not thread-safe. Used by the terminal paths
+     * that run on the main thread ([discard], [reset], the manual [save]).
+     */
     private fun clearJournal() {
         pendingJournalPoints.clear()
+        journal?.clear(sourceSessionId)
+    }
+
+    /**
+     * Deletes only the on-disk journal FILE, safe to call OFF the main thread (the
+     * background live save runs on [uploadScope]). It deliberately does NOT touch
+     * the main-thread-only [pendingJournalPoints]: [stop] already flushed and
+     * cleared that buffer before the background save runs, so there is nothing to
+     * clear here, and mutating the non-thread-safe ArrayList off-thread would be a
+     * data race.
+     */
+    private fun clearJournalFile() {
         journal?.clear(sourceSessionId)
     }
 
@@ -413,9 +429,10 @@ class DriveRecordingCoordinator(
                     savedResult = result
                     // The drive is safely persisted server-side — drop the on-disk
                     // journal so a later relaunch does not resume an already-saved
-                    // drive (#849). Recording has stopped, so the batch buffer was
-                    // already drained on stop and nothing is appending concurrently.
-                    clearJournal()
+                    // drive (#849). Runs on the background uploadScope, so clear only
+                    // the FILE: stop() already drained + cleared the main-thread
+                    // batch buffer, which must not be touched from off-thread.
+                    clearJournalFile()
                     // Snapshot the route (a copy of up to ~20k points) ONLY once we
                     // know there is somewhere to upload it — an uploader exists AND
                     // the save returned a route path. This skips the copy on a
@@ -596,7 +613,9 @@ class DriveRecordingCoordinator(
             savedResult?.let { repository.deleteDrive(it.rideId) }
             recorder = null
             uploadJob = null
-            clearJournal()
+            // File-only: delete() is a suspend that may resume off the main thread,
+            // and the batch buffer was already cleared on stop().
+            clearJournalFile()
             stateFlow.value = RecordingState.Deleted
         } catch (cancellation: CancellationException) {
             // Cancellation (navigation away / scope teardown) is NOT a delete
