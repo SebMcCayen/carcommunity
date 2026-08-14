@@ -311,7 +311,13 @@ describe('garage-addVehicle', () => {
   });
 
   it('enforces the per-user cap of 10 vehicles', async () => {
-    await signInAs(otherMember);
+    // A DEDICATED fresh member: this test fills a garage to the cap, and the
+    // emulator suite shares one Firestore with no per-file isolation, so reusing
+    // a shared user here would leave them maxed out and make any later add for
+    // that user hit the cap (a flaky failure in an unrelated test).
+    const capOwner = await createProvisionedUser('garage-cap');
+    await adminDb.collection('users').doc(capOwner.uid).set({ activeMember: true }, { merge: true });
+    await signInAs(capOwner);
     for (let i = 0; i < 10; i += 1) {
       await call('garage-addVehicle', { ...validAdd, model: `Model ${i}` });
     }
