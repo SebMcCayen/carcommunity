@@ -651,6 +651,16 @@ class DriveRecordingCoordinator(
     }
 
     /**
+     * The id of the ride the background save created, once it has landed (null
+     * until then / if it failed). Read by the live UI when the drive auto-keeps so
+     * the "Drive saved" snackbar can offer Undo (delete this ride) and View (open
+     * it in History) — see AuthenticatedApp. Backed by [savedResult], captured
+     * before [SingleSessionRecording.clear] releases the coordinator.
+     */
+    val savedRideId: String?
+        get() = savedResult?.rideId
+
+    /**
      * Snapshot of the accumulated fixes, used only to compute the client-side
      * [DriveSummary] preview shown in the end-of-session save prompt. Empty once
      * the recorder has been released (after a successful save / discard / reset).

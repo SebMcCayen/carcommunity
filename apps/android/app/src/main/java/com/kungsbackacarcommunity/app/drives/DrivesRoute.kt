@@ -41,6 +41,12 @@ fun DrivesRoute(
     // Reader for the driven-route replay map. Defaulted from Firebase (null in a
     // config-less / CI build) so callers and tests need not supply it.
     routeRepository: RouteReplayRepository? = rememberRouteReplayRepository(),
+    // A ride to open straight to its detail on entry — set by the auto-keep
+    // "Drive saved" snackbar's View action (#856). Consumed via
+    // [onInitialRideConsumed] so returning to the list and re-entering History
+    // does not re-open it.
+    initialRideId: String? = null,
+    onInitialRideConsumed: () -> Unit = {},
 ) {
     // Bumped by the "try again" affordance to re-subscribe the observe flow.
     var reloadKey by rememberSaveable { mutableStateOf(0) }
@@ -66,6 +72,16 @@ fun DrivesRoute(
     val scope = rememberCoroutineScope()
 
     var selectedRideId by remember { mutableStateOf<String?>(null) }
+    // Deep-link into a specific drive's detail once, when the shell hands one in
+    // (the "Drive saved" snackbar's View action, #856). Keyed on the id so a new
+    // request re-opens; consumed immediately so it fires exactly once and a manual
+    // back-out to the list is not overridden on the next recomposition.
+    LaunchedEffect(initialRideId) {
+        if (initialRideId != null) {
+            selectedRideId = initialRideId
+            onInitialRideConsumed()
+        }
+    }
     // The "your driving" stats page is an internal level of this route (peer of
     // the detail view), folded over the already-loaded drive list — no refetch.
     var showStats by remember { mutableStateOf(false) }
