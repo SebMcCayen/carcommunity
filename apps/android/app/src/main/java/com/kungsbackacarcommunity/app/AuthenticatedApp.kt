@@ -482,14 +482,15 @@ private const val CROWN_FIX_INTERVAL_MS = 2_000L
  * How often the dwell tracker is PRE-WARMED with a fresh fix while the member is
  * near a collectable crown but has not opened one yet.
  *
- * Slightly under the claim cadence, so within a few seconds of arriving beside a
- * crown a proof partner has already aged past
- * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS] —
- * meaning the Collect button is live the moment the popup opens instead of after
- * the old "tap, tap, then it works" wait. Deliberately gated to "in range of a
- * collectable crown, popup closed": a high-accuracy read is only worth its
- * battery where a collect is actually plausible, so a parked phone showing crowns
- * far away pays nothing.
+ * A touch SLOWER than the open-popup claim cadence ([CROWN_FIX_INTERVAL_MS], 2 s):
+ * pre-warming is not racing a countdown, it only has to land two fixes past
+ * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS]
+ * apart before the member taps, so the Collect button is live the moment the
+ * popup opens instead of after the old "tap, tap, then it works" wait. The loop
+ * STOPS the instant a proof partner has aged in (see the pre-warm effect), so it
+ * costs a couple of fixes, not a sustained poll. Deliberately gated to "in range
+ * of a collectable crown, popup closed" and run at balanced power, so a parked
+ * phone showing crowns far away pays nothing.
  */
 private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
 
@@ -2084,16 +2085,27 @@ fun AuthenticatedApp(
             // Pre-warm the dwell tracker from the map's ongoing location WHILE the
             // member is near a collectable crown but no popup is open yet, so a
             // proof partner has already aged in the moment they tap one. Gated to
-            // "in range, popup closed" so the high-accuracy read only runs where a
-            // collect is actually plausible; the open-popup loop above takes over
-            // (at the faster claim cadence) the instant a crown is tapped.
+            // "in range, popup closed" so it only runs where a collect is actually
+            // plausible; the open-popup loop above takes over (at the faster claim
+            // cadence, high accuracy) the instant a crown is tapped.
+            //
+            // Bounded so it never sits on GPS: it reads at BALANCED power (the
+            // timing, not the precise position, is all pre-warming needs — the
+            // popup's own high-accuracy loop refines the fix on open) and STOPS the
+            // moment a proof partner is available. So the cost is a couple of
+            // samples when the member first parks by a crown, not a sustained poll
+            // while they linger.
             val crownNearCollectable =
                 crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
+                // Already warm from an earlier pass — nothing to poll for.
+                if (crownFixTracker.proofPartner() != null) return@LaunchedEffect
                 val appContext = context.applicationContext
-                while (true) {
-                    CrownLocation.currentFix(appContext)?.let { crownFixTracker.record(it) }
+                while (crownFixTracker.proofPartner() == null) {
+                    CrownLocation.currentFix(appContext, highAccuracy = false)
+                        ?.let { crownFixTracker.record(it) }
+                    if (crownFixTracker.proofPartner() != null) break
                     delay(CROWN_PREWARM_FIX_INTERVAL_MS)
                 }
             }
@@ -2937,25 +2949,28 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Signal a genuinely stuck crown collect — the dwell-not-ready cause
-            // that never reaches the server. A refused (NeedsPosition) tap is
-            // resolved entirely on the device, so a backend detector would be blind
-            // to it; after a few refusals for one crown this reports it ONCE through
-            // the same client-error pipeline, letting the detector count this cause
-            // too. The tracker is per-crown and latches, so it cannot spam; the
-            // pre-warm + confirming-button changes make this rare in the first
-            // place. Keyed on the claim status so it fires on the transition into
-            // NeedsPosition, not on every recomposition.
-            LaunchedEffect(crownClaimStatus, crownCollectSignalTracker) {
-                if (crownClaimStatus != CrownClaimStatus.NeedsPosition) return@LaunchedEffect
-                val count = crownCollectSignalTracker.onRefused() ?: return@LaunchedEffect
-                errorReporter?.report(
-                    feature = CrownCollectSignalTracker.SIGNAL_FEATURE,
-                    // App-generated and PII-free: a bare refusal count, no
-                    // coordinates, no crown id, no uid.
-                    message = "Crown collect refused for a stationary proof $count times before it resolved",
-                    code = CrownCollectSignalTracker.SIGNAL_CODE,
-                )
+            // Reports a genuinely stuck crown collect — the dwell-not-ready cause
+            // that never reaches the server — through the same client-error
+            // pipeline, so a backend detector can count it. Fired from the collect
+            // ATTEMPT (see the popup's onCollect below), NOT off a claim-status
+            // transition: `collect()` sets the status to NeedsPosition and returns,
+            // so a StateFlow watcher would see identical values on re-taps and drop
+            // them — the counter would reach one and never the threshold. Counting
+            // per tap is what makes the signal fire. Kept as a composition-stable
+            // lambda so the popup callback closes over one instance; the tracker is
+            // per-crown and latches, so it still cannot spam.
+            val reportCrownCollectRefused: () -> Unit = {
+                val count = crownCollectSignalTracker.onRefused()
+                if (count != null) {
+                    errorReporter?.report(
+                        feature = CrownCollectSignalTracker.SIGNAL_FEATURE,
+                        // App-generated and PII-free: a bare refusal count, no
+                        // coordinates, no crown id, no uid.
+                        message =
+                            "Crown collect refused for a stationary proof $count times before it resolved",
+                        code = CrownCollectSignalTracker.SIGNAL_CODE,
+                    )
+                }
             }
 
             // Auto-save a finished LIVE session's drive so it can never be lost by
@@ -5302,6 +5317,18 @@ fun AuthenticatedApp(
                                                         // costs one attempt, not two.
                                                         idempotencyKey = crownIdempotencyKey,
                                                     )
+                                                    // Count THIS tap when it was
+                                                    // refused for want of a dwell
+                                                    // proof — collect() resolved it
+                                                    // locally without a callable, so
+                                                    // only the attempt path can see
+                                                    // it. The tracker reports once,
+                                                    // past its threshold.
+                                                    if (controller.claimStatus.value ==
+                                                        CrownClaimStatus.NeedsPosition
+                                                    ) {
+                                                        reportCrownCollectRefused()
+                                                    }
                                                 }
                                             }
                                         },

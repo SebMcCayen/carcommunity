@@ -124,8 +124,12 @@ class CrownFixTracker {
     }
 
     /**
-     * Whole seconds until a proof partner will have aged in for the current fix,
-     * or 0 when one is already available (or there is nothing to time yet).
+     * Whole seconds until a proof partner will have aged in for the current fix.
+     *
+     * Returns 0 once a partner is already available. Before any fix has landed
+     * (nothing to time against yet) it returns the FULL
+     * [CrownSpawnLimits.MIN_DWELL_SECONDS] — the honest "you have the whole
+     * minimum dwell ahead of you" rather than a misleading 0.
      *
      * Used only to put a friendly "about N s left" on the confirming button; it is
      * a hint, never a gate — the gate is [proofPartner] being non-null.

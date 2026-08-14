@@ -35,6 +35,21 @@ class CrownCollectSignalTrackerTest {
         assertNull(tracker.onRefused())
     }
 
+    /**
+     * Simulates the real trigger: onRefused is called once PER refused tap (from
+     * the collect-attempt path, not off a StateFlow transition that would drop
+     * repeated identical NeedsPosition values). N taps must accumulate to exactly
+     * one signal at the threshold — the bug where the counter reached one and
+     * never fired again.
+     */
+    @Test
+    fun `one call per refused tap accumulates to a single signal at the threshold`() {
+        val tracker = CrownCollectSignalTracker(threshold = 3)
+        val fired = (1..6).mapNotNull { tracker.onRefused() }
+        // Exactly one signal, carrying the count at which it crossed.
+        assertEquals(listOf(3), fired)
+    }
+
     /** The default threshold is three. */
     @Test
     fun `the default threshold fires on the third refusal`() {

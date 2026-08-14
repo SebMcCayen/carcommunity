@@ -33,23 +33,40 @@ object CrownLocation {
     /**
      * A fresh fix, or null when none is available.
      *
-     * [Priority.PRIORITY_HIGH_ACCURACY] rather than the balanced priority the
-     * route origin uses: a claim is decided on a 75 m radius and a 2 m/s speed
-     * ceiling, and a coarse network fix can be hundreds of metres out — which
-     * would produce refusals that look arbitrary to a member standing directly
-     * on top of a crown. This runs only while a crown popup is open, so the cost
-     * is bounded by the user's own attention.
+     * [Priority.PRIORITY_HIGH_ACCURACY] by default rather than the balanced
+     * priority the route origin uses: a claim is decided on a 75 m radius and a
+     * 2 m/s speed ceiling, and a coarse network fix can be hundreds of metres out —
+     * which would produce refusals that look arbitrary to a member standing
+     * directly on top of a crown.
+     *
+     * Two callers, two power profiles:
+     *  - The OPEN crown popup reads at high accuracy ([highAccuracy] = true, the
+     *    default), bounded by the user's own attention — the claim's fixes must be
+     *    trustworthy.
+     *  - The pre-warm ahead of a popup ([highAccuracy] = false) reads at
+     *    [Priority.PRIORITY_BALANCED_POWER_ACCURACY]: it only has to establish the
+     *    dwell TIMING (two fixes far enough apart), the popup's own high-accuracy
+     *    loop refines the position the instant it opens, and this way keeping a
+     *    button warm never sits on high-power GPS. That loop also STOPS as soon as
+     *    a proof partner has aged in, so even the balanced read is a couple of
+     *    samples, not a sustained poll.
      */
-    suspend fun currentFix(context: Context): CrownFix? {
+    suspend fun currentFix(context: Context, highAccuracy: Boolean = true): CrownFix? {
         val client =
             runCatching {
                 LocationServices.getFusedLocationProviderClient(context.applicationContext)
             }.getOrNull() ?: return null
 
+        val priority =
+            if (highAccuracy) {
+                Priority.PRIORITY_HIGH_ACCURACY
+            } else {
+                Priority.PRIORITY_BALANCED_POWER_ACCURACY
+            }
         return runCatching {
             suspendCancellableCoroutine { continuation ->
                 client
-                    .getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, null)
+                    .getCurrentLocation(priority, null)
                     .addOnSuccessListener { location ->
                         if (!continuation.isActive) return@addOnSuccessListener
                         continuation.resume(
