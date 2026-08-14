@@ -4,8 +4,8 @@
  * Builds the ONE client-readable document `leaderboards/alltime` from the
  * server's authoritative aggregates, so the social screen renders every
  * category from a single cheap read (functions/src/leaderboard/leaderboard-core.ts
- * owns the pure assembly). Runs a few times a day; the board is a derived
- * snapshot, so a slightly stale run only delays a rank change, never loses data.
+ * owns the pure assembly). Runs hourly; the board is a derived snapshot, so a
+ * slightly stale run only delays a rank change, never loses data.
  *
  * SOURCES, one per category:
  *  - crownPoints  crownHuntLeaderboardEntries where scope == 'alltime', field
@@ -42,7 +42,7 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
+import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 import {
   CROWN_LEADERBOARD_COLLECTION,
@@ -164,9 +164,9 @@ async function scanBadgeCandidates(): Promise<CategoryCandidates> {
 /**
  * Resolves the public identity of the given uids from `users/{uid}` in batched
  * getAll reads (500 per batch, the Firestore getAll ceiling). A uid with no
- * `users` document is simply absent from the returned map — the pure builder
- * reads that as "deleted member, drop off". A member with no display name falls
- * back to a neutral label rather than an empty string.
+ * `users` document — or one missing the contract-required `displayName` — is
+ * simply absent from the returned map, so the pure builder drops that member off
+ * the board rather than publishing an invented label.
  */
 async function resolveIdentities(uids: readonly string[]): Promise<Map<string, LeaderboardIdentity>> {
   const identities = new Map<string, LeaderboardIdentity>();
@@ -179,12 +179,17 @@ async function resolveIdentities(uids: readonly string[]): Promise<Map<string, L
         continue;
       }
       const data = snap.data() ?? {};
-      const name = typeof data.displayName === 'string' && data.displayName.length > 0
-        ? data.displayName
-        : 'Medlem';
+      // `displayName` is contract-REQUIRED on users/{uid}
+      // (contracts/schemas/user-profile.schema.json). A doc missing it is a
+      // contract violation, not a member to paper over with a fake label — skip
+      // it exactly like a missing doc so the member simply drops off rather than
+      // publishing an invented, non-localizable name.
+      if (typeof data.displayName !== 'string' || data.displayName.length === 0) {
+        continue;
+      }
       const avatarPath =
         typeof data.avatarPath === 'string' && data.avatarPath.length > 0 ? data.avatarPath : null;
-      identities.set(snap.id, { displayName: name, avatarPath });
+      identities.set(snap.id, { displayName: data.displayName, avatarPath });
     }
   }
   return identities;
@@ -222,7 +227,17 @@ export async function runLeaderboardGeneration(): Promise<
     readCrownPointCandidates(),
     scanBadgeCandidates(),
   ]);
-  const perCategory: CategoryCandidates = { ...badgeCandidates, crownPoints };
+  // Trim crownPoints to the SAME retention bound the badge categories were
+  // trimmed to during their scan, so every category's candidate list matches
+  // the uid set `candidateUidsToResolve` resolves identities/opt-outs for.
+  // Otherwise `buildLeaderboardCategory` would iterate crownPoints candidates
+  // ranked beyond the resolved set, find no identity for them, and wrongly treat
+  // a live member as deleted — dropping valid rows (and over-sorting a list that
+  // can be arbitrarily long).
+  const perCategory: CategoryCandidates = {
+    ...badgeCandidates,
+    crownPoints: topCandidates(crownPoints, LEADERBOARD_CANDIDATE_RETENTION),
+  };
 
   const uids = candidateUidsToResolve(perCategory);
   const [identities, optedOut] = await Promise.all([
@@ -258,14 +273,22 @@ export async function runLeaderboardGeneration(): Promise<
  * Scheduled hourly at Europe/Stockholm. Hourly is cheap — one small query, one
  * bounded paged scan and a single document write — and keeps the board fresh
  * without a trigger on every counter change.
+ *
+ * A strict SINGLETON (`maxInstances: 1`): the whole function does one thing —
+ * OVERWRITE `leaderboards/alltime` with the freshest snapshot — so two runs must
+ * never overlap. If a slow run were allowed to finish AFTER a newer one, it
+ * would clobber the newer board with a staler snapshot; serializing runs makes
+ * that regression impossible. `concurrency: 1` is already required by the sub-1
+ * CPU tier (see instanceLimits.ts); this pins the instance ceiling to match,
+ * the same way the Kronjakt spawn/sweep pair sets `maxInstances: 1` locally.
  */
 export const generateLeaderboards = onSchedule(
   {
     region: 'europe-west1',
-    maxInstances: MAX_INSTANCES_SCHEDULED,
+    maxInstances: 1,
     cpu: CPU_SCHEDULED,
     concurrency: 1,
-    schedule: 'every 1 hours',
+    schedule: '0 * * * *',
     timeZone: 'Europe/Stockholm',
     memory: '512MiB',
     timeoutSeconds: 540,
