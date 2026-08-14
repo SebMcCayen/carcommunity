@@ -151,7 +151,12 @@ class DriveRecordingJournalTest {
         assertEquals(0, c.recordedPoints().size)
     }
 
-    /** Minimal repository whose save succeeds with a route path so uploads/clears run. */
+    /**
+     * Minimal repository whose save/delete simply succeed. No route path is
+     * returned (there is no uploader wired here), so no route upload runs — the
+     * journal is cleared purely on the SAVE/DELETE succeeding, which is what these
+     * tests assert.
+     */
     private class JournalFakeRepository : DrivesRepository {
         override fun observeDrives(uid: String) = throw UnsupportedOperationException()
 

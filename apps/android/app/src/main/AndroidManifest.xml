@@ -26,7 +26,8 @@
          Requesting an ignore-battery-optimizations exemption keeps the tracking
          session alive — a use Google Play explicitly permits for apps whose
          primary purpose is location tracking. The exemption is requested via a
-         one-time, user-consented system dialog (BatteryOptimizationExemption);
+         one-time, user-consented system dialog (BatteryOptimizationGate /
+         DriveBatteryOptimizationPrompt);
          it is never forced, and declining leaves a fully working app (the disk
          journal still resumes a killed drive). -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
