@@ -39,17 +39,17 @@ object CrownLocation {
      * which would produce refusals that look arbitrary to a member standing
      * directly on top of a crown.
      *
-     * Two callers, two power profiles:
-     *  - The OPEN crown popup reads at high accuracy ([highAccuracy] = true, the
-     *    default), bounded by the user's own attention — the claim's fixes must be
-     *    trustworthy.
-     *  - The pre-warm ahead of a popup ([highAccuracy] = false) reads at
-     *    [Priority.PRIORITY_BALANCED_POWER_ACCURACY]: it only has to establish the
-     *    dwell TIMING (two fixes far enough apart), the popup's own high-accuracy
-     *    loop refines the position the instant it opens, and this way keeping a
-     *    button warm never sits on high-power GPS. That loop also STOPS as soon as
-     *    a proof partner has aged in, so even the balanced read is a couple of
-     *    samples, not a sustained poll.
+     * Two power profiles, chosen by [highAccuracy]:
+     *  - [highAccuracy] = true (the default): a high-accuracy fix for a
+     *    position that has to be TRUSTWORTHY — a claim, a one-shot check-in, an
+     *    incident clear. These are bounded by a single user action, so the cost is
+     *    the user's own attention. This is why every caller that submits a fix to
+     *    the server takes the default.
+     *  - [highAccuracy] = false: [Priority.PRIORITY_BALANCED_POWER_ACCURACY], for
+     *    warming state ahead of time where only rough TIMING matters and a later
+     *    high-accuracy read will refine the position. The crown pre-warm uses this
+     *    so keeping a Collect button warm never sits on high-power GPS, and it
+     *    stops as soon as it has what it needs rather than polling on.
      */
     suspend fun currentFix(context: Context, highAccuracy: Boolean = true): CrownFix? {
         val client =

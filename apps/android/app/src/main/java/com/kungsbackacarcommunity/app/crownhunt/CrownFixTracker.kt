@@ -154,23 +154,23 @@ class CrownFixTracker {
     }
 
     /**
-     * Whole seconds until a proof partner will have aged in for the current fix.
+     * Whole seconds until a proof partner will have aged in for the current fix,
+     * measured against the REAL wall clock [nowMillis].
      *
-     * Returns 0 once a partner is already available. Before any fix has landed
-     * (nothing to time against yet) it returns the FULL
-     * [CrownSpawnLimits.MIN_DWELL_SECONDS] — the honest "you have the whole
-     * minimum dwell ahead of you" rather than a misleading 0.
+     * There is deliberately no clock-less overload: the elapsed-time answer is
+     * only meaningful against a true clock, and an earlier convenience overload
+     * that passed the latest fix's OWN timestamp as "now" made the age compute as
+     * ~0 and silently bypassed the freshness gate. Callers pass the same clock they
+     * use everywhere else ([System.currentTimeMillis], or an injected one in
+     * tests).
+     *
+     * Returns 0 once a fresh partner is available. When there is no FRESH current
+     * ([bestRecent] with this clock is null — no fix yet, or the latest has aged
+     * out) the wait is the full [CrownSpawnLimits.MIN_DWELL_SECONDS] again — the
+     * honest "you have the whole minimum dwell ahead of you".
      *
      * Used only to put a friendly "about N s left" on the confirming button; it is
      * a hint, never a gate — the gate is [proofPartner] being non-null.
-     */
-    fun secondsUntilProofReady(): Int = secondsUntilProofReady(latest?.recordedAtMillis ?: 0L)
-
-    /**
-     * [secondsUntilProofReady] with a wall-clock, so a stale current fix is not
-     * mistaken for "already timing": if there is no FRESH current
-     * ([bestRecent(nowMillis)] is null) the wait is the full
-     * [CrownSpawnLimits.MIN_DWELL_SECONDS] again.
      */
     fun secondsUntilProofReady(nowMillis: Long): Int {
         val current = bestRecent(nowMillis) ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()

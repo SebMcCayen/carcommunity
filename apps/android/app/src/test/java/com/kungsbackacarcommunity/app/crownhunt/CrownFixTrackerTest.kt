@@ -133,7 +133,8 @@ class CrownFixTrackerTest {
             "a warm tracker should already have a usable pair",
             CrownCollectGate.isDwellProofUsable(partner, current),
         )
-        assertEquals(0, tracker.secondsUntilProofReady())
+        // The clock is read at the moment of the last fix — a fresh current.
+        assertEquals(0, tracker.secondsUntilProofReady(base + 6_000))
     }
 
     /** With only a single fresh fix, the countdown reports the full minimum dwell. */
@@ -141,13 +142,14 @@ class CrownFixTrackerTest {
     fun `the countdown reports the wait until a partner ages in`() {
         val tracker = CrownFixTracker()
         tracker.record(fix(0))
+        // Clock at the fix's own instant — a fresh current, no partner yet.
         assertEquals(
             CrownSpawnLimits.MIN_DWELL_SECONDS.toInt(),
-            tracker.secondsUntilProofReady(),
+            tracker.secondsUntilProofReady(base),
         )
         // One second later a partner is still 3 s short.
         tracker.record(fix(1))
-        assertEquals(3, tracker.secondsUntilProofReady())
+        assertEquals(3, tracker.secondsUntilProofReady(base + 1_000))
     }
 
     // ---- Best-accuracy selection -----------------------------------------
