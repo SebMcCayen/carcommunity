@@ -177,6 +177,7 @@ service cloud.firestore {
         && (!keys.hasAny(['phone']) || (data.phone is string && data.phone.size() <= 32))
         && (!keys.hasAny(['notificationPreferences']) || data.notificationPreferences is map)
         && (!keys.hasAny(['anonymousPartnerStatsOptIn']) || data.anonymousPartnerStatsOptIn is bool)
+        && (!keys.hasAny(['leaderboardOptOut']) || data.leaderboardOptOut is bool)
         && (!keys.hasAny(['updatedAt']) || isServerTimestamp(data.updatedAt));
     }
 
@@ -196,7 +197,7 @@ service cloud.firestore {
     function validUserPrivateUpdate() {
       let keys = request.resource.data.diff(resource.data).affectedKeys();
       return keys.hasOnly(['email', 'phone', 'notificationPreferences',
-          'anonymousPartnerStatsOptIn', 'updatedAt'])
+          'anonymousPartnerStatsOptIn', 'leaderboardOptOut', 'updatedAt'])
         && validUserPrivateFields(keys);
     }
 
@@ -1389,6 +1390,18 @@ service cloud.firestore {
 
     match /crownHuntUserStats/{uid} {
       allow read: if isOwner(uid) || isAdmin();
+      allow write: if false;
+    }
+
+    // Precomputed social leaderboard, one document per scope
+    // (leaderboards/alltime today; a season scope follows). The scheduled
+    // Admin-SDK generator (functions/src/leaderboard/generator.ts) resolves
+    // names/avatars and filters opted-out + deleted members server-side, so the
+    // whole board is one cheap member read and nothing here needs a composite
+    // index (doc-id reads). isActiveMember() (not bare isAuthenticated) so
+    // suspension overrides access, mirroring crownHuntLeaderboardEntries above.
+    match /leaderboards/{scope} {
+      allow read: if isActiveMember();
       allow write: if false;
     }
 
