@@ -100,9 +100,12 @@ class PlayBillingRepository private constructor(
                         ),
                     )
                     .build()
-            billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
+            billingClient.queryProductDetailsAsync(params) { result, productDetailsResult ->
                 if (!continuation.isActive) return@queryProductDetailsAsync
-                val product = productDetailsList.firstOrNull()
+                // Billing v8+ delivers a QueryProductDetailsResult (not a bare
+                // List<ProductDetails>); the fetched products live under
+                // productDetailsList, with unfetched ids reported separately.
+                val product = productDetailsResult.productDetailsList.firstOrNull()
                 if (result.responseCode == BillingClient.BillingResponseCode.OK && product != null) {
                     cachedProduct = product
                     continuation.resume(ProductQueryResult.Available)
