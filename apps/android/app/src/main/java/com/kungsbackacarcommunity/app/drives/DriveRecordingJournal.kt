@@ -108,15 +108,25 @@ class DriveRecordingJournal(private val directory: File) {
     fun load(sourceSessionId: String): JournalSnapshot? {
         val target = fileFor(sourceSessionId)
         if (!target.exists()) return null
-        val lines = runCatching { target.readLines() }.getOrNull() ?: return null
-        val header = lines.firstOrNull() ?: return null
-        if (!header.startsWith(HEADER_PREFIX)) return null
-        val startedAt = header.removePrefix(HEADER_PREFIX).trim().toLongOrNull() ?: return null
-        val points = ArrayList<RecordedPoint>(lines.size)
-        for (i in 1 until lines.size) {
-            parsePoint(lines[i])?.let { points.add(it) }
-        }
-        return JournalSnapshot(startedAtMillis = startedAt, points = points)
+        // STREAM the file line-by-line rather than reading it whole: a long drive is
+        // up to DriveRecorder.MAX_ROUTE_POINTS (~20k) lines, and reading them all
+        // into a List first would spike allocation/GC on the resume path. A
+        // truncated final line (a mid-write kill) is still returned by readLine()
+        // and simply fails to parse, so the tolerate-last-record behaviour holds.
+        return runCatching {
+            target.bufferedReader().use { reader ->
+                val header = reader.readLine() ?: return@use null
+                if (!header.startsWith(HEADER_PREFIX)) return@use null
+                val startedAt =
+                    header.removePrefix(HEADER_PREFIX).trim().toLongOrNull() ?: return@use null
+                val points = ArrayList<RecordedPoint>()
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    parsePoint(line)?.let { points.add(it) }
+                }
+                JournalSnapshot(startedAtMillis = startedAt, points = points)
+            }
+        }.getOrNull()
     }
 
     /** Removes the journal for [sourceSessionId] (called on save / delete / discard). */
