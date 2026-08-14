@@ -34,7 +34,7 @@ playServicesLocation = "21.4.0"
 # Google Play In-App Updates (AppUpdateManager). 2.1.0 is the current release of
 # the standalone app-update Play Core split.
 playAppUpdate = "2.1.0"
-billing = "7.1.1"
+billing = "9.1.0"
 coil = "2.7.0"
 coroutinesTest = "1.11.0"
 junit = "4.13.2"
