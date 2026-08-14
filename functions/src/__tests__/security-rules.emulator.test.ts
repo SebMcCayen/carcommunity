@@ -439,7 +439,9 @@ describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () 
     await assertFails(deleteDoc(doc(ownerFs, 'perkInventory', OWNER)));
   });
 
-  it('active members read the display catalog; suspended members and clients cannot write it', async () => {
+  it('any authenticated non-suspended user reads the display catalog; suspended users and clients cannot write it', async () => {
+    // isActiveMember() today = authenticated + not-suspended (the entitlement
+    // term is disabled repo-wide), so a plain authenticated context reads it.
     const memberFs = testEnv.authenticatedContext('perk-catalog-reader').firestore();
     await assertSucceeds(getDoc(doc(memberFs, 'config', 'perkCatalog')));
 

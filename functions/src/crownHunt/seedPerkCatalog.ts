@@ -20,7 +20,7 @@ import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { MAX_INSTANCES_ADMIN, CPU_ADMIN } from '../shared/instanceLimits';
-import { buildPerkCatalogDoc, PERK_CATALOG_DOC_VERSION } from './perks-core';
+import { buildPerkCatalogDoc } from './perks-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -66,6 +66,8 @@ export const seedPerkCatalog = onCall(
     );
     await batch.commit();
 
-    return { version: PERK_CATALOG_DOC_VERSION, perkCount: doc.perks.length };
+    // Report the version actually written, not the constant — if the builder
+    // and the constant ever drift, the response reflects the persisted doc.
+    return { version: doc.version, perkCount: doc.perks.length };
   },
 );

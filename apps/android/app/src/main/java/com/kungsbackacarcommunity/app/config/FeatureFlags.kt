@@ -39,6 +39,18 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * half, so the hand-placed points keep working with this off.
      */
     CROWN_HUNT_SPAWN("crownHuntSpawn", false),
+
+    /**
+     * The Kronjakt SHOP — the first member-facing Kronpoäng SINK, where members
+     * spend Kronpoäng to buy perks. Default OFF: the shop stays dark until it is
+     * deliberately switched on, and while off the backend rejects every buy so
+     * no Kronpoäng is spent.
+     *
+     * Registered here so the flag is operable end-to-end (contract, backend,
+     * this client, admin console) — the app's shop UI is not built yet, so
+     * nothing reads this flag on Android until that later release.
+     */
+    CROWN_HUNT_PERKS("crownHuntPerks", false),
 }
 
 /**

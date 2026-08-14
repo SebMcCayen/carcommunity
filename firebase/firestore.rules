@@ -422,8 +422,10 @@ service cloud.firestore {
     // shop (perkId, kind, name, icon key, cost, blurb). The authoritative costs
     // and effect parameters live server-side in functions perks-core.ts; this
     // doc is written ONLY by the admin crownHunt.seedPerkCatalog callable
-    // (Admin SDK) and the buy path never trusts a price read from it. Active
-    // members read it to render the shop; no client writes.
+    // (Admin SDK) and the buy path never trusts a price read from it. Read is
+    // gated on isActiveMember(), which today resolves to authenticated +
+    // not-suspended (the entitlement term is currently disabled, same switch as
+    // every other isActiveMember() call site — see the helper). No client writes.
     match /config/perkCatalog {
       allow read: if isActiveMember();
       // No client writes: crownHunt.seedPerkCatalog only.

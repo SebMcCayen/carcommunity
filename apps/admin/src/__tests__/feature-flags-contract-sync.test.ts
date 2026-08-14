@@ -148,6 +148,7 @@ describe('feature flags — defaults are not drifting', () => {
       externalDataSources: true,
       digitalBillboards: true,
       partnerInsightsPassBy: false,
+      crownHuntPerks: false,
     });
   });
 });
