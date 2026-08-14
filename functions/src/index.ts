@@ -96,6 +96,7 @@ import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIn
 import { reingestSpawnAreaPois } from './crownHunt/reingestAreaPois';
 import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
+import { generateLeaderboards } from './leaderboard/generator';
 import { reviewApplication, submitApplication } from './partners/applications';
 import { createCompany, setCompanyStatus, updateCompany } from './partners/manageCompany';
 import { createOffer, setOfferStatus, showOfferCode, updateOffer } from './partners/manageOffer';
@@ -592,6 +593,33 @@ export const crownHunt = {
   // Deployed as crownHunt-buyPerk and crownHunt-seedPerkCatalog.
   buyPerk,
   seedPerkCatalog,
+};
+
+/**
+ * Social leaderboard domain (grouped export → deployed as the scheduled
+ * `leaderboard-generateLeaderboards`).
+ *
+ * The precompute behind the social screen's competitive board. A scheduled
+ * Admin-SDK generator (functions/src/leaderboard/generator.ts) assembles ONE
+ * client-readable document `leaderboards/{scope}` per scope — this PR ships the
+ * ALL-TIME scope (`leaderboards/alltime`) — holding each category's top-10 as an
+ * ordered `[{rank, uid, displayName, avatarPath, value}]` array, so a member
+ * renders the whole board from a single cheap read.
+ *
+ * Categories (owner-approved all-time set): crownPoints (from the maintained
+ * crownHuntLeaderboardEntries all-time counters), and the four badgeProgress
+ * counters distance (lifetimeDistanceMeters), events (completedEventsAttended —
+ * the historic field name), convoys (convoysLed) and streak (bestDayStreak).
+ * Opt-out (userPrivate/{uid}.leaderboardOptOut) and deleted members (no
+ * users/{uid} doc) are filtered SERVER-SIDE before the board is written, so an
+ * opted-out member is never published. The pure ranking/assembly lives in
+ * leaderboard-core.ts; there is NO callable here (nothing is client-invoked), so
+ * this scheduled function is deliberately absent from the callable registry
+ * (contracts/functions/functions.json). The monthly board + the public web JSON
+ * + the Android UI are follow-up PRs that reuse this same core and doc shape.
+ */
+export const leaderboard = {
+  generateLeaderboards,
 };
 
 /**

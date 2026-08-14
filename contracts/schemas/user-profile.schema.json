@@ -107,6 +107,10 @@
           "type": "boolean",
           "description": "Privacy setting for anonymised partner statistics. Defaults to false (explicit opt-in); owner-editable by direct Firestore write (Security Rules enforce boolean type)."
         },
+        "leaderboardOptOut": {
+          "type": "boolean",
+          "description": "Social-leaderboard opt-OUT. Optional; ABSENT or false means the member participates (opt-out, not opt-in). When true, the scheduled leaderboard generator excludes the member from every category of the precomputed leaderboards/{scope} document (and the later public web JSON), so an opted-out member is never published. Owner-editable by direct Firestore write (Security Rules enforce boolean type); the Android settings toggle ships with the leaderboard UI PR."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },

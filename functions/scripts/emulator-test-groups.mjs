@@ -82,6 +82,7 @@ export const GROUPS = [
     name: 'Crown Hunt, Points, Badges, Incidents & Partners',
     patterns: [
       'crownhunt*',
+      'leaderboard',
       'points*',
       'badges',
       'incidents',
