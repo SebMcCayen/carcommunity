@@ -278,10 +278,15 @@ class DriveRecorder(
      * Adds a fix in arrival order. Out-of-order or capacity-exceeding points
      * are dropped rather than throwing: the backend requires monotonically
      * non-decreasing timestampMs, and GPS clocks can jitter backwards.
+     *
+     * @return true if the point was ACCEPTED (appended), false if it was dropped
+     *   as out-of-order or over capacity. The caller uses this to journal only
+     *   the exact fixes that landed in the recorder (#849), so a resume replays
+     *   an identical recording.
      */
-    fun addPoint(point: RecordedPoint) {
-        if (isFull) return
-        if (points.isNotEmpty() && point.timestampMs < points.last().timestampMs) return
+    fun addPoint(point: RecordedPoint): Boolean {
+        if (isFull) return false
+        if (points.isNotEmpty() && point.timestampMs < points.last().timestampMs) return false
         // Accumulate the new segment BEFORE appending, using the previous last
         // fix, so the running total mirrors totalDistanceMetres exactly.
         if (points.isNotEmpty()) {
@@ -289,6 +294,7 @@ class DriveRecorder(
         }
         points.add(point)
         if (point.timestampMs > lastPointMillis) lastPointMillis = point.timestampMs
+        return true
     }
 
     /** Elapsed recording time given a current clock reading. */

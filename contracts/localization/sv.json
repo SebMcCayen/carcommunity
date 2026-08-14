@@ -13,6 +13,12 @@
     "restart": "Starta om",
     "storeUnavailable": "Uppdateringen kunde inte slutföras, och Google Play gick inte att öppna på den här enheten."
   },
+  "batteryOptimization": {
+    "title": "Låt din körning spelas in",
+    "body": "För att din körning ska fortsätta spelas in när skärmen är av eller appen körs i bakgrunden, tillåt att appen körs utan batteribegränsningar. På Samsung-telefoner: ställ även in appens batterianvändning på \"Obegränsad\" (Inställningar › Batteri › Gränser för bakgrundsanvändning) så att den inte försätts i viloläge.",
+    "allow": "Tillåt",
+    "notNow": "Inte nu"
+  },
   "navigation": {
     "home": "Hem",
     "map": "Karta",

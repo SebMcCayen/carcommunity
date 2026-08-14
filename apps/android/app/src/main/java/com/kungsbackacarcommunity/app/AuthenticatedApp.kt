@@ -118,6 +118,7 @@ import com.kungsbackacarcommunity.app.drives.EndedSessionAction
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SavePromptReason
+import com.kungsbackacarcommunity.app.drives.DriveRecordingJournal
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.drives.savePromptReason
@@ -257,6 +258,7 @@ import com.kungsbackacarcommunity.app.live.NearbyLiveOverlay
 import com.kungsbackacarcommunity.app.live.NearbyLiveSession
 import com.kungsbackacarcommunity.app.live.OptimisticLiveStart
 import com.kungsbackacarcommunity.app.location.BackgroundLocationController
+import com.kungsbackacarcommunity.app.location.DriveBatteryOptimizationPrompt
 import com.kungsbackacarcommunity.app.location.CurrentSpeed
 import com.kungsbackacarcommunity.app.location.GeoLinks
 import com.kungsbackacarcommunity.app.location.LocationAccess
@@ -412,6 +414,7 @@ import com.kungsbackacarcommunity.app.whatsnew.UpdateAnnouncement
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewDialog
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
+import java.io.File
 import java.util.Calendar
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -2590,6 +2593,15 @@ fun AuthenticatedApp(
                     FirebaseMediaUploader.createIfAvailable(context)?.let { RouteUploadRunner(it) }
                 }
 
+            // Persists the in-flight recording to disk (#849) so the OS killing the
+            // backgrounded process — routine on Samsung / under Doze — no longer
+            // loses the drive: a relaunched-but-still-live session resumes it. Kept
+            // under the app's private filesDir.
+            val driveRecordingJournal =
+                remember(context) {
+                    DriveRecordingJournal(File(context.filesDir, "drive-journals"))
+                }
+
             // Only record a drive the user could actually SAVE. drives-save is
             // member-gated (requireMemberActor) while live sharing is free, so
             // gating the recording on canShareLive — as v0.8.0 did — handed a
@@ -2654,6 +2666,9 @@ fun AuthenticatedApp(
                             // History then shows no car photo.
                             carImagePath = liveSession?.mainCar?.imagePath,
                             vehicleId = liveSession?.vehicleId,
+                            // Crash-resilient recording: resumes this drive if the
+                            // process is killed while the session stays live (#849).
+                            journal = driveRecordingJournal,
                         ) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way
@@ -2791,6 +2806,18 @@ fun AuthenticatedApp(
             // so there is nothing to stop here (the manual Stop/Hide paths still
             // stop it eagerly for instant feedback). Keyed on uid too so an
             // account switch that keeps a session active re-targets the publisher.
+            //
+            // #849 note — the foreground service reliably starts at a SOLO drive
+            // start (the manual start always runs in the foreground where a FGS
+            // start is allowed). The one window with briefly NO foreground service
+            // is a CONVOY-AUTO session that flips isSharing true while the app is
+            // BACKGROUNDED: a background FGS start is refused, so
+            // BackgroundLocationController records a pending start and retries it on
+            // the next foreground. During that gap nothing publishes AND the drive
+            // is memory-only — which is exactly why the recording is journaled to
+            // disk (DriveRecordingJournal): if the OS kills the process in that
+            // window, the relaunched-but-still-live session resumes the drive rather
+            // than losing it.
             LaunchedEffect(isSharing, uid) {
                 if (isSharing && uid.isNotBlank()) {
                     BackgroundLocationController.start(context, uid)
@@ -6144,6 +6171,15 @@ fun AuthenticatedApp(
                         onDiscard = { activeRecording?.discard() },
                     )
                 }
+
+                // One-time battery-optimization exemption ask (#849): the first
+                // time a drive is actually recording, offer to exempt the app so an
+                // aggressive OS (Samsung / Doze) is less likely to kill the
+                // backgrounded tracking session mid-drive. Shown once; declining is
+                // fully supported (the disk journal still resumes a killed drive).
+                DriveBatteryOptimizationPrompt(
+                    isRecordingDrive = recordingState is RecordingState.Recording,
+                )
 
                 // Chat hub as a TRANSPARENT popup over the map (Issue 4): a focusable
                 // Popup with no dimming scrim and a translucent surface, so the live
