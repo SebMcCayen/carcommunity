@@ -13,6 +13,10 @@
     <string name="appUpdate_downloaded">Uppdateringen är nedladdad och installeras vid omstart.</string>
     <string name="appUpdate_restart">Starta om</string>
     <string name="appUpdate_storeUnavailable">Uppdateringen kunde inte slutföras, och Google Play gick inte att öppna på den här enheten.</string>
+    <string name="batteryOptimization_title">Låt din körning spelas in</string>
+    <string name="batteryOptimization_body">För att din körning ska fortsätta spelas in när skärmen är av eller appen körs i bakgrunden, tillåt att appen körs utan batteribegränsningar. På Samsung-telefoner: ställ även in appens batterianvändning på \"Obegränsad\" (Inställningar › Batteri › Gränser för bakgrundsanvändning) så att den inte försätts i viloläge.</string>
+    <string name="batteryOptimization_allow">Tillåt</string>
+    <string name="batteryOptimization_notNow">Inte nu</string>
     <string name="navigation_home">Hem</string>
     <string name="navigation_map">Karta</string>
     <string name="navigation_events">Träffar</string>

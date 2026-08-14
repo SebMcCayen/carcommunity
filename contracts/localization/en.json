@@ -13,6 +13,12 @@
     "restart": "Restart",
     "storeUnavailable": "The update could not be completed, and Google Play could not be opened on this device."
   },
+  "batteryOptimization": {
+    "title": "Keep your drive recording",
+    "body": "To make sure a drive keeps recording when the screen is off or the app is in the background, allow it to run without battery limits. On Samsung phones, also set the app's battery usage to \"Unrestricted\" (Settings › Battery › Background usage limits) so it isn't put to sleep.",
+    "allow": "Allow",
+    "notNow": "Not now"
+  },
   "navigation": {
     "home": "Home",
     "map": "Map",

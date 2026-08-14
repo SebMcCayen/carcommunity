@@ -74,7 +74,25 @@ class DriveRecordingCoordinator(
      * links back to the exact vehicle. Null on a manual recording or no car.
      */
     private val vehicleId: String? = null,
+    /**
+     * Persists the in-flight recording to disk so it survives the OS killing the
+     * backgrounded process, and lets a relaunched-but-still-live session RESUME the
+     * same drive instead of starting an empty one (#849). Null in a config-less / CI
+     * build (no filesDir wired) — the recording is then memory-only exactly as
+     * before, so nothing about saving changes, it just isn't crash-resilient.
+     */
+    private val journal: DriveRecordingJournal? = null,
 ) {
+    /**
+     * Fixes accepted since the last journal flush, held so writes to disk are
+     * BATCHED (throttled) rather than one tiny append per fix. Flushed when it
+     * reaches [JOURNAL_BATCH_POINTS] or [JOURNAL_FLUSH_INTERVAL_MS] has elapsed,
+     * and drained on [stop]. Main-thread only, like the recorder it shadows.
+     */
+    private val pendingJournalPoints = ArrayList<RecordedPoint>()
+
+    /** Wall-clock of the last journal flush, for the time-based flush trigger. */
+    private var lastJournalFlushMillis = 0L
     private val stateFlow = MutableStateFlow<RecordingState>(RecordingState.Idle)
     val state: StateFlow<RecordingState> = stateFlow.asStateFlow()
 
@@ -155,14 +173,47 @@ class DriveRecordingCoordinator(
     var startedAtMillis: Long? = null
         private set
 
-    /** Begins a recording. No-op if one is already active or resolved. */
+    /**
+     * Begins a recording. No-op if one is already active or resolved.
+     *
+     * If a disk [journal] exists for this [sourceSessionId] (#849), RESUME it: the
+     * process was killed mid-drive and this same live session is still active, so
+     * rebuild the recorder from the persisted ORIGINAL start moment and every
+     * flushed fix rather than starting an empty drive (which would strand the run
+     * already driven). A fresh session (no journal) BEGINS a new journal instead.
+     */
     fun start() {
         if (recorder != null) return
+        val restored = journal?.load(sourceSessionId)
+        if (restored != null) {
+            // Resume: keep the ORIGINAL start (so duration is not reset to now) and
+            // replay the persisted fixes through the recorder to rebuild its point
+            // list + running distance exactly.
+            val started = restored.startedAtMillis
+            val rebuilt =
+                DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId)
+            restored.points.forEach { rebuilt.addPoint(it) }
+            recorder = rebuilt
+            startedAtMillis = started
+            stoppedAtMillis = null
+            pendingJournalPoints.clear()
+            lastJournalFlushMillis = clock()
+            stateFlow.value =
+                RecordingState.Recording(
+                    pointCount = rebuilt.pointCount,
+                    elapsedMillis = rebuilt.elapsedMillis(clock()),
+                    distanceMeters = rebuilt.distanceMetres,
+                )
+            return
+        }
         val started = clock()
         recorder =
             DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId)
         startedAtMillis = started
         stoppedAtMillis = null
+        pendingJournalPoints.clear()
+        lastJournalFlushMillis = started
+        journal?.begin(sourceSessionId, started)
         stateFlow.value = RecordingState.Recording(pointCount = 0, elapsedMillis = 0L)
     }
 
@@ -173,13 +224,61 @@ class DriveRecordingCoordinator(
     fun addFix(latitude: Double, longitude: Double, timestampMs: Long) {
         val recorder = recorder ?: return
         if (stateFlow.value !is RecordingState.Recording) return
-        recorder.addPoint(RecordedPoint(latitude, longitude, timestampMs))
+        val point = RecordedPoint(latitude, longitude, timestampMs)
+        val accepted = recorder.addPoint(point)
+        // Journal only the fixes the recorder actually kept (#849), so a resume
+        // replays an identical drive. Batched to keep disk writes coarse.
+        if (accepted && journal != null) {
+            pendingJournalPoints.add(point)
+            maybeFlushJournal(force = false)
+        }
         stateFlow.value =
             RecordingState.Recording(
                 pointCount = recorder.pointCount,
                 elapsedMillis = recorder.elapsedMillis(clock()),
                 distanceMeters = recorder.distanceMetres,
             )
+    }
+
+    /**
+     * Flushes the batched [pendingJournalPoints] to the [journal] when the batch is
+     * full, enough time has passed, or [force] (called on [stop] to drain the tail).
+     * A no-op without a journal or with an empty buffer.
+     */
+    private fun maybeFlushJournal(force: Boolean) {
+        val journal = journal ?: return
+        if (pendingJournalPoints.isEmpty()) return
+        val now = clock()
+        val due =
+            force ||
+                pendingJournalPoints.size >= JOURNAL_BATCH_POINTS ||
+                now - lastJournalFlushMillis >= JOURNAL_FLUSH_INTERVAL_MS
+        if (!due) return
+        journal.appendPoints(sourceSessionId, pendingJournalPoints)
+        pendingJournalPoints.clear()
+        lastJournalFlushMillis = now
+    }
+
+    /**
+     * Removes the on-disk journal AND the in-memory batch buffer. MAIN-THREAD
+     * ONLY — [pendingJournalPoints] is not thread-safe. Used by the terminal paths
+     * that run on the main thread ([discard], [reset], the manual [save]).
+     */
+    private fun clearJournal() {
+        pendingJournalPoints.clear()
+        journal?.clear(sourceSessionId)
+    }
+
+    /**
+     * Deletes only the on-disk journal FILE, safe to call OFF the main thread (the
+     * background live save runs on [uploadScope]). It deliberately does NOT touch
+     * the main-thread-only [pendingJournalPoints]: [stop] already flushed and
+     * cleared that buffer before the background save runs, so there is nothing to
+     * clear here, and mutating the non-thread-safe ArrayList off-thread would be a
+     * data race.
+     */
+    private fun clearJournalFile() {
+        journal?.clear(sourceSessionId)
     }
 
     /** Stops recording and opens the explicit save/discard prompt. */
@@ -190,6 +289,9 @@ class DriveRecordingCoordinator(
         // endedAt derive from THIS instant, never from a re-read of the clock.
         val stoppedAt = clock()
         stoppedAtMillis = stoppedAt
+        // Drain any batched fixes to disk so the journal is complete up to the
+        // stop, in case the save is interrupted before it clears the journal.
+        maybeFlushJournal(force = true)
         stateFlow.value =
             RecordingState.PromptSave(
                 pointCount = recorder.pointCount,
@@ -240,6 +342,8 @@ class DriveRecordingCoordinator(
             // succeeded; the UI renders the terminal state from RecordingState.
             this.recorder = null
             stoppedAtMillis = null
+            // The drive is safely persisted — drop the on-disk journal (#849).
+            clearJournal()
             stateFlow.value = RecordingState.Saved
             uploadJob = startRouteUpload(result, points)
         } catch (cancellation: CancellationException) {
@@ -323,6 +427,12 @@ class DriveRecordingCoordinator(
                     val request = recorder.buildSaveRequest(title, endedAt)
                     val result = saveWithRetry(request)
                     savedResult = result
+                    // The drive is safely persisted server-side — drop the on-disk
+                    // journal so a later relaunch does not resume an already-saved
+                    // drive (#849). Runs on the background uploadScope, so clear only
+                    // the FILE: stop() already drained + cleared the main-thread
+                    // batch buffer, which must not be touched from off-thread.
+                    clearJournalFile()
                     // Snapshot the route (a copy of up to ~20k points) ONLY once we
                     // know there is somewhere to upload it — an uploader exists AND
                     // the save returned a route path. This skips the copy on a
@@ -503,6 +613,9 @@ class DriveRecordingCoordinator(
             savedResult?.let { repository.deleteDrive(it.rideId) }
             recorder = null
             uploadJob = null
+            // File-only: delete() is a suspend that may resume off the main thread,
+            // and the batch buffer was already cleared on stop().
+            clearJournalFile()
             stateFlow.value = RecordingState.Deleted
         } catch (cancellation: CancellationException) {
             // Cancellation (navigation away / scope teardown) is NOT a delete
@@ -560,6 +673,7 @@ class DriveRecordingCoordinator(
         recorder = null
         stoppedAtMillis = null
         savedResult = null
+        clearJournal()
         stateFlow.value = RecordingState.Discarded
     }
 
@@ -568,6 +682,7 @@ class DriveRecordingCoordinator(
         recorder = null
         stoppedAtMillis = null
         savedResult = null
+        clearJournal()
         stateFlow.value = RecordingState.Idle
     }
 
@@ -596,6 +711,19 @@ class DriveRecordingCoordinator(
          * idempotent per `sourceSessionId`, so the retries are safe.
          */
         const val DEFAULT_MAX_SAVE_ATTEMPTS = 3
+
+        /**
+         * Flush the in-flight journal (#849) once this many fixes have batched up,
+         * so a killed process loses at most this many trailing fixes, never the
+         * drive. Small — the write is a few dozen bytes per fix.
+         */
+        const val JOURNAL_BATCH_POINTS = 8
+
+        /**
+         * …or once this long has passed since the last flush, whichever comes
+         * first, so a slow (stationary) fix cadence still journals promptly.
+         */
+        const val JOURNAL_FLUSH_INTERVAL_MS = 5_000L
 
         /** Backoff before background-save retry N (0-based). Coarse — background. */
         private val SAVE_BACKOFF_MILLIS = longArrayOf(1_000L, 4_000L)

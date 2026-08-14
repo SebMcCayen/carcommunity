@@ -141,6 +141,11 @@ object SingleSessionRecording {
         // Garage-vehicle id of the car being driven, recorded on the saved drive so
         // it links back to the exact vehicle. Null when the sharer has no car.
         vehicleId: String? = null,
+        // Persists the in-flight recording to disk so a process kill mid-drive does
+        // not lose it — a relaunched-but-still-live session RESUMES the same drive
+        // (#849). Null in a config-less / CI build; the recording is then
+        // memory-only, exactly as before.
+        journal: DriveRecordingJournal? = null,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
@@ -167,6 +172,7 @@ object SingleSessionRecording {
                 uploadScope = scope,
                 carImagePath = carImagePath,
                 vehicleId = vehicleId,
+                journal = journal,
             )
         ownerUid = uid
         uploadScope = scope

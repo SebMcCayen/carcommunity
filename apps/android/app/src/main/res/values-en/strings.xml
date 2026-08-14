@@ -13,6 +13,10 @@
     <string name="appUpdate_downloaded">The update is downloaded and installs on restart.</string>
     <string name="appUpdate_restart">Restart</string>
     <string name="appUpdate_storeUnavailable">The update could not be completed, and Google Play could not be opened on this device.</string>
+    <string name="batteryOptimization_title">Keep your drive recording</string>
+    <string name="batteryOptimization_body">To make sure a drive keeps recording when the screen is off or the app is in the background, allow it to run without battery limits. On Samsung phones, also set the app\'s battery usage to \"Unrestricted\" (Settings › Battery › Background usage limits) so it isn\'t put to sleep.</string>
+    <string name="batteryOptimization_allow">Allow</string>
+    <string name="batteryOptimization_notNow">Not now</string>
     <string name="navigation_home">Home</string>
     <string name="navigation_map">Map</string>
     <string name="navigation_events">Events</string>
