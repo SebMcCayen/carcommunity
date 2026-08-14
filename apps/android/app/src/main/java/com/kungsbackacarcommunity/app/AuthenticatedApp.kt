@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarResult
@@ -118,6 +119,8 @@ import com.kungsbackacarcommunity.app.drives.EndedSessionAction
 import com.kungsbackacarcommunity.app.drives.RecordingState
 import com.kungsbackacarcommunity.app.drives.RouteUploadRunner
 import com.kungsbackacarcommunity.app.drives.SavePromptReason
+import com.kungsbackacarcommunity.app.drives.DriveSavedSnackbar
+import com.kungsbackacarcommunity.app.drives.DriveSavedSnackbarVisuals
 import com.kungsbackacarcommunity.app.drives.SessionSummaryDialog
 import com.kungsbackacarcommunity.app.drives.SingleSessionRecording
 import com.kungsbackacarcommunity.app.drives.savePromptReason
@@ -716,6 +719,10 @@ fun AuthenticatedApp(
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
+            // A drive to open in History straight away — set by the "View" action on
+            // the auto-keep "Drive saved" snackbar (#856), which also switches to the
+            // History tab; DrivesRoute pre-selects it and clears it back to null.
+            var pendingDriveDetailRideId by rememberSaveable { mutableStateOf<String?>(null) }
             // Initialised from any route a welcome-flow CTA requested (membership /
             // profile / garage), so finishing the welcome deep-links straight into
             // that screen; null (skip / "Get started") lands on the Map home. Only
@@ -2576,7 +2583,9 @@ fun AuthenticatedApp(
                 (activeRecording?.state ?: idleRecordingState).collectAsState(
                     initial = RecordingState.Idle,
                 )
-            val driveKeptText = stringResource(R.string.savedDrives_driveKept)
+            val driveSavedText = stringResource(R.string.savedDrives_savedSnackbarMessage)
+            val driveSavedUndoText = stringResource(R.string.savedDrives_savedSnackbarUndo)
+            val driveSavedViewText = stringResource(R.string.savedDrives_savedSnackbarView)
             val driveDeletedText = stringResource(R.string.savedDrives_driveDeleted)
             val driveDiscardedText = stringResource(R.string.savedDrives_noDriveSaved)
 
@@ -2857,8 +2866,43 @@ fun AuthenticatedApp(
             LaunchedEffect(recordingState) {
                 when (recordingState) {
                     RecordingState.Kept -> {
+                        // Capture the saved ride id BEFORE clear() releases the
+                        // coordinator, so the confirmation's Undo/View can act on it.
+                        val rideId = activeRecording?.savedRideId
                         SingleSessionRecording.clear()
-                        snackbarHostState.showSnackbar(driveKeptText)
+                        // Show the "Drive saved" confirmation on the composition
+                        // [scope], NOT this effect's own coroutine: clear() flips
+                        // recordingState to Idle, which re-keys and cancels THIS
+                        // effect — a snackbar shown here would be cancelled with it.
+                        // With a ride id, it is the actionable Undo/View snackbar
+                        // (#856); without one (defensive) it is a plain confirmation.
+                        scope.launch {
+                            if (rideId != null && drivesRepository != null) {
+                                snackbarHostState.showSnackbar(
+                                    DriveSavedSnackbarVisuals(
+                                        message = driveSavedText,
+                                        undoLabel = driveSavedUndoText,
+                                        viewLabel = driveSavedViewText,
+                                        // Undo = delete the just-saved ride via the
+                                        // same drives-delete path History uses, then
+                                        // confirm it was removed.
+                                        onUndo = {
+                                            scope.launch {
+                                                runCatching { drivesRepository.deleteDrive(rideId) }
+                                                snackbarHostState.showSnackbar(driveDeletedText)
+                                            }
+                                        },
+                                        // View = open that ride's detail in History.
+                                        onView = {
+                                            pendingDriveDetailRideId = rideId
+                                            selectedTab = ShellTab.History
+                                        },
+                                    ),
+                                )
+                            } else {
+                                snackbarHostState.showSnackbar(driveSavedText)
+                            }
+                        }
                     }
                     RecordingState.Deleted -> {
                         SingleSessionRecording.clear()
@@ -5417,6 +5461,13 @@ fun AuthenticatedApp(
                                                 DrivesRoute(
                                                     repository = drivesRepository,
                                                     uid = uid,
+                                                    // Opened straight to a drive by the
+                                                    // "Drive saved" snackbar's View action
+                                                    // (#856); consumed back to null.
+                                                    initialRideId = pendingDriveDetailRideId,
+                                                    onInitialRideConsumed = {
+                                                        pendingDriveDetailRideId = null
+                                                    },
                                                 )
                                             } else {
                                                 HubScreen(
@@ -6242,7 +6293,15 @@ fun AuthenticatedApp(
                     hostState = snackbarHostState,
                     modifier =
                         Modifier.align(Alignment.BottomCenter).navigationBarsPadding(),
-                )
+                ) { data ->
+                    // The auto-keep "Drive saved" confirmation carries two custom
+                    // actions (Undo / View) the default snackbar can't express;
+                    // every other snackbar renders with the default look (#856).
+                    when (val visuals = data.visuals) {
+                        is DriveSavedSnackbarVisuals -> DriveSavedSnackbar(data, visuals)
+                        else -> Snackbar(data)
+                    }
+                }
               }
             }
             }

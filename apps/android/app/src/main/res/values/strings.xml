@@ -794,6 +794,9 @@
     <string name="savedDrives_discardError">Körningen kunde inte kastas. Försök igen.</string>
     <string name="savedDrives_noDriveSaved">Ingen körning sparades.</string>
     <string name="savedDrives_saveSuccess">Körningen har sparats.</string>
+    <string name="savedDrives_savedSnackbarMessage">Körning sparad</string>
+    <string name="savedDrives_savedSnackbarUndo">Ångra</string>
+    <string name="savedDrives_savedSnackbarView">Visa</string>
     <string name="savedDrives_autoSavedTitle">Körningen sparad</string>
     <string name="savedDrives_autoSavedBody">Din körning sparades automatiskt. Behåll den i historiken, eller radera den om du inte vill ha den.</string>
     <string name="savedDrives_convoyEndedTitle">Konvojen avslutades</string>
