@@ -2914,12 +2914,19 @@ fun AuthenticatedApp(
                         driveSavedDialogVisible = true
                     }
                     RecordingState.Deleted -> {
+                        // Show the confirmation on the composition [scope], NOT this
+                        // effect's own coroutine: clear() flips recordingState to Idle,
+                        // which re-keys and CANCELS this LaunchedEffect — a suspend
+                        // showSnackbar called here would be cancelled before it renders
+                        // (the confirmation would flicker or never show).
                         SingleSessionRecording.clear()
-                        snackbarHostState.showSnackbar(driveDeletedText)
+                        scope.launch { snackbarHostState.showSnackbar(driveDeletedText) }
                     }
                     RecordingState.Discarded -> {
+                        // Same re-key/cancel hazard as Deleted above: launch on the
+                        // composition [scope] so clear() can't cancel the confirmation.
                         SingleSessionRecording.clear()
-                        snackbarHostState.showSnackbar(driveDiscardedText)
+                        scope.launch { snackbarHostState.showSnackbar(driveDiscardedText) }
                     }
                     else -> Unit
                 }

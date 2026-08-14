@@ -152,7 +152,8 @@ class DriveRecordingJournal(private val directory: File) {
      * the separator fuses the next append onto the partial line into one
      * unparseable record — the very corruption this guard exists to prevent. A
      * spurious extra blank line (the cost of `false` on a file that WAS already
-     * terminated) is harmless — readLine() skips it and parsePoint() drops it.
+     * terminated) is harmless — readLine() returns it as an empty string, which
+     * parsePoint() drops (it isn't a `P,` line), so load() ignores it.
      */
     private fun endsWithNewline(file: File): Boolean {
         val length = file.length()
