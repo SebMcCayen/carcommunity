@@ -347,6 +347,107 @@ class CrownCollectGateTest {
         }
     }
 
+    // ---- The confirming step ---------------------------------------------
+
+    /**
+     * In range and stopped but with no two-fix proof yet is [CrownCollectState.Confirming],
+     * NOT [CrownCollectState.Ready] — the honest, disabled "hold on a moment" that
+     * replaces a button that looked live and then refused with NeedsPosition.
+     */
+    @Test
+    fun inRangeAndStoppedButWithoutADwellProofIsConfirmingNotReady() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = false,
+                dwellSecondsRemaining = 2,
+            )
+        assertEquals(CrownCollectState.Confirming(2), state)
+        assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /** Once the proof is ready the same position collects. */
+    @Test
+    fun onceTheDwellProofIsReadyTheButtonGoesLive() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = true,
+            )
+        assertEquals(CrownCollectState.Ready, state)
+        assertTrue(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * A KNOWN accuracy coarser than the collect radius is Confirming: the distance
+     * cannot be trusted yet, so wait for GPS to settle rather than sending a pair
+     * one bad sample would fail as outside_radius.
+     */
+    @Test
+    fun aPositionTooCoarseToTrustIsConfirmingRatherThanReady() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = true,
+                accuracyMeters = radius + 20.0,
+            )
+        assertTrue("expected Confirming, got $state", state is CrownCollectState.Confirming)
+        assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * An UNKNOWN accuracy never blocks — exactly as an unknown speed defers to the
+     * server — so a device that never reports accuracy is never locked out.
+     */
+    @Test
+    fun anUnknownOrBrokenAccuracyDefersInsteadOfBlocking() {
+        for (unknown in listOf(null, Double.NaN, -1.0)) {
+            val state =
+                CrownCollectGate.evaluate(
+                    featureEnabled = true,
+                    distanceMeters = 10.0,
+                    speedMetersPerSecond = 0.0,
+                    dwellProofReady = true,
+                    accuracyMeters = unknown,
+                )
+            assertEquals("accuracy=$unknown", CrownCollectState.Ready, state)
+            assertFalse("accuracy=$unknown", CrownCollectGate.isPositionUnsettled(unknown, radius))
+        }
+    }
+
+    /**
+     * Distance and stillness are still judged BEFORE the confirming step: a crown
+     * out of range reads "too far", and a moving one reads "stop first", never
+     * "confirming" — the confirming step is only reached once the member is in
+     * range and stopped.
+     */
+    @Test
+    fun confirmingNeverMasksTheRealReasonWhenTooFarOrMoving() {
+        val tooFar =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = radius + 50.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = false,
+            )
+        assertTrue("expected TooFar, got $tooFar", tooFar is CrownCollectState.TooFar)
+
+        val moving =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = ceiling + 5.0,
+                dwellProofReady = false,
+            )
+        assertEquals(CrownCollectState.Moving, moving)
+    }
+
     // ---- The dwell proof --------------------------------------------------
 
     @Test

@@ -1174,6 +1174,8 @@
     "spawnStopFirstDetail": "Kronor kan bara hämtas när du står parkerad. Parkera på ett säkert ställe och hämta sedan — det är ingen brådska och ingen tid som tickar.",
     "spawnNoPosition": "Väntar på din position",
     "spawnNoPositionDetail": "Stå stilla några sekunder så vi hinner se att du står still.",
+    "spawnConfirming": "Bekräftar att du står stilla…",
+    "spawnConfirmingSeconds": "Bekräftar att du står stilla… (%1$d s)",
     "spawnResultAwarded": "Kronan är din!",
     "spawnResultAwardedPoints": "+%1$d KP",
     "spawnResultAlreadyTaken": "Någon hann före — den här kronan är redan hämtad.",

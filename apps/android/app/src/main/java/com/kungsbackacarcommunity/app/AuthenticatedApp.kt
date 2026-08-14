@@ -166,6 +166,7 @@ import com.kungsbackacarcommunity.app.convoy.UnavailableConvoyDestinationReposit
 import com.kungsbackacarcommunity.app.crownhunt.ClaimCoordinate
 import com.kungsbackacarcommunity.app.crownhunt.CrownClaimStatus
 import com.kungsbackacarcommunity.app.crownhunt.CrownCollectGate
+import com.kungsbackacarcommunity.app.crownhunt.CrownCollectSignalTracker
 import com.kungsbackacarcommunity.app.crownhunt.CrownFix
 import com.kungsbackacarcommunity.app.crownhunt.CrownFixTracker
 import com.kungsbackacarcommunity.app.crownhunt.CrownHuntClaimStatus
@@ -476,6 +477,21 @@ private const val INCIDENT_CAMERA_IDLE_DEBOUNCE_MS = 500L
  * feature the user is not currently looking at.
  */
 private const val CROWN_FIX_INTERVAL_MS = 2_000L
+
+/**
+ * How often the dwell tracker is PRE-WARMED with a fresh fix while the member is
+ * near a collectable crown but has not opened one yet.
+ *
+ * Slightly under the claim cadence, so within a few seconds of arriving beside a
+ * crown a proof partner has already aged past
+ * [com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits.MIN_DWELL_SECONDS] —
+ * meaning the Collect button is live the moment the popup opens instead of after
+ * the old "tap, tap, then it works" wait. Deliberately gated to "in range of a
+ * collectable crown, popup closed": a high-accuracy read is only worth its
+ * battery where a collect is actually plausible, so a parked phone showing crowns
+ * far away pays nothing.
+ */
+private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
 
 /**
  * How often the crown MAP layer refreshes the member's coarse location to decide
@@ -1997,11 +2013,25 @@ fun AuthenticatedApp(
             val crownClaimStatus by crownClaimFlow.collectAsState()
             // The rolling pair of fixes a claim needs (`crownHunt.claimSpawn` will
             // not accept one — a self-reported speed of zero is just a number the
-            // client sent). Keyed to the open crown, so leaving the popup forgets
-            // the pair rather than letting a stale one prove a later dwell.
-            val crownFixTracker = remember(tappedCrownId) { CrownFixTracker() }
+            // client sent).
+            //
+            // SESSION-scoped, not keyed to the open crown, so it is PRE-WARMED: the
+            // range poll below feeds it while the member is near a crown, so a
+            // proof partner has usually already aged in the instant a popup opens —
+            // the fix for the "stand still, tap, tap, then it collects" lag. It is
+            // not cleared on leaving a popup; the tracker prunes anything past
+            // MAX_DWELL itself, and the server's freshness + dwell checks reject a
+            // stale pair, so keeping the warm recent history costs nothing and
+            // avoids throwing away a still-valid dwell the member just earned.
+            val crownFixTracker = remember { CrownFixTracker() }
             var crownCurrentFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
             var crownPreviousFix by remember(tappedCrownId) { mutableStateOf<CrownFix?>(null) }
+            // Counts refused (NeedsPosition) taps for THIS crown so a genuinely
+            // stuck dwell — the cause that never reaches the server — can be
+            // signalled once. Keyed per crown, so the dedup is structural: one
+            // signal per opened crown, no timer.
+            val crownCollectSignalTracker =
+                remember(tappedCrownId) { CrownCollectSignalTracker() }
             // The claim has been ANSWERED — awarded or honestly refused. Terminal
             // for this popup: [CrownSpawnPopup] swaps the whole body for the
             // outcome, so there is no Collect button and no distance line left for
@@ -2029,16 +2059,59 @@ fun AuthenticatedApp(
                 // member is reading; that belongs to the close path above.
                 if (crownClaimDone) return@LaunchedEffect
                 val appContext = context.applicationContext
+                // Seed from the PRE-WARMED tracker before the first fresh read, so
+                // the distance line — and, when the range poll already warmed a
+                // partner, a live Collect button — are there the instant the popup
+                // opens rather than a fix cadence later.
+                crownFixTracker.bestRecent()?.let { warm ->
+                    crownCurrentFix = warm
+                    crownPreviousFix = crownFixTracker.proofPartnerFor(warm)
+                }
                 while (true) {
                     val fix = CrownLocation.currentFix(appContext)
                     if (fix != null) {
                         crownFixTracker.record(fix)
-                        crownCurrentFix = crownFixTracker.latest
-                        crownPreviousFix = crownFixTracker.proofPartner()
+                        // Prefer the best-accuracy recent sample over the raw
+                        // latest, so a single jittery reading does not compute as
+                        // outside_radius and fail the pair.
+                        val best = crownFixTracker.bestRecent()
+                        crownCurrentFix = best
+                        crownPreviousFix = crownFixTracker.proofPartnerFor(best)
                     }
                     delay(CROWN_FIX_INTERVAL_MS)
                 }
             }
+            // Pre-warm the dwell tracker from the map's ongoing location WHILE the
+            // member is near a collectable crown but no popup is open yet, so a
+            // proof partner has already aged in the moment they tap one. Gated to
+            // "in range, popup closed" so the high-accuracy read only runs where a
+            // collect is actually plausible; the open-popup loop above takes over
+            // (at the faster claim cadence) the instant a crown is tapped.
+            val crownNearCollectable =
+                crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
+            LaunchedEffect(crownNearCollectable, tappedCrownId) {
+                if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
+                val appContext = context.applicationContext
+                while (true) {
+                    CrownLocation.currentFix(appContext)?.let { crownFixTracker.record(it) }
+                    delay(CROWN_PREWARM_FIX_INTERVAL_MS)
+                }
+            }
+            // Whether the two-fix stationary proof is ready, and — if not — a
+            // friendly whole-second hint for the confirming button. The gate turns
+            // "in range and stopped but no proof yet" into an honest, DISABLED
+            // "confirming you're stopped" instead of a live button that refuses.
+            val crownDwellReady =
+                remember(crownCurrentFix, crownPreviousFix) {
+                    val current = crownCurrentFix
+                    val previous = crownPreviousFix
+                    current != null && previous != null &&
+                        CrownCollectGate.isDwellProofUsable(previous, current)
+                }
+            val crownDwellSecondsRemaining =
+                remember(crownDwellReady, crownCurrentFix) {
+                    if (crownDwellReady) null else crownFixTracker.secondsUntilProofReady()
+                }
             // Distance from the member to the open crown, or null with no fix. The
             // same haversine the rest of the app uses (via ViewportRadius), so a
             // distance shown here agrees with one computed anywhere else.
@@ -2058,7 +2131,14 @@ fun AuthenticatedApp(
                     }
                 }
             val crownCollectState =
-                remember(crownSpawnEnabled, crownDistanceMeters, crownCurrentFix, openCrown) {
+                remember(
+                    crownSpawnEnabled,
+                    crownDistanceMeters,
+                    crownCurrentFix,
+                    openCrown,
+                    crownDwellReady,
+                    crownDwellSecondsRemaining,
+                ) {
                     CrownCollectGate.evaluate(
                         featureEnabled = crownSpawnEnabled,
                         distanceMeters = crownDistanceMeters,
@@ -2066,6 +2146,9 @@ fun AuthenticatedApp(
                         collectRadiusMeters =
                             openCrown?.collectRadiusMeters
                                 ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
+                        dwellProofReady = crownDwellReady,
+                        dwellSecondsRemaining = crownDwellSecondsRemaining,
+                        accuracyMeters = crownCurrentFix?.accuracyMeters,
                     )
                 }
             // One key per opened crown, so a retry after a transport failure is the
@@ -2852,6 +2935,27 @@ fun AuthenticatedApp(
                         code = saveFailure.code,
                     )
                 }
+            }
+
+            // Signal a genuinely stuck crown collect — the dwell-not-ready cause
+            // that never reaches the server. A refused (NeedsPosition) tap is
+            // resolved entirely on the device, so a backend detector would be blind
+            // to it; after a few refusals for one crown this reports it ONCE through
+            // the same client-error pipeline, letting the detector count this cause
+            // too. The tracker is per-crown and latches, so it cannot spam; the
+            // pre-warm + confirming-button changes make this rare in the first
+            // place. Keyed on the claim status so it fires on the transition into
+            // NeedsPosition, not on every recomposition.
+            LaunchedEffect(crownClaimStatus, crownCollectSignalTracker) {
+                if (crownClaimStatus != CrownClaimStatus.NeedsPosition) return@LaunchedEffect
+                val count = crownCollectSignalTracker.onRefused() ?: return@LaunchedEffect
+                errorReporter?.report(
+                    feature = CrownCollectSignalTracker.SIGNAL_FEATURE,
+                    // App-generated and PII-free: a bare refusal count, no
+                    // coordinates, no crown id, no uid.
+                    message = "Crown collect refused for a stationary proof $count times before it resolved",
+                    code = CrownCollectSignalTracker.SIGNAL_CODE,
+                )
             }
 
             // Auto-save a finished LIVE session's drive so it can never be lost by

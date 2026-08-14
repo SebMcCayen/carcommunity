@@ -1095,6 +1095,8 @@
     <string name="crownHunt_spawnStopFirstDetail">Crowns can only be collected when you are parked. Park somewhere safe, then collect — there is no rush and no timer.</string>
     <string name="crownHunt_spawnNoPosition">Waiting for your position</string>
     <string name="crownHunt_spawnNoPositionDetail">Stay put for a few seconds so we can confirm you are standing still.</string>
+    <string name="crownHunt_spawnConfirming">Confirming you\'re stopped…</string>
+    <string name="crownHunt_spawnConfirmingSeconds">Confirming you\'re stopped… (%1$d s)</string>
     <string name="crownHunt_spawnResultAwarded">The crown is yours!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
     <string name="crownHunt_spawnResultAlreadyTaken">Someone got there first — this crown has already been collected.</string>

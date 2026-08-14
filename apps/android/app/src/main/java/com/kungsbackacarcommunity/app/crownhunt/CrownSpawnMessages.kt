@@ -75,6 +75,11 @@ object CrownSpawnMessages {
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloser
             CrownCollectState.Moving -> R.string.crownHunt_spawnStopFirst
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPosition
+            // Confirming is not a refusal: nothing has gone wrong and the member
+            // need only stay put. The BUTTON carries the "confirming you're
+            // stopped" line (see [collectActionLabelRes]), so there is no separate
+            // headline to print above the distance — the same choice Ready makes.
+            is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> R.string.crownHunt_spawnResultFeatureDisabled
         }
 
@@ -94,7 +99,28 @@ object CrownSpawnMessages {
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloserDetail
             CrownCollectState.Moving -> R.string.crownHunt_spawnStopFirstDetail
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPositionDetail
+            // The confirming line lives on the button, not in a detail paragraph.
+            is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> null
+        }
+
+    /**
+     * The Collect button's own label for the current [state] and in-flight
+     * [collecting] status — the ONE place the button decides what it says.
+     *
+     * Kept here (not in the composable) so the "confirming you're stopped" step is
+     * unit-testable rather than only visible on a device: the whole point of the
+     * step is that the button stops looking live-then-refusing, and that promise
+     * is worth pinning. The seconds-remaining variant is chosen in the composable
+     * (it needs the argument), off [CrownCollectState.Confirming.secondsRemaining];
+     * this returns the argument-free resource.
+     */
+    @StringRes
+    fun collectActionLabelRes(state: CrownCollectState, collecting: Boolean): Int =
+        when {
+            collecting -> R.string.crownHunt_spawnCollecting
+            state is CrownCollectState.Confirming -> R.string.crownHunt_spawnConfirming
+            else -> R.string.crownHunt_spawnCollect
         }
 
     /** The tier's name, for the popup's header line. */

@@ -17,8 +17,13 @@ class CrownFixTrackerTest {
 
     private val base = 1_700_000_000_000L
 
-    private fun fix(offsetSeconds: Long, lat: Double = 57.5) =
-        CrownFix(latitude = lat, longitude = 12.0, recordedAtMillis = base + offsetSeconds * 1000)
+    private fun fix(offsetSeconds: Long, lat: Double = 57.5, accuracyMeters: Double? = null) =
+        CrownFix(
+            latitude = lat,
+            longitude = 12.0,
+            recordedAtMillis = base + offsetSeconds * 1000,
+            accuracyMeters = accuracyMeters,
+        )
 
     @Test
     fun `before the minimum dwell there is no partner yet`() {
@@ -104,5 +109,84 @@ class CrownFixTrackerTest {
 
         assertNull(tracker.latest)
         assertNull(tracker.proofPartner())
+    }
+
+    // ---- Pre-warming ------------------------------------------------------
+
+    /**
+     * A tracker fed BEFORE a popup opens (the range poll pre-warming it) already
+     * has a proof partner the instant the popup appears — the fix for the
+     * "stand still, tap, tap, then it collects" lag.
+     */
+    @Test
+    fun `a pre-warmed tracker offers a proof partner immediately`() {
+        val tracker = CrownFixTracker()
+        // Simulate the map's ongoing poll landing a few fixes before the popup.
+        tracker.record(fix(0))
+        tracker.record(fix(3))
+        tracker.record(fix(6))
+
+        val partner = tracker.proofPartner()!!
+        val current = tracker.bestRecent()!!
+        assertTrue(
+            "a warm tracker should already have a usable pair",
+            CrownCollectGate.isDwellProofUsable(partner, current),
+        )
+        assertEquals(0, tracker.secondsUntilProofReady())
+    }
+
+    /** With only a single fresh fix, the countdown reports the full minimum dwell. */
+    @Test
+    fun `the countdown reports the wait until a partner ages in`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0))
+        assertEquals(
+            CrownSpawnLimits.MIN_DWELL_SECONDS.toInt(),
+            tracker.secondsUntilProofReady(),
+        )
+        // One second later a partner is still 3 s short.
+        tracker.record(fix(1))
+        assertEquals(3, tracker.secondsUntilProofReady())
+    }
+
+    // ---- Best-accuracy selection -----------------------------------------
+
+    /**
+     * The current fix prefers the best-accuracy sample in the settle window over
+     * the raw latest, so one jittery reading does not decide the distance.
+     */
+    @Test
+    fun `bestRecent prefers the most accurate recent fix over the latest`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0, accuracyMeters = 8.0))
+        // A jittery latest with a huge accuracy radius must not win.
+        tracker.record(fix(2, accuracyMeters = 60.0))
+
+        assertEquals(8.0, tracker.bestRecent()!!.accuracyMeters!!, 0.0)
+    }
+
+    /**
+     * The proof partner is likewise chosen by accuracy, not merely "newest old
+     * enough": a settled earlier fix makes the pair the server judges tighter.
+     */
+    @Test
+    fun `proofPartnerFor prefers the most accurate candidate in the dwell window`() {
+        val tracker = CrownFixTracker()
+        tracker.record(fix(0, accuracyMeters = 40.0))
+        tracker.record(fix(1, accuracyMeters = 6.0))
+        tracker.record(fix(8))
+
+        val current = fix(8)
+        val partner = tracker.proofPartnerFor(current)!!
+        // Both fix(0) and fix(1) are >= 4 s older than fix(8); the 6 m one wins.
+        assertEquals(6.0, partner.accuracyMeters!!, 0.0)
+    }
+
+    /** With no fix at all, there is no current and no partner. */
+    @Test
+    fun `an empty tracker has no current fix`() {
+        val tracker = CrownFixTracker()
+        assertNull(tracker.bestRecent())
+        assertNull(tracker.proofPartnerFor(null))
     }
 }

@@ -1174,6 +1174,8 @@
     "spawnStopFirstDetail": "Crowns can only be collected when you are parked. Park somewhere safe, then collect — there is no rush and no timer.",
     "spawnNoPosition": "Waiting for your position",
     "spawnNoPositionDetail": "Stay put for a few seconds so we can confirm you are standing still.",
+    "spawnConfirming": "Confirming you're stopped…",
+    "spawnConfirmingSeconds": "Confirming you're stopped… (%1$d s)",
     "spawnResultAwarded": "The crown is yours!",
     "spawnResultAwardedPoints": "+%1$d KP",
     "spawnResultAlreadyTaken": "Someone got there first — this crown has already been collected.",

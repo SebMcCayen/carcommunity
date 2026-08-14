@@ -201,6 +201,49 @@ class CrownSpawnMessagesTest {
         assertNull(CrownSpawnMessages.refusalDetailRes(CrownCollectState.FeatureOff))
     }
 
+    /**
+     * The confirming step is not a refusal: it carries no headline and no detail
+     * (the BUTTON says "confirming you're stopped"), exactly as Ready stays quiet.
+     */
+    @Test
+    fun theConfirmingStateSaysNothingInTheRefusalCopyBecauseTheButtonCarriesIt() {
+        val confirming = CrownCollectState.Confirming(2)
+        assertNull(CrownSpawnMessages.refusalTitleRes(confirming))
+        assertNull(CrownSpawnMessages.refusalDetailRes(confirming))
+    }
+
+    /**
+     * The Collect button's own label: "Collecting…" while a call is in flight,
+     * "Confirming you're stopped…" while the dwell/accuracy are not ready, and
+     * plain "Collect" once it is live. In-flight wins over confirming — one press
+     * is one call, and the button must read as busy the instant it is.
+     */
+    @Test
+    fun theCollectButtonLabelReflectsWhetherItIsConfirmingOrLiveOrInFlight() {
+        assertEquals(
+            R.string.crownHunt_spawnCollect,
+            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Ready, collecting = false),
+        )
+        assertEquals(
+            R.string.crownHunt_spawnConfirming,
+            CrownSpawnMessages.collectActionLabelRes(
+                CrownCollectState.Confirming(3),
+                collecting = false,
+            ),
+        )
+        assertEquals(
+            R.string.crownHunt_spawnCollecting,
+            CrownSpawnMessages.collectActionLabelRes(
+                CrownCollectState.Confirming(3),
+                collecting = true,
+            ),
+        )
+        assertEquals(
+            R.string.crownHunt_spawnCollecting,
+            CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Ready, collecting = true),
+        )
+    }
+
     // ---- Rarity ----------------------------------------------------------
 
     @Test
