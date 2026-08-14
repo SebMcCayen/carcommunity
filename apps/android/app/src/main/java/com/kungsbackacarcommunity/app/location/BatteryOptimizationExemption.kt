@@ -104,6 +104,11 @@ object BatteryOptimizationGate {
             true
         } catch (_: ActivityNotFoundException) {
             false
+        } catch (_: SecurityException) {
+            // Some OEMs / device-policy configs block the battery-optimization
+            // action outright, throwing SecurityException from startActivity. Treat
+            // that as "not launchable" rather than crashing on the user's Allow tap.
+            false
         }
 }
 
