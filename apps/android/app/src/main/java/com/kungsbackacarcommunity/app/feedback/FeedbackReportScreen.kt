@@ -16,6 +16,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -44,6 +45,24 @@ fun FeedbackReportScreen(
     var summary by rememberSaveable { mutableStateOf("") }
     var description by rememberSaveable { mutableStateOf("") }
     var showError by rememberSaveable { mutableStateOf(false) }
+
+    // Clear the saved form input the moment a submission SUCCEEDS. The fields are
+    // `rememberSaveable`, so without this they survive process death and get
+    // restored on a cold start — but the Done confirmation lives only in an
+    // in-memory StateFlow, so it does NOT survive. The net effect (issue #850):
+    // if the user leaves after submitting without tapping Close and the OS later
+    // kills the process, the status resets to Idle while the old text is
+    // restored, and the form reappears pre-filled as if never sent (inviting an
+    // accidental double-submit). Wiping the text on Done means even a restored
+    // form is empty. Gated on Done ONLY — a Failed submit must keep the user's
+    // text so they can retry without retyping.
+    LaunchedEffect(status) {
+        if (status is FeedbackStatus.Done) {
+            summary = ""
+            description = ""
+            showError = false
+        }
+    }
 
     val form = FeedbackReportForm(summary = summary, description = description)
 
