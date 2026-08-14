@@ -923,11 +923,13 @@
     "title": "Användare",
     "subtitle": "Sök och moderera användare. Åtgärder loggas och verifieras i backend.",
     "searchLabel": "Sök användare",
-    "searchPlaceholder": "Sök på namn eller användar-ID…",
+    "searchPlaceholder": "Sök på namn, e-post eller användar-ID…",
     "loading": "Hämtar användare…",
     "loadError": "Kunde inte hämta användarna.",
     "empty": "Inga användare hittades.",
-    "emptyFiltered": "Inga användare matchar sökningen.",
+    "emptyFiltered": "Inga användare matchar filtren.",
+    "capNotice": "Visar de första 1000 användarna. Fler kan finnas men visas inte.",
+    "countSummary": "Visar {shown} av {total} användare.",
     "unnamed": "(namnlös)",
     "noNickname": "Inget smeknamn registrerat",
     "columns": {
@@ -935,7 +937,24 @@
       "role": "Roll",
       "member": "Medlem",
       "status": "Status",
+      "lastActivity": "Senaste aktivitet",
       "created": "Skapad"
+    },
+    "filters": {
+      "roleLabel": "Roll",
+      "allRoles": "Alla roller",
+      "statusLabel": "Status",
+      "allStatuses": "Alla statusar",
+      "memberLabel": "Medlem",
+      "allMembers": "Alla",
+      "sortLabel": "Sortera"
+    },
+    "sort": {
+      "lastActivityDesc": "Senaste aktivitet (nyast först)",
+      "lastActivityAsc": "Senaste aktivitet (äldst först)",
+      "createdDesc": "Skapad (nyast först)",
+      "createdAsc": "Skapad (äldst först)",
+      "nameAsc": "Namn (A–Ö)"
     },
     "role": {
       "user": "Användare",

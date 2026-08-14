@@ -22,15 +22,7 @@
  *    against USER_ROLES with a safe `'user'` fallback) before use.
  */
 
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  limit as fsLimit,
-  orderBy,
-  query,
-} from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, limit as fsLimit, query } from 'firebase/firestore';
 import { DEFAULT_DISPLAY_NAME, USER_ROLES, type UserRole } from '@carcommunity/shared/users';
 
 import { callAdmin } from '../../lib/callables';
@@ -41,8 +33,27 @@ import type { ApiError } from '../../lib/errors';
 export type { ApiError, UserRole };
 export { USER_ROLES };
 
-/** Page size for the users list — never load all users at once. */
-const LIST_LIMIT = 50;
+export {
+  filterUsers,
+  sortUsers,
+  filterAndSortUsers,
+  matchesSearch,
+  derivedStatus,
+  EMPTY_USER_FILTERS,
+  DEFAULT_USER_SORT,
+  type UserListFilters,
+  type UserSortKey,
+  type UserDerivedStatus,
+} from './filter';
+
+/**
+ * Hard safety bound on how many users a single list read will pull. The real
+ * user base is small (well under a few hundred), so in practice every user is
+ * loaded and the list is filtered/sorted in memory. This cap only exists so a
+ * runaway collection can never fetch an unbounded number of documents; when it
+ * is hit the UI surfaces a notice rather than silently hiding accounts.
+ */
+export const LIST_MAX = 1000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,11 +63,25 @@ const LIST_LIMIT = 50;
 export interface AdminUserSummary {
   uid: string;
   displayName: string;
+  /**
+   * Account email when the `users/{uid}` doc carries one (it is written only
+   * when provisioning had an email), else null. Surfaced solely to make the
+   * list searchable by email — it is never rendered as a column.
+   */
+  email: string | null;
   role: UserRole;
   activeMember: boolean;
   suspended: boolean;
   deleted: boolean;
   createdAt: string | null;
+  /**
+   * ISO string of the account's most recent sign-in
+   * (`userLifecycle/{uid}.lastLoginAt`), or null when the account has never
+   * recorded a login (predates the lifecycle feature, or never signed in).
+   * This is the "Last activity" column and the same signal the server-side
+   * inactivity sweep uses.
+   */
+  lastLoginAt: string | null;
   /**
    * ISO string of `users/{uid}.onboardingCompletedAt`, or null when onboarding
    * has not completed. Onboarding requires a member-chosen nickname, so a set
@@ -64,6 +89,17 @@ export interface AdminUserSummary {
    * rather than the provisioning placeholder — see [hasMemberSetNickname].
    */
   onboardingCompletedAt: string | null;
+}
+
+/** Result of [adminListUsers]: the loaded users plus whether the cap was hit. */
+export interface AdminUserListResult {
+  users: AdminUserSummary[];
+  /**
+   * True when the read returned exactly `LIST_MAX` documents, meaning more
+   * users may exist beyond the cap. The UI surfaces this so nothing is hidden
+   * silently.
+   */
+  truncated: boolean;
 }
 
 /**
@@ -183,15 +219,21 @@ function coerceOptionalString(raw: unknown): string | null {
   return typeof raw === 'string' ? raw : null;
 }
 
-function toSummary(uid: string, data: Record<string, unknown>): AdminUserSummary {
+function toSummary(
+  uid: string,
+  data: Record<string, unknown>,
+  lastLoginAt: string | null,
+): AdminUserSummary {
   return {
     uid,
     displayName: coerceString(data.displayName),
+    email: coerceOptionalString(data.email),
     role: coerceRole(data.role),
     activeMember: data.activeMember === true,
     suspended: data.suspended === true,
     deleted: data.deleted === true,
     createdAt: toIso(data.createdAt),
+    lastLoginAt,
     onboardingCompletedAt: toIso(data.onboardingCompletedAt),
   };
 }
@@ -201,18 +243,37 @@ function toSummary(uid: string, data: Record<string, unknown>): AdminUserSummary
 // ---------------------------------------------------------------------------
 
 /**
- * Lists the most recently created users (newest first, first page only —
- * never loads all users at once). Direct rules-gated read on `users`.
+ * Loads the full user list for the admin table. Direct rules-gated reads on
+ * `users` and `userLifecycle` (both `isAdmin()`-gated).
+ *
+ * The list is intentionally NOT ordered in the query: an `orderBy('createdAt')`
+ * would silently drop any document missing that field, so a plain collection
+ * scan is used to guarantee every account is reachable, and the caller
+ * sorts/filters in memory (see `filterAndSortUsers`). A single `LIST_MAX` cap
+ * bounds the read; if it is reached the result is flagged `truncated` so the UI
+ * can say so rather than hide accounts.
+ *
+ * Last activity comes from `userLifecycle/{uid}.lastLoginAt`, fetched as one
+ * collection read and joined by uid — the same field the server-side inactivity
+ * sweep treats as last activity. `userLifecycle` is admin-readable; the
+ * owner-only `userPrivate/{uid}` is still never touched.
  */
-export async function adminListUsers(): Promise<AdminUserSummary[]> {
-  const snapshot = await getDocs(
-    query(
-      collection(getAdminFirestore(), 'users'),
-      orderBy('createdAt', 'desc'),
-      fsLimit(LIST_LIMIT),
-    ),
+export async function adminListUsers(): Promise<AdminUserListResult> {
+  const db = getAdminFirestore();
+  const [usersSnap, lifecycleSnap] = await Promise.all([
+    getDocs(query(collection(db, 'users'), fsLimit(LIST_MAX))),
+    getDocs(query(collection(db, 'userLifecycle'), fsLimit(LIST_MAX))),
+  ]);
+
+  const lastLoginByUid = new Map<string, string | null>();
+  for (const d of lifecycleSnap.docs) {
+    lastLoginByUid.set(d.id, toIso((d.data() as Record<string, unknown>).lastLoginAt));
+  }
+
+  const users = usersSnap.docs.map((d) =>
+    toSummary(d.id, d.data() as Record<string, unknown>, lastLoginByUid.get(d.id) ?? null),
   );
-  return snapshot.docs.map((d) => toSummary(d.id, d.data() as Record<string, unknown>));
+  return { users, truncated: usersSnap.size >= LIST_MAX };
 }
 
 /**
