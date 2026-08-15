@@ -178,6 +178,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
+import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
@@ -4780,6 +4781,7 @@ fun AuthenticatedApp(
                         onNavigateToPoint = moveMapToPoint,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
+                        crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS),
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
                         notificationsRepository = notificationsRepository,
@@ -6792,6 +6794,10 @@ private fun RouteHost(
     onNavigateToPoint: (latitude: Double, longitude: Double, name: String?) -> Unit,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
+    // The `crownHuntPerks` flag (contract default FALSE), resolved at the call
+    // site where the flag set is in scope. Gates the Kronjakt shop tab: while
+    // false the CrownHunt hub renders exactly as before and the shop ships dark.
+    crownHuntPerksEnabled: Boolean,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
     notificationsRepository: NotificationsRepository?,
@@ -7268,6 +7274,11 @@ private fun RouteHost(
             // simply shows the loading affordance.
             val crownHuntStatsRepository =
                 remember(context) { FirebaseCrownHuntStatsRepository.createIfAvailable(context) }
+            // Kronjakt SHOP (PR2). Built inline like the stats repo — null in a
+            // config-less/CI build. Only READ when crownHuntPerksEnabled is on
+            // (contract default OFF), so the shop stays dark until then.
+            val perkShopRepository =
+                remember(context) { FirebasePerkShopRepository.createIfAvailable(context) }
             CrownHuntRoute(
                 statsRepository = crownHuntStatsRepository,
                 passesMemberGate = MemberGating.allows(profileActiveMember),
@@ -7277,6 +7288,11 @@ private fun RouteHost(
                 // uses, so no new query shape or index.
                 badgesRepository = badgesRepository,
                 uid = uid,
+                perksEnabled = crownHuntPerksEnabled,
+                perkShopRepository = perkShopRepository,
+                // KP balance: the same owner-scoped pointsLedger/{uid} listener
+                // the Points wallet uses — no new query shape.
+                pointsRepository = pointsRepository,
             )
         }
 

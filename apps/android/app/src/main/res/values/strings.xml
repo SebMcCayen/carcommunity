@@ -1136,6 +1136,25 @@
     <string name="crownHunt_legendSpawnedBody">Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En sällsynt eller legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.</string>
     <string name="crownHunt_legendDisappearTitle">Försvinner en krona när jag samlat in den?</string>
     <string name="crownHunt_legendDisappearBody">En krona du redan samlat in kan du inte ta igen. Vanliga och ovanliga kronor kan flera medlemmar samla in var för sig och ligger kvar på kartan tills tiden går ut eller gränsen nås. Exklusiva kronor (sällsynta och legendariska) försvinner direkt för alla så fort någon har tagit dem.</string>
+    <!-- Kronjakt SHOP (Crown Hunt Shop, PR2) — behind the crownHuntPerks flag -->
+    <string name="crownHunt_tabHome">Kronjakt</string>
+    <string name="crownHunt_tabShop">Butik</string>
+    <string name="crownHunt_shopBalanceLabel">Ditt saldo</string>
+    <string name="crownHunt_shopIntro">Lägg dina Kronpoäng på perks. De hamnar i ditt förråd – du använder dem i en kommande uppdatering.</string>
+    <string name="crownHunt_shopLoading">Laddar butiken…</string>
+    <string name="crownHunt_shopError">Kunde inte hämta butiken. Försök igen.</string>
+    <string name="crownHunt_shopEmpty">Inga perks till salu just nu.</string>
+    <string name="crownHunt_shopBuyButton">Köp</string>
+    <string name="crownHunt_shopBuying">Köper…</string>
+    <string name="crownHunt_shopOwnedLabel">Du äger: %1$d</string>
+    <string name="crownHunt_shopBoughtMessage">Köpt! %1$s ligger nu i ditt förråd.</string>
+    <string name="crownHunt_shopAlreadyBoughtMessage">Köpet var redan registrerat – inga extra poäng drogs.</string>
+    <string name="crownHunt_shopErrorInsufficient">Du har inte tillräckligt med Kronpoäng för den här perken.</string>
+    <string name="crownHunt_shopErrorUnavailable">Butiken är inte tillgänglig just nu.</string>
+    <string name="crownHunt_shopErrorUnknown">Något gick fel. Försök igen.</string>
+    <string name="crownHunt_perkKindTrap">Fälla</string>
+    <string name="crownHunt_perkKindShield">Skydd</string>
+    <string name="crownHunt_perkKindBoost">Boost</string>
     <string name="partners_screenTitle">KCC Företagspartner</string>
     <string name="partners_statusLabel">Samarbetspartner</string>
     <string name="partners_markerLabel">Samarbetspartner</string>
