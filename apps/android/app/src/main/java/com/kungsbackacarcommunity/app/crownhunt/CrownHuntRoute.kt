@@ -11,6 +11,7 @@ import com.kungsbackacarcommunity.app.points.PointsRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.launch
 
 /**
@@ -118,7 +119,10 @@ private fun combineShop(
     combine(
         perkShopRepository.observeCatalog(),
         perkShopRepository.observeInventory(uid),
-        pointsRepository.observeBalance(uid),
+        // Emit null first so the shop still renders (catalog/inventory) even if the
+        // balance listener errors on its first snapshot and never emits — otherwise
+        // combine() would hang the whole shop in Loading forever. null renders as 0 KP.
+        pointsRepository.observeBalance(uid).onStart { emit(null) },
     ) { catalog, inventory, balance ->
         PerkShop.toUiState(catalog, inventory, balance)
     }
