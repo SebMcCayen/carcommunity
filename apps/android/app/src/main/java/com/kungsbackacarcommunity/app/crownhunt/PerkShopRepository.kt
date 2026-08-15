@@ -102,11 +102,18 @@ class FirebasePerkShopRepository private constructor(
     }
 
     override fun observeInventory(uid: String): Flow<Map<String, Long>> = callbackFlow {
+        var loadedOnce = false
         val registration =
             firestore.collection(INVENTORY).document(uid).addSnapshotListener { snapshot, error ->
-                // Keep the last-known counts on a transient error rather than
-                // emitting empty (which would misrender every "Du äger: N" as 0).
-                if (error != null) return@addSnapshotListener
+                if (error != null) {
+                    // First-snapshot error: emit empty so the combine()-built shop
+                    // state can still render instead of hanging in Loading forever.
+                    // After a successful load, keep the last-known counts on a
+                    // transient error rather than misrendering "Du äger: N" as 0.
+                    if (!loadedOnce) trySend(emptyMap())
+                    return@addSnapshotListener
+                }
+                loadedOnce = true
                 trySend(snapshot.toInventoryCounts())
             }
         awaitClose { registration.remove() }

@@ -1230,7 +1230,9 @@
     "shopErrorUnknown": "Något gick fel. Försök igen.",
     "perkKindTrap": "Fälla",
     "perkKindShield": "Skydd",
-    "perkKindBoost": "Boost"
+    "perkKindBoost": "Boost",
+    "tabHome": "Kronjakt",
+    "tabShop": "Butik"
   },
   "partners": {
     "screenTitle": "KCC Företagspartner",

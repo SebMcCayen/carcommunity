@@ -1152,6 +1152,8 @@
     <string name="crownHunt_perkKindTrap">Fälla</string>
     <string name="crownHunt_perkKindShield">Skydd</string>
     <string name="crownHunt_perkKindBoost">Boost</string>
+    <string name="crownHunt_tabHome">Kronjakt</string>
+    <string name="crownHunt_tabShop">Butik</string>
     <string name="partners_screenTitle">KCC Företagspartner</string>
     <string name="partners_statusLabel">Samarbetspartner</string>
     <string name="partners_markerLabel">Samarbetspartner</string>

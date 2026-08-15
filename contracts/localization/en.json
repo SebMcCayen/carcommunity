@@ -1230,7 +1230,9 @@
     "shopErrorUnknown": "Something went wrong. Try again.",
     "perkKindTrap": "Trap",
     "perkKindShield": "Shield",
-    "perkKindBoost": "Boost"
+    "perkKindBoost": "Boost",
+    "tabHome": "Crown Hunt",
+    "tabShop": "Shop"
   },
   "partners": {
     "screenTitle": "KCC Business Partners",

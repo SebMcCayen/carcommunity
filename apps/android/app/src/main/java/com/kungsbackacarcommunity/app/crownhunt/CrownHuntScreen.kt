@@ -591,6 +591,12 @@ private fun PerkCard(
                             strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.onPrimary,
                         )
+                        // Keep a visible + screen-reader label next to the spinner so
+                        // the button isn't left unlabeled while a buy is in flight.
+                        Text(
+                            text = stringResource(R.string.crownHunt_shopBuying),
+                            modifier = Modifier.padding(start = 8.dp),
+                        )
                     } else {
                         Text(stringResource(R.string.crownHunt_shopBuyButton))
                     }
