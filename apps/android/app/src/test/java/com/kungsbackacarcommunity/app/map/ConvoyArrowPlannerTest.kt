@@ -119,8 +119,30 @@ class ConvoyArrowPlannerTest {
     }
 
     @Test
-    fun `a member the map cannot project at all is dropped`() {
-        val result = planWith(listOf(member("ghost", latitude = cameraLat + 0.5))) { null }
+    fun `a member with no trustworthy on-screen projection gets an arrow not a drop`() {
+        // A null projection now means the renderer has no HONEST on-screen position
+        // for this member — behind the tilted camera / folded / clamped, which the
+        // seam refuses to hand back (see MapProjection.screenPositionFor). That is
+        // OFF-SCREEN, not absent: the member is ~55 km north, so they get an edge
+        // arrow drawn from their bearing (which never needs the pixel), rather than
+        // silently vanishing. This is the convoy half of the stuck-in-corner fix.
+        val ghost = member("ghost", latitude = cameraLat + 0.5)
+        val result = planWith(listOf(ghost)) { null }
+        assertTrue(result.onScreen.isEmpty())
+        val arrow = result.offScreen.single()
+        assertEquals("ghost", arrow.member.uid)
+        // Due north, north-up: arrow points up and pins to the top edge inset.
+        assertEquals(0.0, arrow.angleDegrees, 0.5)
+        assertEquals(40f, arrow.point.y, 0.5f)
+    }
+
+    @Test
+    fun `a member under the puck with no projection gets neither marker nor arrow`() {
+        // No honest pixel AND essentially at the camera centre (< MIN_ARROW_DISTANCE):
+        // they are on top of you, so no edge arrow pointing at nothing — and we
+        // cannot place a marker without a pixel. Neither, rather than a spurious arrow.
+        val onTop = member("onTop", latitude = cameraLat, longitude = cameraLng)
+        val result = planWith(listOf(onTop)) { null }
         assertTrue(result.onScreen.isEmpty())
         assertTrue(result.offScreen.isEmpty())
     }

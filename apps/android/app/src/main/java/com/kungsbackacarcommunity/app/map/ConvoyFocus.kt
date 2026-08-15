@@ -321,6 +321,37 @@ object ConvoyFocusPlanner {
         return z.coerceIn(minZoom, maxZoom)
     }
 
+    /**
+     * The members whose positions are fresh enough to FRAME, dropping any that are
+     * stale by the same window the off-screen arrows use
+     * ([ConvoyArrowPlanner.STALE_AFTER_MS]).
+     *
+     * ## Why this exists (a convoy-fit bug)
+     * The fit and the arrows disagreed about who counts. The off-screen arrow
+     * planner already drops a member whose last position is older than
+     * [ConvoyArrowPlanner.STALE_AFTER_MS] — a member who lost signal ten minutes
+     * ago is not pointed at. But the camera FIT included every member the roster
+     * still carried, stale or not (the publisher's `latest` RTDB node lingers after
+     * signal loss and keeps re-arriving unchanged). A member left behind far away
+     * therefore stretched the framed bounding box toward a place nobody is any more.
+     *
+     * Because the fit zoom is floored at a minimum (a group cannot be framed below
+     * street-usefulness), a box stretched by one stale outlier can exceed what that
+     * floor can show — and then the REAL, moving members near the far edge of the
+     * inflated box fall off the screen. So a stale ghost does not just waste space;
+     * it can push live convoy members out of frame. Excluding stale members here
+     * makes the fit frame the same set the arrows point at.
+     *
+     * A member whose position carries no timestamp is kept (unknown age is not
+     * stale — see [ConvoyMemberPosition.updatedAtMillis] and
+     * [ConvoyArrowPlanner.isStale]).
+     */
+    fun freshForFit(
+        members: List<ConvoyMemberPosition>,
+        nowMillis: Long,
+    ): List<ConvoyMemberPosition> =
+        members.filterNot { ConvoyArrowPlanner.isStale(it.updatedAtMillis, nowMillis) }
+
     /** Axis-aligned bounds of a set of points. */
     fun boundsOf(points: List<ConvoyLatLng>): ConvoyBounds =
         ConvoyBounds(

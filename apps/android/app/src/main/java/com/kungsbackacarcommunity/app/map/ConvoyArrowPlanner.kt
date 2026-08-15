@@ -190,7 +190,11 @@ object ConvoyArrowPlanner {
      * @param members every convoy member with a known live position, excluding
      *   the viewer.
      * @param project the map SDK's own coordinate→pixel projection. Returning
-     *   null (no map, no style yet) drops the member for this frame.
+     *   null means the renderer has no TRUSTWORTHY on-screen position (behind a
+     *   tilted camera / folded / clamped — see MapProjection.screenPositionFor):
+     *   the member is treated as OFF-SCREEN and gets an edge arrow from their
+     *   bearing, unless they are within [MIN_ARROW_DISTANCE_METERS] of the camera
+     *   centre (under the puck), in which case they get neither.
      * @param cameraLatitude / [cameraLongitude] the camera centre — the origin
      *   every bearing is measured from, which is what makes the arrows agree
      *   with what is actually framed rather than with where the user's GPS is.
@@ -238,19 +242,38 @@ object ConvoyArrowPlanner {
                 )
 
             val projected = project(member)
+
+            // A NULL projection now means the renderer has no honest on-screen
+            // position for this member: they are behind the tilted camera / beyond
+            // the horizon / off the projectable globe, and the seam refused to hand
+            // back the folded-or-clamped pixel (see MapProjection.screenPositionFor
+            // and ConvoyEdgeGeometry.projectionRoundTrips). That is OFF-SCREEN, not
+            // absent — so they still get an edge arrow, drawn from their bearing
+            // (edgePoint never uses the pixel). The only exception is a member
+            // essentially on top of the puck: no honest pixel AND within
+            // MIN_ARROW_DISTANCE_METERS means they are under us, so no arrow.
+            //
+            // (Before the round-trip seam fix, a fold came back as a NON-null
+            // folded pixel and was reclassified off-screen by isProjectionTrustworthy
+            // below; that path still works for any renderer that returns a raw
+            // pixel, so both are handled.)
+            if (projected == null) {
+                if (distance >= MIN_ARROW_DISTANCE_METERS) {
+                    candidates += Candidate(member, screenAngle, distance)
+                }
+                continue
+            }
+
             // A projection we cannot trust is a point behind a tilted camera
             // folded back into view (see isProjectionTrustworthy): treat it as
             // off screen, because that is where it is.
             val trustworthy =
-                projected != null &&
-                    ConvoyEdgeGeometry.isProjectionTrustworthy(
-                        point = projected,
-                        viewportWidth = viewportWidth,
-                        viewportHeight = viewportHeight,
-                        expectedScreenAngle = screenAngle,
-                    )
-
-            if (projected == null) continue
+                ConvoyEdgeGeometry.isProjectionTrustworthy(
+                    point = projected,
+                    viewportWidth = viewportWidth,
+                    viewportHeight = viewportHeight,
+                    expectedScreenAngle = screenAngle,
+                )
 
             val inside =
                 trustworthy &&

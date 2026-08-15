@@ -99,6 +99,56 @@ class ConvoyFocusTest {
         }
     }
 
+    // ---- stale exclusion from the fit (bug: fit frames a place nobody is) ---
+
+    private val fitNow = 1_700_000_000_000L
+
+    private fun fitMember(
+        uid: String,
+        latitude: Double,
+        updatedAtMillis: Long? = fitNow,
+    ) = ConvoyMemberPosition(uid = uid, latitude = latitude, longitude = 12.1, updatedAtMillis = updatedAtMillis)
+
+    @Test
+    fun `freshForFit drops a member whose position is stale`() {
+        val fresh = fitMember("fresh", 57.50)
+        val stale = fitMember("stale", 58.50, updatedAtMillis = fitNow - ConvoyArrowPlanner.STALE_AFTER_MS - 1)
+        val kept = ConvoyFocusPlanner.freshForFit(listOf(fresh, stale), fitNow)
+        assertEquals(listOf("fresh"), kept.map { it.uid })
+    }
+
+    @Test
+    fun `freshForFit keeps a member right on the staleness boundary and an undated one`() {
+        val edge = fitMember("edge", 57.50, updatedAtMillis = fitNow - ConvoyArrowPlanner.STALE_AFTER_MS)
+        val undated = fitMember("undated", 57.60, updatedAtMillis = null)
+        val kept = ConvoyFocusPlanner.freshForFit(listOf(edge, undated), fitNow)
+        assertEquals(setOf("edge", "undated"), kept.map { it.uid }.toSet())
+    }
+
+    @Test
+    fun `the fit uses the same staleness window as the off-screen arrows`() {
+        // The bug this fixes: the fit framed every member the roster carried while
+        // the arrows already dropped stale ones, so a left-behind ghost stretched
+        // the bounding box and — against the min-zoom floor — could push live
+        // members off screen. Excluding the stale member here makes the framed set
+        // match the arrowed set.
+        val self = ConvoyLatLng(57.00, 12.00)
+        val moving = fitMember("moving", 57.05)
+        val ghost = fitMember("ghost", 59.00, updatedAtMillis = fitNow - ConvoyArrowPlanner.STALE_AFTER_MS - 1)
+
+        val fresh = ConvoyFocusPlanner.freshForFit(listOf(moving, ghost), fitNow)
+        val plan =
+            ConvoyFocusPlanner.plan(
+                ConvoyFocusMode.Convoy,
+                self,
+                fresh.map { ConvoyLatLng(it.latitude, it.longitude) },
+            ) as ConvoyCameraPlan.FitConvoy
+        val bounds = ConvoyFocusPlanner.boundsOf(plan.points)
+        // The ghost at 59.0 must NOT stretch the frame; the north edge is the
+        // moving member, not the abandoned position.
+        assertEquals(57.05, bounds.north, 1e-9)
+    }
+
     @Test
     fun `a single-point set yields degenerate but valid bounds and does not crash`() {
         val only = ConvoyLatLng(57.0, 12.0)

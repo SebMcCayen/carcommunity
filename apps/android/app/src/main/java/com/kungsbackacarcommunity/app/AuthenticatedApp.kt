@@ -4097,13 +4097,25 @@ fun AuthenticatedApp(
                 // same code as the never-enabled path rather than a special case
                 // somebody can forget to write.
                 LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions) {
+                    // Exclude members whose last position is stale (lost signal /
+                    // left behind) BEFORE fitting, matching what the off-screen
+                    // arrows already do. A stale ghost stretches the framed
+                    // bounding box toward a place nobody is any more, and — because
+                    // the fit zoom is floored — an inflated box can push the REAL,
+                    // moving members near its far edge off the screen. See
+                    // ConvoyFocusPlanner.freshForFit.
+                    val freshMembers =
+                        ConvoyFocusPlanner.freshForFit(
+                            members = convoyMemberPositions,
+                            nowMillis = System.currentTimeMillis(),
+                        )
                     val plan =
                         ConvoyFocusPlanner.plan(
                             mode = convoyFocusMode,
                             ownPosition =
                                 ownLiveMarker?.let { ConvoyLatLng(it.latitude, it.longitude) },
                             memberPositions =
-                                convoyMemberPositions.map {
+                                freshMembers.map {
                                     ConvoyLatLng(it.latitude, it.longitude)
                                 },
                         )
@@ -4221,6 +4233,7 @@ fun AuthenticatedApp(
                             ConvoyMapAwarenessOverlay(
                                 mapSurface = mapSurface,
                                 members = convoyMemberPositions,
+                                focusFitActive = convoyFocusMode == ConvoyFocusMode.Convoy,
                             )
                         }
                     } else {
@@ -4261,6 +4274,7 @@ fun AuthenticatedApp(
                                 ConvoyMapAwarenessOverlay(
                                     mapSurface = projection,
                                     members = convoyMemberPositions,
+                                    focusFitActive = convoyFocusMode == ConvoyFocusMode.Convoy,
                                 )
                             }
                             if (liveLayerPlan.nearby) {

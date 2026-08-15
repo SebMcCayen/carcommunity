@@ -261,10 +261,25 @@ data class MapCrownMarker(
 /**
  * A point in the map view's own pixel space, as the renderer projected it.
  * Origin is the view's top-left, y grows downward.
+ *
+ * [trustworthy] is the renderer's own verdict on whether this pixel is an HONEST
+ * projection of the coordinate or a fold/clamp of a point with no real screen
+ * position (behind a tilted camera / beyond the horizon / off the projectable
+ * globe). It is computed by a coordinate round trip in the surface (see
+ * `ConvoyEdgeGeometry.projectionRoundTrips` and `MapProjection.screenPositionFor`)
+ * and is the deterministic fix for the "off-screen live user stuck in the
+ * top-left corner" bug: on a pitched map `pixelForCoordinate` does not fail for a
+ * behind-camera point, it returns a folded pixel (sometimes clamped to the origin
+ * corner), and a bare bounds test then pins a chip there. A false [trustworthy]
+ * means "this (x, y) is a fold — do not place anything at it": the nearby overlay
+ * hides the chip and the convoy overlay draws an edge arrow from bearing instead.
+ * Defaults true so a renderer that cannot self-assess (the stub, older callers)
+ * is taken at face value.
  */
 data class MapScreenPoint(
     val x: Float,
     val y: Float,
+    val trustworthy: Boolean = true,
 )
 
 /**
@@ -392,16 +407,27 @@ interface MapProjection {
 
     /**
      * Project a geographic coordinate into the map view's pixel space, or null
-     * when there is no map to project with (not composed, no style, or the stub).
+     * when there is no map to project with (not composed, no style, or the stub),
+     * or the projection is non-finite.
      *
      * This is the renderer's OWN projection, deliberately, because it is the only
      * thing that accounts exactly for zoom, rotation AND pitch. Reimplementing it
      * would mean reimplementing the camera's projection matrix.
      *
-     * Two caveats the caller must handle, both documented on
-     * `ConvoyEdgeGeometry.isProjectionTrustworthy`: the returned point may be far
-     * outside the viewport, and for a coordinate behind a TILTED camera it may be
-     * folded back into view rather than being honestly off-screen.
+     * A non-null result carries [MapScreenPoint.trustworthy]. The pixel may be far
+     * OUTSIDE the viewport (a coordinate genuinely off to one side — the caller
+     * decides on/off-screen with the viewport rectangle), and it may be UNTRUST-
+     * WORTHY: on a pitched map a coordinate behind the camera / beyond the horizon
+     * has no honest screen position, and `pixelForCoordinate` does not fail — it
+     * FOLDS or CLAMPS the point back into view (e.g. to the origin corner), which
+     * is the "off-screen live user stuck in the top-left corner" bug. The
+     * implementation detects that with a coordinate round trip (see
+     * `ConvoyEdgeGeometry.projectionRoundTrips`) and returns the folded pixel with
+     * `trustworthy = false`, so a caller can BOTH refuse to place a marker there
+     * AND log the raw pixel. The nearby-sharer overlay hides an untrustworthy
+     * point; the convoy overlay treats it as OFF-SCREEN and draws its edge arrow
+     * from the member's bearing (see `ConvoyArrowPlanner.plan`), which never
+     * depends on the folded pixel.
      */
     fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint?
 }
