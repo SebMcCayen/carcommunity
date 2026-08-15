@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.live
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -75,6 +76,11 @@ fun NearbyLiveOverlay(
     mapSurface: MapProjection,
     sharers: List<LiveMarker>,
     modifier: Modifier = Modifier,
+    // Tapping a sharer's car-photo chip raises that sharer so the host can open
+    // the profile sub-menu popup. Null (the default) keeps the chips purely
+    // decorative — the pre-existing behaviour — so a caller with no profile
+    // navigation to offer is unchanged.
+    onSharerTap: ((LiveMarker) -> Unit)? = null,
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
@@ -141,6 +147,7 @@ fun NearbyLiveOverlay(
                 centreY = point.y,
                 contentDescription =
                     stringResource(R.string.nearby_liveSharerOnMap, sharer.spokenName()),
+                onClick = onSharerTap?.let { tap -> { tap(sharer) } },
                 modifier = Modifier.testTag(NEARBY_LIVE_CHIP_TAG + sharer.uid),
             )
         }
@@ -168,6 +175,9 @@ private fun NearbySharerChip(
     centreY: Float,
     contentDescription: String,
     modifier: Modifier = Modifier,
+    // When non-null the chip becomes tappable (opens the profile sub-menu); null
+    // leaves it decorative, so the semantics/layout are otherwise unchanged.
+    onClick: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val chipPx = with(density) { CHIP_SIZE.toPx() }
@@ -186,6 +196,13 @@ private fun NearbySharerChip(
                     )
                 }
                 .size(CHIP_SIZE)
+                .then(
+                    if (onClick != null) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
                 .semantics { this.contentDescription = contentDescription },
         contentAlignment = Alignment.Center,
     ) {

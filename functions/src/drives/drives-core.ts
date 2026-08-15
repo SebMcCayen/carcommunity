@@ -49,6 +49,12 @@ export const DRIVE_TITLE_MAX_LENGTH = 200;
 /** Bound the submitted track: ~5.5 h at 1 Hz. Clients downsample beyond it. */
 export const MAX_ROUTE_POINTS = 20_000;
 export const SOURCE_SESSION_ID_MAX_LENGTH = 128;
+/**
+ * Hard cap on the denormalized convoy roster stored on a ride. Convoys are small
+ * friend groups; this only bounds a hostile/corrupt payload. Client parity:
+ * ConvoyDriveMembers.MAX_MEMBERS.
+ */
+export const CONVOY_MEMBERS_MAX = 24;
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -99,6 +105,28 @@ const saveDriveInputSchema = z
       .refine((id) => id !== '.' && id !== '..')
       .optional(),
     carImagePath: z.string().trim().min(1).max(500).optional(),
+    /**
+     * The OTHER members of the convoy this drive was part of, denormalized by the
+     * client at save time (uid + optional display name + optional avatar path) so
+     * the History card can show who you drove with without an extra read — the
+     * same trade `carImagePath` makes. Optional and backward-compatible: a solo
+     * drive or an older client simply omits it. Bounded to [CONVOY_MEMBERS_MAX]
+     * so a huge or hostile roster can't bloat the ride document, with each field
+     * length-capped and the uid Firestore-safe. Client mirror:
+     * apps/android/.../drives/SavedDrive.kt ConvoyDriveMembers.
+     */
+    convoyMembers: z
+      .array(
+        z
+          .object({
+            uid: z.string().trim().min(1).max(300),
+            displayName: z.string().trim().min(1).max(200).optional(),
+            avatarPath: z.string().trim().min(1).max(500).optional(),
+          })
+          .strict(),
+      )
+      .max(CONVOY_MEMBERS_MAX)
+      .optional(),
   })
   .strict();
 
@@ -276,6 +304,10 @@ export function buildRideDocument(
     // when no car was chosen. carImagePath is what the History card renders.
     vehicleId: input.vehicleId ?? null,
     carImagePath: input.carImagePath ?? null,
+    // Who this drive was driven with — the convoy roster, denormalized so the
+    // History card needs no extra read. Empty array (not null) on a solo drive
+    // or an older client, so the read side is a plain "no members" list.
+    convoyMembers: input.convoyMembers ?? [],
     createdAt: serverTimestamp(),
   };
 }

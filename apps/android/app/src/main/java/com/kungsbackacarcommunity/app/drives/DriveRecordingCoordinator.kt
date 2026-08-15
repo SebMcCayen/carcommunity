@@ -75,6 +75,12 @@ class DriveRecordingCoordinator(
      */
     private val vehicleId: String? = null,
     /**
+     * The other members of the convoy this drive is part of, recorded on the saved
+     * drive so History can show who you drove with. Empty on a solo/manual drive.
+     * Passed straight through to the [DriveRecorder] the same way the car photo is.
+     */
+    private val convoyMembers: List<ConvoyDriveMember> = emptyList(),
+    /**
      * Persists the in-flight recording to disk so it survives the OS killing the
      * backgrounded process, and lets a relaunched-but-still-live session RESUME the
      * same drive instead of starting an empty one (#849). Null in a config-less / CI
@@ -191,7 +197,7 @@ class DriveRecordingCoordinator(
             // list + running distance exactly.
             val started = restored.startedAtMillis
             val rebuilt =
-                DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId)
+                DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId, convoyMembers = convoyMembers)
             restored.points.forEach { rebuilt.addPoint(it) }
             recorder = rebuilt
             startedAtMillis = started
@@ -208,7 +214,7 @@ class DriveRecordingCoordinator(
         }
         val started = clock()
         recorder =
-            DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId)
+            DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId, convoyMembers = convoyMembers)
         startedAtMillis = started
         stoppedAtMillis = null
         pendingJournalPoints.clear()

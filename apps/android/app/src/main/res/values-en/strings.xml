@@ -548,6 +548,9 @@
     <string name="userSearch_openProfile">Open profile</string>
     <string name="nearby_liveSharerOnMap">%1$s is sharing live nearby</string>
     <string name="nearby_unknownSharer">Someone nearby</string>
+    <string name="nearby_visitProfile">Visit profile</string>
+    <string name="nearby_sharerPoints">%1$s %2$s</string>
+    <string name="nearby_sharerPopupClose">Close</string>
     <string name="convoy_title">Convoys</string>
     <string name="convoy_createAction">Create a convoy</string>
     <string name="convoy_invitesTitle">Convoy invites</string>
@@ -752,6 +755,8 @@
     <string name="savedDrives_maxSpeed">Highest speed</string>
     <string name="savedDrives_maxSpeedShort">Max %1$s</string>
     <string name="savedDrives_carPhotoDescription">Car that was driven</string>
+    <string name="savedDrives_convoyDroveWith">Drove with %1$s</string>
+    <string name="savedDrives_convoyMemberUnknown">Member</string>
     <string name="savedDrives_date">Date</string>
     <string name="savedDrives_timeRange">Time</string>
     <string name="savedDrives_shareAction">Share drive</string>

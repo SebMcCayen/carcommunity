@@ -596,7 +596,10 @@
   },
   "nearby": {
     "liveSharerOnMap": "%1$s is sharing live nearby",
-    "unknownSharer": "Someone nearby"
+    "unknownSharer": "Someone nearby",
+    "visitProfile": "Visit profile",
+    "sharerPoints": "%1$s %2$s",
+    "sharerPopupClose": "Close"
   },
   "convoy": {
     "title": "Convoys",
@@ -809,6 +812,8 @@
     "maxSpeed": "Highest speed",
     "maxSpeedShort": "Max %1$s",
     "carPhotoDescription": "Car that was driven",
+    "convoyDroveWith": "Drove with %1$s",
+    "convoyMemberUnknown": "Member",
     "date": "Date",
     "timeRange": "Time",
     "shareAction": "Share drive",

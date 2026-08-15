@@ -141,6 +141,11 @@ object SingleSessionRecording {
         // Garage-vehicle id of the car being driven, recorded on the saved drive so
         // it links back to the exact vehicle. Null when the sharer has no car.
         vehicleId: String? = null,
+        // The other members of the convoy this session belongs to, recorded on the
+        // saved drive so History can show who you drove with. Empty when this is a
+        // solo session (not a convoy drive). Captured here at session start, like
+        // the car photo, and denormalized onto the ride document.
+        convoyMembers: List<ConvoyDriveMember> = emptyList(),
         // Persists the in-flight recording to disk so a process kill mid-drive does
         // not lose it — a relaunched-but-still-live session RESUMES the same drive
         // (#849). Null in a config-less / CI build; the recording is then
@@ -172,6 +177,7 @@ object SingleSessionRecording {
                 uploadScope = scope,
                 carImagePath = carImagePath,
                 vehicleId = vehicleId,
+                convoyMembers = convoyMembers,
                 journal = journal,
             )
         ownerUid = uid

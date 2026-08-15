@@ -248,6 +248,14 @@ class DriveRecorder(
      * or on a manual recording.
      */
     private val vehicleId: String? = null,
+    /**
+     * The other members of the convoy this drive is part of, recorded on the
+     * saved drive so the History card can show who you drove with. Empty on a
+     * solo drive or a manual recording — the field is then omitted from the
+     * payload entirely. Captured once when the recording begins (same as
+     * [carImagePath]); an empty roster keeps the drive a plain solo drive.
+     */
+    private val convoyMembers: List<ConvoyDriveMember> = emptyList(),
 ) {
     private val points = ArrayList<RecordedPoint>()
 
@@ -364,6 +372,12 @@ class DriveRecorder(
         // optional and a blank string would be rejected by the callable schema.
         vehicleId?.takeIf { it.isNotBlank() }?.let { request["vehicleId"] = it }
         carImagePath?.takeIf { it.isNotBlank() }?.let { request["carImagePath"] = it }
+        // Who this drive was driven with — only when it was a convoy drive. The
+        // shared wire shape caps + de-dupes the roster; an empty list omits the
+        // field so a solo drive's payload is byte-for-byte what it was before.
+        ConvoyDriveMembers.toRequestList(convoyMembers)
+            .takeIf { it.isNotEmpty() }
+            ?.let { request["convoyMembers"] = it }
         return request
     }
 
