@@ -661,7 +661,12 @@ class MapboxMapSurface : MapSurface {
             val cameraState = mapboxMap.cameraState
             val metersPerPixel =
                 ConvoyEdgeGeometry.metersPerPixel(
-                    latitude = cameraState.center.latitude(),
+                    // The TARGET's latitude, not the camera centre's: the tolerance
+                    // measures pixel resolution at the point being round-tripped, and
+                    // web-mercator m/px varies with latitude. Using the camera centre
+                    // would skew the tolerance for a target far north/south of it and
+                    // could misclassify the projection.
+                    latitude = latitude,
                     zoom = cameraState.zoom,
                 )
             val trustworthy =

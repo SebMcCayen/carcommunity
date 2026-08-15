@@ -174,7 +174,7 @@ object MapAwarenessDiagnostics {
      * returns true exactly once, the first time the running fault count crosses
      * [escalateAfter], and the caller then fires a single aggregate report.
      *
-     * One folded projection is weather (a real pan off-screen, one settling
+     * One faulty projection is weather (a real pan off-screen, one settling
      * frame); a burst is a fault. The counts and worst viewport are retained for
      * the escalated report and for a future diagnostics dump; the buffer never
      * leaves the device.
@@ -227,7 +227,7 @@ object MapAwarenessDiagnostics {
 
             /**
              * Chip projection faults in one map session before a single aggregate
-             * report is filed. A handful of folded frames while panning is normal;
+             * report is filed. A handful of faulty frames while panning is normal;
              * a run of them is the bug pinning a chip to a corner.
              */
             const val ESCALATE_AFTER_FAULTS = 6
@@ -326,7 +326,7 @@ object MapAwarenessReport {
 
     /**
      * The dominant fault verdict, used as the report `code` so recurrences of the
-     * same shape (corner-clamp vs generic fold) bump ONE issue.
+     * same shape (corner-clamp, generic fold, or non-finite) bump ONE issue.
      */
     fun dominantFault(
         counts: Map<MapAwarenessDiagnostics.ChipProjectionVerdict, Int>,
@@ -344,9 +344,11 @@ object MapAwarenessReport {
     ): String = dominantFault(counts)?.name ?: "UNKNOWN"
 
     /**
-     * One line for the off-screen-chip fault: how many chip projections folded
-     * this session, the per-reason breakdown, and the surface size band — no
-     * coordinate, no uid.
+     * One line for the off-screen-chip fault: how many chip projections were
+     * faulty this session, the per-reason breakdown, and the surface size band —
+     * no coordinate, no uid. "Faulty" is deliberately general: the counted set is
+     * every [MapAwarenessDiagnostics.isFault] verdict, which is a fold, a corner
+     * clamp OR a non-finite projection — the per-reason breakdown names which.
      */
     fun chipMessage(
         faultTotal: Int,
@@ -361,7 +363,7 @@ object MapAwarenessReport {
                 .joinToString(", ") { "${it.key.name}=${it.value}" }
                 .ifEmpty { "none" }
         val fixes = if (faultTotal == 1) "projection" else "projections"
-        return "Off-screen live chip: $faultTotal folded/clamped $fixes on a " +
+        return "Off-screen live chip: $faultTotal faulty $fixes on a " +
             "${sizeBucket(viewportWidth, viewportHeight)} surface; reasons $reasons"
     }
 

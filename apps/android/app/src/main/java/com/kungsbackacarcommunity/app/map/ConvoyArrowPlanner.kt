@@ -190,11 +190,16 @@ object ConvoyArrowPlanner {
      * @param members every convoy member with a known live position, excluding
      *   the viewer.
      * @param project the map SDK's own coordinate→pixel projection. Returning
-     *   null means the renderer has no TRUSTWORTHY on-screen position (behind a
-     *   tilted camera / folded / clamped — see MapProjection.screenPositionFor):
-     *   the member is treated as OFF-SCREEN and gets an edge arrow from their
-     *   bearing, unless they are within [MIN_ARROW_DISTANCE_METERS] of the camera
-     *   centre (under the puck), in which case they get neither.
+     *   null covers every case with no honest pixel to place a marker at: no
+     *   map/style yet (the stub), OR no TRUSTWORTHY on-screen position (behind a
+     *   tilted camera / folded / clamped, which a call site may surface by dropping
+     *   a `MapScreenPoint.trustworthy == false` result) — see
+     *   MapProjection.screenPositionFor. In all of them the member is treated as
+     *   OFF-SCREEN and gets an edge arrow from their bearing, unless they are within
+     *   [MIN_ARROW_DISTANCE_METERS] of the camera centre (under the puck), in which
+     *   case they get neither. (A genuinely absent map is filtered upstream — the
+     *   overlay bails on a null camera — so in practice a null here means
+     *   off-screen, not "no map".)
      * @param cameraLatitude / [cameraLongitude] the camera centre — the origin
      *   every bearing is measured from, which is what makes the arrows agree
      *   with what is actually framed rather than with where the user's GPS is.
