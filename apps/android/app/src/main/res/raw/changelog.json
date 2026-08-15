@@ -2,6 +2,22 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 37,
+      "versionName": "0.8.26",
+      "releaseDate": "2026-08-14",
+      "highlights": [
+        "Kronjakten: kronor samlas nu in mer pålitligt när du står stilla",
+        "Garage: samla upp till 10 bilar",
+        "Sparade körningar bekräftas nu i en tydligare dialog"
+      ],
+      "changes": [
+        "Kronjakten: kronor samlas nu in mer pålitligt när du står stilla, och insamlingsknappen är tydligare",
+        "Garage: du kan nu lägga till upp till 10 bilar (tidigare 5), och Samlare-märket har fått en ny nivåstege",
+        "Körningar: när du sparar en körning bekräftas det nu i en tydlig dialog i stället för en snabb notis",
+        "Mindre förbättringar och tekniska uppdateringar under huven för fortsatt stöd på nyare Android-versioner"
+      ]
+    },
+    {
       "versionCode": 36,
       "versionName": "0.8.25",
       "releaseDate": "2026-08-13",
