@@ -1136,9 +1136,6 @@
     <string name="crownHunt_legendSpawnedBody">Appear on their own near places around the area, in different rarities (Common, Uncommon, Rare, Legendary) – the rarer the crown, the more KP. They have a time limit and disappear on their own when it runs out, even if no one collected them. A rare or legendary crown is taken by the first person to collect it and then disappears immediately for everyone else.</string>
     <string name="crownHunt_legendDisappearTitle">Does a crown disappear once I collect it?</string>
     <string name="crownHunt_legendDisappearBody">A crown you have already collected can\'t be collected again. Common and uncommon crowns can be collected by several members separately and stay on the map until their time runs out or they reach their limit. Exclusive crowns (rare and legendary) disappear for everyone the moment someone takes them.</string>
-    <!-- Kronjakt SHOP (Crown Hunt Shop, PR2) — behind the crownHuntPerks flag -->
-    <string name="crownHunt_tabHome">Crown Hunt</string>
-    <string name="crownHunt_tabShop">Shop</string>
     <string name="crownHunt_shopBalanceLabel">Your balance</string>
     <string name="crownHunt_shopIntro">Spend your Crown Points on perks. They land in your inventory — you use them in a later update.</string>
     <string name="crownHunt_shopLoading">Loading the shop…</string>

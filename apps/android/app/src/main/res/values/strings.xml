@@ -1136,9 +1136,6 @@
     <string name="crownHunt_legendSpawnedBody">Dyker upp av sig själva nära platser i området, i olika sällsynthet (Vanlig, Ovanlig, Sällsynt, Legendarisk) – ju sällsyntare, desto mer KP. De har en tidsgräns och försvinner av sig själva när den går ut, även om ingen hunnit ta dem. En sällsynt eller legendarisk krona tas av den första som samlar in den och försvinner då direkt för alla andra.</string>
     <string name="crownHunt_legendDisappearTitle">Försvinner en krona när jag samlat in den?</string>
     <string name="crownHunt_legendDisappearBody">En krona du redan samlat in kan du inte ta igen. Vanliga och ovanliga kronor kan flera medlemmar samla in var för sig och ligger kvar på kartan tills tiden går ut eller gränsen nås. Exklusiva kronor (sällsynta och legendariska) försvinner direkt för alla så fort någon har tagit dem.</string>
-    <!-- Kronjakt SHOP (Crown Hunt Shop, PR2) — behind the crownHuntPerks flag -->
-    <string name="crownHunt_tabHome">Kronjakt</string>
-    <string name="crownHunt_tabShop">Butik</string>
     <string name="crownHunt_shopBalanceLabel">Ditt saldo</string>
     <string name="crownHunt_shopIntro">Lägg dina Kronpoäng på perks. De hamnar i ditt förråd – du använder dem i en kommande uppdatering.</string>
     <string name="crownHunt_shopLoading">Laddar butiken…</string>
