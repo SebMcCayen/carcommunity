@@ -166,12 +166,21 @@ class FirebasePerkShopRepository private constructor(
  */
 private fun FirebaseFunctionsException.toPerkPurchaseException(): Throwable =
     when (code) {
-        FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
-            if (message?.contains("negative balance", ignoreCase = true) == true) {
+        FirebaseFunctionsException.Code.FAILED_PRECONDITION -> {
+            // Check BOTH message and details for the marker: the SDK may leave
+            // `message` null or the server may carry the reason in `details`.
+            // (A structured error code in the callable would be more robust — a
+            // follow-up; this widens the interim match.)
+            val marker = "negative balance"
+            val insufficient =
+                message?.contains(marker, ignoreCase = true) == true ||
+                    details?.toString()?.contains(marker, ignoreCase = true) == true
+            if (insufficient) {
                 PerkPurchaseInsufficientFundsException(this)
             } else {
                 PerkPurchaseUnavailableException(this)
             }
+        }
         else -> this
     }
 
