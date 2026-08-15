@@ -4138,20 +4138,26 @@ fun AuthenticatedApp(
                     // a parked convoy ages a silent member out even with the roster
                     // unchanged; using it AS the clock keeps the value that triggered
                     // the recompute and the value the filter reads identical.
-                    val freshMembers =
-                        ConvoyFocusPlanner.freshForFit(
-                            members = convoyMemberPositions,
-                            nowMillis = convoyFitStaleTick,
-                        )
+                    // Only do the staleness filter + mapping in Convoy mode: plan()
+                    // returns FollowSelf without reading memberPositions otherwise,
+                    // so computing them for every follow-mode tick is wasted work.
+                    val freshMemberPoints =
+                        if (convoyFocusMode == ConvoyFocusMode.Convoy) {
+                            ConvoyFocusPlanner
+                                .freshForFit(
+                                    members = convoyMemberPositions,
+                                    nowMillis = convoyFitStaleTick,
+                                )
+                                .map { ConvoyLatLng(it.latitude, it.longitude) }
+                        } else {
+                            emptyList()
+                        }
                     val plan =
                         ConvoyFocusPlanner.plan(
                             mode = convoyFocusMode,
                             ownPosition =
                                 ownLiveMarker?.let { ConvoyLatLng(it.latitude, it.longitude) },
-                            memberPositions =
-                                freshMembers.map {
-                                    ConvoyLatLng(it.latitude, it.longitude)
-                                },
+                            memberPositions = freshMemberPoints,
                         )
                     convoyFitActive = plan is ConvoyCameraPlan.FitConvoy
                     mapSurface.setConvoyFit(

@@ -166,20 +166,29 @@ fun NearbyLiveOverlay(
         // threshold. Keyed on the verdict list so a settled camera does not
         // re-record until something actually changes.
         LaunchedEffect(evaluation.second) {
+            // Record EVERY verdict from this settled frame first, THEN report — so
+            // the counts reflect the whole frame rather than a mid-loop partial
+            // state, and the report does not depend on sharer iteration order. One
+            // snapshot of faultTotal + counts feeds both the message and the dedup
+            // code, so they cannot describe different states.
+            var escalated = false
             evaluation.second.forEach { verdict ->
-                if (diagnosticsLog.recordChip(verdict)) {
-                    errorReporter?.report(
-                        feature = MapAwarenessReport.FEATURE_CHIP,
-                        message =
-                            MapAwarenessReport.chipMessage(
-                                faultTotal = diagnosticsLog.faultTotal(),
-                                counts = diagnosticsLog.verdictCounts(),
-                                viewportWidth = viewportWidth,
-                                viewportHeight = viewportHeight,
-                            ),
-                        code = MapAwarenessReport.chipCode(diagnosticsLog.verdictCounts()),
-                    )
-                }
+                if (diagnosticsLog.recordChip(verdict)) escalated = true
+            }
+            if (escalated) {
+                val faultTotal = diagnosticsLog.faultTotal()
+                val counts = diagnosticsLog.verdictCounts()
+                errorReporter?.report(
+                    feature = MapAwarenessReport.FEATURE_CHIP,
+                    message =
+                        MapAwarenessReport.chipMessage(
+                            faultTotal = faultTotal,
+                            counts = counts,
+                            viewportWidth = viewportWidth,
+                            viewportHeight = viewportHeight,
+                        ),
+                    code = MapAwarenessReport.chipCode(counts),
+                )
             }
         }
 
