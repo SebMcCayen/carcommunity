@@ -162,10 +162,17 @@ fun NearbyLiveOverlay(
         val onScreen = evaluation.first
 
         // Feed this settled frame's verdicts to the diagnostics log; escalate one
-        // aggregate report the first time folded/clamped projections cross the
-        // threshold. Keyed on the verdict list so a settled camera does not
-        // re-record until something actually changes.
-        LaunchedEffect(evaluation.second) {
+        // aggregate report the first time faulty projections cross the threshold.
+        //
+        // Keyed on the camera + roster + viewport (the SAME keys that recompute the
+        // evaluation), NOT on the verdict LIST: a chip stuck HIDDEN_CORNER_CLAMP
+        // every frame while the owner keeps panning produces a value-EQUAL verdict
+        // list each settle, and keying on that list would suppress re-recording, so
+        // the faults would never accumulate to ESCALATE_AFTER_FAULTS — defeating
+        // the burst detector on exactly the persistent stuck-chip case it exists to
+        // catch. Keying on the per-settle inputs records every settled frame; the
+        // one-shot guard in recordChip still fires the report only once per burst.
+        LaunchedEffect(snapshot, sharers, viewportSize, marginPx) {
             // Record EVERY verdict from this settled frame first, THEN report — so
             // the counts reflect the whole frame rather than a mid-loop partial
             // state, and the report does not depend on sharer iteration order. One

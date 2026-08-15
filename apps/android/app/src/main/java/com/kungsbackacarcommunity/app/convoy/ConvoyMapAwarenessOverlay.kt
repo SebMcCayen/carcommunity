@@ -231,7 +231,15 @@ fun ConvoyMapAwarenessOverlay(
             } else {
                 null
             }
-        LaunchedEffect(fitFrame) {
+        // Keyed on the per-settle inputs (camera snapshot + the staleness tick +
+        // whether the fit is active), NOT on `fitFrame`: ConvoyFitFrame is a data
+        // class, so consecutive settled frames with the same member/off-screen
+        // counts compare EQUAL and keying on it would suppress re-recording — the
+        // fitLog would never count a RUN of faulty fits (the escalation condition)
+        // while the off-screen count holds steady. Keying on the settle inputs
+        // records each settled frame; recordFrame's one-shot guard still reports
+        // only once per fit session.
+        LaunchedEffect(snapshot, staleTick, focusFitActive) {
             if (fitFrame == null) {
                 // The fit stopped being applied (mode off, panned away, or nothing
                 // left to fit). Start the next fit session clean: clear the counts

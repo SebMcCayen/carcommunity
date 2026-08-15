@@ -141,6 +141,22 @@ class MapAwarenessDiagnosticsTest {
     }
 
     @Test
+    fun `identical corner-clamp verdicts across updates accumulate and escalate once`() {
+        // The persistent stuck-chip case the overlay keying fix targets: the SAME
+        // HIDDEN_CORNER_CLAMP verdict recorded on every settled frame must keep
+        // accumulating toward the threshold (the overlay keys its effect on the
+        // camera/roster, not the verdict list, so identical verdicts still
+        // re-record), and the report must fire exactly once when it crosses.
+        val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 4)
+        var escalations = 0
+        repeat(10) {
+            if (log.recordChip(ChipProjectionVerdict.HIDDEN_CORNER_CLAMP)) escalations++
+        }
+        assertEquals(1, escalations)
+        assertEquals(10, log.faultTotal())
+    }
+
+    @Test
     fun `resetting the chip log re-arms the escalation`() {
         val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 1)
         assertTrue(log.recordChip(ChipProjectionVerdict.HIDDEN_FOLD))
@@ -170,6 +186,20 @@ class MapAwarenessDiagnosticsTest {
         assertEquals(3, summary.faultyFits)
         assertEquals(2, summary.worstOffScreenNonStale)
         assertEquals(5, summary.largestMemberCount)
+    }
+
+    @Test
+    fun `identical faulty fit frames across updates accumulate and escalate once`() {
+        // The convoy-fit analogue: consecutive settled frames with the same
+        // member/off-screen counts (a member stuck off-frame while the fit holds
+        // steady) must count as a RUN and escalate once, which is why the overlay
+        // keys its effect on the settle inputs rather than the data-class frame.
+        val log = MapAwarenessDiagnostics.ConvoyFitLog(escalateAfter = 3)
+        val frame = MapAwarenessDiagnostics.ConvoyFitFrame(memberCount = 4, offScreenNonStale = 1)
+        var escalations = 0
+        repeat(8) { if (log.recordFrame(frame)) escalations++ }
+        assertEquals(1, escalations)
+        assertEquals(8, log.summary().faultyFits)
     }
 
     // ---- public-safe report wording ----------------------------------------
