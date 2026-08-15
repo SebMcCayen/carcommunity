@@ -642,7 +642,7 @@ private fun BuyStatusBanner(buyStatus: PerkBuyStatus, items: List<PerkShopItem>)
     }
 }
 
-/** Swedish family label for a perk kind. */
+/** Resource id for a perk-kind's family label (localized sv/en). */
 private fun perkKindLabelRes(kind: PerkKind): Int =
     when (kind) {
         PerkKind.TRAP -> R.string.crownHunt_perkKindTrap
@@ -650,7 +650,7 @@ private fun perkKindLabelRes(kind: PerkKind): Int =
         PerkKind.BOOST -> R.string.crownHunt_perkKindBoost
     }
 
-/** The message string for a buy-failure reason. */
+/** Resource id for a buy-failure reason's message (localized sv/en). */
 private fun buyFailureMessageRes(reason: PerkBuyFailureReason): Int =
     when (reason) {
         PerkBuyFailureReason.INSUFFICIENT_FUNDS -> R.string.crownHunt_shopErrorInsufficient

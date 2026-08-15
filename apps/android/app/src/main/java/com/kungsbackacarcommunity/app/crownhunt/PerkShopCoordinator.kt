@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-/** Why a buy failed — selects the Swedish message the shop shows. */
+/** Why a buy failed — selects the (localized) message resource the shop shows. */
 enum class PerkBuyFailureReason {
     /** The member cannot afford the perk (client pre-check or server overdraft). */
     INSUFFICIENT_FUNDS,
