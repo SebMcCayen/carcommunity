@@ -76,9 +76,11 @@ import com.kungsbackacarcommunity.app.incidents.IncidentType
 import com.kungsbackacarcommunity.app.incidents.IncidentTypePickerDialog
 import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
+import com.kungsbackacarcommunity.app.location.LastKnownLocationStore
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import com.kungsbackacarcommunity.app.navigation.NavInitialCamera
 import com.kungsbackacarcommunity.app.shell.ChatCircleControl
 import com.kungsbackacarcommunity.app.shell.CircleControl
 import com.kungsbackacarcommunity.app.shell.CompassCircleControl
@@ -101,6 +103,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.ImageHolder
+import com.mapbox.maps.dsl.cameraOptions
 import com.mapbox.maps.extension.observable.eventdata.CameraChangedEventData
 import com.mapbox.maps.plugin.LocationPuck2D
 import com.mapbox.maps.plugin.PuckBearing
@@ -424,7 +427,27 @@ fun TurnByTurnNavScreen(
     val mapView =
         remember {
             MapboxOptions.accessToken = token
-            MapView(context)
+            MapView(context).also { view ->
+                // Open the camera AT the user's last-known location (or the
+                // Kungsbacka default) BEFORE the first GPS fix arrives. A bare
+                // MapView starts at Mapbox's world camera (lng/lat 0,0, zoom 0),
+                // so navigation used to open on a whole-globe view and then fly
+                // in once the follow camera got its first fix — a slow, jarring
+                // cross-globe animation. Setting the initial camera here means
+                // the map is already framed on the user; the NavigationCamera
+                // then just hands off to follow on the first fix below. Kept out
+                // of the follow/convoy-fit path on purpose.
+                val initial =
+                    NavInitialCamera.resolve(LastKnownLocationStore(context).read())
+                runCatching {
+                    view.mapboxMap.setCamera(
+                        cameraOptions {
+                            center(Point.fromLngLat(initial.longitude, initial.latitude))
+                            zoom(initial.zoom)
+                        },
+                    )
+                }
+            }
         }
     val maneuverView =
         remember {
@@ -1507,6 +1530,10 @@ private class TurnByTurnEngine(
      */
     private var styleLoadToken = 0
 
+    // Cache every fix so the NEXT map open (nav or home) starts right where the
+    // user is instead of flying in from the world view. Cheap last-write-wins.
+    private val lastKnownLocationStore = LastKnownLocationStore(context)
+
     private val viewportDataSource = MapboxNavigationViewportDataSource(mapView.mapboxMap)
     private val navigationCamera =
         NavigationCamera(mapView.mapboxMap, mapView.camera, viewportDataSource)
@@ -1993,6 +2020,9 @@ private class TurnByTurnEngine(
                     keyPoints = locationMatcherResult.keyPoints,
                 )
                 viewportDataSource.onLocationChanged(enhanced)
+                // Persist the fix so a later map open starts here, not at the
+                // world camera. Off the follow/convoy path; purely a disk write.
+                lastKnownLocationStore.save(enhanced.latitude, enhanced.longitude)
                 // Record this fix and decide the follow camera's bearing from it,
                 // so the map stays course-up while moving and holds the last
                 // road-aligned heading rather than chasing a stale course at low
