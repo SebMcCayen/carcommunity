@@ -59,6 +59,7 @@ import { buildDiscoveryFields, discoveryExpiresAt, shouldRefreshDiscovery } from
 import { MAX_VEHICLES_PER_USER } from '../garage/garage-core';
 import { trackLiveSessionDistance } from '../points/liveDistance';
 import { recordCrownActivity } from '../crownHunt/spawnActivity';
+import { processTrapDrains } from '../crownHunt/pvp-drain';
 import { MAX_INSTANCES_HOT } from '../shared/instanceLimits';
 
 const CALLABLE_OPTS = {
@@ -322,6 +323,26 @@ export const updatePosition = onCall(
         });
       }
     }
+
+    // Kronjakt PvP trap DRAIN (crownHunt/pvp-drain.ts).
+    //
+    // This member's new position is exactly the "a rival is here now" event a
+    // proximity trap needs, so the drain processor runs INLINE here rather than
+    // as a scheduled job. It finds armed traps within 100 m and, if this member
+    // is an eligible victim (not the placer, not shielded, not a new account,
+    // under the per-victim/per-day caps, past the 2h cooldown, not already
+    // caught by that trap), moves KP from victim → placer with source
+    // `perk_trap` — a source excluded from the leaderboard and the economy cap.
+    //
+    // BEST EFFORT + FLAG-GATED: processTrapDrains never throws and no-ops when
+    // `crownHuntPerks` is OFF, so PvP can never fail a position update — the
+    // same contract the crown-activity signal above lives under.
+    await processTrapDrains({
+      victimUid: actor.uid,
+      latitude: parsed.input.coordinate.latitude,
+      longitude: parsed.input.coordinate.longitude,
+      now,
+    });
 
     return { recordedAt: parsed.input.coordinate.recordedAt };
   },

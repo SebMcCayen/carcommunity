@@ -166,3 +166,188 @@ describe('perks-core display mirror', () => {
     }
   });
 });
+
+// ===========================================================================
+// PvP — DEPLOY/USE pure logic (Crown Hunt Shop PR3)
+// ===========================================================================
+
+import {
+  BOOST_MULTIPLIER,
+  MAX_ACTIVE_TRAPS_PER_USER,
+  MAX_TRAP_DEPLOYS_PER_DAY,
+  MAX_TRAP_EARN_KP_PER_DAY,
+  MAX_TRAP_LOSS_KP_PER_DAY,
+  MAX_VICTIMS_PER_TRAP,
+  NEW_ACCOUNT_IMMUNITY_DAYS,
+  TRAP_DRAIN_KP,
+  TRAP_DURATION_HOURS,
+  TRAP_RADIUS_METERS,
+  TRAP_SELF_SPACING_METERS,
+  VICTIM_COOLDOWN_HOURS,
+  deployRecordDocId,
+  hoursFromNow,
+  isNewAccountImmune,
+  isTimestampActive,
+  isWithinTrapRadius,
+  isWithinVictimCooldown,
+  parseDeployPerkInput,
+  resolveDrainAmount,
+  scopeDeployKey,
+  trapDeployCounterDocId,
+  trapDocId,
+  trapHasVictimRoom,
+  trapVictimMarkerId,
+} from './perks-core';
+
+const HOUR = 60 * 60 * 1000;
+const DAY = 24 * HOUR;
+
+describe('PvP constants match the owner-approved spec', () => {
+  it('pins every anti-abuse constant', () => {
+    expect(TRAP_RADIUS_METERS).toBe(100);
+    expect(TRAP_DRAIN_KP).toBe(15);
+    expect(TRAP_DURATION_HOURS).toBe(6);
+    expect(BOOST_MULTIPLIER).toBe(2);
+    expect(MAX_ACTIVE_TRAPS_PER_USER).toBe(1);
+    expect(MAX_TRAP_DEPLOYS_PER_DAY).toBe(3);
+    expect(TRAP_SELF_SPACING_METERS).toBe(300);
+    expect(MAX_VICTIMS_PER_TRAP).toBe(10);
+    expect(MAX_TRAP_EARN_KP_PER_DAY).toBe(150);
+    expect(MAX_TRAP_LOSS_KP_PER_DAY).toBe(45);
+    expect(VICTIM_COOLDOWN_HOURS).toBe(2);
+    expect(NEW_ACCOUNT_IMMUNITY_DAYS).toBe(7);
+  });
+});
+
+describe('hoursFromNow', () => {
+  it('adds the hours to now', () => {
+    const now = new Date('2026-08-16T00:00:00Z');
+    expect(hoursFromNow(now, 6).toISOString()).toBe('2026-08-16T06:00:00.000Z');
+  });
+});
+
+describe('isNewAccountImmune', () => {
+  const now = 10 * DAY;
+  it('is immune inside the 7-day window', () => {
+    expect(isNewAccountImmune(now - 6 * DAY, now)).toBe(true);
+    expect(isNewAccountImmune(now - 1, now)).toBe(true);
+  });
+  it('is not immune at or past 7 days', () => {
+    expect(isNewAccountImmune(now - 7 * DAY, now)).toBe(false);
+    expect(isNewAccountImmune(now - 8 * DAY, now)).toBe(false);
+  });
+  it('is not immune when the creation time is unknown', () => {
+    expect(isNewAccountImmune(null, now)).toBe(false);
+    expect(isNewAccountImmune(Number.NaN, now)).toBe(false);
+  });
+});
+
+describe('isWithinTrapRadius', () => {
+  it('accepts at or inside 100 m', () => {
+    expect(isWithinTrapRadius(0)).toBe(true);
+    expect(isWithinTrapRadius(99.9)).toBe(true);
+    expect(isWithinTrapRadius(100)).toBe(true);
+  });
+  it('rejects beyond 100 m and non-finite', () => {
+    expect(isWithinTrapRadius(100.1)).toBe(false);
+    expect(isWithinTrapRadius(Number.NaN)).toBe(false);
+    expect(isWithinTrapRadius(-1)).toBe(false);
+  });
+});
+
+describe('isWithinVictimCooldown', () => {
+  const now = 100 * HOUR;
+  it('is on cooldown inside 2h', () => {
+    expect(isWithinVictimCooldown(now - HOUR, now)).toBe(true);
+    expect(isWithinVictimCooldown(now - 1, now)).toBe(true);
+  });
+  it('is clear at or past 2h, or with no prior drain', () => {
+    expect(isWithinVictimCooldown(now - 2 * HOUR, now)).toBe(false);
+    expect(isWithinVictimCooldown(now - 3 * HOUR, now)).toBe(false);
+    expect(isWithinVictimCooldown(null, now)).toBe(false);
+  });
+});
+
+describe('isTimestampActive', () => {
+  const now = 1000;
+  it('is active only for a future, finite expiry', () => {
+    expect(isTimestampActive(1001, now)).toBe(true);
+    expect(isTimestampActive(1000, now)).toBe(false);
+    expect(isTimestampActive(999, now)).toBe(false);
+    expect(isTimestampActive(null, now)).toBe(false);
+    expect(isTimestampActive(Number.POSITIVE_INFINITY, now)).toBe(false);
+  });
+});
+
+describe('resolveDrainAmount', () => {
+  it('drains the full 15 KP when nothing is capped', () => {
+    expect(resolveDrainAmount({ victimBalance: 100, victimLossToday: 0, placerEarnToday: 0 })).toBe(15);
+  });
+  it('never exceeds the victim balance (ledger cannot go negative)', () => {
+    expect(resolveDrainAmount({ victimBalance: 7, victimLossToday: 0, placerEarnToday: 0 })).toBe(7);
+    expect(resolveDrainAmount({ victimBalance: 0, victimLossToday: 0, placerEarnToday: 0 })).toBe(0);
+  });
+  it('clamps to the victim daily loss room', () => {
+    // 45 - 40 = 5 left today.
+    expect(resolveDrainAmount({ victimBalance: 100, victimLossToday: 40, placerEarnToday: 0 })).toBe(5);
+    expect(resolveDrainAmount({ victimBalance: 100, victimLossToday: 45, placerEarnToday: 0 })).toBe(0);
+  });
+  it('clamps to the placer daily earn room', () => {
+    // 150 - 145 = 5 left today.
+    expect(resolveDrainAmount({ victimBalance: 100, victimLossToday: 0, placerEarnToday: 145 })).toBe(5);
+    expect(resolveDrainAmount({ victimBalance: 100, victimLossToday: 0, placerEarnToday: 150 })).toBe(0);
+  });
+  it('takes the tightest of every cap', () => {
+    expect(resolveDrainAmount({ victimBalance: 3, victimLossToday: 43, placerEarnToday: 148 })).toBe(2);
+  });
+});
+
+describe('trapHasVictimRoom', () => {
+  it('has room below 10 distinct victims and none at/over', () => {
+    expect(trapHasVictimRoom(0)).toBe(true);
+    expect(trapHasVictimRoom(9)).toBe(true);
+    expect(trapHasVictimRoom(10)).toBe(false);
+    expect(trapHasVictimRoom(11)).toBe(false);
+  });
+});
+
+describe('deploy doc-id builders', () => {
+  it('scopes the deploy key deterministically and per-user', () => {
+    const a = scopeDeployKey('u1', 'k1');
+    expect(a).toBe(scopeDeployKey('u1', 'k1'));
+    expect(a).not.toBe(scopeDeployKey('u2', 'k1'));
+    expect(a).not.toBe(scopeDeployKey('u1', 'k2'));
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
+  });
+  it('namespaces the trap doc, deploy record, and per-(trap,victim) marker', () => {
+    const scoped = scopeDeployKey('u1', 'k1');
+    expect(trapDocId(scoped)).toMatch(/^trap_[0-9a-f]{64}$/);
+    expect(deployRecordDocId(scoped)).toMatch(/^deploy_[0-9a-f]{64}$/);
+    const m = trapVictimMarkerId('trap1', 'victim1');
+    expect(m).toBe(trapVictimMarkerId('trap1', 'victim1'));
+    expect(m).not.toBe(trapVictimMarkerId('trap1', 'victim2'));
+    expect(m).not.toBe(trapVictimMarkerId('trap2', 'victim1'));
+  });
+  it('builds day-scoped counter ids', () => {
+    expect(trapDeployCounterDocId('u1', '2026-08-16')).toBe('u1__2026-08-16');
+  });
+});
+
+describe('parseDeployPerkInput', () => {
+  it('accepts a trap with coordinates', () => {
+    const r = parseDeployPerkInput({ perkId: 'spike_strip', latitude: 59.3, longitude: 18.1, idempotencyKey: 'k1' });
+    expect(r.ok).toBe(true);
+  });
+  it('accepts shield/boost without coordinates', () => {
+    expect(parseDeployPerkInput({ perkId: 'shield', idempotencyKey: 'k1' }).ok).toBe(true);
+    expect(parseDeployPerkInput({ perkId: 'boost', idempotencyKey: 'k1' }).ok).toBe(true);
+  });
+  it('rejects a missing perkId or idempotency key', () => {
+    expect(parseDeployPerkInput({ idempotencyKey: 'k1' }).ok).toBe(false);
+    expect(parseDeployPerkInput({ perkId: 'shield' }).ok).toBe(false);
+  });
+  it('rejects out-of-range coordinates and unknown extra fields', () => {
+    expect(parseDeployPerkInput({ perkId: 'spike_strip', latitude: 999, longitude: 0, idempotencyKey: 'k1' }).ok).toBe(false);
+    expect(parseDeployPerkInput({ perkId: 'shield', idempotencyKey: 'k1', costKp: 0 }).ok).toBe(false);
+  });
+});

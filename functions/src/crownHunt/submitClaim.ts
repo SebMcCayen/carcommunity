@@ -59,6 +59,7 @@ import {
   type CrownHuntRepeatRule,
 } from './crownhunt-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { resolveActiveBoostMultiplier } from './pvp-drain';
 
 /**
  * Thrown inside the award transaction's read guard when a deterministic
@@ -504,7 +505,13 @@ export const submitClaim = onCall(
     //     second concurrent award for the same window loses (already_claimed);
     //   - crownHuntDailyClaims/{uid__utcDay}: a counter read in the read guard
     //     and incremented here, so the daily cap holds under concurrency.
-    const rewardPoints = point!.rewardPoints as number;
+    // Kronjakt PvP BOOST (Dubbla Poäng): a hand-placed crown also pays 2x while
+    // the collector's boost is active. Best-effort + flag-gated (returns 1 when
+    // crownHuntPerks is OFF), so it is a no-op until PvP is enabled; the doubled
+    // award keeps `source: 'crown_hunt'`, so the daily fold charges the full
+    // boosted amount to the 300/day cap.
+    const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
+    const rewardPoints = (point!.rewardPoints as number) * boostMultiplier;
     const repeatRule = point!.repeatRule as CrownHuntRepeatRule;
     // Distinct-collector cap is read AUTHORITATIVELY from the in-transaction
     // point snapshot in the read guard below (not from the non-transactional

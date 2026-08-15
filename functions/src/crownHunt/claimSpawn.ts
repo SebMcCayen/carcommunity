@@ -89,6 +89,7 @@ import {
   type CrownSpawnClaimResult,
 } from './crown-spawn-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { resolveActiveBoostMultiplier } from './pvp-drain';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -501,7 +502,14 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // writes so the SAME member cannot double-collect, while two DIFFERENT members
   // touch different collector docs and so never contend). The pre-transaction
   // reads in step 4/4b are only fast paths, never the authority.
-  const rewardPoints = spawn!.rewardPoints as number;
+  // Kronjakt PvP BOOST (Dubbla Poäng): while a member's boost is active the
+  // crown pays 2x. Best-effort + flag-gated (returns 1 when crownHuntPerks is
+  // OFF or on any error), so this is a no-op until PvP is switched on. The
+  // doubled amount is still credited with `source: 'crown_hunt'`, so the
+  // existing daily fold charges the FULL boosted amount to the 300/day cap —
+  // the bonus half cannot break the economy.
+  const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
+  const rewardPoints = (spawn!.rewardPoints as number) * boostMultiplier;
   const dailyCounterRef = db
     .collection('crownSpawnDailyClaims')
     .doc(spawnDailyCounterDocId(uid, now));
