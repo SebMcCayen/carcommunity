@@ -212,4 +212,31 @@ class MapAwarenessDiagnosticsTest {
         assertEquals("unknown", MapAwarenessReport.sizeBucket(Float.NaN, 100f))
         assertEquals("unknown", MapAwarenessReport.memberBucket(0))
     }
+
+    @Test
+    fun `a convoy of exactly one other member is its own bucket, not folded into 2-3`() {
+        assertEquals("1", MapAwarenessReport.memberBucket(1))
+        assertEquals("2-3", MapAwarenessReport.memberBucket(2))
+        assertEquals("2-3", MapAwarenessReport.memberBucket(3))
+        assertEquals("4-8", MapAwarenessReport.memberBucket(4))
+    }
+
+    @Test
+    fun `a tie for the dominant fault resolves deterministically by verdict name`() {
+        // Equal counts must not let map iteration order pick the dedup code, or one
+        // fault would split into several GitHub issues. The tie-break is by name, so
+        // both orderings yield the same code regardless of insertion order.
+        val counts =
+            mapOf(
+                ChipProjectionVerdict.HIDDEN_NONFINITE to 4,
+                ChipProjectionVerdict.HIDDEN_FOLD to 4,
+            )
+        val reversed =
+            mapOf(
+                ChipProjectionVerdict.HIDDEN_FOLD to 4,
+                ChipProjectionVerdict.HIDDEN_NONFINITE to 4,
+            )
+        assertEquals("HIDDEN_NONFINITE", MapAwarenessReport.chipCode(counts))
+        assertEquals(MapAwarenessReport.chipCode(counts), MapAwarenessReport.chipCode(reversed))
+    }
 }

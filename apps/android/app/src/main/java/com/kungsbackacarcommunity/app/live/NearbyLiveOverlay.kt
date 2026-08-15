@@ -116,8 +116,9 @@ fun NearbyLiveOverlay(
         // `pixelForCoordinate` folds/clamps that point back into view (sometimes
         // to the origin corner). The renderer's own round-trip verdict
         // ([MapScreenPoint.trustworthy]) rejects that deterministically, and
-        // [NearbyChipVisibility.isVisible] is kept as a secondary bearing check.
-        // Every sharer's verdict is also classified for diagnostics.
+        // [MapAwarenessDiagnostics.classifyChipProjection] keeps the bearing
+        // cross-examination ([ConvoyEdgeGeometry.isProjectionTrustworthy]) as a
+        // secondary check while naming each verdict for diagnostics.
         val evaluation =
             remember(snapshot, sharers, viewportSize, marginPx) {
                 val visible = mutableListOf<Pair<LiveMarker, MapScreenPoint>>()

@@ -333,7 +333,10 @@ object MapAwarenessReport {
     ): MapAwarenessDiagnostics.ChipProjectionVerdict? =
         counts.entries
             .filter { MapAwarenessDiagnostics.isFault(it.key) }
-            .maxByOrNull { it.value }
+            // Break ties by verdict name, NOT by map iteration order: this result
+            // becomes the report's dedup `code`, so a tie that resolved differently
+            // between runs would split one fault into several GitHub issues.
+            .maxWithOrNull(compareBy({ it.value }, { it.key.name }))
             ?.key
 
     fun chipCode(
@@ -388,10 +391,15 @@ object MapAwarenessReport {
         }
     }
 
-    /** Coarse group-size band. */
+    /**
+     * Coarse group-size band. "1" is its own bucket because a convoy of exactly
+     * one other member is common (the viewer plus one), and folding it into "2-3"
+     * would mislabel that count.
+     */
     fun memberBucket(count: Int): String =
         when {
             count <= 0 -> "unknown"
+            count == 1 -> "1"
             count <= 3 -> "2-3"
             count <= 8 -> "4-8"
             else -> "9+"

@@ -4096,6 +4096,14 @@ fun AuthenticatedApp(
                 // returns when it has too little to fit, so the restore path is the
                 // same code as the never-enabled path rather than a special case
                 // somebody can forget to write.
+                // True only when a real convoy FIT is being framed — i.e. the plan
+                // is actually FitConvoy, not merely "focus mode is on". The mode can
+                // be Convoy while the plan still falls back to FollowSelf (own
+                // position unknown + a single member, nobody sharing yet), and the
+                // convoy-fit diagnostics must not count those follow frames as the
+                // fit failing to frame anyone. Gates the overlay's fit telemetry.
+                var convoyFitActive by remember { mutableStateOf(false) }
+
                 LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions) {
                     // Exclude members whose last position is stale (lost signal /
                     // left behind) BEFORE fitting, matching what the off-screen
@@ -4119,6 +4127,7 @@ fun AuthenticatedApp(
                                     ConvoyLatLng(it.latitude, it.longitude)
                                 },
                         )
+                    convoyFitActive = plan is ConvoyCameraPlan.FitConvoy
                     mapSurface.setConvoyFit(
                         points =
                             when (plan) {
@@ -4233,7 +4242,7 @@ fun AuthenticatedApp(
                             ConvoyMapAwarenessOverlay(
                                 mapSurface = mapSurface,
                                 members = convoyMemberPositions,
-                                focusFitActive = convoyFocusMode == ConvoyFocusMode.Convoy,
+                                focusFitActive = convoyFitActive,
                             )
                         }
                     } else {
@@ -4274,7 +4283,7 @@ fun AuthenticatedApp(
                                 ConvoyMapAwarenessOverlay(
                                     mapSurface = projection,
                                     members = convoyMemberPositions,
-                                    focusFitActive = convoyFocusMode == ConvoyFocusMode.Convoy,
+                                    focusFitActive = convoyFitActive,
                                 )
                             }
                             if (liveLayerPlan.nearby) {

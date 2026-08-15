@@ -232,11 +232,23 @@ fun ConvoyMapAwarenessOverlay(
                 null
             }
         LaunchedEffect(fitFrame) {
-            if (fitFrame != null && fitLog.recordFrame(fitFrame)) {
+            if (fitFrame == null) {
+                // The fit stopped being applied (mode off, panned away, or nothing
+                // left to fit). Start the next fit session clean: clear the counts
+                // AND the one-shot escalation flag, so a later fit can report again
+                // and does not inherit a previous session's tallies.
+                fitLog.reset()
+                return@LaunchedEffect
+            }
+            if (fitLog.recordFrame(fitFrame)) {
+                // ONE summary snapshot for both the message and the dedup code, so
+                // they cannot describe different states if a concurrent frame
+                // mutates the log between two reads.
+                val summary = fitLog.summary()
                 fitErrorReporter?.report(
                     feature = MapAwarenessReport.FEATURE_FIT,
-                    message = MapAwarenessReport.fitMessage(fitLog.summary()),
-                    code = MapAwarenessReport.fitCode(fitLog.summary()),
+                    message = MapAwarenessReport.fitMessage(summary),
+                    code = MapAwarenessReport.fitCode(summary),
                 )
             }
         }
