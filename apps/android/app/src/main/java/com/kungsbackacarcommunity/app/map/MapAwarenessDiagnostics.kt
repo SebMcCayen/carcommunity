@@ -22,15 +22,15 @@ import kotlin.math.hypot
  *
  * ## Privacy
  * Like the rejection log, nothing here is a coordinate or an identity. A verdict,
- * a viewport SIZE, and small counts describe the FAULT (a projection folded, a
- * member fell out of a fit) without describing WHERE anyone is.
+ * a viewport SIZE, and small counts describe the FAULT (a projection could not be
+ * placed honestly, a member fell out of a fit) without describing WHERE anyone is.
  */
 object MapAwarenessDiagnostics {
 
     /**
      * Why a live chip's projected pixel was (or was not) drawn this frame — the
-     * same decision [NearbyChipVisibility.isVisible] makes, but naming the reason
-     * so a hidden chip is diagnosable.
+     * draw/not-draw decision [classifyChipProjection] makes, naming the reason so a
+     * hidden chip is diagnosable.
      */
     enum class ChipProjectionVerdict {
         /** Projected honestly inside the (margin-expanded) viewport: drawn. */
@@ -39,7 +39,11 @@ object MapAwarenessDiagnostics {
         /** Projected honestly, but outside the viewport: hidden (nearby) / arrowed (convoy). */
         OFF_SCREEN,
 
-        /** Pixel was NaN / infinite: no honest position. */
+        /**
+         * No honest position at all: the projection was null (no map yet, the
+         * stub, or the seam declined a folded point) OR the pixel was NaN /
+         * infinite. Either way there is nothing to place.
+         */
         HIDDEN_NONFINITE,
 
         /**
@@ -362,8 +366,8 @@ object MapAwarenessReport {
                 .sortedByDescending { it.value }
                 .joinToString(", ") { "${it.key.name}=${it.value}" }
                 .ifEmpty { "none" }
-        val fixes = if (faultTotal == 1) "projection" else "projections"
-        return "Off-screen live chip: $faultTotal faulty $fixes on a " +
+        val projectionWord = if (faultTotal == 1) "projection" else "projections"
+        return "Off-screen live chip: $faultTotal faulty $projectionWord on a " +
             "${sizeBucket(viewportWidth, viewportHeight)} surface; reasons $reasons"
     }
 

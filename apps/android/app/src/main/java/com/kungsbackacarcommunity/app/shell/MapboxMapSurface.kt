@@ -657,26 +657,37 @@ class MapboxMapSurface : MapSurface {
             // raw folded pixel for diagnostics. The nearby overlay hides an
             // untrustworthy point; the convoy overlay treats it as OFF-SCREEN and
             // draws an edge arrow from the member's bearing (never from the pixel).
-            val back = mapboxMap.coordinateForPixel(screen)
             val cameraState = mapboxMap.cameraState
-            val metersPerPixel =
-                ConvoyEdgeGeometry.metersPerPixel(
-                    // The TARGET's latitude, not the camera centre's: the tolerance
-                    // measures pixel resolution at the point being round-tripped, and
-                    // web-mercator m/px varies with latitude. Using the camera centre
-                    // would skew the tolerance for a target far north/south of it and
-                    // could misclassify the projection.
-                    latitude = latitude,
-                    zoom = cameraState.zoom,
-                )
             val trustworthy =
-                ConvoyEdgeGeometry.projectionRoundTrips(
-                    originalLatitude = latitude,
-                    originalLongitude = longitude,
-                    unprojectedLatitude = back.latitude(),
-                    unprojectedLongitude = back.longitude(),
-                    metersPerPixel = metersPerPixel,
-                )
+                if (cameraState.pitch <= ROUND_TRIP_MAX_FLAT_PITCH_DEGREES) {
+                    // A top-down (2D) camera cannot fold a point behind itself:
+                    // every finite pixel is an honest projection (a point genuinely
+                    // off to one side just projects far outside the viewport, which
+                    // the caller's rectangle test handles). So skip the round trip —
+                    // this is the common case (flat fits, north-up 2D browsing) and
+                    // the coordinateForPixel call is pure per-projection overhead there.
+                    true
+                } else {
+                    val back = mapboxMap.coordinateForPixel(screen)
+                    val metersPerPixel =
+                        ConvoyEdgeGeometry.metersPerPixel(
+                            // The TARGET's latitude, not the camera centre's: the
+                            // tolerance measures pixel resolution at the point being
+                            // round-tripped, and web-mercator m/px varies with
+                            // latitude. Using the camera centre would skew the
+                            // tolerance for a target far north/south of it and could
+                            // misclassify the projection.
+                            latitude = latitude,
+                            zoom = cameraState.zoom,
+                        )
+                    ConvoyEdgeGeometry.projectionRoundTrips(
+                        originalLatitude = latitude,
+                        originalLongitude = longitude,
+                        unprojectedLatitude = back.latitude(),
+                        unprojectedLongitude = back.longitude(),
+                        metersPerPixel = metersPerPixel,
+                    )
+                }
             MapScreenPoint(x = x, y = y, trustworthy = trustworthy)
         }.getOrNull()
     }
@@ -2738,6 +2749,15 @@ class MapboxMapSurface : MapSurface {
          * possible, so a member who has driven to another city pins the zoom here
          * and simply falls off the edge (where the direction arrows pick them up).
          */
+        /**
+         * At or below this camera pitch the map is treated as flat (2D) for the
+         * projection round-trip in [screenPositionFor]: a top-down camera has no
+         * behind-camera fold, so the round trip is skipped. A degree of slack
+         * absorbs float noise around a nominally-0° flat fit without ever skipping
+         * the check on the tilted 3D map (~45°).
+         */
+        const val ROUND_TRIP_MAX_FLAT_PITCH_DEGREES = 1.0
+
         const val MIN_CONVOY_FIT_ZOOM = 8.0
 
         /**
