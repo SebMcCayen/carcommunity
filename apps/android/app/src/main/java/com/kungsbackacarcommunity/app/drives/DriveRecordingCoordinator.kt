@@ -222,7 +222,11 @@ class DriveRecordingCoordinator(
             stoppedAtMillis = null
             // Expose the resumed route so the host can re-seed the on-screen tail —
             // the map breadcrumb is memory-only and starts empty on a cold start.
-            resumedRoutePoints = restored.points
+            // Only the newest suffix is kept: the recorder already holds the full
+            // route (copied above), and the breadcrumb renders just its ~1 km window,
+            // so retaining the whole ~20k-point list here would double cold-start
+            // memory for nothing. The rest of `restored.points` can GC after start().
+            resumedRoutePoints = restored.points.takeLast(RESUMED_BREADCRUMB_MAX_POINTS)
             pendingJournalPoints.clear()
             lastJournalFlushMillis = clock()
             log.resumed(sourceSessionId, restored.points.size, started)
@@ -753,6 +757,14 @@ class DriveRecordingCoordinator(
          * idempotent per `sourceSessionId`, so the retries are safe.
          */
         const val DEFAULT_MAX_SAVE_ATTEMPTS = 3
+
+        /**
+         * Newest-suffix cap on [resumedRoutePoints] handed to the breadcrumb reseed
+         * on cold start. The breadcrumb renders only its ~1 km window; 3000 fixes far
+         * exceeds that at any realistic GPS cadence while keeping cold-start memory
+         * well below the recorder's full route (up to DriveRecorder.MAX_ROUTE_POINTS).
+         */
+        const val RESUMED_BREADCRUMB_MAX_POINTS = 3000
 
         /**
          * Flush the in-flight journal (#849) once this many fixes have batched up,
