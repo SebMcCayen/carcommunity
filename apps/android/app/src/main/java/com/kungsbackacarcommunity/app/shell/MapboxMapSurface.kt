@@ -616,6 +616,10 @@ class MapboxMapSurface : MapSurface {
         // maybeApplyBreadcrumbSeed once sharing is active. Never overwrites a
         // pending seed that live fixes haven't yet consumed with anything smaller —
         // a fresh resume only ever hands in the same drive.
+        // Enforce the invariant the doc above states: a later, SMALLER seed must not
+        // down-sample a pending one that live fixes haven't consumed yet.
+        val existingSeed = pendingBreadcrumbSeed
+        if (existingSeed != null && points.size < existingSeed.size) return
         pendingBreadcrumbSeed = points
         runCatching { maybeApplyBreadcrumbSeed() }
     }

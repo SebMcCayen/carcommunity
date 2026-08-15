@@ -2764,10 +2764,17 @@ fun AuthenticatedApp(
                 val coordinator = activeRecording ?: return@LaunchedEffect
                 val resumed = coordinator.resumedRoutePoints
                 if (resumed.isNotEmpty()) {
+                    // Only the newest ~1 km renders on the breadcrumb, but a resumed
+                    // journal can hold up to DriveRecorder.MAX_ROUTE_POINTS (~20k).
+                    // Pass a bounded NEWEST suffix to cap the cold-start allocation and
+                    // the retained pendingBreadcrumbSeed (3000 fixes far exceeds the
+                    // visible window at any realistic GPS cadence); BreadcrumbTrail.seed
+                    // then trims further to windowMeters.
+                    val bounded = resumed.takeLast(3000)
                     mapSurface.seedBreadcrumb(
-                        resumed.map { MapPoint(longitude = it.longitude, latitude = it.latitude) },
+                        bounded.map { MapPoint(longitude = it.longitude, latitude = it.latitude) },
                     )
-                    driveRecordingLog.restoredToMap(coordinator.sourceSessionId, resumed.size)
+                    driveRecordingLog.restoredToMap(coordinator.sourceSessionId, bounded.size)
                 }
             }
 
