@@ -182,8 +182,11 @@ object SingleSessionRecording {
         ownerUid = uid
         uploadScope = scope
         uploadOwnerUid = uid
-        activeState.value = coordinator
+        // start() BEFORE publishing: it loads the resumed journal and fixes
+        // resumedRoutePoints, so the LaunchedEffect(activeRecording) that reads
+        // them for the breadcrumb restore can never observe an empty pre-start list.
         coordinator.start()
+        activeState.value = coordinator
         // A new session must never open on the PREVIOUS session's speed, so the
         // readout starts blank and the first fix fills it.
         CurrentSpeed.clear()

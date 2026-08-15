@@ -628,9 +628,11 @@ class MapboxMapSurface : MapSurface {
      * Apply a [pendingBreadcrumbSeed] iff the surface is live-sharing AND the tail
      * is still empty — restoring a killed drive's visible route on relaunch without
      * ever clobbering a tail already being rebuilt by live fixes. Consumes the seed
-     * (success OR skip), so it is applied at most once and a later live tail is
-     * never re-seeded. Redraws on apply. Called from the position/style callbacks,
-     * so it runs on the map's main thread like the rest of the breadcrumb path.
+     * when it applies OR when the resume window has passed (the tail already has
+     * live points), so it is applied at most once and a later live tail is never
+     * re-seeded. If the surface is NOT yet live-sharing the seed is deliberately
+     * RETAINED for a later call. Redraws on apply. Called from the position/style
+     * callbacks, so it runs on the map's main thread like the rest of the breadcrumb path.
      */
     private fun maybeApplyBreadcrumbSeed() {
         val seed = pendingBreadcrumbSeed ?: return
