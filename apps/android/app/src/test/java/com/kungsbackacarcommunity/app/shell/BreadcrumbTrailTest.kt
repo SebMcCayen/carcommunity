@@ -127,6 +127,65 @@ class BreadcrumbTrailTest {
         assertEquals(2, trail.size())
     }
 
+    // --- seed / restore (#849 follow-up) --------------------------------
+
+    @Test
+    fun `seed replaces the tail with the given points`() {
+        val trail = BreadcrumbTrail()
+        trail.add(pointAtStep(0))
+        // A handful of already-recorded fixes (well under the 1 km window).
+        trail.seed(listOf(pointAtStep(10), pointAtStep(11), pointAtStep(12)))
+        assertEquals(3, trail.size())
+        assertEquals(pointAtStep(10), trail.points().first())
+        assertEquals(pointAtStep(12), trail.points().last())
+    }
+
+    @Test
+    fun `seed trims a long resumed route down to the rolling window`() {
+        val trail = BreadcrumbTrail()
+        // A ~5.5 km resumed drive (50 steps × ~111 m): seeding keeps only the
+        // newest ~1 km, exactly as the live tail would after driving that far.
+        val points = (0..50).map { pointAtStep(it) }
+        trail.seed(points)
+        assertTrue(
+            "retained length ${trail.lengthMeters()} should be >= ~1 km",
+            trail.lengthMeters() >= 1_000.0,
+        )
+        assertTrue(
+            "but should not keep the whole ~5.5 km",
+            trail.lengthMeters() < 1_300.0,
+        )
+        // The NEWEST point is always retained — the tail restores to the head of
+        // the drive, not its start.
+        assertEquals(pointAtStep(50), trail.points().last())
+    }
+
+    @Test
+    fun `seed with fewer than two points keeps them without trimming`() {
+        val trail = BreadcrumbTrail()
+        trail.seed(listOf(pointAtStep(3)))
+        assertEquals(1, trail.size())
+        assertEquals(pointAtStep(3), trail.points().single())
+    }
+
+    @Test
+    fun `an empty seed clears the tail`() {
+        val trail = BreadcrumbTrail()
+        trail.add(pointAtStep(0))
+        trail.add(pointAtStep(1))
+        trail.seed(emptyList())
+        assertTrue(trail.isEmpty())
+    }
+
+    @Test
+    fun `the tail keeps growing normally after a seed`() {
+        val trail = BreadcrumbTrail()
+        trail.seed(listOf(pointAtStep(0), pointAtStep(1)))
+        assertTrue(trail.add(pointAtStep(2)))
+        assertEquals(3, trail.size())
+        assertEquals(pointAtStep(2), trail.points().last())
+    }
+
     // --- haversine sanity ------------------------------------------------
 
     @Test

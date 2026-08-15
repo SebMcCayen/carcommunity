@@ -146,6 +146,10 @@ object SingleSessionRecording {
         // (#849). Null in a config-less / CI build; the recording is then
         // memory-only, exactly as before.
         journal: DriveRecordingJournal? = null,
+        // Low-noise lifecycle log (start / resume / milestone / stop) so a
+        // recurrence of the "drive vanished on restart" report is diagnosable
+        // (#849 follow-up). Defaults to the no-op sink.
+        log: DriveRecordingLog = NoopDriveRecordingLog,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
@@ -173,6 +177,7 @@ object SingleSessionRecording {
                 carImagePath = carImagePath,
                 vehicleId = vehicleId,
                 journal = journal,
+                log = log,
             )
         ownerUid = uid
         uploadScope = scope

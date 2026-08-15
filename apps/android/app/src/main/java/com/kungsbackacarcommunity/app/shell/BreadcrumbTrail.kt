@@ -64,6 +64,26 @@ class BreadcrumbTrail(
     }
 
     /**
+     * Replace the tail with [points] (oldest→newest) — used to RESTORE the visible
+     * trail after a process death (#849 follow-up): the recorded drive is persisted
+     * and resumed into the recorder on relaunch, but this on-screen tail is a
+     * memory-only buffer that would otherwise start empty, so the user sees nothing
+     * of the drive they are still recording until they have driven another window's
+     * worth. Seeding it from the resumed route redraws the road just driven at once.
+     *
+     * The points are already-accepted recorder fixes, so the live [add] jitter/jump
+     * heuristics are deliberately BYPASSED (they exist to clean a raw GPS stream,
+     * not a recorded polyline). Only [trimToWindow] is applied so the restored tail
+     * is the same ~[windowMeters] the live tail shows — the newest points are kept,
+     * the older head is shed. A tail of fewer than two points is left as-is.
+     */
+    fun seed(points: List<MapPoint>) {
+        trail.clear()
+        for (point in points) trail.addLast(point)
+        if (trail.size > 2) trimToWindow()
+    }
+
+    /**
      * Feed the next position fix. Returns true when the retained tail actually
      * CHANGED (a point was added, or the trail was reset), so the caller only
      * re-draws the map line when there is something new — a stationary puck

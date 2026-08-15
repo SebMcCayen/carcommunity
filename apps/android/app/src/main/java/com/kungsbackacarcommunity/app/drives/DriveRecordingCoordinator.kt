@@ -34,7 +34,13 @@ import kotlinx.coroutines.launch
  */
 class DriveRecordingCoordinator(
     private val repository: DrivesRepository,
-    private val sourceSessionId: String,
+    /**
+     * Stable id keying this recording's ride document AND its on-disk journal
+     * ([DriveRecordingJournal]). Public so the host can attribute the
+     * app-launch route-restore log ([DriveRecordingLog.restoredToMap]) to the same
+     * session.
+     */
+    val sourceSessionId: String,
     private val clock: () -> Long = System::currentTimeMillis,
     /**
      * Uploads the recorded route to `route.bin` after the save. Null in a
@@ -82,7 +88,25 @@ class DriveRecordingCoordinator(
      * before, so nothing about saving changes, it just isn't crash-resilient.
      */
     private val journal: DriveRecordingJournal? = null,
+    /**
+     * Low-noise structured log of the recording lifecycle (start / resume /
+     * milestone / stop) so a recurrence of the "drive vanished on restart" report
+     * is diagnosable (#849 follow-up). Defaults to [NoopDriveRecordingLog] — tests
+     * and the config-less path record nothing; production injects the Logcat sink.
+     */
+    private val log: DriveRecordingLog = NoopDriveRecordingLog,
 ) {
+    /**
+     * The fixes rehydrated from the on-disk journal when [start] RESUMED a
+     * killed-and-relaunched drive; empty for a fresh start. Read once by the host
+     * right after [start] to re-seed the map's on-screen route tail (the breadcrumb
+     * is memory-only and would otherwise begin empty on a cold start, so the
+     * in-progress drive looks lost even though it was persisted + resumed).
+     * `@Volatile`: set on the main thread in [start], read by the host effect.
+     */
+    @Volatile
+    var resumedRoutePoints: List<RecordedPoint> = emptyList()
+        private set
     /**
      * Fixes accepted since the last journal flush, held so writes to disk are
      * BATCHED (throttled) rather than one tiny append per fix. Flushed when it
@@ -196,8 +220,12 @@ class DriveRecordingCoordinator(
             recorder = rebuilt
             startedAtMillis = started
             stoppedAtMillis = null
+            // Expose the resumed route so the host can re-seed the on-screen tail —
+            // the map breadcrumb is memory-only and starts empty on a cold start.
+            resumedRoutePoints = restored.points
             pendingJournalPoints.clear()
             lastJournalFlushMillis = clock()
+            log.resumed(sourceSessionId, restored.points.size, started)
             stateFlow.value =
                 RecordingState.Recording(
                     pointCount = rebuilt.pointCount,
@@ -211,9 +239,12 @@ class DriveRecordingCoordinator(
             DriveRecorder(sourceSessionId, started, carImagePath = carImagePath, vehicleId = vehicleId)
         startedAtMillis = started
         stoppedAtMillis = null
+        // A fresh drive has nothing to restore to the map.
+        resumedRoutePoints = emptyList()
         pendingJournalPoints.clear()
         lastJournalFlushMillis = started
         journal?.begin(sourceSessionId, started)
+        log.started(sourceSessionId, started)
         stateFlow.value = RecordingState.Recording(pointCount = 0, elapsedMillis = 0L)
     }
 
@@ -231,6 +262,16 @@ class DriveRecordingCoordinator(
         if (accepted && journal != null) {
             pendingJournalPoints.add(point)
             maybeFlushJournal(force = false)
+        }
+        // Coarse progress telemetry: one line every MILESTONE_INTERVAL accepted
+        // fixes, so a long drive shows it is recording + journalling without a
+        // per-fix log. Guarded on `accepted` so dropped (out-of-order/full) fixes
+        // do not tick it.
+        if (accepted) {
+            val count = recorder.pointCount
+            if (count % DriveRecordingLog.MILESTONE_INTERVAL == 0) {
+                log.milestone(sourceSessionId, count)
+            }
         }
         stateFlow.value =
             RecordingState.Recording(
@@ -292,6 +333,7 @@ class DriveRecordingCoordinator(
         // Drain any batched fixes to disk so the journal is complete up to the
         // stop, in case the save is interrupted before it clears the journal.
         maybeFlushJournal(force = true)
+        log.stopped(sourceSessionId, recorder.pointCount)
         stateFlow.value =
             RecordingState.PromptSave(
                 pointCount = recorder.pointCount,
