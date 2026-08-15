@@ -58,40 +58,49 @@ class PerkShopCoordinator(
     private val state = MutableStateFlow<PerkBuyStatus>(PerkBuyStatus.Idle)
     val status: StateFlow<PerkBuyStatus> = state.asStateFlow()
 
+    // Race-free single-buy guard, separate from the display `state`: claiming it is
+    // an atomic compareAndSet, unlike a check-then-set on state.value where two
+    // callers could both read non-Buying before either writes Buying.
+    private val inFlight = java.util.concurrent.atomic.AtomicBoolean(false)
+
     /**
      * Buys one unit of [perkId]. [affordable] is the row's display hint: when
      * false, the buy short-circuits to [PerkBuyFailureReason.INSUFFICIENT_FUNDS]
      * without calling the backend.
      */
     suspend fun buy(perkId: String, affordable: Boolean) {
-        // Synchronous in-flight guard: reject a second tap (any perk) before the
-        // first suspends, so a double-tap can never start two purchases.
-        if (state.value is PerkBuyStatus.Buying) return
-
-        if (!affordable) {
-            state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.INSUFFICIENT_FUNDS)
-            return
-        }
-
-        state.value = PerkBuyStatus.Buying(perkId)
+        // Atomic in-flight guard: only one buy can claim `inFlight`; a concurrent or
+        // double tap (any perk) returns immediately. `finally` releases it on every
+        // exit (success, failure, short-circuit, or cancellation).
+        if (!inFlight.compareAndSet(false, true)) return
         try {
-            val result = repository.buyPerk(perkId, keyFactory())
-            state.value =
-                PerkBuyStatus.Bought(
-                    perkId = result.perkId,
-                    newBalance = result.newBalance,
-                    inventoryCount = result.inventoryCount,
-                    alreadyPurchased = result.alreadyPurchased,
-                )
-        } catch (cancellation: CancellationException) {
-            state.value = PerkBuyStatus.Idle
-            throw cancellation
-        } catch (insufficient: PerkPurchaseInsufficientFundsException) {
-            state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.INSUFFICIENT_FUNDS)
-        } catch (unavailable: PerkPurchaseUnavailableException) {
-            state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.UNAVAILABLE)
-        } catch (failure: Exception) {
-            state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.UNKNOWN)
+            if (!affordable) {
+                state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.INSUFFICIENT_FUNDS)
+                return
+            }
+
+            state.value = PerkBuyStatus.Buying(perkId)
+            try {
+                val result = repository.buyPerk(perkId, keyFactory())
+                state.value =
+                    PerkBuyStatus.Bought(
+                        perkId = result.perkId,
+                        newBalance = result.newBalance,
+                        inventoryCount = result.inventoryCount,
+                        alreadyPurchased = result.alreadyPurchased,
+                    )
+            } catch (cancellation: CancellationException) {
+                state.value = PerkBuyStatus.Idle
+                throw cancellation
+            } catch (insufficient: PerkPurchaseInsufficientFundsException) {
+                state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.INSUFFICIENT_FUNDS)
+            } catch (unavailable: PerkPurchaseUnavailableException) {
+                state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.UNAVAILABLE)
+            } catch (failure: Exception) {
+                state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.UNKNOWN)
+            }
+        } finally {
+            inFlight.set(false)
         }
     }
 
