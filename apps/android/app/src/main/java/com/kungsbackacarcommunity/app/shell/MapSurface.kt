@@ -416,9 +416,10 @@ interface MapProjection {
      *
      * A non-null result carries [MapScreenPoint.trustworthy]. The pixel may be far
      * OUTSIDE the viewport (a coordinate genuinely off to one side — the caller
-     * decides on/off-screen with the viewport rectangle), and it may be UNTRUST-
-     * WORTHY: on a pitched map a coordinate behind the camera / beyond the horizon
-     * has no honest screen position, and `pixelForCoordinate` does not fail — it
+     * decides on/off-screen with the viewport rectangle), and it may be
+     * UNTRUSTWORTHY: on a pitched map a coordinate behind the camera / beyond the
+     * horizon has no honest screen position, and `pixelForCoordinate` does not
+     * fail — it
      * FOLDS or CLAMPS the point back into view (e.g. to the origin corner), which
      * is the "off-screen live user stuck in the top-left corner" bug. The
      * implementation detects that with a coordinate round trip (see

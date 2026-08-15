@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.map
 
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry.ProjectedPoint
-import kotlin.math.hypot
 
 /**
  * Field telemetry for the two map-camera / off-screen-projection bugs, kept as
@@ -70,7 +69,14 @@ object MapAwarenessDiagnostics {
      */
     const val CORNER_CLAMP_RADIUS_PX: Float = 6f
 
-    /** Whether [point] sits within [CORNER_CLAMP_RADIUS_PX] of any viewport corner. */
+    /**
+     * Whether [point] sits within [radiusPx] of any viewport corner.
+     *
+     * Compares SQUARED distances (`dx*dx + dy*dy` vs `radiusPx*radiusPx`) rather
+     * than calling `hypot`/`sqrt` per corner, and allocates no list: this can run
+     * per marker per frame on the UI thread during a fold burst, so it stays
+     * arithmetic. Behaviour is identical to the straight distance test.
+     */
     fun isCornerClamp(
         point: ProjectedPoint,
         viewportWidth: Float,
@@ -78,14 +84,17 @@ object MapAwarenessDiagnostics {
         radiusPx: Float = CORNER_CLAMP_RADIUS_PX,
     ): Boolean {
         if (!point.x.isFinite() || !point.y.isFinite()) return false
-        val corners =
-            listOf(
-                0f to 0f,
-                viewportWidth to 0f,
-                0f to viewportHeight,
-                viewportWidth to viewportHeight,
-            )
-        return corners.any { (cx, cy) -> hypot(point.x - cx, point.y - cy) <= radiusPx }
+        val radiusSq = radiusPx * radiusPx
+        return nearCorner(point.x, point.y, 0f, 0f, radiusSq) ||
+            nearCorner(point.x, point.y, viewportWidth, 0f, radiusSq) ||
+            nearCorner(point.x, point.y, 0f, viewportHeight, radiusSq) ||
+            nearCorner(point.x, point.y, viewportWidth, viewportHeight, radiusSq)
+    }
+
+    private fun nearCorner(x: Float, y: Float, cornerX: Float, cornerY: Float, radiusSq: Float): Boolean {
+        val dx = x - cornerX
+        val dy = y - cornerY
+        return dx * dx + dy * dy <= radiusSq
     }
 
     /**
