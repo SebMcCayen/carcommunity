@@ -22,8 +22,9 @@
  * existing doc's live tally is preserved (never clobbered by a resync).
  *
  * `runOpenTicketsSync(fetchIssues?)` is exported so an emulator test can inject
- * a deterministic issue set (the real GitHub call is short-circuited in the
- * emulator). Mirrors badges/scheduled.ts runBadgeBacklogSweep.
+ * a deterministic result — an array (reconcile) or null (skip) — since the real
+ * GitHub call short-circuits to null in the emulator. Mirrors
+ * badges/scheduled.ts runBadgeBacklogSweep.
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';

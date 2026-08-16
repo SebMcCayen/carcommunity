@@ -10,11 +10,14 @@
  *  - runOpenTicketsSync (scheduled sync body, run in-process with an injected
  *    GitHub fetcher — the real GitHub call is short-circuited in the emulator):
  *    the issue→openTickets mapping, live-tally preservation, stale-ticket
- *    reconciliation, and the empty-fetch no-delete safety.
+ *    reconciliation on a genuine empty success, and the null-fetch no-change
+ *    (outage) safety.
  *
- * The GitHub REST calls are NOT made in the emulator (createIssueComment /
- * listOpenIssues short-circuit to false/[]), so `posted` is false throughout
- * and no network is hit. Requires the Functions + Firestore emulators — run via:
+ * The GitHub REST calls are NOT made in the emulator: createIssueComment
+ * short-circuits to false and listOpenIssues to null (the same value it returns
+ * on a real failure). So `posted` is false throughout and no network is hit.
+ * The sync tests inject their own fetcher, so they exercise null vs [] directly.
+ * Requires the Functions + Firestore emulators — run via:
  *   pnpm emulators:test
  */
 
