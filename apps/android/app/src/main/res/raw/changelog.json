@@ -2,6 +2,25 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 38,
+      "versionName": "0.8.27",
+      "releaseDate": "2026-08-16",
+      "highlights": [
+        "Olästa chattar och notiser visas nu med en röd prick i stället för en siffra",
+        "Kronjakten: kronor visas nedtonade tills du är nära nog att samla dem",
+        "Ny välkomstguide på kartan första gången du öppnar appen"
+      ],
+      "changes": [
+        "Notiser: olästa markeras nu med en röd prick per flik (Community, Konvojer, Vänner, Notiser) i stället för en siffra",
+        "Kronjakten: kronor på kartan visas nedtonade tills du är nära nog att samla dem; en körning där du samlat kronor ger inte längre noll poäng; tydligare besked när en delad krona redan är samlad",
+        "Konvoj: körhistoriken visar nu vilka du körde med, och du kan trycka på en delad förares bild för att öppna profilen",
+        "Karta och navigering: rutten ritas upp korrekt efter omstart, konvojvyn ramar in alla deltagare bättre, navigeringen startar inte längre långt bortzoomad, och live-användare försvinner inte när du zoomar in",
+        "Chatt: en snabb uppåtsvep dras inte längre tillbaka till botten",
+        "Ny introduktionsguide visas på kartan första gången du öppnar appen",
+        "Mindre förbättringar och tekniska uppdateringar under huven"
+      ]
+    },
+    {
       "versionCode": 37,
       "versionName": "0.8.26",
       "releaseDate": "2026-08-14",
