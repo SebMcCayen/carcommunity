@@ -165,10 +165,21 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
 // ---------------------------------------------------------------------------
 
 /**
- * Global ceiling on points earned in one Europe/Stockholm day, across ALL
- * sources that flow through the economy engine plus Kronjakt crowns (see
+ * Global ceiling on NON-DRIVING points earned in one Europe/Stockholm day,
+ * across the economy engine's non-driving rules plus Kronjakt crowns (see
  * onLedgerEntryCreated: crown awards are folded into this counter so the
  * ceiling cannot be side-stepped by crown farming).
+ *
+ * DRIVING-DERIVED rules (`driving: true` — drive_5km, live_session_1km) are
+ * DELIBERATELY EXEMPT from this cap; they are bounded solely by
+ * WEEKLY_DRIVING_POINTS_CAP (issue #861). See applyEconomyCaps for the full
+ * reasoning — in short, the driving lane already carries its own dedicated
+ * ceiling AND tiny per-day rule limits (2×/day each, ≤ 50 KP/day total), so it
+ * poses no daily-farming risk, and subjecting it to a cap that CROWNS consume
+ * meant a member who collected a few crowns earned nothing at all for a real
+ * saved drive — the exact thing #861 reported. Crowns are already excluded from
+ * the weekly driving cap for the same "a crown is a destination, not a
+ * distance" reason; this closes the matching hole on the daily cap.
  *
  * Deliberately NOT applied to admin adjustments or reversals — a correction
  * by an admin is not a member "earning", and letting it eat the member's
@@ -223,13 +234,35 @@ const nonNegative = (value: number): number =>
  * A remainder of 0 writes NO ledger entry at all (the ledger primitive
  * requires a positive amount, and a 0-point row is noise); the caller reports
  * `cap_reached` instead.
+ *
+ * TWO LANES, TWO CEILINGS (issue #861). A DRIVING-derived rule is bounded ONLY
+ * by WEEKLY_DRIVING_POINTS_CAP; a NON-driving rule is bounded ONLY by
+ * DAILY_POINTS_CAP. The daily cap deliberately does NOT touch driving rules:
+ *  - the driving lane already has a dedicated ceiling AND tiny per-day rule
+ *    limits (drive_5km and live_session_1km are 2×/day each, ≤ 50 KP/day), so
+ *    it cannot be farmed into a leaderboard position regardless of the daily
+ *    cap — the daily cap adds no anti-farm value on this lane; and
+ *  - the daily cap is CONSUMED by Kronjakt crowns (onLedgerEntryCreated folds
+ *    them in, uncapped, so a single legendary alone can push the day's total
+ *    past 300). Subjecting driving rules to it meant collecting a few crowns
+ *    zeroed out the points for a genuine saved drive — reported as #861. Crowns
+ *    are already excluded from the weekly driving cap ("a crown is a
+ *    destination, not a distance"); this removes the same starvation on the
+ *    daily cap.
+ * A driving rule therefore never reports `clippedBy: 'daily'`, and a
+ * non-driving rule never reports `clippedBy: 'weekly_driving'`.
  */
 export function applyEconomyCaps(
   requested: number,
   driving: boolean,
   state: EconomyCapState,
 ): EconomyCapDecision {
-  const dailyRemaining = Math.max(0, DAILY_POINTS_CAP - nonNegative(state.dailyAwarded));
+  // Driving rules answer to the weekly driving cap alone; every other rule
+  // answers to the global daily cap alone. Each lane's OTHER ceiling is
+  // infinite, so exactly one can ever bind an award.
+  const dailyRemaining = driving
+    ? Number.POSITIVE_INFINITY
+    : Math.max(0, DAILY_POINTS_CAP - nonNegative(state.dailyAwarded));
   const drivingRemaining = driving
     ? Math.max(0, WEEKLY_DRIVING_POINTS_CAP - nonNegative(state.weeklyDrivingAwarded))
     : Number.POSITIVE_INFINITY;
@@ -238,8 +271,9 @@ export function applyEconomyCaps(
   if (awarded === requested) {
     return { requested, awarded, clippedBy: 'none' };
   }
-  // Report the BINDING ceiling. Ties go to the daily cap: it is the one every
-  // member sees every day, so it is the more useful explanation.
+  // Exactly one ceiling is finite for a given rule, so the binding one is
+  // unambiguous: the daily cap for a non-driving rule, the weekly driving cap
+  // for a driving rule.
   return {
     requested,
     awarded,

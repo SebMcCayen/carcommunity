@@ -694,4 +694,45 @@ describe('Kronjakt crowns fold into the daily cap', () => {
       .get();
     expect(weekly.empty).toBe(true);
   });
+
+  it('still pays a saved drive after crowns filled the daily cap (#861)', async () => {
+    const user = await createProvisionedUser('pe-crown-drive');
+    await signInAs(user);
+    const day = stockholmDayKey(new Date());
+
+    // Crowns collected during the drive have already pushed the day's total
+    // PAST DAILY_POINTS_CAP (a single legendary is worth 500, and crowns are
+    // never clipped). Preload the daily counter exactly as the crown fold
+    // (points-onLedgerEntryCreated) would have left it after such a session.
+    await adminDb
+      .collection('pointsDailyTotals')
+      .doc(`${user.uid}__${day}`)
+      .set({ userId: user.uid, day, total: DAILY_POINTS_CAP + 200 });
+
+    // Save a >= 5 km drive (server computes the distance from the route).
+    const startedAt = new Date(Date.now() - 30 * 60_000);
+    const distanceMetres = 6_000;
+    const steps = Math.max(2, Math.round(distanceMetres / 100));
+    const routePoints = Array.from({ length: steps + 1 }, (_, i) => ({
+      ...north(i * (distanceMetres / steps)),
+      timestampMs: startedAt.getTime() + i * 10_000,
+    }));
+    const ride = (
+      await call('drives-save', {
+        startedAt: startedAt.toISOString(),
+        endedAt: new Date(startedAt.getTime() + steps * 10_000).toISOString(),
+        routePoints,
+        sourceSessionId: `crown-drive-${Date.now()}`,
+      })
+    ).data as { rideId: string };
+
+    // The drive is paid IN FULL despite the blown daily cap: driving rules
+    // answer to the weekly driving cap alone, so collecting crowns no longer
+    // zeroes out a genuine saved drive (issue #861). Before the fix this
+    // returned `cap_reached` and wrote no ledger entry.
+    const entry = await awaitLedgerEntry(user.uid, economyIdempotencyKey('drive_5km', ride.rideId)!);
+    expect(entry.amount).toBe(15);
+    // Paid in full → the description is the bare label, with no "15 p → x p" clip.
+    expect(String(entry.description)).not.toContain('→');
+  });
 });
