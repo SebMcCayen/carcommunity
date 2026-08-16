@@ -1519,23 +1519,24 @@ fun AuthenticatedApp(
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
 
-            // Community-chat unread flag (a lightweight per-user last-read marker,
-            // no fan-out counter): drives the map chat bubble's "missed" dot AND
-            // the chat hub's Community-tab dot. Gated like garageState so the two
-            // Firestore listeners it opens (newest-message + userPrivate marker)
-            // are live only while that dot can actually be seen — the Map tab
-            // (bubble), the chat hub popup open over the map, or the legacy
-            // ChatHub route fallback — and degrade to a constant `false`
-            // otherwise. Because the popup opens over the map WITHOUT leaving the
-            // Map tab (`selectedTab` stays Map), the `selectedTab == Map` term
-            // already keeps the listener alive while the hub is open; `chatHubOpen`
-            // is kept for clarity and `ShellRoute.ChatHub` covers the fallback
-            // route. Guarded — no repo (config-less build) means never unread.
-            val needsCommunityUnread =
+            // The shared gate for ALL THREE chat-unread listeners below (community,
+            // DM, notifications). Each is a lightweight per-user marker/derivation,
+            // no fan-out counter; together they drive the map chat bubble's
+            // aggregate dot AND the chat hub's per-tab dots. Gated like garageState
+            // so the Firestore listeners they open are live only while a dot can
+            // actually be seen — the Map tab (bubble), the chat hub popup open over
+            // the map, or the legacy ChatHub route fallback — and degrade to a
+            // constant `false` otherwise. Because the popup opens over the map
+            // WITHOUT leaving the Map tab (`selectedTab` stays Map), the
+            // `selectedTab == Map` term already keeps the listeners alive while the
+            // hub is open; `chatHubOpen` is kept for clarity and `ShellRoute.ChatHub`
+            // covers the fallback route. Each derivation is also guarded on its repo
+            // — no repo (config-less build) means never unread.
+            val needsChatUnread =
                 selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
             val communityChatUnread by
-                remember(communityChatRepository, uid, needsCommunityUnread) {
-                    if (communityChatRepository != null && needsCommunityUnread) {
+                remember(communityChatRepository, uid, needsChatUnread) {
+                    if (communityChatRepository != null && needsChatUnread) {
                         communityChatRepository.observeUnread(uid)
                     } else {
                         flowOf(false)
@@ -1552,8 +1553,8 @@ fun AuthenticatedApp(
             // already reads, so no fan-out counter is needed. (Convoys has no
             // aggregate: unread there is per-convoy — see the PR notes.)
             val dmUnread by
-                remember(dmRepository, uid, needsCommunityUnread) {
-                    if (dmRepository != null && needsCommunityUnread) {
+                remember(dmRepository, uid, needsChatUnread) {
+                    if (dmRepository != null && needsChatUnread) {
                         dmRepository.observeConversations(uid).map { it.anyDmUnread() }
                     } else {
                         flowOf(false)
@@ -1561,8 +1562,8 @@ fun AuthenticatedApp(
                 }
                     .collectAsState(initial = false)
             val notificationsUnread by
-                remember(notificationsRepository, uid, needsCommunityUnread) {
-                    if (notificationsRepository != null && needsCommunityUnread) {
+                remember(notificationsRepository, uid, needsChatUnread) {
+                    if (notificationsRepository != null && needsChatUnread) {
                         notificationsRepository.observeNotifications(uid)
                             .map { it.anyNotificationUnread() }
                     } else {
