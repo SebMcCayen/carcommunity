@@ -90,6 +90,21 @@ class CrownSpawnController(
     /** Live crowns around the last refreshed centre, for the map layer. */
     val nearbySpawns: StateFlow<List<CrownSpawn>> = nearbyFlow.asStateFlow()
 
+    /**
+     * Spawn IDs THIS user has already collected, mapped to the crown's own expiry
+     * (nullable when the document omitted it).
+     *
+     * Only SHARED crowns land here: an exclusive crown is gone for everyone the
+     * moment it is claimed, so `listNearby` never returns it again. A shared crown
+     * stays `live` for OTHER members, so `listNearby` keeps returning it — and a
+     * plain [dropSpawn] only survives until the next [refreshOnce] re-adds it.
+     * Filtering the query result against this set is what makes the drop stick, so
+     * a crown that can only ever answer `already_collected` for this user stops
+     * re-inviting the tap (#874). Keyed to the expiry so it self-prunes rather than
+     * growing for the life of the session.
+     */
+    private val collectedSpawnExpiries = mutableMapOf<String, Long?>()
+
     private val claimFlow = MutableStateFlow<CrownClaimStatus>(CrownClaimStatus.Idle)
     val claimStatus: StateFlow<CrownClaimStatus> = claimFlow.asStateFlow()
 
@@ -127,7 +142,11 @@ class CrownSpawnController(
         if (!force && !CrownSpawnQuery.shouldRequery(lastCellKeys, keys)) return false
         return try {
             val spawns = repository.listNearby(keys, nowMillis())
-            nearbyFlow.value = spawns
+            // Hide crowns this user already collected. A shared crown they picked
+            // up is still `live` for others, so the query returns it every pass;
+            // without this filter the next refresh would re-add the crown a
+            // collect just dropped (#874).
+            nearbyFlow.value = withoutCollected(spawns)
             lastCellKeys = keys
             true
         } catch (cancellation: CancellationException) {
@@ -244,20 +263,23 @@ class CrownSpawnController(
         claimFlow.value = CrownClaimStatus.Collecting
         try {
             val outcome = repository.claimSpawn(spawn.id, current, previous, idempotencyKey)
-            if (outcome.result == CrownSpawnClaimResult.AWARDED ||
-                outcome.result == CrownSpawnClaimResult.ALREADY_TAKEN ||
-                outcome.result == CrownSpawnClaimResult.ALREADY_COLLECTED ||
-                outcome.result == CrownSpawnClaimResult.CROWN_EXPIRED
-            ) {
-                // Each of these means THIS user can no longer collect the crown.
-                // AWARDED/ALREADY_TAKEN/CROWN_EXPIRED: it is gone for everyone.
-                // ALREADY_COLLECTED: a SHARED crown the user already picked up
-                // legitimately stays on the map for OTHERS, but never for them —
-                // so drop it from their local list so they cannot keep re-tapping
-                // a crown that will only ever answer "already collected" (#874).
-                // dropSpawn only touches this device's list; other members still
-                // see and can still collect the crown until its TTL.
-                dropSpawn(spawn.id)
+            when (outcome.result) {
+                // Gone for everyone the moment it is claimed. Drop it now so a
+                // collectable-looking marker does not linger until the next
+                // refresh notices; the server already hides it from listNearby.
+                CrownSpawnClaimResult.AWARDED,
+                CrownSpawnClaimResult.ALREADY_TAKEN,
+                CrownSpawnClaimResult.CROWN_EXPIRED -> dropSpawn(spawn.id)
+                // A SHARED crown the user already picked up. It legitimately stays
+                // `live` on the map for OTHER members, so dropping it from the
+                // current list is not enough — the next refresh's listNearby would
+                // re-add it. REMEMBER it (keyed to its expiry) so refreshOnce keeps
+                // filtering it out, then drop it now for the immediate effect (#874).
+                CrownSpawnClaimResult.ALREADY_COLLECTED -> {
+                    collectedSpawnExpiries[spawn.id] = spawn.expiresAtMillis
+                    dropSpawn(spawn.id)
+                }
+                else -> Unit
             }
             claimFlow.value = CrownClaimStatus.Done(outcome, spawn.id)
         } catch (cancellation: CancellationException) {
@@ -281,6 +303,22 @@ class CrownSpawnController(
 
     private fun dropSpawn(spawnId: String) {
         nearbyFlow.value = nearbyFlow.value.filterNot { it.id == spawnId }
+    }
+
+    /**
+     * Removes crowns this user has already collected from a query result, pruning
+     * suppression entries whose crown has since expired so the set never grows
+     * without bound. A null expiry (the document omitted one) is kept until the
+     * feature is toggled off, since there is no known moment at which it is safe
+     * to forget — the crown could still be live.
+     */
+    private fun withoutCollected(spawns: List<CrownSpawn>): List<CrownSpawn> {
+        if (collectedSpawnExpiries.isNotEmpty()) {
+            val now = nowMillis()
+            collectedSpawnExpiries.entries.removeAll { (_, expiry) -> expiry != null && expiry <= now }
+        }
+        if (collectedSpawnExpiries.isEmpty()) return spawns
+        return spawns.filterNot { collectedSpawnExpiries.containsKey(it.id) }
     }
 
     /**

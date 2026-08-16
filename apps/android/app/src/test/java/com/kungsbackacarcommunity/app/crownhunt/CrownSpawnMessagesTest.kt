@@ -161,7 +161,7 @@ class CrownSpawnMessagesTest {
      * silently reintroduce that.
      */
     @Test
-    fun everyBackendResultCodeParsesToAnEnumValue() {
+    fun knownBackendResultCodeParsesToAnEnumValue() {
         val wireCodes =
             listOf(
                 "awarded",
