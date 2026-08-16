@@ -152,6 +152,7 @@
     <string name="welcome_completeProfile">Slutför profil</string>
     <string name="welcome_addCar">Lägg till bil</string>
     <string name="coachMark_progress">%1$d/%2$d</string>
+    <string name="coachMark_a11yTour">Steg %1$d av %2$d: %3$s. %4$s</string>
     <string name="coachMark_skip">Hoppa över</string>
     <string name="coachMark_next">Nästa</string>
     <string name="coachMark_done">Klar</string>

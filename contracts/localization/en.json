@@ -169,6 +169,7 @@
   },
   "coachMark": {
     "progress": "%1$d/%2$d",
+    "a11yTour": "Step %1$d of %2$d: %3$s. %4$s",
     "skip": "Skip",
     "next": "Next",
     "done": "Done",

@@ -48,6 +48,34 @@ enum class CoachMarkStep {
     }
 }
 
+/**
+ * Pure geometry for placing the bubble's tail, kept Android-free so the
+ * degenerate cases are unit-testable off-device.
+ */
+object CoachMarkGeometry {
+    /**
+     * The x of the tail's tip: the target's centre, held [insetPerSide] in from
+     * each of the bubble's edges so the tail stays on the card's flat run rather
+     * than sliding onto a rounded corner.
+     *
+     * When the bubble is too narrow to fit both insets (its width is below
+     * `2 * insetPerSide` — reachable now that the bubble width is clamped down to
+     * `0.dp` on pathologically narrow layouts), the valid band inverts. Rather
+     * than call `coerceIn` with `max < min` (which throws), fall back to the
+     * bubble's horizontal centre — a well-defined, always-valid position.
+     */
+    fun tailCenterX(
+        targetCenterX: Float,
+        bubbleLeft: Float,
+        bubbleWidth: Float,
+        insetPerSide: Float,
+    ): Float {
+        val lo = bubbleLeft + insetPerSide
+        val hi = bubbleLeft + bubbleWidth - insetPerSide
+        return if (hi < lo) bubbleLeft + bubbleWidth / 2f else targetCenterX.coerceIn(lo, hi)
+    }
+}
+
 /** Pure navigation helpers over [CoachMarkStep] ordering. */
 object CoachMarkTour {
     /** The tour steps in display order. */

@@ -68,6 +68,28 @@ class CoachMarkTourTest {
     }
 
     @Test
+    fun `tailCenterX clamps the target into the bubble's inset band`() {
+        // Wide bubble [0, 200], 20px inset each side => valid band [20, 180].
+        // A target far left / right is pulled to the nearest edge of the band;
+        // a target inside the band is left where it is.
+        assertEquals(20f, CoachMarkGeometry.tailCenterX(-50f, 0f, 200f, 20f), 0f)
+        assertEquals(180f, CoachMarkGeometry.tailCenterX(999f, 0f, 200f, 20f), 0f)
+        assertEquals(100f, CoachMarkGeometry.tailCenterX(100f, 0f, 200f, 20f), 0f)
+    }
+
+    @Test
+    fun `tailCenterX falls back to centre when the bubble is too narrow to fit the insets`() {
+        // Zero-width bubble: no valid band at all (would invert coerceIn and throw).
+        // Falls back to the bubble's horizontal centre (left + width/2).
+        assertEquals(10f, CoachMarkGeometry.tailCenterX(999f, 10f, 0f, 20f), 0f)
+        // Near-zero width (30px) with 20px insets => hi (30) < lo (40): centre = 25.
+        assertEquals(25f, CoachMarkGeometry.tailCenterX(-999f, 10f, 30f, 20f), 0f)
+        // Exactly at the degenerate boundary (width == 2*inset) stays valid: band
+        // collapses to a single point at the centre, and coerceIn is well-defined.
+        assertEquals(20f, CoachMarkGeometry.tailCenterX(999f, 0f, 40f, 20f), 0f)
+    }
+
+    @Test
     fun `walking next from the first reaches the last in COUNT minus one hops`() {
         var step = CoachMarkStep.FIRST
         var hops = 0

@@ -107,6 +107,17 @@ private fun CoachMarkOverlay(
     val density = LocalDensity.current
     val bubbleColor = MaterialTheme.colorScheme.surface
     val tourLabel = stringResource(R.string.coachMark_progress, position, count)
+    // Spoken description for TalkBack: the bare "1/4" progress is meaningless on
+    // its own, so announce the step's title and body too, e.g.
+    // "Steg 1 av 4: Starta en körning. Tryck på plus …".
+    val tourDescription =
+        stringResource(
+            R.string.coachMark_a11yTour,
+            position,
+            count,
+            stringResource(step.titleRes()),
+            stringResource(step.bodyRes()),
+        )
 
     val spotlightPadPx = with(density) { KccSpacing.s2.toPx() }
     val spotlightRadiusPx = with(density) { KccRadius.md.toPx() }
@@ -121,7 +132,7 @@ private fun CoachMarkOverlay(
             // Swallow every touch on the scrim so the tour is driven only by the
             // bubble's Skip / Next buttons (which sit above this and keep their taps).
             .pointerInput(Unit) { detectTapGestures { } }
-            .semantics { contentDescription = tourLabel },
+            .semantics { contentDescription = tourDescription },
     ) {
         var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
         var bubbleHeight by remember { mutableIntStateOf(0) }
@@ -196,9 +207,13 @@ private fun CoachMarkOverlay(
             val ready = below || bubbleHeight > 0
 
             // Tail centred on the target, clamped to stay on the card's flat edge.
-            val tailCenterX = localTarget.center.x.coerceIn(
-                bubbleX + spotlightRadiusPx + tailHalfPx,
-                bubbleX + bubbleWidthPx - spotlightRadiusPx - tailHalfPx,
+            // Via the pure helper so the degenerate narrow-bubble case (which would
+            // otherwise invert the coerceIn range and throw) is handled and tested.
+            val tailCenterX = CoachMarkGeometry.tailCenterX(
+                targetCenterX = localTarget.center.x,
+                bubbleLeft = bubbleX,
+                bubbleWidth = bubbleWidthPx,
+                insetPerSide = spotlightRadiusPx + tailHalfPx,
             )
             val tailY = if (below) bubbleY - tailHeightPx else bubbleY + bubbleHeight
 
