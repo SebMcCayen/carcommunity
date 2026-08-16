@@ -194,25 +194,32 @@ async function deployTrap(args: {
     };
   }
 
-  // Pre-transaction anti-abuse read: the caller's currently-armed traps, used to
-  // enforce the 1-active-trap cap AND the 300 m self-spacing rule. These are
-  // best-effort guards (a rare race could momentarily allow a second trap); the
-  // HARD volume ceiling — 3 deploys/day — is enforced transactionally below, and
-  // the per-victim/per-day drain caps bound any abuse regardless. Filtering
-  // expiry in code keeps this to the existing (placedByUid, status) index.
+  // Pre-transaction anti-abuse read: the caller's currently-LIVE armed traps,
+  // used to enforce the 1-active-trap cap AND the 300 m self-spacing rule.
+  //
+  // Expiry is filtered by FIRESTORE (`expiresAt > now`), NOT in code. An expired
+  // trap keeps status:'armed' — expiry is by the `expiresAt` timestamp and the
+  // TTL deletion is optional/eventual — so a code-side filter under a `.limit`
+  // could return only STALE docs once a user accumulates more than the limit of
+  // expired armed traps (~a week at 3/day with no TTL), silently emptying the
+  // live set and bypassing BOTH guards. The server-side range predicate returns
+  // only genuinely-live traps, so the limit only ever elides surplus LIVE ones
+  // (there is at most one, by the cap). Needs the composite index
+  // activePerks(placedByUid, status, expiresAt) in firestore.indexes.json.
+  //
+  // Still best-effort for the concurrent-deploy RACE (a query outside the
+  // transaction cannot be fully atomic); the HARD volume ceiling — 3 deploys/day
+  // — is the transactional guard below, and the per-victim/per-day drain caps
+  // bound any abuse regardless. What changed is that these guards are no longer
+  // defeated by expired-doc accumulation.
   const armedSnap = await db
     .collection('activePerks')
     .where('placedByUid', '==', uid)
     .where('status', '==', 'armed')
+    .where('expiresAt', '>', Timestamp.fromDate(now))
     .limit(20)
     .get();
-  const nowMs = now.getTime();
-  const liveTraps = armedSnap.docs
-    .map((d) => d.data())
-    .filter((t) => {
-      const exp = t.expiresAt as Timestamp | undefined;
-      return exp instanceof Timestamp && exp.toMillis() > nowMs;
-    });
+  const liveTraps = armedSnap.docs.map((d) => d.data());
   if (liveTraps.length >= MAX_ACTIVE_TRAPS_PER_USER) {
     throw new HttpsError('failed-precondition', 'Du har redan en aktiv fälla.');
   }

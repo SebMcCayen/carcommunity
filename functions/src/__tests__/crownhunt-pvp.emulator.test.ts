@@ -300,6 +300,47 @@ describe('crownHunt.deployPerk — trap', () => {
       ),
     ).toBe('functions/failed-precondition');
   });
+
+  it('is not fooled by accumulated EXPIRED armed traps (cap enforced over LIVE traps)', async () => {
+    const member = await createProvisionedUser('pvp-trap-expired');
+    await setInventory(member.uid, { spike_strip: 3 });
+    // Seed 25 EXPIRED armed traps (status stays 'armed'; only expiresAt is past)
+    // — more than the query's .limit(20). Before the server-side expiry filter,
+    // these could fill the limit and empty the live set, bypassing the guards.
+    const past = Timestamp.fromMillis(Date.now() - 60 * 60 * 1000);
+    const batch = adminDb.batch();
+    for (let i = 0; i < 25; i += 1) {
+      batch.set(adminDb.collection('activePerks').doc(`expired-${member.uid}-${i}`), {
+        placedByUid: member.uid,
+        status: 'armed',
+        lat: 20 + i * 0.01,
+        lng: 20 + i * 0.01,
+        radiusM: 100,
+        victimCount: 0,
+        cellKey: '0_0',
+        expiresAt: past,
+        createdAt: past,
+      });
+    }
+    await batch.commit();
+    await signInAs(member);
+
+    // Despite 25 expired armed docs, a NEW deploy still succeeds (they don't count).
+    const spot = uniqueSpot();
+    const res = (
+      await call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() })
+    ).data as DeployResponse;
+    expect(res.kind).toBe('trap');
+
+    // Now there is exactly ONE live trap. A second deploy must be refused — the
+    // 1-active cap is enforced against the live trap, not defeated by the 25
+    // stale ones that would otherwise fill the query limit.
+    expect(
+      await callableErrorCode(
+        call('crownHunt-deployPerk', { perkId: 'spike_strip', ...uniqueSpot(), idempotencyKey: key() }),
+      ),
+    ).toBe('functions/failed-precondition');
+  });
 });
 
 describe('trap DRAIN (inline in live.updatePosition)', () => {
