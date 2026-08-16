@@ -112,14 +112,16 @@ const saveDriveInputSchema = z
      * same trade `carImagePath` makes. Optional and backward-compatible: a solo
      * drive or an older client simply omits it. Bounded to [CONVOY_MEMBERS_MAX]
      * so a huge or hostile roster can't bloat the ride document, with each field
-     * length-capped and the uid Firestore-safe. Client mirror:
-     * apps/android/.../drives/SavedDrive.kt ConvoyDriveMembers.
+     * length-capped. `uid` is a Firebase Auth UID, capped at 128 to match the
+     * uidSchema in admin/claims-core.ts so the constraint does not drift between
+     * domains. Client mirror: apps/android/.../drives/SavedDrive.kt ConvoyDriveMembers.
      */
     convoyMembers: z
       .array(
         z
           .object({
-            uid: z.string().trim().min(1).max(300),
+            // Firebase Auth UID length cap (matches admin/claims-core.ts uidSchema).
+            uid: z.string().trim().min(1).max(128),
             displayName: z.string().trim().min(1).max(200).optional(),
             avatarPath: z.string().trim().min(1).max(500).optional(),
           })

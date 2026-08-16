@@ -43,6 +43,7 @@ import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.friends.FriendPointsFormat
 import com.kungsbackacarcommunity.app.friends.FriendPointsRepository
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
+import com.kungsbackacarcommunity.app.navigation.runCatchingCancellable
 
 /** Test tag on the live-sharer profile sub-menu popup. */
 const val LIVE_SHARER_POPUP_TAG = "live_sharer_popup"
@@ -136,7 +137,12 @@ fun LiveSharerPopup(
             if (repo == null) {
                 LiveSharerPoints.Loaded(0L)
             } else {
-                val balances = runCatching { repo.balancesFor(listOf(sharer.uid)) }.getOrDefault(emptyMap())
+                // runCatchingCancellable (not plain runCatching) so a cancellation
+                // propagates instead of being swallowed as an empty-map "success",
+                // which would break structured concurrency for this producer.
+                val balances =
+                    runCatchingCancellable { repo.balancesFor(listOf(sharer.uid)) }
+                        .getOrDefault(emptyMap())
                 LiveSharerPoints.fromBalances(sharer.uid, balances)
             }
     }
