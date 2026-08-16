@@ -290,11 +290,21 @@ describe('runOpenTicketsSync', () => {
     expect((await adminDb.collection('openTickets').doc('8299').get()).exists).toBe(false);
   });
 
-  it('makes NO deletions on an empty fetch (outage safety)', async () => {
+  it('makes NO changes on a null fetch (outage safety)', async () => {
     const before = (await adminDb.collection('openTickets').get()).size;
-    const result = await runOpenTicketsSync(async () => []);
-    expect(result.removed).toBe(0);
+    expect(before).toBeGreaterThan(0);
+    const result = await runOpenTicketsSync(async () => null);
+    expect(result).toEqual({ fetched: 0, mirrored: 0, removed: 0 });
     const after = (await adminDb.collection('openTickets').get()).size;
-    expect(after).toBe(before);
+    expect(after).toBe(before); // nothing touched
+  });
+
+  it('reconciles a GENUINE empty open set (successful fetch of []) by removing all stale docs', async () => {
+    const before = (await adminDb.collection('openTickets').get()).size;
+    expect(before).toBeGreaterThan(0);
+    const result = await runOpenTicketsSync(async () => []);
+    expect(result.mirrored).toBe(0);
+    expect(result.removed).toBe(before); // an empty success is a real zero — reconcile out
+    expect((await adminDb.collection('openTickets').get()).size).toBe(0);
   });
 });

@@ -9,12 +9,12 @@
  * fetched open set is removed, so the app's list can never show a ticket that is
  * no longer open.
  *
- * BEST-EFFORT: listOpenIssues never throws (it returns `[]` on any GitHub
- * failure and in the emulator). An empty result is treated as "GitHub gave us
- * nothing to reconcile against" and the sync makes NO deletions in that case —
- * a transient GitHub outage must never wipe the whole mirror. Real deletions
- * happen only when GitHub returned a non-empty open set that a given doc is
- * absent from.
+ * BEST-EFFORT: listOpenIssues never throws. It returns `null` on any GitHub
+ * failure (and in the emulator) and an ARRAY (possibly empty) on a successful
+ * fetch. A `null` result makes NO changes at all — a transient outage must
+ * never wipe the mirror. A successful fetch reconciles fully, INCLUDING a
+ * genuine empty open set (every stale doc removed), because an empty array is a
+ * real "zero open issues" answer, distinct from the null failure signal.
  *
  * The per-ticket `plusOneCount` / `commentCount` tallies are the app-facing
  * counts maintained by feedback-interactWithIssue; the sync writes them with a
@@ -51,8 +51,12 @@ export interface OpenTicketsSyncResult {
   removed: number;
 }
 
-/** Injectable GitHub fetcher (defaults to the real, best-effort list call). */
-export type IssueFetcher = () => Promise<GitHubOpenIssue[]>;
+/**
+ * Injectable GitHub fetcher (defaults to the real, best-effort list call).
+ * Resolves to `null` on any failure (skip reconciliation) or an array (possibly
+ * empty) on success (reconcile fully).
+ */
+export type IssueFetcher = () => Promise<GitHubOpenIssue[] | null>;
 
 /**
  * Upserts one ticket, preserving the live interaction tallies. `createdAt` is
@@ -90,6 +94,15 @@ export async function runOpenTicketsSync(
     listOpenIssues(OPEN_TICKETS_LABEL, GITHUB_ISSUE_TOKEN.value(), 'carcommunity-feedback-bot'),
 ): Promise<OpenTicketsSyncResult> {
   const issues = await fetchIssues();
+
+  // A null result is the FAILURE signal (outage / emulator / bad token): make
+  // no changes at all so a transient blip can never touch the mirror. An empty
+  // array is a genuine "zero open issues" answer and proceeds to reconcile.
+  if (issues === null) {
+    logger.info('syncOpenTickets skipped: GitHub fetch unavailable');
+    return { fetched: 0, mirrored: 0, removed: 0 };
+  }
+
   const mirrorable = issues.filter(isMirrorableIssue);
 
   let mirrored = 0;
@@ -106,24 +119,22 @@ export async function runOpenTicketsSync(
     }
   }
 
-  // Reconcile OUT anything no longer open — but ONLY when GitHub actually
-  // returned an open set. An empty fetch (outage / emulator) makes no deletions,
-  // so a transient failure can never empty the mirror.
+  // Reconcile OUT anything no longer open. This runs on ANY successful fetch —
+  // including a genuine empty open set (every stale doc removed) — because we
+  // reached here only when GitHub actually answered (null was handled above).
   let removed = 0;
-  if (mirrorable.length > 0) {
-    const keep = new Set(mirrorable.map((i) => String(i.number)));
-    const existing = await db.collection(OPEN_TICKETS_COLLECTION).get();
-    for (const doc of existing.docs) {
-      if (!keep.has(doc.id)) {
-        try {
-          await doc.ref.delete();
-          removed += 1;
-        } catch (error) {
-          logger.error('syncOpenTickets: stale delete failed', {
-            issueNumber: doc.id,
-            error: String(error),
-          });
-        }
+  const keep = new Set(mirrorable.map((i) => String(i.number)));
+  const existing = await db.collection(OPEN_TICKETS_COLLECTION).get();
+  for (const doc of existing.docs) {
+    if (!keep.has(doc.id)) {
+      try {
+        await doc.ref.delete();
+        removed += 1;
+      } catch (error) {
+        logger.error('syncOpenTickets: stale delete failed', {
+          issueNumber: doc.id,
+          error: String(error),
+        });
       }
     }
   }

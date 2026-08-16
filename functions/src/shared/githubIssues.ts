@@ -56,7 +56,11 @@ export const GITHUB_REPO_URL = 'https://api.github.com/repos/SebMcCayen/carcommu
 /** REST endpoint for issues on the public repo. */
 export const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues`;
 
-/** Common request headers for the GitHub REST v3 JSON API (no token here). */
+/**
+ * Common request headers for the GitHub REST v3 JSON API: the bearer
+ * `Authorization` built from the token argument plus the standard Accept /
+ * API-version / User-Agent. POST callers add their own `Content-Type`.
+ */
 function githubHeaders(token: string, userAgent: string): Record<string, string> {
   return {
     Authorization: `Bearer ${token}`,
@@ -155,9 +159,16 @@ export interface GitHubOpenIssue {
 /**
  * Lists OPEN issues carrying the given label on the public repo, newest-updated
  * first, up to `perPage` (single page — the mirror only needs the current open
- * set, and the tracker never holds hundreds of open bugs). Returns `[]` on ANY
- * failure or in the emulator; NEVER throws — the scheduled sync is best-effort
- * and must not crash-loop on a GitHub blip.
+ * set, and the tracker never holds hundreds of open bugs). `perPage` is clamped
+ * to GitHub's valid 1..100 range so an out-of-range value can never turn a
+ * successful list into a 4xx.
+ *
+ * Returns `null` on ANY failure (network, non-2xx, unexpected shape, missing
+ * token) or in the emulator, and an ARRAY (possibly EMPTY) on a successful 2xx.
+ * NEVER throws — the scheduled sync is best-effort and must not crash-loop on a
+ * GitHub blip. The null-vs-empty distinction is load-bearing: it lets the sync
+ * reconcile stale docs out on a genuine zero-open-issues result WITHOUT wiping
+ * the mirror on a transient outage (which is null, not empty).
  *
  * The label + state are sent as query params; PRs (which the issues endpoint
  * also returns) are NOT filtered here — the caller drops any row with a
@@ -168,28 +179,29 @@ export async function listOpenIssues(
   token: string,
   userAgent: string,
   perPage = 100,
-): Promise<GitHubOpenIssue[]> {
+): Promise<GitHubOpenIssue[] | null> {
   if (process.env.FUNCTIONS_EMULATOR === 'true') {
-    return [];
+    return null;
   }
   if (!token) {
     logger.error('listOpenIssues: GITHUB_ISSUE_TOKEN is empty');
-    return [];
+    return null;
   }
 
+  const boundedPerPage = Math.min(100, Math.max(1, Math.trunc(perPage)));
   const url =
     `${GITHUB_ISSUES_URL}?state=open&labels=${encodeURIComponent(label)}` +
-    `&per_page=${perPage}&sort=updated&direction=desc`;
+    `&per_page=${boundedPerPage}&sort=updated&direction=desc`;
   try {
     const response = await fetch(url, { method: 'GET', headers: githubHeaders(token, userAgent) });
     if (!response.ok) {
       logger.error('listOpenIssues: GitHub list failed', { status: response.status });
-      return [];
+      return null;
     }
     const body = (await response.json()) as unknown;
     if (!Array.isArray(body)) {
       logger.error('listOpenIssues: unexpected GitHub response shape');
-      return [];
+      return null;
     }
     // Keep only rows with the shape we rely on; anything malformed is dropped
     // rather than allowed to poison the mirror.
@@ -204,7 +216,7 @@ export async function listOpenIssues(
     );
   } catch (error) {
     logger.error('listOpenIssues: GitHub request threw', { error: String(error) });
-    return [];
+    return null;
   }
 }
 
