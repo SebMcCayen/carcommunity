@@ -313,6 +313,29 @@ object ChannelThread {
             createdAt != null &&
             (lastReadAtMillis == null || createdAt > lastReadAtMillis)
     }
+
+    /**
+     * True when ANY convoy has an unread message: some convoy whose newest
+     * DELIVERED-message time ([latestByConvoy], maintained server-side by the
+     * convoyChat.post fan-out) is later than the caller's last-read marker for that
+     * same convoy ([lastReadByConvoy]), or that has no marker at all (never opened,
+     * so any delivered message counts). The AGGREGATE form of [hasUnread] across
+     * convoys — but derived from two owner-only `userPrivate` maps rather than a
+     * per-convoy message listener, so the Convoys tab dot and the map-shell dot
+     * cost ONE document listener regardless of how many convoys the caller is in.
+     *
+     * Both maps hold epoch millis keyed by convoy id. A convoy present only in
+     * [lastReadByConvoy] (read, nothing new since) never contributes; a convoy the
+     * post fan-out has not stamped for this caller is simply absent from
+     * [latestByConvoy]. Pure, so the rule is unit-testable off-device.
+     */
+    fun anyConvoyUnread(
+        latestByConvoy: Map<String, Long>,
+        lastReadByConvoy: Map<String, Long>,
+    ): Boolean = latestByConvoy.any { (convoyId, latestMillis) ->
+        val lastReadMillis = lastReadByConvoy[convoyId]
+        lastReadMillis == null || latestMillis > lastReadMillis
+    }
 }
 
 /**

@@ -186,6 +186,31 @@ class FirebaseConvoyChatRepository private constructor(
         }
     }
 
+    override fun observeAnyUnread(uid: String): Flow<Boolean> = callbackFlow {
+        // ONE listener on the caller's own private document supplies BOTH maps the
+        // derivation needs — the per-convoy newest-message stamps
+        // (convoyChatLatestAt, maintained by the convoyChat.post fan-out) and the
+        // per-convoy last-read markers (convoyChatLastReadAt, stamped by markRead).
+        // No per-convoy message listener is opened, so this is a single document
+        // read regardless of how many convoys the caller is in.
+        val registration =
+            firestore
+                .collection(USER_PRIVATE)
+                .document(uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null && snapshot == null) {
+                        // Transient failure with no cached doc: keep the last-known
+                        // value rather than momentarily reading both maps as empty,
+                        // which would wrongly clear (or fail to light) the dot.
+                        return@addSnapshotListener
+                    }
+                    val latest = timestampMillisByConvoy(snapshot?.get(CONVOY_LATEST_AT))
+                    val lastRead = timestampMillisByConvoy(snapshot?.get(CONVOY_LAST_READ_AT))
+                    trySend(ChannelThread.anyConvoyUnread(latest, lastRead))
+                }
+        awaitClose { registration.remove() }
+    }
+
     override suspend fun markRead(convoyId: String) {
         // Best-effort idempotent bookkeeping; a transient failure is swallowed.
         functions.callChannel(MARK_READ, mapOf("convoyId" to convoyId))
@@ -224,6 +249,24 @@ class FirebaseConvoyChatRepository private constructor(
         private const val CREATED_AT = "createdAt"
         private const val USER_PRIVATE = "userPrivate"
         private const val CONVOY_LAST_READ_AT = "convoyChatLastReadAt"
+        private const val CONVOY_LATEST_AT = "convoyChatLatestAt"
+
+        /**
+         * Reads a `{ [convoyId]: Timestamp }` map field into `convoyId -> epoch
+         * millis`, dropping any entry whose key or value is not the expected shape
+         * (a legacy/partial document can never be written by the client but may
+         * still hold junk). Shared by both per-convoy maps on userPrivate.
+         */
+        private fun timestampMillisByConvoy(raw: Any?): Map<String, Long> {
+            val map = raw as? Map<*, *> ?: return emptyMap()
+            return buildMap {
+                for ((key, value) in map) {
+                    val convoyId = key as? String ?: continue
+                    val millis = (value as? Timestamp)?.toDate()?.time ?: continue
+                    put(convoyId, millis)
+                }
+            }
+        }
         private const val CONVOY_LIST = "convoy-list"
         private const val POST = "convoyChat-post"
         private const val LIST = "convoyChat-list"

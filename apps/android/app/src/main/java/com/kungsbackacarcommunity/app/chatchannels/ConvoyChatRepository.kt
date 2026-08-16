@@ -75,6 +75,23 @@ interface ConvoyChatRepository {
     fun observeUnread(convoyId: String, uid: String): Flow<Int>
 
     /**
+     * True when ANY of the caller's convoys has an unread message — the aggregate
+     * that drives the Convoys tab dot and feeds the map-shell chat dot. Derived
+     * from ONE owner-only `userPrivate/{uid}` listener by comparing the newest
+     * delivered-message time per convoy (`convoyChatLatestAt`, stamped by the
+     * convoyChat.post fan-out) against the last-read markers
+     * (`convoyChatLastReadAt`, stamped by [markRead]) — [ChannelThread.anyConvoyUnread].
+     *
+     * DELIBERATELY not a fan-out: unlike enumerating [listConvoys] and opening a
+     * per-convoy [observeUnread] listener each, this binds a single document and
+     * needs no message reads at all. It cannot render a COUNT (the per-convoy
+     * message windows are the only source of that) — only the boolean the dot
+     * needs. Subscribe only while the dot can be seen (the map shell / open hub),
+     * like the community/DM/notification aggregates.
+     */
+    fun observeAnyUnread(uid: String): Flow<Boolean>
+
+    /**
      * `convoyChat-markRead` — stamps the caller's last-read marker for [convoyId],
      * clearing the unread count. Idempotent, and best-effort: a transient failure
      * leaves the badge lit rather than failing anything the reader is doing.

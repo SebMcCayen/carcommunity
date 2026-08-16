@@ -1628,10 +1628,30 @@ fun AuthenticatedApp(
                 }
                     .collectAsState(initial = false)
 
+            // Convoy unread, hoisted the SAME way as the three above and behind the
+            // SAME gate. Unlike the old per-convoy-only badge (a listener per open
+            // convoy), observeAnyUnread binds ONE userPrivate document and derives
+            // "any convoy unread" from the newest-message / last-read marker maps
+            // the backend maintains — no per-convoy message-listener fan-out. This
+            // is what lets convoy finally join the aggregate dot and get its own tab
+            // dot. distinctUntilChanged for the same reason as the others.
+            // Named distinctly from the per-convoy Int `convoyChatUnread` (the
+            // convoy-bar chat badge, hoisted deeper down): this is the aggregate
+            // Boolean across ALL the caller's convoys.
+            val anyConvoyChatUnread by
+                remember(convoyChatRepository, uid, needsChatUnread) {
+                    if (convoyChatRepository != null && needsChatUnread) {
+                        convoyChatRepository.observeAnyUnread(uid).distinctUntilChanged()
+                    } else {
+                        flowOf(false)
+                    }
+                }
+                    .collectAsState(initial = false)
+
             // The map chat-bubble's red dot: true when ANYTHING in the hub is
-            // unread — community message, DM, or notification. Convoy unread is not
-            // part of this aggregate (no cheap any-convoy signal yet).
-            val anyChatUnread = communityChatUnread || dmUnread || notificationsUnread
+            // unread — community message, DM, notification, or a convoy message.
+            val anyChatUnread =
+                communityChatUnread || dmUnread || notificationsUnread || anyConvoyChatUnread
 
             // Single shared vehicles stream for the garage: exactly one Firestore
             // snapshot listener while the user is on the Garage tab — and none at
@@ -5116,6 +5136,7 @@ fun AuthenticatedApp(
                         communityChatUnread = communityChatUnread,
                         dmUnread = dmUnread,
                         notificationsUnread = notificationsUnread,
+                        convoyChatUnread = anyConvoyChatUnread,
                         convoyChatRepository = convoyChatRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
@@ -6721,6 +6742,7 @@ fun AuthenticatedApp(
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
+                        convoysUnread = anyConvoyChatUnread,
                         friendsUnread = dmUnread,
                         notificationsUnread = notificationsUnread,
                         onClose = { chatHubOpen = false },
@@ -7127,6 +7149,9 @@ private fun RouteHost(
     communityChatUnread: Boolean,
     dmUnread: Boolean,
     notificationsUnread: Boolean,
+    // Aggregate "any convoy unread" (the Convoys tab dot), collected once in
+    // AuthenticatedApp like the three above.
+    convoyChatUnread: Boolean,
     convoyChatRepository: ConvoyChatRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
@@ -7756,6 +7781,7 @@ private fun RouteHost(
                 notificationsRepository = notificationsRepository,
                 notificationsCoordinator = notificationsCoordinator,
                 communityUnread = communityChatUnread,
+                convoysUnread = convoyChatUnread,
                 friendsUnread = dmUnread,
                 notificationsUnread = notificationsUnread,
                 onClose = onClose,

@@ -143,6 +143,7 @@ fun ChatHubRoute(
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
+    convoysUnread: Boolean,
     friendsUnread: Boolean,
     notificationsUnread: Boolean,
     onClose: () -> Unit,
@@ -178,6 +179,7 @@ fun ChatHubRoute(
             notificationsRepository = notificationsRepository,
             notificationsCoordinator = notificationsCoordinator,
             communityUnread = communityUnread,
+            convoysUnread = convoysUnread,
             friendsUnread = friendsUnread,
             notificationsUnread = notificationsUnread,
             onClose = onClose,
@@ -239,6 +241,7 @@ fun ChatHubPopup(
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
+    convoysUnread: Boolean,
     friendsUnread: Boolean,
     notificationsUnread: Boolean,
     onClose: () -> Unit,
@@ -284,6 +287,7 @@ fun ChatHubPopup(
             notificationsRepository = notificationsRepository,
             notificationsCoordinator = notificationsCoordinator,
             communityUnread = communityUnread,
+            convoysUnread = convoysUnread,
             friendsUnread = friendsUnread,
             notificationsUnread = notificationsUnread,
             onClose = onClose,
@@ -350,13 +354,16 @@ private fun ChatHubContent(
     // drive the map chat-bubble dot. Passed in (not re-subscribed here) so a
     // single Firestore listener backs both the bubble and this tab's dot.
     communityUnread: Boolean,
-    // Per-tab unread dots for the Friends (any DM with unread) and Notifications
-    // (any unread inbox item) sections. Derived from listeners hoisted in
-    // AuthenticatedApp that run while the indicator can be seen. Note this is NOT
-    // one shared subscription per section: the Friends and Notifications PAGES
-    // (ConversationListRoute / NotificationsRoute) start their OWN inbox listeners
-    // when opened, so on those two pages the hoisted dot-listener briefly overlaps
-    // with the on-page listener. (Convoys has no per-tab dot; see the tab row.)
+    // Per-tab unread dots for the Convoys (any convoy with unread), Friends (any
+    // DM with unread) and Notifications (any unread inbox item) sections. Derived
+    // from listeners hoisted in AuthenticatedApp that run while the indicator can
+    // be seen. Note this is NOT one shared subscription per section: the Friends
+    // and Notifications PAGES (ConversationListRoute / NotificationsRoute) start
+    // their OWN inbox listeners when opened, so on those two pages the hoisted
+    // dot-listener briefly overlaps with the on-page listener. The Convoys dot is
+    // an aggregate over ONE userPrivate listener (convoyChatRepository.observeAnyUnread),
+    // separate from the per-convoy count each open convoy channel shows.
+    convoysUnread: Boolean,
     friendsUnread: Boolean,
     notificationsUnread: Boolean,
     onClose: () -> Unit,
@@ -568,12 +575,14 @@ private fun ChatHubContent(
                         selected = selectedTab,
                         icon = Icons.Filled.Route,
                         label = stringResource(R.string.chatHub_tabConvoys),
-                        // No convoy dot: the app exposes unread only PER convoy
-                        // (observeUnread(convoyId, uid)); an "any convoy unread"
-                        // aggregate would need a listConvoys() + a live listener per
-                        // convoy, always on while the hub is open — new fan-out, not a
-                        // cheap client-side derivation. Left dot-less until a
-                        // lightweight aggregate signal exists (see PR notes).
+                        // "Any convoy unread", derived from a single userPrivate
+                        // listener (convoyChatRepository.observeAnyUnread): the
+                        // backend post fan-out stamps a per-convoy newest-message
+                        // marker the client compares against its last-read markers,
+                        // so this dot costs one document listener — no per-convoy
+                        // message-listener fan-out.
+                        showDot = convoysUnread,
+                        dotContentDescription = unreadDotLabel,
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
