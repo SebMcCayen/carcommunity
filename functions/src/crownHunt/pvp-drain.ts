@@ -39,7 +39,8 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
-import { isRestricted, toUserAccessState } from '../shared/access';
+import { toUserAccessState } from '../shared/access';
+import { memberGateAllows } from '../shared/memberGating';
 import {
   applyDelta,
   buildLedgerEntry,
@@ -147,10 +148,14 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
   }
 
   // Victim eligibility that is independent of any single trap — read ONCE.
+  // Gated with memberGateAllows (parity with buyPerk/claimSpawn): today, with
+  // member gating disabled repo-wide, this excludes only suspended/deleted/
+  // absent accounts; when gating is re-locked it also skips non-members, so a
+  // non-member never loses points to a trap either.
   const victimSnap = await db.collection('users').doc(victimUid).get();
   const victimData = victimSnap.data();
-  if (!victimData || isRestricted(toUserAccessState(victimData))) {
-    return; // suspended/deleted (or absent) never lose points
+  if (!victimData || !memberGateAllows(toUserAccessState(victimData))) {
+    return; // ineligible (suspended/deleted/absent, or non-member once re-locked)
   }
   const createdAt = victimData.createdAt as Timestamp | undefined;
   if (isNewAccountImmune(createdAt instanceof Timestamp ? createdAt.toMillis() : null, nowMs)) {
@@ -298,11 +303,14 @@ async function applyTrapDrain(
       tx.get(earnRef),
     ]);
 
-    // Placer must be able to transact — checked INSIDE the transaction so a
+    // Placer must be eligible to earn — checked INSIDE the transaction so a
     // placer suspended/deleted in the window before commit is not still
-    // credited (a suspended user must never earn new points). Read here rather
-    // than pre-transaction, so it is re-validated at commit time.
-    if (!placerUserSnap.exists || isRestricted(toUserAccessState(placerUserSnap.data()))) {
+    // credited (a suspended user must never earn new points). Gated with
+    // memberGateAllows (parity with buyPerk/claimSpawn): today it excludes only
+    // suspended/deleted/absent; when gating is re-locked a non-member placer
+    // earns nothing from a trap either. Read here rather than pre-transaction,
+    // so it is re-validated at commit time.
+    if (!placerUserSnap.exists || !memberGateAllows(toUserAccessState(placerUserSnap.data()))) {
       return false;
     }
 
