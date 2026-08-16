@@ -341,6 +341,38 @@ describe('crownHunt.deployPerk — trap', () => {
       ),
     ).toBe('functions/failed-precondition');
   });
+
+  it('is RACE-SAFE: two concurrent deploys yield exactly ONE live trap', async () => {
+    const member = await createProvisionedUser('pvp-trap-race');
+    await setInventory(member.uid, { spike_strip: 3 }); // enough that the daily cap is not what stops it
+    await signInAs(member);
+    const spot = uniqueSpot();
+
+    // Fire two deploys CONCURRENTLY with DIFFERENT idempotency keys. Without the
+    // in-transaction cap check both could pass the pre-check and create two live
+    // traps; the tx.get(query) inside the transaction makes the second serialize,
+    // re-query, see the first trap and reject.
+    const results = await Promise.allSettled([
+      call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() }),
+      call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() }),
+    ]);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
+    const rejected = results.filter((r) => r.status === 'rejected').length;
+    expect(fulfilled).toBe(1);
+    expect(rejected).toBe(1);
+
+    // Authoritative: exactly ONE live armed trap exists for this member.
+    const live = await adminDb
+      .collection('activePerks')
+      .where('placedByUid', '==', member.uid)
+      .where('status', '==', 'armed')
+      .get();
+    const liveCount = live.docs.filter((d) => {
+      const exp = d.data().expiresAt as Timestamp | undefined;
+      return exp instanceof Timestamp && exp.toMillis() > Date.now();
+    }).length;
+    expect(liveCount).toBe(1);
+  });
 });
 
 describe('trap DRAIN (inline in live.updatePosition)', () => {

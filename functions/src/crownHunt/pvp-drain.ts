@@ -101,7 +101,24 @@ const PERKS_FLAG_ENABLED_TTL_MS = 5_000;
 const PERKS_FLAG_DISABLED_TTL_MS = 60_000;
 let cachedPerksFlag: { value: boolean; expiresAtMs: number } | null = null;
 
-async function crownHuntPerksEnabled(nowMs: number): Promise<boolean> {
+/**
+ * The crownHuntPerks gate, cached with the asymmetric TTL above. Exported for a
+ * PURE unit test (inject the clock via `nowMs`, the flag via a mocked
+ * readFeatureFlag) so the TTL logic has coverage that does not depend on the
+ * emulator exercising it.
+ *
+ * UNDER THE EMULATOR (FUNCTIONS_EMULATOR === 'true') the cache is BYPASSED — a
+ * fresh read every time. The module cache lives in the functions-emulator
+ * process and survives across test files there; a stale value once leaked
+ * between files and failed CI. Bypassing under the emulator makes every
+ * flag-toggle test deterministic regardless of code path, while prod keeps the
+ * cache (the kill-switch + cheap-when-off behaviour the asymmetric TTL exists
+ * for).
+ */
+export async function crownHuntPerksEnabled(nowMs: number): Promise<boolean> {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY);
+  }
   if (cachedPerksFlag && nowMs < cachedPerksFlag.expiresAtMs) {
     return cachedPerksFlag.value;
   }
@@ -317,6 +334,8 @@ async function applyTrapDrain(
   const dayKey = utcDayKey(now);
 
   const placerUserRef = db.collection('users').doc(placerUid);
+  const victimUserRef = db.collection('users').doc(victimUid);
+  const victimShieldRef = db.collection('perkShield').doc(victimUid);
   const victimLedgerRef = db.collection('pointsLedger').doc(victimUid);
   const placerLedgerRef = db.collection('pointsLedger').doc(placerUid);
   const cooldownRef = db.collection('perkDrainCooldowns').doc(victimCooldownDocId(victimUid));
@@ -350,6 +369,8 @@ async function applyTrapDrain(
 
     const [
       placerUserSnap,
+      victimUserSnap,
+      victimShieldSnap,
       markerSnap,
       cooldownSnap,
       victimLedgerSnap,
@@ -358,6 +379,8 @@ async function applyTrapDrain(
       earnSnap,
     ] = await Promise.all([
       tx.get(placerUserRef),
+      tx.get(victimUserRef),
+      tx.get(victimShieldRef),
       tx.get(markerRef),
       tx.get(cooldownRef),
       tx.get(victimLedgerRef),
@@ -375,6 +398,29 @@ async function applyTrapDrain(
     // so it is re-validated at commit time.
     if (!placerUserSnap.exists || !memberGateAllows(toUserAccessState(placerUserSnap.data()))) {
       return false;
+    }
+
+    // Victim eligibility RE-CHECKED inside the transaction (runTrapDrains already
+    // pre-checked it, but that read is outside this txn). A victim who became
+    // restricted, aged into immunity terms, OR raised a SHIELD between the
+    // pre-check and commit must not still be drained — this upholds the
+    // server-enforced shield/immunity guarantee under concurrency.
+    const victimData = victimUserSnap.data();
+    if (!victimData || !memberGateAllows(toUserAccessState(victimData))) {
+      return false; // victim now restricted/deleted/non-member
+    }
+    const victimCreatedAt = victimData.createdAt as Timestamp | undefined;
+    if (
+      isNewAccountImmune(
+        victimCreatedAt instanceof Timestamp ? victimCreatedAt.toMillis() : null,
+        nowMs,
+      )
+    ) {
+      return false; // new-account immunity
+    }
+    const victimShieldExp = victimShieldSnap.data()?.expiresAt as Timestamp | undefined;
+    if (isTimestampActive(victimShieldExp instanceof Timestamp ? victimShieldExp.toMillis() : null, nowMs)) {
+      return false; // victim raised a shield before commit
     }
 
     if (markerSnap.exists) {
