@@ -9,6 +9,12 @@
  * fetched open set is removed, so the app's list can never show a ticket that is
  * no longer open.
  *
+ * FLAG-GATED (runOpenTicketsSyncIfEnabled): while the contract-default-OFF
+ * `reportTicketsBrowser` flag is OFF the scheduled job is a complete no-op —
+ * no GitHub call, no Firestore write — so the dark feature never touches the
+ * GitHub API or populates the mirror on deploy. The mirror first populates on
+ * the FIRST run after the flag is enabled (a few-minute delay is expected).
+ *
  * BEST-EFFORT: listOpenIssues never throws. It PAGINATES the open set and
  * returns `null` on any failure (network/non-2xx on ANY page, unexpected shape,
  * missing token, emulator) or `{ issues, complete }` on success. A `null`
@@ -40,10 +46,12 @@ import { listOpenIssues, type OpenIssuesResult } from '../shared/githubIssues';
 import {
   OPEN_TICKETS_COLLECTION,
   OPEN_TICKETS_LABEL,
+  REPORT_TICKETS_FLAG_KEY,
   isMirrorableIssue,
   mapIssueToTicketFields,
   type MappableIssue,
 } from './openTickets-core';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
@@ -158,6 +166,29 @@ export async function runOpenTicketsSync(
   return { fetched: issues.length, mirrored, removed };
 }
 
+/**
+ * Flag-gated entry point the scheduled job actually runs. While the
+ * contract-default-OFF `reportTicketsBrowser` flag is OFF the sync is a complete
+ * no-op: it makes NO GitHub call and NO Firestore write, so a dark feature never
+ * hits the GitHub API or populates the mirror on deploy. The mirror first
+ * populates on the FIRST sync run AFTER the flag is enabled (a few-minute delay
+ * is expected). The interact callable is independently flag-gated.
+ *
+ * The flag is read UNCACHED per run (readFeatureFlag reads config/featureFlags
+ * each call) — safe here because this is a low-frequency scheduled job, not a
+ * hot path, so there is no module-level cache to trip the functions-emulator
+ * cross-process cache gotcha. Exported for the emulator test.
+ */
+export async function runOpenTicketsSyncIfEnabled(
+  fetchIssues?: IssueFetcher,
+): Promise<OpenTicketsSyncResult> {
+  if (!(await readFeatureFlag(REPORT_TICKETS_FLAG_KEY))) {
+    logger.debug('syncOpenTickets skipped: reportTicketsBrowser flag OFF');
+    return { fetched: 0, mirrored: 0, removed: 0 };
+  }
+  return fetchIssues ? runOpenTicketsSync(fetchIssues) : runOpenTicketsSync();
+}
+
 export const syncOpenTickets = onSchedule(
   {
     region: 'europe-west1',
@@ -176,6 +207,6 @@ export const syncOpenTickets = onSchedule(
     secrets: [GITHUB_ISSUE_TOKEN],
   },
   withServerErrorReporting('feedback.syncOpenTickets', async () => {
-    await runOpenTicketsSync();
+    await runOpenTicketsSyncIfEnabled();
   }),
 );

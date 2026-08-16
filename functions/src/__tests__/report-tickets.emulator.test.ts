@@ -42,7 +42,7 @@ import {
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runOpenTicketsSync } from '../feedback/syncOpenTickets';
+import { runOpenTicketsSync, runOpenTicketsSyncIfEnabled } from '../feedback/syncOpenTickets';
 import type { GitHubOpenIssue } from '../shared/githubIssues';
 
 const PROJECT_ID = 'demo-test';
@@ -342,5 +342,33 @@ describe('runOpenTicketsSync', () => {
     expect(result.mirrored).toBe(0);
     expect(result.removed).toBe(before); // an empty COMPLETE success is a real zero — reconcile out
     expect((await adminDb.collection('openTickets').get()).size).toBe(0);
+  });
+});
+
+describe('runOpenTicketsSyncIfEnabled (flag gate)', () => {
+  it('is a complete no-op while reportTicketsBrowser is OFF (no fetch, no write)', async () => {
+    await setFlag(false);
+    await seedOpenTicket(8801); // a pre-existing doc that must survive untouched
+    const before = (await adminDb.collection('openTickets').get()).size;
+
+    // The injected fetcher THROWS — proving it is never called when the flag is off.
+    const result = await runOpenTicketsSyncIfEnabled(async () => {
+      throw new Error('fetcher must not be called while the flag is OFF');
+    });
+    expect(result).toEqual({ fetched: 0, mirrored: 0, removed: 0 });
+
+    const after = (await adminDb.collection('openTickets').get()).size;
+    expect(after).toBe(before); // nothing written or deleted
+    expect((await adminDb.collection('openTickets').doc('8801').get()).exists).toBe(true);
+  });
+
+  it('syncs when reportTicketsBrowser is ON', async () => {
+    await setFlag(true);
+    const result = await runOpenTicketsSyncIfEnabled(async () => ({
+      issues: [fakeIssue(8901)],
+      complete: true,
+    }));
+    expect(result.mirrored).toBe(1);
+    expect((await adminDb.collection('openTickets').doc('8901').get()).exists).toBe(true);
   });
 });
