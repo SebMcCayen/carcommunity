@@ -164,8 +164,29 @@ object ConvoyEdgeGeometry {
      * [MAX_ANGLE_DISAGREEMENT_DEGREES] means the projection folded, and the
      * member is treated as off-screen — which is where they actually are.
      *
-     * Points within [CENTRE_EPSILON_PX] of the viewport centre have no
-     * meaningful angle and are trusted: they are on screen by definition.
+     * ## Why the centre is trusted over a WHOLE region, not a single pixel (#867)
+     * Near the viewport centre the cross-examination has to be switched OFF, and
+     * over more than the sub-pixel [CENTRE_EPSILON_PX] it used to skip. The angle
+     * it checks against, [expectedScreenAngle], is the member's bearing from the
+     * camera centre — and as the member approaches the centre that separation
+     * shrinks to a few metres, at which point a sub-metre GPS/rounding jitter (and
+     * the settled snapshot's own ~1 m quantisation of the camera centre it is
+     * measured from) swings that bearing through a full turn. The projected pixel,
+     * by contrast, stays exactly where the live map puts it. So a marker the user
+     * has deliberately zoomed in on — sitting right at the centre, which is the
+     * whole point of zooming toward someone — had a meaningless "expected" angle
+     * cross-examined against an honest pixel, disagreed by more than a right
+     * angle, and was culled: the icon vanished at some zoom levels and came back
+     * at others as the pixel drifted back across the epsilon. That is issue #867.
+     *
+     * A genuine behind-camera fold cannot hide inside this region: it lands at or
+     * above the horizon, which even at this app's maximum pitch (45°,
+     * [com.kungsbackacarcommunity.app.map.MapMarkers.DEFAULT_PITCH]) is empirically
+     * the better part of the viewport HEIGHT away from the centre. Trusting a disc
+     * of radius [CENTRE_TRUST_FRACTION] of the SMALLER viewport dimension therefore
+     * covers the metres-from-centre zone where the bearing is noise while staying
+     * comfortably inside the fold's landing distance, so the fold check keeps
+     * catching the case it exists for.
      */
     fun isProjectionTrustworthy(
         point: ProjectedPoint,
@@ -176,7 +197,9 @@ object ConvoyEdgeGeometry {
         if (!point.x.isFinite() || !point.y.isFinite()) return false
         val dx = point.x - viewportWidth / 2f
         val dy = point.y - viewportHeight / 2f
-        if (hypot(dx, dy) <= CENTRE_EPSILON_PX) return true
+        val centreTrustRadiusPx =
+            maxOf(CENTRE_EPSILON_PX, CENTRE_TRUST_FRACTION * minOf(viewportWidth, viewportHeight))
+        if (hypot(dx, dy) <= centreTrustRadiusPx) return true
         // Screen angle of the projected offset, same convention as
         // [screenAngleDegrees]: 0 = up, clockwise positive. Screen y grows
         // downward, hence -dy.
@@ -306,6 +329,22 @@ object ConvoyEdgeGeometry {
 
     /** Radius around the viewport centre inside which a screen angle is meaningless. */
     const val CENTRE_EPSILON_PX: Float = 1f
+
+    /**
+     * Fraction of the SMALLER viewport dimension around the centre within which a
+     * projection is trusted outright, skipping the bearing cross-examination (see
+     * [isProjectionTrustworthy] for the full reasoning behind #867).
+     *
+     * Sized to sit between the two distances that bracket it. Below: the
+     * few-metres-from-centre zone where [expectedScreenAngle] is dominated by
+     * jitter — at ordinary browsing zooms a few metres is only tens of pixels, so
+     * even a small fraction covers it. Above: the fold's landing distance — a
+     * behind-camera point lands near the horizon, which at this app's 45° pitch is
+     * upward of 40% of the viewport height from the centre, so 15% of the smaller
+     * dimension keeps a better-than-2× margin before the trusted disc could ever
+     * reach a genuine fold.
+     */
+    const val CENTRE_TRUST_FRACTION: Float = 0.15f
 
     /**
      * Round-trip slack in pixels (see [projectionRoundTrips]). A few pixels

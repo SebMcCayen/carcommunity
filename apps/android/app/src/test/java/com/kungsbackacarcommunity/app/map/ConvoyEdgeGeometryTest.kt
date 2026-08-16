@@ -165,8 +165,10 @@ class ConvoyEdgeGeometryTest {
         // Under 45 degrees of pitch a point ahead compresses hard toward the
         // horizon: the radius shrinks a lot, the azimuth barely moves. That must
         // still be trusted, otherwise every member in front of a tilted camera
-        // becomes an arrow.
-        val squashed = ProjectedPoint(x = 520f, y = 940f)
+        // becomes an arrow. Kept well OUTSIDE the centre-trust disc (700px above
+        // centre) so it exercises the bearing cross-examination, not the
+        // near-centre short-circuit.
+        val squashed = ProjectedPoint(x = 525f, y = 300f)
         assertTrue(
             ConvoyEdgeGeometry.isProjectionTrustworthy(
                 squashed,
@@ -185,6 +187,40 @@ class ConvoyEdgeGeometryTest {
                 1000f,
                 2000f,
                 expectedScreenAngle = 123.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a marker zoomed in on near the centre is trusted even when its bearing disagrees`() {
+        // #867: the user has zoomed in on a live sharer, so their icon sits close
+        // to the viewport centre (78px away here — inside the centre-trust disc,
+        // which is 0.15 * 1000 = 150px on this viewport). At that separation the
+        // camera-centre-to-member bearing is a few metres of noise, so the
+        // "expected" angle is meaningless; here it points the opposite way (200)
+        // to the projected offset. Before the fix that disagreement culled the
+        // icon at some zoom levels and let it back at others. It must be trusted.
+        assertTrue(
+            ConvoyEdgeGeometry.isProjectionTrustworthy(
+                ProjectedPoint(560f, 1050f),
+                1000f,
+                2000f,
+                expectedScreenAngle = 200.0,
+            ),
+        )
+    }
+
+    @Test
+    fun `a genuine fold well outside the centre disc is still culled`() {
+        // The widened centre trust must not swallow the fold it exists to catch:
+        // a point 400px above centre (outside the 150px disc) whose true bearing
+        // is straight down (180) is a behind-camera fold and stays untrusted.
+        assertFalse(
+            ConvoyEdgeGeometry.isProjectionTrustworthy(
+                ProjectedPoint(500f, 600f),
+                1000f,
+                2000f,
+                expectedScreenAngle = 180.0,
             ),
         )
     }

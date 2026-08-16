@@ -161,4 +161,23 @@ class NearbyChipVisibilityTest {
             ),
         )
     }
+
+    @Test
+    fun `a sharer zoomed in on near the centre stays visible while its bearing is noise`() {
+        // #867: "when I look at another person and zoom in or out, their picture
+        // disappears at certain zoom levels". Zooming toward a sharer parks their
+        // chip near the centre (56px away here), where the metres-from-centre
+        // bearing is pure jitter — here it disagrees by ~160 degrees. The chip is
+        // squarely on screen and must NOT flicker out. Covered by the widened
+        // centre-trust disc in ConvoyEdgeGeometry.isProjectionTrustworthy.
+        assertTrue(
+            NearbyChipVisibility.isVisible(
+                projected = ProjectedPoint(width / 2f + 40f, height / 2f + 40f),
+                viewportWidth = width,
+                viewportHeight = height,
+                marginPx = margin,
+                expectedScreenAngle = 20.0,
+            ),
+        )
+    }
 }
