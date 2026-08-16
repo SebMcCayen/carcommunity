@@ -78,6 +78,25 @@ import {
   tryEvaluateBadgeTiers,
 } from './tierAwards';
 import { MAX_INSTANCES_TRIGGER_FANOUT, CPU_TRIGGER_FANOUT } from '../shared/instanceLimits';
+import { bumpMemberMonthlyStat } from '../leaderboard/monthly-stats';
+import { MEMBER_MONTHLY_STAT_FIELDS } from '../leaderboard/leaderboard-core';
+
+/**
+ * The instant a source event was delivered, used to bucket a monthly-leaderboard
+ * increment into the calendar month the activity happened in. The CloudEvent
+ * `time` is the write time of the source document (the drive that just saved,
+ * the convoy that just ended), which is the moment the activity occurred; a
+ * missing or unparseable value falls back to now so a bucket is never skipped.
+ */
+function eventInstant(time: string | undefined): Date {
+  if (typeof time === 'string') {
+    const parsed = new Date(time);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return new Date();
+}
 
 const TRIGGER_OPTS = {
   region: 'europe-west1',
@@ -192,6 +211,14 @@ export const onRideCreated = onDocumentCreated(
       return;
     }
     await bumpBadgeCounter(uid, 'lifetimeDistanceMeters', metres);
+    // MONTHLY leaderboard: the same metres also credit this member's bucket for
+    // the month the drive was saved in (leaderboard/monthly-stats.ts).
+    await bumpMemberMonthlyStat(
+      uid,
+      eventInstant(firestoreEvent.time),
+      MEMBER_MONTHLY_STAT_FIELDS.distance,
+      metres,
+    );
   },
 );
 
@@ -207,6 +234,15 @@ export const onConvoyWritten = onDocumentWritten(
       return;
     }
     await bumpBadgeCounter(ownerUid, 'convoysLed', 1);
+    // MONTHLY leaderboard: credit the leader's bucket for the month the convoy
+    // completed in. `convoyLedOwnerUid` fires only on the transition INTO ended,
+    // so this is single-shot per convoy, exactly like the badge counter above.
+    await bumpMemberMonthlyStat(
+      ownerUid,
+      eventInstant(firestoreEvent.time),
+      MEMBER_MONTHLY_STAT_FIELDS.convoys,
+      1,
+    );
   },
 );
 

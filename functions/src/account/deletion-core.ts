@@ -140,6 +140,22 @@ export const PURGE_OWNED_COLLECTIONS: ReadonlyArray<{
 }> = [
   { collection: 'vehicles', userField: 'userId' },
   { collection: 'rides', userField: 'userId' },
+  // Backend-only per-month leaderboard buckets, one document per (month, member)
+  // at `memberMonthlyStats/{YYYY-MM}__{uid}` (functions/src/leaderboard). Each
+  // bucket carries a `uid` field precisely so this owned-query purge reaches
+  // EVERY month's row for the member — a doc-tree purge could not, because the
+  // rows are keyed by month, not by uid. Same privacy rule as `badgeProgress`
+  // above: these hold per-user activity (distance driven, events attended,
+  // convoys led per month) and must not survive erasure.
+  //
+  // The month-scoped crown counters at `crownHuntLeaderboardEntries/{scope}__uid`
+  // are deliberately NOT purged here (matching the all-time entry, which is also
+  // retained): they hold no denormalized identity, and the published
+  // `leaderboards/{scope}` docs resolve names from `users/{uid}` on every run, so
+  // a deleted member drops off the visible board on the next generation
+  // regardless — the boards SELF-HEAL. Purging the `memberMonthlyStats` buckets
+  // is the one addition erasure needs.
+  { collection: 'memberMonthlyStats', userField: 'uid' },
 ];
 
 /**

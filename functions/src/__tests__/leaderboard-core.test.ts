@@ -12,15 +12,19 @@ import { describe, expect, it } from 'vitest';
 import {
   LEADERBOARD_ALL_TIME_SCOPE,
   LEADERBOARD_CATEGORIES,
+  LEADERBOARD_MONTHLY_CATEGORIES,
   LEADERBOARD_TOP_N,
+  MEMBER_MONTHLY_STAT_FIELDS,
   buildLeaderboardCategory,
   candidateUidsToResolve,
+  memberMonthlyStatsDocId,
   readCandidateValue,
   topCandidates,
   type LeaderboardCandidate,
   type LeaderboardCategoryKey,
   type LeaderboardIdentity,
 } from '../leaderboard/leaderboard-core';
+import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
 
 const id = (displayName: string, avatarPath: string | null = null): LeaderboardIdentity => ({
   displayName,
@@ -43,6 +47,42 @@ describe('constants', () => {
       'convoys',
       'streak',
     ]);
+  });
+});
+
+describe('monthly board constants', () => {
+  it('is the all-time set MINUS streak (a streak spans months)', () => {
+    expect([...LEADERBOARD_MONTHLY_CATEGORIES]).toEqual([
+      'crownPoints',
+      'distance',
+      'events',
+      'convoys',
+    ]);
+    // streak is all-time only and must never appear on a monthly board.
+    expect([...LEADERBOARD_MONTHLY_CATEGORIES]).not.toContain('streak');
+    // Every monthly category is a real all-time category (same keys, same shape).
+    for (const key of LEADERBOARD_MONTHLY_CATEGORIES) {
+      expect(LEADERBOARD_CATEGORIES).toContain(key);
+    }
+  });
+
+  it('maps the three additive monthly categories to their bucket fields', () => {
+    expect(MEMBER_MONTHLY_STAT_FIELDS).toEqual({
+      distance: 'distanceMeters',
+      events: 'eventsAttended',
+      convoys: 'convoysLed',
+    });
+  });
+
+  it('keys a bucket by the season the instant falls in (month derived from timestamp)', () => {
+    // Mid-August in Stockholm → the 2026-08 bucket; the write-side month
+    // derivation the triggers use (seasonIdForInstant) composes with the doc id.
+    const august = new Date('2026-08-15T10:00:00Z');
+    expect(seasonIdForInstant(august)).toBe('2026-08');
+    expect(memberMonthlyStatsDocId(seasonIdForInstant(august), 'u1')).toBe('2026-08__u1');
+    // Just before Swedish midnight on Jul 31 is still July, not August (the
+    // boundary is Europe/Stockholm civil time, +02:00 in summer).
+    expect(seasonIdForInstant(new Date('2026-07-31T21:30:00Z'))).toBe('2026-07');
   });
 });
 

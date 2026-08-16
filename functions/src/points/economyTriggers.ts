@@ -254,7 +254,7 @@ export const onAttendanceVerified = onDocumentWritten(
     // maybeAwardHost's tally is guarded by counted/{uid} — so letting this
     // throw makes the whole handler RETRY to completion with no double credit.
     // See creditVerifiedEventAttendance for the full retry-safety argument.
-    await creditVerifiedEventAttendance(uid, eventId);
+    await creditVerifiedEventAttendance(uid, eventId, now);
 
     await maybeAwardHost(eventId, uid, now);
   },
