@@ -166,7 +166,8 @@ object ConvoyEdgeGeometry {
      *
      * ## Why the centre is trusted over a WHOLE region, not a single pixel (#867)
      * Near the viewport centre the cross-examination has to be switched OFF, and
-     * over more than the sub-pixel [CENTRE_EPSILON_PX] it used to skip. The angle
+     * over a wider region than the one-pixel [CENTRE_EPSILON_PX] radius it used to
+     * skip. The angle
      * it checks against, [expectedScreenAngle], is the member's bearing from the
      * camera centre — and as the member approaches the centre that separation
      * shrinks to a few metres, at which point a sub-metre GPS/rounding jitter (and
@@ -327,7 +328,11 @@ object ConvoyEdgeGeometry {
      */
     const val MAX_ANGLE_DISAGREEMENT_DEGREES: Double = 90.0
 
-    /** Radius around the viewport centre inside which a screen angle is meaningless. */
+    /**
+     * One-pixel radius around the viewport centre inside which a screen angle is
+     * meaningless. Retained only as the floor of the much wider
+     * [CENTRE_TRUST_FRACTION] disc (see [isProjectionTrustworthy]).
+     */
     const val CENTRE_EPSILON_PX: Float = 1f
 
     /**

@@ -197,15 +197,16 @@ class ConvoyEdgeGeometryTest {
         // to the viewport centre (78px away here — inside the centre-trust disc,
         // which is 0.15 * 1000 = 150px on this viewport). At that separation the
         // camera-centre-to-member bearing is a few metres of noise, so the
-        // "expected" angle is meaningless; here it points the opposite way (200)
-        // to the projected offset. Before the fix that disagreement culled the
-        // icon at some zoom levels and let it back at others. It must be trusted.
+        // "expected" angle is meaningless: the projected offset points down-right
+        // (~130°), while the noisy bearing here points up-left (300°) — a ~170°
+        // disagreement that, past the 90° fold threshold, culled the icon at some
+        // zoom levels and let it back at others before the fix. It must be trusted.
         assertTrue(
             ConvoyEdgeGeometry.isProjectionTrustworthy(
                 ProjectedPoint(560f, 1050f),
                 1000f,
                 2000f,
-                expectedScreenAngle = 200.0,
+                expectedScreenAngle = 300.0,
             ),
         )
     }

@@ -167,9 +167,11 @@ class NearbyChipVisibilityTest {
         // #867: "when I look at another person and zoom in or out, their picture
         // disappears at certain zoom levels". Zooming toward a sharer parks their
         // chip near the centre (56px away here), where the metres-from-centre
-        // bearing is pure jitter — here it disagrees by ~160 degrees. The chip is
-        // squarely on screen and must NOT flicker out. Covered by the widened
-        // centre-trust disc in ConvoyEdgeGeometry.isProjectionTrustworthy.
+        // bearing is pure jitter. The projected offset (dx=dy=40) points to ~135°,
+        // while the noisy "expected" bearing here is 20°, a ~115° disagreement —
+        // past the 90° fold threshold, so without the widened centre-trust disc
+        // the chip would be culled. It is squarely on screen and must NOT flicker
+        // out. Covered by the disc in ConvoyEdgeGeometry.isProjectionTrustworthy.
         assertTrue(
             NearbyChipVisibility.isVisible(
                 projected = ProjectedPoint(width / 2f + 40f, height / 2f + 40f),
