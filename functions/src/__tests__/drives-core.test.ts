@@ -133,6 +133,24 @@ describe('drives-core input parsing and guards', () => {
     expect(withCar.ok).toBe(true);
     expect(parseSaveDriveInput({ ...validSave, vehicleId: '' }).ok).toBe(false);
     expect(parseSaveDriveInput({ ...validSave, carImagePath: '' }).ok).toBe(false);
+    // The convoy roster is optional; a valid roster is accepted and a malformed
+    // entry (blank uid, blank optional field, unknown key) is rejected.
+    expect(
+      parseSaveDriveInput({
+        ...validSave,
+        convoyMembers: [
+          { uid: 'u2', displayName: 'Anna', avatarPath: 'avatars/u2.jpg' },
+          { uid: 'u3' },
+        ],
+      }).ok,
+    ).toBe(true);
+    expect(parseSaveDriveInput({ ...validSave, convoyMembers: [{ uid: '' }] }).ok).toBe(false);
+    expect(
+      parseSaveDriveInput({ ...validSave, convoyMembers: [{ uid: 'u2', displayName: '' }] }).ok,
+    ).toBe(false);
+    expect(parseSaveDriveInput({ ...validSave, convoyMembers: [{ uid: 'u2', extra: 1 }] }).ok).toBe(
+      false,
+    );
     expect(parseDeleteDriveInput({ rideId: 'r1' }).ok).toBe(true);
     expect(parseDeleteDriveInput({}).ok).toBe(false);
     // Firestore-unsafe IDs fail as invalid-argument instead of throwing in doc().
@@ -207,6 +225,9 @@ describe('drives-core stats and document builder', () => {
     // so every ride document carries them for a uniform read shape.
     expect(docData.vehicleId).toBeNull();
     expect(docData.carImagePath).toBeNull();
+    // Solo drive → the convoy roster defaults to an empty array (not absent), so
+    // the read side is a plain "no members" list.
+    expect(docData.convoyMembers).toEqual([]);
     // REVERSED 2026-07 by an explicit product decision. This line used to read
     //   expect(docData).not.toHaveProperty('topSpeed');
     // and pinned the rule that no top-speed field was ever stored. Maximum
@@ -241,5 +262,49 @@ describe('drives-core stats and document builder', () => {
     );
     expect(docData.vehicleId).toBe('veh-9');
     expect(docData.carImagePath).toBe('vehicleImages/u1/veh-9/photo.jpg');
+  });
+
+  it('records the convoy roster on the ride document for a convoy drive', () => {
+    const parsed = parseSaveDriveInput({
+      ...validSave,
+      convoyMembers: [
+        { uid: 'u2', displayName: 'Anna', avatarPath: 'avatars/u2.jpg' },
+        { uid: 'u3' },
+      ],
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const stats = computeDriveStats(parsed.input);
+    const docData = buildRideDocument(
+      parsed.input,
+      { userId: 'u1', rideId: 'r1', stats, routeThumbnail: null },
+      serverTimestamp,
+    );
+    expect(docData.convoyMembers).toEqual([
+      { uid: 'u2', displayName: 'Anna', avatarPath: 'avatars/u2.jpg' },
+      { uid: 'u3' },
+    ]);
+  });
+
+  it('de-duplicates the convoy roster by uid when storing (first wins, order kept)', () => {
+    const parsed = parseSaveDriveInput({
+      ...validSave,
+      convoyMembers: [
+        { uid: 'u2', displayName: 'Anna' },
+        { uid: 'u3', displayName: 'Erik' },
+        { uid: 'u2', displayName: 'Duplicate' }, // same uid within the cap
+      ],
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const stats = computeDriveStats(parsed.input);
+    const docData = buildRideDocument(
+      parsed.input,
+      { userId: 'u1', rideId: 'r1', stats, routeThumbnail: null },
+      serverTimestamp,
+    );
+    // The duplicate collapses to the FIRST occurrence; order is preserved.
+    expect(docData.convoyMembers).toEqual([
+      { uid: 'u2', displayName: 'Anna' },
+      { uid: 'u3', displayName: 'Erik' },
+    ]);
   });
 });

@@ -596,7 +596,10 @@
   },
   "nearby": {
     "liveSharerOnMap": "%1$s delar live i närheten",
-    "unknownSharer": "Någon i närheten"
+    "unknownSharer": "Någon i närheten",
+    "visitProfile": "Besök profil",
+    "sharerPoints": "%1$s %2$s",
+    "sharerPopupClose": "Stäng"
   },
   "convoy": {
     "title": "Konvojer",
@@ -809,6 +812,8 @@
     "maxSpeed": "Högsta hastighet",
     "maxSpeedShort": "Max %1$s",
     "carPhotoDescription": "Bil som kördes",
+    "convoyDroveWith": "Kördes med %1$s",
+    "convoyMemberUnknown": "Medlem",
     "date": "Datum",
     "timeRange": "Tid",
     "shareAction": "Dela körning",

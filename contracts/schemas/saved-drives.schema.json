@@ -54,9 +54,15 @@
           "maxLength": 500,
           "description": "Denormalized cover-photo Storage path of the driven car, so the History card renders a round photo without a vehicle read. Null when no car was recorded."
         },
+        "convoyMembers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/convoyMember" },
+          "maxItems": 24,
+          "description": "The OTHER members of the convoy this drive was part of, denormalized so the History card can show who you drove with. Empty array on a solo drive; ABSENT on drives saved before the field existed (not backfilled) and on the server-side convoy finalize baseline."
+        },
         "createdAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
       },
-      "comment": "maxSpeedMetersPerSecond, routeThumbnail, vehicleId and carImagePath are deliberately NOT required: drives.save writes them, but drives saved before each field existed are not backfilled and simply lack the keys. Requiring them would describe a shape the collection does not have.",
+      "comment": "maxSpeedMetersPerSecond, routeThumbnail, vehicleId, carImagePath and convoyMembers are deliberately NOT required: drives.save writes them, but drives saved before each field existed are not backfilled and simply lack the keys. Requiring them would describe a shape the collection does not have.",
       "required": [
         "userId",
         "title",
@@ -70,6 +76,17 @@
         "sourceSessionId",
         "createdAt"
       ],
+      "additionalProperties": false
+    },
+    "convoyMember": {
+      "type": "object",
+      "description": "One OTHER member of the convoy a drive was part of, denormalized onto the ride (and submitted on the save) so the History card can show who you drove with without an extra read. Mirrors the backend zod (functions/src/drives/drives-core.ts convoyMembers) and the Android ConvoyDriveMembers wire shape.",
+      "properties": {
+        "uid": { "$ref": "common.schema.json#/$defs/uid" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "avatarPath": { "type": "string", "minLength": 1, "maxLength": 500 }
+      },
+      "required": ["uid"],
       "additionalProperties": false
     },
     "routePoint": {
@@ -117,6 +134,12 @@
           "minLength": 1,
           "maxLength": 500,
           "description": "Cover-photo Storage path of the driven car, denormalized onto the ride for the History card."
+        },
+        "convoyMembers": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/convoyMember" },
+          "maxItems": 24,
+          "description": "The OTHER members of the convoy this drive was part of (uid + optional display name + optional avatar path), submitted so the ride records who you drove with. Optional and omitted on a solo drive or by older clients; the backend de-duplicates by uid and caps the array at 24."
         }
       },
       "required": ["startedAt", "endedAt"],

@@ -543,4 +543,32 @@ class ConvoyBarTest {
             ConvoyBar.stateFor(status, emptySet(), "me", unreadChatCount = 4)?.unreadChatCount,
         )
     }
+
+    // --- driveRoster (convoy members recorded onto a saved drive) ---------
+
+    @Test
+    fun `driveRoster keeps only other accepted members`() {
+        val c =
+            convoy(
+                members =
+                    listOf(
+                        member("owner", ConvoyRole.Owner),
+                        member("me"), // self — excluded
+                        member("anna").copy(displayName = "Anna", avatarPath = "a/anna.jpg"),
+                        member("erik", inviteStatus = ConvoyInviteStatus.Invited), // pending — excluded
+                        member("", inviteStatus = ConvoyInviteStatus.Accepted), // blank uid — excluded
+                    ),
+            )
+        val roster = ConvoyBar.driveRoster(c, selfUid = "me")
+        assertEquals(listOf("owner", "anna"), roster.map { it.uid })
+        val anna = roster.first { it.uid == "anna" }
+        assertEquals("Anna", anna.displayName)
+        assertEquals("a/anna.jpg", anna.avatarPath)
+    }
+
+    @Test
+    fun `driveRoster is empty for a solo convoy of just yourself`() {
+        val c = convoy(members = listOf(member("me", ConvoyRole.Owner)))
+        assertTrue(ConvoyBar.driveRoster(c, selfUid = "me").isEmpty())
+    }
 }

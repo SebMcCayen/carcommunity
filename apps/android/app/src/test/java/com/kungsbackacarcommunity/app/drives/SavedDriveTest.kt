@@ -224,6 +224,65 @@ class SavedDriveTest {
         coordinator.reset()
         assertEquals(DriveDeleteStatus.Idle, coordinator.deleteStatus.value)
     }
+
+    // ---------------------------------------------------------------------
+    // ConvoyDriveMembers — the shared wire shape for the convoy roster.
+    // ---------------------------------------------------------------------
+
+    @Test
+    fun `toRequestList omits blank optional fields and caps + de-dupes`() {
+        val members =
+            listOf(
+                ConvoyDriveMember("u1", "Anna", "a/u1.jpg"),
+                ConvoyDriveMember("u2", "  ", "  "), // blanks dropped, member kept
+                ConvoyDriveMember("u1", "Dupe", "x"), // duplicate uid dropped
+                ConvoyDriveMember("  ", "NoUid", null), // blank uid dropped
+            )
+        val wire = ConvoyDriveMembers.toRequestList(members)
+        assertEquals(2, wire.size)
+        assertEquals("u1", wire[0]["uid"])
+        assertEquals("Anna", wire[0]["displayName"])
+        assertEquals("a/u1.jpg", wire[0]["avatarPath"])
+        // The blank-field member keeps only its uid.
+        assertEquals(setOf("uid"), wire[1].keys)
+        assertEquals("u2", wire[1]["uid"])
+    }
+
+    @Test
+    fun `toRequestList enforces the member cap`() {
+        val many = (1..40).map { ConvoyDriveMember("u$it", "M$it", null) }
+        assertEquals(ConvoyDriveMembers.MAX_MEMBERS, ConvoyDriveMembers.toRequestList(many).size)
+    }
+
+    @Test
+    fun `parse round-trips the wire shape and drops malformed entries`() {
+        val raw =
+            listOf(
+                mapOf("uid" to "u1", "displayName" to "Anna", "avatarPath" to "a/u1.jpg"),
+                mapOf("uid" to "u2"), // optional fields absent → nulls
+                mapOf("displayName" to "NoUid"), // no uid → dropped
+                "not a map", // wrong type → dropped
+                mapOf("uid" to "u1", "displayName" to "Dupe"), // duplicate uid → dropped
+            )
+        val parsed = ConvoyDriveMembers.parse(raw)
+        assertEquals(2, parsed.size)
+        assertEquals(ConvoyDriveMember("u1", "Anna", "a/u1.jpg"), parsed[0])
+        assertEquals(ConvoyDriveMember("u2", null, null), parsed[1])
+        // A non-list is simply empty, never a crash.
+        assertTrue(ConvoyDriveMembers.parse("nope").isEmpty())
+        assertTrue(ConvoyDriveMembers.parse(null).isEmpty())
+    }
+
+    @Test
+    fun `joinedNames uses the fallback for a nameless member`() {
+        val members =
+            listOf(
+                ConvoyDriveMember("u1", "Anna", null),
+                ConvoyDriveMember("u2", null, null),
+            )
+        assertEquals("Anna, Medlem", ConvoyDriveMembers.joinedNames(members, "Medlem"))
+        assertEquals("", ConvoyDriveMembers.joinedNames(emptyList(), "Medlem"))
+    }
 }
 
 private class FakeDrivesRepository(private val shouldFail: Boolean) : DrivesRepository {

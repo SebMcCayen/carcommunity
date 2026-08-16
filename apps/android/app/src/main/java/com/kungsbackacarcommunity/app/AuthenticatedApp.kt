@@ -68,6 +68,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -109,6 +110,7 @@ import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
 import com.kungsbackacarcommunity.app.drives.DriveLocationController
 import com.kungsbackacarcommunity.app.drives.DriveRecordingGate
 import com.kungsbackacarcommunity.app.drives.DriveStatsCalculator
+import com.kungsbackacarcommunity.app.drives.ConvoyDriveMember
 import com.kungsbackacarcommunity.app.drives.ConvoyEndChoice
 import com.kungsbackacarcommunity.app.drives.ConvoyEndResolution
 import com.kungsbackacarcommunity.app.drives.ConvoyEndSessionChoice
@@ -205,6 +207,7 @@ import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
+import com.kungsbackacarcommunity.app.friends.FirebaseFriendPointsRepository
 import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
@@ -248,6 +251,7 @@ import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
 import com.kungsbackacarcommunity.app.live.LiveMarker
+import com.kungsbackacarcommunity.app.live.LiveSharerPopup
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionLoad
 import com.kungsbackacarcommunity.app.live.LiveSessionRecordingLifecycle
@@ -567,6 +571,35 @@ private val navLatLngSaver: Saver<LatLng?, DoubleArray> =
  * repositories to those pieces. Repositories are nullable so the no-Firebase
  * (Unavailable) build still renders the main shell.
  */
+/**
+ * Bundle-saveable [Saver] for the latched convoy drive-roster, so it survives an
+ * Activity recreation / process-death reclaim (SingleSessionRecording.start reads
+ * it to populate the drives-save payload, so a resumed convoy-auto recording must
+ * not save with an empty roster). Each member is stored as a 3-element string list
+ * (uid, displayName, avatarPath) with a null field normalized to "" and back, so
+ * no member type needs to be Parcelable. A blank uid entry is dropped on restore.
+ */
+private val ConvoyDriveRosterSaver: Saver<List<ConvoyDriveMember>, Any> =
+    listSaver(
+        save = { roster ->
+            roster.map { member ->
+                listOf(member.uid, member.displayName ?: "", member.avatarPath ?: "")
+            }
+        },
+        restore = { saved ->
+            saved.mapNotNull { entry ->
+                @Suppress("UNCHECKED_CAST")
+                val fields = entry as? List<String> ?: return@mapNotNull null
+                val uid = fields.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                ConvoyDriveMember(
+                    uid = uid,
+                    displayName = fields.getOrNull(1)?.takeIf { it.isNotBlank() },
+                    avatarPath = fields.getOrNull(2)?.takeIf { it.isNotBlank() },
+                )
+            }
+        },
+    )
+
 /**
  * A pending "end live session while a convoy is active" prompt. Frozen at the
  * moment Stop is tapped so a background convoy refresh (roster/leadership change)
@@ -2560,6 +2593,26 @@ fun AuthenticatedApp(
             // having loaded, is done where that snapshot exists; the restored value
             // bridges the gap until it does. See [LiveSessionRecordingLifecycle].
             var convoyActiveLatched by rememberSaveable { mutableStateOf(false) }
+            // The other accepted members of the convoy the caller is currently in,
+            // latched here so it is in scope at the recording start() call below
+            // (the convoy roster is derived far lower in this composable, from
+            // convoyBarStatus). Updated by the effect near `activeConvoy` and kept
+            // through a convoy end, so a convoy drive still records who you drove
+            // with even when the convoy is torn down under the member. Only applied
+            // when the session is actually a convoy-auto session (the start() call
+            // gates on liveSession.convoyAutoStarted), so a stale roster can never
+            // leak onto a later solo drive.
+            //
+            // rememberSaveable (keyed on uid like the auth-scoped state around it):
+            // SingleSessionRecording.start reads this to populate drives-save, so it
+            // must survive an Activity recreation / process-death RECLAIM — otherwise
+            // a resumed convoy-auto recording would save with an empty roster. The
+            // full COLD-START case (process killed, recording rehydrated from the
+            // durable journal snapshot, which does NOT persist the roster) remains a
+            // tracked BACKEND follow-up — the journal is deliberately not touched here.
+            var convoyDriveRosterLatched by rememberSaveable(uid, stateSaver = ConvoyDriveRosterSaver) {
+                mutableStateOf<List<ConvoyDriveMember>>(emptyList())
+            }
             // Whether the member ended THIS session themselves — tapped Stop / Hide
             // me now, or chose End/Leave in the convoy-stop dialog (all of which run
             // through stopLiveShare/hideMeNow below). Distinguishes a self-stop from
@@ -2844,6 +2897,18 @@ fun AuthenticatedApp(
                             // History then shows no car photo.
                             carImagePath = liveSession?.mainCar?.imagePath,
                             vehicleId = liveSession?.vehicleId,
+                            // Record who you drove with — but only on a convoy-auto
+                            // session. Gating on convoyAutoStarted (the same "this is
+                            // a convoy drive" signal the save-reason below uses) means
+                            // a plain solo session never inherits a stale roster from
+                            // an earlier convoy, and the roster survives the convoy
+                            // ending under the member (the latch keeps it).
+                            convoyMembers =
+                                if (liveSession?.convoyAutoStarted == true) {
+                                    convoyDriveRosterLatched
+                                } else {
+                                    emptyList()
+                                },
                             // Crash-resilient recording: resumes this drive if the
                             // process is killed while the session stays live (#849).
                             journal = driveRecordingJournal,
@@ -4089,7 +4154,33 @@ fun AuthenticatedApp(
                 LaunchedEffect(activeConvoy?.convoyId) {
                     convoyFocusStore.onActiveConvoyChanged(activeConvoy?.convoyId)
                 }
+                // Keep the latched drive-roster in sync with the active convoy so it
+                // is ready when a convoy-auto recording starts (start() reads it far
+                // above, where the roster is not yet in scope). Only OVERWRITTEN while
+                // a convoy is active — when it goes null (left / ended) the last
+                // roster is kept so a convoy drive still records who you drove with
+                // even as the convoy is torn down under the member. The convoyAutoStarted
+                // gate at the start() call keeps a stale roster off a later solo drive.
+                LaunchedEffect(activeConvoy?.convoyId, activeConvoy?.members, uid) {
+                    if (activeConvoy != null) {
+                        convoyDriveRosterLatched = ConvoyBar.driveRoster(activeConvoy, uid)
+                    }
+                }
                 val convoyFocusMode by convoyFocusStore.mode.collectAsState()
+
+                // The live sharer whose car-photo chip was tapped, driving the
+                // profile sub-menu popup (approved 2026-08-11). Null = no popup.
+                // Cleared on dismiss or when the visit-profile action navigates.
+                // Keyed on uid (like the other auth-scoped state here) so an
+                // in-process account switch resets it — a popup must never carry
+                // over from the previous user's tap.
+                var selectedLiveSharer by remember(uid) { mutableStateOf<LiveMarker?>(null) }
+                // Reads a tapped sharer's public Crown Points for the popup — the
+                // same rules-gated `pointsLedger/{uid}.balance` read the profile
+                // headline uses. Null in a config-less / CI build; the popup then
+                // shows 0 and still opens.
+                val liveSharerPointsRepository =
+                    remember(context) { FirebaseFriendPointsRepository.createIfAvailable(context) }
 
                 // Accepted members whose live position this convoy may read (the
                 // backend already narrows that — see ConvoySummary.livePositionUids);
@@ -4331,6 +4422,7 @@ fun AuthenticatedApp(
                             NearbyLiveOverlay(
                                 mapSurface = mapSurface,
                                 sharers = nearbyLiveMarkers,
+                                onSharerTap = { selectedLiveSharer = it },
                             )
                         }
                     } else {
@@ -4364,12 +4456,27 @@ fun AuthenticatedApp(
                                 NearbyLiveOverlay(
                                     mapSurface = projection,
                                     sharers = nearbyLiveMarkers,
+                                    onSharerTap = { selectedLiveSharer = it },
                                 )
                             }
                         }
                     } else {
                         null
                     }
+
+                // The profile sub-menu popup for a tapped live sharer. A Popup is
+                // its own window, so it draws over whichever map slot is showing
+                // regardless of where it sits in the tree; rendering it here (once)
+                // covers both the map-home overlay and the turn-by-turn overlay.
+                selectedLiveSharer?.let { sharer ->
+                    LiveSharerPopup(
+                        sharer = sharer,
+                        pointsRepository = liveSharerPointsRepository,
+                        onVisitProfile =
+                            if (memberProfileRepository != null) openMemberProfile else null,
+                        onDismiss = { selectedLiveSharer = null },
+                    )
+                }
 
                 val convoyBarSlot: (@Composable (Boolean, Boolean) -> Unit)? =
                     if (convoyBarState != null && convoyBarCoordinator != null) {

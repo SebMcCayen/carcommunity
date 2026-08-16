@@ -548,6 +548,9 @@
     <string name="userSearch_openProfile">Öppna profil</string>
     <string name="nearby_liveSharerOnMap">%1$s delar live i närheten</string>
     <string name="nearby_unknownSharer">Någon i närheten</string>
+    <string name="nearby_visitProfile">Besök profil</string>
+    <string name="nearby_sharerPoints">%1$s %2$s</string>
+    <string name="nearby_sharerPopupClose">Stäng</string>
     <string name="convoy_title">Konvojer</string>
     <string name="convoy_createAction">Skapa en konvoj</string>
     <string name="convoy_invitesTitle">Konvoj-inbjudningar</string>
@@ -752,6 +755,8 @@
     <string name="savedDrives_maxSpeed">Högsta hastighet</string>
     <string name="savedDrives_maxSpeedShort">Max %1$s</string>
     <string name="savedDrives_carPhotoDescription">Bil som kördes</string>
+    <string name="savedDrives_convoyDroveWith">Kördes med %1$s</string>
+    <string name="savedDrives_convoyMemberUnknown">Medlem</string>
     <string name="savedDrives_date">Datum</string>
     <string name="savedDrives_timeRange">Tid</string>
     <string name="savedDrives_shareAction">Dela körning</string>

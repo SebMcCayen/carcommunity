@@ -53,7 +53,109 @@ data class SavedDrive(
      * existed, and for drives with no car — the card then shows no car photo.
      */
     val carImagePath: String? = null,
+    /**
+     * The other members of the convoy this drive was part of, denormalized onto
+     * the ride document at save time so the History card can show who you drove
+     * with — a round avatar + name per member — with no extra reads (the same
+     * "denormalize onto the ride doc" trade [carImagePath] makes).
+     *
+     * Empty for a solo drive, for drives saved before the field existed (there
+     * is no backfill), and for the server-side convoy finalize baseline (which
+     * does not yet copy the roster — see the PR notes). The History UI shows the
+     * member row only when this is non-empty, so a non-convoy drive is laid out
+     * exactly as before.
+     */
+    val convoyMembers: List<ConvoyDriveMember> = emptyList(),
 )
+
+/**
+ * One other member of the convoy a saved drive belonged to, as denormalized
+ * onto the ride document (uid + display name + avatar path). Pure data — the
+ * mapping from the live convoy roster ([com.kungsbackacarcommunity.app.convoy.ConvoyMember])
+ * happens in the glue layer so this stays free of the convoy domain and is
+ * JVM-unit-testable alongside the rest of the drive-save payload.
+ *
+ * [avatarPath] is the member's profile-avatar Storage path (what the convoy
+ * screens already render for a member), NOT their car photo: the convoy roster
+ * carries the profile avatar, not a per-member car photo. Nullable name/avatar
+ * mirror the convoy roster, and the History row falls back to a person glyph +
+ * the neutral "member" label exactly like the convoy screens.
+ */
+data class ConvoyDriveMember(
+    val uid: String,
+    val displayName: String?,
+    val avatarPath: String?,
+)
+
+/**
+ * The single wire shape for the convoy roster on a ride: the `drives-save`
+ * payload writes it ([toRequestList]) and the Firestore read parses it ([parse]),
+ * so the two can never drift. Pure so both sides are unit-testable without
+ * Firebase, and so the cap and per-entry validation match the backend
+ * (functions/src/drives/drives-core.ts convoyMembers schema).
+ */
+object ConvoyDriveMembers {
+    /** Backend CONVOY_MEMBERS_MAX parity — a hard cap so a huge roster can't bloat the doc. */
+    const val MAX_MEMBERS = 24
+
+    /**
+     * The `convoyMembers` array for the `drives-save` callable: uid always, plus
+     * displayName / avatarPath only when non-blank (the backend fields are
+     * optional and reject a blank string). Capped at [MAX_MEMBERS]. Returns an
+     * empty list for a solo drive, so the caller can omit the field entirely.
+     */
+    fun toRequestList(members: List<ConvoyDriveMember>): List<Map<String, Any?>> =
+        members
+            .asSequence()
+            .filter { it.uid.isNotBlank() }
+            .distinctBy { it.uid }
+            .take(MAX_MEMBERS)
+            .map { member ->
+                LinkedHashMap<String, Any?>().apply {
+                    put("uid", member.uid)
+                    member.displayName?.takeIf { it.isNotBlank() }?.let { put("displayName", it) }
+                    member.avatarPath?.takeIf { it.isNotBlank() }?.let { put("avatarPath", it) }
+                }
+            }
+            .toList()
+
+    /**
+     * Parses the stored `convoyMembers` array back into the domain, dropping any
+     * malformed entry (missing/blank uid, non-map) and de-duplicating by uid so a
+     * corrupt or legacy document never crashes the History list — it just shows
+     * the members it could read. Blank name/avatar normalize to null (the row's
+     * fallback), never the empty string.
+     */
+    fun parse(raw: Any?): List<ConvoyDriveMember> {
+        val list = raw as? List<*> ?: return emptyList()
+        return list
+            .asSequence()
+            .mapNotNull { entry ->
+                val map = entry as? Map<*, *> ?: return@mapNotNull null
+                val uid = (map["uid"] as? String)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                ConvoyDriveMember(
+                    uid = uid,
+                    displayName = (map["displayName"] as? String)?.takeIf { it.isNotBlank() },
+                    avatarPath = (map["avatarPath"] as? String)?.takeIf { it.isNotBlank() },
+                )
+            }
+            .distinctBy { it.uid }
+            .take(MAX_MEMBERS)
+            .toList()
+    }
+
+    /**
+     * The members' names, comma-joined, for the History card's "drove with" line —
+     * each member's [ConvoyDriveMember.displayName] or [unknownLabel] when it has
+     * none, so a missing name reads as the neutral "member" rather than a blank.
+     * Empty string for no members (the caller then renders nothing). Pure so the
+     * label is unit-testable without Compose.
+     */
+    fun joinedNames(members: List<ConvoyDriveMember>, unknownLabel: String): String =
+        members.joinToString(", ") { member ->
+            member.displayName?.takeIf { it.isNotBlank() } ?: unknownLabel
+        }
+}
 
 object SavedDrives {
     /** Newest saved first; undated drives sort last. */

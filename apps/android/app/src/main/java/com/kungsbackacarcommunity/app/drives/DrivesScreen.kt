@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Surface
 import androidx.compose.material3.AlertDialog
@@ -66,6 +67,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
@@ -721,6 +723,9 @@ private fun DriveCard(
                 // unchanged for those.
                 DrivenCarPhoto(imagePath = drive.carImagePath)
             }
+            // Who this drive was driven with, when it was a convoy drive. Renders
+            // nothing for a solo drive (empty roster), so those cards are unchanged.
+            ConvoyMembersRow(members = drive.convoyMembers)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
@@ -771,6 +776,99 @@ private fun DrivenCarPhoto(imagePath: String?) {
                 contentDescription = stringResource(R.string.savedDrives_carPhotoDescription),
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize(),
+            )
+        }
+    }
+}
+
+/**
+ * The convoy members a drive was driven with: a compact cluster of overlapping
+ * round avatars plus a "drove with …" line naming them. Shown only for a convoy
+ * drive — [members] is empty for a solo drive, and the composable then renders
+ * NOTHING, so a solo card is laid out exactly as before. The avatar is the
+ * member's profile photo (what the convoy screens show), falling back to a
+ * person glyph; a member with no name reads as the neutral "member" label.
+ */
+@Composable
+private fun ConvoyMembersRow(members: List<ConvoyDriveMember>) {
+    if (members.isEmpty()) return
+    val unknownLabel = stringResource(R.string.savedDrives_convoyMemberUnknown)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // Overlapping avatar cluster, capped so a large convoy never overflows the
+        // card; the "+N" chip stands in for the rest.
+        Row(horizontalArrangement = Arrangement.spacedBy((-10).dp)) {
+            members.take(CONVOY_MEMBERS_ROW_MAX).forEach { member ->
+                ConvoyMemberAvatar(avatarPath = member.avatarPath)
+            }
+            val overflow = members.size - CONVOY_MEMBERS_ROW_MAX
+            if (overflow > 0) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = "+$overflow",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text(
+            text =
+                stringResource(
+                    R.string.savedDrives_convoyDroveWith,
+                    ConvoyDriveMembers.joinedNames(members, unknownLabel),
+                ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** How many convoy-member avatars the History card shows before the "+N" chip. */
+private const val CONVOY_MEMBERS_ROW_MAX = 4
+
+/**
+ * One convoy member's round profile avatar (28dp), resolved from its Storage
+ * [avatarPath], with a person glyph while it loads or when the member has none —
+ * the same circular treatment the convoy screens use.
+ */
+@Composable
+private fun ConvoyMemberAvatar(avatarPath: String?) {
+    val url = rememberStorageImageUrl(LocalContext.current, avatarPath)
+    Box(
+        modifier =
+            Modifier
+                .size(28.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize(),
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(16.dp),
             )
         }
     }
@@ -877,6 +975,9 @@ fun SavedDriveDetailScreen(
                         stringResource(R.string.savedDrives_maxSpeed),
                         DriveFormatters.formatSpeed(drive.maxSpeedMetersPerSecond),
                     )
+                    // Who this drive was driven with, for a convoy drive. Renders
+                    // nothing for a solo drive, so the detail is unchanged for those.
+                    ConvoyMembersRow(members = drive.convoyMembers)
                 }
             }
 

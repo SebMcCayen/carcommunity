@@ -49,6 +49,12 @@ export const DRIVE_TITLE_MAX_LENGTH = 200;
 /** Bound the submitted track: ~5.5 h at 1 Hz. Clients downsample beyond it. */
 export const MAX_ROUTE_POINTS = 20_000;
 export const SOURCE_SESSION_ID_MAX_LENGTH = 128;
+/**
+ * Hard cap on the denormalized convoy roster stored on a ride. Convoys are small
+ * friend groups; this only bounds a hostile/corrupt payload. Client parity:
+ * ConvoyDriveMembers.MAX_MEMBERS.
+ */
+export const CONVOY_MEMBERS_MAX = 24;
 
 // ---------------------------------------------------------------------------
 // Input schemas
@@ -99,6 +105,30 @@ const saveDriveInputSchema = z
       .refine((id) => id !== '.' && id !== '..')
       .optional(),
     carImagePath: z.string().trim().min(1).max(500).optional(),
+    /**
+     * The OTHER members of the convoy this drive was part of, denormalized by the
+     * client at save time (uid + optional display name + optional avatar path) so
+     * the History card can show who you drove with without an extra read — the
+     * same trade `carImagePath` makes. Optional and backward-compatible: a solo
+     * drive or an older client simply omits it. Bounded to [CONVOY_MEMBERS_MAX]
+     * so a huge or hostile roster can't bloat the ride document, with each field
+     * length-capped. `uid` is a Firebase Auth UID, capped at 128 to match the
+     * uidSchema in admin/claims-core.ts so the constraint does not drift between
+     * domains. Client mirror: apps/android/.../drives/SavedDrive.kt ConvoyDriveMembers.
+     */
+    convoyMembers: z
+      .array(
+        z
+          .object({
+            // Firebase Auth UID length cap (matches admin/claims-core.ts uidSchema).
+            uid: z.string().trim().min(1).max(128),
+            displayName: z.string().trim().min(1).max(200).optional(),
+            avatarPath: z.string().trim().min(1).max(500).optional(),
+          })
+          .strict(),
+      )
+      .max(CONVOY_MEMBERS_MAX)
+      .optional(),
   })
   .strict();
 
@@ -247,6 +277,29 @@ export function computeRouteThumbnail(input: SaveDriveInput): string | null {
   return buildRouteThumbnail(input.routePoints);
 }
 
+/**
+ * The convoy roster as it should be STORED: de-duplicated by uid, keeping the
+ * first occurrence and preserving order. The schema already caps the array
+ * length, but a hostile or corrupt client can repeat the same uid within the
+ * cap; storing the dupes would diverge from the Android read side (which
+ * de-dupes) and render the same member twice. Canonicalising here keeps the ride
+ * document the single source of truth. An empty/absent roster stays an empty
+ * array.
+ */
+export function dedupeConvoyMembers(
+  members: SaveDriveInput['convoyMembers'],
+): NonNullable<SaveDriveInput['convoyMembers']> {
+  if (!members || members.length === 0) return [];
+  const seen = new Set<string>();
+  const canonical: NonNullable<SaveDriveInput['convoyMembers']> = [];
+  for (const member of members) {
+    if (seen.has(member.uid)) continue;
+    seen.add(member.uid);
+    canonical.push(member);
+  }
+  return canonical;
+}
+
 /** rides/{rideId} document (docs/firebase-data-model.md). */
 export function buildRideDocument(
   input: SaveDriveInput,
@@ -276,6 +329,11 @@ export function buildRideDocument(
     // when no car was chosen. carImagePath is what the History card renders.
     vehicleId: input.vehicleId ?? null,
     carImagePath: input.carImagePath ?? null,
+    // Who this drive was driven with — the convoy roster, denormalized so the
+    // History card needs no extra read. De-duplicated by uid so the stored doc is
+    // canonical (matches the Android read side). Empty array (not null) on a solo
+    // drive or an older client, so the read side is a plain "no members" list.
+    convoyMembers: dedupeConvoyMembers(input.convoyMembers),
     createdAt: serverTimestamp(),
   };
 }

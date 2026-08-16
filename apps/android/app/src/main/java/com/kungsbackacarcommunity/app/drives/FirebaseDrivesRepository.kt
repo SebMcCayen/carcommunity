@@ -171,5 +171,9 @@ private fun DocumentSnapshot.toSavedDrive(): SavedDrive? {
         // Absent (null) on drives saved before the driven-car field existed and on
         // drives with no car — the History card then shows no round car photo.
         carImagePath = getString("carImagePath"),
+        // Absent (→ empty) on solo drives, on drives saved before the field
+        // existed, and on the server-side convoy finalize baseline. The parse
+        // drops any malformed entry, so a corrupt array never breaks the list.
+        convoyMembers = ConvoyDriveMembers.parse(get("convoyMembers")),
     )
 }

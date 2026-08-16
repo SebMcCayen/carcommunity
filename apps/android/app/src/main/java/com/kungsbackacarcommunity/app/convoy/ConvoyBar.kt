@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import com.kungsbackacarcommunity.app.drives.ConvoyDriveMember
+
 /**
  * The compact convoy status bar shown at the TOP of the map home and of
  * turn-by-turn navigation while — and only while — the caller is actually IN a
@@ -363,6 +365,23 @@ object ConvoyBar {
         convoy.members
             .filter { it.inviteStatus == ConvoyInviteStatus.Accepted }
             .map { ConvoyBarMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
+
+    /**
+     * The OTHER accepted members of [convoy] — everyone actually driving in it
+     * except [selfUid] — as the denormalized roster recorded on a saved drive so
+     * History can show who you drove with ([ConvoyDriveMember]). Self is excluded
+     * because a drive's History card lists the people you drove WITH, not yourself;
+     * only accepted members count (a still-pending invitee never joined the drive).
+     * Blank uids are dropped. Empty for a solo drive, which keeps the saved drive a
+     * plain solo drive. Pure so the capture rule is JVM-unit-testable.
+     */
+    fun driveRoster(convoy: ConvoySummary, selfUid: String): List<ConvoyDriveMember> =
+        convoy.members
+            .asSequence()
+            .filter { it.inviteStatus == ConvoyInviteStatus.Accepted }
+            .filter { it.uid.isNotBlank() && it.uid != selfUid }
+            .map { ConvoyDriveMember(uid = it.uid, displayName = it.displayName, avatarPath = it.avatarPath) }
+            .toList()
 
     /**
      * The invited-but-not-yet-joined people in [convoy], in roster order — the ones

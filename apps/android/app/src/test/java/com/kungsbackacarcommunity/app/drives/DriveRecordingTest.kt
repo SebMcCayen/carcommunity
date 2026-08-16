@@ -150,6 +150,38 @@ class DriveRecordingTest {
     }
 
     @Test
+    fun `buildSaveRequest carries the convoy roster only when non-empty`() {
+        // Solo drive → the convoyMembers key is omitted entirely (backward compatible).
+        val solo = DriveRecorder(sourceSessionId = "sess-solo", startedAtMillis = 0L)
+        assertFalse(
+            solo.buildSaveRequest(title = null, endedAtMillis = 1_000L).containsKey("convoyMembers"),
+        )
+
+        val recorder =
+            DriveRecorder(
+                sourceSessionId = "sess-convoy",
+                startedAtMillis = 0L,
+                convoyMembers =
+                    listOf(
+                        ConvoyDriveMember(uid = "u2", displayName = "Anna", avatarPath = "a/u2.jpg"),
+                        // Blank avatar/name are dropped from the entry, not the member.
+                        ConvoyDriveMember(uid = "u3", displayName = null, avatarPath = null),
+                    ),
+            )
+        val request = recorder.buildSaveRequest(title = null, endedAtMillis = 1_000L)
+
+        @Suppress("UNCHECKED_CAST")
+        val members = request["convoyMembers"] as List<Map<String, Any?>>
+        assertEquals(2, members.size)
+        assertEquals("u2", members[0]["uid"])
+        assertEquals("Anna", members[0]["displayName"])
+        assertEquals("a/u2.jpg", members[0]["avatarPath"])
+        // The nameless/avatar-less member keeps only its uid — optional fields omitted.
+        assertEquals(setOf("uid"), members[1].keys)
+        assertEquals("u3", members[1]["uid"])
+    }
+
+    @Test
     fun `buildSaveRequest uses the last fix time as endedAt when points exist`() {
         val recorder = DriveRecorder(sourceSessionId = "sess-end", startedAtMillis = 0L)
         recorder.addPoint(RecordedPoint(57.0, 12.0, 0L))
