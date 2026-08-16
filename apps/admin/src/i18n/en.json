@@ -634,6 +634,7 @@
     "statNoHeat": "No spawn-location data yet.",
     "statPerkTitle": "Perk statistics",
     "statPerkNote": "Purchases and usage per perk, from the shop and PvP aggregates. Empty until Crown Hunt perks are enabled.",
+    "statPerkError": "Could not load perk statistics.",
     "statPerkUsedSeason": "Used this season",
     "statPerkUsedAllTime": "Used all-time",
     "statPerkPurchased": "Purchased all-time",

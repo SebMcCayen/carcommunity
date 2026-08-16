@@ -49,6 +49,45 @@ const fmt = (key: string, params: Record<string, string | number>): string =>
 const pct = (rate: number): string => `${Math.round(rate * 100)}%`;
 const na = (value: number | null): string => (value === null ? '—' : String(value));
 
+/**
+ * True for a Firestore `permission-denied` — the EXPECTED transitional case for
+ * perk stats: the crownHuntPerkStats rules deploy separately (deferred), so
+ * these reads are denied in prod until the rules ship. We discriminate on the
+ * FirebaseError `code`, never a message match. Any OTHER error (network, an
+ * `unavailable`, a genuine post-deploy regression) is a REAL failure and must
+ * surface — not be masked as legitimate "0" data.
+ */
+function isPermissionDenied(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: unknown }).code === 'permission-denied'
+  );
+}
+
+/**
+ * Read one perk-stats scope, discriminating the outcome:
+ *  - success            → the view, not failed
+ *  - permission-denied  → a ZEROED view, not failed (expected pre-deploy)
+ *  - any other error    → a zeroed view flagged `failed` so the UI can show a
+ *                         perk-section error state instead of fake zeros.
+ */
+async function loadPerkScope(
+  scope: string,
+): Promise<{ view: AdminPerkStatsView; failed: boolean }> {
+  try {
+    return { view: await adminGetPerkStats(scope), failed: false };
+  } catch (err: unknown) {
+    if (isPermissionDenied(err)) {
+      // Rules not deployed yet: absent aggregate → honest zeros (empty =
+      // expected pre-launch, matching the section copy).
+      return { view: toAdminPerkStatsView(scope, undefined), failed: false };
+    }
+    console.warn(`[kronjakt] perk stats (${scope}) failed to load`, err);
+    return { view: toAdminPerkStatsView(scope, undefined), failed: true };
+  }
+}
+
 interface StatsData {
   allTime: AdminSpawnStatsView;
   season: AdminSpawnStatsView;
@@ -58,6 +97,8 @@ interface StatsData {
   cellStats: CrownHuntCellStat[];
   allTimePerks: AdminPerkStatsView;
   seasonPerks: AdminPerkStatsView;
+  /** True when a perk-stats read failed for a REAL reason (not permission-denied). */
+  perksError: boolean;
 }
 
 type BoardScope = 'season' | 'alltime';
@@ -175,10 +216,18 @@ const PERK_IS_TRAP: Record<PerkId, boolean> = {
 function PerkStatsSection({
   allTime,
   season,
+  hasError,
 }: {
   allTime: AdminPerkStatsView;
   season: AdminPerkStatsView;
+  hasError: boolean;
 }): React.ReactElement {
+  // A REAL read failure (not the expected permission-denied) shows an error
+  // state, NOT zeroed cards — so a genuine failure is visibly distinct from the
+  // graceful pre-deploy zeros.
+  if (hasError) {
+    return <p className={page.errorText}>{t('crownHunt.statPerkError')}</p>;
+  }
   return (
     <div className={styles.grid}>
       {PERK_IDS.map((perkId) => {
@@ -261,19 +310,13 @@ export function StatsTab(): React.ReactElement {
         adminListLeaderboard('alltime', null, 20),
         adminListSeasons(12),
         adminListCellStats(500),
-        // Perk stats are BEST-EFFORT: the crownHuntPerkStats rules ship
-        // separately (deploy deferred), so these reads can permission-deny in
-        // prod today. A rejection must NOT take down the rest of the dashboard,
-        // so each falls back to a zeroed view (toAdminPerkStatsView(scope,
-        // undefined)) and the perk cards simply render zeros.
-        adminGetPerkStats(ALL_TIME_SCOPE).catch((err: unknown) => {
-          console.warn('[kronjakt] perk stats (all-time) unavailable', err);
-          return toAdminPerkStatsView(ALL_TIME_SCOPE, undefined);
-        }),
-        adminGetPerkStats(seasonId).catch((err: unknown) => {
-          console.warn('[kronjakt] perk stats (season) unavailable', err);
-          return toAdminPerkStatsView(seasonId, undefined);
-        }),
+        // Perk stats are BEST-EFFORT and must never take down the rest of the
+        // dashboard. loadPerkScope discriminates the outcome: permission-denied
+        // (rules not deployed yet) → honest zeros; any other error → zeros +
+        // `failed`, so the perk SECTION shows an error state rather than fake
+        // zeros that would read as legitimate pre-launch data.
+        loadPerkScope(ALL_TIME_SCOPE),
+        loadPerkScope(seasonId),
       ]);
       if (!mountedRef.current) return;
       setData({
@@ -283,8 +326,9 @@ export function StatsTab(): React.ReactElement {
         allTimeLeaderboard,
         seasons,
         cellStats,
-        allTimePerks,
-        seasonPerks,
+        allTimePerks: allTimePerks.view,
+        seasonPerks: seasonPerks.view,
+        perksError: allTimePerks.failed || seasonPerks.failed,
       });
     } catch {
       if (!mountedRef.current) return;
@@ -364,7 +408,11 @@ export function StatsTab(): React.ReactElement {
       {/* Perk usage — buys/uses per perk (season + all-time) */}
       <h3 className={styles.sectionTitle}>{t('crownHunt.statPerkTitle')}</h3>
       <p className={page.introText}>{t('crownHunt.statPerkNote')}</p>
-      <PerkStatsSection allTime={data.allTimePerks} season={data.seasonPerks} />
+      <PerkStatsSection
+        allTime={data.allTimePerks}
+        season={data.seasonPerks}
+        hasError={data.perksError}
+      />
 
       {/* Past-season champions */}
       <h3 className={styles.sectionTitle}>{t('crownHunt.statChampionsTitle')}</h3>

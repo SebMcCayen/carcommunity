@@ -215,19 +215,21 @@ describe('StatsTab', () => {
     expect(shieldCard?.textContent ?? '').not.toContain(t('crownHunt.statPerkTrapTriggersSeason'));
   });
 
-  it('still renders the rest of the dashboard when perk stats reject (best-effort)', async () => {
-    // The crownHuntPerkStats rules ship separately, so these reads can
-    // permission-deny in prod today. That must NOT crash the whole tab.
+  it('shows zeroed perk cards (not an error) when perk stats permission-deny', async () => {
+    // The crownHuntPerkStats rules ship separately, so these reads
+    // permission-deny in prod until deployed — the EXPECTED pre-launch case,
+    // shown as honest zeros. It must NOT crash the tab nor show an error state.
     mocks.perks.mockReset();
-    mocks.perks.mockRejectedValue(new Error('permission-denied'));
+    mocks.perks.mockRejectedValue({ code: 'permission-denied', message: 'Missing permissions' });
     await render();
     const text = container.textContent ?? '';
-    // The tab did NOT fall into the error state — the other sections render.
+    // The tab did NOT fall into the global error state — other sections render.
     expect(text).not.toContain(t('crownHunt.error'));
     expect(text).toContain('100'); // all-time spawned (spawn stats)
     expect(text).toContain(t('crownHunt.statChampionsTitle')); // champions
-    // The perk section still renders — with zeroed cards.
+    // The perk section renders zeroed CARDS (not the error state).
     expect(text).toContain(t('crownHunt.statPerkTitle'));
+    expect(text).not.toContain(t('crownHunt.statPerkError'));
     for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
       expect(text).toContain(name);
     }
@@ -239,5 +241,26 @@ describe('StatsTab', () => {
       (d) => d.querySelector('span')?.textContent === t('crownHunt.statPerkUsedSeason'),
     );
     expect(usedSeasonRow?.textContent ?? '').toContain('0'); // zero fallback
+  });
+
+  it('shows a perk-section error state (not fake zeros) on a real perk-read failure', async () => {
+    // A NON-permission error (network, unavailable, a post-deploy regression) is
+    // a real failure — it must surface as an error, distinct from the graceful
+    // permission-denied zeros, and must not crash the rest of the dashboard.
+    mocks.perks.mockReset();
+    mocks.perks.mockRejectedValue({ code: 'unavailable', message: 'backend unreachable' });
+    await render();
+    const text = container.textContent ?? '';
+    // Rest of the dashboard still renders (no global error, spawn stats shown).
+    expect(text).not.toContain(t('crownHunt.error'));
+    expect(text).toContain('100'); // all-time spawned
+    expect(text).toContain(t('crownHunt.statChampionsTitle'));
+    // The perk SECTION shows its error state — and NOT the perk cards/logos.
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    expect(text).toContain(t('crownHunt.statPerkError'));
+    const perkLogos = [...container.querySelectorAll('svg[role="img"]')].filter((s) =>
+      ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
+    );
+    expect(perkLogos.length).toBe(0);
   });
 });
