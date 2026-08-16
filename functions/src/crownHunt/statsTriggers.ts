@@ -496,7 +496,10 @@ async function foldPerkStat(args: {
       }
     });
   } catch (error) {
-    logger.warn('Perk stat fold failed', { source, sourceDocId, error: String(error) });
+    // Deliberately WITHOUT sourceDocId: for a purchase it is `${uid}__${entryId}`,
+    // so logging it would leak a user identifier on this best-effort side path.
+    // `source` is enough to locate which trigger folded.
+    logger.warn('Perk stat fold failed', { source, error: String(error) });
   }
 }
 
@@ -540,8 +543,12 @@ export const onPerkDrainForStats = onDocumentCreated(
     if (!data) {
       return;
     }
+    // Prefer `drainedAt` (the actual drain instant) over `createdAt` (the commit
+    // serverTimestamp): near a month boundary the two can straddle it and the
+    // event belongs to the season it fired in. Fall back to createdAt, then the
+    // delivery time, if drainedAt is absent.
     const drainedAt = readInstant(
-      data.createdAt ?? data.drainedAt,
+      data.drainedAt ?? data.createdAt,
       event.data?.createTime?.toDate() ?? new Date(),
     );
     await foldPerkStat({
