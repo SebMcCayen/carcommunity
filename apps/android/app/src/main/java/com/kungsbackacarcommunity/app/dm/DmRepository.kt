@@ -17,6 +17,19 @@ sealed interface DmConversationsState {
     data class Loaded(val conversations: List<DmConversation>) : DmConversationsState
 }
 
+/**
+ * True when ANY conversation in a [DmConversationsState.Loaded] inbox has unread
+ * messages for the caller — the aggregate "the Friends tab has something new"
+ * boolean behind the map chat-bubble dot and the Friends tab dot. Loading/Error
+ * are not-unread: a dot is a positive claim ("there IS something"), so an inbox
+ * that has not loaded (or failed) shows none rather than a false one.
+ *
+ * Pure so the derivation is unit-testable off-device (mirrors
+ * [com.kungsbackacarcommunity.app.notifications.Notifications.unreadCount]).
+ */
+fun DmConversationsState.anyUnread(): Boolean =
+    this is DmConversationsState.Loaded && conversations.any { it.unreadCount > 0 }
+
 /** UI-facing state of a live message thread (the newest window). */
 sealed interface DmThreadState {
     data object Loading : DmThreadState

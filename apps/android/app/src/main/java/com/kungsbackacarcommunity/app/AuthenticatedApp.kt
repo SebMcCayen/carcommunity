@@ -199,6 +199,7 @@ import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
 import com.kungsbackacarcommunity.app.dm.ConversationListRoute
 import com.kungsbackacarcommunity.app.dm.DmRepository
+import com.kungsbackacarcommunity.app.dm.anyUnread as anyDmUnread
 import com.kungsbackacarcommunity.app.events.EventSummary
 import com.kungsbackacarcommunity.app.events.Events
 import com.kungsbackacarcommunity.app.events.EventsListState
@@ -230,6 +231,7 @@ import com.kungsbackacarcommunity.app.notifications.NotificationSettingsReposito
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRoute
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
+import com.kungsbackacarcommunity.app.notifications.anyUnread as anyNotificationUnread
 import com.kungsbackacarcommunity.app.notifications.currentPushPermissionStatus
 import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
@@ -433,7 +435,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -1549,29 +1553,85 @@ fun AuthenticatedApp(
             // button (null → falls back to the generic account icon).
             val mapAvatarUrl = rememberStorageImageUrl(context, profile?.avatarPath)
 
-            // Community-chat unread flag (a lightweight per-user last-read marker,
-            // no fan-out counter): drives the map chat bubble's "missed" dot AND
-            // the chat hub's Community-tab dot. Gated like garageState so the two
-            // Firestore listeners it opens (newest-message + userPrivate marker)
-            // are live only while that dot can actually be seen — the Map tab
-            // (bubble), the chat hub popup open over the map, or the legacy
-            // ChatHub route fallback — and degrade to a constant `false`
-            // otherwise. Because the popup opens over the map WITHOUT leaving the
-            // Map tab (`selectedTab` stays Map), the `selectedTab == Map` term
-            // already keeps the listener alive while the hub is open; `chatHubOpen`
-            // is kept for clarity and `ShellRoute.ChatHub` covers the fallback
-            // route. Guarded — no repo (config-less build) means never unread.
-            val needsCommunityUnread =
+            // The shared gate for ALL THREE chat-unread listeners below (community,
+            // DM, notifications). Each is a lightweight per-user marker/derivation,
+            // no fan-out counter; together they drive the map chat bubble's
+            // aggregate dot AND the chat hub's per-tab dots. Gated like garageState
+            // so the Firestore listeners they open are live only while a dot can
+            // actually be seen — the Map tab (bubble), the chat hub popup open over
+            // the map, or the legacy ChatHub route fallback — and degrade to a
+            // constant `false` otherwise. Because the popup opens over the map
+            // WITHOUT leaving the Map tab (`selectedTab` stays Map), the
+            // `selectedTab == Map` term already keeps the listeners alive while the
+            // hub is open; `chatHubOpen` is kept for clarity and `ShellRoute.ChatHub`
+            // covers the fallback route. Each derivation is also guarded on its repo
+            // — no repo (config-less build) means never unread.
+            val needsChatUnread =
                 selectedTab == ShellTab.Map || route == ShellRoute.ChatHub || chatHubOpen
             val communityChatUnread by
-                remember(communityChatRepository, uid, needsCommunityUnread) {
-                    if (communityChatRepository != null && needsCommunityUnread) {
-                        communityChatRepository.observeUnread(uid)
+                remember(communityChatRepository, uid, needsChatUnread) {
+                    if (communityChatRepository != null && needsChatUnread) {
+                        // distinctUntilChanged: the map bubble only cares about the
+                        // boolean flipping, not about every re-emission of the same
+                        // value — so redundant recompositions of the always-on map
+                        // screen are dropped. Same reason on the DM/notification
+                        // flows below.
+                        communityChatRepository.observeUnread(uid).distinctUntilChanged()
                     } else {
                         flowOf(false)
                     }
                 }
                     .collectAsState(initial = false)
+
+            // Friends (DM) and Notifications unread, hoisted the SAME way as
+            // communityChatUnread and behind the SAME gate (needsChatUnread).
+            //
+            // COST, honestly: needsChatUnread is true on the MAP tab (the home
+            // screen), so these two observers — observeConversations (plus its
+            // per-conversation profile hydration / combine work) and
+            // observeNotifications — stay active the ENTIRE time the user is on the
+            // map, even if they never open the hub. That is deliberate: the
+            // aggregate map-bubble dot has to reflect DM + notification unread, not
+            // just community (community was already listened for the old
+            // community-only dot). This is the accepted cost of the aggregate dot.
+            // These are also NOT shared with the hub pages: the Friends /
+            // Notifications routes start their own inbox listeners when opened, so
+            // opening those tabs briefly runs two overlapping listeners. Each
+            // derivation collapses its snapshot to a plain "any unread" boolean, so
+            // no fan-out counter is needed. (Convoys has no aggregate: unread there
+            // is per-convoy — see the PR notes.)
+            //
+            // TODO(optional): a lighter "any-unread-exists" query (an
+            // unread-filtered limit(1)) could replace the full-list observers on the
+            // map screen; deferred — DM unread is per-participant, not directly
+            // queryable without a data-model/index change.
+            val dmUnread by
+                remember(dmRepository, uid, needsChatUnread) {
+                    if (dmRepository != null && needsChatUnread) {
+                        dmRepository.observeConversations(uid)
+                            .map { it.anyDmUnread() }
+                            .distinctUntilChanged()
+                    } else {
+                        flowOf(false)
+                    }
+                }
+                    .collectAsState(initial = false)
+            val notificationsUnread by
+                remember(notificationsRepository, uid, needsChatUnread) {
+                    if (notificationsRepository != null && needsChatUnread) {
+                        notificationsRepository.observeNotifications(uid)
+                            .map { it.anyNotificationUnread() }
+                            .distinctUntilChanged()
+                    } else {
+                        flowOf(false)
+                    }
+                }
+                    .collectAsState(initial = false)
+
+            // The map chat-bubble's red dot: true when ANYTHING in the hub is
+            // unread — community message, DM, or notification. Convoy unread is not
+            // part of this aggregate (no cheap any-convoy signal yet).
+            val anyChatUnread = communityChatUnread || dmUnread || notificationsUnread
 
             // Single shared vehicles stream for the garage: exactly one Firestore
             // snapshot listener while the user is on the Garage tab — and none at
@@ -4751,9 +4811,9 @@ fun AuthenticatedApp(
                         },
                         is3d = mapIs3d,
                         on3dEnabledChange = { mapSurface.set3dEnabled(it) },
-                        // The map home's chat bubble + unread badge, opening the
+                        // The map home's chat bubble + unread DOT, opening the
                         // same hub popup.
-                        unreadChatCount = if (communityChatUnread) 1 else 0,
+                        hasUnreadChat = anyChatUnread,
                         onOpenChat = { chatHubOpen = true },
                         // The map home's saved-places control, on the same shared
                         // stack; opens the same saved-locations picker.
@@ -5054,6 +5114,8 @@ fun AuthenticatedApp(
                         openEventFromNotification = openEventFromNotification,
                         communityChatRepository = communityChatRepository,
                         communityChatUnread = communityChatUnread,
+                        dmUnread = dmUnread,
+                        notificationsUnread = notificationsUnread,
                         convoyChatRepository = convoyChatRepository,
                         dmChatOtherUid = dmChatOtherUid,
                         dmChatOtherName = dmChatOtherName,
@@ -5255,12 +5317,11 @@ fun AuthenticatedApp(
                                             onOpenRoute = { openRootRoute(it) },
                                             onSignOut = onSignOut,
                                         ),
-                                    // Community-chat unread ("missed") dot:
-                                    // shown as a single-count badge when the
-                                    // newest community message post-dates the
-                                    // caller's last-read marker. Cleared when
-                                    // they open + read the Community channel.
-                                    unreadChatCount = if (communityChatUnread) 1 else 0,
+                                    // Aggregate unread red DOT: shown when there is
+                                    // any unread across the hub — a community
+                                    // message, a DM, or a notification. Cleared as
+                                    // each source is read.
+                                    hasUnreadChat = anyChatUnread,
                                     // The chat bubble opens the chat hub
                                     // (Community / Convoys / Friends +
                                     // Notifications) as a TRANSPARENT popup over
@@ -6660,6 +6721,8 @@ fun AuthenticatedApp(
                         notificationsRepository = notificationsRepository,
                         notificationsCoordinator = notificationsCoordinator,
                         communityUnread = communityChatUnread,
+                        friendsUnread = dmUnread,
+                        notificationsUnread = notificationsUnread,
                         onClose = { chatHubOpen = false },
                         // Tapping a shared location link in a message closes the
                         // hub and shows that point on the map IN-APP (the same
@@ -7059,8 +7122,11 @@ private fun RouteHost(
     communityChatRepository: CommunityChatRepository?,
     // Collected once in AuthenticatedApp (drives the map chat-bubble dot); passed
     // down so the chat hub reuses that single unread listener instead of starting
-    // its own duplicate observeUnread subscription.
+    // its own duplicate observeUnread subscription. [dmUnread] / [notificationsUnread]
+    // are the sibling Friends / Notifications tab dots, hoisted the same way.
     communityChatUnread: Boolean,
+    dmUnread: Boolean,
+    notificationsUnread: Boolean,
     convoyChatRepository: ConvoyChatRepository?,
     dmChatOtherUid: String?,
     dmChatOtherName: String?,
@@ -7690,6 +7756,8 @@ private fun RouteHost(
                 notificationsRepository = notificationsRepository,
                 notificationsCoordinator = notificationsCoordinator,
                 communityUnread = communityChatUnread,
+                friendsUnread = dmUnread,
+                notificationsUnread = notificationsUnread,
                 onClose = onClose,
                 onViewProfile = openProfileIfWired,
                 // Tapping a shared location link leaves the hub and shows that

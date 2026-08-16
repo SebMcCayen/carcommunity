@@ -142,11 +142,11 @@ const val MAP_HOME_TEST_TAG = "map_home"
  *   (null [HubEntry.onClick]) are omitted; tapping an available entry runs its
  *   action (which navigates to that destination, or signs out) and closes the
  *   popup, and tapping outside the popup dismisses it.
- * @param unreadChatCount unread indicator for the floating chat control: a
- *   non-zero value renders the "missed" badge/dot on the bubble. It is sourced
- *   from the community-chat unread state (the hoisted `observeUnread` marker
- *   collected once in `AuthenticatedApp`), so the dot shows whenever the caller
- *   has an unread community message.
+ * @param hasUnreadChat unread indicator for the floating chat control: true
+ *   renders a red DOT (no number) on the bubble. It is the AGGREGATE unread
+ *   signal collected in `AuthenticatedApp` — true whenever the caller has an
+ *   unread community message, an unread DM, or an unread notification — so the
+ *   dot means "you have something unread somewhere in the chat hub".
  * @param onOpenChat invoked when the floating chat bubble is tapped; the host
  *   opens the chat hub (Community / Convoys / Friends + Notifications).
  */
@@ -190,7 +190,7 @@ fun MapHome(
      * are unaffected.
      */
     covered: Boolean = false,
-    unreadChatCount: Int = 0,
+    hasUnreadChat: Boolean = false,
     // Tapping the floating chat bubble opens the chat hub
     // (Community / Convoys / Friends + Notifications) as a transparent popup
     // over the map. Defaults to a no-op so existing callers/tests that don't
@@ -734,11 +734,11 @@ fun MapHome(
                             modifier = Modifier.testTag(MAP_HOME_SAVED_PLACES_TAG),
                         )
 
-                    // Chat bubble — opens the chat hub; shows a badge with the
-                    // unread ("missed") message count when > 0.
+                    // Chat bubble — opens the chat hub; shows a red DOT when there
+                    // is any unread across the hub's sections.
                     MapCircleControlKind.Chat ->
                         ChatCircleControl(
-                            unreadCount = unreadChatCount,
+                            hasUnread = hasUnreadChat,
                             onClick = onOpenChat,
                         )
                 }
@@ -1657,27 +1657,31 @@ const val MAP_HOME_MORE_TAG = "map_home_more"
 const val MAP_HOME_CHAT_TAG = "map_home_chat"
 
 /**
- * A [CircleControl]-styled chat bubble with an unread-count badge. Matches the
- * other floating controls (size/shape/elevation/haptics); the badge is hidden
- * when [unreadCount] is 0.
+ * A [CircleControl]-styled chat bubble with an unread DOT badge. Matches the
+ * other floating controls (size/shape/elevation/haptics); the dot is hidden when
+ * [hasUnread] is false.
+ *
+ * Deliberately a plain [Badge] with no content — a red DOT, not a count. The map
+ * bubble only ever answered "is there anything unread?", never "how many", so a
+ * number added noise without adding information; the aggregate unread signal that
+ * feeds [hasUnread] already collapses every section to a single boolean. A screen
+ * reader still hears "unread messages" via the control's content description.
  */
 @Composable
 internal fun ChatCircleControl(
-    unreadCount: Int,
+    hasUnread: Boolean,
     onClick: () -> Unit,
 ) {
     val description =
-        if (unreadCount > 0) {
-            stringResource(R.string.shell_chatUnread, unreadCount)
+        if (hasUnread) {
+            stringResource(R.string.shell_chatUnreadDot)
         } else {
             stringResource(R.string.shell_chat)
         }
     BadgedBox(
         badge = {
-            if (unreadCount > 0) {
-                Badge {
-                    Text(if (unreadCount > 99) "99+" else unreadCount.toString())
-                }
+            if (hasUnread) {
+                Badge()
             }
         },
         // Merge the descendant CircleControl's click/label semantics into this
