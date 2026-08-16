@@ -80,6 +80,43 @@ class PerkShopTest {
         assertEquals(0L, loaded.items[0].ownedCount)
     }
 
+    // ---- toPerkPurchaseException discriminator ------------------------------
+
+    @Test
+    fun `reason parser reads details reason and tolerates absent or malformed details`() {
+        assertEquals("insufficient_funds", perkPurchaseReasonOf(mapOf("reason" to "insufficient_funds")))
+        assertEquals("shop_unavailable", perkPurchaseReasonOf(mapOf("reason" to "shop_unavailable")))
+        // No reason key, wrong value type, non-map, and null all yield null.
+        assertEquals(null, perkPurchaseReasonOf(mapOf("other" to "x")))
+        assertEquals(null, perkPurchaseReasonOf(mapOf("reason" to 42)))
+        assertEquals(null, perkPurchaseReasonOf("insufficient_funds"))
+        assertEquals(null, perkPurchaseReasonOf(null))
+    }
+
+    @Test
+    fun `failed-precondition maps insufficient_funds reason to the insufficient family`() {
+        assertTrue(
+            perkPurchaseFailedPreconditionException("insufficient_funds")
+                is PerkPurchaseInsufficientFundsException,
+        )
+    }
+
+    @Test
+    fun `failed-precondition maps every other reason to the unavailable family`() {
+        assertTrue(
+            perkPurchaseFailedPreconditionException("shop_unavailable")
+                is PerkPurchaseUnavailableException,
+        )
+        // An unrecognised reason, and a missing reason, both fall back to unavailable
+        // rather than misclassifying as insufficient funds.
+        assertTrue(
+            perkPurchaseFailedPreconditionException("mystery") is PerkPurchaseUnavailableException,
+        )
+        assertTrue(
+            perkPurchaseFailedPreconditionException(null) is PerkPurchaseUnavailableException,
+        )
+    }
+
     // ---- PerkShopCoordinator ------------------------------------------------
 
     private class FakeRepo(

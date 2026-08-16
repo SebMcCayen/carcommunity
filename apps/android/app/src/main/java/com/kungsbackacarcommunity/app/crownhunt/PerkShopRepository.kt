@@ -27,9 +27,10 @@ data class PerkPurchaseResult(
 
 /**
  * Thrown when the buy was rejected because the member cannot afford the perk —
- * the server's ledger debit hit the `failed-precondition` overdraft guard.
- * Distinct from [PerkPurchaseUnavailableException] so the UI shows a "not enough
- * KP" hint rather than a generic error.
+ * the server's ledger debit hit the `failed-precondition` overdraft guard, which
+ * buyPerk re-throws with `details.reason == "insufficient_funds"`. Distinct from
+ * [PerkPurchaseUnavailableException] so the UI shows a "not enough KP" hint
+ * rather than a generic error.
  */
 class PerkPurchaseInsufficientFundsException(cause: Throwable? = null) :
     Exception("buyPerk rejected: insufficient Kronpoäng.", cause)
@@ -37,8 +38,9 @@ class PerkPurchaseInsufficientFundsException(cause: Throwable? = null) :
 /**
  * Thrown when the shop itself refused the buy for a non-affordability reason:
  * the `crownHuntPerks` flag is off, the account cannot spend, or the perk id is
- * unknown. All three share the server's `failed-precondition` code, so the UI
- * treats them as a single "shop unavailable" message.
+ * unknown. All three share the server's `failed-precondition` code and carry a
+ * `details.reason` other than `insufficient_funds` (e.g. `shop_unavailable`), so
+ * the UI treats them as a single "shop unavailable" message.
  */
 class PerkPurchaseUnavailableException(cause: Throwable? = null) :
     Exception("buyPerk rejected: shop unavailable.", cause)
@@ -158,30 +160,51 @@ class FirebasePerkShopRepository private constructor(
 }
 
 /**
+ * Wire value of the backend's `details.reason` discriminator for the overdraft
+ * (insufficient-funds) rejection. Mirrors `PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS`
+ * in functions `crownHunt/perks-core.ts`. Every other `FAILED_PRECONDITION`
+ * reason (e.g. `shop_unavailable`) — or none at all — is treated as "shop
+ * unavailable".
+ */
+internal const val PERK_REASON_INSUFFICIENT_FUNDS = "insufficient_funds"
+
+/**
  * Maps a callable failure to the two typed rejection families. The overdraft
  * guard and the shop-unavailable guards both surface as `FAILED_PRECONDITION`,
- * so the overdraft is told apart by its server message (which mentions a
- * negative balance); every other `FAILED_PRECONDITION` is "unavailable".
- * Anything else propagates unchanged.
+ * so they are told apart by the server's STRUCTURED `details.reason`
+ * discriminator (`insufficient_funds` vs everything else) rather than by
+ * substring-matching a (localizable) message — mirroring how
+ * [com.kungsbackacarcommunity.app.friends.FirebaseFriendsRepository] parses
+ * `FirebaseFunctionsException.details`. Anything else propagates unchanged.
  */
 private fun FirebaseFunctionsException.toPerkPurchaseException(): Throwable =
     when (code) {
-        FirebaseFunctionsException.Code.FAILED_PRECONDITION -> {
-            // Check BOTH message and details for the marker: the SDK may leave
-            // `message` null or the server may carry the reason in `details`.
-            // (A structured error code in the callable would be more robust — a
-            // follow-up; this widens the interim match.)
-            val marker = "negative balance"
-            val insufficient =
-                message?.contains(marker, ignoreCase = true) == true ||
-                    details?.toString()?.contains(marker, ignoreCase = true) == true
-            if (insufficient) {
-                PerkPurchaseInsufficientFundsException(this)
-            } else {
-                PerkPurchaseUnavailableException(this)
-            }
-        }
+        FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
+            perkPurchaseFailedPreconditionException(perkPurchaseReasonOf(details), this)
         else -> this
+    }
+
+/**
+ * Reads the backend's `details.reason` discriminator out of a callable error's
+ * `details` payload (the Android SDK deserializes a JSON object to a [Map]).
+ * Returns null when details is absent, not a map, or carries no string reason.
+ */
+internal fun perkPurchaseReasonOf(details: Any?): String? =
+    (details as? Map<*, *>)?.get("reason") as? String
+
+/**
+ * Chooses the typed rejection family for a `FAILED_PRECONDITION` from its
+ * [reason] discriminator: `insufficient_funds` → [PerkPurchaseInsufficientFundsException];
+ * any other reason (including none) → [PerkPurchaseUnavailableException].
+ */
+internal fun perkPurchaseFailedPreconditionException(
+    reason: String?,
+    cause: Throwable? = null,
+): Throwable =
+    if (reason == PERK_REASON_INSUFFICIENT_FUNDS) {
+        PerkPurchaseInsufficientFundsException(cause)
+    } else {
+        PerkPurchaseUnavailableException(cause)
     }
 
 /** Parses the `config/perkCatalog` mirror's `perks` array into display entries. */
