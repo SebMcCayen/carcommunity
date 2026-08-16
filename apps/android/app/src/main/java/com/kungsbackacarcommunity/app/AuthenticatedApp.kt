@@ -68,6 +68,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -567,6 +568,35 @@ private val navLatLngSaver: Saver<LatLng?, DoubleArray> =
  * repositories to those pieces. Repositories are nullable so the no-Firebase
  * (Unavailable) build still renders the main shell.
  */
+/**
+ * Bundle-saveable [Saver] for the latched convoy drive-roster, so it survives an
+ * Activity recreation / process-death reclaim (SingleSessionRecording.start reads
+ * it to populate the drives-save payload, so a resumed convoy-auto recording must
+ * not save with an empty roster). Each member is stored as a 3-element string list
+ * (uid, displayName, avatarPath) with a null field normalized to "" and back, so
+ * no member type needs to be Parcelable. A blank uid entry is dropped on restore.
+ */
+private val ConvoyDriveRosterSaver: Saver<List<ConvoyDriveMember>, Any> =
+    listSaver(
+        save = { roster ->
+            roster.map { member ->
+                listOf(member.uid, member.displayName ?: "", member.avatarPath ?: "")
+            }
+        },
+        restore = { saved ->
+            saved.mapNotNull { entry ->
+                @Suppress("UNCHECKED_CAST")
+                val fields = entry as? List<String> ?: return@mapNotNull null
+                val uid = fields.getOrNull(0)?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                ConvoyDriveMember(
+                    uid = uid,
+                    displayName = fields.getOrNull(1)?.takeIf { it.isNotBlank() },
+                    avatarPath = fields.getOrNull(2)?.takeIf { it.isNotBlank() },
+                )
+            }
+        },
+    )
+
 /**
  * A pending "end live session while a convoy is active" prompt. Frozen at the
  * moment Stop is tapped so a background convoy refresh (roster/leadership change)
@@ -2568,10 +2598,16 @@ fun AuthenticatedApp(
             // with even when the convoy is torn down under the member. Only applied
             // when the session is actually a convoy-auto session (the start() call
             // gates on liveSession.convoyAutoStarted), so a stale roster can never
-            // leak onto a later solo drive. Not rememberSaveable — ConvoyDriveMember
-            // is plain data, and the effect re-derives it from the live convoy after
-            // a recreation.
-            var convoyDriveRosterLatched by remember(uid) {
+            // leak onto a later solo drive.
+            //
+            // rememberSaveable (keyed on uid like the auth-scoped state around it):
+            // SingleSessionRecording.start reads this to populate drives-save, so it
+            // must survive an Activity recreation / process-death RECLAIM — otherwise
+            // a resumed convoy-auto recording would save with an empty roster. The
+            // full COLD-START case (process killed, recording rehydrated from the
+            // durable journal snapshot, which does NOT persist the roster) remains a
+            // tracked BACKEND follow-up — the journal is deliberately not touched here.
+            var convoyDriveRosterLatched by rememberSaveable(uid, stateSaver = ConvoyDriveRosterSaver) {
                 mutableStateOf<List<ConvoyDriveMember>>(emptyList())
             }
             // Whether the member ended THIS session themselves — tapped Stop / Hide

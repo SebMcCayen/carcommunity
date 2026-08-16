@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -199,7 +200,16 @@ private fun NearbySharerChip(
                 .size(CHIP_SIZE)
                 .then(
                     if (onClick != null) {
-                        Modifier.clickable(role = Role.Button, onClick = onClick)
+                        // The drawn chip stays CHIP_SIZE (44dp): minimumInteractive-
+                        // ComponentSize reserves the 48dp minimum touch target
+                        // WITHOUT changing the drawn size (it adds space around the
+                        // centred content), so a tappable chip meets the same 48dp
+                        // minimum the convoy overlay's chips do. The 48dp is a fixed
+                        // constant, not a theme value, so the hit area is enforced
+                        // regardless of theme.
+                        Modifier
+                            .minimumInteractiveComponentSize()
+                            .clickable(role = Role.Button, onClick = onClick)
                     } else {
                         Modifier
                     },
