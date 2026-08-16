@@ -20,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   adminGetSpawnStats,
   adminGetPerkStats,
+  toAdminPerkStatsView,
   adminListLeaderboard,
   adminListSeasons,
   adminListCellStats,
@@ -261,8 +262,19 @@ export function StatsTab(): React.ReactElement {
         adminListLeaderboard('alltime', null, 20),
         adminListSeasons(12),
         adminListCellStats(500),
-        adminGetPerkStats(ALL_TIME_SCOPE),
-        adminGetPerkStats(seasonId),
+        // Perk stats are BEST-EFFORT: the crownHuntPerkStats rules ship
+        // separately (deploy deferred), so these reads can permission-deny in
+        // prod today. A rejection must NOT take down the rest of the dashboard,
+        // so each falls back to a zeroed view (toAdminPerkStatsView(scope,
+        // undefined)) and the perk cards simply render zeros.
+        adminGetPerkStats(ALL_TIME_SCOPE).catch((err: unknown) => {
+          console.warn('[kronjakt] perk stats (all-time) unavailable', err);
+          return toAdminPerkStatsView(ALL_TIME_SCOPE, undefined);
+        }),
+        adminGetPerkStats(seasonId).catch((err: unknown) => {
+          console.warn('[kronjakt] perk stats (season) unavailable', err);
+          return toAdminPerkStatsView(seasonId, undefined);
+        }),
       ]);
       if (!mountedRef.current) return;
       setData({

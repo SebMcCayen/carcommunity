@@ -238,4 +238,30 @@ describe('StatsTab', () => {
     expect(container.querySelector('[data-testid="live-map-stub"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="heat-stub"]')).not.toBeNull();
   });
+
+  it('still renders the rest of the dashboard when perk stats reject (best-effort)', async () => {
+    // The crownHuntPerkStats rules ship separately, so these reads can
+    // permission-deny in prod today. That must NOT crash the whole tab.
+    mocks.perks.mockReset();
+    mocks.perks.mockRejectedValue(new Error('permission-denied'));
+    await render();
+    const text = container.textContent ?? '';
+    // The tab did NOT fall into the error state — the other sections render.
+    expect(text).not.toContain(t('crownHunt.error'));
+    expect(text).toContain('100'); // all-time spawned (spawn stats)
+    expect(text).toContain(t('crownHunt.statChampionsTitle')); // champions
+    // The perk section still renders — with zeroed cards.
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
+      expect(text).toContain(name);
+    }
+    const trapLogo = [...container.querySelectorAll('svg[role="img"]')].find(
+      (s) => s.querySelector('title')?.textContent === 'Spikmatta',
+    );
+    const trapCard = trapLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    const usedSeasonRow = [...(trapCard?.querySelectorAll('div') ?? [])].find(
+      (d) => d.querySelector('span')?.textContent === t('crownHunt.statPerkUsedSeason'),
+    );
+    expect(usedSeasonRow?.textContent ?? '').toContain('0'); // zero fallback
+  });
 });
