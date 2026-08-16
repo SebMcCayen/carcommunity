@@ -106,7 +106,6 @@ import com.kungsbackacarcommunity.app.incidents.ReportLocation
 import com.kungsbackacarcommunity.app.map.LocalMapZoomController
 import com.kungsbackacarcommunity.app.map.MapZoomPreference
 import com.kungsbackacarcommunity.app.navigation.LatLng
-import kotlin.math.roundToInt
 
 /** Test tag on the whole map-first home, so UI tests can assert it renders. */
 const val MAP_HOME_TEST_TAG = "map_home"
@@ -1188,12 +1187,15 @@ private fun incidentAgeOptionLabel(option: IncidentAgeOption): String =
  * and step count come from [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter].
  *
  * The slider value is an OPTION INDEX, so each notch is a named age rather than a
- * raw duration. The thumb tracks the finger locally as it drags; the choice is
- * COMMITTED (persisted + applied to the alert layer, which re-filters live) on
- * release ([Slider.onValueChangeFinished]), not on every delta. Seeded from
- * [maxAge] and re-seeded if it changes underneath (`remember(maxAge)`), so an
- * external change is reflected. The currently-selected age is shown as text so the
- * unlabelled notches are legible.
+ * raw duration. The thumb AND the text label track the finger locally as it drags
+ * (both read the live index through
+ * [com.kungsbackacarcommunity.app.incidents.IncidentAgeFilter.optionForSliderIndex]);
+ * the choice is COMMITTED (persisted + applied to the alert layer, which re-filters
+ * live) only on release ([Slider.onValueChangeFinished]), not on every delta.
+ * Seeded from [maxAge] and re-seeded if it changes underneath (`remember(maxAge)`),
+ * so an external change is reflected. The selected age is shown as text so the
+ * unlabelled notches are legible — and, per issue #871, that text now updates while
+ * dragging and not only on a tap.
  */
 @Composable
 private fun LayerAlertAgeSlider(
@@ -1201,6 +1203,12 @@ private fun LayerAlertAgeSlider(
     onMaxAgeChange: (IncidentAgeOption) -> Unit,
 ) {
     val options = IncidentAgeFilter.orderedOptions
+    var sliderIndex by
+        remember(maxAge) { mutableFloatStateOf(options.indexOf(maxAge).toFloat()) }
+    // The option the thumb currently sits on — tracks the finger LIVE while
+    // dragging, so the label updates continuously and not only on release. The
+    // committed [maxAge] is re-seeded above, so an external change is reflected too.
+    val displayedOption = IncidentAgeFilter.optionForSliderIndex(sliderIndex)
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1212,9 +1220,10 @@ private fun LayerAlertAgeSlider(
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            // The current choice, so the unlabelled notches read at a glance.
+            // The live choice, so the unlabelled notches read at a glance and the
+            // shown value moves as the thumb is dragged (issue #871).
             Text(
-                text = incidentAgeOptionLabel(maxAge),
+                text = incidentAgeOptionLabel(displayedOption),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -1224,15 +1233,10 @@ private fun LayerAlertAgeSlider(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        var sliderIndex by
-            remember(maxAge) { mutableFloatStateOf(options.indexOf(maxAge).toFloat()) }
         Slider(
             value = sliderIndex,
             onValueChange = { sliderIndex = it },
-            onValueChangeFinished = {
-                val idx = sliderIndex.roundToInt().coerceIn(0, options.lastIndex)
-                onMaxAgeChange(options[idx])
-            },
+            onValueChangeFinished = { onMaxAgeChange(IncidentAgeFilter.optionForSliderIndex(sliderIndex)) },
             valueRange = 0f..options.lastIndex.toFloat(),
             steps = IncidentAgeFilter.sliderSteps,
             modifier = Modifier.fillMaxWidth().testTag(MAP_HOME_LAYERS_ALERT_AGE_TAG),

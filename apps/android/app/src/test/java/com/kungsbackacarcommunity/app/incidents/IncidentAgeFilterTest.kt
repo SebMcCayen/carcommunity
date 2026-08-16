@@ -141,4 +141,29 @@ class IncidentAgeFilterTest {
         assertEquals(IncidentAgeOption.entries.size - 2, IncidentAgeFilter.sliderSteps)
         assertEquals(IncidentAgeOption.entries.toList(), IncidentAgeFilter.orderedOptions)
     }
+
+    @Test
+    fun `optionForSliderIndex resolves each whole notch to its option`() {
+        val options = IncidentAgeFilter.orderedOptions
+        for (i in options.indices) {
+            assertEquals(options[i], IncidentAgeFilter.optionForSliderIndex(i.toFloat()))
+        }
+    }
+
+    @Test
+    fun `optionForSliderIndex rounds a mid-drag fractional value to the nearest notch`() {
+        // The whole point of issue #871: a partial drag must resolve to a real option
+        // so the live label can move as the thumb does. Rounds to nearest.
+        val options = IncidentAgeFilter.orderedOptions
+        assertEquals(options[0], IncidentAgeFilter.optionForSliderIndex(0.49f))
+        assertEquals(options[1], IncidentAgeFilter.optionForSliderIndex(0.5f))
+        assertEquals(options[2], IncidentAgeFilter.optionForSliderIndex(1.8f))
+    }
+
+    @Test
+    fun `optionForSliderIndex clamps an out-of-range value to the ends`() {
+        val options = IncidentAgeFilter.orderedOptions
+        assertEquals(options.first(), IncidentAgeFilter.optionForSliderIndex(-3f))
+        assertEquals(options.last(), IncidentAgeFilter.optionForSliderIndex(999f))
+    }
 }
