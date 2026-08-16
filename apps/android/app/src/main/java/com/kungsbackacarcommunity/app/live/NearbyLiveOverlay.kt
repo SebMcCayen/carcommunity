@@ -182,7 +182,12 @@ private fun NearbySharerChip(
     onClick: (() -> Unit)? = null,
 ) {
     val density = LocalDensity.current
-    val chipPx = with(density) { CHIP_SIZE.toPx() }
+    // The offset must centre the chip's FOOTPRINT on the projected coordinate.
+    // When tappable the footprint is the reserved 48dp touch target (see below),
+    // otherwise it is the drawn CHIP_SIZE (44dp) — subtracting the wrong half
+    // would shift the marker off its coordinate.
+    val footprintPx =
+        with(density) { (if (onClick != null) MIN_TOUCH_TARGET else CHIP_SIZE).toPx() }
     // tertiary — deliberately NOT the convoy overlay's primary — so a nearby
     // public sharer reads as a different kind of marker from a convoy member.
     val accent = MaterialTheme.colorScheme.tertiary
@@ -193,23 +198,26 @@ private fun NearbySharerChip(
             modifier
                 .offset {
                     IntOffset(
-                        x = (centreX - chipPx / 2f).roundToInt(),
-                        y = (centreY - chipPx / 2f).roundToInt(),
+                        x = (centreX - footprintPx / 2f).roundToInt(),
+                        y = (centreY - footprintPx / 2f).roundToInt(),
                     )
                 }
+                // When tappable, minimumInteractiveComponentSize is placed OUTSIDE
+                // .size(CHIP_SIZE) so it genuinely reserves the 48dp minimum touch
+                // target AROUND the 44dp content (placed inside .size(44) it would be
+                // clamped to 44 and reserve nothing). The drawn chip stays 44dp and,
+                // because the 48dp footprint is centred on the coordinate (footprintPx
+                // offset above) and the 44dp content is centred within it, the marker
+                // stays centred on its projected coordinate. 48dp is a fixed constant,
+                // not a theme value. The decorative (onClick == null) path keeps the
+                // 44dp footprint and is visually unchanged.
+                .then(
+                    if (onClick != null) Modifier.minimumInteractiveComponentSize() else Modifier,
+                )
                 .size(CHIP_SIZE)
                 .then(
                     if (onClick != null) {
-                        // The drawn chip stays CHIP_SIZE (44dp): minimumInteractive-
-                        // ComponentSize reserves the 48dp minimum touch target
-                        // WITHOUT changing the drawn size (it adds space around the
-                        // centred content), so a tappable chip meets the same 48dp
-                        // minimum the convoy overlay's chips do. The 48dp is a fixed
-                        // constant, not a theme value, so the hit area is enforced
-                        // regardless of theme.
-                        Modifier
-                            .minimumInteractiveComponentSize()
-                            .clickable(role = Role.Button, onClick = onClick)
+                        Modifier.clickable(role = Role.Button, onClick = onClick)
                     } else {
                         Modifier
                     },
@@ -252,3 +260,7 @@ private val CHIP_SIZE = 44.dp
 
 // The photo (and its ring) inside the chip.
 private val PHOTO_SIZE = 38.dp
+
+// Minimum interactive touch target reserved for a TAPPABLE chip (matches the
+// convoy overlay's 48dp chips). Fixed constant, not theme-derived.
+private val MIN_TOUCH_TARGET = 48.dp
