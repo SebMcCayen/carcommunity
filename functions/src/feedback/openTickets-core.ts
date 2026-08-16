@@ -28,6 +28,7 @@
 
 import { z } from 'zod';
 import { boundText, FEEDBACK_ISSUE_LABEL } from './feedback-core';
+import { neutralizeMentions } from '../shared/githubIssues';
 import {
   MODERATION_REPORT_INITIAL_STATUS,
   MODERATION_REPORTS_COLLECTION,
@@ -123,6 +124,25 @@ export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: stri
 export const INTERACT_INPUT_EXPECTED =
   "Expected { issueNumber: positive int, type: 'plus_one'|'comment', text? (required for comment), clientId: [A-Za-z0-9_-]{1,64} }.";
 export const COMMENT_TEXT_REQUIRED_MESSAGE = 'A comment cannot be empty.';
+
+/**
+ * The exact string posted as a member's comment on the public issue.
+ *
+ * `neutralizeMentions` defangs every `@`/`#` (so the comment can neither
+ * @-ping a maintainer nor `#`-link an arbitrary issue) by inserting a
+ * zero-width space after each — which GROWS the string, so a comment already at
+ * the [MAX_TICKET_COMMENT_LENGTH] cap can be pushed back OVER it. So the
+ * neutralized text is re-bounded to the cap, guaranteeing the cap on what is
+ * actually posted (not merely on the pre-neutralized input). A boundary slice
+ * could drop the zero-width guard right after a trailing `@`/`#` and re-expose
+ * a live mention at the very end, so any dangling trailing `@`/`#` is stripped —
+ * the result is both within the cap AND fully defanged.
+ */
+export function buildGitHubCommentBody(commentText: string): string {
+  return neutralizeMentions(commentText)
+    .slice(0, MAX_TICKET_COMMENT_LENGTH)
+    .replace(/[@#]+$/u, '');
+}
 
 export function parseInteractInput(data: unknown): ParseResult<Interaction> {
   const result = interactInputSchema.safeParse(data ?? {});

@@ -104,13 +104,7 @@ export async function createGitHubIssue(
   try {
     const response = await fetch(GITHUB_ISSUES_URL, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': userAgent,
-        'Content-Type': 'application/json',
-      },
+      headers: { ...githubHeaders(token, userAgent), 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
 
@@ -203,17 +197,38 @@ export async function listOpenIssues(
       logger.error('listOpenIssues: unexpected GitHub response shape');
       return null;
     }
-    // Keep only rows with the shape we rely on; anything malformed is dropped
-    // rather than allowed to poison the mirror.
-    return body.filter(
-      (row): row is GitHubOpenIssue =>
-        !!row &&
-        typeof row === 'object' &&
-        typeof (row as GitHubOpenIssue).number === 'number' &&
-        typeof (row as GitHubOpenIssue).title === 'string' &&
-        typeof (row as GitHubOpenIssue).html_url === 'string' &&
-        typeof (row as GitHubOpenIssue).created_at === 'string',
-    );
+    // Validate EVERY field the pipeline consumes and NORMALIZE the row, so a
+    // downstream consumer never sees an `undefined`. A row missing any required
+    // scalar (number/title/html_url/created_at/state) is DROPPED rather than
+    // allowed to poison the mirror; the optional `body`/`comments`/`pull_request`
+    // are coerced to safe defaults. Best-effort — a malformed row is skipped,
+    // never thrown on.
+    const normalized: GitHubOpenIssue[] = [];
+    for (const row of body) {
+      if (!row || typeof row !== 'object') continue;
+      const r = row as Record<string, unknown>;
+      if (
+        typeof r.number !== 'number' ||
+        typeof r.title !== 'string' ||
+        typeof r.html_url !== 'string' ||
+        typeof r.created_at !== 'string' ||
+        typeof r.state !== 'string'
+      ) {
+        continue;
+      }
+      normalized.push({
+        number: r.number,
+        title: r.title,
+        body: typeof r.body === 'string' ? r.body : null,
+        html_url: r.html_url,
+        created_at: r.created_at,
+        state: r.state,
+        comments: typeof r.comments === 'number' ? r.comments : 0,
+        // Preserve the PR marker so isMirrorableIssue can drop pull requests.
+        ...(r.pull_request !== undefined ? { pull_request: r.pull_request } : {}),
+      });
+    }
+    return normalized;
   } catch (error) {
     logger.error('listOpenIssues: GitHub request threw', { error: String(error) });
     return null;

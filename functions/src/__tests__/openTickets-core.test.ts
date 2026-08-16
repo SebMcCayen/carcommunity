@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ALREADY_INTERACTED_MESSAGE,
+  buildGitHubCommentBody,
   buildInteractionDocument,
   buildTicketCommentReportDocument,
   isInteractRateLimited,
@@ -148,5 +149,26 @@ describe('rate limit + builders', () => {
   it('exposes the fixed +1 body and a distinct already-done message', () => {
     expect(PLUS_ONE_COMMENT_BODY).toBe('Another user is affected by this issue.');
     expect(ALREADY_INTERACTED_MESSAGE.length).toBeGreaterThan(0);
+  });
+});
+
+describe('buildGitHubCommentBody', () => {
+  it('defangs @mentions and #refs with a zero-width space', () => {
+    const body = buildGitHubCommentBody('ping @maintainer about #123');
+    expect(body).toContain('@​maintainer');
+    expect(body).toContain('#​123');
+  });
+
+  it('guarantees the cap on the POSTED text even after neutralization grows it', () => {
+    // Every char is an @ → neutralization would double the length to ~2000.
+    const body = buildGitHubCommentBody('@'.repeat(MAX_TICKET_COMMENT_LENGTH));
+    expect(body.length).toBeLessThanOrEqual(MAX_TICKET_COMMENT_LENGTH);
+  });
+
+  it('leaves no dangling live @/# at the boundary after a cap slice', () => {
+    const body = buildGitHubCommentBody('#'.repeat(MAX_TICKET_COMMENT_LENGTH));
+    expect(body.length).toBeLessThanOrEqual(MAX_TICKET_COMMENT_LENGTH);
+    // A trailing bare @/# (its zero-width guard cut off) must be stripped.
+    expect(/[@#]$/u.test(body)).toBe(false);
   });
 });

@@ -40,7 +40,7 @@ import {
   mapIssueToTicketFields,
   type MappableIssue,
 } from './openTickets-core';
-import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
+import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
 
 /** Same secret the feedback callable binds — reused for list + comment scopes. */
@@ -147,7 +147,12 @@ export async function runOpenTicketsSync(
 export const syncOpenTickets = onSchedule(
   {
     region: 'europe-west1',
-    maxInstances: MAX_INSTANCES_SCHEDULED,
+    // Strict SINGLETON (not MAX_INSTANCES_SCHEDULED=2): this job does a full
+    // reconciliation INCLUDING deletes over the whole openTickets collection,
+    // so two overlapping ticks would double the GitHub list call and churn the
+    // mirror. It is not cursor-paged/idempotent like badges.evaluateBacklog, so
+    // it must never overlap itself (see instanceLimits.ts guidance).
+    maxInstances: 1,
     cpu: CPU_SCHEDULED,
     concurrency: 1,
     schedule: 'every 5 minutes',

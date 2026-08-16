@@ -37,7 +37,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireMemberActor } from '../shared/memberActor';
-import { createIssueComment, neutralizeMentions } from '../shared/githubIssues';
+import { createIssueComment } from '../shared/githubIssues';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
   ALREADY_INTERACTED_MESSAGE,
@@ -50,6 +50,7 @@ import {
   PLUS_ONE_COMMENT_BODY,
   REPORT_TICKETS_FLAG_KEY,
   TICKETS_DISABLED_MESSAGE,
+  buildGitHubCommentBody,
   buildInteractionDocument,
   buildTicketCommentReportDocument,
   isInteractRateLimited,
@@ -163,7 +164,7 @@ export const interactWithIssue = onCall(
     const body =
       input.type === 'plus_one'
         ? PLUS_ONE_COMMENT_BODY
-        : neutralizeMentions(input.commentText ?? '');
+        : buildGitHubCommentBody(input.commentText ?? '');
     let posted = false;
     try {
       posted = await createIssueComment(
