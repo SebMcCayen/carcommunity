@@ -1336,6 +1336,111 @@ service cloud.firestore {
       }
     }
 
+    // =========================================================================
+    // Kronjakt PvP — DEPLOY/USE + trap DRAIN (Crown Hunt Shop PR3)
+    //
+    // Everything below is written EXCLUSIVELY by the Admin SDK
+    // (crownHunt.deployPerk and the inline trap-drain processor in
+    // live.updatePosition → pvp-drain.ts), and is entirely behind the
+    // contract-default-OFF crownHuntPerks flag. No client ever writes any of
+    // these. The read surface is the whole security question, so it is stated
+    // per-collection:
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // activePerks – DEPLOYED traps (Spikmatta), one doc per armed trap
+    // A trap is INVISIBLE to everyone but the member who placed it: exposing it
+    // would defeat the mechanic (a rival would just drive around it). So the
+    // read is scoped to the placer alone (plus admins for moderation); the
+    // drain that catches a victim runs server-side and never needs a client
+    // read. No client writes — a trap is reward-bearing (it moves KP), so a
+    // client that could write one could drain a rival at will.
+    // -------------------------------------------------------------------------
+    match /activePerks/{trapId} {
+      allow read: if (isActiveMember() && resource.data.placedByUid == request.auth.uid) || isAdmin();
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // perkShield – the holder's private shield record { uid, expiresAt }
+    // Backend-only both directions. The PUBLIC "protected" status other clients
+    // render lives in perkShieldPublic (below) and carries ONLY the timestamp;
+    // this private record is never client-readable.
+    // -------------------------------------------------------------------------
+    match /perkShield/{userId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // perkShieldPublic – the map-visible shield status { shieldedUntil }
+    // The ONE public field of the shield: a single timestamp so any active
+    // member can render a shield aura on the holder's live marker. Nothing else
+    // about the perk (inventory, cost, other effects) is exposed. Written only
+    // by crownHunt.deployPerk (Admin SDK) — no client writes.
+    // -------------------------------------------------------------------------
+    match /perkShieldPublic/{userId} {
+      allow read: if isActiveMember();
+      // No client writes.
+    }
+
+    // -------------------------------------------------------------------------
+    // perkBoost – the holder's private boost record { uid, expiresAt }
+    // Backend-only. The crown-award path reads it server-side to double a
+    // claim; a client has no need to read it and must not be able to forge it.
+    // -------------------------------------------------------------------------
+    match /perkBoost/{userId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // perkDeploys – idempotency/audit record per deploy (any perk kind)
+    // Backend-only. Deterministic doc (ID = SHA-256 scoping of the client
+    // deploy key) that crownHunt.deployPerk creates so a retried deploy
+    // consumes inventory once and applies the effect once.
+    // -------------------------------------------------------------------------
+    match /perkDeploys/{deployId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // perkDrains – audit trail of every trap drain { trap, placer, victim, amount }
+    // Backend-only. Records the KP transfer for moderation/anti-abuse review;
+    // exposing who drained whom would leak both the trap network and victims.
+    // -------------------------------------------------------------------------
+    match /perkDrains/{drainId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // perkTrapVictims – once-per-(trap, victim) marker (idempotency guard)
+    // Backend-only. Created inside the drain transaction so a victim sitting in
+    // a trap is drained exactly once by it; a client that could read or clear
+    // it could be drained repeatedly or evade the distinct-victim cap.
+    // -------------------------------------------------------------------------
+    match /perkTrapVictims/{markerId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // perkDrainCooldowns / perkTrapDeploys / perkTrapEarn / perkTrapLoss –
+    // anti-abuse counters (2h victim cooldown, 3 deploys/day, 150 KP/day earn
+    // cap, 45 KP/day loss cap). Backend-only, deterministic IDs, read and
+    // incremented inside the deploy/drain transactions. A member must never be
+    // able to inspect or reset their own caps.
+    // -------------------------------------------------------------------------
+    match /perkDrainCooldowns/{victimId} {
+      allow read, write: if false;
+    }
+    match /perkTrapDeploys/{counterId} {
+      allow read, write: if false;
+    }
+    match /perkTrapEarn/{counterId} {
+      allow read, write: if false;
+    }
+    match /perkTrapLoss/{counterId} {
+      allow read, write: if false;
+    }
+
     // -------------------------------------------------------------------------
     // crownSpawnClaims – every auto-spawn claim ATTEMPT
     // Document ID = the namespaced SHA-256-scoped idempotency key. Owner-only

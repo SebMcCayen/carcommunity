@@ -276,3 +276,213 @@ export function buildPerkCatalogDoc(): PerkCatalogDoc {
     })),
   };
 }
+
+// ===========================================================================
+// PvP — DEPLOY / USE side (Crown Hunt Shop PR3). Pure constants + math only.
+//
+// buyPerk (PR1) SELLS perks into perkInventory; this section is the maths and
+// the anti-abuse arithmetic behind USING one: dropping a trap, raising a
+// shield, arming the boost multiplier, and the trap "drain" that transfers KP
+// from a rival who drives into an armed trap. Every point-bearing and every
+// safety-bearing value is a SERVER CONSTANT here — no radius, drain, duration,
+// cap, cooldown or immunity window is ever taken from client input. The
+// Firestore-touching side (the callable, the drain transaction, the boost
+// reader) lives in deployPerk.ts / pvp-drain.ts; this module stays PURE so it
+// is unit-tested in perks-core.test.ts with no emulator.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// Effect parameters — re-exported from the authoritative catalog so the deploy
+// path and the tests name a constant instead of reaching into PERK_CATALOG.
+// ---------------------------------------------------------------------------
+
+// The catalog is typed as the PerkDefinition UNION, so narrow each entry to its
+// concrete kind before reading a kind-specific effect parameter.
+const SPIKE_STRIP = PERK_CATALOG.spike_strip as TrapPerk;
+const SHIELD = PERK_CATALOG.shield as ShieldPerk;
+const BOOST = PERK_CATALOG.boost as BoostPerk;
+
+/** Trap effect radius in metres (a rival within this of an armed trap drains). */
+export const TRAP_RADIUS_METERS = SPIKE_STRIP.radiusMeters; // 100
+/** KP moved from victim → placer on a single successful drain. */
+export const TRAP_DRAIN_KP = SPIKE_STRIP.drainKp; // 15
+/** How long a deployed trap stays `armed` before it expires. */
+export const TRAP_DURATION_HOURS = SPIKE_STRIP.durationHours; // 6
+/** How long a raised shield protects its holder from traps. */
+export const SHIELD_DURATION_HOURS = SHIELD.durationHours; // 3
+/** How long an armed boost doubles the KP the holder's crown claims award. */
+export const BOOST_DURATION_HOURS = BOOST.durationHours; // 1
+/** Award multiplier applied to a crown claim while a boost is active. */
+export const BOOST_MULTIPLIER = BOOST.multiplier; // 2
+
+// ---------------------------------------------------------------------------
+// Anti-abuse constants (owner-approved). None reach a client; changing PvP
+// balance means editing here, nowhere else.
+// ---------------------------------------------------------------------------
+
+/** A member may have at most this many traps `armed` at once. */
+export const MAX_ACTIVE_TRAPS_PER_USER = 1;
+/** A member may DEPLOY at most this many traps per UTC day. */
+export const MAX_TRAP_DEPLOYS_PER_DAY = 3;
+/** Minimum spacing between a member's own armed traps, in metres. */
+export const TRAP_SELF_SPACING_METERS = 300;
+/** A single trap may drain at most this many DISTINCT victims before it stops. */
+export const MAX_VICTIMS_PER_TRAP = 10;
+/** A placer may EARN at most this much KP from traps per UTC day. */
+export const MAX_TRAP_EARN_KP_PER_DAY = 150;
+/** A victim may LOSE at most this much KP to traps per UTC day. */
+export const MAX_TRAP_LOSS_KP_PER_DAY = 45;
+/** A victim cannot be drained again until this many hours have passed. */
+export const VICTIM_COOLDOWN_HOURS = 2;
+/** New accounts are immune as victims for their first this-many days. */
+export const NEW_ACCOUNT_IMMUNITY_DAYS = 7;
+
+const MS_PER_HOUR = 60 * 60 * 1000;
+const MS_PER_DAY = 24 * MS_PER_HOUR;
+
+/** A `Date` `hours` hours after `now` (server-computed expiry). */
+export function hoursFromNow(now: Date, hours: number): Date {
+  return new Date(now.getTime() + hours * MS_PER_HOUR);
+}
+
+/** True while an account is inside its new-account victim-immunity window. */
+export function isNewAccountImmune(createdAtMs: number | null, nowMs: number): boolean {
+  if (createdAtMs === null || !Number.isFinite(createdAtMs)) return false;
+  return nowMs - createdAtMs < NEW_ACCOUNT_IMMUNITY_DAYS * MS_PER_DAY;
+}
+
+/** True when a victim is close enough to an armed trap to be drained. */
+export function isWithinTrapRadius(distanceMeters: number): boolean {
+  return Number.isFinite(distanceMeters) && distanceMeters >= 0 && distanceMeters <= TRAP_RADIUS_METERS;
+}
+
+/** True while a victim is inside the post-drain cooldown (drain refused). */
+export function isWithinVictimCooldown(lastDrainAtMs: number | null, nowMs: number): boolean {
+  if (lastDrainAtMs === null || !Number.isFinite(lastDrainAtMs)) return false;
+  return nowMs - lastDrainAtMs < VICTIM_COOLDOWN_HOURS * MS_PER_HOUR;
+}
+
+/** True when an epoch-ms expiry is still in the future at `nowMs`. */
+export function isTimestampActive(expiresAtMs: number | null, nowMs: number): boolean {
+  return expiresAtMs !== null && Number.isFinite(expiresAtMs) && expiresAtMs > nowMs;
+}
+
+/**
+ * The KP a single drain actually moves — {@link TRAP_DRAIN_KP} clamped so no
+ * cap can be breached: never more than the victim's balance (the ledger cannot
+ * go negative), never past the victim's remaining daily loss room, never past
+ * the placer's remaining daily earn room. Returns a non-negative integer; 0
+ * means "do not drain" (a cap is already spent or the victim is broke).
+ */
+export function resolveDrainAmount(params: {
+  victimBalance: number;
+  victimLossToday: number;
+  placerEarnToday: number;
+}): number {
+  const lossRoom = Math.max(0, MAX_TRAP_LOSS_KP_PER_DAY - Math.max(0, params.victimLossToday));
+  const earnRoom = Math.max(0, MAX_TRAP_EARN_KP_PER_DAY - Math.max(0, params.placerEarnToday));
+  const balance = Math.max(0, Math.floor(params.victimBalance));
+  const drain = Math.min(TRAP_DRAIN_KP, balance, lossRoom, earnRoom);
+  return Number.isFinite(drain) && drain > 0 ? Math.floor(drain) : 0;
+}
+
+/** True when a trap has room for another distinct victim. */
+export function trapHasVictimRoom(victimCount: number): boolean {
+  const n = Number.isFinite(victimCount) ? victimCount : 0;
+  return n < MAX_VICTIMS_PER_TRAP;
+}
+
+// ---------------------------------------------------------------------------
+// Deterministic document IDs (Firestore-safe by construction). All backend-only
+// collections — a client can neither read nor forge these.
+// ---------------------------------------------------------------------------
+
+function sha256(...parts: string[]): string {
+  const hash = createHash('sha256');
+  for (const part of parts) {
+    hash.update(part);
+    hash.update('\0');
+  }
+  return hash.digest('hex');
+}
+
+/**
+ * Scopes a client deploy idempotency key to the actor — the deploy record doc
+ * ID, namespaced `deploy` so a key reused across buy/deploy cannot replay the
+ * other's outcome. A retried deploy hits the same record and is a no-op.
+ */
+export function scopeDeployKey(userId: string, idempotencyKey: string): string {
+  return sha256('deploy', userId, idempotencyKey);
+}
+
+/** activePerks (trap) document ID for an idempotent deploy. */
+export function trapDocId(scopedDeployKey: string): string {
+  return `trap_${scopedDeployKey}`;
+}
+
+/** perkDeploys guard/audit doc ID for an idempotent deploy of any perk kind. */
+export function deployRecordDocId(scopedDeployKey: string): string {
+  return `deploy_${scopedDeployKey}`;
+}
+
+/** perkTrapVictims marker — one per (trap, victim); create-if-absent = once-per-trap. */
+export function trapVictimMarkerId(trapId: string, victimUid: string): string {
+  return sha256('trapvictim', trapId, victimUid);
+}
+
+/** perkDrainCooldowns doc ID — one per victim (global 2h cooldown). */
+export function victimCooldownDocId(victimUid: string): string {
+  return victimUid;
+}
+
+/** perkTrapDeploys counter doc ID — trap deploys by a member on a UTC day. */
+export function trapDeployCounterDocId(uid: string, dayKey: string): string {
+  return `${uid}__${dayKey}`;
+}
+
+/** perkTrapEarn counter doc ID — KP a placer earned from traps on a UTC day. */
+export function trapEarnCounterDocId(uid: string, dayKey: string): string {
+  return `${uid}__${dayKey}`;
+}
+
+/** perkTrapLoss counter doc ID — KP a victim lost to traps on a UTC day. */
+export function trapLossCounterDocId(uid: string, dayKey: string): string {
+  return `${uid}__${dayKey}`;
+}
+
+// ---------------------------------------------------------------------------
+// deployPerk input
+// ---------------------------------------------------------------------------
+
+const deployPerkInputSchema = z
+  .object({
+    perkId: z.string().trim().min(1).max(64),
+    // Required for a trap (dropped at the caller's GPS); ignored for shield/boost.
+    latitude: z.number().finite().gte(-90).lte(90).optional(),
+    longitude: z.number().finite().gte(-180).lte(180).optional(),
+    idempotencyKey: z
+      .string()
+      .trim()
+      .min(1)
+      .max(300)
+      .refine(isFirestoreSafeId, { message: 'idempotencyKey is not a valid document ID.' }),
+  })
+  .strict();
+
+export interface DeployPerkInput {
+  perkId: string;
+  latitude?: number;
+  longitude?: number;
+  idempotencyKey: string;
+}
+
+export function parseDeployPerkInput(data: unknown): ParseResult<DeployPerkInput> {
+  const result = deployPerkInputSchema.safeParse(data ?? {});
+  if (!result.success) {
+    return {
+      ok: false,
+      message: 'Expected { perkId: string, latitude?, longitude?, idempotencyKey: string }.',
+    };
+  }
+  return { ok: true, input: result.data };
+}

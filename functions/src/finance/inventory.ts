@@ -358,6 +358,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'crownHunt.spawnDiagnostics': 'admin-rare',
   'crownHunt.deletePoint': 'admin-rare',
   'crownHunt.buyPerk': 'variable-member',
+  'crownHunt.deployPerk': 'variable-member',
   'crownHunt.seedPerkCatalog': 'admin-rare',
   'events.create': 'admin-rare',
   'events.update': 'admin-rare',

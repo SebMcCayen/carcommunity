@@ -659,6 +659,42 @@
       ]
     },
     {
+      "collectionGroup": "activePerks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "cellKey",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "activePerks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "placedByUid",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crownSpawnCells",
       "queryScope": "COLLECTION",
       "fields": [

@@ -82,6 +82,7 @@ import {
 import { submitClaim } from './crownHunt/submitClaim';
 import { claimSpawn } from './crownHunt/claimSpawn';
 import { buyPerk } from './crownHunt/buyPerk';
+import { deployPerk } from './crownHunt/deployPerk';
 import { seedPerkCatalog } from './crownHunt/seedPerkCatalog';
 import { setSpawnCellApproval } from './crownHunt/spawnCells';
 import {
@@ -594,6 +595,19 @@ export const crownHunt = {
   // Deployed as crownHunt-buyPerk and crownHunt-seedPerkCatalog.
   buyPerk,
   seedPerkCatalog,
+  // Kronjakt PvP (Crown Hunt Shop PR3). deployPerk CONSUMES an owned perk from
+  // perkInventory and applies its effect: a trap drops an invisible armed
+  // activePerks doc at the caller's GPS (drained inline by live.updatePosition
+  // → pvp-drain.processTrapDrains when a rival enters its 100 m radius), a
+  // shield raises perkShield/{uid} + the public perkShieldPublic/{uid} status,
+  // a boost arms perkBoost/{uid} so the crown-award path pays 2x. All anti-abuse
+  // (1 active trap, 3 deploys/day, 300 m self-spacing, <=10 victims/trap,
+  // once-per-trap-per-victim, 150 KP/day earn + 45 KP/day loss caps, 2h victim
+  // cooldown, 7-day new-account immunity, shield skip) is server-enforced.
+  // Entirely behind the contract-default-OFF crownHuntPerks flag — deployPerk,
+  // the drain and the boost all no-op while it is OFF. Deployed as
+  // crownHunt-deployPerk (functions/src/crownHunt/deployPerk.ts).
+  deployPerk,
   // Scheduled COLLECT-LAG detector (every 20 min, Europe/Stockholm). Reads the
   // per-attempt claim docs the two collect paths already write (crownSpawnClaims
   // / crownHuntClaims — no hot-path writes added) and auto-files ONE deduplicated
