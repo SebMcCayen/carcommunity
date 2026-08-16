@@ -140,7 +140,10 @@ interface DrainContext {
  */
 export async function resolveActiveBoostMultiplier(uid: string, now: Date): Promise<number> {
   try {
-    if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
+    // Reuse the module's crownHuntPerks TTL cache (same flag) rather than an
+    // uncached read on every crown-claim attempt — semantically identical, and
+    // it keeps the asymmetric ~5s-when-on kill-switch.
+    if (!(await crownHuntPerksEnabled(now.getTime()))) {
       return 1;
     }
     const snap = await db.collection('perkBoost').doc(uid).get();
@@ -268,16 +271,23 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
 }
 
 /**
- * True for a Firestore/gRPC ALREADY_EXISTS error (status code 6) — the expected
- * outcome when two concurrent drains race the once-per-(trap, victim) marker
- * `create`. Matched on the numeric/string status code, never the message text.
+ * True for a Firestore/gRPC ALREADY_EXISTS error — the expected outcome when two
+ * concurrent drains race the once-per-(trap, victim) marker `create`. The Admin
+ * SDK surfaces it three ways across versions/transports (gRPC code 6, the
+ * 'already-exists' string code, or only in the message text), so all three are
+ * matched — mirroring functions/src/chatchannels/chat-core.ts (itself a mirror
+ * of crownHunt/submitClaim.ts). Missing the text form lets the expected race be
+ * misclassified and re-spam the logs the earlier fix quieted.
  */
 function isAlreadyExistsError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null || !('code' in error)) {
+  if (typeof error !== 'object' || error === null) {
     return false;
   }
-  const code = (error as { code: unknown }).code;
-  return code === 6 || code === 'already-exists';
+  const code = (error as { code?: unknown }).code;
+  if (code === 6 || code === 'already-exists') {
+    return true;
+  }
+  return String((error as { message?: unknown }).message ?? '').includes('ALREADY_EXISTS');
 }
 
 /**
