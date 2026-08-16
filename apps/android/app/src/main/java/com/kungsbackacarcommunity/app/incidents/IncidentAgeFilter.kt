@@ -77,6 +77,23 @@ object IncidentAgeFilter {
     val sliderSteps: Int = (orderedOptions.size - 2).coerceAtLeast(0)
 
     /**
+     * Maps a raw Compose `Slider` value (an OPTION INDEX, possibly mid-drag and so
+     * fractional or out of range) to the [IncidentAgeOption] it lands on. Rounds to
+     * the nearest notch and clamps into [orderedOptions], so a partial drag resolves
+     * to a real option and an over-drag never indexes past the ends.
+     *
+     * Kept here, pure, so the layers-popup slider can render its LIVE label from the
+     * finger position while dragging (not only the committed value) and commit the
+     * SAME resolved option on release — both through this one function — and so the
+     * rounding is unit-testable off device.
+     */
+    fun optionForSliderIndex(value: Float): IncidentAgeOption {
+        if (orderedOptions.isEmpty()) return DEFAULT
+        val idx = Math.round(value).coerceIn(0, orderedOptions.lastIndex)
+        return orderedOptions[idx]
+    }
+
+    /**
      * Decodes a persisted enum NAME into an option. A null (nothing stored yet) or
      * an unrecognised name (a corrupt/hand-edited pref, or an option renamed/removed
      * in a later build) falls back to [DEFAULT] rather than throwing. Names, not
