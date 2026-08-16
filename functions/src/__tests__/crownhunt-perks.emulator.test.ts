@@ -83,6 +83,24 @@ async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
   }
 }
 
+/**
+ * The structured `details.reason` a callable rejection carries (or undefined for
+ * a rejection with no reason). The JS SDK throws a `FunctionsError` (a
+ * `FirebaseError` subclass) that exposes the callable `details` directly.
+ */
+async function callableErrorReason(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+    return 'no-error';
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      const details = (error as { details?: unknown }).details;
+      return (details as { reason?: unknown } | undefined)?.reason;
+    }
+    throw error;
+  }
+}
+
 async function createProvisionedUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
@@ -218,6 +236,11 @@ describe('crownHunt.buyPerk', () => {
     expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'spike_strip' })))).toBe(
       'functions/failed-precondition',
     );
+    // Structured discriminator so the client tells "not enough KP" apart from a
+    // shop-unavailable rejection without substring-matching the message.
+    expect(await callableErrorReason(call('crownHunt-buyPerk', buyInput({ perkId: 'spike_strip' })))).toBe(
+      'insufficient_funds',
+    );
     const after = await readInventory(member.uid);
     expect(after.spike_strip ?? 0).toBe(before.spike_strip ?? 0);
     expect(await readBalance(member.uid)).toBe(50);
@@ -245,6 +268,9 @@ describe('crownHunt.buyPerk', () => {
     expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'nope' })))).toBe(
       'functions/failed-precondition',
     );
+    expect(await callableErrorReason(call('crownHunt-buyPerk', buyInput({ perkId: 'nope' })))).toBe(
+      'shop_unavailable',
+    );
     expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ qty: 0 })))).toBe(
       'functions/invalid-argument',
     );
@@ -260,6 +286,9 @@ describe('crownHunt.buyPerk', () => {
     try {
       expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput()))).toBe(
         'functions/failed-precondition',
+      );
+      expect(await callableErrorReason(call('crownHunt-buyPerk', buyInput()))).toBe(
+        'shop_unavailable',
       );
     } finally {
       await setPerksFlag(true);

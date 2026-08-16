@@ -152,13 +152,21 @@ export type BalanceCheck =
   | { ok: true; balanceAfter: number }
   | { ok: false; message: string };
 
+/**
+ * The exact message a debit that would overdraw the balance rejects with. A
+ * SHARED constant (not an inline literal) so backend callers can recognise the
+ * overdraft rejection precisely instead of substring-matching a message — see
+ * crownHunt/buyPerk.ts, which maps it to a `reason: 'insufficient_funds'` detail.
+ */
+export const DEBIT_OVERDRAFT_MESSAGE = 'Debit would produce a negative balance. Reduce the amount.';
+
 /** A signed delta may never take the balance below zero. */
 export function applyDelta(currentBalance: number, signedAmount: number): BalanceCheck {
   const balanceAfter = currentBalance + signedAmount;
   if (balanceAfter < 0) {
     return {
       ok: false,
-      message: 'Debit would produce a negative balance. Reduce the amount.',
+      message: DEBIT_OVERDRAFT_MESSAGE,
     };
   }
   return { ok: true, balanceAfter };
