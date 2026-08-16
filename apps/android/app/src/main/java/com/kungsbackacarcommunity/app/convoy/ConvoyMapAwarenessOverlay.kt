@@ -51,6 +51,8 @@ import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.location.LivePositionRejectionReport
 import com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
+import com.kungsbackacarcommunity.app.map.MapAwarenessDiagnostics
+import com.kungsbackacarcommunity.app.map.MapAwarenessReport
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPlacement
 import com.kungsbackacarcommunity.app.map.ConvoyMemberPosition
 import com.kungsbackacarcommunity.app.map.LiveMarkerSmoother
@@ -109,9 +111,19 @@ fun ConvoyMapAwarenessOverlay(
     members: List<ConvoyMemberPosition>,
     modifier: Modifier = Modifier,
     nowMillis: () -> Long = { System.currentTimeMillis() },
+    focusFitActive: Boolean = false,
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // Field telemetry for the "convoy fit drops members off screen" bug: while the
+    // keep-everyone-framed mode is on, a fresh member the projection places
+    // OFF-SCREEN right after the camera settled is the fit failing to contain
+    // them. A run of such frames escalates one bucketed report. See
+    // MapAwarenessDiagnostics; a null reporter (config-less build) just fills the
+    // device-local ring buffer.
+    val fitErrorReporter = rememberClientErrorReporter()
+    val fitLog = remember { MapAwarenessDiagnostics.ConvoyFitLog() }
 
     // Deliberately OUTSIDE the Box: the smoother's per-member glide state must
     // survive the frames on which the Box bails out early (no camera yet, empty
@@ -192,12 +204,62 @@ fun ConvoyMapAwarenessOverlay(
                     // recompute is the same one the staleness test uses.
                     nowMillis = staleTick,
                     project = { member ->
-                        mapSurface.screenPositionFor(member.latitude, member.longitude)?.let {
-                            ConvoyEdgeGeometry.ProjectedPoint(it.x, it.y)
-                        }
+                        // Drop an UNTRUSTWORTHY projection (a point folded/clamped
+                        // from behind the tilted camera — see
+                        // MapScreenPoint.trustworthy): the planner then treats the
+                        // member as off-screen and draws an edge arrow from their
+                        // bearing, instead of a marker stuck at the folded pixel.
+                        mapSurface.screenPositionFor(member.latitude, member.longitude)
+                            ?.takeIf { it.trustworthy }
+                            ?.let { ConvoyEdgeGeometry.ProjectedPoint(it.x, it.y) }
                     },
                 )
             }
+
+        // While the fit is framing everyone, a fresh member the projection puts
+        // off-screen right after the camera settled is the bug-1 signature. The
+        // planner already dropped stale members, so every off-screen arrow here
+        // stands for a member who SHOULD be in frame. (Arrows merge members, so
+        // the true off-screen count folds in each arrow's +N.)
+        val fitFrame =
+            if (focusFitActive) {
+                val offScreenMembers = placements.offScreen.sumOf { 1 + it.extraCount }
+                MapAwarenessDiagnostics.ConvoyFitFrame(
+                    memberCount = placements.onScreen.size + offScreenMembers,
+                    offScreenNonStale = offScreenMembers,
+                )
+            } else {
+                null
+            }
+        // Keyed on the per-settle inputs (camera snapshot + the staleness tick +
+        // whether the fit is active), NOT on `fitFrame`: ConvoyFitFrame is a data
+        // class, so consecutive settled frames with the same member/off-screen
+        // counts compare EQUAL and keying on it would suppress re-recording — the
+        // fitLog would never count a RUN of faulty fits (the escalation condition)
+        // while the off-screen count holds steady. Keying on the settle inputs
+        // records each settled frame; recordFrame's one-shot guard still reports
+        // only once per fit session.
+        LaunchedEffect(snapshot, staleTick, focusFitActive) {
+            if (fitFrame == null) {
+                // The fit stopped being applied (mode off, panned away, or nothing
+                // left to fit). Start the next fit session clean: clear the counts
+                // AND the one-shot escalation flag, so a later fit can report again
+                // and does not inherit a previous session's tallies.
+                fitLog.reset()
+                return@LaunchedEffect
+            }
+            if (fitLog.recordFrame(fitFrame)) {
+                // ONE summary snapshot for both the message and the dedup code, so
+                // they cannot describe different states if a concurrent frame
+                // mutates the log between two reads.
+                val summary = fitLog.summary()
+                fitErrorReporter?.report(
+                    feature = MapAwarenessReport.FEATURE_FIT,
+                    message = MapAwarenessReport.fitMessage(summary),
+                    code = MapAwarenessReport.fitCode(summary),
+                )
+            }
+        }
 
         placements.onScreen.forEach { placement ->
             ConvoyMemberChip(

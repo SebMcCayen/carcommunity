@@ -348,4 +348,79 @@ class ConvoyEdgeGeometryTest {
         assertEquals(10.0, ConvoyEdgeGeometry.normalizeDegrees(370.0), 0.0001)
         assertEquals(0.0, ConvoyEdgeGeometry.normalizeDegrees(360.0), 0.0001)
     }
+
+    // ---- projection round trip (the stuck-in-corner deterministic fix) -------
+
+    @Test
+    fun `metres per pixel halves for every zoom level in`() {
+        val z10 = ConvoyEdgeGeometry.metersPerPixel(57.5, 10.0)
+        val z11 = ConvoyEdgeGeometry.metersPerPixel(57.5, 11.0)
+        assertEquals(z10 / 2.0, z11, z11 * 1e-9)
+        // And it shrinks toward the poles (cos latitude).
+        assertTrue(ConvoyEdgeGeometry.metersPerPixel(57.5, 12.0) < ConvoyEdgeGeometry.metersPerPixel(0.0, 12.0))
+    }
+
+    @Test
+    fun `an honest projection round-trips back to itself and is trusted`() {
+        // Coordinate → pixel → coordinate lands within a pixel: the drift is tiny
+        // compared with the pixel-scaled tolerance, so it is believed.
+        val lat = 57.5000
+        val lng = 12.1000
+        val mpp = ConvoyEdgeGeometry.metersPerPixel(lat, 14.0) // ~7 m/px at this latitude
+        // Simulate the unproject landing half a pixel away.
+        val backLat = lat + (mpp * 0.5) / 111_320.0
+        assertTrue(
+            ConvoyEdgeGeometry.projectionRoundTrips(
+                originalLatitude = lat,
+                originalLongitude = lng,
+                unprojectedLatitude = backLat,
+                unprojectedLongitude = lng,
+                metersPerPixel = mpp,
+            ),
+        )
+    }
+
+    @Test
+    fun `a folded projection unprojects far away and is rejected`() {
+        // A point behind the camera folds to a pixel showing somewhere else; that
+        // pixel unprojects kilometres from the input, so the round trip fails.
+        val lat = 57.5000
+        val lng = 12.1000
+        val mpp = ConvoyEdgeGeometry.metersPerPixel(lat, 14.0)
+        assertFalse(
+            ConvoyEdgeGeometry.projectionRoundTrips(
+                originalLatitude = lat,
+                originalLongitude = lng,
+                unprojectedLatitude = lat + 0.2, // ~22 km north
+                unprojectedLongitude = lng,
+                metersPerPixel = mpp,
+            ),
+        )
+    }
+
+    @Test
+    fun `the tolerance scales with zoom so a low-zoom pixel is not falsely rejected`() {
+        // At zoom 8 one pixel is hundreds of metres; a round trip landing one pixel
+        // off must still be trusted, where the same ground drift at zoom 16 is a fold.
+        val lat = 57.5
+        val lng = 12.1
+        val mppLow = ConvoyEdgeGeometry.metersPerPixel(lat, 8.0)
+        val mppHigh = ConvoyEdgeGeometry.metersPerPixel(lat, 16.0)
+        val onePixelLowDeg = mppLow / 111_320.0
+        assertTrue(
+            "one pixel at zoom 8 is on-screen",
+            ConvoyEdgeGeometry.projectionRoundTrips(lat, lng, lat + onePixelLowDeg, lng, mppLow),
+        )
+        assertFalse(
+            "the same ground drift is a fold at zoom 16",
+            ConvoyEdgeGeometry.projectionRoundTrips(lat, lng, lat + onePixelLowDeg, lng, mppHigh),
+        )
+    }
+
+    @Test
+    fun `a non-finite coordinate never round-trips`() {
+        val mpp = ConvoyEdgeGeometry.metersPerPixel(57.5, 14.0)
+        assertFalse(ConvoyEdgeGeometry.projectionRoundTrips(Double.NaN, 12.1, 57.5, 12.1, mpp))
+        assertFalse(ConvoyEdgeGeometry.projectionRoundTrips(57.5, 12.1, Double.NaN, 12.1, mpp))
+    }
 }

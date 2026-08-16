@@ -275,6 +275,7 @@ import com.kungsbackacarcommunity.app.location.locationPermissionRemedy
 import com.kungsbackacarcommunity.app.location.openAppLocationSettings
 import com.kungsbackacarcommunity.app.location.openDeviceLocationSettings
 import com.kungsbackacarcommunity.app.location.shouldShowLocationRationale
+import com.kungsbackacarcommunity.app.map.ConvoyArrowPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyCameraPlan
 import com.kungsbackacarcommunity.app.map.ConvoyFocusMode
 import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
@@ -4138,17 +4139,69 @@ fun AuthenticatedApp(
                 // returns when it has too little to fit, so the restore path is the
                 // same code as the never-enabled path rather than a special case
                 // somebody can forget to write.
-                LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions) {
+                // True only when a real convoy FIT is being framed — i.e. the plan
+                // is actually FitConvoy, not merely "focus mode is on". The mode can
+                // be Convoy while the plan still falls back to FollowSelf (own
+                // position unknown + a single member, nobody sharing yet), and the
+                // convoy-fit diagnostics must not count those follow frames as the
+                // fit failing to frame anyone. Gates the overlay's fit telemetry.
+                var convoyFitActive by remember { mutableStateOf(false) }
+
+                // A coarse staleness clock for the fit. `freshForFit` depends on
+                // TIME passing, but a member who loses signal stops changing the
+                // roster: their RTDB `latest` node lingers and keeps re-arriving
+                // unchanged, so the fit LaunchedEffect below — keyed on the roster —
+                // would never re-run and would go on framing the ghost, exactly the
+                // bounds inflation freshForFit exists to stop. So re-key on a timer
+                // too. It ticks only while convoy-focus is on (staleness is
+                // irrelevant to the FollowSelf path), at a quarter of STALE_AFTER_MS,
+                // derived from it so the two cannot drift — the same rationale as
+                // ConvoyMapAwarenessOverlay's STALE_TICK_MS.
+                var convoyFitStaleTick by remember { mutableStateOf(System.currentTimeMillis()) }
+                LaunchedEffect(convoyFocusMode) {
+                    if (convoyFocusMode != ConvoyFocusMode.Convoy) return@LaunchedEffect
+                    // Refresh the clock the instant focus turns on, so the first fit
+                    // ages out an already-stale member rather than waiting a tick.
+                    convoyFitStaleTick = System.currentTimeMillis()
+                    while (true) {
+                        delay(ConvoyArrowPlanner.STALE_AFTER_MS / 4)
+                        convoyFitStaleTick = System.currentTimeMillis()
+                    }
+                }
+
+                LaunchedEffect(mapSurface, convoyFocusMode, ownLiveMarker, convoyMemberPositions, convoyFitStaleTick) {
+                    // Exclude members whose last position is stale (lost signal /
+                    // left behind) BEFORE fitting, matching what the off-screen
+                    // arrows already do. A stale ghost stretches the framed
+                    // bounding box toward a place nobody is any more, and — because
+                    // the fit zoom is floored — an inflated box can push the REAL,
+                    // moving members near its far edge off the screen. See
+                    // ConvoyFocusPlanner.freshForFit. The staleness tick is a key so
+                    // a parked convoy ages a silent member out even with the roster
+                    // unchanged; using it AS the clock keeps the value that triggered
+                    // the recompute and the value the filter reads identical.
+                    // Only do the staleness filter + mapping in Convoy mode: plan()
+                    // returns FollowSelf without reading memberPositions otherwise,
+                    // so computing them for every follow-mode tick is wasted work.
+                    val freshMemberPoints =
+                        if (convoyFocusMode == ConvoyFocusMode.Convoy) {
+                            ConvoyFocusPlanner
+                                .freshForFit(
+                                    members = convoyMemberPositions,
+                                    nowMillis = convoyFitStaleTick,
+                                )
+                                .map { ConvoyLatLng(it.latitude, it.longitude) }
+                        } else {
+                            emptyList()
+                        }
                     val plan =
                         ConvoyFocusPlanner.plan(
                             mode = convoyFocusMode,
                             ownPosition =
                                 ownLiveMarker?.let { ConvoyLatLng(it.latitude, it.longitude) },
-                            memberPositions =
-                                convoyMemberPositions.map {
-                                    ConvoyLatLng(it.latitude, it.longitude)
-                                },
+                            memberPositions = freshMemberPoints,
                         )
+                    convoyFitActive = plan is ConvoyCameraPlan.FitConvoy
                     mapSurface.setConvoyFit(
                         points =
                             when (plan) {
@@ -4263,6 +4316,7 @@ fun AuthenticatedApp(
                             ConvoyMapAwarenessOverlay(
                                 mapSurface = mapSurface,
                                 members = convoyMemberPositions,
+                                focusFitActive = convoyFitActive,
                             )
                         }
                     } else {
@@ -4303,6 +4357,7 @@ fun AuthenticatedApp(
                                 ConvoyMapAwarenessOverlay(
                                     mapSurface = projection,
                                     members = convoyMemberPositions,
+                                    focusFitActive = convoyFitActive,
                                 )
                             }
                             if (liveLayerPlan.nearby) {

@@ -224,6 +224,65 @@ object ConvoyEdgeGeometry {
         )
     }
 
+    /**
+     * Ground metres one screen pixel spans at [latitude] and [zoom] on the
+     * web-mercator basemap. The standard Mapbox/Google resolution:
+     * `156543.03 * cos(lat) / 2^zoom` at 256-px tiles.
+     *
+     * Used to turn a coordinate round-trip mismatch (see [projectionRoundTrips])
+     * into a pixel-scale tolerance, so the same absolute slack is neither
+     * hair-trigger when zoomed right in nor useless when zoomed out — one pixel is
+     * a metre downtown and hundreds of metres at a country view.
+     */
+    fun metersPerPixel(latitude: Double, zoom: Double): Double =
+        156_543.03392 * cos(Math.toRadians(latitude)) / Math.pow(2.0, zoom)
+
+    /**
+     * Whether a coordinate → pixel → coordinate ROUND TRIP through the SDK's
+     * projection landed back where it started.
+     *
+     * This is the deterministic cure for the "off-screen live user stuck in the
+     * top-left corner" bug that the [isProjectionTrustworthy] angle heuristic only
+     * *usually* caught. On a pitched map a coordinate behind the camera (or beyond
+     * the horizon, or off the projectable globe) has no honest screen position, and
+     * `pixelForCoordinate` folds OR clamps it back into view — sometimes mirrored
+     * through the centre (which the angle check catches), but sometimes clamped to
+     * a fixed viewport CORNER such as the origin (0, 0), whose direction is
+     * independent of the target's bearing, so roughly half of those slipped past
+     * the ≤90° cross-examination and pinned a chip to the top-left.
+     *
+     * Unprojecting the folded/clamped pixel does not recover the original
+     * coordinate — it returns the real place that pixel is showing, which is far
+     * away — whereas a genuinely on-screen point round-trips back to itself within
+     * a pixel. So the coordinate-space mismatch is a bearing-INDEPENDENT,
+     * zoom-independent test that the projection can be believed.
+     *
+     * @param metersPerPixel the current [metersPerPixel]; the tolerance is
+     *   [tolerancePixels] of these, floored at [MIN_ROUND_TRIP_TOLERANCE_METERS] so
+     *   sub-pixel rounding at high zoom never trips it.
+     */
+    fun projectionRoundTrips(
+        originalLatitude: Double,
+        originalLongitude: Double,
+        unprojectedLatitude: Double,
+        unprojectedLongitude: Double,
+        metersPerPixel: Double,
+        tolerancePixels: Double = ROUND_TRIP_TOLERANCE_PX,
+    ): Boolean {
+        if (!originalLatitude.isFinite() || !originalLongitude.isFinite()) return false
+        if (!unprojectedLatitude.isFinite() || !unprojectedLongitude.isFinite()) return false
+        val mpp = if (metersPerPixel.isFinite() && metersPerPixel > 0.0) metersPerPixel else 0.0
+        val tolerance = (mpp * tolerancePixels).coerceAtLeast(MIN_ROUND_TRIP_TOLERANCE_METERS)
+        val drift =
+            distanceMeters(
+                fromLatitude = originalLatitude,
+                fromLongitude = originalLongitude,
+                toLatitude = unprojectedLatitude,
+                toLongitude = unprojectedLongitude,
+            )
+        return drift <= tolerance
+    }
+
     /** Wraps any angle into `[0, 360)`. */
     fun normalizeDegrees(degrees: Double): Double {
         val wrapped = degrees % 360.0
@@ -247,6 +306,21 @@ object ConvoyEdgeGeometry {
 
     /** Radius around the viewport centre inside which a screen angle is meaningless. */
     const val CENTRE_EPSILON_PX: Float = 1f
+
+    /**
+     * Round-trip slack in pixels (see [projectionRoundTrips]). A few pixels
+     * absorbs the SDK's own coordinate↔pixel rounding for a genuine on-screen
+     * point; a fold/clamp misses by orders of magnitude more, so the exact value
+     * is not delicate.
+     */
+    const val ROUND_TRIP_TOLERANCE_PX: Double = 4.0
+
+    /**
+     * Floor on the round-trip tolerance in metres, so at very high zoom (a pixel
+     * spanning centimetres) the pixel-scaled tolerance does not collapse below the
+     * projection's own arithmetic noise and reject a point that is genuinely there.
+     */
+    const val MIN_ROUND_TRIP_TOLERANCE_METERS: Double = 2.0
 
     // Below this, a ray direction component is treated as exactly zero (an
     // axis-aligned ray), which avoids dividing by a denormal and shooting the

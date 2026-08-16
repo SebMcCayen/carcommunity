@@ -25,6 +25,7 @@ import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.incidents.ViewportRadius
 import com.kungsbackacarcommunity.app.map.CameraFollowController
+import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
 import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
@@ -680,8 +681,64 @@ class MapboxMapSurface : MapSurface {
     override fun screenPositionFor(latitude: Double, longitude: Double): MapScreenPoint? {
         val map = mapViewRef ?: return null
         return runCatching {
-            val screen = map.mapboxMap.pixelForCoordinate(Point.fromLngLat(longitude, latitude))
-            MapScreenPoint(x = screen.x.toFloat(), y = screen.y.toFloat())
+            val mapboxMap = map.mapboxMap
+            val input = Point.fromLngLat(longitude, latitude)
+            val screen = mapboxMap.pixelForCoordinate(input)
+            val x = screen.x.toFloat()
+            val y = screen.y.toFloat()
+            // A non-finite pixel has no honest position at all: null, not a chip
+            // pinned at NaN → (0,0).
+            if (!x.isFinite() || !y.isFinite()) return@runCatching null
+
+            // The fix for the "off-screen live user stuck in the top-left corner"
+            // bug (a re-occurrence of #838). On the default pitched map a point
+            // BEHIND the camera has no real screen position, and
+            // pixelForCoordinate does not fail — it folds the point back into view,
+            // sometimes CLAMPED to the origin corner (0,0), whose direction is
+            // independent of the target's bearing and so slipped past the
+            // downstream angle heuristic. Round-tripping the pixel back to a
+            // coordinate catches every such case deterministically: a folded/
+            // clamped pixel unprojects to the far-away place it is actually
+            // showing, not back to the input, whereas an honest on-screen point
+            // round-trips to itself within a pixel.
+            //
+            // The pixel is returned EITHER way, tagged with the verdict, so a
+            // caller can both (a) refuse to place a chip on a fold and (b) log the
+            // raw folded pixel for diagnostics. The nearby overlay hides an
+            // untrustworthy point; the convoy overlay treats it as OFF-SCREEN and
+            // draws an edge arrow from the member's bearing (never from the pixel).
+            val cameraState = mapboxMap.cameraState
+            val trustworthy =
+                if (cameraState.pitch <= ROUND_TRIP_MAX_FLAT_PITCH_DEGREES) {
+                    // A top-down (2D) camera cannot fold a point behind itself:
+                    // every finite pixel is an honest projection (a point genuinely
+                    // off to one side just projects far outside the viewport, which
+                    // the caller's rectangle test handles). So skip the round trip —
+                    // this is the common case (flat fits, north-up 2D browsing) and
+                    // the coordinateForPixel call is pure per-projection overhead there.
+                    true
+                } else {
+                    val back = mapboxMap.coordinateForPixel(screen)
+                    val metersPerPixel =
+                        ConvoyEdgeGeometry.metersPerPixel(
+                            // The TARGET's latitude, not the camera centre's: the
+                            // tolerance measures pixel resolution at the point being
+                            // round-tripped, and web-mercator m/px varies with
+                            // latitude. Using the camera centre would skew the
+                            // tolerance for a target far north/south of it and could
+                            // misclassify the projection.
+                            latitude = latitude,
+                            zoom = cameraState.zoom,
+                        )
+                    ConvoyEdgeGeometry.projectionRoundTrips(
+                        originalLatitude = latitude,
+                        originalLongitude = longitude,
+                        unprojectedLatitude = back.latitude(),
+                        unprojectedLongitude = back.longitude(),
+                        metersPerPixel = metersPerPixel,
+                    )
+                }
+            MapScreenPoint(x = x, y = y, trustworthy = trustworthy)
         }.getOrNull()
     }
 
@@ -2755,6 +2812,15 @@ class MapboxMapSurface : MapSurface {
          * possible, so a member who has driven to another city pins the zoom here
          * and simply falls off the edge (where the direction arrows pick them up).
          */
+        /**
+         * At or below this camera pitch the map is treated as flat (2D) for the
+         * projection round-trip in [screenPositionFor]: a top-down camera has no
+         * behind-camera fold, so the round trip is skipped. A degree of slack
+         * absorbs float noise around a nominally-0° flat fit without ever skipping
+         * the check on the tilted 3D map (~45°).
+         */
+        const val ROUND_TRIP_MAX_FLAT_PITCH_DEGREES = 1.0
+
         const val MIN_CONVOY_FIT_ZOOM = 8.0
 
         /**

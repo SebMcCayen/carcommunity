@@ -12,6 +12,7 @@ import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -33,10 +34,13 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
-import com.kungsbackacarcommunity.app.map.NearbyChipVisibility
+import com.kungsbackacarcommunity.app.map.MapAwarenessDiagnostics
+import com.kungsbackacarcommunity.app.map.MapAwarenessReport
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.MapProjection
+import com.kungsbackacarcommunity.app.shell.MapScreenPoint
 import kotlin.math.roundToInt
 
 /** Test tag on the whole nearby-live-sharer overlay. */
@@ -79,6 +83,13 @@ fun NearbyLiveOverlay(
     val camera by mapSurface.cameraSnapshot.collectAsState()
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
+    // Field telemetry for the "off-screen live user stuck in the top-left corner"
+    // bug. A burst of folded/clamped chip projections escalates ONE bucketed,
+    // coordinate-free report; a null reporter (config-less build) leaves the
+    // evidence in the device-local ring buffer. See MapAwarenessDiagnostics.
+    val errorReporter = rememberClientErrorReporter()
+    val diagnosticsLog = remember { MapAwarenessDiagnostics.MapAwarenessLog() }
+
     Box(
         modifier =
             modifier
@@ -90,26 +101,31 @@ fun NearbyLiveOverlay(
         if (sharers.isEmpty() || viewportSize.width <= 0 || viewportSize.height <= 0) return@Box
 
         val marginPx = with(LocalDensity.current) { (CHIP_SIZE / 2).toPx() }
+        val viewportWidth = viewportSize.width.toFloat()
+        val viewportHeight = viewportSize.height.toFloat()
 
         // Recomputed whenever the camera settles somewhere new or the roster
         // changes — the projection reaches into the live map, so it is keyed on
         // the settled snapshot rather than memoised on the sharers alone. Only
-        // sharers whose projected point lands inside the viewport (with a
-        // half-chip margin, so a marker is not clipped by the edge) are drawn.
+        // sharers whose projected point is TRUSTWORTHY and lands inside the
+        // viewport (with a half-chip margin, so a marker is not clipped by the
+        // edge) are drawn.
         //
-        // The visibility test is NOT a plain rectangle check: on the default
-        // pitched (45°) map, a sharer the owner has panned OFF the screen is
-        // behind the tilted camera, and `pixelForCoordinate` folds that point
-        // back into view near the top of the screen. A bare bounds test accepts
-        // the folded pixel and pins the chip to the corner — the reported bug.
-        // [NearbyChipVisibility.isVisible] cross-examines the projection against
-        // the sharer's true bearing and hides a folded (or NaN/off-screen) one.
-        val onScreen =
+        // Two guards, not a plain rectangle check: on the default pitched (45°)
+        // map a sharer panned OFF the screen is behind the tilted camera, and
+        // `pixelForCoordinate` folds/clamps that point back into view (sometimes
+        // to the origin corner). The renderer's own round-trip verdict
+        // ([MapScreenPoint.trustworthy]) rejects that deterministically, and
+        // [MapAwarenessDiagnostics.classifyChipProjection] keeps the bearing
+        // cross-examination ([ConvoyEdgeGeometry.isProjectionTrustworthy]) as a
+        // secondary check while naming each verdict for diagnostics.
+        val evaluation =
             remember(snapshot, sharers, viewportSize, marginPx) {
-                sharers.mapNotNull { sharer ->
-                    val point =
-                        mapSurface.screenPositionFor(sharer.latitude, sharer.longitude)
-                            ?: return@mapNotNull null
+                val visible = mutableListOf<Pair<LiveMarker, MapScreenPoint>>()
+                val verdicts = mutableListOf<MapAwarenessDiagnostics.ChipProjectionVerdict>()
+                for (sharer in sharers) {
+                    val point = mapSurface.screenPositionFor(sharer.latitude, sharer.longitude)
+                    val projected = point?.let { ConvoyEdgeGeometry.ProjectedPoint(it.x, it.y) }
                     val geographicBearing =
                         ConvoyEdgeGeometry.initialBearingDegrees(
                             fromLatitude = snapshot.latitude,
@@ -122,17 +138,67 @@ fun NearbyLiveOverlay(
                             geographicBearing = geographicBearing,
                             cameraBearing = snapshot.bearing,
                         )
-                    val visible =
-                        NearbyChipVisibility.isVisible(
-                            projected = ConvoyEdgeGeometry.ProjectedPoint(point.x, point.y),
-                            viewportWidth = viewportSize.width.toFloat(),
-                            viewportHeight = viewportSize.height.toFloat(),
+                    val verdict =
+                        MapAwarenessDiagnostics.classifyChipProjection(
+                            projected = projected,
+                            // The renderer's round-trip verdict is authoritative;
+                            // a null projection is treated as untrustworthy.
+                            roundTripTrustworthy = point?.trustworthy == true,
+                            viewportWidth = viewportWidth,
+                            viewportHeight = viewportHeight,
                             marginPx = marginPx,
                             expectedScreenAngle = screenAngle,
                         )
-                    if (visible) sharer to point else null
+                    verdicts += verdict
+                    // ON_SCREEN is exactly the draw case (round trip AND bearing
+                    // agree, inside the margin-expanded viewport).
+                    if (point != null && verdict == MapAwarenessDiagnostics.ChipProjectionVerdict.ON_SCREEN) {
+                        visible += sharer to point
+                    }
                 }
+                visible to verdicts
             }
+
+        val onScreen = evaluation.first
+
+        // Feed this settled frame's verdicts to the diagnostics log; escalate one
+        // aggregate report the first time faulty projections cross the threshold.
+        //
+        // Keyed on the camera + roster + viewport (the SAME keys that recompute the
+        // evaluation), NOT on the verdict LIST: a chip stuck HIDDEN_CORNER_CLAMP
+        // every frame while the owner keeps panning produces a value-EQUAL verdict
+        // list each settle, and keying on that list would suppress re-recording, so
+        // the faults would never accumulate to ESCALATE_AFTER_FAULTS — defeating
+        // the burst detector on exactly the persistent stuck-chip case it exists to
+        // catch. Keying on the per-settle inputs records every settled frame; the
+        // one-shot guard in recordChip still fires the report only once per burst.
+        LaunchedEffect(snapshot, sharers, viewportSize, marginPx) {
+            // Record EVERY verdict from this settled frame first, THEN report — so
+            // the counts reflect the whole frame rather than a mid-loop partial
+            // state, and the report does not depend on sharer iteration order. One
+            // snapshot of faultTotal + counts feeds both the message and the dedup
+            // code, so they cannot describe different states.
+            var escalated = false
+            evaluation.second.forEach { verdict ->
+                if (diagnosticsLog.recordChip(verdict)) escalated = true
+            }
+            if (escalated) {
+                // ONE atomic snapshot of faultTotal + counts feeds both the message
+                // and the dedup code, so they cannot describe different states.
+                val faultSnapshot = diagnosticsLog.snapshot()
+                errorReporter?.report(
+                    feature = MapAwarenessReport.FEATURE_CHIP,
+                    message =
+                        MapAwarenessReport.chipMessage(
+                            faultTotal = faultSnapshot.faultTotal,
+                            counts = faultSnapshot.counts,
+                            viewportWidth = viewportWidth,
+                            viewportHeight = viewportHeight,
+                        ),
+                    code = MapAwarenessReport.chipCode(faultSnapshot.counts),
+                )
+            }
+        }
 
         onScreen.forEach { (sharer, point) ->
             NearbySharerChip(
