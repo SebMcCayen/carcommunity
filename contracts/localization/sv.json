@@ -167,6 +167,21 @@
     "completeProfile": "Slutför profil",
     "addCar": "Lägg till bil"
   },
+  "coachMark": {
+    "progress": "%1$d/%2$d",
+    "a11yTour": "Steg %1$d av %2$d: %3$s. %4$s",
+    "skip": "Hoppa över",
+    "next": "Nästa",
+    "done": "Klar",
+    "driveTitle": "Starta en körning",
+    "driveBody": "Tryck på plus för att köra – din position delas live och rutten spelas in.",
+    "socialTitle": "Gemenskapen",
+    "socialBody": "Här hittar du vänner, konvojer och andra entusiaster.",
+    "exploreTitle": "Meny",
+    "exploreBody": "Öppna menyn för Kronjakt, event, din profil och inställningar.",
+    "historyTitle": "Dina körningar",
+    "historyBody": "Dina inspelade körningar sparas och visas här."
+  },
   "url": {
     "terms": "https://kungsbacka-car-community.web.app/terms",
     "privacy": "https://kungsbacka-car-community.web.app/privacy",

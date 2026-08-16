@@ -89,6 +89,8 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkStep
+import com.kungsbackacarcommunity.app.coachmark.coachMarkAnchor
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -1980,7 +1982,11 @@ private fun SearchBarRow(
                 tonalElevation = 3.dp,
                 shadowElevation = 3.dp,
                 onClick = onOpenMore,
-                modifier = Modifier.size(KccSpacing.s12).testTag(MAP_HOME_MORE_TAG),
+                modifier =
+                    Modifier
+                        .size(KccSpacing.s12)
+                        .testTag(MAP_HOME_MORE_TAG)
+                        .coachMarkAnchor(CoachMarkStep.Explore),
             ) {
                 // Always render the AccountCircle fallback so the button never
                 // shows a blank circle: it covers both the window while the Storage
