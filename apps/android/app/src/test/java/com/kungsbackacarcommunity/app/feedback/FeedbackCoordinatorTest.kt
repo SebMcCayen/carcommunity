@@ -9,7 +9,8 @@ import org.junit.Test
 class FeedbackCoordinatorTest {
 
     private class FakeRepo(
-        private val result: FeedbackSubmitResult = FeedbackSubmitResult("rep_1", null, created = false),
+        private val result: FeedbackSubmitResult =
+            FeedbackSubmitResult("rep_1", null, issueNumber = null, created = false),
         private val failWith: Exception? = null,
     ) : FeedbackRepository {
         var submits = 0
@@ -25,19 +26,29 @@ class FeedbackCoordinatorTest {
 
     @Test
     fun `success captured without an issue reports Done with null url`() = runTest {
-        val repo = FakeRepo(FeedbackSubmitResult("rep_1", null, created = false))
+        val repo = FakeRepo(FeedbackSubmitResult("rep_1", null, issueNumber = null, created = false))
         val coordinator = FeedbackCoordinator(repo)
         coordinator.submit(input)
         assertEquals(1, repo.submits)
-        assertEquals(FeedbackStatus.Done(null), coordinator.status.value)
+        // The submitted summary ("Map") is carried into Done for the thank-you window.
+        assertEquals(
+            FeedbackStatus.Done(issueUrl = null, issueNumber = null, summary = "Map"),
+            coordinator.status.value,
+        )
     }
 
     @Test
-    fun `success with a created issue surfaces the url`() = runTest {
+    fun `success with a created issue surfaces the url and number`() = runTest {
         val url = "https://github.com/SebMcCayen/carcommunity/issues/42"
-        val coordinator = FeedbackCoordinator(FakeRepo(FeedbackSubmitResult("rep_1", url, created = true)))
+        val coordinator =
+            FeedbackCoordinator(
+                FakeRepo(FeedbackSubmitResult("rep_1", url, issueNumber = 42, created = true)),
+            )
         coordinator.submit(input)
-        assertEquals(FeedbackStatus.Done(url), coordinator.status.value)
+        assertEquals(
+            FeedbackStatus.Done(issueUrl = url, issueNumber = 42, summary = "Map"),
+            coordinator.status.value,
+        )
     }
 
     @Test

@@ -53,15 +53,15 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
     CROWN_HUNT_PERKS("crownHuntPerks", false),
 
     /**
-     * The in-app "open tickets" browser on the Report-a-problem page: reading
+     * The in-app "Open tickets" browser on the Report-a-problem page: reading
      * the backend `openTickets` mirror of open public GitHub issues and letting
      * a member +1 or comment on one (once each). Default OFF: while off the
      * backend rejects every interaction so nothing is posted to the public repo.
      *
-     * Registered here so the flag is operable end-to-end (contract, backend,
-     * this client, admin console) — the app's tickets-browser UI is not built
-     * yet (backend-first), so nothing reads this flag on Android until that
-     * later release.
+     * Consumed by the Android UI: while OFF the "View open tickets"
+     * (Visa öppna ärenden) entry is hidden on the report screen, the OpenTickets
+     * route is unreachable and nothing reads the `openTickets` mirror. Operable
+     * end-to-end (contract, backend, this client, admin console).
      */
     REPORT_TICKETS_BROWSER("reportTicketsBrowser", false),
 }

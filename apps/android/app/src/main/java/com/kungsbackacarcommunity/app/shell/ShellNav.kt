@@ -115,6 +115,8 @@ enum class ShellRoute {
     AccountDeletion,
     PartnerStats,
     Feedback,
+    /** The "Open tickets" browser, opened from the Feedback (report a problem) screen. */
+    OpenTickets,
     Subscription,
     Settings,
     /** The standalone "Saved places" management screen, reached from Settings. */
