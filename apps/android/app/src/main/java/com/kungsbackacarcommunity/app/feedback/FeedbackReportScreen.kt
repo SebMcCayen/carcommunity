@@ -23,6 +23,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -37,6 +38,8 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
 fun FeedbackReportScreen(
     status: FeedbackStatus,
     clientContext: FeedbackClientContext,
+    openTicketsEnabled: Boolean,
+    onOpenTickets: () -> Unit,
     onSubmit: (FeedbackReportInput) -> Unit,
     onViewIssue: (String) -> Unit,
     onBack: () -> Unit,
@@ -83,18 +86,54 @@ fun FeedbackReportScreen(
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
             if (status is FeedbackStatus.Done) {
-                Text(
-                    text =
-                        stringResource(
-                            if (status.issueUrl != null) {
-                                R.string.feedback_successWithIssue
-                            } else {
-                                R.string.feedback_success
-                            },
+                // "Tack för din rapport" confirmation window: the report summary
+                // (when the user gave one), the created issue number and a browser
+                // link to the public issue.
+                Card(
+                    colors =
+                        CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         ),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.feedback_thankYouTitle),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            text = stringResource(R.string.feedback_thankYouBody),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        if (!status.summary.isNullOrBlank()) {
+                            Text(
+                                text = status.summary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontStyle = FontStyle.Italic,
+                            )
+                        }
+                        if (status.issueNumber != null) {
+                            Text(
+                                text =
+                                    stringResource(
+                                        R.string.feedback_issueNumber,
+                                        status.issueNumber,
+                                    ),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                        if (status.issueUrl != null) {
+                            Text(
+                                text = stringResource(R.string.feedback_thankYouIssue),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                }
                 if (status.issueUrl != null) {
                     OutlinedButton(
                         onClick = { onViewIssue(status.issueUrl) },
@@ -185,6 +224,16 @@ fun FeedbackReportScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.feedback_submit))
+            }
+
+            // Entry to the "Open tickets" browser — only when the flag is on.
+            if (openTicketsEnabled) {
+                OutlinedButton(
+                    onClick = onOpenTickets,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(text = stringResource(R.string.feedback_openTicketsButton))
+                }
             }
     }
 }

@@ -18,6 +18,8 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 data class FeedbackSubmitResult(
     val reportId: String,
     val issueUrl: String?,
+    /** GitHub issue number when the public issue was created; null otherwise. */
+    val issueNumber: Int?,
     val created: Boolean,
 )
 
@@ -49,8 +51,16 @@ sealed interface FeedbackStatus {
 
     data object Submitting : FeedbackStatus
 
-    /** Report captured; [issueUrl] is present only when the public issue was created. */
-    data class Done(val issueUrl: String?) : FeedbackStatus
+    /**
+     * Report captured. [issueUrl]/[issueNumber] are present only when the public
+     * issue was created; [summary] is the short title the user typed (may be
+     * blank), carried through so the "thank you" window can echo it.
+     */
+    data class Done(
+        val issueUrl: String?,
+        val issueNumber: Int?,
+        val summary: String?,
+    ) : FeedbackStatus
 
     /** Submission failed; [reason] selects the message the user is shown. */
     data class Failed(val reason: FeedbackFailureReason) : FeedbackStatus
@@ -72,7 +82,14 @@ class FeedbackCoordinator(
         state.value = FeedbackStatus.Submitting
         try {
             val result = repository.report(input)
-            state.value = FeedbackStatus.Done(result.issueUrl)
+            state.value =
+                FeedbackStatus.Done(
+                    issueUrl = result.issueUrl,
+                    issueNumber = result.issueNumber,
+                    // The backend does not echo the summary; carry the submitted
+                    // one so the confirmation window can show what was reported.
+                    summary = input.summary?.takeIf { it.isNotBlank() },
+                )
         } catch (cancellation: CancellationException) {
             state.value = FeedbackStatus.Idle
             throw cancellation
@@ -145,6 +162,9 @@ class FirebaseFeedbackRepository private constructor(
                             FeedbackSubmitResult(
                                 reportId = reportId,
                                 issueUrl = payload["githubIssueUrl"] as? String,
+                                // Callable numbers arrive as Double/Long via the
+                                // JSON bridge; normalise to Int, null when absent.
+                                issueNumber = (payload["githubIssueNumber"] as? Number)?.toInt(),
                                 created = payload["status"] == "created",
                             ),
                         )

@@ -214,6 +214,7 @@ import com.kungsbackacarcommunity.app.events.EventsRoute
 import com.kungsbackacarcommunity.app.events.RsvpCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FeedbackReportRoute
+import com.kungsbackacarcommunity.app.feedback.OpenTicketsRoute
 import com.kungsbackacarcommunity.app.friends.FirebaseFriendPointsRepository
 import com.kungsbackacarcommunity.app.friends.FriendActionError
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
@@ -5170,6 +5171,7 @@ fun AuthenticatedApp(
                         partnerStatsRepository = partnerStatsRepository,
                         partnerStatsCoordinator = partnerStatsCoordinator,
                         feedbackCoordinator = feedbackCoordinator,
+                        reportTicketsEnabled = flags.isEnabled(FeatureFlag.REPORT_TICKETS_BROWSER),
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
                         // gates for sub-routes (e.g. the Settings hub)
@@ -7229,6 +7231,10 @@ private fun RouteHost(
     partnerStatsRepository: PartnerStatsRepository?,
     partnerStatsCoordinator: PartnerStatsCoordinator?,
     feedbackCoordinator: FeedbackCoordinator?,
+    // The `reportTicketsBrowser` flag (contract default FALSE), resolved at the
+    // call site. Gates the "View open tickets" entry on the report screen and the
+    // OpenTickets sub-route; while false the browser ships dark.
+    reportTicketsEnabled: Boolean,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
     partnerStatsEnabled: Boolean,
@@ -7941,11 +7947,18 @@ private fun RouteHost(
             if (feedbackCoordinator != null) {
                 FeedbackReportRoute(
                     coordinator = feedbackCoordinator,
+                    openTicketsEnabled = reportTicketsEnabled,
+                    onOpenTickets = { onOpenRoute(ShellRoute.OpenTickets) },
                     onBack = onClose,
                 )
             } else {
                 LoadingScreen()
             }
+
+        // Reachable only while the reportTicketsBrowser flag is on: the entry that
+        // opens it (on the Feedback screen) is gated on the same flag. Builds its
+        // own Firestore/callable repository from context.
+        ShellRoute.OpenTickets -> OpenTicketsRoute()
 
         ShellRoute.SavedPlaces ->
             SavedPlacesScreen(

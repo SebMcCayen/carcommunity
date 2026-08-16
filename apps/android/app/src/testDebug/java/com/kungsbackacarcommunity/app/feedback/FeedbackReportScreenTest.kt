@@ -48,6 +48,8 @@ class FeedbackReportScreenTest {
                 FeedbackReportScreen(
                     status = status,
                     clientContext = context,
+                    openTicketsEnabled = false,
+                    onOpenTickets = {},
                     onSubmit = {},
                     onViewIssue = {},
                     onBack = {},
@@ -60,10 +62,10 @@ class FeedbackReportScreenTest {
         composeTestRule.onNodeWithText(descriptionLabel).performScrollTo().performTextInput("Map crashed")
         composeTestRule.onNodeWithText("Map crashed").assertIsDisplayed()
 
-        status = FeedbackStatus.Done(issueUrl = null)
+        status = FeedbackStatus.Done(issueUrl = null, issueNumber = null, summary = null)
         composeTestRule.waitForIdle()
-        // Confirmation is shown; the form text node is gone.
-        composeTestRule.onNodeWithText(str(R.string.feedback_success)).assertIsDisplayed()
+        // The "thank you" window is shown; the form text node is gone.
+        composeTestRule.onNodeWithText(str(R.string.feedback_thankYouTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Map crashed").assertDoesNotExist()
 
         // Simulate the OS killing + recreating the process: rememberSaveable is
@@ -87,6 +89,8 @@ class FeedbackReportScreenTest {
                 FeedbackReportScreen(
                     status = status,
                     clientContext = context,
+                    openTicketsEnabled = false,
+                    onOpenTickets = {},
                     onSubmit = {},
                     onViewIssue = {},
                     onBack = {},

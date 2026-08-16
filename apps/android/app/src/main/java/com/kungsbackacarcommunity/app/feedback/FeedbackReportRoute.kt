@@ -1,9 +1,5 @@
 package com.kungsbackacarcommunity.app.feedback
 
-import android.content.ActivityNotFoundException
-import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -23,6 +19,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun FeedbackReportRoute(
     coordinator: FeedbackCoordinator?,
+    // Whether the `reportTicketsBrowser` flag is on — gates the "View open
+    // tickets" entry. Resolved at the call site where the flag set is in scope.
+    openTicketsEnabled: Boolean,
+    onOpenTickets: () -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -35,8 +35,10 @@ fun FeedbackReportRoute(
     FeedbackReportScreen(
         status = status,
         clientContext = clientContext,
+        openTicketsEnabled = openTicketsEnabled,
+        onOpenTickets = onOpenTickets,
         onSubmit = { input -> coordinator?.let { c -> scope.launch { c.submit(input) } } },
-        onViewIssue = { url -> openUrl(context, url) },
+        onViewIssue = { url -> openGitHubUrl(context, url) },
         onBack = {
             coordinator?.reset()
             onBack()
@@ -51,27 +53,3 @@ private fun currentFeedbackClientContext(): FeedbackClientContext =
         osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
         deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
     )
-
-private fun openUrl(context: Context, url: String) {
-    // Only ever launch an http(s) github.com URL. This is a privileged in-app
-    // flow, so a malformed/compromised backend response must not be able to
-    // launch a non-web intent (file:/intent:/javascript: …). The report was
-    // already filed, so silently skip anything that fails validation.
-    if (!isGitHubWebUrl(url)) return
-    try {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-    } catch (_: ActivityNotFoundException) {
-        // No browser available — nothing to open; the report was already filed.
-    }
-}
-
-/** True only for an http(s) URL on github.com (or a *.github.com subdomain). */
-private fun isGitHubWebUrl(url: String): Boolean {
-    val uri = Uri.parse(url)
-    val scheme = uri.scheme?.lowercase()
-    if (scheme != "http" && scheme != "https") return false
-    val host = uri.host?.lowercase() ?: return false
-    return host == "github.com" || host.endsWith(".github.com")
-}
