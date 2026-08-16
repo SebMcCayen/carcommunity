@@ -35,7 +35,7 @@ import { logger } from 'firebase-functions';
 import { defineSecret } from 'firebase-functions/params';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireActiveActor } from '../shared/memberActor';
+import { requireMemberActor } from '../shared/memberActor';
 import { createIssueComment, neutralizeMentions } from '../shared/githubIssues';
 import { readFeatureFlag } from '../shared/featureFlags';
 import {
@@ -79,8 +79,12 @@ export interface InteractWithIssueResponse {
 export const interactWithIssue = onCall(
   CALLABLE_OPTS,
   async (request): Promise<InteractWithIssueResponse> => {
-    // Auth REQUIRED (unauthenticated → `unauthenticated`); suspended/deleted rejected.
-    const actor = await requireActiveActor(request);
+    // Member gate — matches the openTickets read rules the browser reads from
+    // (isActiveMember) and the other member-only surfaces. requireMemberActor
+    // rejects unauthenticated (`unauthenticated`) and suspended/deleted; the
+    // entitlement term is behaviour-neutral today (MEMBER_GATING_ENABLED=false)
+    // and correctly locks the write path when membership is re-enabled.
+    const actor = await requireMemberActor(request);
 
     // Flag gate BEFORE any work — while off, nothing may reach the public repo.
     if (!(await readFeatureFlag(REPORT_TICKETS_FLAG_KEY))) {
