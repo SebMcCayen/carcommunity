@@ -161,7 +161,7 @@ async function deployTrap(args: {
     longitude === undefined ||
     !isValidCoordinate(latitude, longitude)
   ) {
-    throw new HttpsError('invalid-argument', 'A trap needs your current position.');
+    throw new HttpsError('invalid-argument', 'En fälla kräver din nuvarande position.');
   }
 
   const cellKey = crownCellKey(latitude, longitude);

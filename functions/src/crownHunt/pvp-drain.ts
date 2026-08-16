@@ -62,6 +62,14 @@ import {
   victimCooldownDocId,
 } from './perks-core';
 
+/**
+ * Hard ceiling on how many candidate traps a single position update will run a
+ * drain transaction against before the first drain lands. Bounds the hot-path
+ * cost when many traps overlap one spot; the first success early-exits well
+ * inside this in the common case.
+ */
+const MAX_TRAP_SCAN_BUDGET = 5;
+
 /** TTL horizon for the ephemeral counter/cooldown/marker docs. */
 function ttlDaysFromNow(now: Date, days: number): Timestamp {
   return Timestamp.fromMillis(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -154,11 +162,24 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
     return; // shielded
   }
 
+  // A victim can lose to AT MOST ONE trap per position update: the moment one
+  // trap drains them it sets the 2h victim cooldown (perkDrainCooldowns), which
+  // makes every OTHER trap on this same sample a guaranteed no-op. So we
+  // EARLY-EXIT on the first successful drain rather than run a full transaction
+  // against each remaining trap only to rediscover the cooldown — this is the
+  // hot path (live.updatePosition), and the invariant is unchanged (each trap
+  // still drains a given victim at most once, and the per-victim caps hold).
+  // A scan budget bounds the worst case (many overlapping traps in one cell)
+  // before the first drain lands.
+  let scanned = 0;
   for (const doc of snap.docs) {
+    if (scanned >= MAX_TRAP_SCAN_BUDGET) {
+      break;
+    }
     const trap = doc.data();
     const placerUid = trap.placedByUid as string | undefined;
     if (!placerUid || placerUid === victimUid) {
-      continue; // can't be caught by your own trap
+      continue; // can't be caught by your own trap (no transaction spent)
     }
     const tLat = trap.lat as number | undefined;
     const tLng = trap.lng as number | undefined;
@@ -166,16 +187,22 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
       continue;
     }
     if (!isWithinTrapRadius(haversineDistanceMeters(latitude, longitude, tLat, tLng))) {
-      continue; // outside the 100 m radius
+      continue; // outside the 100 m radius (no transaction spent)
     }
+    scanned += 1;
     // Apply this trap's drain (its own transaction). A skip (already caught by
-    // this trap, cooldown, cap spent, race) is silent — try the next trap.
-    await applyTrapDrain(doc.ref, placerUid, ctx).catch((error) => {
+    // this trap, cooldown, cap spent, race) returns false — try the next trap;
+    // a real drain returns true and we STOP (one trap per update, see above).
+    const drained = await applyTrapDrain(doc.ref, placerUid, ctx).catch((error) => {
       logger.warn('Single trap drain failed; skipping', {
         trapId: doc.id,
         error: error instanceof Error ? error.message : String(error),
       });
+      return false;
     });
+    if (drained) {
+      return;
+    }
   }
 }
 
@@ -186,12 +213,17 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
  * the anti-abuse bookkeeping. The marker `create` is the idempotency guard:
  * two concurrent samples for the same (trap, victim) serialise on it and the
  * loser aborts, so a victim sitting in a trap is drained exactly once.
+ *
+ * Returns TRUE when it actually moved KP (so the caller can early-exit — a
+ * drained victim is now on cooldown and no other trap can catch them this
+ * update), FALSE for every skip (placer restricted, trap gone/full, already
+ * caught, cooldown, cap spent, broke).
  */
 async function applyTrapDrain(
   trapRef: FirebaseFirestore.DocumentReference,
   placerUid: string,
   ctx: DrainContext,
-): Promise<void> {
+): Promise<boolean> {
   const { victimUid, now } = ctx;
   const nowMs = now.getTime();
   const dayKey = utcDayKey(now);
@@ -199,7 +231,7 @@ async function applyTrapDrain(
   // Placer must also be able to transact (a suspended placer earns nothing).
   const placerSnap = await db.collection('users').doc(placerUid).get();
   if (!placerSnap.exists || isRestricted(toUserAccessState(placerSnap.data()))) {
-    return;
+    return false;
   }
 
   const victimLedgerRef = db.collection('pointsLedger').doc(victimUid);
@@ -208,11 +240,11 @@ async function applyTrapDrain(
   const lossRef = db.collection('perkTrapLoss').doc(trapLossCounterDocId(victimUid, dayKey));
   const earnRef = db.collection('perkTrapEarn').doc(trapEarnCounterDocId(placerUid, dayKey));
 
-  await db.runTransaction(async (tx) => {
+  return db.runTransaction(async (tx) => {
     const trapSnap = await tx.get(trapRef);
     const trap = trapSnap.data();
     if (!trapSnap.exists || !trap) {
-      return;
+      return false;
     }
     // Re-validate the trap inside the transaction.
     const expiresAt = trap.expiresAt as Timestamp | undefined;
@@ -223,10 +255,10 @@ async function applyTrapDrain(
       trap.placedByUid !== placerUid ||
       trap.placedByUid === victimUid
     ) {
-      return;
+      return false;
     }
     if (!trapHasVictimRoom((trap.victimCount as number | undefined) ?? 0)) {
-      return; // trap full (10 distinct victims)
+      return false; // trap full (10 distinct victims)
     }
 
     const markerRef = db
@@ -244,13 +276,13 @@ async function applyTrapDrain(
       ]);
 
     if (markerSnap.exists) {
-      return; // already caught by THIS trap
+      return false; // already caught by THIS trap
     }
     const lastDrainAt = cooldownSnap.data()?.lastDrainAt as Timestamp | undefined;
     if (
       isWithinVictimCooldown(lastDrainAt instanceof Timestamp ? lastDrainAt.toMillis() : null, nowMs)
     ) {
-      return; // victim in 2h cooldown
+      return false; // victim in 2h cooldown
     }
 
     const victimBalance = toStoredBalance(victimLedgerSnap.data()?.balance);
@@ -258,19 +290,19 @@ async function applyTrapDrain(
     const placerEarnToday = (earnSnap.data()?.total as number | undefined) ?? 0;
     const drain = resolveDrainAmount({ victimBalance, victimLossToday, placerEarnToday });
     if (drain <= 0) {
-      return; // broke or a daily cap already spent
+      return false; // broke or a daily cap already spent
     }
 
     // Paired ledger writes — victim debited, placer credited, both serialised on
     // their own balance docs (append-only entries + denormalised balance).
     const victimCheck = applyDelta(victimBalance, -drain);
     if (!victimCheck.ok) {
-      return; // cannot go negative (belt-and-braces; resolveDrainAmount clamps)
+      return false; // cannot go negative (belt-and-braces; resolveDrainAmount clamps)
     }
     const placerBalance = toStoredBalance(placerLedgerSnap.data()?.balance);
     const placerCheck = applyDelta(placerBalance, drain);
     if (!placerCheck.ok) {
-      return; // unreachable for a positive credit; keeps the type narrowed
+      return false; // unreachable for a positive credit; keeps the type narrowed
     }
     const ts = () => FieldValue.serverTimestamp();
 
@@ -369,5 +401,7 @@ async function applyTrapDrain(
       expireAt: ttlDaysFromNow(now, 30),
       createdAt: ts(),
     });
+
+    return true; // KP moved — the caller early-exits (one trap per update)
   });
 }
