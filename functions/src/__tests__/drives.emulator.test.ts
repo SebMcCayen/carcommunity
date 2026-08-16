@@ -250,6 +250,71 @@ describe('drives-save', () => {
     expect(docData).not.toHaveProperty('topSpeed');
   });
 
+  /**
+   * Regression for GitHub #800 ([Auto-error] drives.saveDrive — "Saving a
+   * live-session drive failed (1207 points)", code INTERNAL).
+   *
+   * The report's "1207 points" is INCIDENTAL, not causal: the server compute
+   * path (distance/speed stats plus the ~64-point RDP thumbnail) is bounded and
+   * iterative, and the ride document stores only that thumbnail — the full
+   * track is a separate client upload to Cloud Storage, never inline. A drive
+   * of this size therefore saves in a few milliseconds and the document stays a
+   * few hundred bytes. The original INTERNAL was an unhandled TRANSIENT
+   * Firestore failure (now mapped to a retryable error + logged, PR #804), so
+   * this pins the invariant the point count never actually threatened: a large
+   * drive saves cleanly and its document does NOT balloon with inline points.
+   */
+  it('saves a large (1207-point) live-session drive without ballooning the document (#800)', async () => {
+    await signInAs(member);
+
+    const POINT_COUNT = 1207; // the exact magnitude from the #800 report
+    const startMs = 1_751_392_800_000;
+    const routePoints = Array.from({ length: POINT_COUNT }, (_, i) => ({
+      // ~5.5 m/s of plausible motion with a sine wiggle so the route has real
+      // shape (non-null distance + maxSpeed, a non-trivial thumbnail), all well
+      // under the >200 km/h GPS-glitch filter.
+      latitude: 57.487 + i * 0.00005,
+      longitude: 12.076 + Math.sin(i / 40) * 0.002,
+      timestampMs: startMs + i * 1_000,
+    }));
+    const input = {
+      title: 'Lång tur',
+      startedAt: new Date(startMs).toISOString(),
+      endedAt: new Date(startMs + (POINT_COUNT - 1) * 1_000).toISOString(),
+      routePoints,
+      sourceSessionId: 'large-drive-800',
+    };
+
+    const data = (await call('drives-save', input)).data as {
+      rideId: string;
+      distanceMeters: number | null;
+      maxSpeedMetersPerSecond: number | null;
+      alreadySaved: boolean;
+    };
+
+    // The save succeeds cleanly — no INTERNAL, no failed-precondition. Assert
+    // the stats are present before reading them as numbers, so a null (a
+    // summary-only save) fails loudly here rather than passing a NaN comparison.
+    expect(data.alreadySaved).toBe(false);
+    expect(typeof data.rideId).toBe('string');
+    expect(data.distanceMeters).not.toBeNull();
+    expect(data.distanceMeters).toBeGreaterThan(0);
+    expect(data.maxSpeedMetersPerSecond).not.toBeNull();
+    expect(data.maxSpeedMetersPerSecond).toBeGreaterThan(0);
+    expect(data.maxSpeedMetersPerSecond).toBeLessThanOrEqual(55.6);
+
+    const docData = (await adminDb.collection('rides').doc(data.rideId).get()).data()!;
+    // Only a BOUNDED thumbnail is stored — the 1207 raw points never land
+    // inline (they belong in rideRoutes/{uid}/{rideId}/route.bin in Storage).
+    expect(typeof docData.routeThumbnail).toBe('string');
+    expect(docData).not.toHaveProperty('routePoints');
+    // The whole document stays tiny — far under Firestore's 1 MiB limit — proof
+    // the point count cannot drive a size-based failure at save time. Measured
+    // in BYTES (Buffer.byteLength), the unit the 1 MiB limit is expressed in,
+    // not UTF-16 code units.
+    expect(Buffer.byteLength(JSON.stringify(docData), 'utf8')).toBeLessThan(20_000);
+  });
+
   it('is idempotent per sourceSessionId', async () => {
     await signInAs(member);
     const input = { ...validSave, sourceSessionId: 'session-abc-123' };
