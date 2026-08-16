@@ -101,3 +101,16 @@
 .mapWrap {
   margin-top: 8px;
 }
+
+.perkHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.perkName {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--color-text, #101828);
+}

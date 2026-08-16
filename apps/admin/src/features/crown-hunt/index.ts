@@ -151,6 +151,11 @@ export {
   adminListCellStats,
   adminListLeaderboard,
   adminListSeasons,
+  PERK_IDS,
+  zeroPerkCounts,
+  toPerkCounts,
+  toAdminPerkStatsView,
+  adminGetPerkStats,
 } from './stats';
 export type {
   AdminSpawnStatsView,
@@ -159,6 +164,8 @@ export type {
   CrownHuntLeaderboardEntry,
   CrownHuntSeason,
   CrownHuntSeasonWinner,
+  PerkId,
+  AdminPerkStatsView,
 } from './stats';
 
 const DEFAULT_PAGE_SIZE = 20;

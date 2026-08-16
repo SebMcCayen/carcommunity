@@ -72,6 +72,10 @@ const CELL_STATS_COLLECTION = 'crownHuntCellStats';
 const LEADERBOARD_COLLECTION = 'crownHuntLeaderboardEntries';
 const SEASONS_COLLECTION = 'crownHuntSeasons';
 const USER_STATS_COLLECTION = 'crownHuntUserStats';
+// Per-scope admin-readable perk-usage aggregate written by the perk-stats
+// triggers — mirrors functions/src/crownHunt/perk-stats-core.ts
+// (CROWN_PERK_STATS_COLLECTION).
+const PERK_STATS_COLLECTION = 'crownHuntPerkStats';
 
 export const CROWN_STATS_CELL_DEGREES = 0.01;
 export const ALL_TIME_SCOPE = CROWN_HUNT_ALL_TIME_SCOPE;
@@ -355,3 +359,73 @@ export async function adminListSeasons(limitN = 12): Promise<CrownHuntSeason[]> 
 
 /** Rarity tiers, ascending — re-exported for the dashboard rarity breakdown. */
 export const RARITY_TIERS: readonly CrownHuntRarity[] = CROWN_HUNT_RARITIES;
+
+// ---------------------------------------------------------------------------
+// Perk-usage stats (crownHuntPerkStats/{scope}) — admin read layer
+//
+// The read half of the perk-stats aggregate shipped in PR-A (#891). Like every
+// other aggregate above, the `crownHuntPerkStats/{scope}` document is written
+// EXCLUSIVELY by backend triggers (buyPerk / deployPerk / trap-drain fold into
+// it) and read here via a direct rules-gated `isAdmin()` getDoc. Shape:
+//
+//   crownHuntPerkStats/{scope}   scope = 'alltime' | 'YYYY-MM'
+//     { scope,
+//       usedByPerk:      { spike_strip, shield, boost },   // deploy/activation
+//       purchasedByPerk: { spike_strip, shield, boost },   // shop purchases
+//       trapTriggers,                                       // trap drains
+//       updatedAt }
+//
+// Everything stays inert (the document is simply absent → all zeros) until the
+// crownHuntPerks flag flips ON and the first perk event exists — the empty
+// dashboard pre-launch is expected, not an error.
+// ---------------------------------------------------------------------------
+
+/** The perk ids the aggregate keys by (mirrors PERK_IDS in perks-core.ts). */
+export const PERK_IDS = ['spike_strip', 'shield', 'boost'] as const;
+export type PerkId = (typeof PERK_IDS)[number];
+
+/** A zeroed per-perk histogram — the shape every `*ByPerk` map takes. */
+export function zeroPerkCounts(): Record<PerkId, number> {
+  return { spike_strip: 0, shield: 0, boost: 0 };
+}
+
+/** Read a sparse per-perk map, coercing each known perk bucket to a number. */
+export function toPerkCounts(value: unknown): Record<PerkId, number> {
+  const out = zeroPerkCounts();
+  if (value && typeof value === 'object') {
+    for (const id of PERK_IDS) {
+      const bucket = (value as Record<string, unknown>)[id];
+      if (typeof bucket === 'number' && Number.isFinite(bucket)) out[id] = bucket;
+    }
+  }
+  return out;
+}
+
+/** The admin perk-usage dashboard view for one scope ('alltime' or a season). */
+export interface AdminPerkStatsView {
+  scope: string;
+  usedByPerk: Record<PerkId, number>;
+  purchasedByPerk: Record<PerkId, number>;
+  trapTriggers: number;
+  updatedAt: string | null;
+}
+
+/** Map a `crownHuntPerkStats/{scope}` document to the dashboard view. */
+export function toAdminPerkStatsView(
+  scope: string,
+  data: DocumentData | undefined,
+): AdminPerkStatsView {
+  return {
+    scope,
+    usedByPerk: toPerkCounts(data?.usedByPerk),
+    purchasedByPerk: toPerkCounts(data?.purchasedByPerk),
+    trapTriggers: num(data?.trapTriggers),
+    updatedAt: toIso(data?.updatedAt),
+  };
+}
+
+/** Read the perk-usage totals for one scope ('alltime' or a season id). */
+export async function adminGetPerkStats(scope: string): Promise<AdminPerkStatsView> {
+  const snap = await getDoc(doc(getAdminFirestore(), PERK_STATS_COLLECTION, scope));
+  return toAdminPerkStatsView(scope, snap.exists() ? snap.data() : undefined);
+}

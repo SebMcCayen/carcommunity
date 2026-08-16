@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   leaderboard: vi.fn(),
   seasons: vi.fn(),
   cells: vi.fn(),
+  perks: vi.fn(),
 }));
 
 vi.mock('@/lib/callables', () => ({ callAdmin: vi.fn() }));
@@ -36,6 +37,7 @@ vi.mock('@/features/crown-hunt', async (importOriginal) => {
     adminListLeaderboard: mocks.leaderboard,
     adminListSeasons: mocks.seasons,
     adminListCellStats: mocks.cells,
+    adminGetPerkStats: mocks.perks,
   };
 });
 
@@ -69,6 +71,15 @@ function entry(rank: number, uid: string, displayName: string, points: number, c
   return { rank, uid, displayName, points, crownsCollected: crowns, seasonsWon };
 }
 
+function perkStats(
+  scope: string,
+  used: { spike_strip: number; shield: number; boost: number },
+  purchased: { spike_strip: number; shield: number; boost: number },
+  trapTriggers: number,
+) {
+  return { scope, usedByPerk: used, purchasedByPerk: purchased, trapTriggers, updatedAt: null };
+}
+
 async function render() {
   await act(async () => {
     root.render(<StatsTab />);
@@ -85,6 +96,7 @@ beforeEach(() => {
   mocks.leaderboard.mockReset();
   mocks.seasons.mockReset();
   mocks.cells.mockReset();
+  mocks.perks.mockReset();
 
   mocks.getStats.mockImplementation((scope: string) =>
     Promise.resolve(scope === 'alltime' ? stats('alltime', 100, 40) : stats(scope, 20, 9)),
@@ -110,6 +122,13 @@ beforeEach(() => {
     },
   ]);
   mocks.cells.mockResolvedValue([{ cellKey: '5748_1207', spawned: 5, collected: 2 }]);
+  mocks.perks.mockImplementation((scope: string) =>
+    Promise.resolve(
+      scope === 'alltime'
+        ? perkStats('alltime', { spike_strip: 12, shield: 7, boost: 4 }, { spike_strip: 20, shield: 15, boost: 9 }, 33)
+        : perkStats(scope, { spike_strip: 3, shield: 2, boost: 1 }, { spike_strip: 5, shield: 4, boost: 2 }, 8),
+    ),
+  );
 });
 
 afterEach(() => {
@@ -158,5 +177,23 @@ describe('StatsTab', () => {
     expect(text).toContain(t('crownHunt.statChampionsTitle'));
     expect(text).toContain('2026-07');
     expect(text).toContain('Ada');
+  });
+
+  it('renders a perk-usage card per perk with a generated logo and the counts', async () => {
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    // One named card per perk (Swedish names), each with a generated SVG logo.
+    for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
+      expect(text).toContain(name);
+    }
+    // The perk logos are inline SVGs labelled by the perk name (role="img").
+    const perkLogos = [...container.querySelectorAll('svg[role="img"]')].filter((s) =>
+      ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
+    );
+    expect(perkLogos.length).toBe(3);
+    // Trap triggers surface only on the trap perk (spike_strip), all-time = 33.
+    expect(text).toContain(t('crownHunt.statPerkTrapTriggers'));
+    expect(text).toContain('33');
   });
 });

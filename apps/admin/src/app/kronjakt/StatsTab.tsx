@@ -19,18 +19,23 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
   adminGetSpawnStats,
+  adminGetPerkStats,
   adminListLeaderboard,
   adminListSeasons,
   adminListCellStats,
   currentSeasonId,
   ALL_TIME_SCOPE,
   RARITY_TIERS,
+  PERK_IDS,
   type AdminSpawnStatsView,
+  type AdminPerkStatsView,
   type CrownHuntCellStat,
   type CrownHuntLeaderboardEntry,
   type CrownHuntSeason,
+  type PerkId,
 } from '@/features/crown-hunt';
 import { CrownHeatMap } from '@/components/map/CrownHeatMap';
+import { PerkLogo } from './PerkLogos';
 import { translate } from '@/i18n';
 
 import styles from './StatsTab.module.css';
@@ -50,6 +55,8 @@ interface StatsData {
   allTimeLeaderboard: CrownHuntLeaderboardEntry[];
   seasons: CrownHuntSeason[];
   cellStats: CrownHuntCellStat[];
+  allTimePerks: AdminPerkStatsView;
+  seasonPerks: AdminPerkStatsView;
 }
 
 type BoardScope = 'season' | 'alltime';
@@ -151,6 +158,61 @@ function Leaderboard({ entries }: { entries: CrownHuntLeaderboardEntry[] }): Rea
   );
 }
 
+/** The perk id → its trap-triggers relevance (only the trap perk drains KP). */
+const PERK_IS_TRAP: Record<PerkId, boolean> = {
+  spike_strip: true,
+  shield: false,
+  boost: false,
+};
+
+/**
+ * Per-perk usage cards — a generated gold logo, the Swedish perk name, and the
+ * used-this-season / used-all-time / purchased counts, plus trap-trigger count
+ * for the trap perk. All counts read zero (documents absent) until the
+ * crownHuntPerks flag is enabled and the first perk event exists.
+ */
+function PerkStatsSection({
+  allTime,
+  season,
+}: {
+  allTime: AdminPerkStatsView;
+  season: AdminPerkStatsView;
+}): React.ReactElement {
+  return (
+    <div className={styles.grid}>
+      {PERK_IDS.map((perkId) => {
+        const name = t(`crownHunt.perkName_${perkId}`);
+        return (
+          <div key={perkId} className={styles.card}>
+            <div className={styles.perkHead}>
+              <PerkLogo perkId={perkId} size={40} title={name} />
+              <span className={styles.perkName}>{name}</span>
+            </div>
+            <div className={styles.statRow}>
+              <span className={styles.statLabel}>{t('crownHunt.statPerkUsedSeason')}</span>
+              <span className={styles.statValue}>{season.usedByPerk[perkId]}</span>
+            </div>
+            <div className={styles.statRow}>
+              <span className={styles.statLabel}>{t('crownHunt.statPerkUsedAllTime')}</span>
+              <span className={styles.statValueSmall}>{allTime.usedByPerk[perkId]}</span>
+            </div>
+            <div className={styles.statRow}>
+              <span className={styles.statLabel}>{t('crownHunt.statPerkPurchased')}</span>
+              <span className={styles.statValueSmall}>{allTime.purchasedByPerk[perkId]}</span>
+            </div>
+            {PERK_IS_TRAP[perkId] && (
+              <div className={styles.statRow}>
+                <span className={styles.statLabel}>{t('crownHunt.statPerkTrapTriggers')}</span>
+                <span className={styles.statValueSmall}>{allTime.trapTriggers}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function StatsTab(): React.ReactElement {
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -170,17 +232,36 @@ export function StatsTab(): React.ReactElement {
     setError(null);
     const seasonId = currentSeasonId();
     try {
-      const [allTime, season, seasonLeaderboard, allTimeLeaderboard, seasons, cellStats] =
-        await Promise.all([
-          adminGetSpawnStats(ALL_TIME_SCOPE),
-          adminGetSpawnStats(seasonId),
-          adminListLeaderboard('season', seasonId, 20),
-          adminListLeaderboard('alltime', null, 20),
-          adminListSeasons(12),
-          adminListCellStats(500),
-        ]);
+      const [
+        allTime,
+        season,
+        seasonLeaderboard,
+        allTimeLeaderboard,
+        seasons,
+        cellStats,
+        allTimePerks,
+        seasonPerks,
+      ] = await Promise.all([
+        adminGetSpawnStats(ALL_TIME_SCOPE),
+        adminGetSpawnStats(seasonId),
+        adminListLeaderboard('season', seasonId, 20),
+        adminListLeaderboard('alltime', null, 20),
+        adminListSeasons(12),
+        adminListCellStats(500),
+        adminGetPerkStats(ALL_TIME_SCOPE),
+        adminGetPerkStats(seasonId),
+      ]);
       if (!mountedRef.current) return;
-      setData({ allTime, season, seasonLeaderboard, allTimeLeaderboard, seasons, cellStats });
+      setData({
+        allTime,
+        season,
+        seasonLeaderboard,
+        allTimeLeaderboard,
+        seasons,
+        cellStats,
+        allTimePerks,
+        seasonPerks,
+      });
     } catch {
       if (!mountedRef.current) return;
       setError(t('crownHunt.error'));
@@ -255,6 +336,11 @@ export function StatsTab(): React.ReactElement {
       <h3 className={styles.sectionTitle}>{t('crownHunt.statRarityTitle')}</h3>
       <p className={page.introText}>{t('crownHunt.statRarityNote')}</p>
       <RarityTable stats={rarityScope} />
+
+      {/* Perk usage — buys/uses per perk (season + all-time) */}
+      <h3 className={styles.sectionTitle}>{t('crownHunt.statPerkTitle')}</h3>
+      <p className={page.introText}>{t('crownHunt.statPerkNote')}</p>
+      <PerkStatsSection allTime={data.allTimePerks} season={data.seasonPerks} />
 
       {/* Past-season champions */}
       <h3 className={styles.sectionTitle}>{t('crownHunt.statChampionsTitle')}</h3>
