@@ -71,6 +71,43 @@ import {
  */
 const MAX_TRAP_SCAN_BUDGET = 5;
 
+// ---------------------------------------------------------------------------
+// crownHuntPerks flag — short module-level TTL cache (HOT-PATH ONLY)
+//
+// processTrapDrains runs on live.updatePosition (every accepted position
+// sample), and readFeatureFlag has no cache — each call is a fresh
+// config/featureFlags Firestore read. Without this, every live position update
+// would pay that read forever, even with the feature OFF (the flag is read
+// before the early-return). So the gate is cached in-memory per warm instance
+// for CACHE_TTL_MS.
+//
+// This cache is DELIBERATELY LOCAL to the drain hot path — it does NOT touch
+// the shared featureFlags infra (a global flag cache would add staleness to
+// every flag-gated behaviour and needs separate sign-off). Bounded staleness:
+// when the flag is flipped ON at launch, drains begin within <= CACHE_TTL_MS
+// per warm instance — fine for a game feature. A failed read caches the
+// contract default (false) briefly, which is the correct fail-safe.
+// ---------------------------------------------------------------------------
+
+const PERKS_FLAG_CACHE_TTL_MS = 60_000;
+let cachedPerksFlag: { value: boolean; expiresAtMs: number } | null = null;
+
+async function crownHuntPerksEnabled(nowMs: number): Promise<boolean> {
+  if (cachedPerksFlag && nowMs < cachedPerksFlag.expiresAtMs) {
+    return cachedPerksFlag.value;
+  }
+  // readFeatureFlag already returns the contract default (false) on a read
+  // error, so a failed read simply caches false for the TTL.
+  const value = await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY);
+  cachedPerksFlag = { value, expiresAtMs: nowMs + PERKS_FLAG_CACHE_TTL_MS };
+  return value;
+}
+
+/** Test-only: clears the module-level flag cache between cases. */
+export function __resetPerksFlagCacheForTest(): void {
+  cachedPerksFlag = null;
+}
+
 /** TTL horizon for the ephemeral counter/cooldown/marker docs. */
 function ttlDaysFromNow(now: Date, days: number): Timestamp {
   return Timestamp.fromMillis(now.getTime() + days * 24 * 60 * 60 * 1000);
@@ -117,7 +154,9 @@ export async function resolveActiveBoostMultiplier(uid: string, now: Date): Prom
  */
 export async function processTrapDrains(ctx: DrainContext): Promise<void> {
   try {
-    if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
+    // Cached gate (see crownHuntPerksEnabled) so the hot path does not pay a
+    // fresh config/featureFlags read on every position sample.
+    if (!(await crownHuntPerksEnabled(ctx.now.getTime()))) {
       return;
     }
     await runTrapDrains(ctx);
