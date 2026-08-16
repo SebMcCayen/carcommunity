@@ -199,7 +199,7 @@ private fun CoachMarkOverlay(
             val bubbleY = if (below) {
                 localTarget.bottom + gapPx + tailHeightPx
             } else {
-                localTarget.top - gapPx - tailHeightPx - bubbleHeight
+                localTarget.top - gapPx - tailHeightPx - bubbleHeight.toFloat()
             }
 
             // Only the ABOVE placement needs the measured height; below is stable at
@@ -215,7 +215,7 @@ private fun CoachMarkOverlay(
                 bubbleWidth = bubbleWidthPx,
                 insetPerSide = spotlightRadiusPx + tailHalfPx,
             )
-            val tailY = if (below) bubbleY - tailHeightPx else bubbleY + bubbleHeight
+            val tailY = if (below) bubbleY - tailHeightPx else bubbleY + bubbleHeight.toFloat()
 
             Box(
                 modifier = Modifier
