@@ -632,6 +632,17 @@
     "statHeatTitle": "Spawn-platser",
     "statHeatNote": "Varje cirkel är en ~1,1 km rutnätscell, storlekssatt efter spawnade kronor och färgad efter insamlade kronor.",
     "statNoHeat": "Ingen spawn-platsdata ännu.",
+    "statPerkTitle": "Perk-statistik",
+    "statPerkNote": "Köp och användning per perk, från butiks- och PvP-aggregaten. Tomt tills Kronjakt-perkar aktiveras.",
+    "statPerkError": "Kunde inte ladda perk-statistik.",
+    "statPerkUsedSeason": "Använd denna säsong",
+    "statPerkUsedAllTime": "Använd totalt",
+    "statPerkPurchased": "Köpt totalt",
+    "statPerkTrapTriggersSeason": "Fällor utlösta denna säsong",
+    "statPerkTrapTriggersAllTime": "Fällor utlösta totalt",
+    "perkName_spike_strip": "Spikmatta",
+    "perkName_shield": "Sköld",
+    "perkName_boost": "Dubbla Poäng",
     "statNoData": "Ingen statistik ännu."
   },
   "partners": {

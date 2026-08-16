@@ -632,6 +632,17 @@
     "statHeatTitle": "Spawn locations",
     "statHeatNote": "Each circle is a ~1.1 km grid cell, sized by crowns spawned and coloured by crowns collected.",
     "statNoHeat": "No spawn-location data yet.",
+    "statPerkTitle": "Perk statistics",
+    "statPerkNote": "Purchases and usage per perk, from the shop and PvP aggregates. Empty until Crown Hunt perks are enabled.",
+    "statPerkError": "Could not load perk statistics.",
+    "statPerkUsedSeason": "Used this season",
+    "statPerkUsedAllTime": "Used all-time",
+    "statPerkPurchased": "Purchased all-time",
+    "statPerkTrapTriggersSeason": "Trap triggers this season",
+    "statPerkTrapTriggersAllTime": "Trap triggers all-time",
+    "perkName_spike_strip": "Spike strip",
+    "perkName_shield": "Shield",
+    "perkName_boost": "Double points",
     "statNoData": "No statistics yet."
   },
   "partnerOffers": {

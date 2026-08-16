@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   leaderboard: vi.fn(),
   seasons: vi.fn(),
   cells: vi.fn(),
+  perks: vi.fn(),
 }));
 
 vi.mock('@/lib/callables', () => ({ callAdmin: vi.fn() }));
@@ -36,6 +37,7 @@ vi.mock('@/features/crown-hunt', async (importOriginal) => {
     adminListLeaderboard: mocks.leaderboard,
     adminListSeasons: mocks.seasons,
     adminListCellStats: mocks.cells,
+    adminGetPerkStats: mocks.perks,
   };
 });
 
@@ -69,6 +71,15 @@ function entry(rank: number, uid: string, displayName: string, points: number, c
   return { rank, uid, displayName, points, crownsCollected: crowns, seasonsWon };
 }
 
+function perkStats(
+  scope: string,
+  used: { spike_strip: number; shield: number; boost: number },
+  purchased: { spike_strip: number; shield: number; boost: number },
+  trapTriggers: number,
+) {
+  return { scope, usedByPerk: used, purchasedByPerk: purchased, trapTriggers, updatedAt: null };
+}
+
 async function render() {
   await act(async () => {
     root.render(<StatsTab />);
@@ -85,6 +96,7 @@ beforeEach(() => {
   mocks.leaderboard.mockReset();
   mocks.seasons.mockReset();
   mocks.cells.mockReset();
+  mocks.perks.mockReset();
 
   mocks.getStats.mockImplementation((scope: string) =>
     Promise.resolve(scope === 'alltime' ? stats('alltime', 100, 40) : stats(scope, 20, 9)),
@@ -110,6 +122,13 @@ beforeEach(() => {
     },
   ]);
   mocks.cells.mockResolvedValue([{ cellKey: '5748_1207', spawned: 5, collected: 2 }]);
+  mocks.perks.mockImplementation((scope: string) =>
+    Promise.resolve(
+      scope === 'alltime'
+        ? perkStats('alltime', { spike_strip: 12, shield: 7, boost: 4 }, { spike_strip: 20, shield: 15, boost: 9 }, 33)
+        : perkStats(scope, { spike_strip: 3, shield: 2, boost: 1 }, { spike_strip: 5, shield: 4, boost: 2 }, 8),
+    ),
+  );
 });
 
 afterEach(() => {
@@ -158,5 +177,90 @@ describe('StatsTab', () => {
     expect(text).toContain(t('crownHunt.statChampionsTitle'));
     expect(text).toContain('2026-07');
     expect(text).toContain('Ada');
+  });
+
+  it('renders a perk-usage card per perk with a generated logo and the counts', async () => {
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    // One named card per perk (Swedish names), each with a generated SVG logo.
+    for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
+      expect(text).toContain(name);
+    }
+    // The perk logos are inline SVGs labelled by the perk name (role="img").
+    const perkLogos = [...container.querySelectorAll('svg[role="img"]')].filter((s) =>
+      ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
+    );
+    expect(perkLogos.length).toBe(3);
+
+    // Trap triggers surface only on the trap perk (Spikmatta) — assert the
+    // values inside THAT card's labelled rows, not as bare substrings of the
+    // whole page (which also contains e.g. leaderboard "80").
+    const trapLogo = perkLogos.find((s) => s.querySelector('title')?.textContent === 'Spikmatta');
+    // card = svg → perkHead → card
+    const trapCard = trapLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    expect(trapCard).toBeDefined();
+    const rowFor = (label: string): string => {
+      const row = [...(trapCard?.querySelectorAll('div') ?? [])].find(
+        (d) => d.querySelector('span')?.textContent === label,
+      );
+      return row?.textContent ?? '';
+    };
+    expect(rowFor(t('crownHunt.statPerkTrapTriggersSeason'))).toContain('8'); // season
+    expect(rowFor(t('crownHunt.statPerkTrapTriggersAllTime'))).toContain('33'); // all-time
+
+    // The non-trap perks (Sköld) show NO trap-trigger rows.
+    const shieldLogo = perkLogos.find((s) => s.querySelector('title')?.textContent === 'Sköld');
+    const shieldCard = shieldLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    expect(shieldCard?.textContent ?? '').not.toContain(t('crownHunt.statPerkTrapTriggersSeason'));
+  });
+
+  it('shows zeroed perk cards (not an error) when perk stats permission-deny', async () => {
+    // The crownHuntPerkStats rules ship separately, so these reads
+    // permission-deny in prod until deployed — the EXPECTED pre-launch case,
+    // shown as honest zeros. It must NOT crash the tab nor show an error state.
+    mocks.perks.mockReset();
+    mocks.perks.mockRejectedValue({ code: 'permission-denied', message: 'Missing permissions' });
+    await render();
+    const text = container.textContent ?? '';
+    // The tab did NOT fall into the global error state — other sections render.
+    expect(text).not.toContain(t('crownHunt.error'));
+    expect(text).toContain('100'); // all-time spawned (spawn stats)
+    expect(text).toContain(t('crownHunt.statChampionsTitle')); // champions
+    // The perk section renders zeroed CARDS (not the error state).
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    expect(text).not.toContain(t('crownHunt.statPerkError'));
+    for (const name of ['Spikmatta', 'Sköld', 'Dubbla Poäng']) {
+      expect(text).toContain(name);
+    }
+    const trapLogo = [...container.querySelectorAll('svg[role="img"]')].find(
+      (s) => s.querySelector('title')?.textContent === 'Spikmatta',
+    );
+    const trapCard = trapLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    const usedSeasonRow = [...(trapCard?.querySelectorAll('div') ?? [])].find(
+      (d) => d.querySelector('span')?.textContent === t('crownHunt.statPerkUsedSeason'),
+    );
+    expect(usedSeasonRow?.textContent ?? '').toContain('0'); // zero fallback
+  });
+
+  it('shows a perk-section error state (not fake zeros) on a real perk-read failure', async () => {
+    // A NON-permission error (network, unavailable, a post-deploy regression) is
+    // a real failure — it must surface as an error, distinct from the graceful
+    // permission-denied zeros, and must not crash the rest of the dashboard.
+    mocks.perks.mockReset();
+    mocks.perks.mockRejectedValue({ code: 'unavailable', message: 'backend unreachable' });
+    await render();
+    const text = container.textContent ?? '';
+    // Rest of the dashboard still renders (no global error, spawn stats shown).
+    expect(text).not.toContain(t('crownHunt.error'));
+    expect(text).toContain('100'); // all-time spawned
+    expect(text).toContain(t('crownHunt.statChampionsTitle'));
+    // The perk SECTION shows its error state — and NOT the perk cards/logos.
+    expect(text).toContain(t('crownHunt.statPerkTitle'));
+    expect(text).toContain(t('crownHunt.statPerkError'));
+    const perkLogos = [...container.querySelectorAll('svg[role="img"]')].filter((s) =>
+      ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
+    );
+    expect(perkLogos.length).toBe(0);
   });
 });
