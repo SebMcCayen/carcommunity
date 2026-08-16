@@ -53,7 +53,15 @@ class CrownPointMarkersTest {
 
     @Test
     fun anEligiblePointYieldsAMarkerAtItsCoordinate() {
-        val markers = CrownPointMarkers.markers(listOf(point()), visible = true, glyphRes = glyphRes)
+        // In range (its own id in the set) so the disc is drawn in colour — this
+        // test is about the coordinate/glyph mapping, not the greying rule.
+        val markers =
+            CrownPointMarkers.markers(
+                listOf(point()),
+                visible = true,
+                glyphRes = glyphRes,
+                inRangeIds = setOf("p1"),
+            )
         assertEquals(1, markers.size)
         val marker = markers.single()
         assertEquals("p1", marker.id)
@@ -61,7 +69,7 @@ class CrownPointMarkersTest {
         assertEquals(12.07, marker.longitude, 0.0)
         assertEquals(CrownMarkerStyle.ADMIN_POINT_DISC, marker.discColorArgb)
         assertEquals(glyphRes, marker.iconRes)
-        assertEquals(CrownMarkerStyle.adminPointGlyphColorArgb(), marker.glyphColorArgb)
+        assertEquals(CrownMarkerStyle.adminPointGlyphColorArgb(inRange = true), marker.glyphColorArgb)
         // Admin points carry no glow — that stays the legendary spawn tier's.
         assertNull(marker.glowColorArgb)
     }
@@ -102,11 +110,15 @@ class CrownPointMarkersTest {
     }
 
     @Test
-    fun nullInRangeSetColoursEveryPointExactlyAsBefore() {
-        // The default (no live location) must not grey the whole layer.
+    fun nullInRangeSetGreysEveryPointUntilAFixProvesInRange() {
+        // Regression for the "coloured on app open" bug: with no live location
+        // (null in-range set, the default) the layer FAILS CLOSED — every point is
+        // greyed to the out-of-range slate, never lit as if collectible, until a
+        // real fix puts its id in the set. Previously this defaulted the other way
+        // and every crown looked reachable the instant the map appeared.
         val markers =
             CrownPointMarkers.markers(listOf(point()), visible = true, glyphRes = glyphRes)
-        assertEquals(CrownMarkerStyle.ADMIN_POINT_DISC, markers.single().discColorArgb)
+        assertEquals(CrownMarkerStyle.OUT_OF_RANGE_DISC, markers.single().discColorArgb)
     }
 
     // ---- A point with no coordinate is skipped, not drawn at (0,0) --------

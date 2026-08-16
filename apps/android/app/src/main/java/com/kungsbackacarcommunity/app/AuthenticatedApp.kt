@@ -1933,9 +1933,11 @@ fun AuthenticatedApp(
                         emptyList()
                     } else {
                         crownSpawns.map { spawn ->
-                            // null in-range set = no fix yet → colour normally,
-                            // rather than greying the whole layer.
-                            val inRange = inRangeSpawnIds == null || spawn.id in inRangeSpawnIds
+                            // null in-range set = no fix yet → fail closed and grey
+                            // every crown. A crown lights to its rarity colour only
+                            // once a real location proves the member is inside the
+                            // ring; before the first fix nothing looks collectible.
+                            val inRange = inRangeSpawnIds != null && spawn.id in inRangeSpawnIds
                             MapCrownMarker(
                                 id = spawn.id,
                                 longitude = spawn.longitude,
