@@ -12,6 +12,19 @@ sealed interface NotificationsState {
 }
 
 /**
+ * True when a [NotificationsState.Loaded] inbox holds at least one unread item —
+ * the aggregate "the Notifications tab has something new" boolean behind the map
+ * chat-bubble dot and the Notifications tab dot. Loading/Error are not-unread: a
+ * dot asserts there IS something, so an inbox that has not loaded shows none.
+ *
+ * Pure (mirrors [com.kungsbackacarcommunity.app.dm.anyUnread]); reuses
+ * [Notifications.unreadCount] so "unread" means the same thing here as in the
+ * inbox's own mark-all-read affordance.
+ */
+fun NotificationsState.anyUnread(): Boolean =
+    this is NotificationsState.Loaded && Notifications.unreadCount(items) > 0
+
+/**
  * In-app notification operations (Phase 12 slice 21). Firebase-free interface
  * so the screen/coordinator logic is unit-testable with fakes.
  *

@@ -143,6 +143,8 @@ fun ChatHubRoute(
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
+    friendsUnread: Boolean,
+    notificationsUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
@@ -176,6 +178,8 @@ fun ChatHubRoute(
             notificationsRepository = notificationsRepository,
             notificationsCoordinator = notificationsCoordinator,
             communityUnread = communityUnread,
+            friendsUnread = friendsUnread,
+            notificationsUnread = notificationsUnread,
             onClose = onClose,
             applyStatusBarInset = true,
             onViewProfile = onViewProfile,
@@ -235,6 +239,8 @@ fun ChatHubPopup(
     notificationsRepository: NotificationsRepository?,
     notificationsCoordinator: NotificationsCoordinator?,
     communityUnread: Boolean,
+    friendsUnread: Boolean,
+    notificationsUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
     onViewProfile: ((String) -> Unit)? = null,
@@ -278,6 +284,8 @@ fun ChatHubPopup(
             notificationsRepository = notificationsRepository,
             notificationsCoordinator = notificationsCoordinator,
             communityUnread = communityUnread,
+            friendsUnread = friendsUnread,
+            notificationsUnread = notificationsUnread,
             onClose = onClose,
             // The panel's card already sits below the status bar, so the content
             // must NOT add the inset again.
@@ -342,6 +350,13 @@ private fun ChatHubContent(
     // drive the map chat-bubble dot. Passed in (not re-subscribed here) so a
     // single Firestore listener backs both the bubble and this tab's dot.
     communityUnread: Boolean,
+    // Per-tab unread dots for the Friends (any DM with unread) and Notifications
+    // (any unread inbox item) sections. Like [communityUnread], derived from the
+    // SAME listeners AuthenticatedApp already runs while the hub can be seen, so
+    // the tab dots and the aggregate map-bubble dot share one subscription each.
+    // (Convoys has no per-tab dot; see the tab row.)
+    friendsUnread: Boolean,
+    notificationsUnread: Boolean,
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
     onViewProfile: ((String) -> Unit)?,
@@ -532,6 +547,10 @@ private fun ChatHubContent(
             // Hide the tab row while a sub-screen (thread/channel) is open, so the
             // thread gets the full height and Back is the way out of it.
             if (!inSubScreen) {
+                // The per-tab dot's screen-reader label. Single string reused across
+                // tabs: the visible tab label already names the section, so the dot
+                // only needs to announce "unread".
+                val unreadDotLabel = stringResource(R.string.chatHub_tabUnread)
                 TabRow(selectedTabIndex = selectedTab.ordinal) {
                     ChatTabItem(
                         tab = ChatTab.Community,
@@ -539,6 +558,7 @@ private fun ChatHubContent(
                         icon = Icons.AutoMirrored.Filled.Chat,
                         label = stringResource(R.string.chatHub_tabCommunity),
                         showDot = communityUnread,
+                        dotContentDescription = unreadDotLabel,
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
@@ -546,6 +566,12 @@ private fun ChatHubContent(
                         selected = selectedTab,
                         icon = Icons.Filled.Route,
                         label = stringResource(R.string.chatHub_tabConvoys),
+                        // No convoy dot: the app exposes unread only PER convoy
+                        // (observeUnread(convoyId, uid)); an "any convoy unread"
+                        // aggregate would need a listConvoys() + a live listener per
+                        // convoy, always on while the hub is open — new fan-out, not a
+                        // cheap client-side derivation. Left dot-less until a
+                        // lightweight aggregate signal exists (see PR notes).
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
@@ -553,6 +579,8 @@ private fun ChatHubContent(
                         selected = selectedTab,
                         icon = Icons.Filled.Person,
                         label = stringResource(R.string.chatHub_tabFriends),
+                        showDot = friendsUnread,
+                        dotContentDescription = unreadDotLabel,
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                     ChatTabItem(
@@ -560,6 +588,8 @@ private fun ChatHubContent(
                         selected = selectedTab,
                         icon = Icons.Filled.Notifications,
                         label = stringResource(R.string.chatHub_tabNotifications),
+                        showDot = notificationsUnread,
+                        dotContentDescription = unreadDotLabel,
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it.ordinal) } },
                     )
                 }
@@ -733,6 +763,11 @@ private fun ChatTabItem(
     label: String,
     onSelect: (ChatTab) -> Unit,
     showDot: Boolean = false,
+    // Announced by a screen reader when the tab carries an unread DOT, so the
+    // purely-visual dot is not silent. Null when [showDot] is false; the tab's
+    // visible label already names the section, so the dot only needs to add
+    // "unread", not repeat the section name.
+    dotContentDescription: String? = null,
 ) {
     Tab(
         selected = selected == tab,
@@ -745,7 +780,7 @@ private fun ChatTabItem(
         ) {
             if (showDot) {
                 androidx.compose.material3.BadgedBox(badge = { Badge() }) {
-                    Icon(imageVector = icon, contentDescription = null)
+                    Icon(imageVector = icon, contentDescription = dotContentDescription)
                 }
             } else {
                 Icon(imageVector = icon, contentDescription = null)

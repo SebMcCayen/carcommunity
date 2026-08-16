@@ -97,6 +97,8 @@ class ChatHubTitleTest {
                         notificationsRepository = null,
                         notificationsCoordinator = null,
                         communityUnread = false,
+                        friendsUnread = false,
+                        notificationsUnread = false,
                         onClose = {},
                     )
                 }
