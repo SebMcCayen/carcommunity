@@ -24,12 +24,14 @@ import com.kungsbackacarcommunity.app.diagnostics.MapRenderWatchdog
 import com.kungsbackacarcommunity.app.diagnostics.mapLoadingErrorKindFor
 import com.kungsbackacarcommunity.app.diagnostics.rememberFeatureHealthReporter
 import com.kungsbackacarcommunity.app.incidents.ViewportRadius
+import com.kungsbackacarcommunity.app.location.LastKnownLocationStore
 import com.kungsbackacarcommunity.app.map.CameraFollowController
 import com.kungsbackacarcommunity.app.map.ConvoyEdgeGeometry
 import com.kungsbackacarcommunity.app.map.ConvoyFocusPlanner
 import com.kungsbackacarcommunity.app.map.ConvoyLatLng
 import com.kungsbackacarcommunity.app.map.MapMarkerStyle
 import com.kungsbackacarcommunity.app.map.MapMarkers
+import com.kungsbackacarcommunity.app.navigation.NavInitialCamera
 import com.mapbox.android.gestures.MoveGestureDetector
 import com.mapbox.android.gestures.RotateGestureDetector
 import com.mapbox.android.gestures.ShoveGestureDetector
@@ -350,6 +352,22 @@ class MapboxMapSurface : MapSurface {
     // specifically: this surface outlives individual MapViews, and holding an
     // Activity here would leak it.
     private var appContext: Context? = null
+
+    // Caches the latest fix so the NEXT map open (this map home or turn-by-turn
+    // navigation) starts right where the user is, instead of flying in from the
+    // world camera. Built lazily off [appContext] on the first fix; last-write-
+    // wins. Off the follow/convoy-fit path — purely a disk write.
+    private var lastKnownLocationStore: LastKnownLocationStore? = null
+
+    private fun persistLastKnownLocation(point: Point) {
+        val store =
+            lastKnownLocationStore
+                ?: appContext?.let { LastKnownLocationStore(it) }?.also {
+                    lastKnownLocationStore = it
+                }
+                ?: return
+        runCatching { store.save(point.latitude(), point.longitude()) }
+    }
 
     // Style-image names already registered on the CURRENT style, so each
     // category's marker image is rasterised and uploaded once rather than on
@@ -1431,6 +1449,10 @@ class MapboxMapSurface : MapSurface {
                     // re-entered from inside itself (see [guardIndicator]).
                     guardIndicator {
                         lastPoint = point
+                        // Cache this fix for the next map open (see
+                        // [persistLastKnownLocation]). Before the follow gate so
+                        // it keeps refreshing even when the user has panned away.
+                        persistLastKnownLocation(point)
                         // Private breadcrumb tail: record the user's OWN path while —
                         // and only while — they are live-sharing. Done BEFORE the
                         // camera-follow gate below so the tail keeps growing even when
@@ -1783,16 +1805,21 @@ class MapboxMapSurface : MapSurface {
                     runCatching { gestures.addOnScaleListener(scaleL) }
                     runCatching { gestures.addOnRotateListener(rotateL) }
                     runCatching { gestures.addOnShoveListener(shoveL) }
-                    // Default camera until the first GPS fix arrives.
+                    // Open at the user's last-known location until the first GPS
+                    // fix arrives, falling back to the Kungsbacka default on a
+                    // fresh install. Same resolver navigation uses, so both maps
+                    // open where the user is instead of surveying the town.
+                    val initialCamera =
+                        NavInitialCamera.resolve(LastKnownLocationStore(context).read())
                     mapboxMap.setCamera(
                         cameraOptions {
                             center(
                                 Point.fromLngLat(
-                                    MapMarkers.DEFAULT_CAMERA.longitude,
-                                    MapMarkers.DEFAULT_CAMERA.latitude,
+                                    initialCamera.longitude,
+                                    initialCamera.latitude,
                                 ),
                             )
-                            zoom(MapMarkers.DEFAULT_CAMERA.zoom)
+                            zoom(initialCamera.zoom)
                             // Tilt the default camera so the map opens in 3D.
                             pitch(this@MapboxMapSurface.pitch)
                         },
