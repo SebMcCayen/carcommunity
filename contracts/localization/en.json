@@ -1185,6 +1185,7 @@
     "spawnResultAwarded": "The crown is yours!",
     "spawnResultAwardedPoints": "+%1$d KP",
     "spawnResultAlreadyTaken": "Someone got there first — this crown has already been collected.",
+    "spawnResultAlreadyCollected": "You have already collected this crown.",
     "spawnResultOutsideRadius": "You are too far from the crown.",
     "spawnResultMustBeStationary": "You need to be standing still to collect. Stop somewhere safe, wait a few seconds and try again.",
     "spawnResultPositionTooOld": "Your position is a little old. Wait a moment and try again.",
