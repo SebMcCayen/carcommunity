@@ -117,12 +117,12 @@ class ChatListPinningTest {
     }
 
     @Test
-    fun doesNotFollowAnIncomingMessageWhileTheReaderIsFlingingUpNearTheBottom() {
+    fun doesNotFollowAnIncomingMessageWhileTheUserIsFlingingUpNearTheBottom() {
         // #870: a fast upward flick lifts the finger while still within the
         // near-bottom tolerance, then a fling carries the reader up. An incoming
         // message arriving mid-fling must NOT fire the follow — animateScrollToItem
         // would cancel the fling and drag the reader back to the bottom ("scroll up
-        // fast and the chat window scrolls away"). While a scroll is in progress the
+        // fast and the chat window scrolls away"). While the USER is scrolling the
         // incoming message defers, even though the reader still reads as at/near the
         // bottom.
         assertFalse(
@@ -130,7 +130,7 @@ class ChatListPinningTest {
                 lastVisibleIndex = 19,
                 totalItemsCount = 20,
                 isOwnMessage = false,
-                isScrollInProgress = true,
+                isUserScrolling = true,
             ),
         )
         assertFalse(
@@ -138,35 +138,63 @@ class ChatListPinningTest {
                 lastVisibleIndex = 18,
                 totalItemsCount = 20,
                 isOwnMessage = false,
-                isScrollInProgress = true,
+                isUserScrolling = true,
             ),
         )
     }
 
     @Test
     fun stillFollowsYourOwnSendEvenWhileScrolling() {
-        // The scroll-in-progress guard is only for OTHER people's messages. Your own
-        // send always follows down, so hitting send mid-fling still lands you on it.
+        // The user-scrolling guard is only for OTHER people's messages. Your own send
+        // always follows down, so hitting send mid-fling still lands you on it.
         assertTrue(
             ChatListPinning.shouldFollowNewest(
                 lastVisibleIndex = 2,
                 totalItemsCount = 20,
                 isOwnMessage = true,
-                isScrollInProgress = true,
+                isUserScrolling = true,
+            ),
+        )
+    }
+
+    @Test
+    fun catchesUpABurstThatLandsDuringItsOwnFollowAnimation() {
+        // The review's catch on the first #870 fix: gating on
+        // LazyListState.isScrollInProgress would have suppressed the follow for the
+        // 2nd, 3rd, … message of a burst, because THIS effect's own follow animation
+        // keeps that flag true — leaving a pinned reader stuck a row above the newest.
+        // The programmatic follow is NOT a user scroll (isUserScrolling = false, since
+        // no drag gesture set it), so a burst message landing mid-animation still
+        // follows and the reader ends on the newest, not above it. A reader one row
+        // off the bottom (the animation has not fully landed yet) still counts.
+        assertTrue(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 19,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+                isUserScrolling = false,
+            ),
+        )
+        assertTrue(
+            ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = 18,
+                totalItemsCount = 20,
+                isOwnMessage = false,
+                isUserScrolling = false,
             ),
         )
     }
 
     @Test
     fun followsAnIncomingMessageAtTheBottomOnceTheScrollHasSettled() {
-        // Same near-bottom reader, scroll no longer in progress: the follow resumes,
-        // so a settled reader parked at the bottom still tracks new messages down.
+        // Same near-bottom reader, no user scroll in progress: the follow resumes, so
+        // a settled reader parked at the bottom still tracks new messages down.
         assertTrue(
             ChatListPinning.shouldFollowNewest(
                 lastVisibleIndex = 19,
                 totalItemsCount = 20,
                 isOwnMessage = false,
-                isScrollInProgress = false,
+                isUserScrolling = false,
             ),
         )
     }

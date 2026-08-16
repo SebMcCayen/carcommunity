@@ -1,18 +1,22 @@
 package com.kungsbackacarcommunity.app.chat
 
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalDensity
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * The one keyboard/scroll interaction shared by every chat surface — the group
@@ -62,18 +66,28 @@ object ChatListPinning {
      * who has scrolled UP into history is left exactly where they are, so an
      * incoming message never yanks them away from what they were reading.
      *
-     * One near-bottom case still needs excluding: a reader who is ACTIVELY scrolling
-     * ([isScrollInProgress]) — typically a fast upward flick whose fling has not yet
-     * carried them clear of the near-bottom tolerance. Lifting the finger off a hard
-     * flick hands control to a fling animation, which — like [KeepPinnedToNewest]'s
-     * `animateScrollToItem` — runs at `MutatePriority.Default`. An incoming message
-     * arriving mid-fling would otherwise fire that follow scroll, cancel the fling,
-     * and drag the reader straight back to the bottom (issue #870: "scroll up fast
-     * and the chat window scrolls away, you have to start over"). A finger-dragged
-     * (slow) scroll never hits this: the drag holds `MutatePriority.UserInput`, and
-     * by the time the finger lifts the reader has cleared the tolerance. So while a
-     * scroll is in progress, an incoming message defers — the reader keeps flinging
-     * and the follow simply doesn't happen. Their OWN send still always follows.
+     * One near-bottom case still needs excluding: a reader the USER is actively
+     * scrolling ([isUserScrolling]) — typically a fast upward flick whose fling has
+     * not yet carried them clear of the near-bottom tolerance. Lifting the finger off
+     * a hard flick hands control to a fling animation, which — like
+     * [KeepPinnedToNewest]'s `animateScrollToItem` — runs at `MutatePriority.Default`.
+     * An incoming message arriving mid-fling would otherwise fire that follow scroll,
+     * cancel the fling, and drag the reader straight back to the bottom (issue #870:
+     * "scroll up fast and the chat window scrolls away, you have to start over"). A
+     * finger-dragged (slow) scroll never hits this: the drag holds
+     * `MutatePriority.UserInput`, and by the time the finger lifts the reader has
+     * cleared the tolerance. So while the USER is scrolling, an incoming message
+     * defers — the reader keeps flinging and the follow simply doesn't happen. Their
+     * OWN send still always follows.
+     *
+     * Crucially this is USER scrolling, NOT [LazyListState.isScrollInProgress] — that
+     * flag is also true while THIS effect's own `animateScrollToItem` follow runs, so
+     * gating on it would suppress the follow for the 2nd, 3rd, … message of a burst
+     * that lands mid-animation and leave a pinned reader stuck a row above the newest.
+     * The caller derives [isUserScrolling] from a real drag gesture
+     * ([androidx.compose.foundation.interaction.DragInteraction]) held until the list
+     * settles (see [rememberIsUserScrolling]), so a programmatic follow is never
+     * mistaken for a user scroll and bursts still catch a pinned reader up.
      *
      * This is the FOLLOW decision only; the one-time jump-to-bottom on OPEN is owned
      * by [KeepPinnedToNewest]'s open effect, which is why this can assume the list is
@@ -85,23 +99,24 @@ object ChatListPinning {
      * @param totalItemsCount the LazyColumn's item count.
      * @param isOwnMessage whether the newly-arrived newest message is the caller's
      *   own send.
-     * @param isScrollInProgress whether the list is being actively scrolled or is
-     *   flinging ([androidx.compose.foundation.lazy.LazyListState.isScrollInProgress]).
-     *   Defaults to false — a settled list, the assumption the pure decision was
-     *   written under before #870.
+     * @param isUserScrolling whether the USER is dragging or flinging the list — NOT a
+     *   programmatic follow animation. Defaults to false — a settled list, the
+     *   assumption the pure decision was written under before #870.
      */
     fun shouldFollowNewest(
         lastVisibleIndex: Int,
         totalItemsCount: Int,
         isOwnMessage: Boolean,
-        isScrollInProgress: Boolean = false,
+        isUserScrolling: Boolean = false,
     ): Boolean {
+        // Nothing to scroll to — checked first, so "own send always follows" below is
+        // "…on a non-empty list", never index -1.
         if (totalItemsCount <= 0) return false
-        // Always follow your own send down, wherever you were — even mid-fling.
+        // Follow your own send down wherever you were — even mid-fling.
         if (isOwnMessage) return true
-        // Don't fight a reader who is actively scrolling (flinging up into history):
-        // the incoming message defers rather than cancelling their fling. See #870.
-        if (isScrollInProgress) return false
+        // Don't fight a reader the USER is flinging up into history: the incoming
+        // message defers rather than cancelling their fling. See #870.
+        if (isUserScrolling) return false
         return shouldRepinToNewest(lastVisibleIndex, totalItemsCount)
     }
 
@@ -190,6 +205,11 @@ fun KeepPinnedToNewest(
     // who had scrolled up into history back down to the bottom.
     var didInitialJump by rememberSaveable { mutableStateOf(false) }
 
+    // Tracks a USER drag/fling (NOT this effect's own programmatic follow). The
+    // new-message follow below consults it to leave a fast upward flick alone
+    // without suppressing the programmatic burst-follow. See #870.
+    val isUserScrolling = rememberIsUserScrolling(listState)
+
     // ON OPEN: wait for the first real layout, then JUMP (no animation) to the last
     // row — once. snapshotFlow.first { it > 0 } is the fix for the async-load race:
     // the effect suspends until the LazyColumn has measured something, instead of
@@ -211,18 +231,57 @@ fun KeepPinnedToNewest(
         val layoutInfo = listState.layoutInfo
         val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         val totalItems = layoutInfo.totalItemsCount
-        // isScrollInProgress guards the #870 flick: a message arriving while the
-        // reader is flinging up must not cancel the fling and drag them to the bottom.
+        // isUserScrolling guards the #870 flick: a message arriving while the reader
+        // is flinging up must not cancel the fling and drag them to the bottom. It is
+        // false during this effect's OWN follow animation, so a burst of messages
+        // landing mid-follow still catches a pinned reader up to the newest.
         if (ChatListPinning.shouldFollowNewest(
                 lastVisibleIndex = lastVisibleIndex,
                 totalItemsCount = totalItems,
                 isOwnMessage = isOwnNewestMessage,
-                isScrollInProgress = listState.isScrollInProgress,
+                isUserScrolling = isUserScrolling.value,
             )
         ) {
             listState.animateScrollToItem(totalItems - 1)
         }
     }
+}
+
+/**
+ * Tracks whether the USER is currently scrolling [listState] — a finger drag or the
+ * fling it releases into — as opposed to a programmatic `animateScrollToItem`.
+ *
+ * `LazyListState.isScrollInProgress` alone cannot tell the two apart: it is true for
+ * BOTH, so [KeepPinnedToNewest]'s new-message follow could not gate on it without
+ * suppressing its OWN follow animation (issue #870's review — a burst of messages
+ * landing mid-follow would leave a pinned reader stuck a row above the newest).
+ *
+ * A real gesture is the distinguishing signal: the list emits a
+ * [DragInteraction.Start] on its `interactionSource` when the user grabs it, and
+ * nothing when we scroll it ourselves. So this latches true on a drag start and
+ * releases only once the list has fully SETTLED (`isScrollInProgress` false) — which
+ * spans the post-lift fling, exactly the window a fast flick needs protecting. A
+ * programmatic follow, having no drag, never flips it.
+ */
+@Composable
+fun rememberIsUserScrolling(listState: LazyListState): State<Boolean> {
+    val isUserScrolling = remember(listState) { mutableStateOf(false) }
+    LaunchedEffect(listState) {
+        // A drag grabs the list: the user is scrolling, and stays "scrolling" through
+        // the fling that follows their finger lift.
+        launch {
+            listState.interactionSource.interactions.collect { interaction ->
+                if (interaction is DragInteraction.Start) isUserScrolling.value = true
+            }
+        }
+        // Release only when ALL motion stops — the fling has settled. A programmatic
+        // follow also settles here, but since no drag ever set the latch for it, this
+        // is a no-op clear in that case.
+        snapshotFlow { listState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) isUserScrolling.value = false
+        }
+    }
+    return isUserScrolling
 }
 
 /**
