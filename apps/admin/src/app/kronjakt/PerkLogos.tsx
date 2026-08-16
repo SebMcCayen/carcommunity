@@ -94,7 +94,10 @@ const GLYPHS: Record<PerkId, () => React.ReactElement> = {
 /** A generated gold-theme perk logo, drawn inline as SVG (no image asset). */
 export function PerkLogo({ perkId, size = 40, title }: PerkLogoProps): React.ReactElement {
   const Glyph = GLYPHS[perkId];
-  const decorative = title === undefined;
+  // An empty/whitespace title is treated as decorative too, so we never emit
+  // role="img" with an empty aria-label (an unlabeled image in the a11y tree).
+  const label = title?.trim() ?? '';
+  const decorative = label === '';
   return (
     <svg
       width={size}
@@ -102,10 +105,10 @@ export function PerkLogo({ perkId, size = 40, title }: PerkLogoProps): React.Rea
       viewBox="0 0 42 42"
       role={decorative ? undefined : 'img'}
       aria-hidden={decorative ? true : undefined}
-      aria-label={decorative ? undefined : title}
+      aria-label={decorative ? undefined : label}
       focusable="false"
     >
-      {!decorative && <title>{title}</title>}
+      {!decorative && <title>{label}</title>}
       <Glyph />
     </svg>
   );

@@ -204,9 +204,12 @@ describe('StatsTab', () => {
       ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
     );
     expect(perkLogos.length).toBe(3);
-    // Trap triggers surface only on the trap perk (spike_strip), all-time = 33.
-    expect(text).toContain(t('crownHunt.statPerkTrapTriggers'));
-    expect(text).toContain('33');
+    // Trap triggers surface only on the trap perk (spike_strip), for BOTH
+    // scopes: season = 8, all-time = 33.
+    expect(text).toContain(t('crownHunt.statPerkTrapTriggersSeason'));
+    expect(text).toContain(t('crownHunt.statPerkTrapTriggersAllTime'));
+    expect(text).toContain('8'); // season trap triggers
+    expect(text).toContain('33'); // all-time trap triggers
   });
 
   it('mounts the live game map and subscribes to live crowns + traps', async () => {

@@ -202,10 +202,22 @@ function PerkStatsSection({
               <span className={styles.statValueSmall}>{allTime.purchasedByPerk[perkId]}</span>
             </div>
             {PERK_IS_TRAP[perkId] && (
-              <div className={styles.statRow}>
-                <span className={styles.statLabel}>{t('crownHunt.statPerkTrapTriggers')}</span>
-                <span className={styles.statValueSmall}>{allTime.trapTriggers}</span>
-              </div>
+              <>
+                {/* trapTriggers is a per-scope scalar; show BOTH scopes so it
+                    reads consistently with the season/all-time rows above. */}
+                <div className={styles.statRow}>
+                  <span className={styles.statLabel}>
+                    {t('crownHunt.statPerkTrapTriggersSeason')}
+                  </span>
+                  <span className={styles.statValueSmall}>{season.trapTriggers}</span>
+                </div>
+                <div className={styles.statRow}>
+                  <span className={styles.statLabel}>
+                    {t('crownHunt.statPerkTrapTriggersAllTime')}
+                  </span>
+                  <span className={styles.statValueSmall}>{allTime.trapTriggers}</span>
+                </div>
+              </>
             )}
           </div>
         );
