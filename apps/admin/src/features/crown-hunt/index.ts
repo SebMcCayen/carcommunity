@@ -168,6 +168,17 @@ export type {
   AdminPerkStatsView,
 } from './stats';
 
+// LIVE GAME MAP (live-map.ts) — real-time onSnapshot subscriptions over the
+// admin-readable game state (live crowns + armed traps) for the admin live map.
+export {
+  isLiveNow,
+  toLiveCrownSpawn,
+  toLiveTrap,
+  subscribeLiveCrownSpawns,
+  subscribeLiveTraps,
+} from './live-map';
+export type { LiveCrownSpawn, LiveTrap } from './live-map';
+
 const DEFAULT_PAGE_SIZE = 20;
 
 /** Firestore Timestamp | Date | null → ISO string (or null). */

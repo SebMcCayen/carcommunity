@@ -36,6 +36,7 @@ import {
 } from '@/features/crown-hunt';
 import { CrownHeatMap } from '@/components/map/CrownHeatMap';
 import { PerkLogo } from './PerkLogos';
+import { LiveGameMapSection } from './LiveGameMapSection';
 import { translate } from '@/i18n';
 
 import styles from './StatsTab.module.css';
@@ -386,6 +387,9 @@ export function StatsTab(): React.ReactElement {
           />
         </div>
       )}
+
+      {/* Live game map — current crowns + armed traps (real-time onSnapshot) */}
+      <LiveGameMapSection />
     </section>
   );
 }

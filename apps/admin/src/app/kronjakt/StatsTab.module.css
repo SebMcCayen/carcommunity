@@ -114,3 +114,35 @@
   font-weight: 700;
   color: var(--color-text, #101828);
 }
+
+.legendRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 8px 0;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8125rem;
+  color: var(--color-text-muted, #667085);
+}
+
+.legendDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid;
+}
+
+.legendCrown {
+  background: #ecb44c;
+  border-color: #c9922e;
+}
+
+.legendTrap {
+  background: #dc2626;
+  border-color: #7c2d12;
+}
