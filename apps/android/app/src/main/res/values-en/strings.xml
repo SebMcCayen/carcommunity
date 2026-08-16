@@ -1106,6 +1106,7 @@
     <string name="crownHunt_spawnResultAwarded">The crown is yours!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
     <string name="crownHunt_spawnResultAlreadyTaken">Someone got there first — this crown has already been collected.</string>
+    <string name="crownHunt_spawnResultAlreadyCollected">You have already collected this crown.</string>
     <string name="crownHunt_spawnResultOutsideRadius">You are too far from the crown.</string>
     <string name="crownHunt_spawnResultMustBeStationary">You need to be standing still to collect. Stop somewhere safe, wait a few seconds and try again.</string>
     <string name="crownHunt_spawnResultPositionTooOld">Your position is a little old. Wait a moment and try again.</string>

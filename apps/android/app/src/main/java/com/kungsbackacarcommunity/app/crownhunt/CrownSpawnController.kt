@@ -246,12 +246,17 @@ class CrownSpawnController(
             val outcome = repository.claimSpawn(spawn.id, current, previous, idempotencyKey)
             if (outcome.result == CrownSpawnClaimResult.AWARDED ||
                 outcome.result == CrownSpawnClaimResult.ALREADY_TAKEN ||
+                outcome.result == CrownSpawnClaimResult.ALREADY_COLLECTED ||
                 outcome.result == CrownSpawnClaimResult.CROWN_EXPIRED
             ) {
-                // All three mean the crown is no longer collectable by anyone.
-                // Dropping it on "already taken" is the difference between a
-                // graceful "someone beat you to it" and a marker that invites
-                // the user to try again for something that no longer exists.
+                // Each of these means THIS user can no longer collect the crown.
+                // AWARDED/ALREADY_TAKEN/CROWN_EXPIRED: it is gone for everyone.
+                // ALREADY_COLLECTED: a SHARED crown the user already picked up
+                // legitimately stays on the map for OTHERS, but never for them —
+                // so drop it from their local list so they cannot keep re-tapping
+                // a crown that will only ever answer "already collected" (#874).
+                // dropSpawn only touches this device's list; other members still
+                // see and can still collect the crown until its TTL.
                 dropSpawn(spawn.id)
             }
             claimFlow.value = CrownClaimStatus.Done(outcome, spawn.id)
