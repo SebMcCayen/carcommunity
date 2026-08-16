@@ -12,11 +12,16 @@
  *      and writes nothing;
  *   2. reads the per-rule limit counter (1/day, 2/day, 3/day, 1/event, once
  *      ever) and refuses when it is spent;
- *   3. reads the daily-total and weekly-driving counters and CLIPS the award
- *      to whatever headroom is left (partial award — see applyEconomyCaps);
+ *   3. reads THIS rule's ONE cap counter and CLIPS the award to whatever
+ *      headroom is left (partial award — see applyEconomyCaps). A driving rule
+ *      answers to the weekly-driving counter alone; every other rule answers to
+ *      the daily-total counter alone — the two lanes are decoupled (issue #861);
  *   4. appends the ledger entry with a description that names the cap when
  *      one bit; and
- *   5. increments all three counters atomically with the entry.
+ *   5. increments the limit counter plus THAT SAME ONE cap counter atomically
+ *      with the entry (weekly for a driving rule, daily for every other) — a
+ *      driving award never touches the daily total, so it can neither be
+ *      blocked by it nor eat the headroom it leaves for non-driving rules.
  *
  * Because steps 2-5 happen inside the transaction, two concurrent awards for
  * the same uid serialise on the ledger balance document and cannot race each
@@ -192,16 +197,21 @@ export async function awardEconomyPoints(
         relatedEntityType: request.relatedEntityType ?? null,
         relatedEntityId: request.relatedEntityId ?? null,
       },
-      // READ PHASE: limit counter + both cap counters, transactionally.
+      // READ PHASE: limit counter + this rule's ONE cap counter, transactionally.
       async (tx) => {
         // Firestore may run this resolver more than once (transaction retry
         // on contention), so the captured value is reset every attempt rather
         // than carrying a stale ceiling over from an aborted one.
         clippedBy = 'none';
 
+        // Each rule answers to exactly ONE lane, so it reads exactly one cap
+        // counter: a driving rule reads only the weekly driving total, every
+        // other rule reads only the daily total. A driving rule does not even
+        // read the daily counter — it neither consumes nor is bound by it
+        // (issue #861), and skipping the read keeps it off that contended doc.
         const [counterSnap, dailySnap, weeklySnap] = await Promise.all([
           tx.get(counterRef),
-          tx.get(dailyRef),
+          rule.driving ? Promise.resolve(null) : tx.get(dailyRef),
           rule.driving ? tx.get(weeklyRef) : Promise.resolve(null),
         ]);
 
@@ -210,7 +220,7 @@ export async function awardEconomyPoints(
         }
 
         const decision = applyEconomyCaps(requested, rule.driving, {
-          dailyAwarded: readCount(dailySnap.data()?.total),
+          dailyAwarded: readCount(dailySnap?.data()?.total),
           weeklyDrivingAwarded: readCount(weeklySnap?.data()?.total),
         });
         // Captured BEFORE the rejection throw: when the headroom is 0 the
@@ -240,22 +250,29 @@ export async function awardEconomyPoints(
           },
           { merge: true },
         );
-        tx.set(
-          dailyRef,
-          {
-            userId: request.uid,
-            day: dayKey,
-            total: FieldValue.increment(mutation.amount),
-            updatedAt: stamp,
-          },
-          { merge: true },
-        );
+        // ONE lane, ONE counter — the mirror of the read phase. A driving
+        // award moves the weekly driving total and NOTHING on the daily total;
+        // every other award moves the daily total and nothing weekly. Driving
+        // therefore neither is bound by the daily cap NOR consumes any of the
+        // headroom the daily cap leaves for non-driving rules (issue #861): the
+        // two lanes are fully decoupled in both directions.
         if (rule.driving) {
           tx.set(
             weeklyRef,
             {
               userId: request.uid,
               week: weekKey,
+              total: FieldValue.increment(mutation.amount),
+              updatedAt: stamp,
+            },
+            { merge: true },
+          );
+        } else {
+          tx.set(
+            dailyRef,
+            {
+              userId: request.uid,
+              day: dayKey,
               total: FieldValue.increment(mutation.amount),
               updatedAt: stamp,
             },

@@ -172,14 +172,19 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  *
  * DRIVING-DERIVED rules (`driving: true` — drive_5km, live_session_1km) are
  * DELIBERATELY EXEMPT from this cap; they are bounded solely by
- * WEEKLY_DRIVING_POINTS_CAP (issue #861). See applyEconomyCaps for the full
- * reasoning — in short, the driving lane already carries its own dedicated
- * ceiling AND tiny per-day rule limits (2×/day each, ≤ 50 KP/day total), so it
- * poses no daily-farming risk, and subjecting it to a cap that CROWNS consume
- * meant a member who collected a few crowns earned nothing at all for a real
- * saved drive — the exact thing #861 reported. Crowns are already excluded from
- * the weekly driving cap for the same "a crown is a destination, not a
- * distance" reason; this closes the matching hole on the daily cap.
+ * WEEKLY_DRIVING_POINTS_CAP (issue #861). The exemption runs in BOTH
+ * directions: a driving award is neither clipped by this cap NOR added to the
+ * counter it is measured against — `awardEconomyPoints` increments
+ * `pointsDailyTotals` only for non-driving rules — so driving points also do
+ * not eat the daily headroom the cap leaves for non-driving rules. The two
+ * lanes never touch. See applyEconomyCaps for the full reasoning — in short,
+ * the driving lane already carries its own dedicated ceiling AND tiny per-day
+ * rule limits (2×/day each, ≤ 50 KP/day total), so it poses no daily-farming
+ * risk, and subjecting it to a cap that CROWNS consume meant a member who
+ * collected a few crowns earned nothing at all for a real saved drive — the
+ * exact thing #861 reported. Crowns are already excluded from the weekly
+ * driving cap for the same "a crown is a destination, not a distance" reason;
+ * this closes the matching hole on the daily cap.
  *
  * Deliberately NOT applied to admin adjustments or reversals — a correction
  * by an admin is not a member "earning", and letting it eat the member's

@@ -578,9 +578,9 @@ So the weekly `D` counter should be keyed on `startOfUtcWeek`'s date, exactly as
 
 **Known consequence:** these boundaries are UTC, but the members are in Sweden (UTC+1/+2). A "day" therefore rolls over at 01:00 or 02:00 local, and the driving week resets late on Sunday evening local time. That is acceptable for a cap (it is a ceiling, not a scoreboard) but it is **not** acceptable for the daily-open streak, which a member will judge against their own calendar. Whether streaks and caps should share a boundary, or streaks move to `Europe/Stockholm`, is **Q14**.
 
-**Bucket `D` (driving-derived)** = `live_session_1km` + `drive_5km` + `crown_collect`.
+**Bucket `D` (driving-derived)** = `live_session_1km` + `drive_5km`. **Crowns are NOT in `D`** in the shipped engine — `crown_collect` folds into the *daily* cap, never the weekly driving cap (see the CORRECTION below and §5.4 Q2). An earlier draft listed `crown_collect` here; the code never did.
 
-Everything else — daily open, events, garage, confirmed reports, badge milestones — sits **outside** `D` and is capped only by the 300/day global.
+Everything else — daily open, events, garage, confirmed reports, badge milestones — sits **outside** `D` and is capped only by the 300/day global. As of #861 the two `D` rules sit outside the 300/day global too (they answer to `D` alone), so `D` and the daily cap are now fully disjoint.
 
 **Cap exemption:** badge tier milestones are **exempt from the 300/day global cap**. They are once-per-lifetime by construction, so they are already rate-limited, and clipping a member's 500 KP Platina award because they also had a good crown day would be an obviously wrong user experience.
 
@@ -592,7 +592,7 @@ Everything else — daily open, events, garage, confirmed reports, badge milesto
 
 `D ≤ 400 KP/week` is the direct implementation of constraint **C3**.
 
-Its effect: at an expected 24.5 KP/crown, the weekly budget covers roughly **13–16 crowns plus a handful of distance awards** — about **two heavy hunting days**. After that, **the marginal reward for another kilometre driven is exactly zero for the rest of the week.**
+Its effect: because the shipped engine keeps crowns *out* of `D` (they fold into the daily cap instead — §5.3 CORRECTION / Q2), `D` bounds only the two distance rules. Those are already tiny — `drive_5km` (15 KP) and `live_session_1km` (10 KP), each ≤ 2×/day, so ≤ **50 KP/day** combined — meaning `D` binds only a member who drives most days of the week. After the weekly budget is spent, **the marginal reward for another kilometre driven is exactly zero for the rest of the week.**
 
 That is the whole point. State it plainly, including in-app:
 
@@ -602,7 +602,7 @@ Non-driving paths — attending meets, hosting, streaks, garage, confirmed incid
 
 **Behaviour at the cap:** capped-out awards are **forfeited, not banked**. Banking would re-create the very incentive the cap removes (drive now, collect Monday). The client must show this honestly and calmly — *"Veckans körbudget är slut"* with the reset time — never as a silent failure and never with urgency framing. See **Q9**.
 
-*Open question:* whether crowns belong in bucket `D` at all is **Q2**. Argument for: crowns are the strongest driving incentive in the system, so excluding them guts the cap. Argument against: crowns require *stopping*, and 400/week bites after two days, which some members will find tight. The doc assumes crowns **are** in `D`.
+*Q2 — RESOLVED in code:* crowns do **not** belong to bucket `D`. The shipped engine charges `crown_collect` to the *daily* cap only (via the `points-onLedgerEntryCreated` fold), never to the weekly driving cap — crowns require *stopping*, so "a crown is a destination, not a distance" and the driving lane is the wrong ceiling for them. #861 then took the last step in the same direction: it removed the *daily* cap from the two `D` rules as well, so the driving lane and the daily/crown lane no longer share any ceiling. (The original argument-for — "excluding crowns guts the driving cap" — is moot: crowns are still bounded, by the daily cap and their own per-day claim limits.)
 
 ### 5.5 Idempotency
 

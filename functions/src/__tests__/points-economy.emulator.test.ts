@@ -296,6 +296,33 @@ describe('drive_5km via the rides trigger', () => {
     expect(await entryCount(user.uid)).toBe(1);
   });
 
+  it('credits the weekly driving total but never the daily total (#861)', async () => {
+    const user = await createProvisionedUser('pe-drive-nodaily');
+    await signInAs(user);
+    const day = stockholmDayKey(new Date());
+
+    const long = await saveDrive(6_000, `nodaily-${Date.now()}`);
+    const entry = await awaitLedgerEntry(user.uid, economyIdempotencyKey('drive_5km', long.rideId)!);
+    expect(entry.amount).toBe(15);
+
+    // The drive credited the WEEKLY driving total...
+    const weekly = await adminDb
+      .collection('pointsWeeklyDriving')
+      .where('userId', '==', user.uid)
+      .get();
+    expect(weekly.empty).toBe(false);
+    expect(weekly.docs[0]!.data().total).toBe(15);
+
+    // ...but left the DAILY total untouched: driving is decoupled from the
+    // daily cap in BOTH directions, so it consumes none of the headroom the
+    // daily cap leaves for non-driving rules (issue #861).
+    const daily = await adminDb
+      .collection('pointsDailyTotals')
+      .doc(`${user.uid}__${day}`)
+      .get();
+    expect(daily.exists).toBe(false);
+  });
+
   it('caps drive_5km at 2 per local day', async () => {
     const user = await createProvisionedUser('pe-drivecap');
     await signInAs(user);
