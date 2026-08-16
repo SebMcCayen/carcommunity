@@ -15,8 +15,11 @@
  *    (issue, type), +1 an issue (posts a fixed "another user is affected"
  *    comment) or add their own comment (neutralized + length-bounded, posted to
  *    the public issue AND mirrored to the moderationReports admin queue). Dedup
- *    is a backend-only `issueInteractions/{issueNumber}__{uid}__{type}` document
- *    created transactionally: a repeat is `already-exists` → failed-precondition.
+ *    is a backend-only `issueInteractions/{issueNumber}__{uid}__{type}` document:
+ *    the callable reads it via `tx.get` inside a transaction and, if it already
+ *    exists, rejects with `failed-precondition`; otherwise it creates it in the
+ *    same transaction, so two concurrent attempts serialize on the doc and the
+ *    loser sees it and is rejected.
  *
  * Pure module — no Firebase Admin SDK and no network imports, so every branch is
  * unit-testable without emulators (mirrors feedback/feedback-core.ts). The
@@ -147,9 +150,10 @@ export function parseInteractInput(data: unknown): ParseResult<Interaction> {
 /**
  * `issueInteractions/{issueNumber}__{uid}__{type}` — the ONCE-per-(issue, user,
  * type) key. A member may do a +1 AND a comment on one issue (two distinct
- * types → two distinct ids), but not two of either. Created transactionally;
- * an `already-exists` on the create is the dedup signal the callable turns into
- * failed-precondition.
+ * types → two distinct ids), but not two of either. The callable reads this doc
+ * with `tx.get` inside a transaction and rejects with `failed-precondition`
+ * when it already exists, otherwise creating it in the same transaction — so
+ * concurrent attempts serialize on the doc and only the first wins.
  *
  * uid is a Firebase Auth uid (alphanumeric) and type is a fixed enum, so
  * `__` can never be forged out of them into a colliding key; issueNumber is a

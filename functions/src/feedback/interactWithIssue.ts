@@ -2,8 +2,9 @@
  * feedback.interactWithIssue — AUTHENTICATED callable
  * (contracts/functions/functions.json).
  *
- * The in-app "open tickets" browser's write path. An active signed-in user may,
- * ONCE per (issue, type), either:
+ * The in-app "open tickets" browser's write path. A member (requireMemberActor —
+ * behaviour-neutral today with member gating off, matching the openTickets read
+ * rules) may, ONCE per (issue, type), either:
  *   - `plus_one`: register "I'm affected too" — posts a FIXED, content-free
  *     comment ("Another user is affected by this issue.") to the public issue;
  *   - `comment`: post their own note — neutralized (@/# defanged) and
