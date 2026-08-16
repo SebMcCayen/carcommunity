@@ -45,6 +45,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
@@ -129,20 +130,27 @@ private fun CoachMarkOverlay(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
-            // Swallow every touch on the scrim so the tour is driven only by the
-            // bubble's Skip / Next buttons (which sit above this and keep their taps).
-            .pointerInput(Unit) { detectTapGestures { } }
             .semantics { contentDescription = tourDescription },
     ) {
         var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
         var bubbleHeight by remember { mutableIntStateOf(0) }
 
-        // A caller-independent origin capture: translate the root-space anchor
-        // bounds into this overlay's own local coordinates.
+        // Bottom layer: a full-screen scrim that (a) captures this overlay's own
+        // origin, so the root-space anchor bounds can be made overlay-local, and
+        // (b) swallows any tap that MISSES the bubble — a tap on the dimmed
+        // background neither advances the tour nor falls through to the app
+        // behind this modal coach mark. Composed FIRST, so it is drawn and
+        // hit-tested BELOW the bubble; the Skip / Next buttons sit on top and
+        // therefore receive their taps unambiguously (the tap-swallow is on this
+        // separate layer, never on the shared parent). This mirrors the dismiss-
+        // layer pattern in shell/TranslucentPanel. clearAndSetSemantics keeps the
+        // invisible layer out of the a11y tree (the bubble carries the actions).
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .onGloballyPositioned { overlayOrigin = it.positionInRoot() },
+                .onGloballyPositioned { overlayOrigin = it.positionInRoot() }
+                .pointerInput(Unit) { detectTapGestures { } }
+                .clearAndSetSemantics {},
         )
 
         val localTarget = targetBounds?.let {
