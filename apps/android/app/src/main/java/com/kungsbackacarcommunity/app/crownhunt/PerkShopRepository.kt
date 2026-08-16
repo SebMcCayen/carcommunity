@@ -2,11 +2,13 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import android.content.Context
 import com.google.firebase.FirebaseApp
+import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.functions.FirebaseFunctionsException
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
+import java.util.Date
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -24,6 +26,39 @@ data class PerkPurchaseResult(
     /** True when an idempotent replay returned the original purchase. */
     val alreadyPurchased: Boolean,
 )
+
+/** Outcome of a successful `crownHunt-deployPerk` call. */
+data class PerkDeployResult(
+    val perkId: String,
+    /** Which effect was applied (trap / shield / boost). */
+    val kind: PerkKind,
+    /** The trap/shield/boost effect id (trap doc id, or the holder uid). */
+    val effectId: String,
+    /** Epoch-ms the deployed effect expires. */
+    val expiresAtMillis: Long,
+    /** Remaining owned count of this perk after the consume. */
+    val inventoryCount: Long,
+    /** True when an idempotent replay returned the original deploy. */
+    val alreadyDeployed: Boolean,
+)
+
+/**
+ * Thrown when `deployPerk` refused for a non-location reason: the
+ * `crownHuntPerks` flag is off, the perk is unknown, the member owns none, or a
+ * trap anti-abuse cap (1 active / 3-per-day / 300 m spacing) was hit. All of
+ * these arrive as the server's `failed-precondition`; the deploy callable
+ * attaches no structured `details.reason`, so they collapse to one family.
+ */
+class PerkDeployUnavailableException(cause: Throwable? = null) :
+    Exception("deployPerk rejected: unavailable.", cause)
+
+/**
+ * Thrown when the server rejected a trap because it carried no/invalid current
+ * position (`invalid-argument`). The client also pre-checks the GPS fix, so this
+ * is the belt-and-braces server side of the same "we need your location" case.
+ */
+class PerkDeployMissingLocationException(cause: Throwable? = null) :
+    Exception("deployPerk rejected: a trap needs a current position.", cause)
 
 /**
  * Thrown when the buy was rejected because the member cannot afford the perk —
@@ -67,6 +102,43 @@ interface PerkShopRepository {
      * for the two rejection families, and propagates every other failure as-is.
      */
     suspend fun buyPerk(perkId: String, idempotencyKey: String): PerkPurchaseResult
+
+    /**
+     * The member's own currently-ACTIVE shield expiry (epoch-ms), or null when
+     * no shield is live. Sourced from the owner-readable
+     * `perkShieldPublic/{uid}.shieldedUntil` — the private `perkShield` doc is
+     * backend-only. Emits null on absence/transient error so the menu still
+     * renders. (There is deliberately NO boost equivalent: `perkBoost` has no
+     * public mirror, so a live boost is known only from a deploy result.)
+     */
+    fun observeShieldActiveUntil(uid: String): Flow<Long?>
+
+    /**
+     * The EXPIRY timestamps (epoch-ms) of the member's currently-armed traps
+     * (`activePerks` where placedByUid == uid, status == 'armed'). The placer is
+     * the only client allowed to read their traps (firestore.rules). Returns the
+     * expiries — not a pre-computed count — so the caller can re-filter them
+     * against a MOVING now (the menu ticker): a trap that expires while the menu
+     * is open then drops out without a Firestore re-emit. Emits an empty list on
+     * absence/transient error (fail-safe → 0 live traps → the button stays
+     * enabled; the server still enforces the cap).
+     */
+    fun observeActiveTrapExpiries(uid: String): Flow<List<Long>>
+
+    /**
+     * Deploys ONE unit of [perkId] via the `crownHunt-deployPerk` callable.
+     * [latitude]/[longitude] are the caller's current GPS for a TRAP and ignored
+     * for shield/boost. [idempotencyKey] makes a retried call a no-op that
+     * consumes once. Throws [PerkDeployUnavailableException] /
+     * [PerkDeployMissingLocationException] for the two typed rejection families,
+     * and propagates every other failure as-is.
+     */
+    suspend fun deployPerk(
+        perkId: String,
+        latitude: Double?,
+        longitude: Double?,
+        idempotencyKey: String,
+    ): PerkDeployResult
 }
 
 /**
@@ -142,12 +214,123 @@ class FirebasePerkShopRepository private constructor(
             ?: throw IllegalStateException("buyPerk returned an unrecognized result")
     }
 
+    override fun observeShieldActiveUntil(uid: String): Flow<Long?> = callbackFlow {
+        var loadedOnce = false
+        var emittedFallback = false
+        val registration =
+            firestore.collection(SHIELD_PUBLIC).document(uid).addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Emit the null fallback at most ONCE before any successful
+                    // load, so a persistent error doesn't re-emit it on every
+                    // callback. A later success still updates (loadedOnce gate
+                    // below), and an error AFTER a success keeps the last value.
+                    if (!loadedOnce && !emittedFallback) {
+                        emittedFallback = true
+                        trySend(null)
+                    }
+                    return@addSnapshotListener
+                }
+                loadedOnce = true
+                trySend((snapshot?.getTimestamp(SHIELDED_UNTIL))?.toDate()?.time)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    override fun observeActiveTrapExpiries(uid: String): Flow<List<Long>> = callbackFlow {
+        // The query's `expiresAt > now` bound is captured once when the listener
+        // attaches, so it is set GENEROUSLY into the past (a safety margin) rather
+        // than at exactly-now: the precise live/expired cut is done client-side
+        // against the menu's moving 15s tick (PerkDeploy.liveTrapCount), so a trap
+        // that expires while the menu stays open drops out of the count without a
+        // menu reopen. The margin keeps just-expired docs in the emitted set long
+        // enough for the tick to be the authority. Uses the composite index
+        // activePerks(placedByUid, status, expiresAt) in firestore.indexes.json.
+        var loadedOnce = false
+        var emittedFallback = false
+        val lowerBound = Timestamp(Date(System.currentTimeMillis() - TRAP_QUERY_MARGIN_MS))
+        val query =
+            firestore
+                .collection(ACTIVE_PERKS)
+                .whereEqualTo(PLACED_BY_UID, uid)
+                .whereEqualTo(STATUS, TRAP_STATUS_ARMED)
+                .whereGreaterThan(EXPIRES_AT, lowerBound)
+        val registration =
+            query.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Fail-safe to empty (never let a read error DISABLE the trap
+                    // button — the server still enforces the cap in a
+                    // transaction), emitted at most ONCE before any successful
+                    // load so a persistent error doesn't re-emit it every
+                    // callback. A later success still updates below.
+                    if (!loadedOnce && !emittedFallback) {
+                        emittedFallback = true
+                        trySend(emptyList())
+                    }
+                    return@addSnapshotListener
+                }
+                loadedOnce = true
+                val expiries =
+                    snapshot?.documents.orEmpty().mapNotNull {
+                        it.getTimestamp(EXPIRES_AT)?.toDate()?.time
+                    }
+                trySend(expiries)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    override suspend fun deployPerk(
+        perkId: String,
+        latitude: Double?,
+        longitude: Double?,
+        idempotencyKey: String,
+    ): PerkDeployResult {
+        val payload =
+            buildMap<String, Any> {
+                put("perkId", perkId)
+                put("idempotencyKey", idempotencyKey)
+                // Only sent for a trap; the callable ignores them for shield/boost.
+                if (latitude != null && longitude != null) {
+                    put("latitude", latitude)
+                    put("longitude", longitude)
+                }
+            }
+        val response =
+            try {
+                functions
+                    .getHttpsCallable(DEPLOY_PERK)
+                    .call(payload)
+                    .awaitOrThrow { "deployPerk failed without a cause" }
+            } catch (functionsError: FirebaseFunctionsException) {
+                throw functionsError.toPerkDeployException()
+            }
+        @Suppress("UNCHECKED_CAST")
+        val data = response?.getData() as? Map<String, Any?>
+        return data?.toDeployResult()
+            ?: throw IllegalStateException("deployPerk returned an unrecognized result")
+    }
+
     companion object {
         private const val REGION = "europe-west1"
         private const val CONFIG = "config"
         private const val PERK_CATALOG = "perkCatalog"
         private const val INVENTORY = "perkInventory"
         private const val BUY_PERK = "crownHunt-buyPerk"
+        private const val DEPLOY_PERK = "crownHunt-deployPerk"
+        private const val SHIELD_PUBLIC = "perkShieldPublic"
+        private const val SHIELDED_UNTIL = "shieldedUntil"
+        private const val ACTIVE_PERKS = "activePerks"
+        private const val PLACED_BY_UID = "placedByUid"
+        private const val STATUS = "status"
+        private const val EXPIRES_AT = "expiresAt"
+        private const val TRAP_STATUS_ARMED = "armed"
+
+        /**
+         * Safety margin (ms) subtracted from `now` for the armed-trap query's
+         * lower bound, so a trap that expires shortly after the listener attaches
+         * still arrives in the snapshot and the client-side moving-`now` filter
+         * (not the fixed query bound) decides when it drops out of the count.
+         */
+        private const val TRAP_QUERY_MARGIN_MS = 2 * 60 * 1000L
 
         fun createIfAvailable(context: Context): PerkShopRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -206,6 +389,54 @@ internal fun perkPurchaseFailedPreconditionException(
     } else {
         PerkPurchaseUnavailableException(cause)
     }
+
+/**
+ * Maps a `deployPerk` callable failure to the two typed rejection families.
+ * Unlike `buyPerk`, the deploy callable attaches NO structured `details.reason`
+ * — it distinguishes cases only by HttpsError CODE + a (localizable) message —
+ * so the mapping keys on the CODE, never on a substring of the message:
+ *  - `invalid-argument` → [PerkDeployMissingLocationException] (a trap with no
+ *    valid current position; the only invalid-argument the deploy path throws
+ *    for a well-formed request from this client).
+ *  - `failed-precondition` → [PerkDeployUnavailableException] (flag off, unknown
+ *    perk, no inventory, trap cap / spacing / daily limit).
+ * Anything else (network, internal) propagates unchanged and surfaces as UNKNOWN.
+ */
+private fun FirebaseFunctionsException.toPerkDeployException(): Throwable =
+    when (code) {
+        FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
+            PerkDeployMissingLocationException(this)
+        FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
+            PerkDeployUnavailableException(this)
+        else -> this
+    }
+
+/** Parses the `crownHunt-deployPerk` callable result payload. */
+private fun Map<String, Any?>.toDeployResult(): PerkDeployResult? {
+    val perkId = (this["perkId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val kind = PerkKind.fromWire(this["kind"] as? String) ?: return null
+    val effectId = (this["effectId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+    val expiresAtMillis = parseIsoMillis(this["expiresAt"] as? String) ?: return null
+    val inventoryCount = (this["inventoryCount"] as? Number)?.toLong() ?: return null
+    return PerkDeployResult(
+        perkId = perkId,
+        kind = kind,
+        effectId = effectId,
+        expiresAtMillis = expiresAtMillis,
+        inventoryCount = inventoryCount,
+        alreadyDeployed = (this["alreadyDeployed"] as? Boolean) ?: false,
+    )
+}
+
+/**
+ * Parses the callable's ISO-8601 `expiresAt` (e.g. "2026-08-16T12:00:00.000Z")
+ * to epoch-ms. Returns null on a blank/unparseable value so a malformed result
+ * is skipped rather than shown as a bogus countdown.
+ */
+private fun parseIsoMillis(iso: String?): Long? {
+    val value = iso?.takeIf { it.isNotBlank() } ?: return null
+    return runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
+}
 
 /** Parses the `config/perkCatalog` mirror's `perks` array into display entries. */
 private fun DocumentSnapshot.toCatalogEntries(): List<PerkCatalogEntry> {

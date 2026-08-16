@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.WorkspacePremium
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -224,6 +225,15 @@ fun MapHome(
     onIncidentsLayerEnabledChange: (Boolean) -> Unit = {},
     incidentReportingEnabled: Boolean = false,
     onReportIncident: (IncidentType, ReportLocation) -> Unit = { _, _ -> },
+    // Kronjakt perk DEPLOY control. When [crownHuntPerksEnabled] (the
+    // `crownHuntPerks` flag, contract default FALSE) is on, a round "use a perk"
+    // control is appended to the right-side stack (after chat) and a tap invokes
+    // [onOpenPerks]; the host renders the deploy menu popup (the same
+    // control-invokes-callback, host-hosts-popup split the chat bubble uses).
+    // While off, the control is absent and nothing on the map changes. Defaults
+    // so existing callers/tests/previews (and turn-by-turn) are unaffected.
+    crownHuntPerksEnabled: Boolean = false,
+    onOpenPerks: () -> Unit = {},
     // Whether any of the currently-loaded incidents actually came from
     // Trafikverket (see `hasTrafikverketData`). Gates the "Källa: Trafikverket"
     // credit in the layers popup so it appears exactly where their data is on
@@ -643,7 +653,7 @@ fun MapHome(
             // it. What each control DOES is still local to its own screen (a
             // re-centre means something different to a follow camera), which is
             // why the list carries kinds rather than composables.
-            MapControlSet.rightSideStack(incidentReportingEnabled).forEach { control ->
+            MapControlSet.rightSideStack(incidentReportingEnabled, crownHuntPerksEnabled).forEach { control ->
                 when (control) {
                     // Report-incident control — opens the type picker. Present
                     // only when incident reporting is available (a repository
@@ -742,6 +752,14 @@ fun MapHome(
                             hasUnread = hasUnreadChat,
                             onClick = onOpenChat,
                         )
+
+                    // Kronjakt perk-deploy control — opens the "use a perk" menu
+                    // (drop a trap / raise a shield / arm the boost). Present only
+                    // while the crownHuntPerks flag is on (see rightSideStack); a
+                    // tap raises the host-owned deploy popup via onOpenPerks,
+                    // mirroring how the chat bubble opens the host's chat hub.
+                    MapCircleControlKind.Perks ->
+                        PerkDeployCircleControl(onClick = onOpenPerks)
                 }
             }
         }
@@ -1701,6 +1719,24 @@ internal fun ChatCircleControl(
             onClick = onClick,
         )
     }
+}
+
+const val MAP_HOME_PERKS_TAG = "map_home_perks"
+
+/**
+ * A [CircleControl]-styled Kronjakt perk-deploy control. Matches the other
+ * floating controls (size/shape/elevation/haptics); a tap opens the host-owned
+ * "use a perk" menu via [onClick]. `internal` because turn-by-turn draws the
+ * SAME right-side stack (see [MapControlSet.rightSideStack]).
+ */
+@Composable
+internal fun PerkDeployCircleControl(onClick: () -> Unit) {
+    CircleControl(
+        icon = Icons.Filled.WorkspacePremium,
+        contentDescription = stringResource(R.string.shell_perksButton),
+        onClick = onClick,
+        modifier = Modifier.testTag(MAP_HOME_PERKS_TAG),
+    )
 }
 
 /**

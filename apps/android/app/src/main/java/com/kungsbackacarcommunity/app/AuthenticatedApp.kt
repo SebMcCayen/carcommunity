@@ -63,6 +63,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -196,6 +197,12 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
+import com.kungsbackacarcommunity.app.crownhunt.PerkDeploy
+import com.kungsbackacarcommunity.app.crownhunt.PerkDeployCoordinator
+import com.kungsbackacarcommunity.app.crownhunt.PerkDeployMenuState
+import com.kungsbackacarcommunity.app.crownhunt.PerkDeployPopup
+import com.kungsbackacarcommunity.app.crownhunt.PerkDeployStatus
+import com.kungsbackacarcommunity.app.crownhunt.PerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
@@ -443,6 +450,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -543,6 +551,71 @@ private fun applyCrownFix(
         tracker.bestRecent(nowMillis) to null
     }
 }
+
+/**
+ * Combines the Kronjakt deploy menu's live reads into one [PerkDeployMenuState]
+ * through the pure [PerkDeploy.toMenuState]:
+ *  - the shop catalog + owned inventory (reused from the buy surface),
+ *  - the owner-readable `perkShieldPublic.shieldedUntil` shield window,
+ *  - the owner-readable armed-trap count, and
+ *  - the coordinator's session-local shield/boost windows from the last deploy
+ *    (boost has no client-readable Firestore mirror, so this is its only source;
+ *    the shield takes whichever of the public doc / last deploy is later).
+ *
+ * A ~15s ticker keeps the active/activatable derivation fresh so an effect that
+ * expires while the menu is open re-enables its ACTIVATE action without needing
+ * a Firestore re-emit. Only subscribed while the menu is actually open (the
+ * caller swaps in a single Loading emission otherwise).
+ */
+private fun combinePerkDeployMenu(
+    repository: PerkShopRepository,
+    coordinator: PerkDeployCoordinator,
+    uid: String,
+): Flow<PerkDeployMenuState> {
+    val ticker =
+        flow {
+            while (true) {
+                emit(System.currentTimeMillis())
+                delay(15_000L)
+            }
+        }
+    // The session windows + the tick, folded to one flow so the outer combine
+    // stays within its 5-arg arity.
+    val sessionAndTick =
+        combine(
+            coordinator.shieldActiveUntilMillis,
+            coordinator.boostActiveUntilMillis,
+            ticker,
+        ) { shieldSession, boostSession, now -> Triple(shieldSession, boostSession, now) }
+    return combine(
+        repository.observeCatalog(),
+        repository.observeInventory(uid),
+        repository.observeShieldActiveUntil(uid),
+        repository.observeActiveTrapExpiries(uid),
+        sessionAndTick,
+    ) { catalog, inventory, shieldPublicUntil, trapExpiries, session ->
+        val (shieldSessionUntil, boostSessionUntil, now) = session
+        PerkDeploy.toMenuState(
+            catalog = catalog,
+            inventory = inventory,
+            // The later of the public-doc expiry and this session's last deploy.
+            shieldActiveUntilMillis = laterOf(shieldPublicUntil, shieldSessionUntil),
+            boostActiveUntilMillis = boostSessionUntil,
+            // Count only traps still live at the ticking `now`, so one expiring
+            // while the menu is open drops the count (re-enabling the button).
+            activeTrapCount = PerkDeploy.liveTrapCount(trapExpiries, now),
+            nowMillis = now,
+        )
+    }
+}
+
+/** The later of two nullable epoch-ms values (null when both are null). */
+private fun laterOf(a: Long?, b: Long?): Long? =
+    when {
+        a == null -> b
+        b == null -> a
+        else -> maxOf(a, b)
+    }
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -1795,6 +1868,66 @@ fun AuthenticatedApp(
                     }
                 }
             }
+
+            // ── Kronjakt perk DEPLOY (the map's "use a perk" surface) ──────────
+            // PR1 sold perks into inventory and PR2 rendered the buy tab; this is
+            // the USE side reached from the map's right-side stack. Everything is
+            // gated on the contract-default-OFF `crownHuntPerks` flag: while off,
+            // no control is added to the stack, no deploy flow subscribes, and the
+            // popup is never hosted (the page is exactly the pre-perks map).
+            val crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS)
+            // Reused catalog/inventory/deploy source (guarded → null in a
+            // config-less/CI build, which simply omits the whole surface).
+            val perkDeployRepository: PerkShopRepository? =
+                remember(context) { FirebasePerkShopRepository.createIfAvailable(context) }
+            var perkDeployOpen by remember { mutableStateOf(false) }
+            // A trap is dropped at the caller's CURRENT GPS: a FRESH fix (the same
+            // source the crown-range layer uses), falling back to the last known
+            // fix, and null when neither is available (→ NO_LOCATION, resolved in
+            // the coordinator without a round-trip). Shield/boost need no location.
+            val perkDeployCoordinator =
+                remember(perkDeployRepository) {
+                    perkDeployRepository?.let { repo ->
+                        PerkDeployCoordinator(
+                            repository = repo,
+                            locationSource = {
+                                val appContext = context.applicationContext
+                                CurrentLocation.currentFix(appContext)
+                                    ?: CurrentLocation.lastKnown(appContext)
+                            },
+                        )
+                    }
+                }
+            val perkDeployStatus: PerkDeployStatus =
+                perkDeployCoordinator?.status?.collectAsState()?.value ?: PerkDeployStatus.Idle
+            // The whole surface is live only when the flag is on, a repo + uid
+            // exist. `uid` is the signed-in member (a blank uid is never queried).
+            val perkDeployActive =
+                crownHuntPerksEnabled && perkDeployRepository != null &&
+                    perkDeployCoordinator != null && uid.isNotBlank()
+            // Coarse "now" for the countdown, live only while the menu is open so a
+            // closed menu holds no ticker. Drives both the display countdown and
+            // the active/activatable recompute in the menu-state flow.
+            var perkDeployNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(perkDeployOpen) {
+                while (perkDeployOpen) {
+                    perkDeployNow = System.currentTimeMillis()
+                    delay(15_000L)
+                }
+            }
+            // Subscribed ONLY while the menu is actually open (perkDeployOpen): the
+            // combine holds four Firestore listeners + a ticker, so a closed menu
+            // must hold none. Closing swaps back to a single Loading emission, so
+            // re-opening starts fresh.
+            val perkDeployMenuState by
+                remember(perkDeployActive, perkDeployOpen, perkDeployRepository, perkDeployCoordinator, uid) {
+                    if (perkDeployActive && perkDeployOpen) {
+                        combinePerkDeployMenu(perkDeployRepository!!, perkDeployCoordinator!!, uid)
+                    } else {
+                        flowOf(PerkDeployMenuState.Loading)
+                    }
+                }
+                    .collectAsState(initial = PerkDeployMenuState.Loading)
 
             // Keep the nearby-incidents layer LIVE around the user whenever the
             // Map tab is shown AND the "Traffic alerts" layer is enabled. The
@@ -4860,6 +4993,11 @@ fun AuthenticatedApp(
                         // The map home's saved-places control, on the same shared
                         // stack; opens the same saved-locations picker.
                         onOpenSavedPlaces = { savedPlacesPickerOpen = true },
+                        // The map home's perk-deploy control, on the same shared
+                        // stack; a tap raises the same host-owned deploy menu
+                        // (usable while driving). Gated on the crownHuntPerks flag.
+                        crownHuntPerksEnabled = crownHuntPerksEnabled,
+                        onOpenPerks = { perkDeployOpen = true },
                         // The ongoing live-session pill (elapsed + distance +
                         // speed). Starting turn-by-turn navigation used to hide it
                         // along with the whole map-home chrome; a session that is
@@ -5429,6 +5567,13 @@ fun AuthenticatedApp(
                                     // both call sites go through one lambda.
                                     incidentReportingEnabled = incidentReportingEnabled,
                                     onReportIncident = reportIncident,
+                                    // Kronjakt perk-deploy control (right-side
+                                    // stack, after chat) + a tap that raises the
+                                    // host-owned deploy menu popup. Gated on the
+                                    // crownHuntPerks flag: off = no control, no
+                                    // change to the map.
+                                    crownHuntPerksEnabled = crownHuntPerksEnabled,
+                                    onOpenPerks = { perkDeployOpen = true },
                                     // Live-session pill in the top search strip
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.
@@ -6848,6 +6993,34 @@ fun AuthenticatedApp(
                         // sheet and its confirm dialog compose inside it, and
                         // blocking from chat should leave the user where they were.
                         blockingRepository = blockingRepository,
+                    )
+                }
+
+                // Kronjakt perk DEPLOY menu — the host-owned popup the map home's
+                // (and turn-by-turn's) perk control raises via onOpenPerks, the
+                // same control-invokes-callback / host-hosts-popup split the chat
+                // hub uses. Rendered here (after the map chrome, before the
+                // snackbar) so it overlays the map AND the opaque turn-by-turn
+                // cover, so a perk is usable while driving. Never composed while
+                // the flag is off (perkDeployActive folds it in).
+                if (perkDeployOpen && perkDeployActive && perkDeployCoordinator != null) {
+                    PerkDeployPopup(
+                        menuState = perkDeployMenuState,
+                        status = perkDeployStatus,
+                        nowMillis = perkDeployNow,
+                        // One-tap deploy: drop a trap at the current GPS, or arm a
+                        // shield/boost. No confirm modal (deliberate — usable while
+                        // driving); the coordinator's atomic guard + a fresh
+                        // idempotency key make a double-tap safe.
+                        onDeploy = { item ->
+                            scope.launch { perkDeployCoordinator.deploy(item.perkId, item.kind) }
+                        },
+                        onDismiss = {
+                            perkDeployOpen = false
+                            // Clear the terminal deploy status so re-opening the
+                            // menu starts fresh (mirrors the shop coordinator).
+                            perkDeployCoordinator.reset()
+                        },
                     )
                 }
 

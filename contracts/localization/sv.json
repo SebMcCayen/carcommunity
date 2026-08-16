@@ -1253,7 +1253,24 @@
     "perkKindShield": "Skydd",
     "perkKindBoost": "Boost",
     "tabHome": "Kronjakt",
-    "tabShop": "Butik"
+    "tabShop": "Butik",
+    "deployTitle": "Använd perk",
+    "deployLoading": "Laddar ditt förråd …",
+    "deployError": "Det gick inte att läsa in dina perks.",
+    "deployEmpty": "Du har inga perks. Köp i butiken först.",
+    "deployOwnedLabel": "Du äger: %1$d",
+    "deployActivateButton": "Aktivera",
+    "deployActiveTraps": "%1$d aktiv fälla",
+    "deployActiveFor": "Aktiv – %1$s kvar",
+    "deployRemainingHm": "%1$d h %2$d min",
+    "deployRemainingM": "%1$d min",
+    "deploySuccessTrap": "%1$s placerad där du står.",
+    "deploySuccessShield": "%1$s aktiverad.",
+    "deploySuccessBoost": "%1$s aktiverad.",
+    "deployAlreadyMessage": "Redan aktiverad.",
+    "deployErrorNoLocation": "Din position behövs för att placera en fälla. Försök igen.",
+    "deployErrorUnavailable": "Det gick inte att aktivera perken just nu.",
+    "deployErrorUnknown": "Något gick fel. Försök igen."
   },
   "partners": {
     "screenTitle": "KCC Företagspartner",
@@ -1644,7 +1661,8 @@
     "saveLocationCancel": "Avbryt",
     "locationShared": "Platsen delades med %1$s",
     "locationSharedFriendFallback": "din vän",
-    "locationShareFailed": "Det gick inte att dela platsen. Försök igen."
+    "locationShareFailed": "Det gick inte att dela platsen. Försök igen.",
+    "perksButton": "Använd perk"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

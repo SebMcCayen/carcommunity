@@ -87,6 +87,7 @@ import com.kungsbackacarcommunity.app.shell.CompassCircleControl
 import com.kungsbackacarcommunity.app.shell.IncidentMarkerLayer
 import com.kungsbackacarcommunity.app.shell.MapCameraSnapshot
 import com.kungsbackacarcommunity.app.shell.MapCircleControlKind
+import com.kungsbackacarcommunity.app.shell.PerkDeployCircleControl
 import com.kungsbackacarcommunity.app.shell.MapCompassMode
 import com.kungsbackacarcommunity.app.shell.MapControlSet
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
@@ -378,6 +379,13 @@ fun TurnByTurnNavScreen(
     // control, so the same button on the same right-side stack (see
     // [MapControlSet.rightSideStack]).
     onOpenSavedPlaces: () -> Unit = {},
+    // The map home's Kronjakt perk-deploy control, on the same shared stack.
+    // [crownHuntPerksEnabled] (the `crownHuntPerks` flag, default FALSE) gates it
+    // exactly as on the map home; a tap raises the host-owned deploy menu via
+    // [onOpenPerks]. Defaulted so callers/tests that don't wire perks compile and
+    // simply omit the control.
+    crownHuntPerksEnabled: Boolean = false,
+    onOpenPerks: () -> Unit = {},
     liveSessionBar: (@Composable () -> Unit)? = null,
     convoyBar: (@Composable () -> Unit)? = null,
     liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
@@ -896,7 +904,7 @@ fun TurnByTurnNavScreen(
                     // control kind fails to compile here until this screen draws
                     // it, which is the point.
                     MapControlSet
-                        .rightSideStack(incidentReportingEnabled)
+                        .rightSideStack(incidentReportingEnabled, crownHuntPerksEnabled)
                         .forEach { control ->
                             when (control) {
                                 // Report incident/roadwork — the map home's
@@ -981,6 +989,14 @@ fun TurnByTurnNavScreen(
                                         hasUnread = hasUnreadChat,
                                         onClick = onOpenChat,
                                     )
+
+                                // Kronjakt perk-deploy control — the map home's
+                                // control, on the same shared stack; the host
+                                // raises the same deploy menu popup via onOpenPerks
+                                // (usable while driving). Present only while the
+                                // crownHuntPerks flag is on.
+                                MapCircleControlKind.Perks ->
+                                    PerkDeployCircleControl(onClick = onOpenPerks)
                             }
                         }
                 }

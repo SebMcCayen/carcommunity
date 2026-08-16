@@ -136,6 +136,17 @@ class PerkShopTest {
             buys++
             return result ?: PerkPurchaseResult(perkId, 1, 100, 400, 1, alreadyPurchased = false)
         }
+
+        override fun observeShieldActiveUntil(uid: String) = throw UnsupportedOperationException()
+
+        override fun observeActiveTrapExpiries(uid: String) = throw UnsupportedOperationException()
+
+        override suspend fun deployPerk(
+            perkId: String,
+            latitude: Double?,
+            longitude: Double?,
+            idempotencyKey: String,
+        ) = throw UnsupportedOperationException()
     }
 
     @Test
