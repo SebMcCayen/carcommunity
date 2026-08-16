@@ -395,7 +395,13 @@ async function maybeAwardHost(eventId: string, uid: string, now: Date): Promise<
  * after the fact, for both. Two consequences, stated plainly:
  *  - a crown is never CLIPPED by the cap — a 500-point crown pays 500 even on
  *    a day that already had 280 — but it does consume the day's budget, so
- *    economy awards for the rest of that local day return `cap_reached`;
+ *    NON-DRIVING economy awards for the rest of that local day return
+ *    `cap_reached`. DRIVING-derived awards (drive_5km, live_session_1km) are
+ *    exempt from the daily cap (they answer to WEEKLY_DRIVING_POINTS_CAP
+ *    alone), so a crown-heavy day no longer zeroes out a genuine saved drive —
+ *    issue #861. See applyEconomyCaps for why the driving lane needs no daily
+ *    cap (its own weekly ceiling plus a ≤ 50 KP/day rule-limit ceiling already
+ *    make it unfarmable);
  *  - the fold is eventually consistent (trigger latency, typically under a
  *    second). An economy award landing inside that window may be paid before
  *    the crown is folded in. The overshoot is bounded by one rule's value

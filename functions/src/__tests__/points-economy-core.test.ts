@@ -203,24 +203,26 @@ describe('applyEconomyCaps — weekly driving cap', () => {
     ).toEqual({ requested: 15, awarded: 0, clippedBy: 'weekly_driving' });
   });
 
-  it('reports the TIGHTER ceiling when both bind, daily on a tie', () => {
-    // daily headroom 5, weekly headroom 8 -> daily binds.
+  it('is the ONLY ceiling on a driving rule — the daily cap never binds it (#861)', () => {
+    // A crown-heavy day has blown the daily total far past the cap, yet a
+    // saved drive is still paid in full: driving rules answer to the weekly
+    // driving cap alone, so collecting crowns no longer zeroes out a real
+    // drive (issue #861). This is the regression the fix exists to prevent.
+    expect(applyEconomyCaps(15, true, { dailyAwarded: 780, weeklyDrivingAwarded: 0 })).toEqual({
+      requested: 15,
+      awarded: 15,
+      clippedBy: 'none',
+    });
+    // Exactly at the daily cap, with zero daily headroom, a drive still pays.
+    expect(
+      applyEconomyCaps(15, true, { dailyAwarded: DAILY_POINTS_CAP, weeklyDrivingAwarded: 0 }),
+    ).toEqual({ requested: 15, awarded: 15, clippedBy: 'none' });
+    // The weekly driving cap is the only thing that can clip a driving rule,
+    // no matter how little daily headroom is left — it never reports `daily`.
     expect(applyEconomyCaps(15, true, { dailyAwarded: 295, weeklyDrivingAwarded: 392 })).toEqual({
       requested: 15,
-      awarded: 5,
-      clippedBy: 'daily',
-    });
-    // daily headroom 8, weekly headroom 5 -> weekly binds.
-    expect(applyEconomyCaps(15, true, { dailyAwarded: 292, weeklyDrivingAwarded: 395 })).toEqual({
-      requested: 15,
-      awarded: 5,
+      awarded: 8,
       clippedBy: 'weekly_driving',
-    });
-    // equal headroom -> the daily cap is the reported reason.
-    expect(applyEconomyCaps(15, true, { dailyAwarded: 295, weeklyDrivingAwarded: 395 })).toEqual({
-      requested: 15,
-      awarded: 5,
-      clippedBy: 'daily',
     });
   });
 });
