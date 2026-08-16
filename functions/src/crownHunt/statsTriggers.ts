@@ -422,7 +422,9 @@ export const onCrownSpawnStatsWritten = onDocumentWritten(
 //                                — it cannot be backfilled once reaped)
 //   - the perk_shop ledger branch above → purchasedByPerk[perkId]
 // Perks are not season-stamped, so the season is derived from each event's
-// `createdAt` via the shared `seasonIdForInstant`.
+// EVENT-TIME via the shared `seasonIdForInstant`: `createdAt` for deploys and
+// purchases, and `drainedAt` (falling back to `createdAt`) for drains, since a
+// drain carries the true drain instant separately from its commit time.
 // ---------------------------------------------------------------------------
 
 function perkStatsRef(scope: string): FirebaseFirestore.DocumentReference {

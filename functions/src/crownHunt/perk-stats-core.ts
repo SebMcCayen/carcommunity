@@ -28,9 +28,12 @@
  *   - perkDrains/{drainId}    → trapTriggers            (each trap trigger)
  *
  * SEASON DERIVATION. Perk documents are NOT season-stamped (perks exist outside
- * the season model), so the season is derived from each event's `createdAt` via
+ * the season model), so the season is derived from each event's EVENT-TIME via
  * `seasonIdForInstant` — the same Europe/Stockholm monthly bucketing the crown
- * leaderboard uses — reused here rather than re-implemented.
+ * leaderboard uses, reused here rather than re-implemented. The event-time is
+ * `createdAt` for deploys and purchases, and `drainedAt` (falling back to
+ * `createdAt`) for drains, which carry the true drain instant separately from
+ * their commit time.
  *
  * INERT PRE-LAUNCH. Every source is gated on the contract-default-OFF
  * `crownHuntPerks` flag, so no perk event exists until an operator turns the
