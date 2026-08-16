@@ -75,6 +75,10 @@ fun CoachMarkTourHost(
 ) {
     var stepIndex by rememberSaveable { mutableIntStateOf(0) }
     val steps = CoachMarkTour.ORDERED
+    // Fail-safe: with no steps there is nothing to show — render nothing at all
+    // (no scrim) so an empty tour can never cover the map. (ORDERED is a non-empty
+    // compile-time list today; this just keeps the invariant honest.)
+    if (steps.isEmpty()) return
     // Clamp a restored index in case the step list ever shrank between releases.
     val index = stepIndex.coerceIn(0, steps.lastIndex)
     val step = steps[index]
@@ -135,22 +139,15 @@ private fun CoachMarkOverlay(
         var overlayOrigin by remember { mutableStateOf(Offset.Zero) }
         var bubbleHeight by remember { mutableIntStateOf(0) }
 
-        // Bottom layer: a full-screen scrim that (a) captures this overlay's own
-        // origin, so the root-space anchor bounds can be made overlay-local, and
-        // (b) swallows any tap that MISSES the bubble — a tap on the dimmed
-        // background neither advances the tour nor falls through to the app
-        // behind this modal coach mark. Composed FIRST, so it is drawn and
-        // hit-tested BELOW the bubble; the Skip / Next buttons sit on top and
-        // therefore receive their taps unambiguously (the tap-swallow is on this
-        // separate layer, never on the shared parent). This mirrors the dismiss-
-        // layer pattern in shell/TranslucentPanel. clearAndSetSemantics keeps the
-        // invisible layer out of the a11y tree (the bubble carries the actions).
+        // Always-present, fully transparent origin probe: measures where this
+        // overlay sits in the root so the root-space anchor bounds can be made
+        // overlay-local. It draws nothing and intercepts no touches, so on its
+        // own — before, or in the absence of, a target — it never dims or blocks
+        // the map underneath.
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .onGloballyPositioned { overlayOrigin = it.positionInRoot() }
-                .pointerInput(Unit) { detectTapGestures { } }
-                .clearAndSetSemantics {},
+                .onGloballyPositioned { overlayOrigin = it.positionInRoot() },
         )
 
         val localTarget = targetBounds?.let {
@@ -162,28 +159,47 @@ private fun CoachMarkOverlay(
             )
         }
 
-        // Scrim with a rounded spotlight hole punched around the target. Needs an
-        // offscreen layer so BlendMode.Clear actually cuts a hole in the scrim.
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen),
-        ) {
-            drawRect(color = Color.Black.copy(alpha = 0.6f))
-            localTarget?.let { t ->
+        // Fail-safe: the dimming scrim, the tap-swallow and the bubble are drawn
+        // ONLY once the current step's control has reported its bounds. If a step
+        // ever has no eligible anchor (its target isn't laid out), nothing
+        // blocking is shown — the map stays fully usable instead of sitting under
+        // a scrim with no way forward. In practice the anchored map-home controls
+        // are always laid out, so this resolves within a frame.
+        if (localTarget != null) {
+            // Bottom layer of the modal: swallow any tap that MISSES the bubble,
+            // so a tap on the dimmed background neither advances the tour nor
+            // falls through to the app behind it. Composed FIRST (drawn + hit-
+            // tested BELOW the bubble), so the Skip / Next buttons on top receive
+            // their taps unambiguously — the tap-swallow lives on this separate
+            // layer, never on the shared parent (mirrors shell/TranslucentPanel).
+            // clearAndSetSemantics keeps this invisible layer out of the a11y tree.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures { } }
+                    .clearAndSetSemantics {},
+            )
+
+            // Scrim with a rounded spotlight hole punched around the target. Needs
+            // an offscreen layer so BlendMode.Clear actually cuts a hole in it.
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen),
+            ) {
+                drawRect(color = Color.Black.copy(alpha = 0.6f))
                 drawRoundRect(
                     color = Color.Transparent,
-                    topLeft = Offset(t.left - spotlightPadPx, t.top - spotlightPadPx),
-                    size = Size(t.width + spotlightPadPx * 2, t.height + spotlightPadPx * 2),
+                    topLeft = Offset(localTarget.left - spotlightPadPx, localTarget.top - spotlightPadPx),
+                    size = Size(
+                        localTarget.width + spotlightPadPx * 2,
+                        localTarget.height + spotlightPadPx * 2,
+                    ),
                     cornerRadius = CornerRadius(spotlightRadiusPx, spotlightRadiusPx),
                     blendMode = BlendMode.Clear,
                 )
             }
-        }
 
-        // Nothing to point at yet: hold the scrim until the control reports bounds
-        // (always within a frame for the always-present map-home controls).
-        if (localTarget != null) {
             val containerW = constraints.maxWidth.toFloat()
             val containerH = constraints.maxHeight.toFloat()
 

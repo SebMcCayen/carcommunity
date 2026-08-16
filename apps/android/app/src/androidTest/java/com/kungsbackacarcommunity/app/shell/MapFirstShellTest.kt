@@ -27,6 +27,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTheme
@@ -77,14 +78,19 @@ class MapFirstShellTest {
         InstrumentationRegistry.getInstrumentation().targetContext.getString(id)
 
     /**
-     * The one-time first-login welcome flow gates the Main shell on the first
-     * reach for a uid. These tests target the shell itself, so mark the flow
-     * already-seen for this uid (device-local WelcomeStore) — deterministic
-     * regardless of prior device state — so [setShell] renders the shell directly.
+     * Two one-time first-login flows gate/overlay the Main shell on the first
+     * reach for a uid: the full-screen welcome flow, and the coach-mark tour
+     * (whose dimming scrim would otherwise cover the map home and swallow these
+     * tests' injected taps). These tests target the shell itself, so mark BOTH
+     * already-seen for this uid (device-local WelcomeStore / CoachMarkStore) —
+     * deterministic regardless of prior device state — so [setShell] renders the
+     * bare shell directly, with no intro overlay.
      */
     @Before
-    fun markWelcomeSeen() {
-        WelcomeStore(InstrumentationRegistry.getInstrumentation().targetContext).markSeen(TEST_UID)
+    fun markOnboardingSeen() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        WelcomeStore(context).markSeen(TEST_UID)
+        CoachMarkStore(context).markSeen(TEST_UID)
     }
 
     private fun setShell(
