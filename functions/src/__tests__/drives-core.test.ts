@@ -284,4 +284,27 @@ describe('drives-core stats and document builder', () => {
       { uid: 'u3' },
     ]);
   });
+
+  it('de-duplicates the convoy roster by uid when storing (first wins, order kept)', () => {
+    const parsed = parseSaveDriveInput({
+      ...validSave,
+      convoyMembers: [
+        { uid: 'u2', displayName: 'Anna' },
+        { uid: 'u3', displayName: 'Erik' },
+        { uid: 'u2', displayName: 'Duplicate' }, // same uid within the cap
+      ],
+    });
+    if (!parsed.ok) throw new Error('expected ok');
+    const stats = computeDriveStats(parsed.input);
+    const docData = buildRideDocument(
+      parsed.input,
+      { userId: 'u1', rideId: 'r1', stats, routeThumbnail: null },
+      serverTimestamp,
+    );
+    // The duplicate collapses to the FIRST occurrence; order is preserved.
+    expect(docData.convoyMembers).toEqual([
+      { uid: 'u2', displayName: 'Anna' },
+      { uid: 'u3', displayName: 'Erik' },
+    ]);
+  });
 });

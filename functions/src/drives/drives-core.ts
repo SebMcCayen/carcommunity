@@ -277,6 +277,29 @@ export function computeRouteThumbnail(input: SaveDriveInput): string | null {
   return buildRouteThumbnail(input.routePoints);
 }
 
+/**
+ * The convoy roster as it should be STORED: de-duplicated by uid, keeping the
+ * first occurrence and preserving order. The schema already caps the array
+ * length, but a hostile or corrupt client can repeat the same uid within the
+ * cap; storing the dupes would diverge from the Android read side (which
+ * de-dupes) and render the same member twice. Canonicalising here keeps the ride
+ * document the single source of truth. An empty/absent roster stays an empty
+ * array.
+ */
+export function dedupeConvoyMembers(
+  members: SaveDriveInput['convoyMembers'],
+): NonNullable<SaveDriveInput['convoyMembers']> {
+  if (!members || members.length === 0) return [];
+  const seen = new Set<string>();
+  const canonical: NonNullable<SaveDriveInput['convoyMembers']> = [];
+  for (const member of members) {
+    if (seen.has(member.uid)) continue;
+    seen.add(member.uid);
+    canonical.push(member);
+  }
+  return canonical;
+}
+
 /** rides/{rideId} document (docs/firebase-data-model.md). */
 export function buildRideDocument(
   input: SaveDriveInput,
@@ -307,9 +330,10 @@ export function buildRideDocument(
     vehicleId: input.vehicleId ?? null,
     carImagePath: input.carImagePath ?? null,
     // Who this drive was driven with — the convoy roster, denormalized so the
-    // History card needs no extra read. Empty array (not null) on a solo drive
-    // or an older client, so the read side is a plain "no members" list.
-    convoyMembers: input.convoyMembers ?? [],
+    // History card needs no extra read. De-duplicated by uid so the stored doc is
+    // canonical (matches the Android read side). Empty array (not null) on a solo
+    // drive or an older client, so the read side is a plain "no members" list.
+    convoyMembers: dedupeConvoyMembers(input.convoyMembers),
     createdAt: serverTimestamp(),
   };
 }

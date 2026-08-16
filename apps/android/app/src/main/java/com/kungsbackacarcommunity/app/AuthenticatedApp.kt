@@ -4092,7 +4092,10 @@ fun AuthenticatedApp(
                 // The live sharer whose car-photo chip was tapped, driving the
                 // profile sub-menu popup (approved 2026-08-11). Null = no popup.
                 // Cleared on dismiss or when the visit-profile action navigates.
-                var selectedLiveSharer by remember { mutableStateOf<LiveMarker?>(null) }
+                // Keyed on uid (like the other auth-scoped state here) so an
+                // in-process account switch resets it — a popup must never carry
+                // over from the previous user's tap.
+                var selectedLiveSharer by remember(uid) { mutableStateOf<LiveMarker?>(null) }
                 // Reads a tapped sharer's public Crown Points for the popup — the
                 // same rules-gated `pointsLedger/{uid}.balance` read the profile
                 // headline uses. Null in a config-less / CI build; the popup then
