@@ -38,6 +38,19 @@ export const CROWN_HUNT_PERKS_FLAG_KEY = 'crownHuntPerks';
 export const CROWN_HUNT_PERKS_FLAG_DEFAULT = false;
 
 // ---------------------------------------------------------------------------
+// Structured rejection reasons (HttpsError `details.reason`)
+// ---------------------------------------------------------------------------
+
+/**
+ * `details.reason` discriminators buyPerk attaches to its `failed-precondition`
+ * rejections so the client can tell "not enough Kronpoäng" apart from "the shop
+ * refused the buy" WITHOUT substring-matching a (localizable) message. The
+ * Android client mirrors these string values in PerkShopRepository.kt.
+ */
+export const PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS = 'insufficient_funds';
+export const PERK_PURCHASE_REASON_SHOP_UNAVAILABLE = 'shop_unavailable';
+
+// ---------------------------------------------------------------------------
 // The catalog
 // ---------------------------------------------------------------------------
 

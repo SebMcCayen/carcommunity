@@ -304,7 +304,7 @@ private const val ROUTE_LINE_BELOW_LAYER_ID = "road-label-navigation"
  *   flattening it is the honest equivalent of the map home's flat 2D camera.
  *   (The map home's other 3D effect, the Standard style's 3D buildings, has no
  *   counterpart: the classic navigation styles do not draw any.)
- * @param unreadChatCount / [onOpenChat] the chat bubble and its unread badge —
+ * @param hasUnreadChat / [onOpenChat] the chat bubble and its unread DOT —
  *   the map home's [ChatCircleControl], not a copy. The host raises the same
  *   chat-hub popup it raises from the map.
  * @param liveMembersOverlay the OTHER people sharing a live position — convoy
@@ -372,7 +372,7 @@ fun TurnByTurnNavScreen(
     onNightModeChange: (Boolean) -> Unit = {},
     is3d: Boolean = true,
     on3dEnabledChange: (Boolean) -> Unit = {},
-    unreadChatCount: Int = 0,
+    hasUnreadChat: Boolean = false,
     onOpenChat: () -> Unit = {},
     // Opens the host's saved-locations picker — the map home's saved-places
     // control, so the same button on the same right-side stack (see
@@ -974,11 +974,11 @@ fun TurnByTurnNavScreen(
                                         modifier = Modifier.testTag(TURN_BY_TURN_SAVED_PLACES_TAG),
                                     )
 
-                                // Chat bubble + unread badge — the map home's
+                                // Chat bubble + unread dot — the map home's
                                 // control. The host raises the same chat-hub popup.
                                 MapCircleControlKind.Chat ->
                                     ChatCircleControl(
-                                        unreadCount = unreadChatCount,
+                                        hasUnread = hasUnreadChat,
                                         onClick = onOpenChat,
                                     )
                             }

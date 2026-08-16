@@ -1372,6 +1372,7 @@
     <string name="chatHub_tabConvoys">Convoys</string>
     <string name="chatHub_tabFriends">Friends</string>
     <string name="chatHub_tabNotifications">Notifications</string>
+    <string name="chatHub_tabUnread">Unread</string>
     <string name="chatHub_unavailable">This isn\'t available right now.</string>
     <string name="chatHub_convoysEmpty">You\'re not in any convoys yet.</string>
     <string name="chatHub_convoysError">Couldn\'t load your convoys.</string>
@@ -1446,6 +1447,7 @@
     <string name="shell_trafficOff">Show traffic</string>
     <string name="shell_chat">Chat</string>
     <string name="shell_chatUnread">%1$d unread chat messages</string>
+    <string name="shell_chatUnreadDot">Chat, unread messages and notifications</string>
     <string name="shell_chatTitle">Community chat</string>
     <string name="shell_chatClose">Close chat</string>
     <string name="shell_chatEmpty">You\'re all caught up — no new messages.</string>

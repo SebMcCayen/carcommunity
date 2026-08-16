@@ -22,7 +22,6 @@
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
-import { LEADERBOARD_COLLECTION } from './generator';
 import { LEADERBOARD_ALL_TIME_SCOPE } from './leaderboard-core';
 import {
   buildPublicLeaderboardFile,
@@ -30,6 +29,12 @@ import {
   type StoredCategories,
 } from './publicLeaderboard-core';
 import { syncHomepageLeaderboardFile, type HomepageSyncStatus } from './leaderboardRepo';
+
+// The leaderboard collection name, inlined here rather than imported from
+// ./generator to avoid a generator <-> publicLeaderboard import cycle
+// (generator.ts imports publishPublicLeaderboard from this module). Under the
+// functions' CommonJS build a cycle risks partially-initialized exports.
+const LEADERBOARD_COLLECTION = 'leaderboards';
 
 /** Reads one `leaderboards/{scope}` document's `categories` map, or null when absent. */
 async function readScopeCategories(scope: string): Promise<StoredCategories | null> {

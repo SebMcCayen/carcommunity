@@ -86,7 +86,7 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") onNightModeChange: (Boolean) -> Unit = {},
     @Suppress("UNUSED_PARAMETER") is3d: Boolean = true,
     @Suppress("UNUSED_PARAMETER") on3dEnabledChange: (Boolean) -> Unit = {},
-    @Suppress("UNUSED_PARAMETER") unreadChatCount: Int = 0,
+    @Suppress("UNUSED_PARAMETER") hasUnreadChat: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") onOpenSavedPlaces: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") liveSessionBar: (@Composable () -> Unit)? = null,

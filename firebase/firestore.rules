@@ -1511,13 +1511,15 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // Precomputed social leaderboard, one document per scope
-    // (leaderboards/alltime today; a season scope follows). The scheduled
-    // Admin-SDK generator (functions/src/leaderboard/generator.ts) resolves
-    // names/avatars and filters opted-out + deleted members server-side, so the
-    // whole board is one cheap member read and nothing here needs a composite
-    // index (doc-id reads). isActiveMember() (not bare isAuthenticated) so
-    // suspension overrides access, mirroring crownHuntLeaderboardEntries above.
+    // Precomputed social leaderboard, one document per scope: `alltime` (the
+    // never-resetting board) AND `{YYYY-MM}` (the current month, regenerated each
+    // run). The `{scope}` wildcard already covers BOTH — no change was needed to
+    // admit the monthly scope. The scheduled Admin-SDK generator
+    // (functions/src/leaderboard/generator.ts) resolves names/avatars and filters
+    // opted-out + deleted members server-side, so the whole board is one cheap
+    // member read and nothing here needs a composite index (doc-id reads).
+    // isActiveMember() (not bare isAuthenticated) so suspension overrides access,
+    // mirroring crownHuntLeaderboardEntries above.
     match /leaderboards/{scope} {
       allow read: if isActiveMember();
       allow write: if false;
@@ -1538,13 +1540,26 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Per-scope admin PERK-USAGE aggregate: crownHuntPerkStats/{scope}
+    // (scope = 'alltime' | 'YYYY-MM'). How many times each perk was deployed
+    // (usedByPerk), purchased (purchasedByPerk) and how many trap triggers fired
+    // (trapTriggers) — an admin-dashboard read, backend-written by the perk-stats
+    // triggers. Admin-only, mirroring crownHuntSpawnStats above.
+    match /crownHuntPerkStats/{scope} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     // Backend-only exactly-once markers for the stats triggers/rollover
-    // (crownHuntStatFolds, crownHuntSpawnFolds, crownHuntSeasonWinCredits).
-    // Never client-readable or client-writable.
+    // (crownHuntStatFolds, crownHuntSpawnFolds, crownHuntPerkStatFolds,
+    // crownHuntSeasonWinCredits). Never client-readable or client-writable.
     match /crownHuntStatFolds/{foldId} {
       allow read, write: if false;
     }
     match /crownHuntSpawnFolds/{foldId} {
+      allow read, write: if false;
+    }
+    match /crownHuntPerkStatFolds/{foldId} {
       allow read, write: if false;
     }
     match /crownHuntSeasonWinCredits/{seasonId} {
@@ -1754,6 +1769,25 @@ service cloud.firestore {
       match /attendanceCredits/{eventId} {
         allow read, write: if false;
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // memberMonthlyStats – backend-only per-month leaderboard buckets
+    // (functions/src/leaderboard), one document per (month, member) at
+    // `memberMonthlyStats/{YYYY-MM}__{uid}`. Incremented by the same activity
+    // triggers that feed badgeProgress, read ONLY by the Admin-SDK monthly
+    // generator.
+    //
+    // DENIED TO EVERY CLIENT — read included — for the same two reasons as
+    // badgeProgress: (1) ANTI-ABUSE, these are the raw counters the monthly board
+    // ranks on, so a client that could write one could forge a rank; (2) PRIVACY,
+    // they are a per-month running log of how far a member drove, how many meets they
+    // attended and how many convoys they led. Only the derived, opt-out-filtered
+    // `leaderboards/{YYYY-MM}` document is public — publish the ranking, not the
+    // telemetry.
+    // -------------------------------------------------------------------------
+    match /memberMonthlyStats/{docId} {
+      allow read, write: if false;
     }
 
     // -------------------------------------------------------------------------

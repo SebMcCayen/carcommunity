@@ -45,9 +45,11 @@ object CrownPointMarkers {
      *   NOT in it is greyed to the neutral out-of-range slate (see
      *   [CrownMarkerStyle.adminPointDiscArgb]) so the map shows at a glance which
      *   points are reachable right now. `null` (the default) means "no live
-     *   location to judge by" — every point is drawn in colour, exactly the
-     *   pre-greying behaviour, so a build with no fix never paints the whole layer
-     *   grey.
+     *   location to judge by" — which FAILS CLOSED: every point is greyed, exactly
+     *   as [CrownRange.isInRange] treats a missing fix, so a crown never looks
+     *   collectible before a real location proves the member is actually in range.
+     *   (Before the fix this defaulted the other way — every crown lit up on app
+     *   open, looking reachable while the member was far away.)
      */
     fun markers(
         points: List<CrownHuntPoint>,
@@ -59,9 +61,10 @@ object CrownPointMarkers {
         return points.mapNotNull { point ->
             val latitude = point.latitude ?: return@mapNotNull null
             val longitude = point.longitude ?: return@mapNotNull null
-            // null inRangeIds → treat every point as in range (colour it), so a
-            // location-less build renders exactly as before.
-            val inRange = inRangeIds == null || point.id in inRangeIds
+            // null inRangeIds → no live location, so treat every point as OUT of
+            // range (grey it): a crown only lights up once a real fix proves the
+            // member is inside the ring, never on the pre-fix default.
+            val inRange = inRangeIds != null && point.id in inRangeIds
             MapCrownMarker(
                 id = point.id,
                 longitude = longitude,

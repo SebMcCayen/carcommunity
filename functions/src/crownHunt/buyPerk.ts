@@ -26,9 +26,12 @@ import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { debitPoints } from '../points/ledger';
+import { DEBIT_OVERDRAFT_MESSAGE } from '../points/points-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
+  PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS,
+  PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
   parseBuyPerkInput,
   perkById,
   perkCost,
@@ -76,14 +79,18 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // 1. Feature flag. The shop is off by default; a member must never be able to
   // spend KP against a system that is officially disabled.
   if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
-    throw new HttpsError('failed-precondition', 'Kronjaktsbutiken är inte tillgänglig just nu.');
+    throw new HttpsError('failed-precondition', 'Kronjaktsbutiken är inte tillgänglig just nu.', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+    });
   }
 
   // 2. Account status. Suspended/deleted users cannot spend (debitPoints also
   // enforces this, but reject early with a member-facing message).
   const userSnap = await db.collection('users').doc(uid).get();
   if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
-    throw new HttpsError('failed-precondition', 'Ditt konto kan inte köpa perks just nu.');
+    throw new HttpsError('failed-precondition', 'Ditt konto kan inte köpa perks just nu.', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+    });
   }
 
   // 3. Resolve the perk + cost from SERVER constants only — the client never
@@ -91,7 +98,9 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   const perk = perkById(perkId);
   const cost = perkCost(perkId, qty);
   if (!perk || cost === null) {
-    throw new HttpsError('failed-precondition', 'Okänd perk.');
+    throw new HttpsError('failed-precondition', 'Okänd perk.', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+    });
   }
 
   const scopedKey = scopePerkPurchaseKey(uid, idempotencyKey);
@@ -100,28 +109,49 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // 4. Debit + grant, atomically. The AtomicExtraWrites hook runs INSIDE the
   // ledger transaction, only when a NEW debit entry is written — an idempotent
   // replay adds nothing, so the inventory is never double-incremented.
-  const result = await debitPoints(
-    {
-      targetUid: uid,
-      amount: cost,
-      transactionType: 'spend',
-      source: 'perk_shop',
-      description: `Kronjaktsbutik: ${perk.name} x${qty}`,
-      idempotencyKey: perkPurchaseLedgerKey(scopedKey),
-      relatedEntityType: 'perk',
-      relatedEntityId: perk.perkId,
-    },
-    (tx) => {
-      tx.set(
-        inventoryRef,
-        {
-          [perk.perkId]: FieldValue.increment(qty),
-          updatedAt: FieldValue.serverTimestamp(),
-        },
-        { merge: true },
+  let result: Awaited<ReturnType<typeof debitPoints>>;
+  try {
+    result = await debitPoints(
+      {
+        targetUid: uid,
+        amount: cost,
+        transactionType: 'spend',
+        source: 'perk_shop',
+        description: `Kronjaktsbutik: ${perk.name} x${qty}`,
+        idempotencyKey: perkPurchaseLedgerKey(scopedKey),
+        relatedEntityType: 'perk',
+        relatedEntityId: perk.perkId,
+      },
+      (tx) => {
+        tx.set(
+          inventoryRef,
+          {
+            [perk.perkId]: FieldValue.increment(qty),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      },
+    );
+  } catch (err) {
+    // The ledger's overdraft guard rejects an unaffordable buy with a
+    // `failed-precondition` carrying the shared DEBIT_OVERDRAFT_MESSAGE. Keep
+    // the FAILED_PRECONDITION code but re-throw with a member-facing message and
+    // a structured `reason` so the client tells "insufficient funds" apart from
+    // a shop-unavailable rejection WITHOUT substring-matching the wire message.
+    if (
+      err instanceof HttpsError &&
+      err.code === 'failed-precondition' &&
+      err.message === DEBIT_OVERDRAFT_MESSAGE
+    ) {
+      throw new HttpsError(
+        'failed-precondition',
+        'Du har inte tillräckligt med Kronpoäng för den här perken.',
+        { reason: PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS },
       );
-    },
-  );
+    }
+    throw err;
+  }
 
   // Read back the buyer's count AFTER the transaction so the response reflects
   // the granted total (the inventory doc is backend-only; the client learns its
