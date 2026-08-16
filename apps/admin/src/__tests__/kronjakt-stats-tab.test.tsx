@@ -21,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   seasons: vi.fn(),
   cells: vi.fn(),
   perks: vi.fn(),
+  subCrowns: vi.fn(() => () => {}),
+  subTraps: vi.fn(() => () => {}),
 }));
 
 vi.mock('@/lib/callables', () => ({ callAdmin: vi.fn() }));
@@ -38,11 +40,17 @@ vi.mock('@/features/crown-hunt', async (importOriginal) => {
     adminListSeasons: mocks.seasons,
     adminListCellStats: mocks.cells,
     adminGetPerkStats: mocks.perks,
+    subscribeLiveCrownSpawns: mocks.subCrowns,
+    subscribeLiveTraps: mocks.subTraps,
   };
 });
 
 vi.mock('@/components/map/CrownHeatMap', () => ({
   CrownHeatMap: () => <div data-testid="heat-stub" />,
+}));
+
+vi.mock('@/components/map/LiveGameMap', () => ({
+  LiveGameMap: () => <div data-testid="live-map-stub" />,
 }));
 
 import { StatsTab } from '@/app/kronjakt/StatsTab';
@@ -97,6 +105,10 @@ beforeEach(() => {
   mocks.seasons.mockReset();
   mocks.cells.mockReset();
   mocks.perks.mockReset();
+  mocks.subCrowns.mockReset();
+  mocks.subTraps.mockReset();
+  mocks.subCrowns.mockImplementation(() => () => {});
+  mocks.subTraps.mockImplementation(() => () => {});
 
   mocks.getStats.mockImplementation((scope: string) =>
     Promise.resolve(scope === 'alltime' ? stats('alltime', 100, 40) : stats(scope, 20, 9)),
@@ -213,6 +225,18 @@ describe('StatsTab', () => {
     const shieldLogo = perkLogos.find((s) => s.querySelector('title')?.textContent === 'Sköld');
     const shieldCard = shieldLogo?.parentElement?.parentElement as HTMLElement | undefined;
     expect(shieldCard?.textContent ?? '').not.toContain(t('crownHunt.statPerkTrapTriggersSeason'));
+  });
+
+  it('mounts the live game map and subscribes to live crowns + traps', async () => {
+    await render();
+    const text = container.textContent ?? '';
+    expect(text).toContain(t('crownHunt.statLiveMapTitle'));
+    // Both live subscriptions are wired on mount.
+    expect(mocks.subCrowns).toHaveBeenCalledTimes(1);
+    expect(mocks.subTraps).toHaveBeenCalledTimes(1);
+    // The live map renders alongside the existing spawn heat map (both kept).
+    expect(container.querySelector('[data-testid="live-map-stub"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="heat-stub"]')).not.toBeNull();
   });
 
   it('shows zeroed perk cards (not an error) when perk stats permission-deny', async () => {

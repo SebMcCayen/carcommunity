@@ -643,6 +643,11 @@
     "perkName_spike_strip": "Spike strip",
     "perkName_shield": "Shield",
     "perkName_boost": "Double points",
+    "statLiveMapTitle": "Live map",
+    "statLiveMapNote": "Real-time game state: active crowns and deployed traps. Updates automatically. (Live users not shown yet.)",
+    "statLiveMapCrowns": "Crowns: {count}",
+    "statLiveMapTraps": "Traps: {count}",
+    "statLiveMapError": "Could not read live state.",
     "statNoData": "No statistics yet."
   },
   "partnerOffers": {

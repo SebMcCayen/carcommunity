@@ -643,6 +643,11 @@
     "perkName_spike_strip": "Spikmatta",
     "perkName_shield": "Sköld",
     "perkName_boost": "Dubbla Poäng",
+    "statLiveMapTitle": "Live-karta",
+    "statLiveMapNote": "Spelläget i realtid: aktiva kronor och utplacerade fällor. Uppdateras automatiskt. (Live-användare visas inte ännu.)",
+    "statLiveMapCrowns": "Kronor: {count}",
+    "statLiveMapTraps": "Fällor: {count}",
+    "statLiveMapError": "Kunde inte läsa live-läget.",
     "statNoData": "Ingen statistik ännu."
   },
   "partners": {
