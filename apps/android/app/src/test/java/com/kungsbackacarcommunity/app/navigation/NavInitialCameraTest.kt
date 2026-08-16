@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.navigation
 import com.kungsbackacarcommunity.app.location.LastKnownLocation
 import com.kungsbackacarcommunity.app.map.MapMarkers
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -38,9 +39,10 @@ class NavInitialCameraTest {
     fun `cached zoom is street level, closer than the regional fallback`() {
         // A cached fix should open TIGHTER than the town-wide fallback, so the
         // user lands on their street rather than surveying the region.
-        assert(NavInitialCamera.CACHED_ZOOM > MapMarkers.DEFAULT_CAMERA.zoom) {
+        assertTrue(
             "cached zoom ${NavInitialCamera.CACHED_ZOOM} should exceed " +
-                "fallback ${MapMarkers.DEFAULT_CAMERA.zoom}"
-        }
+                "fallback ${MapMarkers.DEFAULT_CAMERA.zoom}",
+            NavInitialCamera.CACHED_ZOOM > MapMarkers.DEFAULT_CAMERA.zoom,
+        )
     }
 }
