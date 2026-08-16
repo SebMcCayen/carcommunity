@@ -62,22 +62,35 @@ export async function publishPublicLeaderboard(
   token: string,
   now: Date = new Date(),
 ): Promise<PublicLeaderboardPublishResult> {
-  const monthId = seasonIdForInstant(now);
-  const [alltime, monthCategories] = await Promise.all([
-    readScopeCategories(LEADERBOARD_ALL_TIME_SCOPE),
-    readScopeCategories(monthId),
-  ]);
+  // The WHOLE body is wrapped so the documented "never throws" contract is real
+  // rather than relying on the caller. syncHomepageLeaderboardFile already
+  // swallows its own errors, but the Firestore reads (readScopeCategories) and
+  // the pure build could still throw before it — a bad `leaderboards/{scope}`
+  // read or an unexpected builder fault must degrade to 'failed', never take
+  // down the scheduled generator run that invoked us.
+  try {
+    const monthId = seasonIdForInstant(now);
+    const [alltime, monthCategories] = await Promise.all([
+      readScopeCategories(LEADERBOARD_ALL_TIME_SCOPE),
+      readScopeCategories(monthId),
+    ]);
 
-  const month = monthCategories ? buildPublicMonthBlock(monthId, monthCategories) : null;
-  const content = buildPublicLeaderboardFile(alltime, month, now);
-  const status = await syncHomepageLeaderboardFile(content, token, {
-    month: monthId,
-    hasMonth: month ? 1 : 0,
-  });
-  // One summary line per publish (matches the events publisher); 'unchanged'
-  // runs stay quiet so a stable board is not hourly log noise.
-  if (status !== 'unchanged') {
-    logger.info('Public leaderboard sync', { status, month: monthId, hasMonth: month !== null });
+    const month = monthCategories ? buildPublicMonthBlock(monthId, monthCategories) : null;
+    const content = buildPublicLeaderboardFile(alltime, month, now);
+    const status = await syncHomepageLeaderboardFile(content, token, {
+      month: monthId,
+      hasMonth: month ? 1 : 0,
+    });
+    // One summary line per publish (matches the events publisher); 'unchanged'
+    // runs stay quiet so a stable board is not hourly log noise.
+    if (status !== 'unchanged') {
+      logger.info('Public leaderboard sync', { status, month: monthId, hasMonth: month !== null });
+    }
+    return { status, hasMonth: month !== null };
+  } catch (error) {
+    // Non-identifying context only (never the token or member data). Consistent
+    // with the 'failed' shape syncHomepageLeaderboardFile itself returns.
+    logger.error('Public leaderboard publish failed', { error: String(error) });
+    return { status: 'failed', hasMonth: false };
   }
-  return { status, hasMonth: month !== null };
 }
