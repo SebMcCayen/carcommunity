@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 /**
  * Orchestrates the (optimistic) per-ticket interaction state for the open-tickets
@@ -105,9 +106,14 @@ class OpenTicketsCoordinator(
     }
 
     private fun update(issueNumber: Int, transform: (TicketInteractionState) -> TicketInteractionState) {
-        state.value =
-            state.value.toMutableMap().apply {
+        // Atomic read-modify-write: +1/comment for different tickets run in
+        // separate coroutines, so a plain `state.value = state.value…` could lose
+        // a concurrent write. MutableStateFlow.update retries its lambda on a CAS
+        // miss, so both updates land.
+        state.update { current ->
+            current.toMutableMap().apply {
                 this[issueNumber] = transform(this[issueNumber] ?: TicketInteractionState())
             }
+        }
     }
 }

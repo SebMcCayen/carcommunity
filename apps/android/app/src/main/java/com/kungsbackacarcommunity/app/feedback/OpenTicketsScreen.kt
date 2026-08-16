@@ -22,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -77,11 +78,17 @@ fun OpenTicketsScreen(
             when (listState) {
                 is OpenTicketsListState.Loading ->
                     item {
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                            horizontalArrangement = Arrangement.Center,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             CircularProgressIndicator()
+                            Text(
+                                text = stringResource(R.string.openTickets_loading),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
 
@@ -201,6 +208,13 @@ private fun TicketCard(
                     color = MaterialTheme.colorScheme.primary,
                 )
             } else {
+                // A comment is posted to a PUBLIC GitHub issue — warn before the
+                // user types, same spirit as the report form's public-tracker card.
+                Text(
+                    text = stringResource(R.string.openTickets_publicNotice),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
                 OutlinedTextField(
                     value = comment,
                     onValueChange = {
