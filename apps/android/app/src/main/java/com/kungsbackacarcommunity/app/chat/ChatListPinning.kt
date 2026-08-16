@@ -62,6 +62,19 @@ object ChatListPinning {
      * who has scrolled UP into history is left exactly where they are, so an
      * incoming message never yanks them away from what they were reading.
      *
+     * One near-bottom case still needs excluding: a reader who is ACTIVELY scrolling
+     * ([isScrollInProgress]) — typically a fast upward flick whose fling has not yet
+     * carried them clear of the near-bottom tolerance. Lifting the finger off a hard
+     * flick hands control to a fling animation, which — like [KeepPinnedToNewest]'s
+     * `animateScrollToItem` — runs at `MutatePriority.Default`. An incoming message
+     * arriving mid-fling would otherwise fire that follow scroll, cancel the fling,
+     * and drag the reader straight back to the bottom (issue #870: "scroll up fast
+     * and the chat window scrolls away, you have to start over"). A finger-dragged
+     * (slow) scroll never hits this: the drag holds `MutatePriority.UserInput`, and
+     * by the time the finger lifts the reader has cleared the tolerance. So while a
+     * scroll is in progress, an incoming message defers — the reader keeps flinging
+     * and the follow simply doesn't happen. Their OWN send still always follows.
+     *
      * This is the FOLLOW decision only; the one-time jump-to-bottom on OPEN is owned
      * by [KeepPinnedToNewest]'s open effect, which is why this can assume the list is
      * already laid out and does not special-case a not-yet-measured (totalItemsCount
@@ -72,14 +85,23 @@ object ChatListPinning {
      * @param totalItemsCount the LazyColumn's item count.
      * @param isOwnMessage whether the newly-arrived newest message is the caller's
      *   own send.
+     * @param isScrollInProgress whether the list is being actively scrolled or is
+     *   flinging ([androidx.compose.foundation.lazy.LazyListState.isScrollInProgress]).
+     *   Defaults to false — a settled list, the assumption the pure decision was
+     *   written under before #870.
      */
     fun shouldFollowNewest(
         lastVisibleIndex: Int,
         totalItemsCount: Int,
         isOwnMessage: Boolean,
+        isScrollInProgress: Boolean = false,
     ): Boolean {
         if (totalItemsCount <= 0) return false
+        // Always follow your own send down, wherever you were — even mid-fling.
         if (isOwnMessage) return true
+        // Don't fight a reader who is actively scrolling (flinging up into history):
+        // the incoming message defers rather than cancelling their fling. See #870.
+        if (isScrollInProgress) return false
         return shouldRepinToNewest(lastVisibleIndex, totalItemsCount)
     }
 
@@ -189,7 +211,15 @@ fun KeepPinnedToNewest(
         val layoutInfo = listState.layoutInfo
         val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
         val totalItems = layoutInfo.totalItemsCount
-        if (ChatListPinning.shouldFollowNewest(lastVisibleIndex, totalItems, isOwnNewestMessage)) {
+        // isScrollInProgress guards the #870 flick: a message arriving while the
+        // reader is flinging up must not cancel the fling and drag them to the bottom.
+        if (ChatListPinning.shouldFollowNewest(
+                lastVisibleIndex = lastVisibleIndex,
+                totalItemsCount = totalItems,
+                isOwnMessage = isOwnNewestMessage,
+                isScrollInProgress = listState.isScrollInProgress,
+            )
+        ) {
             listState.animateScrollToItem(totalItems - 1)
         }
     }
