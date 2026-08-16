@@ -73,6 +73,56 @@ export const LEADERBOARD_CATEGORIES = [
 
 export type LeaderboardCategoryKey = (typeof LEADERBOARD_CATEGORIES)[number];
 
+/**
+ * The competitive categories of a MONTHLY (`YYYY-MM`) board — the same keys and
+ * the same published order as the all-time board, MINUS `streak`.
+ *
+ * `streak` is deliberately ALL-TIME ONLY: the daily-collection streak
+ * (`bestDayStreak`) is a run that spans months, so a "longest streak THIS month"
+ * is neither meaningful nor cheaply derivable — the monthly doc simply omits the
+ * key. Every other category has a natural per-month bucket:
+ *  - `crownPoints`  crownHuntLeaderboardEntries where scope == the month id
+ *    (`{YYYY-MM}__{uid}.points`) — the Kronjakt season counter, already
+ *    maintained per season by the crown stats layer.
+ *  - `distance` / `events` / `convoys` — the per-month buckets in
+ *    `memberMonthlyStats/{YYYY-MM}__{uid}` (distanceMeters / eventsAttended /
+ *    convoysLed), incremented additively by the same three triggers that feed the
+ *    all-time badgeProgress counters.
+ */
+export const LEADERBOARD_MONTHLY_CATEGORIES = [
+  'crownPoints',
+  'distance',
+  'events',
+  'convoys',
+] as const satisfies readonly LeaderboardCategoryKey[];
+
+export type LeaderboardMonthlyCategoryKey = (typeof LEADERBOARD_MONTHLY_CATEGORIES)[number];
+
+/**
+ * The backend-only per-month stat buckets, one document per (month, member) at
+ * `memberMonthlyStats/{YYYY-MM}__{uid}`. DENIED to every client in
+ * firestore.rules — only the Admin-SDK generator reads them. The month id is the
+ * Kronjakt season id (`seasonIdForInstant`), so the monthly board reuses the
+ * exact month boundaries the crown season already defines.
+ */
+export const MEMBER_MONTHLY_STATS_COLLECTION = 'memberMonthlyStats';
+
+/**
+ * The `memberMonthlyStats` document field each additive monthly category is read
+ * from (generator) and incremented on (the source triggers). `crownPoints` is
+ * NOT here — it comes from the crown season counters, not this collection.
+ */
+export const MEMBER_MONTHLY_STAT_FIELDS = {
+  distance: 'distanceMeters',
+  events: 'eventsAttended',
+  convoys: 'convoysLed',
+} as const satisfies Record<Exclude<LeaderboardMonthlyCategoryKey, 'crownPoints'>, string>;
+
+/** `memberMonthlyStats/{scope}__{uid}` — one bucket per (month, member). */
+export function memberMonthlyStatsDocId(scope: string, uid: string): string {
+  return `${scope}__${uid}`;
+}
+
 /** A single (member, value) input to a category ranking, before identity resolution. */
 export interface LeaderboardCandidate {
   uid: string;

@@ -1,11 +1,13 @@
 /**
  * Social LEADERBOARD generator — the scheduled Admin-SDK precompute.
  *
- * Builds the ONE client-readable document `leaderboards/alltime` from the
- * server's authoritative aggregates, so the social screen renders every
- * category from a single cheap read (functions/src/leaderboard/leaderboard-core.ts
- * owns the pure assembly). Runs hourly; the board is a derived snapshot, so a
- * slightly stale run only delays a rank change, never loses data.
+ * Builds the client-readable board documents from the server's authoritative
+ * aggregates, so the social screen renders every category from a single cheap
+ * read (functions/src/leaderboard/leaderboard-core.ts owns the pure assembly).
+ * Each run writes TWO documents: `leaderboards/alltime` (the never-resetting
+ * board) and `leaderboards/{YYYY-MM}` for the CURRENT Europe/Stockholm month
+ * (`runMonthlyLeaderboardGeneration`). Runs hourly; the board is a derived
+ * snapshot, so a slightly stale run only delays a rank change, never loses data.
  *
  * SOURCES, one per category:
  *  - crownPoints  crownHuntLeaderboardEntries where scope == 'alltime', field
@@ -48,11 +50,16 @@ import { withServerErrorReporting } from '../errors/serverErrors';
 import {
   CROWN_LEADERBOARD_COLLECTION,
   ALL_TIME_SCOPE,
+  isSeasonId,
+  seasonIdForInstant,
 } from '../crownHunt/crown-hunt-stats-core';
 import {
   LEADERBOARD_ALL_TIME_SCOPE,
   LEADERBOARD_CANDIDATE_RETENTION,
   LEADERBOARD_CATEGORIES,
+  LEADERBOARD_MONTHLY_CATEGORIES,
+  MEMBER_MONTHLY_STATS_COLLECTION,
+  MEMBER_MONTHLY_STAT_FIELDS,
   buildLeaderboardCategory,
   candidateUidsToResolve,
   readCandidateValue,
@@ -60,6 +67,7 @@ import {
   type LeaderboardCandidate,
   type LeaderboardCategoryKey,
   type LeaderboardIdentity,
+  type LeaderboardMonthlyCategoryKey,
   type LeaderboardRow,
 } from './leaderboard-core';
 
@@ -98,13 +106,16 @@ function trimCandidates(candidates: CategoryCandidates): void {
 }
 
 /**
- * All-time crown-points candidates, from the maintained per-scope leaderboard
- * counters. Projects only `uid` + `points` to keep the payload small.
+ * Crown-points candidates for a scope, from the maintained per-scope leaderboard
+ * counters. `scope` is `alltime` for the all-time board or a `YYYY-MM` season id
+ * for a monthly board — the crown stats layer keeps one counter document per
+ * (scope, uid), so the identical query serves both, differing only in the scope
+ * it filters on. Projects only `uid` + `points` to keep the payload small.
  */
-async function readCrownPointCandidates(): Promise<LeaderboardCandidate[]> {
+async function readCrownPointCandidates(scope: string): Promise<LeaderboardCandidate[]> {
   const snap = await db
     .collection(CROWN_LEADERBOARD_COLLECTION)
-    .where('scope', '==', ALL_TIME_SCOPE)
+    .where('scope', '==', scope)
     .select('uid', 'points')
     .get();
   const candidates: LeaderboardCandidate[] = [];
@@ -225,7 +236,7 @@ export async function runLeaderboardGeneration(): Promise<
   Record<LeaderboardCategoryKey, LeaderboardRow[]>
 > {
   const [crownPoints, badgeCandidates] = await Promise.all([
-    readCrownPointCandidates(),
+    readCrownPointCandidates(ALL_TIME_SCOPE),
     scanBadgeCandidates(),
   ]);
   // Trim crownPoints to the SAME retention bound the badge categories were
@@ -270,16 +281,171 @@ export async function runLeaderboardGeneration(): Promise<
   return categories;
 }
 
+// ---------------------------------------------------------------------------
+// Monthly board
+// ---------------------------------------------------------------------------
+
+/** The three additive monthly categories read from `memberMonthlyStats`. */
+type MonthlyStatCategory = keyof typeof MEMBER_MONTHLY_STAT_FIELDS;
+const MONTHLY_STAT_CATEGORIES = ['distance', 'events', 'convoys'] as const satisfies readonly [
+  MonthlyStatCategory,
+  MonthlyStatCategory,
+  MonthlyStatCategory,
+];
+
+/**
+ * The distance/events/convoys candidates for one month, from a paged scan of
+ * `memberMonthlyStats` restricted to that month by an equality filter on the
+ * `scope` field, ordered by `FieldPath.documentId()` for stable paging.
+ *
+ * Needs NO composite index: an equality filter on a single field plus an
+ * `orderBy(__name__)` is served by that field's AUTOMATIC single-field index
+ * (whose final component is `__name__` ascending), the one filter+order shape
+ * Firestore covers without a hand-declared composite. Walked to exhaustion in
+ * one run (a global top-N needs a full pass over the month); the per-category
+ * lists are trimmed to LEADERBOARD_CANDIDATE_RETENTION after every page, so peak
+ * memory is the page size plus a handful of retained candidates per category,
+ * not the member count.
+ */
+async function scanMonthlyStatCandidates(
+  scope: string,
+): Promise<Record<MonthlyStatCategory, LeaderboardCandidate[]>> {
+  const candidates: Record<MonthlyStatCategory, LeaderboardCandidate[]> = {
+    distance: [],
+    events: [],
+    convoys: [],
+  };
+  const idPrefix = `${scope}__`;
+  let cursor: string | null = null;
+  for (;;) {
+    let query = db
+      .collection(MEMBER_MONTHLY_STATS_COLLECTION)
+      .where('scope', '==', scope)
+      .orderBy(FieldPath.documentId())
+      .limit(LEADERBOARD_SCAN_PAGE_SIZE);
+    if (cursor) {
+      query = query.startAfter(cursor);
+    }
+    const page = await query.get();
+    if (page.empty) {
+      break;
+    }
+    for (const doc of page.docs) {
+      const data = doc.data();
+      // `uid` is written on every bump; fall back to the id's `{scope}__{uid}`
+      // suffix defensively (a bucket is never published for an empty uid).
+      const uid =
+        typeof data.uid === 'string' && data.uid.length > 0
+          ? data.uid
+          : doc.id.startsWith(idPrefix)
+            ? doc.id.slice(idPrefix.length)
+            : '';
+      if (!uid) {
+        continue;
+      }
+      for (const key of MONTHLY_STAT_CATEGORIES) {
+        const value = readCandidateValue(data[MEMBER_MONTHLY_STAT_FIELDS[key]]);
+        if (value > 0) {
+          candidates[key].push({ uid, value });
+        }
+      }
+    }
+    for (const key of MONTHLY_STAT_CATEGORIES) {
+      candidates[key] = topCandidates(candidates[key], LEADERBOARD_CANDIDATE_RETENTION);
+    }
+    if (page.size < LEADERBOARD_SCAN_PAGE_SIZE) {
+      break;
+    }
+    cursor = page.docs[page.docs.length - 1]?.id ?? null;
+    if (!cursor) {
+      break;
+    }
+  }
+  return candidates;
+}
+
+/**
+ * Builds and writes the MONTHLY board `leaderboards/{YYYY-MM}` for one season id.
+ *
+ * Mirrors `runLeaderboardGeneration` exactly — same entry shape, same top-N,
+ * same server-side opt-out and deleted-member filtering, same identity
+ * resolution from `users/{uid}` — differing only in the SOURCES and the CATEGORY
+ * SET: crownPoints comes from the crown counters at `scope == YYYY-MM`,
+ * distance/events/convoys from that month's `memberMonthlyStats` buckets, and
+ * `streak` is OMITTED (a streak spans months; see LEADERBOARD_MONTHLY_CATEGORIES).
+ *
+ * Returns the assembled category rows for the emulator test; the scheduled
+ * wrapper ignores the return.
+ */
+export async function runMonthlyLeaderboardGeneration(
+  scope: string,
+): Promise<Record<LeaderboardMonthlyCategoryKey, LeaderboardRow[]>> {
+  if (!isSeasonId(scope)) {
+    // A monthly board is only ever a `YYYY-MM` id — never `alltime`, never a
+    // malformed value. Guard here so a bad caller cannot overwrite the all-time
+    // doc or mint a garbage scope document.
+    throw new Error(`runMonthlyLeaderboardGeneration: not a season id: ${scope}`);
+  }
+  const [crownPoints, monthlyStats] = await Promise.all([
+    readCrownPointCandidates(scope),
+    scanMonthlyStatCandidates(scope),
+  ]);
+  // A FULL candidate record (streak included, empty) so the shared
+  // `candidateUidsToResolve` — which iterates every category key — type-checks
+  // and unions correctly; the empty streak list contributes nothing and streak
+  // is never published (the write loops LEADERBOARD_MONTHLY_CATEGORIES).
+  const perCategory: Record<LeaderboardCategoryKey, LeaderboardCandidate[]> = {
+    crownPoints: topCandidates(crownPoints, LEADERBOARD_CANDIDATE_RETENTION),
+    distance: monthlyStats.distance,
+    events: monthlyStats.events,
+    convoys: monthlyStats.convoys,
+    streak: [],
+  };
+
+  const uids = candidateUidsToResolve(perCategory);
+  const [identities, optedOut] = await Promise.all([
+    resolveIdentities(uids),
+    resolveOptOuts(uids),
+  ]);
+
+  // Only the monthly category keys are ever populated or written (streak is
+  // OMITTED), so the result is typed to exactly that key set — the persisted
+  // document shape, not the full all-time set.
+  const categories = {} as Record<LeaderboardMonthlyCategoryKey, LeaderboardRow[]>;
+  for (const key of LEADERBOARD_MONTHLY_CATEGORIES) {
+    categories[key] = buildLeaderboardCategory(perCategory[key], identities, optedOut);
+  }
+
+  await db
+    .collection(LEADERBOARD_COLLECTION)
+    .doc(scope)
+    .set({
+      scope,
+      categories,
+      generatedAt: FieldValue.serverTimestamp(),
+    });
+
+  logger.info('Monthly social leaderboard generated', {
+    scope,
+    counts: Object.fromEntries(
+      LEADERBOARD_MONTHLY_CATEGORIES.map((key) => [key, categories[key].length]),
+    ),
+    optedOut: optedOut.size,
+  });
+  return categories;
+}
+
 /**
  * Scheduled hourly at Europe/Stockholm. Hourly is cheap — one small query, one
  * bounded paged scan and a single document write — and keeps the board fresh
  * without a trigger on every counter change.
  *
  * A strict SINGLETON (`maxInstances: 1`): the whole function does one thing —
- * OVERWRITE `leaderboards/alltime` with the freshest snapshot — so two runs must
- * never overlap. If a slow run were allowed to finish AFTER a newer one, it
- * would clobber the newer board with a staler snapshot; serializing runs makes
- * that regression impossible. `concurrency: 1` is already required by the sub-1
+ * OVERWRITE the board documents (`leaderboards/alltime` and the current month's
+ * `leaderboards/{YYYY-MM}`) with the freshest snapshot — so two runs must never
+ * overlap. If a slow run were allowed to finish AFTER a newer one, it would
+ * clobber the newer board with a staler snapshot; serializing runs makes that
+ * regression impossible. `concurrency: 1` is already required by the sub-1
  * CPU tier (see instanceLimits.ts); this pins the instance ceiling to match,
  * the same way the Kronjakt spawn/sweep pair sets `maxInstances: 1` locally.
  */
@@ -296,5 +462,12 @@ export const generateLeaderboards = onSchedule(
   },
   withServerErrorReporting('leaderboard.generateLeaderboards', async () => {
     await runLeaderboardGeneration();
+    // The CURRENT month's board, regenerated every run from the freshest
+    // buckets. Computing the season id fresh each run is what makes the monthly
+    // doc roll over on its own: the first run in a new Europe/Stockholm month
+    // resolves the new `YYYY-MM` and writes THAT document, leaving the previous
+    // month's board frozen at its last pre-rollover snapshot (never touched
+    // again, since we only ever generate the current month — no backfill).
+    await runMonthlyLeaderboardGeneration(seasonIdForInstant(new Date()));
   }),
 );

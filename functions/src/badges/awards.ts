@@ -28,6 +28,13 @@ import {
   qualifiesAsEarlyMember,
   type BadgeKey,
 } from './badge-core';
+import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
+import {
+  MEMBER_MONTHLY_STAT_FIELDS,
+  MEMBER_MONTHLY_STATS_COLLECTION,
+  memberMonthlyStatsDocId,
+} from '../leaderboard/leaderboard-core';
+import { memberMonthlyStatPayload } from '../leaderboard/monthly-stats';
 
 export interface AwardResult {
   badgeKey: BadgeKey;
@@ -103,13 +110,27 @@ export async function awardBadge(params: {
  *    are awarded ONLY here — onBadgeProgressWritten evaluates the tier ladders,
  *    not these — so if a first delivery committed the counter but then failed
  *    before awarding, the retry (marker already present) still awards them.
+ *
+ * MONTHLY LEADERBOARD. The `events` category of the monthly board
+ * (`memberMonthlyStats/{YYYY-MM}__{uid}.eventsAttended`) is incremented in the
+ * SAME transaction, guarded by the SAME `attendanceCredits/{eventId}` marker, so
+ * it is exactly-once too — a member's monthly attendance count can never drift
+ * from the exactly-once lifetime counter. The month is derived from `now` (the
+ * verified-write time passed by the trigger); a caller that omits it falls back
+ * to the current instant. The bucket write joins the counter write and the
+ * marker claim atomically, so all three commit together or not at all.
  */
 export async function creditVerifiedEventAttendance(
   targetUid: string,
   eventId: string,
+  now: Date = new Date(),
 ): Promise<void> {
   const progressRef = db.collection('badgeProgress').doc(targetUid);
   const creditRef = progressRef.collection('attendanceCredits').doc(eventId);
+  const monthlyScope = seasonIdForInstant(now);
+  const monthlyRef = db
+    .collection(MEMBER_MONTHLY_STATS_COLLECTION)
+    .doc(memberMonthlyStatsDocId(monthlyScope, targetUid));
   const attendanceCount = await db.runTransaction(async (tx) => {
     const [progressSnap, creditSnap] = await Promise.all([tx.get(progressRef), tx.get(creditRef)]);
     const stored = progressSnap.data()?.completedEventsAttended;
@@ -128,6 +149,14 @@ export async function creditVerifiedEventAttendance(
     tx.set(
       progressRef,
       { completedEventsAttended: next, updatedAt: FieldValue.serverTimestamp() },
+      { merge: true },
+    );
+    // MONTHLY bucket, credited atomically with the lifetime counter and behind
+    // the same one-shot marker, so it is exactly-once (never double-counts a
+    // single attendance, even under an at-least-once trigger redelivery).
+    tx.set(
+      monthlyRef,
+      memberMonthlyStatPayload(monthlyScope, targetUid, MEMBER_MONTHLY_STAT_FIELDS.events, 1),
       { merge: true },
     );
     // `create`, not `set`: the marker is a one-shot idempotency guard, so an
