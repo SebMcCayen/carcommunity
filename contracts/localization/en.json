@@ -167,6 +167,20 @@
     "completeProfile": "Complete profile",
     "addCar": "Add your car"
   },
+  "coachMark": {
+    "progress": "%1$d/%2$d",
+    "skip": "Skip",
+    "next": "Next",
+    "done": "Done",
+    "driveTitle": "Start a drive",
+    "driveBody": "Tap plus to drive — your position is shared live and the route is recorded.",
+    "socialTitle": "The community",
+    "socialBody": "Find friends, convoys and other enthusiasts here.",
+    "exploreTitle": "Menu",
+    "exploreBody": "Open the menu for Crown Hunt, events, your profile and settings.",
+    "historyTitle": "Your drives",
+    "historyBody": "Your recorded drives are saved and shown here."
+  },
   "url": {
     "terms": "https://kungsbacka-car-community.web.app/terms",
     "privacy": "https://kungsbacka-car-community.web.app/privacy",

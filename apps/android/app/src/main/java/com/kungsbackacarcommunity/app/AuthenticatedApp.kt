@@ -136,6 +136,12 @@ import com.kungsbackacarcommunity.app.billboards.BillboardsRoute
 import com.kungsbackacarcommunity.app.billboards.BillboardsState
 import com.kungsbackacarcommunity.app.chat.ChatCoordinator
 import com.kungsbackacarcommunity.app.chat.EventChatRepository
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkAnchorRegistry
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkStep
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
+import com.kungsbackacarcommunity.app.coachmark.CoachMarkTourHost
+import com.kungsbackacarcommunity.app.coachmark.LocalCoachMarkAnchors
+import com.kungsbackacarcommunity.app.coachmark.coachMarkAnchor
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.config.FeatureGate
 import com.kungsbackacarcommunity.app.config.MemberGating
@@ -799,6 +805,21 @@ fun AuthenticatedApp(
             // Selected bottom-nav tab (Map is the default home) and the
             // currently-open full-screen sub-route (null = show the tab).
             var selectedTab by rememberSaveable { mutableStateOf(ShellTab.DEFAULT) }
+
+            // First-login coach-mark tour (issue #845): a short, skippable set of
+            // chat-bubble tips pointing at the map-home's primary controls — the
+            // drive-recording "+" first, so newcomers learn that starting it RECORDS
+            // their drive. Runs ONCE per user on this device, AFTER the welcome flow
+            // above, and is gated exactly like it: device-local per-uid
+            // SharedPreferences ([CoachMarkStore]), so it never re-appears on a later
+            // launch or on re-login and is deliberately NOT account state. The
+            // registry collects the live on-screen bounds of the controls tagged with
+            // [Modifier.coachMarkAnchor] so the overlay can spotlight and point at them.
+            val coachMarkContext = LocalContext.current
+            val coachMarkStore = remember(coachMarkContext) { CoachMarkStore(coachMarkContext) }
+            var coachMarksSeen by
+                rememberSaveable(uid) { mutableStateOf(coachMarkStore.hasSeenCoachMarks(uid)) }
+            val coachMarkAnchors = remember { CoachMarkAnchorRegistry() }
             // A drive to open in History straight away — set by the "History" action
             // on the auto-keep "Drive saved" dialog (#856), which also switches to the
             // History tab; DrivesRoute pre-selects it and clears it back to null.
@@ -5205,6 +5226,12 @@ fun AuthenticatedApp(
                     // the chrome and the bottom bar - which draw their own
                     // interactive nodes - keep receiving their touches exactly as
                     // before.
+                    //
+                    // Wrapped in a CompositionLocalProvider that hands the whole
+                    // frame (map chrome AND bottom bar) the coach-mark anchor
+                    // registry, so the controls tagged with Modifier.coachMarkAnchor
+                    // report their bounds to the tour overlay drawn at the end.
+                    CompositionLocalProvider(LocalCoachMarkAnchors provides coachMarkAnchors) {
                     Box(
                         modifier =
                             Modifier.fillMaxSize().then(
@@ -6112,6 +6139,27 @@ fun AuthenticatedApp(
                                 onManageLiveShare = { liveManageOpen = true },
                             )
                         }
+
+                        // First-login coach-mark tour overlay — drawn LAST in the
+                        // shell frame so its scrim + bubbles sit above the map chrome
+                        // AND the bottom bar. route == null already holds in this
+                        // branch; also require the Map tab (the anchored controls are
+                        // laid out there) and that no session is running yet, so the
+                        // "+" tip points at Start-a-drive rather than the Stop disc.
+                        // key(uid) so a different user signing in re-starts the tour
+                        // at tip 1 instead of inheriting the previous user's index.
+                        if (!coachMarksSeen && selectedTab == ShellTab.Map && !isSharingUi) {
+                            key(uid) {
+                                CoachMarkTourHost(
+                                    anchors = coachMarkAnchors,
+                                    onFinish = {
+                                        coachMarkStore.markSeen(uid)
+                                        coachMarksSeen = true
+                                    },
+                                )
+                            }
+                        }
+                    }
                     }
                 }
 
@@ -6849,6 +6897,7 @@ internal fun ShellBottomBar(
             onClick = { onSelect(ShellTab.History) },
             icon = { Icon(Icons.Filled.History, contentDescription = stringResource(R.string.shell_tabHistory)) },
             label = null,
+            modifier = Modifier.coachMarkAnchor(CoachMarkStep.History),
         )
         // The centre action is a "+" that starts a session, and — while one RUNS —
         // the live-session disc that raises the stop sheet: one control for the
@@ -6859,6 +6908,7 @@ internal fun ShellBottomBar(
         NavigationBarItem(
             selected = !isSharing && selected == ShellTab.Create,
             onClick = { if (isSharing) onManageLiveShare() else onSelect(ShellTab.Create) },
+            modifier = Modifier.coachMarkAnchor(CoachMarkStep.Drive),
             // Standout action: a glyph on a filled disc so it reads as a distinct
             // button rather than another tab, in both light and dark. The disc
             // turns error-red while sharing so the stop affordance is
@@ -6916,6 +6966,7 @@ internal fun ShellBottomBar(
             onClick = { onSelect(ShellTab.Social) },
             icon = { Icon(Icons.Filled.Groups, contentDescription = stringResource(R.string.shell_tabSocial)) },
             label = null,
+            modifier = Modifier.coachMarkAnchor(CoachMarkStep.Social),
         )
         NavigationBarItem(
             selected = selected == ShellTab.Garage,
