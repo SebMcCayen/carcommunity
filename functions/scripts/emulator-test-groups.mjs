@@ -94,6 +94,7 @@ export const GROUPS = [
       'errors',
       'serverErrors',
       'feedback',
+      'report-tickets',
       'metrics',
       'finance',
     ],

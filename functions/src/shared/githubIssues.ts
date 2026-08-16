@@ -50,8 +50,21 @@ export interface GitHubIssueResult {
   url: string;
 }
 
+/** REST base for the public repo (issues live under `/issues`). */
+export const GITHUB_REPO_URL = 'https://api.github.com/repos/SebMcCayen/carcommunity';
+
 /** REST endpoint for issues on the public repo. */
-export const GITHUB_ISSUES_URL = 'https://api.github.com/repos/SebMcCayen/carcommunity/issues';
+export const GITHUB_ISSUES_URL = `${GITHUB_REPO_URL}/issues`;
+
+/** Common request headers for the GitHub REST v3 JSON API (no token here). */
+function githubHeaders(token: string, userAgent: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': userAgent,
+  };
+}
 
 /**
  * Files a public issue. Returns the created issue's number/url, or `null` on
@@ -119,5 +132,122 @@ export async function createGitHubIssue(
       error: String(error),
     });
     return null;
+  }
+}
+
+/**
+ * A single OPEN issue as returned by `GET /issues`, reduced to the fields the
+ * `openTickets` mirror needs. `pull_request` is present only on rows that are
+ * actually pull requests (the issues endpoint returns both) — callers filter it
+ * out. `body` may be null on a bodyless issue.
+ */
+export interface GitHubOpenIssue {
+  number: number;
+  title: string;
+  body: string | null;
+  html_url: string;
+  created_at: string;
+  state: string;
+  comments: number;
+  pull_request?: unknown;
+}
+
+/**
+ * Lists OPEN issues carrying the given label on the public repo, newest-updated
+ * first, up to `perPage` (single page — the mirror only needs the current open
+ * set, and the tracker never holds hundreds of open bugs). Returns `[]` on ANY
+ * failure or in the emulator; NEVER throws — the scheduled sync is best-effort
+ * and must not crash-loop on a GitHub blip.
+ *
+ * The label + state are sent as query params; PRs (which the issues endpoint
+ * also returns) are NOT filtered here — the caller drops any row with a
+ * `pull_request` field so the filtering rule lives with the mapping.
+ */
+export async function listOpenIssues(
+  label: string,
+  token: string,
+  userAgent: string,
+  perPage = 100,
+): Promise<GitHubOpenIssue[]> {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return [];
+  }
+  if (!token) {
+    logger.error('listOpenIssues: GITHUB_ISSUE_TOKEN is empty');
+    return [];
+  }
+
+  const url =
+    `${GITHUB_ISSUES_URL}?state=open&labels=${encodeURIComponent(label)}` +
+    `&per_page=${perPage}&sort=updated&direction=desc`;
+  try {
+    const response = await fetch(url, { method: 'GET', headers: githubHeaders(token, userAgent) });
+    if (!response.ok) {
+      logger.error('listOpenIssues: GitHub list failed', { status: response.status });
+      return [];
+    }
+    const body = (await response.json()) as unknown;
+    if (!Array.isArray(body)) {
+      logger.error('listOpenIssues: unexpected GitHub response shape');
+      return [];
+    }
+    // Keep only rows with the shape we rely on; anything malformed is dropped
+    // rather than allowed to poison the mirror.
+    return body.filter(
+      (row): row is GitHubOpenIssue =>
+        !!row &&
+        typeof row === 'object' &&
+        typeof (row as GitHubOpenIssue).number === 'number' &&
+        typeof (row as GitHubOpenIssue).title === 'string' &&
+        typeof (row as GitHubOpenIssue).html_url === 'string' &&
+        typeof (row as GitHubOpenIssue).created_at === 'string',
+    );
+  } catch (error) {
+    logger.error('listOpenIssues: GitHub request threw', { error: String(error) });
+    return [];
+  }
+}
+
+/**
+ * Posts a comment to an existing issue. Returns `true` on success, `false` on
+ * ANY failure or in the emulator; NEVER throws. `body` MUST already be
+ * sanitized by the caller (neutralizeMentions + length bound) — this helper
+ * does no sanitization, it only transports.
+ */
+export async function createIssueComment(
+  issueNumber: number,
+  body: string,
+  token: string,
+  userAgent: string,
+  logContext: Record<string, string | number> = {},
+): Promise<boolean> {
+  if (process.env.FUNCTIONS_EMULATOR === 'true') {
+    return false;
+  }
+  if (!token) {
+    logger.error('createIssueComment: GITHUB_ISSUE_TOKEN is empty', logContext);
+    return false;
+  }
+
+  try {
+    const response = await fetch(`${GITHUB_ISSUES_URL}/${issueNumber}/comments`, {
+      method: 'POST',
+      headers: { ...githubHeaders(token, userAgent), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ body }),
+    });
+    if (!response.ok) {
+      logger.error('createIssueComment: GitHub comment failed', {
+        ...logContext,
+        status: response.status,
+      });
+      return false;
+    }
+    return true;
+  } catch (error) {
+    logger.error('createIssueComment: GitHub request threw', {
+      ...logContext,
+      error: String(error),
+    });
+    return false;
   }
 }

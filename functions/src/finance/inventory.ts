@@ -416,6 +416,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'notifications.unregisterPushToken': 'variable-member',
   'diagnostics.submitReport': 'variable-member',
   'feedback.reportIssue': 'variable-member',
+  'feedback.interactWithIssue': 'variable-member',
   'errors.reportClientError': 'variable-member',
   'account.deleteAccount': 'variable-member',
   'subscription.grantEntitlement': 'admin-rare',

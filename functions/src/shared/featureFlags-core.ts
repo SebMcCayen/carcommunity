@@ -33,6 +33,14 @@ import { z } from 'zod';
  * SHOP switch — the FIRST member-facing Kronpoäng SINK (buying perks with KP).
  * It stays off until the shop is deliberately turned on; while off, buyPerk
  * rejects and members spend nothing.
+ *
+ * `reportTicketsBrowser` is default OFF: it switches on the in-app "open
+ * tickets" browser on the Report-a-problem page — reading the `openTickets`
+ * Firestore mirror of public GitHub issues and letting a member +1 or comment
+ * on one (feedback.interactWithIssue). While off, the callable rejects
+ * (failed-precondition) so no comment is ever posted to the public repo, and
+ * the client draws no ticket list. Stays dark until the browser UI ships and is
+ * deliberately turned on.
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
@@ -47,6 +55,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   digitalBillboards: true,
   partnerInsightsPassBy: false,
   crownHuntPerks: false,
+  reportTicketsBrowser: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;
