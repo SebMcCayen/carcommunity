@@ -204,12 +204,27 @@ describe('StatsTab', () => {
       ['Spikmatta', 'Sköld', 'Dubbla Poäng'].includes(s.querySelector('title')?.textContent ?? ''),
     );
     expect(perkLogos.length).toBe(3);
-    // Trap triggers surface only on the trap perk (spike_strip), for BOTH
-    // scopes: season = 8, all-time = 33.
-    expect(text).toContain(t('crownHunt.statPerkTrapTriggersSeason'));
-    expect(text).toContain(t('crownHunt.statPerkTrapTriggersAllTime'));
-    expect(text).toContain('8'); // season trap triggers
-    expect(text).toContain('33'); // all-time trap triggers
+
+    // Trap triggers surface only on the trap perk (Spikmatta) — assert the
+    // values inside THAT card's labelled rows, not as bare substrings of the
+    // whole page (which also contains e.g. leaderboard "80").
+    const trapLogo = perkLogos.find((s) => s.querySelector('title')?.textContent === 'Spikmatta');
+    // card = svg → perkHead → card
+    const trapCard = trapLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    expect(trapCard).toBeDefined();
+    const rowFor = (label: string): string => {
+      const row = [...(trapCard?.querySelectorAll('div') ?? [])].find(
+        (d) => d.querySelector('span')?.textContent === label,
+      );
+      return row?.textContent ?? '';
+    };
+    expect(rowFor(t('crownHunt.statPerkTrapTriggersSeason'))).toContain('8'); // season
+    expect(rowFor(t('crownHunt.statPerkTrapTriggersAllTime'))).toContain('33'); // all-time
+
+    // The non-trap perks (Sköld) show NO trap-trigger rows.
+    const shieldLogo = perkLogos.find((s) => s.querySelector('title')?.textContent === 'Sköld');
+    const shieldCard = shieldLogo?.parentElement?.parentElement as HTMLElement | undefined;
+    expect(shieldCard?.textContent ?? '').not.toContain(t('crownHunt.statPerkTrapTriggersSeason'));
   });
 
   it('mounts the live game map and subscribes to live crowns + traps', async () => {
