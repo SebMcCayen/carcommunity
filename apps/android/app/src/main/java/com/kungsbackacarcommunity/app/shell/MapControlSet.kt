@@ -26,6 +26,13 @@ enum class MapCircleControlKind {
 
     /** Chat hub, with the unread badge. */
     Chat,
+
+    /**
+     * Kronjakt perk DEPLOY menu — opens the "use a perk" popup (drop a trap /
+     * raise a shield / arm the boost). Present ONLY while the `crownHuntPerks`
+     * flag is on, exactly like [Report] is gated on incident reporting.
+     */
+    Perks,
 }
 
 /**
@@ -50,17 +57,24 @@ object MapControlSet {
     /**
      * The stack, top to bottom.
      *
-     * [incidentReportingEnabled] is the ONLY thing that varies it, and it varies
-     * it the same way on both screens: when reporting is unavailable the control
-     * is absent and the rest close up by one slot — no gap, no placeholder. Their
-     * order relative to each other never changes.
+     * Two flags vary it, and each varies it the same way on both screens:
+     * [incidentReportingEnabled] adds the leading [MapCircleControlKind.Report],
+     * and [crownHuntPerksEnabled] adds the trailing [MapCircleControlKind.Perks]
+     * (the Kronjakt "use a perk" control, default OFF via the `crownHuntPerks`
+     * flag). When a flag is off its control is absent and the rest close up by
+     * one slot — no gap, no placeholder. The order of the always-present controls
+     * relative to each other never changes.
      */
-    fun rightSideStack(incidentReportingEnabled: Boolean): List<MapCircleControlKind> =
+    fun rightSideStack(
+        incidentReportingEnabled: Boolean,
+        crownHuntPerksEnabled: Boolean = false,
+    ): List<MapCircleControlKind> =
         buildList {
             if (incidentReportingEnabled) add(MapCircleControlKind.Report)
             add(MapCircleControlKind.Layers)
             add(MapCircleControlKind.Compass)
             add(MapCircleControlKind.SavedPlaces)
             add(MapCircleControlKind.Chat)
+            if (crownHuntPerksEnabled) add(MapCircleControlKind.Perks)
         }
 }

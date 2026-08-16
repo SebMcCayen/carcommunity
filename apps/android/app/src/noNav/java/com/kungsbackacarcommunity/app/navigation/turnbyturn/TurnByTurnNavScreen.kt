@@ -89,6 +89,10 @@ fun TurnByTurnNavScreen(
     @Suppress("UNUSED_PARAMETER") hasUnreadChat: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onOpenChat: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") onOpenSavedPlaces: () -> Unit = {},
+    // Signature parity with the real src/nav screen (the crownHuntPerks-gated
+    // perk-deploy control + its host callback). Unused: this stub owns no map.
+    @Suppress("UNUSED_PARAMETER") crownHuntPerksEnabled: Boolean = false,
+    @Suppress("UNUSED_PARAMETER") onOpenPerks: () -> Unit = {},
     @Suppress("UNUSED_PARAMETER") liveSessionBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,

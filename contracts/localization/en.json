@@ -1253,7 +1253,24 @@
     "perkKindShield": "Shield",
     "perkKindBoost": "Boost",
     "tabHome": "Crown Hunt",
-    "tabShop": "Shop"
+    "tabShop": "Shop",
+    "deployTitle": "Use a perk",
+    "deployLoading": "Loading your inventory …",
+    "deployError": "Couldn't load your perks.",
+    "deployEmpty": "You have no perks. Buy some in the shop first.",
+    "deployOwnedLabel": "You own: %1$d",
+    "deployActivateButton": "Activate",
+    "deployActiveTraps": "%1$d active trap",
+    "deployActiveFor": "Active – %1$s left",
+    "deployRemainingHm": "%1$dh %2$dm",
+    "deployRemainingM": "%1$dm",
+    "deploySuccessTrap": "%1$s dropped where you are.",
+    "deploySuccessShield": "%1$s activated.",
+    "deploySuccessBoost": "%1$s activated.",
+    "deployAlreadyMessage": "Already activated.",
+    "deployErrorNoLocation": "Your location is needed to place a trap. Try again.",
+    "deployErrorUnavailable": "Couldn't activate the perk right now.",
+    "deployErrorUnknown": "Something went wrong. Try again."
   },
   "partners": {
     "screenTitle": "KCC Business Partners",
@@ -1644,7 +1661,8 @@
     "saveLocationCancel": "Cancel",
     "locationShared": "Location shared with %1$s",
     "locationSharedFriendFallback": "your friend",
-    "locationShareFailed": "Couldn't share the location. Try again."
+    "locationShareFailed": "Couldn't share the location. Try again.",
+    "perksButton": "Use a perk"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",
