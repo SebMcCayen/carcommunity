@@ -114,6 +114,24 @@ function userPrivateRef(uid: string) {
 /** Field holding `{ [convoyId]: Timestamp }` — see convoyChat.markRead. */
 const CONVOY_LAST_READ_FIELD = 'convoyChatLastReadAt';
 
+/**
+ * Field holding `{ [convoyId]: Timestamp }` — the newest message DELIVERED to
+ * this member in each convoy, stamped by the `post` fan-out below (never by the
+ * client). Owner-only readable, alongside CONVOY_LAST_READ_FIELD, so a single
+ * `userPrivate/{uid}` listener lets the client derive an "any convoy unread"
+ * aggregate — the Convoys tab dot and the map-shell chat dot — by comparing this
+ * map against the last-read markers, with NO per-convoy message listener.
+ *
+ * It mirrors the last-read map exactly (a per-convoy Timestamp map) and is bounded
+ * the same way: `markRead` prunes it to CONVOY_LAST_READ_MAX_ENTRIES off the same
+ * document read it already does. It gains a key per convoy a member RECEIVES in,
+ * so a member who receives but never opens any convoy would not prune it; the cap
+ * is far above the convoys anyone is in at once, and opening ANY convoy prunes the
+ * whole map, so it stays bounded in practice — the same self-healing contract the
+ * last-read map documents.
+ */
+const CONVOY_LATEST_FIELD = 'convoyChatLatestAt';
+
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
@@ -204,11 +222,24 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
       ? convoyMessagesRef(convoyId).doc(clientId)
       : convoyMessagesRef(convoyId).doc();
 
+  // ONE logical timestamp for this send, captured once and used for BOTH the
+  // message's createdAt AND the "any convoy unread" aggregate stamp below. This is
+  // what closes the aggregate race: were the aggregate stamped with a fresh
+  // FieldValue.serverTimestamp() in the fan-out, it would resolve to the fan-out
+  // write's COMMIT time — strictly AFTER the message. A recipient could then
+  // observe the message, markRead (stamping convoyChatLastReadAt at a time after
+  // the message but before the fan-out commit), and still have latest > lastRead —
+  // a phantom "unread" dot for a message they just read. Stamping the aggregate
+  // with the message's OWN createdAt makes latest == the message time, so any read
+  // that post-dates the message clears the dot, and the aggregate can never
+  // disagree with the per-convoy unread (which compares this same createdAt).
+  const postedAt = Timestamp.now();
+
   // TTL: convoy messages are retained CONVOY_CHAT_RETENTION_DAYS days. The
   // field-scoped Firestore TTL policy on `expireAt` for the `messages` collection
   // group (see communityChat.ts) auto-deletes them after that.
   const expireAt = Timestamp.fromDate(
-    chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
+    chatMessageExpiry(postedAt.toDate(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
   // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
@@ -223,7 +254,10 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     await messageRef.create(
       buildChatMessageDocument(
         { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
-        () => FieldValue.serverTimestamp(),
+        // The fixed logical time captured above, NOT a server sentinel: the
+        // aggregate stamp below reuses this exact value so it equals the message's
+        // createdAt (see the postedAt comment for the race this closes).
+        () => postedAt,
       ),
     );
   } catch (error) {
@@ -265,17 +299,38 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   const notificationId = convoyChatNotificationId(convoyId, new Date());
   await Promise.all(
     recipients.map((uid) =>
-      writeInAppNotification(
-        uid,
-        {
-          category: 'convoy_chat',
-          title: convoyTitle ? `Nytt i konvojen: ${convoyTitle}` : 'Nytt i konvojchatten',
-          previewText: `${senderName}: ${messagePreview(text)}`,
-          actionType: 'open_notifications',
-          relatedEntityId: convoyId,
-        },
-        notificationId,
-      ).catch(() => undefined),
+      Promise.all([
+        writeInAppNotification(
+          uid,
+          {
+            category: 'convoy_chat',
+            title: convoyTitle ? `Nytt i konvojen: ${convoyTitle}` : 'Nytt i konvojchatten',
+            previewText: `${senderName}: ${messagePreview(text)}`,
+            actionType: 'open_notifications',
+            relatedEntityId: convoyId,
+          },
+          notificationId,
+        ).catch(() => undefined),
+        // Light up the recipient's "any convoy unread" aggregate: stamp THIS
+        // message's logical time (postedAt, the SAME value written as the message's
+        // createdAt) for this convoy on their private doc (CONVOY_LATEST_FIELD),
+        // for the exact set of recipients — accepted members minus the sender minus
+        // blocked pairs — that get the notification. Reusing postedAt (rather than a
+        // fresh serverTimestamp that would resolve to this write's later commit
+        // time) is what keeps the stamp from drifting past a subsequent markRead.
+        // The owner-only readable map drives the client's aggregate dot from ONE
+        // userPrivate listener, so no per-convoy message listener is opened for it.
+        // A nested value under merge writes only this convoy's key, so a concurrent
+        // stamp for a different convoy cannot clobber it. Best-effort like the
+        // notification: a failed stamp only means this one message does not
+        // pre-light the dot — the per-convoy unread window still shows it on open.
+        userPrivateRef(uid)
+          .set(
+            { [CONVOY_LATEST_FIELD]: { [convoyId]: postedAt } },
+            { merge: true },
+          )
+          .catch(() => undefined),
+      ]),
     ),
   );
 
@@ -387,6 +442,18 @@ export const markRead = onCall(
       Date.now(),
     );
 
+    // Bound the parallel latest-message map the post fan-out grows, with the same
+    // cap and eviction rule as the read marker. It gains a key per convoy the
+    // member ever RECEIVES in (not just the ones they read), so without pruning it
+    // could outgrow the read map; markRead is the one place already reading this
+    // document, so the prune adds no read. The convoy just read is protected from
+    // eviction — it is the one most likely to still matter.
+    const evictedLatest = pruneConvoyLastRead(
+      snap.data()?.[CONVOY_LATEST_FIELD],
+      convoyId,
+      Date.now(),
+    );
+
     // A nested serverTimestamp sentinel under a merge: only the ONE convoy's key
     // is written (Firestore merges the map by field path), so a concurrent
     // markRead for a different convoy cannot clobber this one — which writing the
@@ -405,7 +472,20 @@ export const markRead = onCall(
     for (const key of evicted) {
       update[key] = FieldValue.delete();
     }
-    await ref.set({ [CONVOY_LAST_READ_FIELD]: update }, { merge: true });
+    const payload: Record<string, unknown> = { [CONVOY_LAST_READ_FIELD]: update };
+
+    // Fold the latest-map evictions into the SAME merge write — nested deletes, so
+    // they remove only the over-cap keys and never touch the entries the post
+    // fan-out is still stamping. Only present when there is something to evict, so
+    // markRead stays a single write on the steady-state path.
+    if (evictedLatest.length > 0) {
+      const latestUpdate: Record<string, unknown> = {};
+      for (const key of evictedLatest) {
+        latestUpdate[key] = FieldValue.delete();
+      }
+      payload[CONVOY_LATEST_FIELD] = latestUpdate;
+    }
+    await ref.set(payload, { merge: true });
 
     return { convoyId };
   },

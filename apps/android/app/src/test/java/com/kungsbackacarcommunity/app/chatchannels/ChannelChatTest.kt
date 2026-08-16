@@ -141,6 +141,41 @@ class ChannelChatTest {
     }
 
     @Test
+    fun `anyConvoyUnread is false when there is nothing delivered`() {
+        // No delivered-message stamps at all → no convoy can be unread, whatever
+        // the read markers say.
+        assertFalse(ChannelThread.anyConvoyUnread(emptyMap(), emptyMap()))
+        assertFalse(ChannelThread.anyConvoyUnread(emptyMap(), mapOf("c1" to 5000L)))
+    }
+
+    @Test
+    fun `anyConvoyUnread is true for a convoy with a delivery and no read marker`() {
+        // A convoy the caller has received in but never opened (absent marker) is
+        // unread — mirrors hasUnread's null-marker rule, one level up.
+        assertTrue(ChannelThread.anyConvoyUnread(mapOf("c1" to 1000L), emptyMap()))
+    }
+
+    @Test
+    fun `anyConvoyUnread compares per convoy against its own marker`() {
+        val latest = mapOf("c1" to 2000L, "c2" to 5000L)
+        // c1 read up to 2000 (caught up), c2 read up to 5000 (caught up) → none unread.
+        assertFalse(ChannelThread.anyConvoyUnread(latest, mapOf("c1" to 2000L, "c2" to 5000L)))
+        // c2 has a newer delivery than its marker → unread, even though c1 is caught up.
+        assertTrue(ChannelThread.anyConvoyUnread(latest, mapOf("c1" to 2000L, "c2" to 4000L)))
+        // A marker for a convoy with no delivery never invents unread.
+        assertFalse(
+            ChannelThread.anyConvoyUnread(mapOf("c1" to 2000L), mapOf("c1" to 2000L, "c3" to 1L)),
+        )
+    }
+
+    @Test
+    fun `anyConvoyUnread needs only ONE unread convoy among many read ones`() {
+        val latest = mapOf("c1" to 1000L, "c2" to 1000L, "c3" to 9000L)
+        val read = mapOf("c1" to 1000L, "c2" to 1000L, "c3" to 1000L)
+        assertTrue(ChannelThread.anyConvoyUnread(latest, read))
+    }
+
+    @Test
     fun `parsePostSuccess needs a non-blank messageId`() {
         assertEquals(
             ChannelSendResult.Sent("m1"),
