@@ -67,6 +67,7 @@ import {
   type LeaderboardCandidate,
   type LeaderboardCategoryKey,
   type LeaderboardIdentity,
+  type LeaderboardMonthlyCategoryKey,
   type LeaderboardRow,
 } from './leaderboard-core';
 
@@ -294,16 +295,17 @@ const MONTHLY_STAT_CATEGORIES = ['distance', 'events', 'convoys'] as const satis
 
 /**
  * The distance/events/convoys candidates for one month, from a paged scan of
- * `memberMonthlyStats` restricted to that month.
+ * `memberMonthlyStats` restricted to that month by an equality filter on the
+ * `scope` field, ordered by `FieldPath.documentId()` for stable paging.
  *
- * The scan walks document ids in the range `[{scope}__, {scope}__)`,
- * ordered by `FieldPath.documentId()`, so it reads ONLY that month's buckets and
- * needs NO composite index — the built-in `__name__` index serves it, the same
- * doc-id-range technique the rules note keeps every leaderboard read index-free.
- * Walked to exhaustion in one run (a global top-N needs a full pass over the
- * month); the per-category lists are trimmed to LEADERBOARD_CANDIDATE_RETENTION
- * after every page, so peak memory is the page size plus a handful of retained
- * candidates per category, not the member count.
+ * Needs NO composite index: an equality filter on a single field plus an
+ * `orderBy(__name__)` is served by that field's AUTOMATIC single-field index
+ * (whose final component is `__name__` ascending), the one filter+order shape
+ * Firestore covers without a hand-declared composite. Walked to exhaustion in
+ * one run (a global top-N needs a full pass over the month); the per-category
+ * lists are trimmed to LEADERBOARD_CANDIDATE_RETENTION after every page, so peak
+ * memory is the page size plus a handful of retained candidates per category,
+ * not the member count.
  */
 async function scanMonthlyStatCandidates(
   scope: string,
@@ -313,16 +315,17 @@ async function scanMonthlyStatCandidates(
     events: [],
     convoys: [],
   };
-  const rangeStart = `${scope}__`;
-  const rangeEnd = `${scope}__`;
+  const idPrefix = `${scope}__`;
   let cursor: string | null = null;
   for (;;) {
     let query = db
       .collection(MEMBER_MONTHLY_STATS_COLLECTION)
+      .where('scope', '==', scope)
       .orderBy(FieldPath.documentId())
-      .endAt(rangeEnd)
       .limit(LEADERBOARD_SCAN_PAGE_SIZE);
-    query = cursor ? query.startAfter(cursor) : query.startAt(rangeStart);
+    if (cursor) {
+      query = query.startAfter(cursor);
+    }
     const page = await query.get();
     if (page.empty) {
       break;
@@ -334,7 +337,9 @@ async function scanMonthlyStatCandidates(
       const uid =
         typeof data.uid === 'string' && data.uid.length > 0
           ? data.uid
-          : doc.id.slice(rangeStart.length);
+          : doc.id.startsWith(idPrefix)
+            ? doc.id.slice(idPrefix.length)
+            : '';
       if (!uid) {
         continue;
       }
@@ -374,7 +379,7 @@ async function scanMonthlyStatCandidates(
  */
 export async function runMonthlyLeaderboardGeneration(
   scope: string,
-): Promise<Record<LeaderboardCategoryKey, LeaderboardRow[]>> {
+): Promise<Record<LeaderboardMonthlyCategoryKey, LeaderboardRow[]>> {
   if (!isSeasonId(scope)) {
     // A monthly board is only ever a `YYYY-MM` id — never `alltime`, never a
     // malformed value. Guard here so a bad caller cannot overwrite the all-time
@@ -403,7 +408,10 @@ export async function runMonthlyLeaderboardGeneration(
     resolveOptOuts(uids),
   ]);
 
-  const categories = {} as Record<LeaderboardCategoryKey, LeaderboardRow[]>;
+  // Only the monthly category keys are ever populated or written (streak is
+  // OMITTED), so the result is typed to exactly that key set — the persisted
+  // document shape, not the full all-time set.
+  const categories = {} as Record<LeaderboardMonthlyCategoryKey, LeaderboardRow[]>;
   for (const key of LEADERBOARD_MONTHLY_CATEGORIES) {
     categories[key] = buildLeaderboardCategory(perCategory[key], identities, optedOut);
   }

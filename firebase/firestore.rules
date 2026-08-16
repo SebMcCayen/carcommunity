@@ -1663,7 +1663,7 @@ service cloud.firestore {
     // DENIED TO EVERY CLIENT — read included — for the same two reasons as
     // badgeProgress: (1) ANTI-ABUSE, these are the raw counters the monthly board
     // ranks on, so a client that could write one could forge a rank; (2) PRIVACY,
-    // they are a per-month running log of how far a member drove, which meets they
+    // they are a per-month running log of how far a member drove, how many meets they
     // attended and how many convoys they led. Only the derived, opt-out-filtered
     // `leaderboards/{YYYY-MM}` document is public — publish the ranking, not the
     // telemetry.
