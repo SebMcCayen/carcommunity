@@ -222,11 +222,24 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
       ? convoyMessagesRef(convoyId).doc(clientId)
       : convoyMessagesRef(convoyId).doc();
 
+  // ONE logical timestamp for this send, captured once and used for BOTH the
+  // message's createdAt AND the "any convoy unread" aggregate stamp below. This is
+  // what closes the aggregate race: were the aggregate stamped with a fresh
+  // FieldValue.serverTimestamp() in the fan-out, it would resolve to the fan-out
+  // write's COMMIT time — strictly AFTER the message. A recipient could then
+  // observe the message, markRead (stamping convoyChatLastReadAt at a time after
+  // the message but before the fan-out commit), and still have latest > lastRead —
+  // a phantom "unread" dot for a message they just read. Stamping the aggregate
+  // with the message's OWN createdAt makes latest == the message time, so any read
+  // that post-dates the message clears the dot, and the aggregate can never
+  // disagree with the per-convoy unread (which compares this same createdAt).
+  const postedAt = Timestamp.now();
+
   // TTL: convoy messages are retained CONVOY_CHAT_RETENTION_DAYS days. The
   // field-scoped Firestore TTL policy on `expireAt` for the `messages` collection
   // group (see communityChat.ts) auto-deletes them after that.
   const expireAt = Timestamp.fromDate(
-    chatMessageExpiry(new Date(), CONVOY_CHAT_RETENTION_DAYS),
+    chatMessageExpiry(postedAt.toDate(), CONVOY_CHAT_RETENTION_DAYS),
   );
 
   // `create()`, NOT `set()`: the write IS the idempotency guard, and it is the
@@ -241,7 +254,10 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
     await messageRef.create(
       buildChatMessageDocument(
         { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
-        () => FieldValue.serverTimestamp(),
+        // The fixed logical time captured above, NOT a server sentinel: the
+        // aggregate stamp below reuses this exact value so it equals the message's
+        // createdAt (see the postedAt comment for the race this closes).
+        () => postedAt,
       ),
     );
   } catch (error) {
@@ -295,19 +311,22 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
           },
           notificationId,
         ).catch(() => undefined),
-        // Light up the recipient's "any convoy unread" aggregate: stamp the newest
-        // message time for THIS convoy on their private doc (CONVOY_LATEST_FIELD),
-        // the exact set of recipients — accepted members minus the sender minus
-        // blocked pairs — that get the notification. The owner-only readable map
-        // drives the client's aggregate dot from ONE userPrivate listener, so no
-        // per-convoy message listener is opened for it. A nested serverTimestamp
-        // under merge writes only this convoy's key, so a concurrent stamp for a
-        // different convoy cannot clobber it. Best-effort like the notification: a
-        // failed stamp only means this one message does not pre-light the dot — the
-        // per-convoy unread window still shows it on open.
+        // Light up the recipient's "any convoy unread" aggregate: stamp THIS
+        // message's logical time (postedAt, the SAME value written as the message's
+        // createdAt) for this convoy on their private doc (CONVOY_LATEST_FIELD),
+        // for the exact set of recipients — accepted members minus the sender minus
+        // blocked pairs — that get the notification. Reusing postedAt (rather than a
+        // fresh serverTimestamp that would resolve to this write's later commit
+        // time) is what keeps the stamp from drifting past a subsequent markRead.
+        // The owner-only readable map drives the client's aggregate dot from ONE
+        // userPrivate listener, so no per-convoy message listener is opened for it.
+        // A nested value under merge writes only this convoy's key, so a concurrent
+        // stamp for a different convoy cannot clobber it. Best-effort like the
+        // notification: a failed stamp only means this one message does not
+        // pre-light the dot — the per-convoy unread window still shows it on open.
         userPrivateRef(uid)
           .set(
-            { [CONVOY_LATEST_FIELD]: { [convoyId]: FieldValue.serverTimestamp() } },
+            { [CONVOY_LATEST_FIELD]: { [convoyId]: postedAt } },
             { merge: true },
           )
           .catch(() => undefined),

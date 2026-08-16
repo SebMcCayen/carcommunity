@@ -668,19 +668,32 @@ describe('convoyChat-post in-app notification fan-out', () => {
     // stamp for THIS convoy — the owner-only readable signal the client's
     // aggregate dot derives from, keyed by convoy exactly like the last-read
     // marker. This is the same recipient set as the notify fan-out.
-    await call('convoyChat-post', { convoyId, text: 'är alla här?' });
+    const posted = (await call('convoyChat-post', { convoyId, text: 'är alla här?' })).data as {
+      messageId: string;
+    };
 
     const latest = await pollUntil(async () => (await latestFor(accepted.uid))?.[convoyId]);
     expect(latest.toMillis()).toBeGreaterThan(0);
+
+    // RACE GUARD: the stamp must be the message's OWN logical time, NOT the later
+    // commit time of the fan-out write. If it were stamped with a fresh
+    // serverTimestamp in the fan-out it would resolve AFTER the message's
+    // createdAt, and a markRead landing between the two could leave latest >
+    // lastRead — a phantom "unread" dot. Assert latest EQUALS the message's
+    // createdAt, which pins the fix (with the bug this reads strictly greater).
+    const messageCreatedAt = (
+      await adminDb.collection('convoyChats').doc(convoyId).collection('messages').doc(posted.messageId).get()
+    ).data()!.createdAt as Timestamp;
+    expect(latest.toMillis()).toBe(messageCreatedAt.toMillis());
 
     // The poster never lights their OWN aggregate, and a still-invited member —
     // who cannot even read the channel — is never stamped.
     expect((await latestFor(owner.uid))?.[convoyId]).toBe(undefined);
     expect((await latestFor(invited.uid))?.[convoyId]).toBe(undefined);
 
-    // Reading the convoy stamps a last-read marker AT/AFTER the latest message
-    // time, so latest <= lastRead → the client derives "not unread" and clears the
-    // dot. The two markers are what the pure client derivation compares.
+    // Reading the convoy stamps a last-read marker AT/AFTER the message time, so
+    // latest <= lastRead → the client derives "not unread" (no phantom dot). The
+    // two markers are exactly what the pure client derivation compares.
     await signInAs(accepted);
     await call('convoyChat-markRead', { convoyId });
     const lastRead = await pollUntil(async () => {
