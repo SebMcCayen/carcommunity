@@ -634,6 +634,7 @@
     "statNoHeat": "Ingen spawn-platsdata ännu.",
     "statPerkTitle": "Perk-statistik",
     "statPerkNote": "Köp och användning per perk, från butiks- och PvP-aggregaten. Tomt tills Kronjakt-perkar aktiveras.",
+    "statPerkError": "Kunde inte ladda perk-statistik.",
     "statPerkUsedSeason": "Använd denna säsong",
     "statPerkUsedAllTime": "Använd totalt",
     "statPerkPurchased": "Köpt totalt",
