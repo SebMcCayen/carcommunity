@@ -95,7 +95,12 @@ import { spawnCrowns, sweepSpawns } from './crownHunt/spawnScheduled';
 import { spawnDiagnostics } from './crownHunt/spawnDiagnostics';
 import { onSpawnAreaWrittenIngestPois, refreshAreaPois } from './crownHunt/poiIngestion';
 import { reingestSpawnAreaPois } from './crownHunt/reingestAreaPois';
-import { onCrownLedgerEntryForStats, onCrownSpawnStatsWritten } from './crownHunt/statsTriggers';
+import {
+  onCrownLedgerEntryForStats,
+  onCrownSpawnStatsWritten,
+  onPerkDeployForStats,
+  onPerkDrainForStats,
+} from './crownHunt/statsTriggers';
 import { rolloverSeason } from './crownHunt/seasonRollover';
 import { generateLeaderboards } from './leaderboard/generator';
 import { detectClaimLag } from './crownHunt/claimLagDetector';
@@ -584,6 +589,14 @@ export const crownHunt = {
   // crownHunt-onCrownSpawnStatsWritten and crownHunt-rolloverSeason.
   onCrownLedgerEntryForStats,
   onCrownSpawnStatsWritten,
+  // Perk-usage aggregate (admin-stats PR-A). Two triggers maintain the admin-only
+  // crownHuntPerkStats/{scope} counts: onPerkDeployForStats (usedByPerk, per
+  // deploy) and onPerkDrainForStats (trapTriggers, per trap drain). Purchases
+  // (purchasedByPerk) fold in via the perk_shop branch of
+  // onCrownLedgerEntryForStats above — no extra trigger on the ledger path.
+  // Deployed as crownHunt-onPerkDeployForStats, crownHunt-onPerkDrainForStats.
+  onPerkDeployForStats,
+  onPerkDrainForStats,
   rolloverSeason,
   // Kronjakt SHOP (Crown Hunt Shop PR1, backend core). buyPerk is the first
   // member-facing Kronpoäng SINK — a member spends KP to buy a perk, granted

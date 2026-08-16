@@ -38,6 +38,7 @@
  * succeeded — so they swallow and log.
  */
 
+import { createHash } from 'node:crypto';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
@@ -62,6 +63,15 @@ import {
   stockholmDayKey,
   type CrownStatsRarity,
 } from './crown-hunt-stats-core';
+import {
+  CROWN_PERK_STATS_COLLECTION,
+  CROWN_PERK_STAT_FOLDS_COLLECTION,
+  isPerkId,
+  perkStatFoldId,
+  type PerkId,
+  type PerkStatSource,
+} from './perk-stats-core';
+import { PERK_IDS } from './perks-core';
 import { MAX_INSTANCES_TRIGGER, CPU_TRIGGER } from '../shared/instanceLimits';
 
 const TRIGGER_OPTS = {
@@ -106,6 +116,32 @@ export const onCrownLedgerEntryForStats = onDocumentCreated(
   { ...TRIGGER_OPTS, document: 'pointsLedger/{uid}/entries/{entryId}' },
   async (event) => {
     const data = event.data?.data();
+
+    // PERK-SHOP PURCHASE branch (admin-stats PR-A). A perk purchase writes a
+    // `perk_shop` ledger entry on this SAME path — so the perk aggregate is fed
+    // from a branch HERE rather than a second trigger registered on
+    // pointsLedger/{uid}/entries (a second onDocumentCreated on one path would
+    // double-register). The crown_hunt leaderboard fold below is untouched.
+    if (data?.source === 'perk_shop') {
+      const perkId = data.relatedEntityId;
+      if (data.transactionType === 'spend' && data.relatedEntityType === 'perk' && isPerkId(perkId)) {
+        const uid = event.params.uid;
+        const entryId = event.params.entryId;
+        const purchasedAt = readInstant(
+          data.createdAt,
+          event.data?.createTime?.toDate() ?? new Date(),
+        );
+        await foldPerkStat({
+          source: 'purchase',
+          sourceDocId: `${uid}__${entryId}`,
+          instant: purchasedAt,
+          perkField: { base: 'purchasedByPerk', perkId },
+          foldExtra: { uid, entryId, perkId },
+        });
+      }
+      return;
+    }
+
     if (!data || data.source !== 'crown_hunt' || data.transactionType !== 'earn') {
       return;
     }
@@ -365,5 +401,176 @@ export const onCrownSpawnStatsWritten = onDocumentWritten(
     } catch (error) {
       logger.warn('Crown collect stat fold failed', { spawnId, error: String(error) });
     }
+  },
+);
+
+// ---------------------------------------------------------------------------
+// 3. Perks → admin perk-usage aggregate (crownHuntPerkStats)  [admin-stats PR-A]
+//
+// A THIRD, admin-only aggregate, fed by the perk documents the shop/PvP layer
+// already writes. It mirrors the spawn-stats trigger exactly: one small
+// fixed-key document per scope (all-time + season), blind `increment`s (never
+// read, so two events cannot race the counter), and a create-if-absent fold
+// marker per source EVENT guarding BOTH scope increments in one transaction.
+// Best-effort: a stats side effect must never fail the perk action that already
+// succeeded, so every handler swallows and logs.
+//
+// THREE sources:
+//   - perkDeploys/{deployId}  → usedByPerk[perkId]  (every deploy/activation)
+//   - perkDrains/{drainId}    → trapTriggers        (each trap trigger; the source
+//                                has a 30-day TTL, so it is tallied as it happens
+//                                — it cannot be backfilled once reaped)
+//   - the perk_shop ledger branch above → purchasedByPerk[perkId]
+// Perks are not season-stamped, so the season is derived from each event's
+// EVENT-TIME via the shared `seasonIdForInstant`: `createdAt` for deploys and
+// purchases, and `drainedAt` (falling back to `createdAt`) for drains, since a
+// drain carries the true drain instant separately from its commit time.
+// ---------------------------------------------------------------------------
+
+function perkStatsRef(scope: string): FirebaseFirestore.DocumentReference {
+  return db.collection(CROWN_PERK_STATS_COLLECTION).doc(scope);
+}
+
+/**
+ * All perk buckets as `increment(0)` — makes a `*ByPerk` map a PRESENT, full
+ * fixed-key map without changing any count, so `crownHuntPerkStats/{scope}` is
+ * always contract-complete whichever source writes it first. `increment(0)` is a
+ * no-op on any bucket that already has a real count.
+ */
+function perkCountsInit(): Record<string, FirebaseFirestore.FieldValue> {
+  const out: Record<string, FirebaseFirestore.FieldValue> = {};
+  for (const id of PERK_IDS) {
+    out[id] = FieldValue.increment(0);
+  }
+  return out;
+}
+
+/**
+ * Folds ONE perk event into `crownHuntPerkStats` on both the all-time and season
+ * scopes, exactly once, under a single fold marker. `perkField` bumps a per-perk
+ * map bucket (+1); `scalarField` bumps a scalar (+1). Every write initialises
+ * the full document shape so a scope's doc is always complete.
+ */
+async function foldPerkStat(args: {
+  source: PerkStatSource;
+  sourceDocId: string;
+  instant: Date;
+  perkField?: { base: 'usedByPerk' | 'purchasedByPerk'; perkId: PerkId };
+  scalarField?: 'trapTriggers';
+  foldExtra: Record<string, unknown>;
+}): Promise<void> {
+  const { source, sourceDocId, instant, perkField, scalarField, foldExtra } = args;
+  const seasonId = seasonIdForInstant(instant);
+  const foldRef = db
+    .collection(CROWN_PERK_STAT_FOLDS_COLLECTION)
+    .doc(perkStatFoldId(source, sourceDocId));
+
+  try {
+    await db.runTransaction(async (tx) => {
+      if ((await tx.get(foldRef)).exists) {
+        return;
+      }
+      tx.create(foldRef, {
+        source,
+        sourceDocId,
+        seasonId,
+        createdAt: FieldValue.serverTimestamp(),
+        ...foldExtra,
+      });
+      for (const ref of [perkStatsRef(ALL_TIME_SCOPE), perkStatsRef(seasonId)]) {
+        const patch: Record<string, unknown> = {
+          scope: ref.id,
+          // Full fixed-key shape every time (all no-ops unless overwritten below).
+          usedByPerk: perkCountsInit(),
+          purchasedByPerk: perkCountsInit(),
+          trapTriggers: FieldValue.increment(0),
+          updatedAt: FieldValue.serverTimestamp(),
+        };
+        if (perkField) {
+          patch[perkField.base] = {
+            ...perkCountsInit(),
+            [perkField.perkId]: FieldValue.increment(1),
+          };
+        }
+        if (scalarField) {
+          patch[scalarField] = FieldValue.increment(1);
+        }
+        tx.set(ref, patch, { merge: true });
+      }
+    });
+  } catch (error) {
+    // Log a HASHED correlation id, never the raw sourceDocId: for a purchase the
+    // id is `${uid}__${entryId}` and logging it raw would leak a user identifier
+    // on this best-effort side path. A short SHA-256 prefix keeps a fold failure
+    // traceable to its source event without exposing the uid.
+    logger.warn('Perk stat fold failed', {
+      source,
+      ref: createHash('sha256').update(sourceDocId).digest('hex').slice(0, 12),
+      error: String(error),
+    });
+  }
+}
+
+/**
+ * A perk DEPLOY/ACTIVATION — the create edge of `perkDeploys/{deployId}`, written
+ * once per deploy of any kind (trap drop, shield raise, boost arm). Counts toward
+ * `usedByPerk[perkId]`.
+ */
+export const onPerkDeployForStats = onDocumentCreated(
+  { ...TRIGGER_OPTS, document: 'perkDeploys/{deployId}' },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) {
+      return;
+    }
+    const perkId = data.perkId;
+    if (!isPerkId(perkId)) {
+      return;
+    }
+    // `perkDeploys.createdAt` is a serverTimestamp (commit time). Unlike a drain
+    // — which carries a separate `drainedAt` event instant — a deploy has NO
+    // distinct event-time field: the commit IS the deploy, so createdAt is both
+    // the best and only available instant. The transaction commits ~ms after the
+    // deploy, so it buckets correctly except in a vanishingly small window right
+    // at a Stockholm month boundary, which is acceptable for a usage aggregate.
+    const deployedAt = readInstant(data.createdAt, event.data?.createTime?.toDate() ?? new Date());
+    await foldPerkStat({
+      source: 'deploy',
+      sourceDocId: event.params.deployId,
+      instant: deployedAt,
+      perkField: { base: 'usedByPerk', perkId },
+      foldExtra: { perkId },
+    });
+  },
+);
+
+/**
+ * A TRAP TRIGGER — the create edge of `perkDrains/{drainId}`, written once per
+ * successful trap drain (spike_strip only). Counts toward `trapTriggers`. Tallied
+ * as it happens because `perkDrains` carries a 30-day TTL and cannot be
+ * backfilled once reaped.
+ */
+export const onPerkDrainForStats = onDocumentCreated(
+  { ...TRIGGER_OPTS, document: 'perkDrains/{drainId}' },
+  async (event) => {
+    const data = event.data?.data();
+    if (!data) {
+      return;
+    }
+    // Prefer `drainedAt` (the actual drain instant) over `createdAt` (the commit
+    // serverTimestamp): near a month boundary the two can straddle it and the
+    // event belongs to the season it fired in. Fall back to createdAt, then the
+    // delivery time, if drainedAt is absent.
+    const drainedAt = readInstant(
+      data.drainedAt ?? data.createdAt,
+      event.data?.createTime?.toDate() ?? new Date(),
+    );
+    await foldPerkStat({
+      source: 'drain',
+      sourceDocId: event.params.drainId,
+      instant: drainedAt,
+      scalarField: 'trapTriggers',
+      foldExtra: {},
+    });
   },
 );
