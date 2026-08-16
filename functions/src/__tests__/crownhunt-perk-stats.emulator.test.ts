@@ -147,6 +147,45 @@ describe('trap trigger stats (perkDrains trigger)', () => {
     });
     expect(allTime.trapTriggers).toBeGreaterThanOrEqual(1);
   });
+
+  it('buckets a month-boundary drain by drainedAt, not createdAt', async () => {
+    // drainedAt is the actual drain instant (Aug); createdAt is a later commit
+    // time that has crossed into the next month (Sep). The stat must land in the
+    // drainedAt month.
+    const drainedAt = new Date('2024-08-31T21:59:00Z'); // 23:59 Stockholm, Aug 31
+    const createdAt = new Date('2024-09-01T00:05:00Z'); // already September
+    const drainMonth = seasonIdForInstant(drainedAt); // 2024-08
+    const commitMonth = seasonIdForInstant(createdAt); // 2024-09
+    expect(drainMonth).toBe('2024-08');
+    expect(commitMonth).toBe('2024-09');
+    const drainId = `${TAG}-drain-boundary`;
+
+    await adminDb
+      .collection('perkDrains')
+      .doc(drainId)
+      .set({
+        trapId: `${TAG}-trap-b`,
+        placerUid: `${TAG}-placer-b`,
+        victimUid: `${TAG}-victim-b`,
+        amount: 15,
+        drainedAt: Timestamp.fromDate(drainedAt),
+        createdAt: Timestamp.fromDate(createdAt),
+      });
+
+    // The drainedAt month (Aug) gets the trigger's increment...
+    const augDoc = await pollUntil(async () => {
+      const s = await perkStats(drainMonth);
+      return s && (s.trapTriggers ?? 0) >= 1 ? s : undefined;
+    });
+    expect(augDoc.trapTriggers).toBeGreaterThanOrEqual(1);
+
+    // ...and the commit month (Sep) is NOT credited by this drain. Give the
+    // trigger time to settle, then assert Sep saw no trap trigger from it. (This
+    // TAG is unique to this file, and no other case writes a drain in Sep 2024.)
+    await new Promise((r) => setTimeout(r, 2_000));
+    const sepDoc = await perkStats(commitMonth);
+    expect(sepDoc?.trapTriggers ?? 0).toBe(0);
+  });
 });
 
 describe('perk purchase stats (perk_shop ledger branch)', () => {

@@ -38,6 +38,7 @@
  * succeeded — so they swallow and log.
  */
 
+import { createHash } from 'node:crypto';
 import { onDocumentCreated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
@@ -496,10 +497,15 @@ async function foldPerkStat(args: {
       }
     });
   } catch (error) {
-    // Deliberately WITHOUT sourceDocId: for a purchase it is `${uid}__${entryId}`,
-    // so logging it would leak a user identifier on this best-effort side path.
-    // `source` is enough to locate which trigger folded.
-    logger.warn('Perk stat fold failed', { source, error: String(error) });
+    // Log a HASHED correlation id, never the raw sourceDocId: for a purchase the
+    // id is `${uid}__${entryId}` and logging it raw would leak a user identifier
+    // on this best-effort side path. A short SHA-256 prefix keeps a fold failure
+    // traceable to its source event without exposing the uid.
+    logger.warn('Perk stat fold failed', {
+      source,
+      ref: createHash('sha256').update(sourceDocId).digest('hex').slice(0, 12),
+      error: String(error),
+    });
   }
 }
 
@@ -519,6 +525,12 @@ export const onPerkDeployForStats = onDocumentCreated(
     if (!isPerkId(perkId)) {
       return;
     }
+    // `perkDeploys.createdAt` is a serverTimestamp (commit time). Unlike a drain
+    // — which carries a separate `drainedAt` event instant — a deploy has NO
+    // distinct event-time field: the commit IS the deploy, so createdAt is both
+    // the best and only available instant. The transaction commits ~ms after the
+    // deploy, so it buckets correctly except in a vanishingly small window right
+    // at a Stockholm month boundary, which is acceptable for a usage aggregate.
     const deployedAt = readInstant(data.createdAt, event.data?.createTime?.toDate() ?? new Date());
     await foldPerkStat({
       source: 'deploy',
