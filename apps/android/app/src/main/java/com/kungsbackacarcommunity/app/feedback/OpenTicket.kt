@@ -6,10 +6,11 @@ import java.util.UUID
  * "Open tickets" browser — pure (Android/Firebase-free) domain model for the
  * in-app list of OPEN GitHub issues a member can browse, +1 or comment on.
  *
- * Mirrors the backend `openTickets/{issueNumber}` mirror document (see
- * functions/src/feedback/openTickets-core.ts) and the `feedback-interactWithIssue`
- * callable contract. Kept pure so the list mapping and the (optimistic)
- * interaction-state machine are JVM-unit-testable without emulators or Compose.
+ * Mirrors the member-readable `openTickets/{issueNumber}` Firestore document
+ * (a backend-maintained mirror of open public GitHub issues) and the
+ * `feedback-interactWithIssue` callable contract. Kept pure so the list mapping
+ * and the (optimistic) interaction-state machine are JVM-unit-testable without
+ * emulators or Compose.
  */
 
 /** One row of the openTickets mirror as the app renders it. */

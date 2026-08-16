@@ -3,13 +3,13 @@ package com.kungsbackacarcommunity.app.feedback
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -29,13 +29,18 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
-import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.AeroLazyPage
+import com.kungsbackacarcommunity.app.shell.AeroPageTitle
+import com.kungsbackacarcommunity.app.shell.aeroLazyContentPadding
 
 /**
  * "Open tickets" browser: the member-facing list of OPEN GitHub issues mirrored
  * into `openTickets`. Per ticket the user can open the issue in the browser,
  * +1 ("me too"), and add ONE comment. The +1/comment controls disable once done
  * (optimistic, session-local — see [OpenTicketsCoordinator]).
+ *
+ * Renders on a [AeroLazyPage] + [LazyColumn] so rows compose/recycle lazily — the
+ * backend mirror can grow, so the list must not eagerly compose every ticket.
  *
  * Gated upstream by the `reportTicketsBrowser` flag: the route is only reachable
  * while the flag is on, so this screen never renders with the feature off.
@@ -50,51 +55,66 @@ fun OpenTicketsScreen(
     onOpenInGitHub: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    AeroPage(
-        title = stringResource(R.string.openTickets_title),
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
-    ) {
-        Text(
-            text = stringResource(R.string.openTickets_intro),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-
-        when (listState) {
-            is OpenTicketsListState.Loading ->
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
-                    horizontalArrangement = Arrangement.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-
-            is OpenTicketsListState.Error ->
+    AeroLazyPage(modifier = modifier) {
+        LazyColumn(
+            // Consume the IME inset so a ticket's comment field near the bottom is
+            // not hidden behind the keyboard; the LazyColumn brings the focused
+            // field into view within the shrunk viewport.
+            modifier = Modifier.fillMaxSize().imePadding(),
+            contentPadding = aeroLazyContentPadding(),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item {
+                AeroPageTitle(stringResource(R.string.openTickets_title))
+            }
+            item {
                 Text(
-                    text = stringResource(R.string.openTickets_error),
+                    text = stringResource(R.string.openTickets_intro),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
                 )
+            }
 
-            is OpenTicketsListState.Loaded ->
-                if (listState.tickets.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.openTickets_empty),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                } else {
-                    listState.tickets.forEach { ticket ->
-                        TicketCard(
-                            ticket = ticket,
-                            state = interactions[ticket.number] ?: TicketInteractionState(),
-                            onPlusOne = { onPlusOne(ticket.number) },
-                            onComment = { text -> onComment(ticket.number, text) },
-                            onCommentEdited = { onCommentEdited(ticket.number) },
-                            onOpenInGitHub = { onOpenInGitHub(ticket.htmlUrl) },
+            when (listState) {
+                is OpenTicketsListState.Loading ->
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                            horizontalArrangement = Arrangement.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+
+                is OpenTicketsListState.Error ->
+                    item {
+                        Text(
+                            text = stringResource(R.string.openTickets_error),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
                         )
                     }
-                }
+
+                is OpenTicketsListState.Loaded ->
+                    if (listState.tickets.isEmpty()) {
+                        item {
+                            Text(
+                                text = stringResource(R.string.openTickets_empty),
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
+                    } else {
+                        items(listState.tickets, key = { it.number }) { ticket ->
+                            TicketCard(
+                                ticket = ticket,
+                                state = interactions[ticket.number] ?: TicketInteractionState(),
+                                onPlusOne = { onPlusOne(ticket.number) },
+                                onComment = { text -> onComment(ticket.number, text) },
+                                onCommentEdited = { onCommentEdited(ticket.number) },
+                                onOpenInGitHub = { onOpenInGitHub(ticket.htmlUrl) },
+                            )
+                        }
+                    }
+            }
         }
     }
 }
@@ -194,10 +214,12 @@ private fun TicketCard(
                     modifier = Modifier.fillMaxWidth(),
                 )
                 OutlinedButton(
-                    onClick = {
-                        onComment(comment)
-                        comment = ""
-                    },
+                    // Keep the typed text on submit: it is only useful to clear it
+                    // once the comment has actually posted, and at that point the
+                    // field is replaced by the "comment sent" note (commentDone).
+                    // A failed / rate-limited call therefore preserves the text so
+                    // the user can retry without retyping.
+                    onClick = { onComment(comment) },
                     enabled = state.canComment && TicketComments.isValid(comment),
                     modifier = Modifier.fillMaxWidth(),
                 ) {

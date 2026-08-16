@@ -7955,10 +7955,19 @@ private fun RouteHost(
                 LoadingScreen()
             }
 
-        // Reachable only while the reportTicketsBrowser flag is on: the entry that
-        // opens it (on the Feedback screen) is gated on the same flag. Builds its
-        // own Firestore/callable repository from context.
-        ShellRoute.OpenTickets -> OpenTicketsRoute()
+        // Gated on the reportTicketsBrowser flag. The entry that opens it (on the
+        // Feedback screen) is already flag-gated, but `route` is rememberSaveable:
+        // a process restore could re-land on OpenTickets after the flag was turned
+        // OFF. Mounting it then would start a Firestore listener on `openTickets`,
+        // breaking the "ships dark while off" guarantee — so when disabled we do
+        // NOT mount the route and redirect home instead (migration-safe pattern).
+        ShellRoute.OpenTickets ->
+            if (reportTicketsEnabled) {
+                OpenTicketsRoute()
+            } else {
+                LaunchedEffect(Unit) { onClose() }
+                LoadingScreen()
+            }
 
         ShellRoute.SavedPlaces ->
             SavedPlacesScreen(
