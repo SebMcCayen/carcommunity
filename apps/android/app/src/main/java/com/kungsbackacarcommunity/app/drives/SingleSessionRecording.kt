@@ -146,6 +146,10 @@ object SingleSessionRecording {
         // (#849). Null in a config-less / CI build; the recording is then
         // memory-only, exactly as before.
         journal: DriveRecordingJournal? = null,
+        // Low-noise lifecycle log (start / resume / milestone / stop) so a
+        // recurrence of the "drive vanished on restart" report is diagnosable
+        // (#849 follow-up). Defaults to the no-op sink.
+        log: DriveRecordingLog = NoopDriveRecordingLog,
         controllerFactory: () -> DriveLocationController?,
     ) {
         if (activeState.value != null) return
@@ -173,12 +177,16 @@ object SingleSessionRecording {
                 carImagePath = carImagePath,
                 vehicleId = vehicleId,
                 journal = journal,
+                log = log,
             )
         ownerUid = uid
         uploadScope = scope
         uploadOwnerUid = uid
-        activeState.value = coordinator
+        // start() BEFORE publishing: it loads the resumed journal and fixes
+        // resumedRoutePoints, so the LaunchedEffect(activeRecording) that reads
+        // them for the breadcrumb restore can never observe an empty pre-start list.
         coordinator.start()
+        activeState.value = coordinator
         // A new session must never open on the PREVIOUS session's speed, so the
         // readout starts blank and the first fix fills it.
         CurrentSpeed.clear()

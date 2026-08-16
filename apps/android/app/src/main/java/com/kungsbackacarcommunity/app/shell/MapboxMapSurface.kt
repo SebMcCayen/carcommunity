@@ -307,6 +307,16 @@ class MapboxMapSurface : MapSurface {
     // style. Touched only on the main-thread position callback.
     private val breadcrumbTrail = BreadcrumbTrail()
 
+    // A resumed drive's route (#849 follow-up), handed in via [seedBreadcrumb] to
+    // RESTORE the visible tail after a process death, held until the surface is
+    // actually live-sharing so an early hand-in is not lost or clobbered. Applied
+    // by [maybeApplyBreadcrumbSeed] and dropped once applied or once sharing ends.
+    // Volatile: written from the seedBreadcrumb caller (main thread), read from the
+    // style-load / update-block callbacks (also main thread) — volatile is belt-and-
+    // braces for visibility across the map's own callback dispatch.
+    @Volatile
+    private var pendingBreadcrumbSeed: List<MapPoint>? = null
+
     // Test seam: the breadcrumb tail's base ARGB (the brand yellow it is drawn
     // in). Exposed so a pure JVM test can assert the tail is derived from the
     // brand design token — the colour cannot be read off the GL layer off-device.
@@ -596,6 +606,46 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the line +
         // destination marker, so publishing the value is enough.
         routeOverlayFlow.value = overlay
+    }
+
+    override fun seedBreadcrumb(points: List<MapPoint>) {
+        if (points.isEmpty()) return
+        // Stash the resumed route and try to apply it now. If the surface is not yet
+        // live-sharing (the marker has not been pushed), the stash waits: the
+        // live-sharing lifecycle block + the style-load block both call
+        // maybeApplyBreadcrumbSeed once sharing is active. Never overwrites a
+        // pending seed that live fixes haven't yet consumed with anything smaller —
+        // a fresh resume only ever hands in the same drive.
+        // Enforce the invariant the doc above states: a later, SMALLER seed must not
+        // down-sample a pending one that live fixes haven't consumed yet.
+        val existingSeed = pendingBreadcrumbSeed
+        if (existingSeed != null && points.size < existingSeed.size) return
+        pendingBreadcrumbSeed = points
+        runCatching { maybeApplyBreadcrumbSeed() }
+    }
+
+    /**
+     * Apply a [pendingBreadcrumbSeed] iff the surface is live-sharing AND the tail
+     * is still empty — restoring a killed drive's visible route on relaunch without
+     * ever clobbering a tail already being rebuilt by live fixes. Consumes the seed
+     * when it applies OR when the resume window has passed (the tail already has
+     * live points), so it is applied at most once and a later live tail is never
+     * re-seeded. If the surface is NOT yet live-sharing the seed is deliberately
+     * RETAINED for a later call. Redraws on apply. Called from the position/style
+     * callbacks, so it runs on the map's main thread like the rest of the breadcrumb path.
+     */
+    private fun maybeApplyBreadcrumbSeed() {
+        val seed = pendingBreadcrumbSeed ?: return
+        if (userMarkerFlow.value?.isLiveSharing != true) return
+        // A tail already has live points — the resume window has passed; drop the
+        // seed rather than replace real driving with the stale snapshot.
+        if (breadcrumbTrail.isNotEmpty()) {
+            pendingBreadcrumbSeed = null
+            return
+        }
+        breadcrumbTrail.seed(seed)
+        pendingBreadcrumbSeed = null
+        runCatching { redrawBreadcrumb() }
     }
 
     override fun setEventMarkers(markers: List<MapEventMarker>) {
@@ -1847,6 +1897,11 @@ class MapboxMapSurface : MapSurface {
                         runCatching {
                             addBreadcrumbLayer(style)
                             if (userMarkerFlow.value?.isLiveSharing == true) {
+                                // Apply a resumed-drive seed (#849) if one is pending
+                                // and the tail is still empty, so a relaunch that loads
+                                // the style after the session is already live restores
+                                // the visible route rather than starting blank.
+                                maybeApplyBreadcrumbSeed()
                                 redrawBreadcrumb()
                             } else {
                                 clearBreadcrumbRender()
@@ -1946,6 +2001,14 @@ class MapboxMapSurface : MapSurface {
                     if (marker?.isLiveSharing != true) {
                         breadcrumbTrail.clear()
                         clearBreadcrumbRender()
+                        // A session that has ended must not later resurrect a stale
+                        // resumed-drive seed onto a fresh session's map.
+                        pendingBreadcrumbSeed = null
+                    } else {
+                        // Now sharing: apply a resumed-drive seed (#849) if one is
+                        // pending and no live tail exists yet, restoring the route the
+                        // user was recording before the process was killed.
+                        maybeApplyBreadcrumbSeed()
                     }
                 }
             },

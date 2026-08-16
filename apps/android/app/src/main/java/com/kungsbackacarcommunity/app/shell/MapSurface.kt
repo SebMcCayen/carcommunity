@@ -792,6 +792,25 @@ interface MapSurface : MapProjection {
     fun setRouteOverlay(overlay: MapRouteOverlay?)
 
     /**
+     * RESTORE the on-screen "road just driven" tail (the private breadcrumb) from
+     * [points] after a process death mid-drive (#849 follow-up).
+     *
+     * The recorded drive itself is persisted incrementally and resumed into the
+     * recorder on relaunch, but the breadcrumb the user actually SEES is a
+     * memory-only buffer fed purely from live position fixes — so on a cold start
+     * it begins empty and the in-progress drive looks lost until another window's
+     * worth of driving redraws it. The host calls this once, with the resumed
+     * route, so the tail reappears immediately.
+     *
+     * Idempotent and race-safe by contract: the surface applies the seed only when
+     * it is live-sharing AND the tail is still empty, so it never clobbers a tail
+     * already being rebuilt by live fixes, and an early call (before the surface
+     * knows it is sharing) is held until sharing becomes active. Passing an empty
+     * list is a no-op. A no-op beyond recording the value on the stub.
+     */
+    fun seedBreadcrumb(points: List<MapPoint>)
+
+    /**
      * Replace the set of incident markers drawn on the map. The host fetches
      * these near the viewport via `incidents.listNearby` and pushes them here so
      * every user sees them. A no-op beyond storing the value on the stub.
@@ -1162,6 +1181,18 @@ class StubMapSurface(
 
     override fun setRouteOverlay(overlay: MapRouteOverlay?) {
         routeOverlayFlow.value = overlay
+    }
+
+    private val seededBreadcrumbFlow = MutableStateFlow<List<MapPoint>>(emptyList())
+
+    /** Last non-empty seed passed to [seedBreadcrumb] — observable so tests can assert the wiring. */
+    val seededBreadcrumb: StateFlow<List<MapPoint>> = seededBreadcrumbFlow.asStateFlow()
+
+    override fun seedBreadcrumb(points: List<MapPoint>) {
+        // No renderer on the stub — just record the request so the restore wiring
+        // can be asserted off-device. Mirror the real surface's empty-list no-op.
+        if (points.isEmpty()) return
+        seededBreadcrumbFlow.value = points
     }
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {

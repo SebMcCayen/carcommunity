@@ -102,6 +102,7 @@ import com.kungsbackacarcommunity.app.blocking.BlockingRoute
 import com.kungsbackacarcommunity.app.diagnostics.CrashEvents
 import com.kungsbackacarcommunity.app.diagnostics.CrashKeys
 import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetryText
+import com.kungsbackacarcommunity.app.diagnostics.LogcatDriveRecordingLog
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.rememberClientErrorReporter
 import com.kungsbackacarcommunity.app.diagnostics.rememberCrashTelemetry
@@ -2740,6 +2741,43 @@ fun AuthenticatedApp(
                     DriveRecordingJournal(File(context.filesDir, "drive-journals"))
                 }
 
+            // Low-noise structured log of the drive-recording lifecycle (#849
+            // follow-up): start / resume / point milestones / stop, plus the
+            // app-launch route-restore below. Emitted to logcat under the
+            // "DriveRecording" tag so a recurrence of "the in-progress drive
+            // vanished after a restart" is traceable from a device log without
+            // per-fix spam.
+            val driveRecordingLog = remember { LogcatDriveRecordingLog() }
+
+            // Restore the on-screen route after a process death (#849 follow-up).
+            // When a relaunched-but-still-live session RESUMES a persisted drive,
+            // its journalled points are back in the recorder — but the map's
+            // breadcrumb tail is a memory-only buffer that starts EMPTY on a cold
+            // start, so the drive the user is still recording looks lost until they
+            // have driven another window's worth. Re-seed the tail from the resumed
+            // route so the road already driven redraws at once. A fresh drive
+            // exposes no resumed points, so this is a no-op then. Keyed on the
+            // coordinator instance so it runs once per session (its
+            // resumedRoutePoints are fixed at start); seedBreadcrumb is itself
+            // idempotent + race-safe (applied only while sharing with an empty tail).
+            LaunchedEffect(activeRecording) {
+                val coordinator = activeRecording ?: return@LaunchedEffect
+                val resumed = coordinator.resumedRoutePoints
+                if (resumed.isNotEmpty()) {
+                    // Only the newest ~1 km renders on the breadcrumb, but a resumed
+                    // journal can hold up to DriveRecorder.MAX_ROUTE_POINTS (~20k).
+                    // Pass a bounded NEWEST suffix to cap the cold-start allocation and
+                    // the retained pendingBreadcrumbSeed (3000 fixes far exceeds the
+                    // visible window at any realistic GPS cadence); BreadcrumbTrail.seed
+                    // then trims further to windowMeters.
+                    val bounded = resumed.takeLast(3000)
+                    mapSurface.seedBreadcrumb(
+                        bounded.map { MapPoint(longitude = it.longitude, latitude = it.latitude) },
+                    )
+                    driveRecordingLog.restoredToMap(coordinator.sourceSessionId, bounded.size)
+                }
+            }
+
             // Only record a drive the user could actually SAVE. drives-save is
             // member-gated (requireMemberActor) while live sharing is free, so
             // gating the recording on canShareLive — as v0.8.0 did — handed a
@@ -2807,6 +2845,9 @@ fun AuthenticatedApp(
                             // Crash-resilient recording: resumes this drive if the
                             // process is killed while the session stays live (#849).
                             journal = driveRecordingJournal,
+                            // Structured lifecycle log (start/resume/milestone/stop)
+                            // so a future recurrence is diagnosable (#849 follow-up).
+                            log = driveRecordingLog,
                         ) {
                             // Null when Play services are unavailable OR the
                             // fine-location permission isn't granted; either way
