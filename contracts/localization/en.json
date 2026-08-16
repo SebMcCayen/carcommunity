@@ -1543,7 +1543,7 @@
     "trafficOff": "Show traffic",
     "chat": "Chat",
     "chatUnread": "%1$d unread chat messages",
-    "chatUnreadDot": "Unread messages",
+    "chatUnreadDot": "Chat, unread messages and notifications",
     "chatTitle": "Community chat",
     "chatClose": "Close chat",
     "chatEmpty": "You're all caught up — no new messages.",

@@ -1442,7 +1442,7 @@
     <string name="shell_trafficOff">Visa trafik</string>
     <string name="shell_chat">Chatt</string>
     <string name="shell_chatUnread">%1$d olästa chattmeddelanden</string>
-    <string name="shell_chatUnreadDot">Olästa meddelanden</string>
+    <string name="shell_chatUnreadDot">Chatt, olästa meddelanden och aviseringar</string>
     <string name="shell_chatTitle">Gemenskapschatt</string>
     <string name="shell_chatClose">Stäng chatt</string>
     <string name="shell_chatEmpty">Du är ikapp — inga nya meddelanden.</string>

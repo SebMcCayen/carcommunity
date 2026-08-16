@@ -1442,7 +1442,7 @@
     <string name="shell_trafficOff">Show traffic</string>
     <string name="shell_chat">Chat</string>
     <string name="shell_chatUnread">%1$d unread chat messages</string>
-    <string name="shell_chatUnreadDot">Unread messages</string>
+    <string name="shell_chatUnreadDot">Chat, unread messages and notifications</string>
     <string name="shell_chatTitle">Community chat</string>
     <string name="shell_chatClose">Close chat</string>
     <string name="shell_chatEmpty">You\'re all caught up — no new messages.</string>

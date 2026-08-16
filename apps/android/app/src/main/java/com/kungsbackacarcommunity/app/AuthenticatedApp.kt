@@ -431,6 +431,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -1537,7 +1538,12 @@ fun AuthenticatedApp(
             val communityChatUnread by
                 remember(communityChatRepository, uid, needsChatUnread) {
                     if (communityChatRepository != null && needsChatUnread) {
-                        communityChatRepository.observeUnread(uid)
+                        // distinctUntilChanged: the map bubble only cares about the
+                        // boolean flipping, not about every re-emission of the same
+                        // value — so redundant recompositions of the always-on map
+                        // screen are dropped. Same reason on the DM/notification
+                        // flows below.
+                        communityChatRepository.observeUnread(uid).distinctUntilChanged()
                     } else {
                         flowOf(false)
                     }
@@ -1569,7 +1575,9 @@ fun AuthenticatedApp(
             val dmUnread by
                 remember(dmRepository, uid, needsChatUnread) {
                     if (dmRepository != null && needsChatUnread) {
-                        dmRepository.observeConversations(uid).map { it.anyDmUnread() }
+                        dmRepository.observeConversations(uid)
+                            .map { it.anyDmUnread() }
+                            .distinctUntilChanged()
                     } else {
                         flowOf(false)
                     }
@@ -1580,6 +1588,7 @@ fun AuthenticatedApp(
                     if (notificationsRepository != null && needsChatUnread) {
                         notificationsRepository.observeNotifications(uid)
                             .map { it.anyNotificationUnread() }
+                            .distinctUntilChanged()
                     } else {
                         flowOf(false)
                     }
