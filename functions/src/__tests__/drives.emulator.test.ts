@@ -292,12 +292,16 @@ describe('drives-save', () => {
       alreadySaved: boolean;
     };
 
-    // The save succeeds cleanly — no INTERNAL, no failed-precondition.
+    // The save succeeds cleanly — no INTERNAL, no failed-precondition. Assert
+    // the stats are present before reading them as numbers, so a null (a
+    // summary-only save) fails loudly here rather than passing a NaN comparison.
     expect(data.alreadySaved).toBe(false);
     expect(typeof data.rideId).toBe('string');
-    expect(data.distanceMeters as number).toBeGreaterThan(0);
-    expect(data.maxSpeedMetersPerSecond as number).toBeGreaterThan(0);
-    expect(data.maxSpeedMetersPerSecond as number).toBeLessThanOrEqual(55.6);
+    expect(data.distanceMeters).not.toBeNull();
+    expect(data.distanceMeters).toBeGreaterThan(0);
+    expect(data.maxSpeedMetersPerSecond).not.toBeNull();
+    expect(data.maxSpeedMetersPerSecond).toBeGreaterThan(0);
+    expect(data.maxSpeedMetersPerSecond).toBeLessThanOrEqual(55.6);
 
     const docData = (await adminDb.collection('rides').doc(data.rideId).get()).data()!;
     // Only a BOUNDED thumbnail is stored — the 1207 raw points never land
@@ -305,8 +309,10 @@ describe('drives-save', () => {
     expect(typeof docData.routeThumbnail).toBe('string');
     expect(docData).not.toHaveProperty('routePoints');
     // The whole document stays tiny — far under Firestore's 1 MiB limit — proof
-    // the point count cannot drive a size-based failure at save time.
-    expect(JSON.stringify(docData).length).toBeLessThan(20_000);
+    // the point count cannot drive a size-based failure at save time. Measured
+    // in BYTES (Buffer.byteLength), the unit the 1 MiB limit is expressed in,
+    // not UTF-16 code units.
+    expect(Buffer.byteLength(JSON.stringify(docData), 'utf8')).toBeLessThan(20_000);
   });
 
   it('is idempotent per sourceSessionId', async () => {
