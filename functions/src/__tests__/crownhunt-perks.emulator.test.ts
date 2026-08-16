@@ -74,11 +74,27 @@ async function pollUntil<T>(
 }
 
 async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
+  return (await callableError(promise)).code;
+}
+
+/**
+ * The `{ code, reason }` a callable rejection carries, captured from a SINGLE
+ * call so the error code and the structured `details.reason` are guaranteed to
+ * describe the same rejection (and the emulator is only hit once). The JS SDK
+ * throws a `FunctionsError` (a `FirebaseError` subclass) that exposes the
+ * callable `details` directly.
+ */
+async function callableError(
+  promise: Promise<unknown>,
+): Promise<{ code: string; reason: unknown }> {
   try {
     await promise;
-    return 'no-error';
+    return { code: 'no-error', reason: undefined };
   } catch (error) {
-    if (error instanceof FirebaseError) return error.code;
+    if (error instanceof FirebaseError) {
+      const details = (error as { details?: unknown }).details;
+      return { code: error.code, reason: (details as { reason?: unknown } | undefined)?.reason };
+    }
     throw error;
   }
 }
@@ -215,9 +231,12 @@ describe('crownHunt.buyPerk', () => {
     await setBalance(member.uid, 50); // spike_strip costs 150
     await signInAs(member);
     const before = await readInventory(member.uid);
-    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'spike_strip' })))).toBe(
-      'functions/failed-precondition',
-    );
+    // Capture the rejection once so code + structured discriminator describe the
+    // same call: the client tells "not enough KP" apart from a shop-unavailable
+    // rejection via details.reason, without substring-matching the message.
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'spike_strip' })));
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('insufficient_funds');
     const after = await readInventory(member.uid);
     expect(after.spike_strip ?? 0).toBe(before.spike_strip ?? 0);
     expect(await readBalance(member.uid)).toBe(50);
@@ -242,9 +261,9 @@ describe('crownHunt.buyPerk', () => {
   it('rejects an unknown perk and a bad quantity', async () => {
     await setBalance(member.uid, 1000);
     await signInAs(member);
-    expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ perkId: 'nope' })))).toBe(
-      'functions/failed-precondition',
-    );
+    const unknownPerk = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'nope' })));
+    expect(unknownPerk.code).toBe('functions/failed-precondition');
+    expect(unknownPerk.reason).toBe('shop_unavailable');
     expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput({ qty: 0 })))).toBe(
       'functions/invalid-argument',
     );
@@ -258,9 +277,9 @@ describe('crownHunt.buyPerk', () => {
     await setBalance(member.uid, 1000);
     await signInAs(member);
     try {
-      expect(await callableErrorCode(call('crownHunt-buyPerk', buyInput()))).toBe(
-        'functions/failed-precondition',
-      );
+      const err = await callableError(call('crownHunt-buyPerk', buyInput()));
+      expect(err.code).toBe('functions/failed-precondition');
+      expect(err.reason).toBe('shop_unavailable');
     } finally {
       await setPerksFlag(true);
     }
