@@ -42,11 +42,13 @@
  */
 
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { defineSecret } from 'firebase-functions/params';
 import { FieldPath, FieldValue } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
 import { CPU_SCHEDULED } from '../shared/instanceLimits';
 import { withServerErrorReporting } from '../errors/serverErrors';
+import { publishPublicLeaderboard } from './publicLeaderboard';
 import {
   CROWN_LEADERBOARD_COLLECTION,
   ALL_TIME_SCOPE,
@@ -73,6 +75,16 @@ import {
 
 /** The client-readable board collection. One document per scope. */
 export const LEADERBOARD_COLLECTION = 'leaderboards';
+
+/**
+ * Fine-grained GitHub PAT with `contents: write` on ONLY
+ * SebMcCayen/kungsbacka-car-community-homepage — the SAME secret the events
+ * publisher (events/publicSite.ts) uses. No NEW secret is provisioned for the
+ * leaderboard: both generated files (data/app-events.json, data/leaderboard.json)
+ * live in the same repo, so one `contents: write` token covers both. Used only
+ * by the scheduled generator, to publish the public web JSON after each run.
+ */
+const HOMEPAGE_REPO_TOKEN = defineSecret('HOMEPAGE_REPO_TOKEN');
 
 /** Members read per badgeProgress page during the full scan. */
 export const LEADERBOARD_SCAN_PAGE_SIZE = 500;
@@ -459,6 +471,7 @@ export const generateLeaderboards = onSchedule(
     timeZone: 'Europe/Stockholm',
     memory: '512MiB',
     timeoutSeconds: 540,
+    secrets: [HOMEPAGE_REPO_TOKEN],
   },
   withServerErrorReporting('leaderboard.generateLeaderboards', async () => {
     await runLeaderboardGeneration();
@@ -469,5 +482,18 @@ export const generateLeaderboards = onSchedule(
     // month's board frozen at its last pre-rollover snapshot (never touched
     // again, since we only ever generate the current month — no backfill).
     await runMonthlyLeaderboardGeneration(seasonIdForInstant(new Date()));
+    // Publish the public web JSON AFTER the boards are regenerated (PR3), so the
+    // homepage always reflects the run that just finished. BEST-EFFORT: a
+    // publish failure must never fail generation — publishPublicLeaderboard
+    // never throws, but the call is guarded anyway so a future change cannot
+    // regress that. The hourly cadence + skip-when-unchanged means the site
+    // refreshes each run and a transient GitHub outage self-heals next hour.
+    try {
+      await publishPublicLeaderboard(HOMEPAGE_REPO_TOKEN.value());
+    } catch (error) {
+      logger.warn('Public leaderboard publish threw; next run will retry', {
+        error: String(error),
+      });
+    }
   }),
 );
