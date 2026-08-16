@@ -88,8 +88,10 @@ describe('feature builders', () => {
       { id: 'b', latitude: Number.NaN, longitude: 12.1, rarity: null, rewardPoints: null, expiresAtMs: null },
     ]);
     expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].geometry.coordinates).toEqual([12.1, 57.5]);
-    expect(fc.features[0].properties.id).toBe('a');
+    const [feat] = fc.features;
+    expect(feat).toBeDefined();
+    expect(feat?.geometry.coordinates).toEqual([12.1, 57.5]);
+    expect(feat?.properties.id).toBe('a');
   });
 
   it('trapsToFeatures emits [lon, lat] points with the victim count', () => {
@@ -97,7 +99,9 @@ describe('feature builders', () => {
       { id: 't', latitude: 57.6, longitude: 12.2, victimCount: 3, expiresAtMs: null },
     ]);
     expect(fc.features).toHaveLength(1);
-    expect(fc.features[0].geometry.coordinates).toEqual([12.2, 57.6]);
-    expect(fc.features[0].properties.victimCount).toBe(3);
+    const [feat] = fc.features;
+    expect(feat).toBeDefined();
+    expect(feat?.geometry.coordinates).toEqual([12.2, 57.6]);
+    expect(feat?.properties.victimCount).toBe(3);
   });
 });
