@@ -356,10 +356,17 @@ describe('crownHunt.deployPerk — trap', () => {
       call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() }),
       call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() }),
     ]);
-    const fulfilled = results.filter((r) => r.status === 'fulfilled').length;
-    const rejected = results.filter((r) => r.status === 'rejected').length;
-    expect(fulfilled).toBe(1);
-    expect(rejected).toBe(1);
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const rejected = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    // The rejection must be the 1-active-trap cap SPECIFICALLY, not an unrelated
+    // transient emulator error — otherwise the regression guard is toothless.
+    const [rejection] = rejected;
+    expect(rejection?.reason).toBeInstanceOf(FirebaseError);
+    expect((rejection?.reason as FirebaseError | undefined)?.code).toBe(
+      'functions/failed-precondition',
+    );
 
     // Authoritative: exactly ONE live armed trap exists for this member.
     const live = await adminDb
