@@ -148,6 +148,35 @@ export const deployPerk = onCall(CALLABLE_OPTS, async (request): Promise<DeployP
 // TRAP
 // ---------------------------------------------------------------------------
 
+/**
+ * The 1-active-trap + 300 m self-spacing caps evaluated against a set of the
+ * caller's LIVE armed traps. Returns an HttpsError to throw, or null when the
+ * deploy is allowed. Shared by the fast pre-transaction early-reject and the
+ * authoritative in-transaction check so the two can never diverge.
+ */
+function evaluateTrapCaps(
+  liveTraps: FirebaseFirestore.DocumentData[],
+  latitude: number,
+  longitude: number,
+): HttpsError | null {
+  if (liveTraps.length >= MAX_ACTIVE_TRAPS_PER_USER) {
+    return new HttpsError('failed-precondition', 'Du har redan en aktiv fälla.');
+  }
+  for (const t of liveTraps) {
+    const tLat = t.lat as number | undefined;
+    const tLng = t.lng as number | undefined;
+    if (typeof tLat === 'number' && typeof tLng === 'number') {
+      if (haversineDistanceMeters(latitude, longitude, tLat, tLng) < TRAP_SELF_SPACING_METERS) {
+        return new HttpsError(
+          'failed-precondition',
+          'För nära en av dina egna fällor. Flytta dig och försök igen.',
+        );
+      }
+    }
+  }
+  return null;
+}
+
 async function deployTrap(args: {
   uid: string;
   perk: PerkDefinition;
@@ -194,8 +223,13 @@ async function deployTrap(args: {
     };
   }
 
-  // Pre-transaction anti-abuse read: the caller's currently-LIVE armed traps,
-  // used to enforce the 1-active-trap cap AND the 300 m self-spacing rule.
+  // The caller's currently-LIVE armed traps, used to enforce the 1-active-trap
+  // cap AND the 300 m self-spacing rule. Built once as a QUERY, run BOTH as a
+  // fast pre-transaction early-reject (below, so the common case never starts a
+  // transaction) AND — authoritatively — INSIDE the transaction via tx.get(query),
+  // so two concurrent deploys (different idempotency keys) cannot both pass: the
+  // second serializes on the transaction, re-queries, sees the first trap and
+  // rejects.
   //
   // Expiry is filtered by FIRESTORE (`expiresAt > now`), NOT in code. An expired
   // trap keeps status:'armed' — expiry is by the `expiresAt` timestamp and the
@@ -206,41 +240,31 @@ async function deployTrap(args: {
   // only genuinely-live traps, so the limit only ever elides surplus LIVE ones
   // (there is at most one, by the cap). Needs the composite index
   // activePerks(placedByUid, status, expiresAt) in firestore.indexes.json.
-  //
-  // Still best-effort for the concurrent-deploy RACE (a query outside the
-  // transaction cannot be fully atomic); the HARD volume ceiling — 3 deploys/day
-  // — is the transactional guard below, and the per-victim/per-day drain caps
-  // bound any abuse regardless. What changed is that these guards are no longer
-  // defeated by expired-doc accumulation.
-  const armedSnap = await db
+  const armedQuery = db
     .collection('activePerks')
     .where('placedByUid', '==', uid)
     .where('status', '==', 'armed')
     .where('expiresAt', '>', Timestamp.fromDate(now))
-    .limit(20)
-    .get();
-  const liveTraps = armedSnap.docs.map((d) => d.data());
-  if (liveTraps.length >= MAX_ACTIVE_TRAPS_PER_USER) {
-    throw new HttpsError('failed-precondition', 'Du har redan en aktiv fälla.');
-  }
-  for (const t of liveTraps) {
-    const tLat = t.lat as number | undefined;
-    const tLng = t.lng as number | undefined;
-    if (typeof tLat === 'number' && typeof tLng === 'number') {
-      if (haversineDistanceMeters(latitude, longitude, tLat, tLng) < TRAP_SELF_SPACING_METERS) {
-        throw new HttpsError(
-          'failed-precondition',
-          'För nära en av dina egna fällor. Flytta dig och försök igen.',
-        );
-      }
-    }
+    .limit(20);
+
+  // Fast pre-transaction early-reject (better UX; avoids starting a transaction
+  // in the common case). NOT authoritative — the in-transaction check below is.
+  const preSnap = await armedQuery.get();
+  const preLiveTraps = preSnap.docs.map((d) => d.data());
+  const capRejection = evaluateTrapCaps(preLiveTraps, latitude, longitude);
+  if (capRejection) {
+    throw capRejection;
   }
 
   const result = await db.runTransaction(async (tx) => {
-    const [deploySnap, inventorySnap, counterSnap] = await Promise.all([
+    // tx.get(query) runs in the read phase (all reads precede all writes). This
+    // is the AUTHORITATIVE, race-safe cap/spacing check — a concurrent deploy
+    // that committed a trap since the pre-check is seen here and rejected.
+    const [deploySnap, inventorySnap, counterSnap, armedTxSnap] = await Promise.all([
       tx.get(deployRef),
       tx.get(inventoryRef),
       tx.get(deployCounterRef),
+      tx.get(armedQuery),
     ]);
 
     if (deploySnap.exists) {
@@ -251,6 +275,16 @@ async function deployTrap(args: {
         inventoryCount: (inventorySnap.data()?.[perk.perkId] as number | undefined) ?? 0,
         alreadyDeployed: true,
       };
+    }
+
+    // Race-safe 1-active-trap + 300 m self-spacing, on the in-transaction query
+    // result (excluding this deploy's own trap doc, defensively).
+    const liveTrapsTx = armedTxSnap.docs
+      .filter((d) => d.id !== trapRef.id)
+      .map((d) => d.data());
+    const txCapRejection = evaluateTrapCaps(liveTrapsTx, latitude, longitude);
+    if (txCapRejection) {
+      throw txCapRejection;
     }
 
     const owned = (inventorySnap.data()?.[perk.perkId] as number | undefined) ?? 0;
@@ -326,8 +360,11 @@ async function deployTimedEffect(args: {
   const { uid, perk, kind, durationHours, now, deployRef, inventoryRef } = args;
   const expiresAt = hoursFromNow(now, durationHours);
   const effectRef = db.collection(kind === 'shield' ? 'perkShield' : 'perkBoost').doc(uid);
-  // Public shield status — the ONLY field other clients may read: a single
-  // timestamp so a live marker can render a shield aura. No other perk state.
+  // Public shield status doc. It stores two fields — `shieldedUntil` (the
+  // expiry a live marker reads to render a shield aura) and a bookkeeping
+  // `updatedAt` — and NOTHING else about the perk (no inventory, cost, or other
+  // effects). `shieldedUntil` is the only field clients actually consume; both
+  // are harmless to expose, which is the whole point of a separate public doc.
   const publicShieldRef = db.collection('perkShieldPublic').doc(uid);
 
   const result = await db.runTransaction(async (tx) => {

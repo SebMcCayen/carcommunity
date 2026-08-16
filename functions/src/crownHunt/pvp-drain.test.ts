@@ -1,15 +1,15 @@
 /**
- * Unit test for the crownHuntPerks flag cache on the trap-drain hot path
- * (pvp-drain.ts). No emulator — `../firebase` and `../shared/featureFlags` are
- * mocked so the OFF path (early return, no Firestore access) can be exercised
- * in isolation.
+ * PURE unit test for the crownHuntPerks flag cache on the trap-drain hot path
+ * (pvp-drain.ts). No emulator, no Firestore — `../firebase` and
+ * `../shared/featureFlags` are mocked, the clock is injected via `nowMs`, and
+ * the flag reader is a vi.fn(). This gives the asymmetric-TTL / cache-hit logic
+ * coverage that does NOT depend on the emulator exercising it.
  *
- * The point under test: processTrapDrains runs on every accepted live-position
- * sample, so it must NOT pay a fresh config/featureFlags read each time — the
- * gate is cached in-memory for a short TTL per warm instance.
+ * crownHuntPerksEnabled is tested DIRECTLY (rather than only through
+ * processTrapDrains) so the TTL semantics are pinned in isolation.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const readFeatureFlagMock = vi.fn();
 
@@ -18,49 +18,71 @@ vi.mock('../shared/featureFlags', () => ({
   readFeatureFlag: (...args: unknown[]) => readFeatureFlagMock(...args),
 }));
 
-import { processTrapDrains, __resetPerksFlagCacheForTest } from './pvp-drain';
+import { crownHuntPerksEnabled, __resetPerksFlagCacheForTest } from './pvp-drain';
 
-const sample = (nowMs: number) => ({
-  victimUid: 'victim',
-  latitude: 59.3,
-  longitude: 18.1,
-  now: new Date(nowMs),
+const originalEmulatorEnv = process.env.FUNCTIONS_EMULATOR;
+
+beforeEach(() => {
+  // These cases pin the CACHE behaviour, which is bypassed under the emulator —
+  // so ensure the emulator flag is OFF for the pure test regardless of the host.
+  delete process.env.FUNCTIONS_EMULATOR;
 });
 
 afterEach(() => {
   __resetPerksFlagCacheForTest();
   readFeatureFlagMock.mockReset();
+  if (originalEmulatorEnv === undefined) {
+    delete process.env.FUNCTIONS_EMULATOR;
+  } else {
+    process.env.FUNCTIONS_EMULATOR = originalEmulatorEnv;
+  }
 });
 
-describe('processTrapDrains flag cache', () => {
-  it('reads the flag ONCE across many samples within the TTL (flag OFF)', async () => {
+describe('crownHuntPerksEnabled — asymmetric TTL cache', () => {
+  it('serves many calls within the TTL from ONE underlying read', async () => {
     readFeatureFlagMock.mockResolvedValue(false);
-    const base = 1_000_000;
     for (let i = 0; i < 6; i += 1) {
-      await processTrapDrains(sample(base + i * 5_000)); // 6 samples over 25s
+      await crownHuntPerksEnabled(1_000_000 + i * 5_000); // 6 calls over 25s
     }
-    // One underlying read despite six hot-path calls — the rest hit the cache.
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
   });
 
   it('OFF holds for the long 60s TTL', async () => {
     readFeatureFlagMock.mockResolvedValue(false);
-    await processTrapDrains(sample(0));
-    await processTrapDrains(sample(59_000)); // still inside the long TTL
+    expect(await crownHuntPerksEnabled(0)).toBe(false);
+    expect(await crownHuntPerksEnabled(59_000)).toBe(false); // inside the long TTL
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
-    await processTrapDrains(sample(60_001)); // past the long TTL → fresh read
+    expect(await crownHuntPerksEnabled(60_001)).toBe(false); // past it → fresh read
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(2);
   });
 
   it('ON re-reads after the short 5s TTL (fast kill-switch)', async () => {
-    // Flag ON. crownHuntPerksEnabled resolves true, then runTrapDrains throws on
-    // the mocked db and is swallowed by processTrapDrains — the flag read count
-    // is unaffected, which is what this asserts.
     readFeatureFlagMock.mockResolvedValue(true);
-    await processTrapDrains(sample(0));
-    await processTrapDrains(sample(4_000)); // still inside the short TTL → cached
+    expect(await crownHuntPerksEnabled(0)).toBe(true);
+    expect(await crownHuntPerksEnabled(4_000)).toBe(true); // inside the short TTL
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
-    await processTrapDrains(sample(5_001)); // past the short TTL → fresh read
+    expect(await crownHuntPerksEnabled(5_001)).toBe(true); // past it → fresh read
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('picks the TTL from the freshly-read VALUE, not the previous one', async () => {
+    // First read ON (short TTL), then the flag flips OFF: the disable is seen at
+    // the next read past the 5s ON-TTL, and thereafter holds for the long TTL.
+    readFeatureFlagMock.mockResolvedValueOnce(true).mockResolvedValue(false);
+    expect(await crownHuntPerksEnabled(0)).toBe(true); // read 1 (ON, 5s)
+    expect(await crownHuntPerksEnabled(6_000)).toBe(false); // read 2 (OFF, 60s)
+    expect(await crownHuntPerksEnabled(60_000)).toBe(false); // still cached OFF
+    expect(readFeatureFlagMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('crownHuntPerksEnabled — emulator bypass', () => {
+  it('reads fresh every call (no cache) when FUNCTIONS_EMULATOR is set', async () => {
+    process.env.FUNCTIONS_EMULATOR = 'true';
+    readFeatureFlagMock.mockResolvedValue(true);
+    await crownHuntPerksEnabled(0);
+    await crownHuntPerksEnabled(1); // would be cached in prod; here it re-reads
+    await crownHuntPerksEnabled(2);
+    expect(readFeatureFlagMock).toHaveBeenCalledTimes(3);
   });
 });
