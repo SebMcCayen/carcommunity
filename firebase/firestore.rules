@@ -1887,6 +1887,39 @@ service cloud.firestore {
       // No client writes: feedback.reportIssue only.
     }
 
+    // -------------------------------------------------------------------------
+    // openTickets – member-readable mirror of OPEN public GitHub issues
+    // (labelled android-issue), refreshed by the scheduled
+    // feedback-syncOpenTickets job (functions/src/feedback/syncOpenTickets.ts).
+    // The in-app "open tickets" browser reads THIS collection so it never makes
+    // a GitHub call per open. Its fields (number/title/summary/htmlUrl/
+    // createdAt/state/plusOneCount/commentCount/syncedAt) are all echoes of
+    // already-PUBLIC issue text plus app-facing interaction tallies — no uid or
+    // PII — so any active member may read it. Read is gated on isActiveMember()
+    // (authenticated + not-suspended, same switch as config/perkCatalog). ALL
+    // writes are backend-only: the scheduled sync upserts, and
+    // feedback.interactWithIssue bumps the tallies — a direct client write would
+    // let a member forge ticket text or inflate a count.
+    // -------------------------------------------------------------------------
+    match /openTickets/{issueNumber} {
+      allow read: if isActiveMember();
+      // No client writes: feedback-syncOpenTickets / feedback.interactWithIssue.
+    }
+
+    // -------------------------------------------------------------------------
+    // issueInteractions – backend-only per-(issue,user,type) dedup ledger for
+    // feedback.interactWithIssue ({issueNumber}__{uid}__{type}). It enforces the
+    // once-per-issue +1 / comment guarantee and backs the per-user rate-limit
+    // count. It is NOT a member-facing collection: exposing it would leak which
+    // members interacted with which public issues (a de-anonymisation vector, as
+    // the public issue itself carries no uid), and a client write would let a
+    // member fake or erase their own dedup slot to post twice. Denied to every
+    // client in BOTH directions.
+    // -------------------------------------------------------------------------
+    match /issueInteractions/{interactionId} {
+      allow read, write: if false;
+    }
+
     // clientErrorReports – authenticated client-error record of record (Android)
     // Admin-only read. The PRIVATE record: carries the reporter's uid, the
     // (app-generated) error message/code, client context, the dedup fingerprint,

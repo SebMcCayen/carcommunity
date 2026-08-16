@@ -154,6 +154,8 @@ import { onSignInFailure } from './diagnostics/onSignInFailure';
 import { cleanupExpired as cleanupExpiredDiagnostics } from './diagnostics/scheduled';
 import { saveDrive } from './drives/saveDrive';
 import { reportIssue } from './feedback/reportIssue';
+import { interactWithIssue } from './feedback/interactWithIssue';
+import { syncOpenTickets } from './feedback/syncOpenTickets';
 import { reportClientError } from './errors/reportClientError';
 import { onClientErrorReport } from './errors/onClientErrorReport';
 import { onServerErrorReport } from './errors/onServerErrorReport';
@@ -814,9 +816,22 @@ export const diagnostics = {
  * PII. GitHub failures never fail the callable (the report is already
  * captured) and never surface a raw GitHub error to the app. Requires the
  * GITHUB_ISSUE_TOKEN secret (functions/src/feedback/reportIssue.ts).
+ *
+ * `feedback-interactWithIssue` (callable) + `feedback-syncOpenTickets`
+ * (scheduled) back the in-app "open tickets" browser (report-tickets PR1).
+ * syncOpenTickets mirrors OPEN public issues labelled `android-issue` into the
+ * member-readable `openTickets/{issueNumber}` collection every few minutes;
+ * interactWithIssue lets an active member, once each per issue, +1 (a fixed
+ * "another user is affected" comment) or comment (neutralized + bounded, posted
+ * to the public issue AND mirrored to the moderationReports admin queue) —
+ * deduped by a backend-only `issueInteractions/{n}__{uid}__{type}` doc and
+ * gated on the contract-default-OFF `reportTicketsBrowser` flag. Both bind the
+ * GITHUB_ISSUE_TOKEN secret (functions/src/feedback/*).
  */
 export const feedback = {
   reportIssue,
+  interactWithIssue,
+  syncOpenTickets,
 };
 
 /**
