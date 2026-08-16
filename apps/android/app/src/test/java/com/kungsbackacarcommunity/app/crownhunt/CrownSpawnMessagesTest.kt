@@ -56,6 +56,10 @@ class CrownSpawnMessagesTest {
             CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.ALREADY_TAKEN),
         )
         assertEquals(
+            R.string.crownHunt_spawnResultAlreadyCollected,
+            CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.ALREADY_COLLECTED),
+        )
+        assertEquals(
             R.string.crownHunt_spawnResultOutsideRadius,
             CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.OUTSIDE_RADIUS),
         )
@@ -124,6 +128,63 @@ class CrownSpawnMessagesTest {
         assertNotEquals(
             CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.CROWN_EXPIRED),
             CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.ALREADY_TAKEN),
+        )
+    }
+
+    /**
+     * Re-collecting a SHARED crown you already picked up ("you already got this
+     * one") is a distinct, benign message — NOT the "someone beat you" race line
+     * (ALREADY_TAKEN) and, above all, NOT the generic transport error the missing
+     * enum value used to produce (#874).
+     */
+    @Test
+    fun alreadyCollectedIsItsOwnBenignLineAndNeverTheGenericError() {
+        val collected = CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.ALREADY_COLLECTED)
+        assertEquals(R.string.crownHunt_spawnResultAlreadyCollected, collected)
+        assertNotEquals(
+            "already_collected must not read as the 'someone beat you' race line",
+            CrownSpawnMessages.resultMessageRes(CrownSpawnClaimResult.ALREADY_TAKEN),
+            collected,
+        )
+        assertNotEquals(
+            "already_collected must not read as a generic transport failure",
+            R.string.crownHunt_spawnErrorClaim,
+            collected,
+        )
+    }
+
+    /**
+     * The wire code the backend actually sends for a re-tap of a shared crown
+     * MUST round-trip to a rendered enum value. Before #874 the enum omitted it,
+     * so `fromWire` returned null, the response failed to parse, and the popup
+     * showed the generic error. Pinned so a future prune of the enum cannot
+     * silently reintroduce that.
+     */
+    @Test
+    fun knownBackendResultCodeParsesToAnEnumValue() {
+        val wireCodes =
+            listOf(
+                "awarded",
+                "already_taken",
+                "already_collected",
+                "outside_radius",
+                "must_be_stationary",
+                "position_too_old",
+                "crown_expired",
+                "daily_limit_reached",
+                "risk_review",
+                "feature_disabled",
+                "not_eligible",
+            )
+        for (code in wireCodes) {
+            assertNotNull(
+                "backend result code '$code' must parse to an enum value, not null",
+                CrownSpawnClaimResult.fromWire(code),
+            )
+        }
+        assertEquals(
+            CrownSpawnClaimResult.ALREADY_COLLECTED,
+            CrownSpawnClaimResult.fromWire("already_collected"),
         )
     }
 

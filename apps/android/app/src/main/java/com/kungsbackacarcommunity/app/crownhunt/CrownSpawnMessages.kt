@@ -46,6 +46,11 @@ object CrownSpawnMessages {
         when (result) {
             CrownSpawnClaimResult.AWARDED -> R.string.crownHunt_spawnResultAwarded
             CrownSpawnClaimResult.ALREADY_TAKEN -> R.string.crownHunt_spawnResultAlreadyTaken
+            // "You already got this one", NOT "someone beat you" (ALREADY_TAKEN):
+            // a shared crown the caller collected earlier is still on the map, so
+            // this is the honest reading of a re-tap, not a lost race.
+            CrownSpawnClaimResult.ALREADY_COLLECTED ->
+                R.string.crownHunt_spawnResultAlreadyCollected
             CrownSpawnClaimResult.OUTSIDE_RADIUS -> R.string.crownHunt_spawnResultOutsideRadius
             CrownSpawnClaimResult.MUST_BE_STATIONARY ->
                 R.string.crownHunt_spawnResultMustBeStationary

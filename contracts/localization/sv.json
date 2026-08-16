@@ -1185,6 +1185,7 @@
     "spawnResultAwarded": "Kronan är din!",
     "spawnResultAwardedPoints": "+%1$d KP",
     "spawnResultAlreadyTaken": "Någon hann före — den här kronan är redan hämtad.",
+    "spawnResultAlreadyCollected": "Du har redan hämtat den här kronan.",
     "spawnResultOutsideRadius": "Du är för långt från kronan.",
     "spawnResultMustBeStationary": "Du behöver stå stilla för att hämta kronan. Stanna säkert, vänta några sekunder och försök igen.",
     "spawnResultPositionTooOld": "Din position är lite gammal. Vänta en stund och försök igen.",

@@ -52,6 +52,14 @@ enum class CrownRarity(val wire: String, val rewardPoints: Int) {
 enum class CrownSpawnClaimResult(val wire: String) {
     AWARDED("awarded"),
     ALREADY_TAKEN("already_taken"),
+    // A SHARED crown (common/uncommon) is collectable once per member but stays
+    // on the map to its TTL for everyone else, so a member who already picked it
+    // up will still see — and can still tap — the very same crown. The backend
+    // answers that second tap with `already_collected`. This MUST be in the enum:
+    // a missing code makes fromWire return null, the response fails to parse, and
+    // the popup shows the generic "something went wrong" transport error for what
+    // is a benign, expected re-tap (issue #874).
+    ALREADY_COLLECTED("already_collected"),
     OUTSIDE_RADIUS("outside_radius"),
     MUST_BE_STATIONARY("must_be_stationary"),
     POSITION_TOO_OLD("position_too_old"),

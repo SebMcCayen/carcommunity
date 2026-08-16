@@ -454,6 +454,137 @@ class CrownSpawnControllerTest {
         assertEquals(listOf("still-there"), controller.nearbySpawns.value.map { it.id })
     }
 
+    /**
+     * Re-tapping a SHARED crown you already collected is a benign, EXPECTED
+     * outcome (the crown stays on the map for others), not a transport failure.
+     * It must surface as a Done result — so the popup shows "you already got
+     * this one" — and drop the crown from THIS user's map so they stop re-tapping
+     * a crown that will only ever answer already_collected. Regression for #874,
+     * where the missing enum value made the response fail to parse and the popup
+     * showed the generic "something went wrong" error instead.
+     */
+    @Test
+    fun `already collected is a graceful result that drops the crown, not a failure`() = runTest {
+        val repo =
+            FakeRepo(
+                spawns = listOf(spawn("shared")),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.ALREADY_COLLECTED,
+                        null,
+                        null,
+                        CrownRarity.COMMON,
+                    ),
+            )
+        val controller = CrownSpawnController(repo)
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+
+        val now = 1_000_000L
+        controller.collect(
+            spawn = spawn("shared"),
+            current = CrownFix(57.5, 12.0, now),
+            previous = CrownFix(57.5, 12.0, now - 10_000),
+            idempotencyKey = "k1",
+        )
+
+        val status = controller.claimStatus.value
+        assertTrue("already_collected must not be a transport failure", status is CrownClaimStatus.Done)
+        assertEquals(
+            CrownSpawnClaimResult.ALREADY_COLLECTED,
+            (status as CrownClaimStatus.Done).outcome.result,
+        )
+        assertTrue("already_collected must clear the marker", controller.nearbySpawns.value.isEmpty())
+    }
+
+    /**
+     * The drop must SURVIVE a refresh. A shared crown the user collected is still
+     * `live` for others, so listNearby keeps returning it — a plain in-place drop
+     * would be undone by the very next refresh, re-inviting the tap. The
+     * suppression set must filter it out of the query result too (#874).
+     */
+    @Test
+    fun `a refresh does not re-add a crown the user already collected`() = runTest {
+        val shared = spawn("shared") // expiresAtMillis = null → never pruned
+        val repo =
+            FakeRepo(
+                spawns = listOf(shared),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.ALREADY_COLLECTED,
+                        null,
+                        null,
+                        CrownRarity.COMMON,
+                    ),
+            )
+        val controller = CrownSpawnController(repo)
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+
+        val now = 1_000_000L
+        controller.collect(
+            spawn = shared,
+            current = CrownFix(57.5, 12.0, now),
+            previous = CrownFix(57.5, 12.0, now - 10_000),
+            idempotencyKey = "k1",
+        )
+        assertTrue(controller.nearbySpawns.value.isEmpty())
+
+        // The crown is STILL returned by the backend (it is live for others), but
+        // the refresh must not put it back on THIS user's map.
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        assertTrue(
+            "a collected shared crown must stay hidden across refreshes",
+            controller.nearbySpawns.value.isEmpty(),
+        )
+    }
+
+    /**
+     * The suppression set self-prunes: once a collected crown's own expiry has
+     * passed it is gone for everyone, so forgetting it costs nothing and keeps the
+     * set from growing for the life of the session.
+     */
+    @Test
+    fun `suppression of a collected crown is forgotten once it expires`() = runTest {
+        var clock = 1_000_000L
+        val expiring =
+            CrownSpawn(
+                id = "expiring",
+                latitude = 57.4870,
+                longitude = 12.0760,
+                rarity = CrownRarity.COMMON,
+                rewardPoints = CrownRarity.COMMON.rewardPoints,
+                collectRadiusMeters = CrownSpawnLimits.COLLECT_RADIUS_METERS,
+                expiresAtMillis = 2_000_000L,
+            )
+        val repo =
+            FakeRepo(
+                spawns = listOf(expiring),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.ALREADY_COLLECTED,
+                        null,
+                        null,
+                        CrownRarity.COMMON,
+                    ),
+            )
+        val controller = CrownSpawnController(repo, nowMillis = { clock })
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        controller.collect(
+            spawn = expiring,
+            current = CrownFix(57.5, 12.0, clock),
+            previous = CrownFix(57.5, 12.0, clock - 10_000),
+            idempotencyKey = "k1",
+        )
+        // Before expiry: still suppressed.
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        assertTrue(controller.nearbySpawns.value.isEmpty())
+
+        // After the crown's own expiry the suppression entry is pruned — nothing
+        // is left to grow, and the crown is gone for everyone anyway.
+        clock = 2_000_001L
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        assertEquals(listOf("expiring"), controller.nearbySpawns.value.map { it.id })
+    }
+
     /** A transport failure says "something went wrong", never judging the user. */
     @Test
     fun `a transport failure is a failure, not a refusal`() = runTest {

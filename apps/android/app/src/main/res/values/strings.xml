@@ -1106,6 +1106,7 @@
     <string name="crownHunt_spawnResultAwarded">Kronan är din!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
     <string name="crownHunt_spawnResultAlreadyTaken">Någon hann före — den här kronan är redan hämtad.</string>
+    <string name="crownHunt_spawnResultAlreadyCollected">Du har redan hämtat den här kronan.</string>
     <string name="crownHunt_spawnResultOutsideRadius">Du är för långt från kronan.</string>
     <string name="crownHunt_spawnResultMustBeStationary">Du behöver stå stilla för att hämta kronan. Stanna säkert, vänta några sekunder och försök igen.</string>
     <string name="crownHunt_spawnResultPositionTooOld">Din position är lite gammal. Vänta en stund och försök igen.</string>
