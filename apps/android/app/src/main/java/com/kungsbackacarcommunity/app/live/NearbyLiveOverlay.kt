@@ -183,18 +183,19 @@ fun NearbyLiveOverlay(
                 if (diagnosticsLog.recordChip(verdict)) escalated = true
             }
             if (escalated) {
-                val faultTotal = diagnosticsLog.faultTotal()
-                val counts = diagnosticsLog.verdictCounts()
+                // ONE atomic snapshot of faultTotal + counts feeds both the message
+                // and the dedup code, so they cannot describe different states.
+                val faultSnapshot = diagnosticsLog.snapshot()
                 errorReporter?.report(
                     feature = MapAwarenessReport.FEATURE_CHIP,
                     message =
                         MapAwarenessReport.chipMessage(
-                            faultTotal = faultTotal,
-                            counts = counts,
+                            faultTotal = faultSnapshot.faultTotal,
+                            counts = faultSnapshot.counts,
                             viewportWidth = viewportWidth,
                             viewportHeight = viewportHeight,
                         ),
-                    code = MapAwarenessReport.chipCode(counts),
+                    code = MapAwarenessReport.chipCode(faultSnapshot.counts),
                 )
             }
         }

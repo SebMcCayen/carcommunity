@@ -180,64 +180,81 @@ object MapAwarenessDiagnostics {
         val isFault: Boolean get() = offScreenNonStale > 0
     }
 
+    /** An atomic snapshot of a [MapAwarenessLog], for one escalation report. */
+    data class ChipFaultSnapshot(
+        val faultTotal: Int,
+        val counts: Map<ChipProjectionVerdict, Int>,
+    )
+
     /**
-     * A BOUNDED, device-local ring buffer of map-awareness observations, and a
-     * one-shot escalation the same shape as
-     * [com.kungsbackacarcommunity.app.location.LivePositionRejectionLog]: [record]
-     * returns true exactly once, the first time the running fault count crosses
+     * A device-local tally of chip projection FAULTS, and a one-shot escalation the
+     * same shape as [com.kungsbackacarcommunity.app.location.LivePositionRejectionLog]:
+     * [recordChip] returns true exactly once, the first time the fault count crosses
      * [escalateAfter], and the caller then fires a single aggregate report.
      *
-     * One faulty projection is weather (a real pan off-screen, one settling
-     * frame); a burst is a fault. The counts and worst viewport are retained for
-     * the escalated report and for a future diagnostics dump; the buffer never
-     * leaves the device.
+     * ## Why an accumulating count, not a ring buffer of verdicts
+     * The report needs the FAULT distribution that drove the escalation, and there
+     * are only three fault verdicts, so this keeps a per-verdict count that never
+     * evicts — O(1) memory regardless of how long a session runs. A bounded ring of
+     * raw verdicts (the first cut) was actively wrong here: a settled frame records
+     * one verdict PER SHARER (up to ~50), the vast majority ON_SCREEN/OFF_SCREEN
+     * non-faults, so a single busy frame could evict every fault that triggered the
+     * report before the report read them back — leaving the dominant-fault `code`
+     * stale or "UNKNOWN" even though [faultTotal] had crossed the threshold.
+     * Non-fault verdicts are therefore not stored at all: they cannot displace a
+     * fault, and the report never needs their counts.
      */
     class MapAwarenessLog(
-        private val capacity: Int = DEFAULT_CAPACITY,
         private val escalateAfter: Int = ESCALATE_AFTER_FAULTS,
     ) {
-        private val verdicts = ArrayDeque<ChipProjectionVerdict>(capacity)
+        private val faultCounts = HashMap<ChipProjectionVerdict, Int>()
         private var faultTotal = 0
         private var escalated = false
         private val lock = Any()
 
         /**
-         * Records one chip verdict.
+         * Records one chip verdict; non-faults are ignored (they cannot evict a
+         * fault and the report never needs them).
          *
          * @return true exactly once per [reset] cycle — when the fault count first
          *   reaches [escalateAfter] — so the caller escalates without keeping its
          *   own flag.
          */
         fun recordChip(verdict: ChipProjectionVerdict): Boolean = synchronized(lock) {
-            verdicts.addLast(verdict)
-            while (verdicts.size > capacity) verdicts.removeFirst()
-            if (isFault(verdict)) {
-                faultTotal++
-                if (!escalated && faultTotal >= escalateAfter) {
-                    escalated = true
-                    return@synchronized true
-                }
+            if (!isFault(verdict)) return@synchronized false
+            faultCounts[verdict] = (faultCounts[verdict] ?: 0) + 1
+            faultTotal++
+            if (!escalated && faultTotal >= escalateAfter) {
+                escalated = true
+                return@synchronized true
             }
             false
         }
 
-        /** Faults recorded since the last [reset], including any already evicted. */
+        /** Faults recorded since the last [reset]. */
         fun faultTotal(): Int = synchronized(lock) { faultTotal }
 
-        /** Per-verdict counts over the RETAINED tail — the recent shape of a burst. */
+        /** Per-fault-verdict counts since the last [reset] (a copy). */
         fun verdictCounts(): Map<ChipProjectionVerdict, Int> =
-            synchronized(lock) { verdicts.groupingBy { it }.eachCount() }
+            synchronized(lock) { HashMap(faultCounts) }
 
-        /** Clears the buffer, counts and the escalation flag. */
+        /**
+         * An ATOMIC snapshot of the fault total and per-verdict counts. Taken under
+         * one lock so the escalation report's message and dedup code are computed
+         * from a single consistent state, never two reads that a concurrent record
+         * could have changed between.
+         */
+        fun snapshot(): ChipFaultSnapshot =
+            synchronized(lock) { ChipFaultSnapshot(faultTotal, HashMap(faultCounts)) }
+
+        /** Clears the counts and the escalation flag. */
         fun reset() = synchronized(lock) {
-            verdicts.clear()
+            faultCounts.clear()
             faultTotal = 0
             escalated = false
         }
 
         companion object {
-            const val DEFAULT_CAPACITY = 32
-
             /**
              * Chip projection faults in one map session before a single aggregate
              * report is filed. A handful of faulty frames while panning is normal;
@@ -248,14 +265,18 @@ object MapAwarenessDiagnostics {
     }
 
     /**
-     * A BOUNDED ring buffer + one-shot escalation for convoy-FIT faults (bug 1):
-     * fresh members left out of frame while the fit is active.
+     * A running tally + one-shot escalation for convoy-FIT faults (bug 1): fresh
+     * members left out of frame while the fit is active.
+     *
+     * Keeps only RUNNING AGGREGATES (the fault count, the worst off-screen count,
+     * the largest group seen) rather than a buffer of frames: [summary] — the one
+     * thing the report reads — is derived from those aggregates directly, so, unlike
+     * a bounded frame buffer, a long run of faults can never evict the numbers the
+     * report needs. [summary] is itself the atomic snapshot (one lock).
      */
     class ConvoyFitLog(
-        private val capacity: Int = DEFAULT_CAPACITY,
         private val escalateAfter: Int = ESCALATE_AFTER_FAULTY_FITS,
     ) {
-        private val frames = ArrayDeque<ConvoyFitFrame>(capacity)
         private var faultTotal = 0
         private var worstOffScreen = 0
         private var largestMemberCount = 0
@@ -269,8 +290,6 @@ object MapAwarenessDiagnostics {
          *   fits first reaches [escalateAfter].
          */
         fun recordFrame(frame: ConvoyFitFrame): Boolean = synchronized(lock) {
-            frames.addLast(frame)
-            while (frames.size > capacity) frames.removeFirst()
             largestMemberCount = maxOf(largestMemberCount, frame.memberCount)
             if (frame.isFault) {
                 faultTotal++
@@ -283,6 +302,7 @@ object MapAwarenessDiagnostics {
             false
         }
 
+        /** An atomic snapshot of the running aggregates, for one report. */
         fun summary(): ConvoyFitSummary = synchronized(lock) {
             ConvoyFitSummary(
                 faultyFits = faultTotal,
@@ -292,7 +312,6 @@ object MapAwarenessDiagnostics {
         }
 
         fun reset() = synchronized(lock) {
-            frames.clear()
             faultTotal = 0
             worstOffScreen = 0
             largestMemberCount = 0
@@ -300,8 +319,6 @@ object MapAwarenessDiagnostics {
         }
 
         companion object {
-            const val DEFAULT_CAPACITY = 32
-
             /**
              * Faulty fits (a fresh member off-screen while framing) before a report
              * is filed. One settling frame can momentarily leave someone out while

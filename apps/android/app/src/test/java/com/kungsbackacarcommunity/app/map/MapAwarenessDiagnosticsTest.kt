@@ -157,6 +157,35 @@ class MapAwarenessDiagnosticsTest {
     }
 
     @Test
+    fun `fault counts survive a large burst of non-fault verdicts`() {
+        // The ring-buffer eviction bug: a settled frame records one verdict PER
+        // SHARER (~50), nearly all ON_SCREEN/OFF_SCREEN. A bounded verdict buffer
+        // let that non-fault flood evict the faults that drove escalation, so the
+        // report's dominant-fault code came back stale/UNKNOWN. Faults must survive.
+        val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 2)
+        log.recordChip(ChipProjectionVerdict.HIDDEN_CORNER_CLAMP)
+        log.recordChip(ChipProjectionVerdict.HIDDEN_CORNER_CLAMP)
+        // A big flood of non-faults across many frames.
+        repeat(500) { log.recordChip(ChipProjectionVerdict.ON_SCREEN) }
+        repeat(500) { log.recordChip(ChipProjectionVerdict.OFF_SCREEN) }
+
+        val snapshot = log.snapshot()
+        assertEquals(2, snapshot.faultTotal)
+        assertEquals(2, snapshot.counts[ChipProjectionVerdict.HIDDEN_CORNER_CLAMP])
+        // Non-faults are never stored, so the report's code stays the real fault.
+        assertEquals("HIDDEN_CORNER_CLAMP", MapAwarenessReport.chipCode(snapshot.counts))
+    }
+
+    @Test
+    fun `the atomic snapshot agrees with the piecewise reads`() {
+        val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 10)
+        repeat(3) { log.recordChip(ChipProjectionVerdict.HIDDEN_FOLD) }
+        val snapshot = log.snapshot()
+        assertEquals(log.faultTotal(), snapshot.faultTotal)
+        assertEquals(log.verdictCounts(), snapshot.counts)
+    }
+
+    @Test
     fun `resetting the chip log re-arms the escalation`() {
         val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 1)
         assertTrue(log.recordChip(ChipProjectionVerdict.HIDDEN_FOLD))
