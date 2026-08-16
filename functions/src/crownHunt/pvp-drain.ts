@@ -194,16 +194,36 @@ async function runTrapDrains(ctx: DrainContext): Promise<void> {
     // this trap, cooldown, cap spent, race) returns false — try the next trap;
     // a real drain returns true and we STOP (one trap per update, see above).
     const drained = await applyTrapDrain(doc.ref, placerUid, ctx).catch((error) => {
-      logger.warn('Single trap drain failed; skipping', {
-        trapId: doc.id,
-        error: error instanceof Error ? error.message : String(error),
-      });
+      // The marker `create` is the once-per-(trap, victim) idempotency guard, so
+      // two concurrent samples racing the SAME marker have one loser throw
+      // Firestore ALREADY_EXISTS — a NORMAL no-op, not a failure. Skip it
+      // silently (matching the gRPC status code, not message text) so it cannot
+      // spam prod logs under load; only genuinely unexpected errors warn.
+      if (!isAlreadyExistsError(error)) {
+        logger.warn('Single trap drain failed; skipping', {
+          trapId: doc.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
       return false;
     });
     if (drained) {
       return;
     }
   }
+}
+
+/**
+ * True for a Firestore/gRPC ALREADY_EXISTS error (status code 6) — the expected
+ * outcome when two concurrent drains race the once-per-(trap, victim) marker
+ * `create`. Matched on the numeric/string status code, never the message text.
+ */
+function isAlreadyExistsError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null || !('code' in error)) {
+    return false;
+  }
+  const code = (error as { code: unknown }).code;
+  return code === 6 || code === 'already-exists';
 }
 
 /**
@@ -228,12 +248,7 @@ async function applyTrapDrain(
   const nowMs = now.getTime();
   const dayKey = utcDayKey(now);
 
-  // Placer must also be able to transact (a suspended placer earns nothing).
-  const placerSnap = await db.collection('users').doc(placerUid).get();
-  if (!placerSnap.exists || isRestricted(toUserAccessState(placerSnap.data()))) {
-    return false;
-  }
-
+  const placerUserRef = db.collection('users').doc(placerUid);
   const victimLedgerRef = db.collection('pointsLedger').doc(victimUid);
   const placerLedgerRef = db.collection('pointsLedger').doc(placerUid);
   const cooldownRef = db.collection('perkDrainCooldowns').doc(victimCooldownDocId(victimUid));
@@ -265,15 +280,31 @@ async function applyTrapDrain(
       .collection('perkTrapVictims')
       .doc(trapVictimMarkerId(trapRef.id, victimUid));
 
-    const [markerSnap, cooldownSnap, victimLedgerSnap, placerLedgerSnap, lossSnap, earnSnap] =
-      await Promise.all([
-        tx.get(markerRef),
-        tx.get(cooldownRef),
-        tx.get(victimLedgerRef),
-        tx.get(placerLedgerRef),
-        tx.get(lossRef),
-        tx.get(earnRef),
-      ]);
+    const [
+      placerUserSnap,
+      markerSnap,
+      cooldownSnap,
+      victimLedgerSnap,
+      placerLedgerSnap,
+      lossSnap,
+      earnSnap,
+    ] = await Promise.all([
+      tx.get(placerUserRef),
+      tx.get(markerRef),
+      tx.get(cooldownRef),
+      tx.get(victimLedgerRef),
+      tx.get(placerLedgerRef),
+      tx.get(lossRef),
+      tx.get(earnRef),
+    ]);
+
+    // Placer must be able to transact — checked INSIDE the transaction so a
+    // placer suspended/deleted in the window before commit is not still
+    // credited (a suspended user must never earn new points). Read here rather
+    // than pre-transaction, so it is re-validated at commit time.
+    if (!placerUserSnap.exists || isRestricted(toUserAccessState(placerUserSnap.data()))) {
+      return false;
+    }
 
     if (markerSnap.exists) {
       return false; // already caught by THIS trap
