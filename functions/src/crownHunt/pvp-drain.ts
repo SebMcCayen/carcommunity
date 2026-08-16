@@ -72,24 +72,33 @@ import {
 const MAX_TRAP_SCAN_BUDGET = 5;
 
 // ---------------------------------------------------------------------------
-// crownHuntPerks flag — short module-level TTL cache (HOT-PATH ONLY)
+// crownHuntPerks flag — module-level TTL cache with ASYMMETRIC TTL (HOT-PATH ONLY)
 //
 // processTrapDrains runs on live.updatePosition (every accepted position
 // sample), and readFeatureFlag has no cache — each call is a fresh
 // config/featureFlags Firestore read. Without this, every live position update
 // would pay that read forever, even with the feature OFF (the flag is read
-// before the early-return). So the gate is cached in-memory per warm instance
-// for CACHE_TTL_MS.
+// before the early-return). So the gate is cached in-memory per warm instance.
+//
+// The TTL is ASYMMETRIC, keyed on the cached VALUE, so the flag stays a fast
+// KILL-SWITCH while still cheap when off:
+//   - FALSE (feature off/disabled — the steady state pre-launch and after a
+//     kill): cached for the LONG TTL, so the hot path pays ~no reads while off.
+//   - TRUE (feature live): cached for a SHORT TTL, so if Seb emergency-disables
+//     crownHuntPerks, warm instances stop draining within a few seconds rather
+//     than up to a minute — the whole point of the flag as a kill-switch — while
+//     still avoiding a per-sample read.
 //
 // This cache is DELIBERATELY LOCAL to the drain hot path — it does NOT touch
 // the shared featureFlags infra (a global flag cache would add staleness to
-// every flag-gated behaviour and needs separate sign-off). Bounded staleness:
-// when the flag is flipped ON at launch, drains begin within <= CACHE_TTL_MS
-// per warm instance — fine for a game feature. A failed read caches the
-// contract default (false) briefly, which is the correct fail-safe.
+// every flag-gated behaviour and needs separate sign-off). A failed read caches
+// the contract default (false) for the long TTL, which is the correct fail-safe.
 // ---------------------------------------------------------------------------
 
-const PERKS_FLAG_CACHE_TTL_MS = 60_000;
+/** TTL for a cached ENABLED gate — short, so a disable propagates in seconds. */
+const PERKS_FLAG_ENABLED_TTL_MS = 5_000;
+/** TTL for a cached DISABLED gate — long, so the off steady-state is cheap. */
+const PERKS_FLAG_DISABLED_TTL_MS = 60_000;
 let cachedPerksFlag: { value: boolean; expiresAtMs: number } | null = null;
 
 async function crownHuntPerksEnabled(nowMs: number): Promise<boolean> {
@@ -97,9 +106,10 @@ async function crownHuntPerksEnabled(nowMs: number): Promise<boolean> {
     return cachedPerksFlag.value;
   }
   // readFeatureFlag already returns the contract default (false) on a read
-  // error, so a failed read simply caches false for the TTL.
+  // error, so a failed read simply caches false for the long (disabled) TTL.
   const value = await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY);
-  cachedPerksFlag = { value, expiresAtMs: nowMs + PERKS_FLAG_CACHE_TTL_MS };
+  const ttlMs = value ? PERKS_FLAG_ENABLED_TTL_MS : PERKS_FLAG_DISABLED_TTL_MS;
+  cachedPerksFlag = { value, expiresAtMs: nowMs + ttlMs };
   return value;
 }
 

@@ -43,12 +43,24 @@ describe('processTrapDrains flag cache', () => {
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
   });
 
-  it('re-reads after the 60s TTL elapses', async () => {
+  it('OFF holds for the long 60s TTL', async () => {
     readFeatureFlagMock.mockResolvedValue(false);
     await processTrapDrains(sample(0));
-    await processTrapDrains(sample(59_000)); // still inside the TTL
+    await processTrapDrains(sample(59_000)); // still inside the long TTL
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
-    await processTrapDrains(sample(60_001)); // past the TTL → fresh read
+    await processTrapDrains(sample(60_001)); // past the long TTL → fresh read
+    expect(readFeatureFlagMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('ON re-reads after the short 5s TTL (fast kill-switch)', async () => {
+    // Flag ON. crownHuntPerksEnabled resolves true, then runTrapDrains throws on
+    // the mocked db and is swallowed by processTrapDrains — the flag read count
+    // is unaffected, which is what this asserts.
+    readFeatureFlagMock.mockResolvedValue(true);
+    await processTrapDrains(sample(0));
+    await processTrapDrains(sample(4_000)); // still inside the short TTL → cached
+    expect(readFeatureFlagMock).toHaveBeenCalledTimes(1);
+    await processTrapDrains(sample(5_001)); // past the short TTL → fresh read
     expect(readFeatureFlagMock).toHaveBeenCalledTimes(2);
   });
 });
