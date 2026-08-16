@@ -274,7 +274,10 @@ describe('runOpenTicketsSync', () => {
     await seedOpenTicket(8201, { plusOneCount: 5, commentCount: 2 });
     await seedOpenTicket(8299);
 
-    const result = await runOpenTicketsSync(async () => [fakeIssue(8201), fakeIssue(8202)]);
+    const result = await runOpenTicketsSync(async () => ({
+      issues: [fakeIssue(8201), fakeIssue(8202)],
+      complete: true,
+    }));
     expect(result.mirrored).toBe(2);
     expect(result.removed).toBeGreaterThanOrEqual(1);
 
@@ -293,6 +296,20 @@ describe('runOpenTicketsSync', () => {
     expect((await adminDb.collection('openTickets').doc('8299').get()).exists).toBe(false);
   });
 
+  it('mirrors a large multi-page set fully and deletes NONE of the still-open tickets', async () => {
+    // Simulates listOpenIssues having paginated 150 open issues into one
+    // complete set: every one is still open, so all mirror and none are dropped.
+    const many = Array.from({ length: 150 }, (_, i) => fakeIssue(8400 + i));
+    const result = await runOpenTicketsSync(async () => ({ issues: many, complete: true }));
+    expect(result.mirrored).toBe(150);
+    // A stale doc left over from the run above (8299 already deleted) — assert
+    // every one of the 150 is present.
+    const present = await Promise.all(
+      many.map(async (i) => (await adminDb.collection('openTickets').doc(String(i.number)).get()).exists),
+    );
+    expect(present.every(Boolean)).toBe(true);
+  });
+
   it('makes NO changes on a null fetch (outage safety)', async () => {
     const before = (await adminDb.collection('openTickets').get()).size;
     expect(before).toBeGreaterThan(0);
@@ -302,12 +319,28 @@ describe('runOpenTicketsSync', () => {
     expect(after).toBe(before); // nothing touched
   });
 
-  it('reconciles a GENUINE empty open set (successful fetch of []) by removing all stale docs', async () => {
+  it('upserts but DELETES NOTHING on a truncated (complete:false) fetch', async () => {
+    // 8601/8602 are outside the 8400-8549 range mirrored above.
+    await seedOpenTicket(8601); // a stale doc NOT in the (truncated) fetch set
+    const before = (await adminDb.collection('openTickets').get()).size;
+    const result = await runOpenTicketsSync(async () => ({
+      issues: [fakeIssue(8602)],
+      complete: false,
+    }));
+    expect(result.mirrored).toBe(1);
+    expect(result.removed).toBe(0); // truncated → no reconciliation
+    // The stale doc survives (it may simply be on an unfetched page).
+    expect((await adminDb.collection('openTickets').doc('8601').get()).exists).toBe(true);
+    const after = (await adminDb.collection('openTickets').get()).size;
+    expect(after).toBe(before + 1); // only the upsert of 8602 was added
+  });
+
+  it('reconciles a GENUINE empty open set (complete fetch of []) by removing all stale docs', async () => {
     const before = (await adminDb.collection('openTickets').get()).size;
     expect(before).toBeGreaterThan(0);
-    const result = await runOpenTicketsSync(async () => []);
+    const result = await runOpenTicketsSync(async () => ({ issues: [], complete: true }));
     expect(result.mirrored).toBe(0);
-    expect(result.removed).toBe(before); // an empty success is a real zero — reconcile out
+    expect(result.removed).toBe(before); // an empty COMPLETE success is a real zero — reconcile out
     expect((await adminDb.collection('openTickets').get()).size).toBe(0);
   });
 });

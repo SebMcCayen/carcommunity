@@ -151,29 +151,86 @@ export interface GitHubOpenIssue {
 }
 
 /**
+ * Validates EVERY field the openTickets pipeline consumes and NORMALIZES each
+ * row, so a downstream consumer never sees an `undefined`. A row missing any
+ * required scalar (number/title/html_url/created_at/state) is DROPPED rather
+ * than allowed to poison the mirror; the optional `body`/`comments`/
+ * `pull_request` are coerced to safe defaults.
+ */
+function normalizeIssueRows(rows: unknown[]): GitHubOpenIssue[] {
+  const normalized: GitHubOpenIssue[] = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    if (
+      typeof r.number !== 'number' ||
+      typeof r.title !== 'string' ||
+      typeof r.html_url !== 'string' ||
+      typeof r.created_at !== 'string' ||
+      typeof r.state !== 'string'
+    ) {
+      continue;
+    }
+    normalized.push({
+      number: r.number,
+      title: r.title,
+      body: typeof r.body === 'string' ? r.body : null,
+      html_url: r.html_url,
+      created_at: r.created_at,
+      state: r.state,
+      comments: typeof r.comments === 'number' ? r.comments : 0,
+      // Preserve the PR marker so isMirrorableIssue can drop pull requests.
+      ...(r.pull_request !== undefined ? { pull_request: r.pull_request } : {}),
+    });
+  }
+  return normalized;
+}
+
+/**
+ * A successful list result. `complete` is true when the FULL open set was
+ * fetched (the final page was short, so nothing follows); it is false when the
+ * page cap was hit while pages were still full — meaning the open set may be
+ * TRUNCATED. The scheduled sync must NOT run its delete/reconcile pass on a
+ * truncated set (it would delete still-open tickets it never saw), so this flag
+ * is load-bearing, not cosmetic.
+ */
+export interface OpenIssuesResult {
+  issues: GitHubOpenIssue[];
+  complete: boolean;
+}
+
+/** Max pages fetched per list call (100/page → up to 1000 open issues). */
+export const OPEN_ISSUES_MAX_PAGES = 10;
+
+/**
  * Lists OPEN issues carrying the given label on the public repo, newest-updated
- * first, up to `perPage` (single page — the mirror only needs the current open
- * set, and the tracker never holds hundreds of open bugs). `perPage` is clamped
- * to GitHub's valid 1..100 range so an out-of-range value can never turn a
- * successful list into a 4xx.
+ * first, PAGINATING through all pages (per_page clamped to GitHub's 1..100)
+ * until a short page ends the set or [OPEN_ISSUES_MAX_PAGES] is hit. `perPage`
+ * is clamped so an out-of-range value can never turn a successful list into a
+ * 4xx.
  *
  * Returns `null` on ANY failure (network, non-2xx, unexpected shape, missing
- * token) or in the emulator, and an ARRAY (possibly EMPTY) on a successful 2xx.
- * NEVER throws — the scheduled sync is best-effort and must not crash-loop on a
- * GitHub blip. The null-vs-empty distinction is load-bearing: it lets the sync
- * reconcile stale docs out on a genuine zero-open-issues result WITHOUT wiping
- * the mirror on a transient outage (which is null, not empty).
+ * token, or a failure on ANY page mid-pagination — so a partial set is never
+ * returned) and in the emulator. On success returns `{ issues, complete }`:
+ * `complete` is false only when the page cap was reached with full pages, i.e.
+ * the set may be truncated. NEVER throws — the scheduled sync is best-effort and
+ * must not crash-loop on a GitHub blip.
  *
- * The label + state are sent as query params; PRs (which the issues endpoint
- * also returns) are NOT filtered here — the caller drops any row with a
- * `pull_request` field so the filtering rule lives with the mapping.
+ * The null-vs-result and complete-vs-truncated distinctions are load-bearing:
+ * they let the sync reconcile stale docs out on a genuine COMPLETE result
+ * (including a zero-open-issues one) WITHOUT wiping the mirror on a transient
+ * outage (null) or deleting unseen open tickets from a truncated set.
+ *
+ * PRs (which the issues endpoint also returns) are NOT filtered here — the
+ * caller drops any row with a `pull_request` field so the rule lives with the
+ * mapping.
  */
 export async function listOpenIssues(
   label: string,
   token: string,
   userAgent: string,
   perPage = 100,
-): Promise<GitHubOpenIssue[] | null> {
+): Promise<OpenIssuesResult | null> {
   if (process.env.FUNCTIONS_EMULATOR === 'true') {
     return null;
   }
@@ -183,56 +240,45 @@ export async function listOpenIssues(
   }
 
   const boundedPerPage = Math.min(100, Math.max(1, Math.trunc(perPage)));
-  const url =
-    `${GITHUB_ISSUES_URL}?state=open&labels=${encodeURIComponent(label)}` +
-    `&per_page=${boundedPerPage}&sort=updated&direction=desc`;
-  try {
-    const response = await fetch(url, { method: 'GET', headers: githubHeaders(token, userAgent) });
-    if (!response.ok) {
-      logger.error('listOpenIssues: GitHub list failed', { status: response.status });
-      return null;
-    }
-    const body = (await response.json()) as unknown;
-    if (!Array.isArray(body)) {
-      logger.error('listOpenIssues: unexpected GitHub response shape');
-      return null;
-    }
-    // Validate EVERY field the pipeline consumes and NORMALIZE the row, so a
-    // downstream consumer never sees an `undefined`. A row missing any required
-    // scalar (number/title/html_url/created_at/state) is DROPPED rather than
-    // allowed to poison the mirror; the optional `body`/`comments`/`pull_request`
-    // are coerced to safe defaults. Best-effort — a malformed row is skipped,
-    // never thrown on.
-    const normalized: GitHubOpenIssue[] = [];
-    for (const row of body) {
-      if (!row || typeof row !== 'object') continue;
-      const r = row as Record<string, unknown>;
-      if (
-        typeof r.number !== 'number' ||
-        typeof r.title !== 'string' ||
-        typeof r.html_url !== 'string' ||
-        typeof r.created_at !== 'string' ||
-        typeof r.state !== 'string'
-      ) {
-        continue;
+  const issues: GitHubOpenIssue[] = [];
+
+  for (let page = 1; page <= OPEN_ISSUES_MAX_PAGES; page += 1) {
+    const url =
+      `${GITHUB_ISSUES_URL}?state=open&labels=${encodeURIComponent(label)}` +
+      `&per_page=${boundedPerPage}&page=${page}&sort=updated&direction=desc`;
+    try {
+      const response = await fetch(url, { method: 'GET', headers: githubHeaders(token, userAgent) });
+      if (!response.ok) {
+        // A failure on ANY page aborts the WHOLE call to null — never return a
+        // partial set, which would make the sync delete the pages it never saw.
+        logger.error('listOpenIssues: GitHub list failed', { status: response.status, page });
+        return null;
       }
-      normalized.push({
-        number: r.number,
-        title: r.title,
-        body: typeof r.body === 'string' ? r.body : null,
-        html_url: r.html_url,
-        created_at: r.created_at,
-        state: r.state,
-        comments: typeof r.comments === 'number' ? r.comments : 0,
-        // Preserve the PR marker so isMirrorableIssue can drop pull requests.
-        ...(r.pull_request !== undefined ? { pull_request: r.pull_request } : {}),
-      });
+      const body = (await response.json()) as unknown;
+      if (!Array.isArray(body)) {
+        logger.error('listOpenIssues: unexpected GitHub response shape', { page });
+        return null;
+      }
+      issues.push(...normalizeIssueRows(body));
+      // A short RAW page (fewer than the page size) is the last page. Use the
+      // raw length, not the normalized count, so dropped malformed rows can't
+      // be mistaken for the end of the set.
+      if (body.length < boundedPerPage) {
+        return { issues, complete: true };
+      }
+    } catch (error) {
+      logger.error('listOpenIssues: GitHub request threw', { error: String(error), page });
+      return null;
     }
-    return normalized;
-  } catch (error) {
-    logger.error('listOpenIssues: GitHub request threw', { error: String(error) });
-    return null;
   }
+
+  // The page cap was hit with full pages throughout: the open set may extend
+  // beyond what we fetched, so mark it potentially-truncated.
+  logger.warn('listOpenIssues: page cap reached; open set may be truncated', {
+    pages: OPEN_ISSUES_MAX_PAGES,
+    fetched: issues.length,
+  });
+  return { issues, complete: false };
 }
 
 /**

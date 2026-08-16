@@ -9,12 +9,16 @@
  * fetched open set is removed, so the app's list can never show a ticket that is
  * no longer open.
  *
- * BEST-EFFORT: listOpenIssues never throws. It returns `null` on any GitHub
- * failure (and in the emulator) and an ARRAY (possibly empty) on a successful
- * fetch. A `null` result makes NO changes at all — a transient outage must
- * never wipe the mirror. A successful fetch reconciles fully, INCLUDING a
- * genuine empty open set (every stale doc removed), because an empty array is a
- * real "zero open issues" answer, distinct from the null failure signal.
+ * BEST-EFFORT: listOpenIssues never throws. It PAGINATES the open set and
+ * returns `null` on any failure (network/non-2xx on ANY page, unexpected shape,
+ * missing token, emulator) or `{ issues, complete }` on success. A `null`
+ * result makes NO changes at all — a transient outage must never wipe the
+ * mirror. A COMPLETE successful fetch reconciles fully, INCLUDING a genuine
+ * empty open set (every stale doc removed). A `complete: false` set is
+ * potentially TRUNCATED (the page cap was hit with full pages), so the delete
+ * pass is SKIPPED — the sync upserts what it saw but never deletes tickets it
+ * may simply not have fetched, so a repo with >1000 open tickets can never lose
+ * still-open rows from the mirror.
  *
  * The per-ticket `plusOneCount` / `commentCount` tallies are the app-facing
  * counts maintained by feedback-interactWithIssue; the sync writes them with a
@@ -22,7 +26,7 @@
  * existing doc's live tally is preserved (never clobbered by a resync).
  *
  * `runOpenTicketsSync(fetchIssues?)` is exported so an emulator test can inject
- * a deterministic result — an array (reconcile) or null (skip) — since the real
+ * a deterministic result — `{ issues, complete }` or null — since the real
  * GitHub call short-circuits to null in the emulator. Mirrors
  * badges/scheduled.ts runBadgeBacklogSweep.
  */
@@ -32,7 +36,7 @@ import { defineSecret } from 'firebase-functions/params';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { logger } from 'firebase-functions';
 import { db } from '../firebase';
-import { listOpenIssues, type GitHubOpenIssue } from '../shared/githubIssues';
+import { listOpenIssues, type OpenIssuesResult } from '../shared/githubIssues';
 import {
   OPEN_TICKETS_COLLECTION,
   OPEN_TICKETS_LABEL,
@@ -54,10 +58,12 @@ export interface OpenTicketsSyncResult {
 
 /**
  * Injectable GitHub fetcher (defaults to the real, best-effort list call).
- * Resolves to `null` on any failure (skip reconciliation) or an array (possibly
- * empty) on success (reconcile fully).
+ * Resolves to `null` on any failure (make no changes), or `{ issues, complete }`
+ * on success — `complete: false` marks a potentially-truncated set on which the
+ * delete/reconcile pass is SKIPPED (upsert only) so unseen open tickets are
+ * never deleted.
  */
-export type IssueFetcher = () => Promise<GitHubOpenIssue[] | null>;
+export type IssueFetcher = () => Promise<OpenIssuesResult | null>;
 
 /**
  * Upserts one ticket, preserving the live interaction tallies. `createdAt` is
@@ -94,16 +100,16 @@ export async function runOpenTicketsSync(
   fetchIssues: IssueFetcher = () =>
     listOpenIssues(OPEN_TICKETS_LABEL, GITHUB_ISSUE_TOKEN.value(), 'carcommunity-feedback-bot'),
 ): Promise<OpenTicketsSyncResult> {
-  const issues = await fetchIssues();
+  const result = await fetchIssues();
 
   // A null result is the FAILURE signal (outage / emulator / bad token): make
-  // no changes at all so a transient blip can never touch the mirror. An empty
-  // array is a genuine "zero open issues" answer and proceeds to reconcile.
-  if (issues === null) {
+  // no changes at all so a transient blip can never touch the mirror.
+  if (result === null) {
     logger.info('syncOpenTickets skipped: GitHub fetch unavailable');
     return { fetched: 0, mirrored: 0, removed: 0 };
   }
 
+  const { issues, complete } = result;
   const mirrorable = issues.filter(isMirrorableIssue);
 
   let mirrored = 0;
@@ -120,24 +126,32 @@ export async function runOpenTicketsSync(
     }
   }
 
-  // Reconcile OUT anything no longer open. This runs on ANY successful fetch —
-  // including a genuine empty open set (every stale doc removed) — because we
-  // reached here only when GitHub actually answered (null was handled above).
+  // Reconcile OUT anything no longer open — but ONLY on a COMPLETE fetch. A
+  // truncated set (page cap hit, complete=false) has open tickets we never saw,
+  // so deleting docs "not in the set" would wrongly drop still-open tickets:
+  // upsert only, skip deletion. A complete set — including a genuine empty one —
+  // reconciles fully (every stale doc removed).
   let removed = 0;
-  const keep = new Set(mirrorable.map((i) => String(i.number)));
-  const existing = await db.collection(OPEN_TICKETS_COLLECTION).get();
-  for (const doc of existing.docs) {
-    if (!keep.has(doc.id)) {
-      try {
-        await doc.ref.delete();
-        removed += 1;
-      } catch (error) {
-        logger.error('syncOpenTickets: stale delete failed', {
-          issueNumber: doc.id,
-          error: String(error),
-        });
+  if (complete) {
+    const keep = new Set(mirrorable.map((i) => String(i.number)));
+    const existing = await db.collection(OPEN_TICKETS_COLLECTION).get();
+    for (const doc of existing.docs) {
+      if (!keep.has(doc.id)) {
+        try {
+          await doc.ref.delete();
+          removed += 1;
+        } catch (error) {
+          logger.error('syncOpenTickets: stale delete failed', {
+            issueNumber: doc.id,
+            error: String(error),
+          });
+        }
       }
     }
+  } else {
+    logger.warn('syncOpenTickets: truncated open set — skipping stale reconciliation', {
+      fetched: issues.length,
+    });
   }
 
   logger.info('syncOpenTickets complete', { fetched: issues.length, mirrored, removed });
