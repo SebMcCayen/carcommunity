@@ -5231,7 +5231,19 @@ fun AuthenticatedApp(
                     // frame (map chrome AND bottom bar) the coach-mark anchor
                     // registry, so the controls tagged with Modifier.coachMarkAnchor
                     // report their bounds to the tour overlay drawn at the end.
-                    CompositionLocalProvider(LocalCoachMarkAnchors provides coachMarkAnchors) {
+                    //
+                    // The registry is provided ONLY while the tour can still run
+                    // (!coachMarksSeen); once seen, it provides null so every
+                    // coachMarkAnchor collapses to the intended no-op and stops
+                    // measuring on every layout pass — no permanent overhead for the
+                    // (vast majority of) users who have already finished onboarding.
+                    // Provider and overlay share the same !coachMarksSeen gate, so
+                    // they switch off together on finish and an in-progress tour is
+                    // never left without its registry.
+                    CompositionLocalProvider(
+                        LocalCoachMarkAnchors provides
+                            (if (coachMarksSeen) null else coachMarkAnchors),
+                    ) {
                     Box(
                         modifier =
                             Modifier.fillMaxSize().then(
