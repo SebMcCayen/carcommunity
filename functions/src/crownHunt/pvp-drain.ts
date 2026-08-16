@@ -140,10 +140,14 @@ interface DrainContext {
  */
 export async function resolveActiveBoostMultiplier(uid: string, now: Date): Promise<number> {
   try {
-    // Reuse the module's crownHuntPerks TTL cache (same flag) rather than an
-    // uncached read on every crown-claim attempt — semantically identical, and
-    // it keeps the asymmetric ~5s-when-on kill-switch.
-    if (!(await crownHuntPerksEnabled(now.getTime()))) {
+    // DELIBERATELY an UNCACHED read (unlike the drain hot path). The boost
+    // multiplier is a direct, per-crown-claim reward the member expects the
+    // instant they deploy a boost — the crownHuntPerksEnabled cache holds a
+    // stale FALSE for up to 60s (its long off-TTL), which is fine for the
+    // background drain but would deny 2x on the very next crown after a member
+    // enables PvP / deploys a boost. A crown claim is also far lower frequency
+    // than a position sample, so a per-claim flag read costs little.
+    if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
       return 1;
     }
     const snap = await db.collection('perkBoost').doc(uid).get();
