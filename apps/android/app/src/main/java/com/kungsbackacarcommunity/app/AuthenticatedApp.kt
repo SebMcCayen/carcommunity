@@ -1545,13 +1545,27 @@ fun AuthenticatedApp(
                     .collectAsState(initial = false)
 
             // Friends (DM) and Notifications unread, hoisted the SAME way as
-            // communityChatUnread and behind the SAME gate: the inbox listeners run
-            // only while the indicator can be seen (Map bubble or hub open) and
-            // degrade to a constant `false` otherwise. Each is one listener shared
-            // by the map bubble's aggregate dot AND its own chat-hub tab dot. Both
-            // derive a plain "any unread" boolean from the SAME snapshot each tab
-            // already reads, so no fan-out counter is needed. (Convoys has no
-            // aggregate: unread there is per-convoy — see the PR notes.)
+            // communityChatUnread and behind the SAME gate (needsChatUnread).
+            //
+            // COST, honestly: needsChatUnread is true on the MAP tab (the home
+            // screen), so these two observers — observeConversations (plus its
+            // per-conversation profile hydration / combine work) and
+            // observeNotifications — stay active the ENTIRE time the user is on the
+            // map, even if they never open the hub. That is deliberate: the
+            // aggregate map-bubble dot has to reflect DM + notification unread, not
+            // just community (community was already listened for the old
+            // community-only dot). This is the accepted cost of the aggregate dot.
+            // These are also NOT shared with the hub pages: the Friends /
+            // Notifications routes start their own inbox listeners when opened, so
+            // opening those tabs briefly runs two overlapping listeners. Each
+            // derivation collapses its snapshot to a plain "any unread" boolean, so
+            // no fan-out counter is needed. (Convoys has no aggregate: unread there
+            // is per-convoy — see the PR notes.)
+            //
+            // TODO(optional): a lighter "any-unread-exists" query (an
+            // unread-filtered limit(1)) could replace the full-list observers on the
+            // map screen; deferred — DM unread is per-participant, not directly
+            // queryable without a data-model/index change.
             val dmUnread by
                 remember(dmRepository, uid, needsChatUnread) {
                     if (dmRepository != null && needsChatUnread) {

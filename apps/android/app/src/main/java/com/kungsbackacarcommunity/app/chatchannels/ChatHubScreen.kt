@@ -351,10 +351,12 @@ private fun ChatHubContent(
     // single Firestore listener backs both the bubble and this tab's dot.
     communityUnread: Boolean,
     // Per-tab unread dots for the Friends (any DM with unread) and Notifications
-    // (any unread inbox item) sections. Like [communityUnread], derived from the
-    // SAME listeners AuthenticatedApp already runs while the hub can be seen, so
-    // the tab dots and the aggregate map-bubble dot share one subscription each.
-    // (Convoys has no per-tab dot; see the tab row.)
+    // (any unread inbox item) sections. Derived from listeners hoisted in
+    // AuthenticatedApp that run while the indicator can be seen. Note this is NOT
+    // one shared subscription per section: the Friends and Notifications PAGES
+    // (ConversationListRoute / NotificationsRoute) start their OWN inbox listeners
+    // when opened, so on those two pages the hoisted dot-listener briefly overlaps
+    // with the on-page listener. (Convoys has no per-tab dot; see the tab row.)
     friendsUnread: Boolean,
     notificationsUnread: Boolean,
     onClose: () -> Unit,
