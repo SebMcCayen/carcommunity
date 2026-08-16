@@ -127,8 +127,13 @@ function toPublicRow(row: StoredLeaderboardRow | undefined, position: number): P
  * scored in simply renders empty — never an error).
  */
 export function publicCategoryRows(rows: StoredLeaderboardRow[] | undefined): PublicLeaderboardRow[] {
+  // A malformed `leaderboards/{scope}` document could store a category as an
+  // object/null/scalar rather than the expected array. Publishing is
+  // best-effort and must NEVER throw (a bad doc must not break the site sync),
+  // so a non-array category reads as empty rather than crashing the for-of.
+  const safeRows = Array.isArray(rows) ? rows : [];
   const out: PublicLeaderboardRow[] = [];
-  for (const row of rows ?? []) {
+  for (const row of safeRows) {
     if (out.length >= PUBLIC_LEADERBOARD_TOP_N) {
       break;
     }

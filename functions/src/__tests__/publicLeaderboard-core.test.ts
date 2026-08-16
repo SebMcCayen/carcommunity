@@ -89,6 +89,15 @@ describe('publicCategoryRows', () => {
   it('returns an empty array for a missing category', () => {
     expect(publicCategoryRows(undefined)).toEqual([]);
   });
+
+  it('treats a MALFORMED (non-array) category as empty without throwing', () => {
+    // A mangled leaderboards/{scope} doc could store a category as null, an
+    // object or a scalar; best-effort publishing must never throw on it.
+    for (const bad of [null, {}, 42, 'oops', { rank: 1, displayName: 'X' }]) {
+      expect(() => publicCategoryRows(bad as never)).not.toThrow();
+      expect(publicCategoryRows(bad as never)).toEqual([]);
+    }
+  });
 });
 
 describe('buildPublicLeaderboardFile', () => {
