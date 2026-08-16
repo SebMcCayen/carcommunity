@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.coachmark
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -56,6 +57,12 @@ fun Modifier.coachMarkAnchor(step: CoachMarkStep): Modifier =
         if (registry == null) {
             this
         } else {
+            // Forget this step's bounds when the anchored control leaves the
+            // composition (a tab switch, conditional composition, config change),
+            // so the overlay never spotlights a stale position after re-layout.
+            DisposableEffect(registry, step) {
+                onDispose { registry.clear(step) }
+            }
             this.onGloballyPositioned { coordinates ->
                 if (coordinates.isAttached) {
                     registry.report(step, coordinates.boundsInRoot())

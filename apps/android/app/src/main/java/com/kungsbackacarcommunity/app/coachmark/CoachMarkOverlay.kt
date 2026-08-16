@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -169,7 +170,10 @@ private fun CoachMarkOverlay(
 
             // Bubble width is fixed (so horizontal placement is stable from the
             // first frame): a comfortable card, shrunk to fit narrow screens.
-            val bubbleWidthDp = minOf(320.dp, maxWidth - KccSpacing.s4 * 2)
+            // coerceAtLeast(0.dp) guards a pathologically narrow layout where the
+            // margins alone exceed the width — a negative width would crash layout.
+            val bubbleWidthDp =
+                minOf(320.dp, (maxWidth - KccSpacing.s4 * 2).coerceAtLeast(0.dp))
             val bubbleWidthPx = with(density) { bubbleWidthDp.toPx() }
 
             // Bubble goes BELOW a target in the top half, ABOVE one in the bottom
