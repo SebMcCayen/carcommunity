@@ -155,14 +155,18 @@ object LeaderboardBoard {
 
     /**
      * The document id to read for [scope]. All-time is the fixed [ALL_TIME_DOC_ID];
-     * this-month is the caller-supplied `YYYY-MM` [seasonId] (derived from
+     * this-month is the `YYYY-MM` id from [seasonId] (derived from
      * [com.kungsbackacarcommunity.app.crownhunt.CrownSeasonClock] so the client and
      * the backend agree on the month boundary and format).
+     *
+     * [seasonId] is a LAZY provider, evaluated ONLY for the monthly scope — the
+     * all-time board never needs a season id, so resolving one (an `Instant.now()`
+     * + format) for it would be wasted work.
      */
-    fun scopeDocId(scope: LeaderboardScope, seasonId: String): String =
+    fun scopeDocId(scope: LeaderboardScope, seasonId: () -> String): String =
         when (scope) {
             LeaderboardScope.ALL_TIME -> ALL_TIME_DOC_ID
-            LeaderboardScope.THIS_MONTH -> seasonId
+            LeaderboardScope.THIS_MONTH -> seasonId()
         }
 
     /**
@@ -181,6 +185,14 @@ object LeaderboardBoard {
      * yields an empty category (never a dropped section), and the server's row order
      * and `rank` are preserved verbatim (the client does not re-rank). [viewerUid]
      * flags the signed-in member's own row.
+     *
+     * A row without a POSITIVE rank is dropped: rank drives the medal colour, the
+     * podium/list split and the "#N" line, so a rank-0 row would render as a broken
+     * "#0" with no medal. The server always publishes contiguous 1-based ranks, so
+     * this only removes a corrupt/partial row, never a legitimate one. A blank
+     * `displayName` is NOT a drop reason — [resolveName] falls back to a uid stub —
+     * so the one field a row cannot survive without is a positive rank (and a uid,
+     * already required upstream when the raw rows are extracted).
      */
     fun board(
         scope: LeaderboardScope,
@@ -192,16 +204,18 @@ object LeaderboardBoard {
             LeaderboardCategoryBoard(
                 category = category,
                 entries =
-                    rows.map { row ->
-                        LeaderboardEntry(
-                            rank = row.rank,
-                            uid = row.uid,
-                            displayName = resolveName(row.displayName, row.uid),
-                            avatarPath = row.avatarPath,
-                            value = row.value,
-                            isViewer = viewerUid != null && row.uid == viewerUid,
-                        )
-                    },
+                    rows
+                        .filter { it.rank > 0 }
+                        .map { row ->
+                            LeaderboardEntry(
+                                rank = row.rank,
+                                uid = row.uid,
+                                displayName = resolveName(row.displayName, row.uid),
+                                avatarPath = row.avatarPath,
+                                value = row.value,
+                                isViewer = viewerUid != null && row.uid == viewerUid,
+                            )
+                        },
             )
         }
 

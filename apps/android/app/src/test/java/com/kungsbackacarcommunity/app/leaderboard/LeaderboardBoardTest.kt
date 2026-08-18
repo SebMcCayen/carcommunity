@@ -18,12 +18,24 @@ class LeaderboardBoardTest {
 
     @Test
     fun allTimeScopeReadsTheReservedDocId() {
-        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME, "2026-08"))
+        assertEquals("alltime", LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) { "2026-08" })
     }
 
     @Test
     fun thisMonthScopeReadsTheSeasonId() {
-        assertEquals("2026-08", LeaderboardBoard.scopeDocId(LeaderboardScope.THIS_MONTH, "2026-08"))
+        assertEquals("2026-08", LeaderboardBoard.scopeDocId(LeaderboardScope.THIS_MONTH) { "2026-08" })
+    }
+
+    @Test
+    fun allTimeScopeNeverEvaluatesTheSeasonProvider() {
+        // The all-time id is fixed, so the (potentially clock-reading) provider must
+        // not be invoked for it. A throwing provider proves the laziness.
+        assertEquals(
+            "alltime",
+            LeaderboardBoard.scopeDocId(LeaderboardScope.ALL_TIME) {
+                throw AssertionError("season provider must not run for the all-time scope")
+            },
+        )
     }
 
     // ── categoriesFor ───────────────────────────────────────────────────────
@@ -157,14 +169,42 @@ class LeaderboardBoardTest {
     }
 
     @Test
-    fun blankDisplayNameFallsBackToAUidStub() {
+    fun blankDisplayNameIsKeptAndFallsBackToAUidStub() {
+        // A blank displayName is NOT a drop reason (rank is positive): resolveName
+        // provides the uid stub so the row still renders.
         val boards =
             LeaderboardBoard.board(
                 LeaderboardScope.ALL_TIME,
                 rawByCategory = mapOf("distance" to listOf(RawLeaderboardRow(1, "abcdef1234", "  ", null, 5000.0))),
                 viewerUid = null,
             )
-        assertEquals("abcdef12", boards.first { it.category == LeaderboardCategory.DISTANCE }.entries[0].displayName)
+        val distance = boards.first { it.category == LeaderboardCategory.DISTANCE }
+        assertEquals(1, distance.entries.size)
+        assertEquals("abcdef12", distance.entries[0].displayName)
+    }
+
+    @Test
+    fun rowWithNonPositiveRankIsDropped() {
+        // rank drives the medal colour, podium split and the "#N" line — a rank-0
+        // row would render as a broken "#0", so board() drops it while keeping the
+        // valid rows around it (and does NOT renumber them — the server's ranks stand).
+        val boards =
+            LeaderboardBoard.board(
+                LeaderboardScope.ALL_TIME,
+                rawByCategory =
+                    mapOf(
+                        "crownPoints" to
+                            listOf(
+                                RawLeaderboardRow(1, "alice", "Alice", null, 900.0),
+                                RawLeaderboardRow(0, "ghost", "Ghost", null, 800.0),
+                                RawLeaderboardRow(2, "bob", "Bob", null, 500.0),
+                            ),
+                    ),
+                viewerUid = null,
+            )
+        val crown = boards.first { it.category == LeaderboardCategory.CROWN_POINTS }
+        assertEquals(listOf("alice", "bob"), crown.entries.map { it.uid })
+        assertEquals(listOf(1, 2), crown.entries.map { it.rank })
     }
 
     private fun entry(rank: Int, uid: String): LeaderboardEntry =

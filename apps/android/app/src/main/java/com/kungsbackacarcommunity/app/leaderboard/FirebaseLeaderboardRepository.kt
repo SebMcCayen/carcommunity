@@ -31,7 +31,9 @@ class FirebaseLeaderboardRepository private constructor(
         viewerUid: String?,
     ): Flow<LeaderboardUiState> = callbackFlow {
         trySend(LeaderboardUiState.Loading)
-        val docId = LeaderboardBoard.scopeDocId(scope, seasonIdProvider())
+        // Lazy: seasonIdProvider (an Instant.now() + format) runs ONLY for the
+        // monthly scope — the all-time board's id is fixed.
+        val docId = LeaderboardBoard.scopeDocId(scope, seasonIdProvider)
         val registration =
             firestore.collection(COLLECTION).document(docId).addSnapshotListener { snapshot, error ->
                 if (error != null) {
@@ -71,11 +73,14 @@ class FirebaseLeaderboardRepository private constructor(
  * Extracts the per-category raw rows from a `leaderboards/{scope}` snapshot. Reads
  * the document's `categories` map; each value is an ordered array of row maps
  * `{ rank, uid, displayName, avatarPath, value }`. Only a row missing its `uid` is
- * dropped — the one field with no safe fallback (a row that cannot be keyed to a
- * member); a blank `displayName` is passed through as-is and resolved by
+ * dropped HERE — the one field with no safe fallback (a row that cannot be keyed to
+ * a member); a blank `displayName` is passed through as-is and resolved by
  * [LeaderboardBoard]'s own `resolveName` (uid-stub fallback), so the two layers
  * agree rather than the repository silently discarding what the pure fold would
- * have shown. Order is preserved verbatim; the server has already ranked each array.
+ * have shown. A missing/invalid `rank` is read as 0 and dropped downstream by
+ * [LeaderboardBoard.board] (which requires a positive rank), keeping the "what makes
+ * a row renderable" rule in one, unit-tested place. Order is preserved verbatim; the
+ * server has already ranked each array.
  */
 private fun DocumentSnapshot.rawCategories(): Map<String, List<RawLeaderboardRow>> {
     if (!exists()) return emptyMap()
@@ -85,17 +90,14 @@ private fun DocumentSnapshot.rawCategories(): Map<String, List<RawLeaderboardRow
     for ((key, value) in categories) {
         val rows = value as? List<*> ?: continue
         result[key] =
-            rows.mapIndexedNotNull { index, raw ->
+            rows.mapNotNull { raw ->
                 @Suppress("UNCHECKED_CAST")
-                val row = raw as? Map<String, Any?> ?: return@mapIndexedNotNull null
+                val row = raw as? Map<String, Any?> ?: return@mapNotNull null
                 val uid =
                     (row["uid"] as? String)?.takeIf { it.isNotEmpty() }
-                        ?: return@mapIndexedNotNull null
+                        ?: return@mapNotNull null
                 RawLeaderboardRow(
-                    // Server rows are always 1-based-ranked; if a rank is ever absent
-                    // fall back to the row's position in the (already ordered) array
-                    // rather than 0, so the UI never renders "#0".
-                    rank = (row["rank"] as? Number)?.toInt() ?: (index + 1),
+                    rank = (row["rank"] as? Number)?.toInt() ?: 0,
                     uid = uid,
                     displayName = (row["displayName"] as? String).orEmpty(),
                     avatarPath = (row["avatarPath"] as? String)?.takeIf { it.isNotEmpty() },
