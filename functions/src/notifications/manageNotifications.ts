@@ -101,6 +101,45 @@ export const markAllRead = onCall(
   },
 );
 
+export interface MarkSeenResponse {
+  /** The stamped marker, echoed back (ISO-8601). */
+  lastSeenAt: string;
+}
+
+/**
+ * notifications.markSeen — stamps the caller's inbox-seen marker at
+ * userPrivate/{uid}.notificationsLastSeenAt = now (owner-only readable, the same
+ * per-user private doc that holds communityChatLastReadAt).
+ *
+ * This is the "the inbox has something new" marker behind the Notifications
+ * red dot (map chat bubble + the hub's Notifications tab), the exact mirror of
+ * communityChat.markRead: the client's newest-item live listener lights the dot
+ * when the newest notification post-dates this marker and clears it once the
+ * user opens the inbox (which calls this). It is DELIBERATELY separate from the
+ * per-item `read` flag that markRead / markAllRead maintain — opening the inbox
+ * clears the dot without marking every row read, so each row keeps its own
+ * unread styling until the user actually taps it (again mirroring chat, where
+ * opening the channel clears the dot without touching individual messages).
+ *
+ * Takes {} and derives the uid from auth, so there is no value a caller could
+ * supply that would stamp another member's marker. Idempotent: re-stamping just
+ * advances the timestamp. Best-effort bookkeeping — the client swallows failures.
+ */
+export const markSeen = onCall(CALLABLE_OPTS, async (request): Promise<MarkSeenResponse> => {
+  const actor = await requireActiveActor(request);
+
+  const ref = db.collection('userPrivate').doc(actor.uid);
+  await ref.set({ notificationsLastSeenAt: FieldValue.serverTimestamp() }, { merge: true });
+
+  const fresh = await ref.get();
+  const stamped = fresh.data()?.notificationsLastSeenAt;
+  const iso =
+    stamped && typeof stamped.toDate === 'function'
+      ? stamped.toDate().toISOString()
+      : new Date().toISOString();
+  return { lastSeenAt: iso };
+});
+
 export interface DeleteNotificationResponse {
   notificationId: string;
   /** False when there was nothing to delete (idempotent replay). */

@@ -245,7 +245,6 @@ import com.kungsbackacarcommunity.app.notifications.NotificationSettingsReposito
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsRoute
 import com.kungsbackacarcommunity.app.notifications.NotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationsRoute
-import com.kungsbackacarcommunity.app.notifications.anyUnread as anyNotificationUnread
 import com.kungsbackacarcommunity.app.notifications.currentPushPermissionStatus
 import com.kungsbackacarcommunity.app.notifications.openAppNotificationSettings
 import com.kungsbackacarcommunity.app.partners.OfferCodeCoordinator
@@ -1714,9 +1713,13 @@ fun AuthenticatedApp(
             val notificationsUnread by
                 remember(notificationsRepository, uid, needsChatUnread) {
                     if (notificationsRepository != null && needsChatUnread) {
-                        notificationsRepository.observeNotifications(uid)
-                            .map { it.anyNotificationUnread() }
-                            .distinctUntilChanged()
+                        // observeUnread is the last-SEEN-marker dot (mirrors
+                        // community chat), NOT the per-item read count: the dot
+                        // clears when the inbox is opened (notifications.markSeen)
+                        // without marking every row read. A limit(1) newest-item
+                        // listener + the userPrivate marker, lighter than the old
+                        // full-inbox listener this used to run.
+                        notificationsRepository.observeUnread(uid).distinctUntilChanged()
                     } else {
                         flowOf(false)
                     }

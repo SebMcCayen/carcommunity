@@ -260,6 +260,49 @@ describe('notifications-markRead / markAllRead', () => {
   });
 });
 
+describe('notifications-markSeen', () => {
+  it('stamps the inbox-seen marker without touching per-item read state', async () => {
+    const seen = await createProvisionedUser('notif-seen');
+    // A brand-new notification is unread AND unseen.
+    const { notificationId } = await writeInAppNotification(seen.uid, baseNotification, 'seen-1');
+
+    await signInAs(seen);
+    const before = await adminDb.collection('userPrivate').doc(seen.uid).get();
+    expect(before.data()?.notificationsLastSeenAt ?? null).toBeNull();
+
+    const first = (await call('notifications-markSeen', {})).data as { lastSeenAt: string };
+    expect(typeof first.lastSeenAt).toBe('string');
+
+    const after = await adminDb.collection('userPrivate').doc(seen.uid).get();
+    expect(after.data()?.notificationsLastSeenAt).toBeInstanceOf(Timestamp);
+
+    // The item is SEEN but still UNREAD — markSeen must not flip the read flag,
+    // so each row keeps its own unread styling until actually tapped.
+    const item = (await itemsOf(seen.uid).doc(notificationId!).get()).data()!;
+    expect(item.read).toBe(false);
+  });
+
+  it('is idempotent — re-stamping only advances the marker', async () => {
+    const seen = await createProvisionedUser('notif-seen-idem');
+    await signInAs(seen);
+
+    const first = (await call('notifications-markSeen', {})).data as { lastSeenAt: string };
+    const firstStamp = (
+      await adminDb.collection('userPrivate').doc(seen.uid).get()
+    ).data()!.notificationsLastSeenAt as Timestamp;
+
+    const second = (await call('notifications-markSeen', {})).data as { lastSeenAt: string };
+    const secondStamp = (
+      await adminDb.collection('userPrivate').doc(seen.uid).get()
+    ).data()!.notificationsLastSeenAt as Timestamp;
+
+    expect(typeof first.lastSeenAt).toBe('string');
+    expect(typeof second.lastSeenAt).toBe('string');
+    // Monotonic: the second stamp is not older than the first.
+    expect(secondStamp.toMillis()).toBeGreaterThanOrEqual(firstStamp.toMillis());
+  });
+});
+
 describe('notifications-delete / deleteAll', () => {
   it('deletes only the caller’s own item, idempotently', async () => {
     const owner = await createProvisionedUser('notif-del-owner');

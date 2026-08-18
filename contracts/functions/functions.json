@@ -685,6 +685,15 @@
       "source": "docs/migration/backend-domain-mapping.md (Notifications)"
     },
     {
+      "name": "notifications.markSeen",
+      "domain": "notifications",
+      "description": "Stamps the caller's inbox-seen marker ({} input) at userPrivate/{uid}.notificationsLastSeenAt = now (owner-only readable, the same private doc as communityChatLastReadAt). The client's newest-notification live listener uses it to show/clear the Notifications red dot (map chat bubble + hub Notifications tab) — the dot lights when the newest notification post-dates the marker and clears once the user opens the inbox, which calls this. Deliberately SEPARATE from the per-item read flag (markRead / markAllRead): opening the inbox clears the dot without marking every row read, mirroring communityChat-markRead where opening the channel clears the dot without touching individual messages. Idempotent (re-stamping just advances the timestamp); ownership is structural (no uid input). Returns { lastSeenAt }. Deployed via grouped export as notifications-markSeen (functions/src/notifications/manageNotifications.ts).",
+      "access": "authenticated",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "docs/migration/backend-domain-mapping.md (Notifications)"
+    },
+    {
       "name": "notifications.delete",
       "domain": "notifications",
       "description": "Deletes ONE of the caller's own in-app notifications ({ notificationId }) — the Android inbox's swipe-to-delete. The inbox is backend-write-only, so removal goes through this callable rather than a client delete, and the firestore.rules match stays read-only. Ownership is structural rather than checked: the document reference is built from the authenticated uid and the callable accepts no uid, so the only collection it can address is notifications/{caller}/items — another member's notification id names a document that does not exist there, and their item is untouched. A miss is a silent { deleted: false } rather than not-found (deliberately unlike markRead): the requested end state already holds, which makes a double-swipe, a retry after a dropped response, and a race with the retention sweep all no-ops instead of errors, and keeps the response from being an oracle for another member's inbox. The client removes the row optimistically and restores it when this callable fails, so a failed delete never silently drops a notification that still exists. Deployed via grouped export as notifications-delete (functions/src/notifications/manageNotifications.ts).",
