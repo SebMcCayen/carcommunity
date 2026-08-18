@@ -140,6 +140,14 @@ class CrownFixTracker {
     fun proofPartner(): CrownFix? = proofPartnerFor(bestRecent())
 
     /**
+     * The earlier half of the best achievable IN-RANGE dwell pair for [nowMillis],
+     * or null — [proofPair] restated for callers that only need the partner, with
+     * the same [inRange] geofence gate.
+     */
+    fun proofPartner(nowMillis: Long, inRange: (CrownFix) -> Boolean): CrownFix? =
+        proofPair(nowMillis, inRange)?.previous
+
+    /**
      * The best (current, previous) dwell pair achievable from the recorded fixes,
      * or null when none is — the ONE readiness answer everything downstream uses.
      *
@@ -161,14 +169,39 @@ class CrownFixTracker {
      * bound) applies to the CURRENT half only — the partner may legitimately be up
      * to [CrownSpawnLimits.MAX_DWELL_SECONDS] old, which is the whole point of the
      * dwell. A stale [latest] therefore yields no fresh current and null here.
+     *
+     * ## Why the geofence gate is on BOTH halves (#911)
+     *
+     * The server's `evaluateStationaryCollection` refuses the pair with
+     * `outside_radius` when EITHER fix is outside the collect geofence — not just
+     * the current one. This tracker is fed by a PRE-WARM poll that runs while the
+     * member is still APPROACHING a crown, so its buffer routinely holds
+     * approach-era fixes recorded from farther out (or a jittery balanced-power
+     * sample that landed outside the ring). Left ungated, [proofPair] would happily
+     * pair a dead-on current with one of those out-of-range earlier fixes, the gate
+     * would read [CrownCollectState.Ready], and the very first tap would be refused
+     * `outside_radius` by the server — the exact "tap, out of range, restart, works"
+     * bug in #911, whose telemetry logs a perfect 0–10 m current fix because the
+     * server never logs the PREVIOUS fix that actually failed.
+     *
+     * So callers that know the crown pass an [inRange] predicate; BOTH the current
+     * and the chosen partner must satisfy it, mirroring the server's
+     * `insideNow && insideBefore`. The default accepts any fix, preserving the pure
+     * dwell-timing behaviour for callers (and tests) that do not track a crown.
+     * This only ever makes the client STRICTER than the server — it can never widen
+     * the gate — so the anti-spoof geofence stays the authority.
      */
-    fun proofPair(nowMillis: Long): CrownProofPair? {
+    fun proofPair(
+        nowMillis: Long,
+        inRange: (CrownFix) -> Boolean = ACCEPT_ANY,
+    ): CrownProofPair? {
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
         var best: CrownProofPair? = null
         // Newest first, so equal-accuracy currents resolve to the newest.
         for (current in recent.asReversed()) {
             if (current.recordedAtMillis < freshCutoff) continue
-            val partner = proofPartnerFor(current) ?: continue
+            if (!inRange(current)) continue
+            val partner = proofPartnerFor(current, inRange) ?: continue
             if (best == null || accuracyRank(current) < accuracyRank(best.current)) {
                 best = CrownProofPair(current, partner)
             }
@@ -193,8 +226,16 @@ class CrownFixTracker {
      * sample cannot fail an otherwise-stationary claim. Ties break towards the
      * NEWEST candidate, so the span still hugs the minimum dwell (the regression
      * [CrownFixTrackerTest] pins) whenever accuracy says nothing.
+     *
+     * [inRange] gates the candidate on the crown geofence exactly as [proofPair]
+     * does — an out-of-range earlier fix is not a valid partner, because the server
+     * would refuse the resulting pair `outside_radius` (#911). The default accepts
+     * any fix.
      */
-    fun proofPartnerFor(current: CrownFix?): CrownFix? {
+    fun proofPartnerFor(
+        current: CrownFix?,
+        inRange: (CrownFix) -> Boolean = ACCEPT_ANY,
+    ): CrownFix? {
         val anchor = current ?: return null
         val minGapMs = CrownSpawnLimits.MIN_DWELL_SECONDS * 1000
         val maxGapMs = CrownSpawnLimits.MAX_DWELL_SECONDS * 1000
@@ -202,7 +243,7 @@ class CrownFixTracker {
             .asReversed()
             .filter {
                 val gap = anchor.recordedAtMillis - it.recordedAtMillis
-                gap in minGapMs..maxGapMs
+                gap in minGapMs..maxGapMs && inRange(it)
             }
             .minByOrNull { accuracyRank(it) }
     }
@@ -230,14 +271,23 @@ class CrownFixTracker {
      * Used only to put a friendly "about N s left" on the confirming button; it is
      * a hint, never a gate — the gate is [proofPair] being non-null.
      */
-    fun secondsUntilProofReady(nowMillis: Long): Int {
-        if (proofPair(nowMillis) != null) return 0
+    fun secondsUntilProofReady(
+        nowMillis: Long,
+        inRange: (CrownFix) -> Boolean = ACCEPT_ANY,
+    ): Int {
+        if (proofPair(nowMillis, inRange) != null) return 0
         val current = latest ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
         if (current.recordedAtMillis < freshCutoff) {
             return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         }
-        val oldest = recent.firstOrNull() ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
+        // Estimate the span against the oldest IN-RANGE fix: an out-of-range
+        // approach-era sample can never become a valid partner (#911), so counting
+        // down against it would over-promise and drop the hint to 0 while the gate
+        // still, correctly, shows "confirming".
+        val oldest =
+            recent.firstOrNull { inRange(it) }
+                ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val ageSeconds = (current.recordedAtMillis - oldest.recordedAtMillis) / 1000.0
         val remaining = CrownSpawnLimits.MIN_DWELL_SECONDS - ageSeconds
         return if (remaining <= 0.0) 0 else kotlin.math.ceil(remaining).toInt()
@@ -265,5 +315,12 @@ class CrownFixTracker {
          * while staying comfortably inside the server's freshness window.
          */
         const val SETTLE_WINDOW_SECONDS = 6L
+
+        /**
+         * The default geofence gate: accept any fix. Preserves the pure
+         * dwell-timing behaviour for callers (and tests) that do not track a crown;
+         * the crown-aware popup path passes a real in-range predicate (#911).
+         */
+        val ACCEPT_ANY: (CrownFix) -> Boolean = { true }
     }
 }

@@ -378,4 +378,107 @@ class CrownFixTrackerTest {
             }
         }
     }
+
+    // ── #911: the proof partner must be inside the crown geofence ───────────
+    //
+    // The server refuses a claim `outside_radius` when EITHER fix is outside the
+    // ring, and the pre-warm poll feeds this tracker while the member is still
+    // approaching — so the buffer holds approach-era fixes from farther out.
+    // Pairing a dead-on current with one of those was the bug: the button looked
+    // Ready, the first tap was refused, and only an app restart (which cleared the
+    // session-scoped tracker) let a cold, all-in-range pair form. These pin the
+    // in-range gate that makes the client's Ready match the server's acceptance.
+
+    /** Crown at the same point the default [fix] sits on. */
+    private val crownLat = 57.5
+    private val crownLon = 12.0
+
+    /**
+     * A fix [metresEast] east of the crown, at [offsetSeconds]. At 57.5° latitude
+     * 0.001° of longitude is ~59.8 m, so this converts a metre offset into a
+     * coordinate the real haversine will read back as (approximately) that far out.
+     */
+    private fun eastFix(offsetSeconds: Long, metresEast: Double, accuracyMeters: Double? = null) =
+        CrownFix(
+            latitude = crownLat,
+            longitude = crownLon + metresEast / 59_800.0,
+            recordedAtMillis = base + offsetSeconds * 1000,
+            accuracyMeters = accuracyMeters,
+        )
+
+    /** The production in-range gate, mirrored: plain distance vs the 75 m radius. */
+    private val inRange: (CrownFix) -> Boolean = { f ->
+        CrownRange.isInRange(
+            CrownSpawnQuery.distanceMeters(f.latitude, f.longitude, crownLat, crownLon),
+            CrownSpawnLimits.COLLECT_RADIUS_METERS,
+        )
+    }
+
+    @Test
+    fun `an out-of-range earlier fix is not a valid proof partner`() {
+        val tracker = CrownFixTracker()
+        // Approach-era sample ~180 m out, then the member stops on the crown.
+        tracker.record(eastFix(0, metresEast = 180.0))
+        tracker.record(eastFix(5, metresEast = 0.0))
+        val now = base + 5_000
+
+        // Ungated, the stale out-of-range partner pairs with the dead-on current —
+        // this is exactly the false Ready that produced the server `outside_radius`.
+        assertNotNull("regression: ungated selection pairs the out-of-range fix", tracker.proofPair(now))
+
+        // Gated on the crown geofence, there is no valid partner yet, so the gate
+        // honestly withholds Ready instead of letting the first tap be refused.
+        assertNull("the out-of-range earlier fix must not be a partner", tracker.proofPair(now, inRange))
+        assertNull(tracker.proofPartner(now, inRange))
+    }
+
+    @Test
+    fun `an in-range pair collects on the first attempt without a cold start`() {
+        val tracker = CrownFixTracker()
+        // Both fixes are inside the ring (the member stood still in range).
+        tracker.record(eastFix(0, metresEast = 20.0))
+        tracker.record(eastFix(5, metresEast = 10.0))
+        val now = base + 5_000
+
+        val pair = tracker.proofPair(now, inRange)
+        assertNotNull("a fully in-range dwell pair must be ready", pair)
+        assertTrue("current must be in range", inRange(pair!!.current))
+        assertTrue("previous must be in range", inRange(pair.previous))
+        assertTrue(CrownCollectGate.isDwellProofUsable(pair.previous, pair.current))
+        assertEquals(0, tracker.secondsUntilProofReady(now, inRange))
+    }
+
+    @Test
+    fun `a warm in-range pair survives a popup reopen`() {
+        val tracker = CrownFixTracker()
+        // The tracker is session-scoped (not keyed to the popup), so a reopen re-
+        // queries the SAME warm history. Prove the in-range pair is still there a
+        // few seconds later with no further recording — the popup does not need a
+        // cold restart to re-earn it.
+        tracker.record(eastFix(0, metresEast = 15.0))
+        tracker.record(eastFix(5, metresEast = 5.0))
+
+        assertNotNull(tracker.proofPair(base + 5_000, inRange))
+        // "Reopen" a couple of seconds later — still fresh (< 60 s), no new fix.
+        val reopened = tracker.proofPair(base + 7_000, inRange)
+        assertNotNull("the in-range pair must survive a popup close/reopen", reopened)
+        assertTrue(inRange(reopened!!.previous))
+    }
+
+    @Test
+    fun `the confirming countdown ignores an out-of-range approach fix`() {
+        val tracker = CrownFixTracker()
+        // Only an out-of-range approach fix and a fresh in-range current: there is
+        // no valid in-range partner, so the countdown must stay above zero (honest
+        // "confirming") rather than reading the out-of-range fix as ready.
+        tracker.record(eastFix(0, metresEast = 200.0))
+        tracker.record(eastFix(5, metresEast = 0.0))
+        val now = base + 5_000
+
+        assertEquals("ungated hint would falsely say ready", 0, tracker.secondsUntilProofReady(now))
+        assertTrue(
+            "the in-range countdown must not drop to 0 off a stale out-of-range fix",
+            tracker.secondsUntilProofReady(now, inRange) > 0,
+        )
+    }
 }
