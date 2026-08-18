@@ -409,6 +409,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'billboards.recordInteraction': 'variable-member',
   'notifications.markRead': 'variable-member',
   'notifications.markAllRead': 'variable-member',
+  'notifications.markSeen': 'variable-member',
   'notifications.delete': 'variable-member',
   'notifications.deleteAll': 'variable-member',
   'notifications.registerPushToken': 'variable-member',
