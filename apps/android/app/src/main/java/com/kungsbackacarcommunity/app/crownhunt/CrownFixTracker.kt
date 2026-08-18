@@ -259,14 +259,20 @@ class CrownFixTracker {
      * use everywhere else ([System.currentTimeMillis], or an injected one in
      * tests).
      *
-     * Returns 0 once a pair is achievable ([proofPair] is non-null). When there is
-     * no FRESH current at all (no fix yet, or [latest] has aged out) the wait is
-     * the full [CrownSpawnLimits.MIN_DWELL_SECONDS] again — the honest "you have
-     * the whole minimum dwell ahead of you".
+     * Returns 0 ONLY once a pair is achievable ([proofPair] is non-null) — never
+     * otherwise. The whole estimate honours the same [inRange] gate as [proofPair]
+     * so the countdown and the Ready gate can never disagree: estimating from the
+     * raw [latest] (which may be an OUT-OF-RANGE jitter fix that arrived after an
+     * in-range one) could otherwise drop the hint to 0 while no in-range pair
+     * exists, reporting "ready" when the gate correctly still says "confirming"
+     * (#911 review). When there is no FRESH IN-RANGE fix at all the wait is the
+     * full [CrownSpawnLimits.MIN_DWELL_SECONDS] again — the honest "you have the
+     * whole minimum dwell ahead of you".
      *
-     * Otherwise it estimates the wait for the NEWEST fix against the oldest sample
-     * that could become its partner — the shortest genuine wait, so the countdown
-     * never over-promises.
+     * Otherwise it estimates the wait for the freshest IN-RANGE fix against the
+     * oldest IN-RANGE sample that could become its partner — the shortest genuine
+     * wait, so the countdown never over-promises — and is floored at 1: past the
+     * [proofPair] check readiness is false, so the hint must stay strictly positive.
      *
      * Used only to put a friendly "about N s left" on the confirming button; it is
      * a hint, never a gate — the gate is [proofPair] being non-null.
@@ -276,21 +282,23 @@ class CrownFixTracker {
         inRange: (CrownFix) -> Boolean = ACCEPT_ANY,
     ): Int {
         if (proofPair(nowMillis, inRange) != null) return 0
-        val current = latest ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val freshCutoff = nowMillis - CrownSpawnLimits.MAX_POSITION_AGE_SECONDS * 1000
-        if (current.recordedAtMillis < freshCutoff) {
-            return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
-        }
-        // Estimate the span against the oldest IN-RANGE fix: an out-of-range
-        // approach-era sample can never become a valid partner (#911), so counting
-        // down against it would over-promise and drop the hint to 0 while the gate
-        // still, correctly, shows "confirming".
+        // The freshest FRESH, IN-RANGE fix is the only viable "current" for a
+        // future pair; an out-of-range latest can never be one, and estimating from
+        // it is what produced the false 0 the gate would contradict.
+        val current =
+            recent.lastOrNull { inRange(it) && it.recordedAtMillis >= freshCutoff }
+                ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
+        // Oldest IN-RANGE fix — the earliest a partner could come from.
         val oldest =
             recent.firstOrNull { inRange(it) }
                 ?: return CrownSpawnLimits.MIN_DWELL_SECONDS.toInt()
         val ageSeconds = (current.recordedAtMillis - oldest.recordedAtMillis) / 1000.0
         val remaining = CrownSpawnLimits.MIN_DWELL_SECONDS - ageSeconds
-        return if (remaining <= 0.0) 0 else kotlin.math.ceil(remaining).toInt()
+        // Floored at 1: [proofPair] was null above, so readiness is false and the
+        // hint must stay strictly positive — a computed <= 0 (e.g. the only in-range
+        // partner sits beyond MAX_DWELL) must never masquerade as ready.
+        return if (remaining <= 0.0) 1 else kotlin.math.ceil(remaining).toInt()
     }
 
     /** Forgets everything — used when the map tab is left, so a stale pair cannot be reused. */

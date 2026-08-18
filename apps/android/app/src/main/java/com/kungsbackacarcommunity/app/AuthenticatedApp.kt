@@ -68,6 +68,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -2398,13 +2399,20 @@ fun AuthenticatedApp(
                     val ids = inRangeSpawnIds ?: emptySet()
                     crownSpawns.filter { it.id in ids }
                 }
+            // Read through rememberUpdatedState so the long-lived pre-warm coroutine
+            // always warms against the CURRENT in-range crowns: the effect is keyed
+            // only on (crownNearCollectable, tappedCrownId), so as the member moves
+            // and the in-range SET changes underneath it — without that set becoming
+            // empty — the effect is not restarted and a plain capture would keep
+            // sampling against a stale crown (Copilot review).
+            val crownNearbyInRangeState = rememberUpdatedState(crownNearbyInRange)
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
                 // In range of ANY nearby collectable crown. The popup re-checks the
                 // SPECIFIC crown; this only decides when the warm-up has what it
                 // needs, so an OR across the in-range crowns is the right bound.
                 val inRangeOfAny: (CrownFix) -> Boolean = { fix ->
-                    crownNearbyInRange.any { crown ->
+                    crownNearbyInRangeState.value.any { crown ->
                         CrownRange.isInRange(
                             CrownSpawnQuery.distanceMeters(
                                 fix.latitude,

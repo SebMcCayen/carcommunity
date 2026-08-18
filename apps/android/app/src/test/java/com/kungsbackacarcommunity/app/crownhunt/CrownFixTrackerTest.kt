@@ -481,4 +481,24 @@ class CrownFixTrackerTest {
             tracker.secondsUntilProofReady(now, inRange) > 0,
         )
     }
+
+    @Test
+    fun `a newer out-of-range jitter fix does not make the countdown report ready`() {
+        // An in-range fix, then a FRESHER out-of-range jitter fix (the drift that
+        // #911 is about). `latest` is now out of range, so estimating the countdown
+        // from it used to compute a large age and drop the hint to 0 — reporting
+        // "ready" while proofPair, correctly, has no in-range pair. The countdown
+        // must honour the same in-range gate and stay strictly positive whenever
+        // proofPair is null, so the hint and the Ready gate never disagree.
+        val tracker = CrownFixTracker()
+        tracker.record(eastFix(0, metresEast = 5.0))
+        tracker.record(eastFix(8, metresEast = 300.0))
+        val now = base + 8_000
+
+        assertNull("no in-range pair is achievable", tracker.proofPair(now, inRange))
+        assertTrue(
+            "the countdown must not report ready (0) when no in-range pair exists",
+            tracker.secondsUntilProofReady(now, inRange) > 0,
+        )
+    }
 }
