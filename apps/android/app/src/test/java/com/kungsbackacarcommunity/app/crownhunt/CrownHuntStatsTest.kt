@@ -157,8 +157,15 @@ class CrownHuntStatsTest {
 
     @Test
     fun `a negative or zero count never renders below zero`() {
-        val standing = CrownHuntStats.kronjagare(emptyList(), crownsCollected = 0L)
-        assertEquals(0L, standing.crownsTowardNext)
+        assertEquals(
+            0L,
+            CrownHuntStats.kronjagare(emptyList(), crownsCollected = 0L).crownsTowardNext,
+        )
+        // A corrupt/negative counter must clamp UP to the floor, not render "-3 / 10".
+        assertEquals(
+            0L,
+            CrownHuntStats.kronjagare(emptyList(), crownsCollected = -3L).crownsTowardNext,
+        )
     }
 
     @Test

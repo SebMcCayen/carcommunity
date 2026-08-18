@@ -162,7 +162,9 @@ class CrownHuntScreenTest {
                 )
             }
         }
-        // The honest progress figure is shown, and BOTH parts of the goal line.
+        // The non-misleading "no rung yet" copy is shown (no "first crown"),
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsRankNone)).assertIsDisplayed()
+        // and the honest progress figure against the goal line.
         composeTestRule.onNodeWithText("9 / 10", substring = true).assertIsDisplayed()
     }
 }
