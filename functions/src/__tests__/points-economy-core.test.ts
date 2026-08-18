@@ -124,8 +124,10 @@ describe('applyEconomyCaps — global daily cap', () => {
     });
   });
 
-  it('pays in full at exactly the boundary (285 + 15 = 300)', () => {
-    expect(applyEconomyCaps(15, false, { dailyAwarded: 285, weeklyDrivingAwarded: 0 })).toEqual({
+  it('pays in full at exactly the boundary (cap - 15, + 15 = cap)', () => {
+    expect(
+      applyEconomyCaps(15, false, { dailyAwarded: DAILY_POINTS_CAP - 15, weeklyDrivingAwarded: 0 }),
+    ).toEqual({
       requested: 15,
       awarded: 15,
       clippedBy: 'none',
@@ -133,7 +135,9 @@ describe('applyEconomyCaps — global daily cap', () => {
   });
 
   it('pays the PARTIAL remainder one point over the boundary', () => {
-    expect(applyEconomyCaps(15, false, { dailyAwarded: 286, weeklyDrivingAwarded: 0 })).toEqual({
+    expect(
+      applyEconomyCaps(15, false, { dailyAwarded: DAILY_POINTS_CAP - 14, weeklyDrivingAwarded: 0 }),
+    ).toEqual({
       requested: 15,
       awarded: 14,
       clippedBy: 'daily',
@@ -153,7 +157,11 @@ describe('applyEconomyCaps — global daily cap', () => {
   });
 
   it('pays nothing when already over the cap (a crown overshot it)', () => {
-    expect(applyEconomyCaps(50, false, { dailyAwarded: 780, weeklyDrivingAwarded: 0 })).toEqual({
+    // A legendary crown (500) landing on an already-full day pushes the total
+    // well past the ceiling; a later non-driving award earns nothing.
+    expect(
+      applyEconomyCaps(50, false, { dailyAwarded: DAILY_POINTS_CAP + 480, weeklyDrivingAwarded: 0 }),
+    ).toEqual({
       requested: 50,
       awarded: 0,
       clippedBy: 'daily',

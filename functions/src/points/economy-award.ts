@@ -57,6 +57,7 @@ import { db } from '../firebase';
 import { creditPointsResolved, type AtomicExtraWrites } from './ledger';
 import {
   DAILY_OPEN_BASE_POINTS,
+  DAILY_POINTS_CAP,
   MAX_STREAK_FOR_MULTIPLIER,
   POINTS_DAILY_TOTALS_COLLECTION,
   POINTS_RULE_COUNTERS_COLLECTION,
@@ -71,6 +72,7 @@ import {
   stockholmDayKey,
   stockholmWeekKey,
   weeklyDrivingDocId,
+  WEEKLY_DRIVING_POINTS_CAP,
   type EconomyCapClip,
   type EconomyRuleKey,
 } from './points-economy-core';
@@ -292,6 +294,26 @@ export async function awardEconomyPoints(
     };
   } catch (error) {
     if (error instanceof EconomyRejection) {
+      if (error.status === 'cap_reached') {
+        // Structured signal at the exact refusal, on the hot path but I/O-free:
+        // a member filled the day's budget (crowns fold in uncapped) and this
+        // award earned nothing. NOT a public issue — that is filed out of band,
+        // once per day, by points-detectDailyCapReached (which scans the same
+        // pointsDailyTotals counter this refusal read), so the award transaction
+        // is never slowed by a GitHub call. No PII beyond the rule/lane here; the
+        // log is private.
+        // The lane is deterministic from the rule: a driving rule can only be
+        // clipped by the weekly driving cap, every other rule only by the daily
+        // cap (see applyEconomyCaps). Deriving the cap from rule.driving also
+        // sidesteps the compiler mis-narrowing `clippedBy` (it is assigned inside
+        // the resolver closure, which TS cannot see runs).
+        logger.info('points.dailyCapReached', {
+          rule: request.rule,
+          uid: request.uid,
+          capType: rule.driving ? 'weekly_driving' : 'points',
+          cap: rule.driving ? WEEKLY_DRIVING_POINTS_CAP : DAILY_POINTS_CAP,
+        });
+      }
       return {
         status: error.status,
         points: 0,
