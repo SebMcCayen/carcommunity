@@ -1272,6 +1272,32 @@ class DriveRecordingTest {
     }
 
     @Test
+    fun `the fast path (save already landed) reaches Kept with a non-null ride id for the host`() = runTest {
+        // The Kept fast path: the background save landed BEFORE the auto-keep, so
+        // keep() resolves straight to Kept without ever passing through
+        // KeptPendingSave. The host's single reconcile effect raises the confirmation
+        // in this same Kept branch and reads savedRideId for the History deep-link, so
+        // that id MUST be non-null here — otherwise the deep-link would be permanently
+        // broken (the null-rideId race). shouldShow is true on Kept so the host raises
+        // it deterministically without relying on a second effect having run first.
+        val repo = RecordingFakeRepository(shouldFail = false) // returns rideId = "ride"
+        val c = liveCoordinator(repo)
+        c.start()
+        c.addFix(57.0, 12.0, 1_000L)
+        c.addFix(57.001, 12.0, 2_000L)
+        c.stop()
+        c.autoSave(title = null)
+        // Save already landed → not pending → keep() is the fast path to Kept.
+        assertFalse((c.state.value as RecordingState.SavedPendingChoice).savePending)
+
+        c.keep()
+        assertEquals(RecordingState.Kept, c.state.value)
+        assertTrue(DriveSaveConfirmation.shouldShow(c.state.value))
+        assertNotNull("the host reads this for the History deep-link on the fast path", c.savedRideId)
+        assertEquals("ride", c.savedRideId)
+    }
+
+    @Test
     fun `an early keep whose background save fails retracts the confirmation for the safety-net`() = runTest {
         // The never-lose-a-drive path: keep tapped while the save is in flight, then
         // the save gives up. The coordinator surfaces Failed, which the host reconcile
