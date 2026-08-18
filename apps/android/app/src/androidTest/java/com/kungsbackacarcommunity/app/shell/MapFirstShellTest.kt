@@ -120,6 +120,7 @@ class MapFirstShellTest {
                     groupDriveCoordinator = null,
                     crownHuntRepository = null,
                     crownHuntCoordinator = null,
+                    leaderboardRepository = null,
                     partnersRepository = null,
                     offerCodeCoordinator = null,
                     notificationsRepository = null,
