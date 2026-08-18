@@ -64,10 +64,11 @@ const GITHUB_ISSUE_TOKEN = defineSecret('GITHUB_ISSUE_TOKEN');
 
 const PIPELINE = 'points.detectDailyCapReached';
 
-/** Minutes between detector runs. Hourly is ample for a once-a-day notice. */
-export const DAILY_CAP_RUN_INTERVAL_MINUTES = 60;
-
-/** Cron for {@link DAILY_CAP_RUN_INTERVAL_MINUTES} (top of every hour). */
+/**
+ * Detector cadence: the top of every hour. Hourly is ample for a once-a-day
+ * notice (the first pass that sees a reacher files; the rest of the day dedups).
+ * The cron is the single source of truth for the schedule.
+ */
 const DAILY_CAP_SCHEDULE_CRON = '0 * * * *';
 
 /**

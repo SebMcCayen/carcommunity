@@ -297,11 +297,12 @@ export async function awardEconomyPoints(
       if (error.status === 'cap_reached') {
         // Structured signal at the exact refusal, on the hot path but I/O-free:
         // a member filled the budget (crowns fold in uncapped) and this award
-        // earned nothing. This is a PRIVATE Cloud Logging line, not the public
-        // issue — so it carries `uid` for debuggability, consistent with the
-        // sibling "Economy award not granted" log below; the deduplicated GitHub
-        // issue filed out of band by points-detectDailyCapReached carries no uid
-        // and is never on this path, so the award transaction is never slowed.
+        // earned nothing. NO PII — this whole feature is no-PII by design, so the
+        // line carries only the rule, the lane and the cap value, never the uid.
+        // It is a tuning aggregate ("the cap is biting"), not a per-account audit;
+        // the deduplicated GitHub issue filed out of band by
+        // points-detectDailyCapReached likewise carries no uid, and is never on
+        // this path, so the award transaction is never slowed.
         //
         // The lane is deterministic from the rule: a driving rule can only be
         // clipped by the WEEKLY driving cap, every other rule only by the DAILY
@@ -312,7 +313,6 @@ export async function awardEconomyPoints(
         // inside the resolver closure, which TS cannot see runs).
         logger.info('points.capReached', {
           rule: request.rule,
-          uid: request.uid,
           capType: rule.driving ? 'weekly_driving' : 'points',
           cap: rule.driving ? WEEKLY_DRIVING_POINTS_CAP : DAILY_POINTS_CAP,
         });

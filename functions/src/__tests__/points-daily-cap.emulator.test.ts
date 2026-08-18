@@ -30,7 +30,11 @@ process.env.GCLOUD_PROJECT ??= 'demo-test';
 // non-empty token is passed below.
 process.env.FUNCTIONS_EMULATOR = 'true';
 
-import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
+import {
+  deleteApp,
+  getApps as getAdminApps,
+  initializeApp as initializeAdminApp,
+} from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runDailyCapDetection } from '../points/dailyCapDetector';
@@ -41,8 +45,14 @@ import {
 import { DAILY_POINTS_CAP, stockholmDayKey } from '../points/points-economy-core';
 
 const PROJECT_ID = 'demo-test';
+// A DEDICATED named app owned solely by this file, so disposing it in afterAll
+// (below) cannot tear down the shared default admin app other emulator test
+// files reuse. `find` by name keeps a re-import from throwing "app already
+// exists" without falling back to someone else's app.
+const APP_NAME = 'daily-cap-emulator';
 const adminApp =
-  getAdminApps()[0] ?? initializeAdminApp({ projectId: PROJECT_ID }, 'daily-cap-emulator');
+  getAdminApps().find((app) => app.name === APP_NAME) ??
+  initializeAdminApp({ projectId: PROJECT_ID }, APP_NAME);
 const adminDb = getAdminFirestore(adminApp);
 
 // Distinct historical Stockholm days (winter → UTC+1, noon UTC is safely mid-day),
@@ -109,6 +119,8 @@ afterAll(async () => {
       .doc(buildDailyCapFingerprint('points', DAY_DETECT)),
   );
   await batch.commit();
+  // Dispose the dedicated admin app so no Firestore handle leaks between files.
+  await deleteApp(adminApp);
 });
 
 describe('runDailyCapDetection (emulator)', () => {
