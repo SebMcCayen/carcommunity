@@ -2431,24 +2431,55 @@ fun AuthenticatedApp(
             // Bounded so it never sits on GPS: it reads at BALANCED power (the
             // timing, not the precise position, is all pre-warming needs — the
             // popup's own high-accuracy loop refines the fix on open) and STOPS the
-            // moment a proof partner is available. So the cost is a couple of
-            // samples when the member first parks by a crown, not a sustained poll
-            // while they linger.
+            // moment an IN-RANGE proof partner is available. So the cost is a couple
+            // of samples when the member first parks by a crown, not a sustained
+            // poll while they linger.
             val crownNearCollectable =
                 crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
+            // The crowns the member is currently in range of — the ones a warm pair
+            // could actually be collected at. The pre-warm readiness is gated on
+            // being in range of ONE of them (#911): otherwise the loop stopped the
+            // instant any two approach-era fixes formed a time-valid pair, leaving
+            // the buffer full of out-of-range samples the popup's own geofence gate
+            // then rejected — so the "warm" pair bought nothing and the first tap
+            // fell back to a cold confirming wait. Keeping BOTH halves in range here
+            // means the popup usually opens genuinely Ready.
+            val crownNearbyInRange =
+                remember(crownSpawns, inRangeSpawnIds) {
+                    val ids = inRangeSpawnIds ?: emptySet()
+                    crownSpawns.filter { it.id in ids }
+                }
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
+                // In range of ANY nearby collectable crown. The popup re-checks the
+                // SPECIFIC crown; this only decides when the warm-up has what it
+                // needs, so an OR across the in-range crowns is the right bound.
+                val inRangeOfAny: (CrownFix) -> Boolean = { fix ->
+                    crownNearbyInRange.any { crown ->
+                        CrownRange.isInRange(
+                            CrownSpawnQuery.distanceMeters(
+                                fix.latitude,
+                                fix.longitude,
+                                crown.latitude,
+                                crown.longitude,
+                            ),
+                            crown.collectRadiusMeters,
+                        )
+                    }
+                }
                 // Already warm from an earlier pass — nothing to poll for. Uses the
-                // FRESH pair-readiness check (proofPair(now)), so a stale pair from a
-                // previous visit does not skip the warm-up.
-                if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) {
+                // FRESH, in-range pair-readiness check, so a stale or out-of-range
+                // pair from a previous visit does not skip the warm-up.
+                if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
                     return@LaunchedEffect
                 }
                 val appContext = context.applicationContext
-                while (crownFixTracker.proofPair(System.currentTimeMillis()) == null) {
+                while (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) == null) {
                     CrownLocation.currentFix(appContext, highAccuracy = false)
                         ?.let { crownFixTracker.record(it) }
-                    if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) break
+                    if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
+                        break
+                    }
                     delay(CROWN_PREWARM_FIX_INTERVAL_MS)
                 }
             }
