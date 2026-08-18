@@ -66,9 +66,17 @@ fun CrownHuntRoute(
             }
         }
             .collectAsState(initial = BadgesState.Loading)
+    // The client-readable lifetime crown count (all-time leaderboard mirror),
+    // known only once the stats read has loaded a personal row. Threaded into the
+    // standing so the badge card can draw honest "X / 10 crowns" progress; null
+    // while stats are Loading/Error → the card shows the fixed goal line instead.
+    val crownsCollected =
+        (statsState as? CrownStatsUiState.Loaded)?.personal?.crownsCollected?.toLong()
     val kronjagare =
-        remember(badgesState) {
-            (badgesState as? BadgesState.Loaded)?.let { CrownHuntStats.kronjagare(it.badges) }
+        remember(badgesState, crownsCollected) {
+            (badgesState as? BadgesState.Loaded)?.let {
+                CrownHuntStats.kronjagare(it.badges, crownsCollected)
+            }
         }
 
     // SHOP. Only wired when the flag is on, the gate passes and the repos + uid
