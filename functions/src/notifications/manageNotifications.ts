@@ -19,6 +19,7 @@ import { requireActiveActor } from '../shared/memberActor';
 import {
   parseDeleteNotificationInput,
   parseMarkNotificationReadInput,
+  parseMarkNotificationsSeenInput,
 } from './notifications-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
@@ -127,6 +128,11 @@ export interface MarkSeenResponse {
  */
 export const markSeen = onCall(CALLABLE_OPTS, async (request): Promise<MarkSeenResponse> => {
   const actor = await requireActiveActor(request);
+
+  const parsed = parseMarkNotificationsSeenInput(request.data);
+  if (!parsed.ok) {
+    throw new HttpsError('invalid-argument', parsed.message);
+  }
 
   const ref = db.collection('userPrivate').doc(actor.uid);
   // The write's own commit time IS the stamped value (the serverTimestamp

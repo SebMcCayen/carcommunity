@@ -230,6 +230,10 @@ const unregisterPushTokenInputSchema = z
   .object({ tokenId: z.string().regex(/^[a-f0-9]{64}$/) })
   .strict();
 
+// notifications.markSeen takes no fields; .strict() rejects any unexpected key
+// so the {} contract is enforced at runtime (mirrors communityChat.markRead).
+const markNotificationsSeenInputSchema = z.object({}).strict();
+
 export type MarkNotificationReadInput = z.infer<typeof markNotificationReadInputSchema>;
 export type RegisterPushTokenInput = z.infer<typeof registerPushTokenInputSchema>;
 export type UnregisterPushTokenInput = z.infer<typeof unregisterPushTokenInputSchema>;
@@ -253,6 +257,10 @@ export const parseMarkNotificationReadInput = (d: unknown) =>
  * alias exists so the callable parses against its own name.
  */
 export const parseDeleteNotificationInput = parseMarkNotificationReadInput;
+
+/** notifications.markSeen — asserts an empty `{}` payload (no unexpected keys). */
+export const parseMarkNotificationsSeenInput = (d: unknown) =>
+  parse(markNotificationsSeenInputSchema, d, 'Expected an empty object.');
 export const parseRegisterPushTokenInput = (d: unknown) =>
   parse(
     registerPushTokenInputSchema,
