@@ -19,7 +19,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -39,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.design.KccPalette
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.media.rememberStorageImageUrl
 import com.kungsbackacarcommunity.app.shell.AeroPage
@@ -59,6 +59,9 @@ const val LEADERBOARD_SCOPE_TABS_TAG = "leaderboardScopeTabs"
  * streak spans months), which [LeaderboardBoard.categoriesFor] already enforces —
  * so the monthly view simply carries four categories, not five.
  *
+ * Back is handled centrally by the shell (the pinned AeroPage arrow +
+ * system-Back dispatcher), so this screen takes no back callback of its own.
+ *
  * @param state Loading (skeleton), Error (a soft notice) or Loaded (the boards).
  */
 @Composable
@@ -66,7 +69,6 @@ fun LeaderboardScreen(
     scope: LeaderboardScope,
     onScopeChange: (LeaderboardScope) -> Unit,
     state: LeaderboardUiState,
-    onBack: () -> Unit,
 ) {
     AeroPage(title = stringResource(R.string.leaderboard_title)) {
         ScopeToggle(scope = scope, onScopeChange = onScopeChange)
@@ -403,12 +405,14 @@ private fun formattedValue(format: LeaderboardValueFormat, value: Double): Strin
     return stringResource(template, magnitude)
 }
 
-/** Gold / silver / bronze for ranks 1–3; the brand gold as a fallback. */
+/** Gold / silver / bronze for ranks 1–3; the brand primary as a fallback. */
 @Composable
 private fun medalColor(rank: Int): Color =
     when (rank) {
-        1 -> Color(0xFFEAB54B) // crownGold
-        2 -> Color(0xFFB4B1AD) // silverGrey
-        3 -> Color(0xFFCD7F32) // bronze
+        1 -> KccPalette.crownGold
+        2 -> KccPalette.silverGrey
+        // Bronze has no design token; the medal set is a semantic trio, so the
+        // third colour is defined locally rather than inventing a palette entry.
+        3 -> Color(0xFFCD7F32)
         else -> MaterialTheme.colorScheme.primary
     }

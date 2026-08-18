@@ -7861,7 +7861,6 @@ private fun RouteHost(
             LeaderboardRoute(
                 repository = leaderboardRepository,
                 uid = uid,
-                onBack = onClose,
             )
 
         ShellRoute.Partners ->

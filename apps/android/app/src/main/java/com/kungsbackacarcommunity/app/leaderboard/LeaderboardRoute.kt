@@ -21,13 +21,15 @@ import kotlinx.coroutines.flow.flowOf
  *
  * @param repository the board source. Null in a config-less/CI build → the screen
  *   shows its loading affordance.
+ * Back is handled centrally by the shell (AeroPage's pinned arrow + the system-Back
+ * dispatcher), so no back callback is threaded here.
+ *
  * @param uid the signed-in member, so their own row is highlighted where it appears.
  */
 @Composable
 fun LeaderboardRoute(
     repository: LeaderboardRepository?,
     uid: String?,
-    onBack: () -> Unit,
 ) {
     var scope by rememberSaveable { mutableStateOf(LeaderboardScope.ALL_TIME) }
 
@@ -45,6 +47,5 @@ fun LeaderboardRoute(
         scope = scope,
         onScopeChange = { scope = it },
         state = state,
-        onBack = onBack,
     )
 }
