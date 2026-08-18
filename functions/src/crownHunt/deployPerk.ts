@@ -33,6 +33,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
@@ -101,46 +102,81 @@ export const deployPerk = onCall(CALLABLE_OPTS, async (request): Promise<DeployP
   }
   const { perkId, latitude, longitude, idempotencyKey } = parsed.input;
 
-  // Flag gate — a member must never be able to deploy against a disabled system.
-  if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
-    throw new HttpsError('failed-precondition', 'Kronjaktsbutiken är inte tillgänglig just nu.');
-  }
+  // Single logging point for every server-authoritative rejection (flag off,
+  // unknown perk, missing position, 1-active-trap / self-spacing / no-inventory /
+  // daily-limit guards) AND any transaction/infrastructure failure. Logging here
+  // — OUTSIDE the deploy transactions — means a Firestore transaction retry on
+  // contention cannot double-log a rejection. NO PII: perk catalog id + the
+  // server-authored HttpsError code/message only, never the uid or coordinates.
+  try {
+    // Flag gate — a member must never be able to deploy against a disabled system.
+    if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
+      throw new HttpsError('failed-precondition', 'Kronjaktsbutiken är inte tillgänglig just nu.');
+    }
 
-  const perk = perkById(perkId);
-  if (!perk) {
-    throw new HttpsError('failed-precondition', 'Okänd perk.');
-  }
-
-  const now = new Date();
-  const scopedKey = scopeDeployKey(uid, idempotencyKey);
-  const deployRef = db.collection('perkDeploys').doc(deployRecordDocId(scopedKey));
-  const inventoryRef = db.collection('perkInventory').doc(uid);
-
-  switch (perk.kind) {
-    case 'trap':
-      return deployTrap({ uid, perk, latitude, longitude, now, scopedKey, deployRef, inventoryRef });
-    case 'shield':
-      return deployTimedEffect({
-        uid,
-        perk,
-        kind: 'shield',
-        durationHours: SHIELD_DURATION_HOURS,
-        now,
-        deployRef,
-        inventoryRef,
-      });
-    case 'boost':
-      return deployTimedEffect({
-        uid,
-        perk,
-        kind: 'boost',
-        durationHours: BOOST_DURATION_HOURS,
-        now,
-        deployRef,
-        inventoryRef,
-      });
-    default:
+    const perk = perkById(perkId);
+    if (!perk) {
       throw new HttpsError('failed-precondition', 'Okänd perk.');
+    }
+
+    const now = new Date();
+    const scopedKey = scopeDeployKey(uid, idempotencyKey);
+    const deployRef = db.collection('perkDeploys').doc(deployRecordDocId(scopedKey));
+    const inventoryRef = db.collection('perkInventory').doc(uid);
+
+    switch (perk.kind) {
+      case 'trap':
+        return await deployTrap({
+          uid,
+          perk,
+          latitude,
+          longitude,
+          now,
+          scopedKey,
+          deployRef,
+          inventoryRef,
+        });
+      case 'shield':
+        return await deployTimedEffect({
+          uid,
+          perk,
+          kind: 'shield',
+          durationHours: SHIELD_DURATION_HOURS,
+          now,
+          deployRef,
+          inventoryRef,
+        });
+      case 'boost':
+        return await deployTimedEffect({
+          uid,
+          perk,
+          kind: 'boost',
+          durationHours: BOOST_DURATION_HOURS,
+          now,
+          deployRef,
+          inventoryRef,
+        });
+      default:
+        throw new HttpsError('failed-precondition', 'Okänd perk.');
+    }
+  } catch (err) {
+    if (err instanceof HttpsError) {
+      // Ordinary server-authoritative rejection — reason is the server-authored
+      // (non-PII) message; code separates failed-precondition/resource-exhausted.
+      logger.info('crownHunt.deployPerk rejected', {
+        perkId,
+        code: err.code,
+        reason: err.message,
+      });
+    } else {
+      // Unexpected transaction/infrastructure failure — surface it before it
+      // propagates so a failed deploy is diagnosable.
+      logger.error('crownHunt.deployPerk transaction failed', {
+        perkId,
+        error: String(err),
+      });
+    }
+    throw err;
   }
 });
 

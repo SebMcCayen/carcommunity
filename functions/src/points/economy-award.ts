@@ -336,17 +336,17 @@ export async function tryAwardEconomyPoints(
   try {
     const outcome = await awardEconomyPoints(request);
     if (outcome.status !== 'awarded' && outcome.status !== 'already_awarded') {
+      // No PII: the rule + outcome status are enough to diagnose a mis-award;
+      // the uid is deliberately NOT logged (hard no-identifiers-in-logs rule).
       logger.info('Economy award not granted', {
         rule: request.rule,
         status: outcome.status,
-        uid: request.uid,
       });
     }
     return outcome;
   } catch (error) {
     logger.error('Economy award failed', {
       rule: request.rule,
-      uid: request.uid,
       error: String(error),
     });
     return null;

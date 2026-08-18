@@ -172,8 +172,9 @@ export async function resolveActiveBoostMultiplier(uid: string, now: Date): Prom
     const expiresMs = expiresAt instanceof Timestamp ? expiresAt.toMillis() : null;
     return isTimestampActive(expiresMs, now.getTime()) ? BOOST_MULTIPLIER : 1;
   } catch (error) {
+    // No PII: the uid is deliberately NOT logged (hard no-identifiers-in-logs
+    // rule); "boost read failed" plus the error is enough to diagnose.
     logger.warn('Boost multiplier read failed; awarding unboosted', {
-      uid,
       error: error instanceof Error ? error.message : String(error),
     });
     return 1;

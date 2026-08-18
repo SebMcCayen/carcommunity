@@ -24,6 +24,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue, type DocumentData } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -100,6 +101,25 @@ export const reingestSpawnAreaPois = onCall(
       resolveOverpassEndpoint(),
     );
     const response = toReingestResponse(areaId, previousPoiCount, result);
+
+    // Surface the outcome to Cloud Logging. The failed run is otherwise SILENT
+    // in logs — runAreaPoiIngestion never throws on an Overpass outage, it just
+    // returns ok:false and the old cache is kept — so without this an operator
+    // re-runs the retry button and cannot tell it ran or why it did nothing.
+    // areaId is an admin-defined area identifier, not user PII.
+    if (response.ok) {
+      logger.info('crownHunt.reingestSpawnAreaPois complete', {
+        areaId,
+        poiCount: response.poiCount,
+        fetched: response.fetched,
+        removedStale: response.removedStale,
+      });
+    } else {
+      logger.warn(
+        'crownHunt.reingestSpawnAreaPois: Overpass ingestion failed, previous POI cache kept',
+        { areaId, previousPoiCount },
+      );
+    }
 
     await db
       .collection('adminAuditEvents')
