@@ -368,6 +368,32 @@ class CrownCollectGateTest {
         assertFalse(CrownCollectGate.isCollectEnabled(state))
     }
 
+    /**
+     * #911 end-to-end: a dead-on CURRENT fix (0–10 m, tight accuracy) is still
+     * Confirming — never Ready — while the two-fix proof is withheld.
+     *
+     * This is the shape the #911 telemetry logged: a perfect current fix, yet the
+     * server refused `outside_radius` because the PRE-WARMED partner was an
+     * approach-era fix outside the ring. The tracker's in-range gate now hands the
+     * caller a null partner in that case, so `dwellProofReady` is false and the
+     * gate keeps the button honestly disabled instead of letting the first tap be
+     * refused — no app restart required.
+     */
+    @Test
+    fun aPerfectCurrentFixWithNoInRangePartnerIsConfirmingNotReady() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 4.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = false,
+                dwellSecondsRemaining = 3,
+                accuracyMeters = 6.0,
+            )
+        assertEquals(CrownCollectState.Confirming(3), state)
+        assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
     /** Once the proof is ready the same position collects. */
     @Test
     fun onceTheDwellProofIsReadyTheButtonGoesLive() {

@@ -68,6 +68,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -186,6 +187,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
+import com.kungsbackacarcommunity.app.crownhunt.CrownProofSelection
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
 import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkShopRepository
@@ -529,28 +531,6 @@ private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
  * that does not cross any ring rebuilds no markers at all.
  */
 private const val CROWN_RANGE_LOCATION_INTERVAL_MS = 10_000L
-
-/**
- * Chooses the (current, previous) fixes that drive the crown popup from [tracker]
- * at wall-clock [nowMillis].
- *
- * Prefers a valid dwell PAIR ([CrownFixTracker.proofPair]) so Collect goes live
- * whenever a claim is actually possible — never stranded in "confirming" while a
- * usable pair sits in the buffer. When no pair is achievable yet it still returns
- * a fresh best-accuracy current for the distance line, with a null partner so the
- * gate honestly shows the confirming state.
- */
-private fun applyCrownFix(
-    tracker: CrownFixTracker,
-    nowMillis: Long,
-): Pair<CrownFix?, CrownFix?> {
-    val pair = tracker.proofPair(nowMillis)
-    return if (pair != null) {
-        pair.current to pair.previous
-    } else {
-        tracker.bestRecent(nowMillis) to null
-    }
-}
 
 /**
  * Combines the Kronjakt deploy menu's live reads into one [PerkDeployMenuState]
@@ -2364,7 +2344,14 @@ fun AuthenticatedApp(
                 // the distance line — and, when the range poll already warmed a
                 // pair, a live Collect button — are there the instant the popup
                 // opens rather than a fix cadence later.
-                applyCrownFix(crownFixTracker, System.currentTimeMillis()).let { (cur, prev) ->
+                // The crown is read from the slot each pass so the in-range gate
+                // uses the latched crown even if it landed a frame after this
+                // effect started (openCrownSlot fills from a sibling effect).
+                CrownProofSelection.selectFixes(
+                    crownFixTracker,
+                    System.currentTimeMillis(),
+                    openCrownSlot.value,
+                ).let { (cur, prev) ->
                     crownCurrentFix = cur
                     crownPreviousFix = prev
                 }
@@ -2372,11 +2359,14 @@ fun AuthenticatedApp(
                     val fix = CrownLocation.currentFix(appContext)
                     if (fix != null) {
                         crownFixTracker.record(fix)
-                        applyCrownFix(crownFixTracker, System.currentTimeMillis())
-                            .let { (cur, prev) ->
-                                crownCurrentFix = cur
-                                crownPreviousFix = prev
-                            }
+                        CrownProofSelection.selectFixes(
+                            crownFixTracker,
+                            System.currentTimeMillis(),
+                            openCrownSlot.value,
+                        ).let { (cur, prev) ->
+                            crownCurrentFix = cur
+                            crownPreviousFix = prev
+                        }
                     }
                     delay(CROWN_FIX_INTERVAL_MS)
                 }
@@ -2391,24 +2381,62 @@ fun AuthenticatedApp(
             // Bounded so it never sits on GPS: it reads at BALANCED power (the
             // timing, not the precise position, is all pre-warming needs — the
             // popup's own high-accuracy loop refines the fix on open) and STOPS the
-            // moment a proof partner is available. So the cost is a couple of
-            // samples when the member first parks by a crown, not a sustained poll
-            // while they linger.
+            // moment an IN-RANGE proof partner is available. So the cost is a couple
+            // of samples when the member first parks by a crown, not a sustained
+            // poll while they linger.
             val crownNearCollectable =
                 crownSpawnEnabled && (inRangeSpawnIds?.isNotEmpty() == true)
+            // The crowns the member is currently in range of — the ones a warm pair
+            // could actually be collected at. The pre-warm readiness is gated on
+            // being in range of ONE of them (#911): otherwise the loop stopped the
+            // instant any two approach-era fixes formed a time-valid pair, leaving
+            // the buffer full of out-of-range samples the popup's own geofence gate
+            // then rejected — so the "warm" pair bought nothing and the first tap
+            // fell back to a cold confirming wait. Keeping BOTH halves in range here
+            // means the popup usually opens genuinely Ready.
+            val crownNearbyInRange =
+                remember(crownSpawns, inRangeSpawnIds) {
+                    val ids = inRangeSpawnIds ?: emptySet()
+                    crownSpawns.filter { it.id in ids }
+                }
+            // Read through rememberUpdatedState so the long-lived pre-warm coroutine
+            // always warms against the CURRENT in-range crowns: the effect is keyed
+            // only on (crownNearCollectable, tappedCrownId), so as the member moves
+            // and the in-range SET changes underneath it — without that set becoming
+            // empty — the effect is not restarted and a plain capture would keep
+            // sampling against a stale crown (Copilot review).
+            val crownNearbyInRangeState = rememberUpdatedState(crownNearbyInRange)
             LaunchedEffect(crownNearCollectable, tappedCrownId) {
                 if (!crownNearCollectable || tappedCrownId != null) return@LaunchedEffect
+                // In range of ANY nearby collectable crown. The popup re-checks the
+                // SPECIFIC crown; this only decides when the warm-up has what it
+                // needs, so an OR across the in-range crowns is the right bound.
+                val inRangeOfAny: (CrownFix) -> Boolean = { fix ->
+                    crownNearbyInRangeState.value.any { crown ->
+                        CrownRange.isInRange(
+                            CrownSpawnQuery.distanceMeters(
+                                fix.latitude,
+                                fix.longitude,
+                                crown.latitude,
+                                crown.longitude,
+                            ),
+                            crown.collectRadiusMeters,
+                        )
+                    }
+                }
                 // Already warm from an earlier pass — nothing to poll for. Uses the
-                // FRESH pair-readiness check (proofPair(now)), so a stale pair from a
-                // previous visit does not skip the warm-up.
-                if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) {
+                // FRESH, in-range pair-readiness check, so a stale or out-of-range
+                // pair from a previous visit does not skip the warm-up.
+                if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
                     return@LaunchedEffect
                 }
                 val appContext = context.applicationContext
-                while (crownFixTracker.proofPair(System.currentTimeMillis()) == null) {
+                while (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) == null) {
                     CrownLocation.currentFix(appContext, highAccuracy = false)
                         ?.let { crownFixTracker.record(it) }
-                    if (crownFixTracker.proofPair(System.currentTimeMillis()) != null) break
+                    if (crownFixTracker.proofPair(System.currentTimeMillis(), inRangeOfAny) != null) {
+                        break
+                    }
                     delay(CROWN_PREWARM_FIX_INTERVAL_MS)
                 }
             }
@@ -2424,11 +2452,14 @@ fun AuthenticatedApp(
                         CrownCollectGate.isDwellProofUsable(previous, current)
                 }
             val crownDwellSecondsRemaining =
-                remember(crownDwellReady, crownCurrentFix) {
+                remember(crownDwellReady, crownCurrentFix, openCrown) {
                     if (crownDwellReady) {
                         null
                     } else {
-                        crownFixTracker.secondsUntilProofReady(System.currentTimeMillis())
+                        crownFixTracker.secondsUntilProofReady(
+                            System.currentTimeMillis(),
+                            CrownProofSelection.inRangePredicate(openCrown),
+                        )
                     }
                 }
             // Distance from the member to the open crown, or null with no fix. The
