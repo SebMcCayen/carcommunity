@@ -46,8 +46,9 @@ import com.kungsbackacarcommunity.app.shell.AeroPage
  *   Loading/Error. Read from the #710 aggregates ([CrownHuntStatsRepository]).
  * @param kronjagare the member's own crown-hunter TIER standing (the badge
  *   ladder), or null while the owner badge listener is still loading — the badge
- *   band is then simply omitted. Never carries a fabricated crowns-collected
- *   count (that counter is backend-only; see [KronjagareStanding]).
+ *   band is then simply omitted. Its crowns-collected figure, when present, is the
+ *   client-readable all-time leaderboard mirror, never a fabricated one (see
+ *   [KronjagareStanding.crownsCollected]).
  * @param perksEnabled the `crownHuntPerks` flag. DEFAULT FALSE, and load-bearing:
  *   when off (the shipped default) the shop tab is NOT rendered at all — the page
  *   is byte-identical to the pre-shop hub. Only when an operator switches the flag
@@ -365,9 +366,12 @@ private fun LeaderboardRow(row: CrownLeaderboardRow) {
  * none is), the next rung and its crown threshold. Reuses the badge catalog's
  * ladder/tier strings so it can never disagree with the profile badge wall.
  *
- * Shows NO crowns-collected count and NO progress bar: that counter lives on
- * `badgeProgress/{uid}`, denied to every client, so the note explains the rank is
- * tallied server-side rather than inventing a number.
+ * Shows honest progress toward the next rung ("9 / 10 crowns") WHEN the lifetime
+ * count is known — sourced from the client-readable all-time leaderboard mirror
+ * (`crownHuntLeaderboardEntries/alltime__{uid}`), reconciled up to the same number
+ * the ladder is derived from, NOT the rules-denied `badgeProgress/{uid}`. When the
+ * count has not loaded (or the read failed) it falls back to the fixed goal line
+ * with no figure; the server note explains the rank itself is tallied server-side.
  */
 @Composable
 private fun KronjagareStatsCard(standing: KronjagareStanding) {
@@ -394,13 +398,27 @@ private fun KronjagareStatsCard(standing: KronjagareStanding) {
                 color = MaterialTheme.colorScheme.onSurface,
             )
             if (standing.nextTier != null && standing.nextThresholdCrowns != null) {
+                val nextTierName = ladderName + " " + stringResource(tierNameRes(standing.nextTier))
+                val towardNext = standing.crownsTowardNext
                 Text(
                     text =
-                        stringResource(
-                            R.string.crownHunt_statsNext,
-                            ladderName + " " + stringResource(tierNameRes(standing.nextTier)),
-                            standing.nextThresholdCrowns.toString(),
-                        ),
+                        if (towardNext != null) {
+                            // Honest progress against the fixed goal line, e.g.
+                            // "Next rank: Kronjägare Brons — 9 / 10 crowns."
+                            stringResource(
+                                R.string.crownHunt_statsNextProgress,
+                                nextTierName,
+                                towardNext.toString(),
+                                standing.nextThresholdCrowns.toString(),
+                            )
+                        } else {
+                            // Count not loaded yet — the goal line without a figure.
+                            stringResource(
+                                R.string.crownHunt_statsNext,
+                                nextTierName,
+                                standing.nextThresholdCrowns.toString(),
+                            )
+                        },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )

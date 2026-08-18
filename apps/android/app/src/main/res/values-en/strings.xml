@@ -1092,8 +1092,9 @@
     <string name="crownHunt_emptyBody">Collect crowns on the map while you\'re stopped. New crowns appear now and then — check the map and keep an eye out next time you\'re out driving.</string>
     <string name="crownHunt_statsTitle">Your Crown Hunter status</string>
     <string name="crownHunt_statsRankCurrent">Current rank: %1$s</string>
-    <string name="crownHunt_statsRankNone">You haven\'t unlocked a Crown Hunter rank yet — your first crown gets you started.</string>
+    <string name="crownHunt_statsRankNone">You haven\'t reached a Crown Hunter rank yet — keep collecting crowns to unlock the first one.</string>
     <string name="crownHunt_statsNext">Next rank: %1$s — collect %2$s crowns in total.</string>
+    <string name="crownHunt_statsNextProgress">Next rank: %1$s — %2$s / %3$s crowns.</string>
     <string name="crownHunt_statsComplete">You\'ve reached the top Crown Hunter rank. Nicely done!</string>
     <string name="crownHunt_statsServerNote">Your standing is tallied on the server — the next rank appears here as soon as you reach it.</string>
     <string name="crownHunt_layerLabel">Crowns</string>

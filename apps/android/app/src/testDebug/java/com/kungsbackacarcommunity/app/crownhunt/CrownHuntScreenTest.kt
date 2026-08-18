@@ -143,4 +143,28 @@ class CrownHuntScreenTest {
         composeTestRule.onNodeWithText(str(R.string.crownHunt_statsTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("250", substring = true).assertIsDisplayed()
     }
+
+    @Test
+    fun badgeStanding_noRungYet_showsCrownsProgressNotFirstCrownCopy() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
+                    onBack = {},
+                    kronjagare =
+                        KronjagareStanding(
+                            highestTier = null,
+                            nextTier = BadgeTier.BRONS,
+                            nextThresholdCrowns = 10L,
+                            crownsCollected = 9L,
+                        ),
+                )
+            }
+        }
+        // The non-misleading "no rung yet" copy is shown (no "first crown"),
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_statsRankNone)).assertIsDisplayed()
+        // and the honest progress figure against the goal line.
+        composeTestRule.onNodeWithText("9 / 10", substring = true).assertIsDisplayed()
+    }
 }
