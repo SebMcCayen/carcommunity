@@ -38,9 +38,9 @@
     "@types/node": "^24.13.3",
     "eslint": "^10.8.1",
     "firebase": "^12.17.1",
-    "firebase-tools": "^15.26.0",
+    "firebase-tools": "^15.27.0",
     "typescript": "~6.0.3",
-    "typescript-eslint": "^8.66.0",
+    "typescript-eslint": "^8.67.0",
     "vitest": "^4.1.10"
   }
 }
