@@ -15,8 +15,8 @@ import org.junit.Test
  * punctuation — must auto-capitalise. This test keeps that honest so the setting
  * cannot silently drift back to the platform default (None).
  *
- * Pure JVM: [KeyboardOptions] is a plain data holder, so no device or Robolectric
- * is needed.
+ * Pure JVM: [androidx.compose.foundation.text.KeyboardOptions] is a plain data
+ * holder, so no device or Robolectric is needed.
  */
 class ChatComposerKeyboardTest {
 
