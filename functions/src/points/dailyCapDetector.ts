@@ -122,6 +122,10 @@ export async function runDailyCapDetection(
   const snap = await db
     .collection(POINTS_DAILY_TOTALS_COLLECTION)
     .where('day', '==', dayKey)
+    // Only `total` is needed to decide who is at/over the cap; projecting it
+    // trims the payload and per-run memory for up to MAX_DAILY_TOTALS_SCANNED
+    // docs (the billed read count is unchanged). Each doc is still one member.
+    .select('total')
     .limit(MAX_DAILY_TOTALS_SCANNED)
     .get();
 
