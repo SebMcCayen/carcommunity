@@ -125,6 +125,7 @@ import {
   deleteNotification,
   markAllRead,
   markRead,
+  markSeen as markNotificationsSeen,
 } from './notifications/manageNotifications';
 import { registerPushToken, unregisterPushToken } from './notifications/pushTokens';
 import { onNotificationCreated } from './notifications/sendPush';
@@ -764,6 +765,7 @@ export const billboards = {
 export const notifications = {
   markRead,
   markAllRead,
+  markSeen: markNotificationsSeen,
   // Aliased because `delete` is a reserved word and cannot be an import
   // binding; the deployed name is still `notifications-delete`.
   delete: deleteNotification,

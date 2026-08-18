@@ -17,6 +17,7 @@ import {
   hashPushToken,
   isEssentialCategory,
   parseMarkNotificationReadInput,
+  parseMarkNotificationsSeenInput,
   parseRegisterPushTokenInput,
   parseUnregisterPushTokenInput,
   readRetentionCutoff,
@@ -44,6 +45,11 @@ describe('notifications-core inputs', () => {
     const tokenId = hashPushToken('fcm-abc');
     expect(parseUnregisterPushTokenInput({ tokenId }).ok).toBe(true);
     expect(parseUnregisterPushTokenInput({ tokenId: 'not-a-hash' }).ok).toBe(false);
+
+    // markSeen takes {}; a missing/empty payload is fine, unexpected keys reject.
+    expect(parseMarkNotificationsSeenInput({}).ok).toBe(true);
+    expect(parseMarkNotificationsSeenInput(undefined).ok).toBe(true);
+    expect(parseMarkNotificationsSeenInput({ notificationId: 'n1' }).ok).toBe(false);
   });
 
   it('hashes push tokens to stable 64-hex ids', () => {

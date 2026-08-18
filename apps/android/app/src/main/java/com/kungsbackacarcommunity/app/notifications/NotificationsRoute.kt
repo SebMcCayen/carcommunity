@@ -11,6 +11,7 @@ import com.kungsbackacarcommunity.app.diagnostics.FirebaseClientErrorReporter
 import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -84,6 +85,27 @@ fun NotificationsRoute(
     // holds only rows that are still being hidden from something.
     LaunchedEffect(serverState, coordinator) {
         (serverState as? NotificationsState.Loaded)?.let { coordinator?.onSnapshot(it.items) }
+    }
+
+    // Clear the red dot: stamp the last-seen marker when the inbox opens, and
+    // again whenever a newer notification lands while it is on screen. This is
+    // the notifications mirror of the community channel's markRead-on-open — it
+    // clears the DOT without marking any row read (that stays a per-item tap /
+    // the explicit "mark all read"). Keyed on the newest item's id so it fires
+    // on the Loading->Loaded transition and on each new arrival. Best-effort and
+    // idempotent: a failure just leaves the dot for the next open to retry.
+    val newestNotificationId =
+        (serverState as? NotificationsState.Loaded)?.items?.firstOrNull()?.id
+    LaunchedEffect(repository, uid, newestNotificationId) {
+        if (newestNotificationId != null) {
+            try {
+                repository.markSeen()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                // Best-effort bookkeeping; the dot simply persists until the next open.
+            }
+        }
     }
 
     // The optimistic view: the server's list minus the rows a delete has taken

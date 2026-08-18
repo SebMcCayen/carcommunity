@@ -21,8 +21,12 @@ class NotificationsCoordinatorTest {
         /** Set to fail ONLY the delete calls, leaving mark-read working. */
         var failDeletesWith: Exception? = null
 
+        var seenCount = 0
+
         override fun observeNotifications(uid: String): Flow<NotificationsState> =
             flowOf(NotificationsState.Loading)
+
+        override fun observeUnread(uid: String): Flow<Boolean> = flowOf(false)
 
         override suspend fun markRead(notificationId: String) {
             failWith?.let { throw it }
@@ -32,6 +36,10 @@ class NotificationsCoordinatorTest {
         override suspend fun markAllRead() {
             failWith?.let { throw it }
             allReadCount++
+        }
+
+        override suspend fun markSeen() {
+            seenCount++
         }
 
         override suspend fun deleteNotification(notificationId: String) {

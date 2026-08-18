@@ -110,6 +110,37 @@ object Notifications {
     fun unreadCount(items: List<AppNotification>): Int = items.count { !it.isRead }
 
     /**
+     * True when the inbox has something the user has not SEEN yet: the newest
+     * notification post-dates the caller's last-seen marker (null marker = never
+     * opened → any notification is unseen). Drives the Notifications red dot (the
+     * map chat bubble's aggregate and the hub's Notifications tab), the exact
+     * mirror of the community chat dot ([com.kungsbackacarcommunity.app.chatchannels.ChatChannels.hasUnread]).
+     *
+     * This is DELIBERATELY separate from [unreadCount]'s per-item [AppNotification.isRead]:
+     * opening the inbox stamps the marker (notifications.markSeen) and clears the
+     * dot WITHOUT marking every row read, so each row keeps its own unread styling
+     * until the user taps it — just as opening the community channel clears its
+     * dot without touching individual messages. A notification with no parseable
+     * createdAt cannot be shown to be newer than the marker, so it never lights
+     * the dot on its own (matching the chat rule).
+     *
+     * Pure so the derivation is unit-testable off-device.
+     */
+    fun hasUnread(newestCreatedAtMillis: Long?, lastSeenAtMillis: Long?): Boolean {
+        if (newestCreatedAtMillis == null) return false
+        return lastSeenAtMillis == null || newestCreatedAtMillis > lastSeenAtMillis
+    }
+
+    /**
+     * The newest notification instant in [items] — the value compared against the
+     * last-seen marker in [hasUnread]. Null when the inbox is empty or no item
+     * carries a parseable createdAt. Independent of client sort order: it takes
+     * the maximum rather than assuming [sortedForInbox] has run.
+     */
+    fun newestCreatedAtMillis(items: List<AppNotification>): Long? =
+        items.mapNotNull { it.createdAtMillis }.maxOrNull()
+
+    /**
      * The rows the inbox should actually render: the server's items minus the
      * ones a delete has optimistically removed.
      *
