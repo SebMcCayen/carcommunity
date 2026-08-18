@@ -129,15 +129,16 @@ export const markSeen = onCall(CALLABLE_OPTS, async (request): Promise<MarkSeenR
   const actor = await requireActiveActor(request);
 
   const ref = db.collection('userPrivate').doc(actor.uid);
-  await ref.set({ notificationsLastSeenAt: FieldValue.serverTimestamp() }, { merge: true });
-
-  const fresh = await ref.get();
-  const stamped = fresh.data()?.notificationsLastSeenAt;
-  const iso =
-    stamped && typeof stamped.toDate === 'function'
-      ? stamped.toDate().toISOString()
-      : new Date().toISOString();
-  return { lastSeenAt: iso };
+  // The write's own commit time IS the stamped value (the serverTimestamp
+  // resolves to it), so echo it straight from the WriteResult rather than
+  // reading the doc back — this callable fires on every inbox open and on each
+  // new notification while it is open, and the client ignores the response, so
+  // a readback would double the reads and add latency for nothing.
+  const result = await ref.set(
+    { notificationsLastSeenAt: FieldValue.serverTimestamp() },
+    { merge: true },
+  );
+  return { lastSeenAt: result.writeTime.toDate().toISOString() };
 });
 
 export interface DeleteNotificationResponse {

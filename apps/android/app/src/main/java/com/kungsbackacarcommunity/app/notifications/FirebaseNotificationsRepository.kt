@@ -4,6 +4,7 @@ import android.content.Context
 import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
 import com.google.firebase.firestore.Query
 import com.google.firebase.functions.FirebaseFunctions
 import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
@@ -61,11 +62,23 @@ class FirebaseNotificationsRepository private constructor(
                     .orderBy(CREATED_AT, Query.Direction.DESCENDING)
                     .limit(1)
                     .addSnapshotListener { snapshot, error ->
-                        if (error != null && snapshot == null) {
-                            // Transient failure with no cached data: keep the
-                            // last-known value rather than emitting a misleading
-                            // no-unread that a real notification should override.
-                            return@addSnapshotListener
+                        if (error != null) {
+                            if ((error as? FirebaseFirestoreException)?.code ==
+                                FirebaseFirestoreException.Code.PERMISSION_DENIED
+                            ) {
+                                // Access revoked (account restriction / rules
+                                // gating): hard-clear the dot even if a stale
+                                // cached snapshot is present — never keep it lit
+                                // for an inbox the user can no longer read.
+                                // Mirrors CommunityChatRepository.observeUnread.
+                                trySend(null)
+                                return@addSnapshotListener
+                            }
+                            // Other (transient) error with no cached data: keep
+                            // the last-known value rather than emitting a
+                            // misleading no-unread. With cached data, fall
+                            // through and use it.
+                            if (snapshot == null) return@addSnapshotListener
                         }
                         trySend(
                             snapshot?.documents?.firstOrNull()
