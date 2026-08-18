@@ -186,6 +186,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownHuntRoute
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
 import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerStyle
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
+import com.kungsbackacarcommunity.app.crownhunt.CrownProofSelection
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
 import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkShopRepository
@@ -529,61 +530,6 @@ private const val CROWN_PREWARM_FIX_INTERVAL_MS = 3_000L
  * that does not cross any ring rebuilds no markers at all.
  */
 private const val CROWN_RANGE_LOCATION_INTERVAL_MS = 10_000L
-
-/**
- * Whether [fix] is inside [crown]'s collect radius — the client mirror of the
- * server's per-fix geofence test, used to gate BOTH halves of the dwell pair.
- *
- * A null crown accepts any fix (there is nothing to be in range of yet); the
- * plain distance-vs-radius rule is the same [CrownRange] uses for the marker and
- * the "too far" line, so a pair the client calls collectable agrees with where
- * the ring is drawn.
- */
-private fun crownInRangePredicate(crown: CrownSpawn?): (CrownFix) -> Boolean {
-    if (crown == null) return { true }
-    return { fix ->
-        CrownRange.isInRange(
-            CrownSpawnQuery.distanceMeters(
-                fix.latitude,
-                fix.longitude,
-                crown.latitude,
-                crown.longitude,
-            ),
-            crown.collectRadiusMeters,
-        )
-    }
-}
-
-/**
- * Chooses the (current, previous) fixes that drive the crown popup from [tracker]
- * at wall-clock [nowMillis], for the open [crown].
- *
- * Prefers a valid dwell PAIR ([CrownFixTracker.proofPair]) so Collect goes live
- * whenever a claim is actually possible — never stranded in "confirming" while a
- * usable pair sits in the buffer. When no pair is achievable yet it still returns
- * a fresh best-accuracy current for the distance line, with a null partner so the
- * gate honestly shows the confirming state.
- *
- * BOTH halves of the pair are gated on [crown]'s geofence (#911): the pre-warm
- * poll runs while the member is still approaching, so the buffer holds
- * approach-era fixes from farther out; pairing a dead-on current with one of
- * those out-of-range earlier fixes made the button look Ready and then the server
- * refused the claim `outside_radius`. Requiring the partner to be in range too
- * makes the client's Ready match what the server will accept, so the first tap
- * succeeds instead of needing an app restart to clear the stale pair.
- */
-private fun applyCrownFix(
-    tracker: CrownFixTracker,
-    nowMillis: Long,
-    crown: CrownSpawn?,
-): Pair<CrownFix?, CrownFix?> {
-    val pair = tracker.proofPair(nowMillis, crownInRangePredicate(crown))
-    return if (pair != null) {
-        pair.current to pair.previous
-    } else {
-        tracker.bestRecent(nowMillis) to null
-    }
-}
 
 /**
  * Combines the Kronjakt deploy menu's live reads into one [PerkDeployMenuState]
@@ -2400,16 +2346,19 @@ fun AuthenticatedApp(
                 // The crown is read from the slot each pass so the in-range gate
                 // uses the latched crown even if it landed a frame after this
                 // effect started (openCrownSlot fills from a sibling effect).
-                applyCrownFix(crownFixTracker, System.currentTimeMillis(), openCrownSlot.value)
-                    .let { (cur, prev) ->
-                        crownCurrentFix = cur
-                        crownPreviousFix = prev
-                    }
+                CrownProofSelection.selectFixes(
+                    crownFixTracker,
+                    System.currentTimeMillis(),
+                    openCrownSlot.value,
+                ).let { (cur, prev) ->
+                    crownCurrentFix = cur
+                    crownPreviousFix = prev
+                }
                 while (true) {
                     val fix = CrownLocation.currentFix(appContext)
                     if (fix != null) {
                         crownFixTracker.record(fix)
-                        applyCrownFix(
+                        CrownProofSelection.selectFixes(
                             crownFixTracker,
                             System.currentTimeMillis(),
                             openCrownSlot.value,
@@ -2501,7 +2450,7 @@ fun AuthenticatedApp(
                     } else {
                         crownFixTracker.secondsUntilProofReady(
                             System.currentTimeMillis(),
-                            crownInRangePredicate(openCrown),
+                            CrownProofSelection.inRangePredicate(openCrown),
                         )
                     }
                 }
