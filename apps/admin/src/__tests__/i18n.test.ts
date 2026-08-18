@@ -50,3 +50,12 @@ describe('translate', () => {
     expect(translate('en', 'this.key.does.not.exist')).toBe('this.key.does.not.exist');
   });
 });
+
+describe('crown-points abbreviation', () => {
+  // The unit is "Kronpoäng" (KP) in Swedish, but "Crown Points" (CP) in English.
+  // Guard that the two dictionaries never drift back to sharing "KP".
+  it('abbreviates the points unit as KP in Swedish and CP in English', () => {
+    expect((sv.points as { shortForm: string }).shortForm).toBe('KP');
+    expect((en.points as { shortForm: string }).shortForm).toBe('CP');
+  });
+});
