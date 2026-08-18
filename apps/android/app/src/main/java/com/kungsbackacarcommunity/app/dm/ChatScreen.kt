@@ -56,6 +56,7 @@ import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
 import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
 import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
+import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.events.EventShareLinks
@@ -208,6 +209,7 @@ fun ChatScreen(
                 },
                 placeholder = { Text(stringResource(R.string.dm_inputPlaceholder)) },
                 modifier = Modifier.weight(1f),
+                keyboardOptions = ChatComposerKeyboardOptions,
                 singleLine = false,
             )
             Button(
