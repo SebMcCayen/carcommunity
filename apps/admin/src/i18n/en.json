@@ -364,9 +364,9 @@
     "actionError": "The action failed."
   },
   "points": {
-    "pageTitle": "Kronpoäng",
-    "loading": "Loading Kronpoäng...",
-    "error": "Could not load Kronpoäng. Please try again.",
+    "pageTitle": "Crown Points",
+    "loading": "Loading Crown Points...",
+    "error": "Could not load Crown Points. Please try again.",
     "retry": "Try again",
     "balanceLabel": "Current balance",
     "shortForm": "CP",
@@ -383,7 +383,7 @@
       "expectedBalance": "Expected balance (not guaranteed)",
       "notice": "This action is logged and cannot modify previous transactions.",
       "confirm": "Confirm adjustment",
-      "confirmTitle": "Confirm Kronpoäng adjustment",
+      "confirmTitle": "Confirm Crown Points adjustment",
       "confirmDescription": "Do you want to proceed with this adjustment? The action will be logged.",
       "submit": "Adjust",
       "submitting": "Adjusting...",
