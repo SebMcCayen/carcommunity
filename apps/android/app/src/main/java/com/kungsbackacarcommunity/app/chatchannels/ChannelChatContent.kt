@@ -75,6 +75,7 @@ import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
 import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
 import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
+import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.location.GeoLinks
@@ -401,6 +402,7 @@ fun ChannelChatContent(
                 },
                 placeholder = { Text(stringResource(R.string.channel_inputPlaceholder)) },
                 modifier = Modifier.weight(1f).testTag(CHANNEL_INPUT_TEST_TAG),
+                keyboardOptions = ChatComposerKeyboardOptions,
                 singleLine = false,
             )
             Button(

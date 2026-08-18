@@ -38,6 +38,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
@@ -276,6 +277,7 @@ fun EventChatScreen(
                     onValueChange = { if (it.length <= EventChat.MESSAGE_MAX_LENGTH) draft = it },
                     placeholder = { Text(text = stringResource(R.string.chat_inputPlaceholder)) },
                     modifier = Modifier.weight(1f),
+                    keyboardOptions = ChatComposerKeyboardOptions,
                     singleLine = false,
                 )
                 Button(
