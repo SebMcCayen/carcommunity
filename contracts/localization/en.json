@@ -1272,6 +1272,24 @@
     "deployErrorUnavailable": "Couldn't activate the perk right now.",
     "deployErrorUnknown": "Something went wrong. Try again."
   },
+  "leaderboard": {
+    "title": "Leaderboard",
+    "scopeAllTime": "All-time",
+    "scopeThisMonth": "This month",
+    "categoryCrownPoints": "Crown Points",
+    "categoryDistance": "Distance",
+    "categoryEvents": "Events attended",
+    "categoryConvoys": "Convoys led",
+    "categoryStreak": "Longest streak",
+    "valueCrownPoints": "%1$d CP",
+    "valueDistance": "%1$d km",
+    "valueCount": "%1$d",
+    "valueDays": "%1$d days",
+    "rank": "#%1$d",
+    "you": "You",
+    "categoryEmpty": "No entries yet — be the first on the board.",
+    "error": "Couldn't load the leaderboard. Please try again."
+  },
   "partners": {
     "screenTitle": "KCC Business Partners",
     "statusLabel": "Partner",
@@ -1586,6 +1604,7 @@
     "socialEvents": "Events",
     "socialNotifications": "Notifications",
     "socialCrownHunt": "Crown Hunt",
+    "socialLeaderboard": "Leaderboard",
     "socialPartners": "Partners",
     "garageFriends": "Friends",
     "garageBadges": "Badges",

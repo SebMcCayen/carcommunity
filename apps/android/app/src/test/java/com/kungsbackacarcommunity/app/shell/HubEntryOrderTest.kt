@@ -38,22 +38,24 @@ class HubEntryOrderTest {
      *    unreferenced, pending map integration.
      */
     private val socialEn =
-        listOf("Events", "Crown Hunt", "Partners")
+        listOf("Events", "Crown Hunt", "Leaderboard", "Partners")
     private val socialSv =
-        listOf("Event", "Kronjakt", "Partners")
+        listOf("Event", "Kronjakt", "Topplista", "Partners")
 
     @Test
     fun socialEntriesAreAlphabeticalInEnglish() {
         assertEquals(
-            listOf("Crown Hunt", "Events", "Partners"),
+            listOf("Crown Hunt", "Events", "Leaderboard", "Partners"),
             order(socialEn, Locale.ENGLISH),
         )
     }
 
     @Test
     fun socialEntriesAreAlphabeticalInSwedish() {
+        // Swedish collates T after P, so Topplista sorts LAST — unlike English,
+        // where Leaderboard sits between Events and Partners.
         assertEquals(
-            listOf("Event", "Kronjakt", "Partners"),
+            listOf("Event", "Kronjakt", "Partners", "Topplista"),
             order(socialSv, Locale.forLanguageTag("sv")),
         )
     }

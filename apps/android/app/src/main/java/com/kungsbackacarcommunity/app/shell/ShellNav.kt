@@ -36,6 +36,8 @@ enum class ShellRoute {
     Map,
     Events,
     CrownHunt,
+    /** The social leaderboard (all-time / this-month podiums per category). */
+    Leaderboard,
     Partners,
     Notifications,
     NotificationSettings,

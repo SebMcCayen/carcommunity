@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.BusinessCenter
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Event
+import androidx.compose.material.icons.filled.Leaderboard
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
@@ -228,6 +229,8 @@ import com.kungsbackacarcommunity.app.friends.FriendsCoordinator
 import com.kungsbackacarcommunity.app.friends.FriendsRepository
 import com.kungsbackacarcommunity.app.friends.FriendsRoute
 import com.kungsbackacarcommunity.app.friends.FriendsStatus
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardRepository
+import com.kungsbackacarcommunity.app.leaderboard.LeaderboardRoute
 import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRepository
 import com.kungsbackacarcommunity.app.memberprofile.MemberProfileRoute
 import com.kungsbackacarcommunity.app.garage.GarageCoordinator
@@ -711,6 +714,7 @@ fun AuthenticatedApp(
     groupDriveCoordinator: GroupDriveCoordinator?,
     crownHuntRepository: CrownHuntRepository?,
     crownHuntCoordinator: CrownHuntCoordinator?,
+    leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
     notificationsRepository: NotificationsRepository?,
@@ -5227,6 +5231,7 @@ fun AuthenticatedApp(
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
                         crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS),
+                        leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
                         notificationsRepository = notificationsRepository,
@@ -6193,6 +6198,20 @@ fun AuthenticatedApp(
                                                                     )
                                                                 ) {
                                                                     { openRootRoute(ShellRoute.CrownHunt) }
+                                                                } else {
+                                                                    null
+                                                                },
+                                                            ),
+                                                            // Read-only social leaderboard. Gated
+                                                            // only on the repo being wired (config
+                                                            // present) — like the Events entry — so
+                                                            // it's hidden in a config-less/CI build
+                                                            // instead of showing a permanent spinner.
+                                                            HubEntry(
+                                                                stringResource(R.string.shell_socialLeaderboard),
+                                                                Icons.Filled.Leaderboard,
+                                                                if (leaderboardRepository != null) {
+                                                                    { openRootRoute(ShellRoute.Leaderboard) }
                                                                 } else {
                                                                     null
                                                                 },
@@ -7326,6 +7345,7 @@ private fun RouteHost(
     // site where the flag set is in scope. Gates the Kronjakt shop tab: while
     // false the CrownHunt hub renders exactly as before and the shop ships dark.
     crownHuntPerksEnabled: Boolean,
+    leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
     notificationsRepository: NotificationsRepository?,
@@ -7833,6 +7853,16 @@ private fun RouteHost(
                 pointsRepository = pointsRepository,
             )
         }
+
+        ShellRoute.Leaderboard ->
+            // Read-only social leaderboard. A single rules-gated listener on the
+            // precomputed `leaderboards/{scope}` doc — null repo in a config-less
+            // build simply shows the loading skeleton.
+            LeaderboardRoute(
+                repository = leaderboardRepository,
+                uid = uid,
+                onBack = onClose,
+            )
 
         ShellRoute.Partners ->
             if (partnersRepository != null) {
