@@ -141,7 +141,7 @@ The proposed 75 m collect radius and 10/25/100/500 KP rewards all sit comfortabl
 | Gap | Status |
 |---|---|
 | **Partial clipping** | **CLOSED.** §5.3 and the §10 worked example require awarding *part* of an earn when it would breach a cap (e.g. 130 of 180 KP), and `AtomicReadGuard` returns `Promise<void>` — it can only throw to abort the whole mutation. `creditPointsResolved` in `ledger.ts` adds an `AmountResolver` that runs inside the transaction and returns the final amount, which the ledger validates is a positive integer **no larger than the requested one** — a resolver can only clip down, never inflate an award. |
-| **Cap exemption** | **OPEN.** §5.3 exempts badge milestones from the 300/day global cap. `PointsMutationParams` has no such flag, so the cap logic has nothing to branch on. Not yet needed: the §7 ladders are unbuilt, so nothing writes `source: 'badge'`. |
+| **Cap exemption** | **OPEN.** §5.3 exempts badge milestones from the 1500/day global cap. `PointsMutationParams` has no such flag, so the cap logic has nothing to branch on. Not yet needed: the §7 ladders are unbuilt, so nothing writes `source: 'badge'`. |
 | **`debitPoints` has no `readGuard`** | **OPEN.** `creditPoints` takes one; `debitPoints` takes only `extraWrites`. Any capped or guarded *spend* path needs the parameter added. Not yet needed: there is no spend path. |
 
 Note that the first gap interacts with the **forfeit-not-bank** decision (Q9): capped-out KP is forfeited, and partial clipping is what makes "you earned 180, we credited 130" honest rather than a silent all-or-nothing rejection. The shipped award engine names the binding ceiling (`clippedBy`: `daily` or `weekly_driving`) in the ledger entry's description, so a member can always see *which* cap bit.
@@ -193,7 +193,7 @@ At the time this document was first written there was no progression, no tiering
                            ▼
     ┌────────────────────────────────────────────────┐
     │  POINTS LEDGER  (§5) — append-only, capped     │
-    │  300 KP/day global · 400 KP/week driving       │
+    │  1500 KP/day global · 400 KP/week driving      │
     │  every award idempotent on a derived key       │
     └──────────────────────┬─────────────────────────┘
                            │ counters cross thresholds
@@ -205,7 +205,7 @@ At the time this document was first written there was no progression, no tiering
     └────────────────────────────────────────────────┘
 ```
 
-**Three of the four boxes are now built; the badge box is not.** The ledger's *append-only, idempotent-on-a-derived-key* property, the earning rules, and both caps annotated on the diagram (300/day, 400/week) are real: `pointsDailyTotals` and `pointsWeeklyDriving` are the counter collections and `DAILY_POINTS_CAP` / `WEEKLY_DRIVING_POINTS_CAP` the constants, both in `points-economy-core.ts`, read and incremented inside the award transaction. Presence aggregation and spawning shipped with the auto-spawn engine (§4, §1.1) — though the spawner **tops a cell straight up to target** rather than drawing Poisson arrivals, so the diagram's replenishment box is labelled for what the code does, not for §4.4. **Badge tiers remain unbuilt**, so the bottom box and its `source=badge` arrow are still design. Both crown daily caps exist side by side and are unchanged: `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` on hand-placed claims and `MAX_DAILY_SPAWN_CLAIMS = 20` on spawned ones, counted separately.
+**Three of the four boxes are now built; the badge box is not.** The ledger's *append-only, idempotent-on-a-derived-key* property, the earning rules, and both caps annotated on the diagram (1500/day, 400/week) are real: `pointsDailyTotals` and `pointsWeeklyDriving` are the counter collections and `DAILY_POINTS_CAP` / `WEEKLY_DRIVING_POINTS_CAP` the constants, both in `points-economy-core.ts`, read and incremented inside the award transaction. Presence aggregation and spawning shipped with the auto-spawn engine (§4, §1.1) — though the spawner **tops a cell straight up to target** rather than drawing Poisson arrivals, so the diagram's replenishment box is labelled for what the code does, not for §4.4. **Badge tiers remain unbuilt**, so the bottom box and its `source=badge` arrow are still design. Both crown daily caps exist side by side and are unchanged: `MAX_DAILY_SUCCESSFUL_CLAIMS = 10` on hand-placed claims and `MAX_DAILY_SPAWN_CLAIMS = 20` on spawned ones, counted separately.
 
 Three feedback loops, deliberately different in tempo:
 
@@ -558,7 +558,7 @@ The `min(s,7)` and the 1.7 ceiling reach the cap at exactly the same point — t
 
 | Cap | Value | Window | Window start | Status |
 |---|---|---|---|---|
-| Global earn cap | **300 KP** | Europe/Stockholm civil day | local midnight | **built** (`DAILY_POINTS_CAP`) |
+| Global earn cap | **1500 KP** | Europe/Stockholm civil day | local midnight | **built** (`DAILY_POINTS_CAP`) |
 | **Driving-derived** cap `D` | **400 KP** | Europe/Stockholm week (Mon–Sun) | local Monday midnight | **built** (`WEEKLY_DRIVING_POINTS_CAP`) |
 | Crown claims | 10 | fixed UTC calendar day | `00:00:00Z` daily | **built** (pre-existing) |
 
@@ -580,13 +580,13 @@ So the weekly `D` counter should be keyed on `startOfUtcWeek`'s date, exactly as
 
 **Bucket `D` (driving-derived)** = `live_session_1km` + `drive_5km`. **Crowns are NOT in `D`** in the shipped engine — `crown_collect` folds into the *daily* cap, never the weekly driving cap (see the CORRECTION below and §5.4 Q2). An earlier draft listed `crown_collect` here; the code never did.
 
-Everything else — daily open, events, garage, confirmed reports, badge milestones — sits **outside** `D` and is capped only by the 300/day global. As of #861 the two `D` rules sit outside the 300/day global too (they answer to `D` alone), so `D` and the daily cap are now fully disjoint.
+Everything else — daily open, events, garage, confirmed reports, badge milestones — sits **outside** `D` and is capped only by the 1500/day global. As of #861 the two `D` rules sit outside the 1500/day global too (they answer to `D` alone), so `D` and the daily cap are now fully disjoint.
 
-**Cap exemption:** badge tier milestones are **exempt from the 300/day global cap**. They are once-per-lifetime by construction, so they are already rate-limited, and clipping a member's 500 KP Platina award because they also had a good crown day would be an obviously wrong user experience.
+**Cap exemption:** badge tier milestones are **exempt from the 1500/day global cap**. They are once-per-lifetime by construction, so they are already rate-limited, and clipping a member's 500 KP Platina award because they also had a good crown day would be an obviously wrong user experience.
 
-**Calibration check — the 300/day cap is not arbitrary.** A maximal Kronjakt day is 10 crowns at expected value 24.5 KP = **245 KP**, plus 9 daily-open, plus one distance award ≈ **270 KP**. So a maximum honest day lands *just under* the cap: the cap is invisible to normal play, and only bites on a lucky day (one legendary alone pushes past it) or a day with an event on top. That is the correct place to put a ceiling — it does not punish the diligent, it truncates the extreme.
+**Calibration — the daily cap was raised 300 → 1500 (legit grinders were hitting it).** The original 300 was calibrated for a **10-crown day**: 10 hand-placed claims (`MAX_DAILY_SUCCESSFUL_CLAIMS`) at expected value 24.5 KP = **245 KP**, plus daily-open and a distance award ≈ **270 KP**, so a maximal honest day landed *just under* 300. That calibration **pre-dated the auto-spawn engine**, which added a SECOND crown lane worth **20 more claims/day** (`MAX_DAILY_SPAWN_CLAIMS`). The realistic maximum legit grind is now the two crown-count caps combined — **10 + 20 = 30 crowns** — and crowns fold into the daily counter uncapped, so a dedicated player reaches `30 × 24.5 ≈ 735 KP` on an average rarity roll, and **`735 × 2 ≈ 1470 KP`** with the boost perk (a collect doubler) active. The old 300 therefore starved honest grinders the moment they collected ~12 average crowns (`300 / 24.5`) or a single legendary (500). **`DAILY_POINTS_CAP` is now 1500**, set just above that boosted-maximum ceiling with headroom for the handful of non-crown economy awards, so the points cap no longer bites honest play: the crown-COUNT caps remain the true anti-farm bound on crowns, and the per-rule limits bound the rest. It is a **single tunable** — every doc, test and the member-facing cap text derives from it — and when a member IS refused an award because the cap is spent, `points-detectDailyCapReached` auto-files one deduplicated GitHub issue per Europe/Stockholm day so the ceiling stays observable and can be retuned.
 
-**CORRECTION (issue #861) — driving-derived rules are exempt from the 300/day global cap.** The shipped `applyEconomyCaps` no longer charges `drive_5km` / `live_session_1km` against `DAILY_POINTS_CAP`; they are bounded **solely** by `WEEKLY_DRIVING_POINTS_CAP`. The trigger for this: crowns fold into the daily cap **uncapped** (a single legendary alone pushes the day past 300, §5.3), so a member who collected a few crowns during a drive earned **zero** for the genuine saved drive afterwards — reported as #861 ("får inga poäng för min körning när jag har samlat in kronor"). The driving lane already carries its own dedicated ceiling **and** tiny per-day rule limits (both rules are 2×/day, ≤ 50 KP/day combined), so it cannot be farmed into a leaderboard position regardless of the daily cap — the daily cap added no anti-farm value on this lane, only the starvation. Crowns were already excluded from the weekly driving cap for the same *"a crown is a destination, not a distance"* reason; this closes the matching hole on the daily cap. Non-driving rules (daily open, events, garage, confirmed reports) are unchanged — still capped by the 300/day global, still charged by the crown fold.
+**CORRECTION (issue #861) — driving-derived rules are exempt from the daily global cap.** The shipped `applyEconomyCaps` no longer charges `drive_5km` / `live_session_1km` against `DAILY_POINTS_CAP`; they are bounded **solely** by `WEEKLY_DRIVING_POINTS_CAP`. The trigger for this: crowns fold into the daily cap **uncapped** (a single legendary alone pushes the day past the cap, §5.3), so a member who collected a few crowns during a drive earned **zero** for the genuine saved drive afterwards — reported as #861 ("får inga poäng för min körning när jag har samlat in kronor"). The driving lane already carries its own dedicated ceiling **and** tiny per-day rule limits (both rules are 2×/day, ≤ 50 KP/day combined), so it cannot be farmed into a leaderboard position regardless of the daily cap — the daily cap added no anti-farm value on this lane, only the starvation. Crowns were already excluded from the weekly driving cap for the same *"a crown is a destination, not a distance"* reason; this closes the matching hole on the daily cap. Non-driving rules (daily open, events, garage, confirmed reports) are unchanged — still capped by the daily global (now 1500 KP), still charged by the crown fold.
 
 ### 5.4 Why the weekly driving cap exists, and what it does
 
@@ -886,7 +886,7 @@ Two further limits for when it *is* wired. It is **client-supplied**, so it will
 
 - `MAX_DAILY_SUCCESSFUL_CLAIMS = 10`/UTC day on hand-placed claims (`crownHuntDailyClaims`), plus the per-point repeat rule via `crownHuntAwardGuards`;
 - **`MAX_DAILY_SPAWN_CLAIMS = 20`/UTC day on spawned claims (`crownSpawnDailyClaims`)** — a **separate** counter on purpose, because the two are different economies (curated 1–1 000 KP points vs a 10/25/100/500 spawn table) and sharing one would mean a busy hunting afternoon silently locked a member out of an admin's event point;
-- the §5.3 KP economy caps: `pointsDailyTotals` (300/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits, all via `creditPointsResolved`.
+- the §5.3 KP economy caps: `pointsDailyTotals` (1500/day global) and `pointsWeeklyDriving` (400/week driving-derived), plus `pointsRuleCounters` for the per-rule limits, all via `creditPointsResolved`.
 
 The spawn path additionally enforces its **once-globally** rule in the same transaction: the read guard re-reads the crown document and the write phase flips it to `status: 'claimed'` with `expiresAt` set to the claim instant, so concurrent taps serialise on the crown and exactly one wins. The pre-transaction status read is a fast path, never the authority. Setting `expiresAt` to *now* rather than leaving the rarity TTL is what makes the client read rule (`status == 'live' && expiresAt > request.time`) hide a taken crown immediately instead of leaving it on the map until the sweeper arrives.
 
@@ -929,7 +929,7 @@ Different jobs. Do not unify them.
 
 **The honest conclusion, and the reason not to over-invest in detection:**
 
-> Because the caps in §5.3 are low, **a perfect GPS spoofer's maximum weekly extraction is identical to a diligent honest member's**: 400 KP of driving-derived earnings and 300/day overall. Spoofing buys *convenience*, not *advantage*. Combined with the fact that KP have **no cash value, no purchase path and no pay-to-win effect**, the rational incentive to spoof is close to zero.
+> Because the caps in §5.3 are low, **a perfect GPS spoofer's maximum weekly extraction is identical to a diligent honest member's**: 400 KP of driving-derived earnings and 1500/day overall. Spoofing buys *convenience*, not *advantage*. Combined with the fact that KP have **no cash value, no purchase path and no pay-to-win effect**, the rational incentive to spoof is close to zero.
 
 Caps are the real anti-abuse mechanism. The risk pipeline exists to catch the careless and to give admins evidence, not to win an arms race we would lose. Building an ML anomaly detector before there is anything worth stealing would be effort spent in the wrong place.
 
@@ -983,7 +983,7 @@ Caps are the real anti-abuse mechanism. The risk pipeline exists to catch the ca
 | Sun | streak 2 → **6** | 1 uncommon → **25** | 1× drive 5 km → **15** | — | **46** |
 | | **46** | **200** | **75** | **90** | **411 KP** |
 
-**Cap check — daily (300 KP):** Anna's biggest day is Saturday at 241 KP. Under the cap, and she never sees it. Note the Brons badge bonus (25) is cap-exempt anyway. **The cap is invisible to normal play** — exactly as intended.
+**Cap check — daily (1500 KP):** Anna's biggest day is Saturday at 241 KP. Far under the cap, and she never sees it. Note the Brons badge bonus (25) is cap-exempt anyway. **The cap is invisible to normal play** — exactly as intended.
 
 **Cap check — weekly driving `D` (400 KP):** `D = 200 (crowns) + 75 (distance) = 275 KP`. Well under. **An average member never meets the driving cap.**
 
@@ -997,7 +997,7 @@ Caps are the real anti-abuse mechanism. The risk pipeline exists to catch the ca
 | Tue | 8 common + 2 uncommon = **130** | 2 live + 2 drive = **50** | 180 | 450 → **clipped to 400** | **130** (50 forfeited) |
 | Wed–Sun | any amount | any amount | — | 400 (full) | **0 driving KP** |
 
-Monday's day total is `8 + 220 + 50 = 278` — under the 300 daily cap, though a legendary instead of the rare would have pushed him to 678 and been clipped to 300.
+Monday's day total is `8 + 220 + 50 = 278` — far under the 1500 daily cap. Even a legendary instead of the rare (pushing him to ~678), or a full 30-crown grind (~735, or ~1470 with the boost perk), stays within the raised cap — which is exactly why 300 was raised: those honest big days used to be clipped.
 
 From Tuesday afternoon onward, **Björn earns nothing further from driving that week.** Non-driving progress still available to him across Wed–Sun:
 
@@ -1032,7 +1032,7 @@ Names are indicative; the implementing slices own the final shapes and the contr
 | `crownSpawnClaims/{scopedKey}` | Every spawn claim attempt; ID = namespaced SHA-256 of (uid, client key) | owner reads own | — |
 | `crownSpawnClaimRisk/{scopedKey}` | Risk score + reasons for spawn claims | backend only | — |
 | `crownSpawnDailyClaims/{derivedId}` | Per-user/per-UTC-day spawn-claim counter (cap 20) | backend only | — |
-| `pointsDailyTotals/{derivedId}` | Global 300/day counter, transactionally enforced | backend only | `pointsDailyCounters` |
+| `pointsDailyTotals/{derivedId}` | Global 1500/day counter, transactionally enforced | backend only | `pointsDailyCounters` |
 | `pointsWeeklyDriving/{derivedId}` | Bucket `D` 400/week counter | backend only | `pointsWeeklyDrivingCounters` |
 | `eventAttendance/{eventId}_{uid}` | Verified boolean, dwell seconds, sample count — **no trace** | owner reads own | as sketched |
 | `badgeProgress/{uid}` | **Existing.** Extend with per-ladder lifetime counters | backend only | **still unbuilt** |
@@ -1109,7 +1109,7 @@ Everything an implementer needs, in one table. Crown-side values have been check
 | Mock-location penalty | **60** (= threshold, so it alone triggers review); spawn path only | `MOCK_LOCATION_SCORE` |
 | Crown claims/day — hand-placed | 10 (fixed UTC day, from 00:00Z) | `MAX_DAILY_SUCCESSFUL_CLAIMS` |
 | Crown claims/day — spawned | **20** (fixed UTC day, separate counter) | `MAX_DAILY_SPAWN_CLAIMS` |
-| Global earn cap | 300 KP (Europe/Stockholm civil day, from local midnight) | `DAILY_POINTS_CAP` |
+| Global earn cap | 1500 KP (Europe/Stockholm civil day, from local midnight) | `DAILY_POINTS_CAP` |
 | Driving-derived cap `D` | 400 KP (Europe/Stockholm week, from local Monday midnight) | `WEEKLY_DRIVING_POINTS_CAP` |
 | Streak multiplier | `min(1.7, 1 + min(s,7)/10)` | `points-economy-core.ts` |
 | Event fence | 150 m | `events/checkIn.ts` |

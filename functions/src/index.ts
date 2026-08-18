@@ -72,6 +72,7 @@ import {
   onLedgerEntryCreated,
   onVehicleCreated,
 } from './points/economyTriggers';
+import { detectDailyCapReached } from './points/dailyCapDetector';
 import {
   activatePoint,
   createPoint,
@@ -509,6 +510,12 @@ export const badges = {
  * `live_session_1km` has no such document (live positions are RTDB-only with
  * no history by design), so points/liveDistance.ts is called inline by
  * live.updatePosition from the session node it has already read.
+ *
+ * The scheduled `points-detectDailyCapReached` (points/dailyCapDetector.ts)
+ * reads the same `pointsDailyTotals` counter hourly and auto-files ONE
+ * deduplicated GitHub issue per Europe/Stockholm day when members reach
+ * `DAILY_POINTS_CAP`, so a cap that is starting to bite honest grinders is
+ * noticed and can be retuned — out of band, so the award path is never slowed.
  */
 export const points = {
   adminAdjust,
@@ -519,6 +526,7 @@ export const points = {
   onVehicleCreated,
   onAttendanceVerified,
   onLedgerEntryCreated,
+  detectDailyCapReached,
 };
 
 /**

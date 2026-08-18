@@ -57,6 +57,7 @@ import { db } from '../firebase';
 import { creditPointsResolved, type AtomicExtraWrites } from './ledger';
 import {
   DAILY_OPEN_BASE_POINTS,
+  DAILY_POINTS_CAP,
   MAX_STREAK_FOR_MULTIPLIER,
   POINTS_DAILY_TOTALS_COLLECTION,
   POINTS_RULE_COUNTERS_COLLECTION,
@@ -71,6 +72,7 @@ import {
   stockholmDayKey,
   stockholmWeekKey,
   weeklyDrivingDocId,
+  WEEKLY_DRIVING_POINTS_CAP,
   type EconomyCapClip,
   type EconomyRuleKey,
 } from './points-economy-core';
@@ -292,6 +294,29 @@ export async function awardEconomyPoints(
     };
   } catch (error) {
     if (error instanceof EconomyRejection) {
+      if (error.status === 'cap_reached') {
+        // Structured signal at the exact refusal, on the hot path but I/O-free:
+        // a member filled the budget (crowns fold in uncapped) and this award
+        // earned nothing. NO PII — this whole feature is no-PII by design, so the
+        // line carries only the rule, the lane and the cap value, never the uid.
+        // It is a tuning aggregate ("the cap is biting"), not a per-account audit;
+        // the deduplicated GitHub issue filed out of band by
+        // points-detectDailyCapReached likewise carries no uid, and is never on
+        // this path, so the award transaction is never slowed.
+        //
+        // The lane is deterministic from the rule: a driving rule can only be
+        // clipped by the WEEKLY driving cap, every other rule only by the DAILY
+        // cap (see applyEconomyCaps). The event fires for both lanes, so it is
+        // named generically and `capType` distinguishes them (the auto-issue
+        // covers the daily points cap only). Deriving the cap from rule.driving
+        // also sidesteps the compiler mis-narrowing `clippedBy` (it is assigned
+        // inside the resolver closure, which TS cannot see runs).
+        logger.info('points.capReached', {
+          rule: request.rule,
+          capType: rule.driving ? 'weekly_driving' : 'points',
+          cap: rule.driving ? WEEKLY_DRIVING_POINTS_CAP : DAILY_POINTS_CAP,
+        });
+      }
       return {
         status: error.status,
         points: 0,
