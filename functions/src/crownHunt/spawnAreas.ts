@@ -19,8 +19,8 @@
  * Turning an area OFF (deactivating, deleting, or re-drawing its shape) DRAINS
  * that area's live auto-spawned crowns immediately, rather than waiting out
  * their TTL — the same reasoning as revoking a cell: deactivation is the lever
- * an admin reaches for after a near-miss, and up to a day of standing (a rare lives 24 h)
- * crowns in an area just declared unsafe would make it useless. Crowns are
+ * an admin reaches for after a near-miss, and up to a day of standing crowns
+ * (a rare lives 24 h) in an area just declared unsafe would make it useless. Crowns are
  * tagged with `areaId` at spawn time (spawnScheduled.ts) precisely so this drain
  * can find exactly them.
  *
