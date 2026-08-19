@@ -175,12 +175,15 @@ describe('live-sendWave gating', () => {
     expect((await callableError(call('live-sendWave', {}))).code).toBe('functions/unauthenticated');
   });
 
-  it('a caller who is not sharing live location is failed-precondition', async () => {
+  it('a caller who is not sharing is failed-precondition AND is not charged the cooldown', async () => {
     const lurker = await createProvisionedUser('wave-lurker', `Lurker-${SFX}`);
     await signInAs(lurker);
     expect((await callableError(call('live-sendWave', {}))).code).toBe(
       'functions/failed-precondition',
     );
+    // The rejected (not-sharing) attempt must NOT stamp the cooldown, so it can
+    // never rate-limit the caller's next legitimate wave.
+    expect((await adminDb.collection('liveWaveCooldowns').doc(lurker.uid).get()).exists).toBe(false);
   });
 
   it('rejects a client-supplied position (strict schema)', async () => {

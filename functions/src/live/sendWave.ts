@@ -9,23 +9,27 @@
  * ## What it does, in order
  *  1. requireActiveActor — signed-in, non-suspended. Waving is free (social),
  *     like sharing your own position (requireActiveActor, not requireMemberActor).
- *  2. ANTI-SPAM FIRST: a single transaction on `liveWaveCooldowns/{uid}` gates the
- *     whole send. An idempotent replay (same clientId) returns the prior result
- *     without doing anything; a send inside the 45s window is refused
- *     (resource-exhausted, details {retryAfterMs}); otherwise it stamps the
- *     cooldown and proceeds. Doing this BEFORE the geo-query means a throttled
- *     spammer never triggers the read-bearing nearby scan or the fan-out.
- *  3. AUTHORITATIVE position: the sender's own `liveSessions/{uid}` discovery doc
- *     (written by live.updatePosition) supplies the geoCell + lat/lng + public
- *     displayName. No such active doc → failed-precondition (you must be sharing
- *     live to wave). The client can NEVER supply a position, so it cannot spoof a
- *     far-away blast radius.
- *  4. RECIPIENTS: the SAME geo-cell query live.listNearby uses over
+ *  2. IDEMPOTENT REPLAY FAST PATH: a retry with the same clientId returns the
+ *     committed result immediately — before the sharing gate, so a legitimate
+ *     retry still replays even if the caller has since stopped sharing.
+ *  3. AUTHORITATIVE position + SHARING GATE (before the cooldown is charged): the
+ *     sender's own `liveSessions/{uid}` discovery doc (written by
+ *     live.updatePosition) supplies the geoCell + lat/lng + public displayName. No
+ *     such active doc → failed-precondition (you must be sharing live to wave),
+ *     and a rejected attempt does NOT burn the cooldown. The client can NEVER
+ *     supply a position, so it cannot spoof a far-away blast radius.
+ *  4. ANTI-SPAM: a single transaction on `liveWaveCooldowns/{uid}` — re-check
+ *     idempotency, refuse a send inside the 45s window (resource-exhausted,
+ *     details {retryAfterMs}), otherwise stamp the cooldown. Reached only after
+ *     the sharing gate and BEFORE the geo-query, so a not-sharing attempt never
+ *     charges the cooldown and a throttled spammer never triggers the nearby scan
+ *     or the fan-out.
+ *  5. RECIPIENTS: the SAME geo-cell query live.listNearby uses over
  *     `liveSessions` (status=='active', expiresAt>now, exact Haversine radius),
  *     minus self, minus anyone in a block relationship in either direction
  *     (resolvePeerBlockPairs — the shared convoy block matrix). Radius is the
  *     FIXED WAVE_RADIUS_METERS (clamped), never client-controlled.
- *  5. DELIVERY: one short-lived doc fanned out (batched) to each recipient's OWN
+ *  6. DELIVERY: one short-lived doc fanned out (batched) to each recipient's OWN
  *     `liveWaves/{uid}/waves/{waveId}` inbox — the SAME per-user-inbox shape as
  *     notifications/{uid}/items (owner-only read, backend-only write). Each
  *     recipient's client holds a Firestore listener on its own inbox and pops the
@@ -123,55 +127,27 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   const createdAt = Timestamp.fromDate(now);
   const cooldownDocRef = cooldownRef(actor.uid);
 
-  // ANTI-SPAM GATE (server source of truth), run FIRST so a throttled caller
-  // never reaches the read-bearing geo-query below. The cooldown read + stamp
-  // share ONE transaction, so two rapid taps serialise on the cooldown doc: the
-  // first stamps and proceeds, the second reads the fresh stamp and is refused.
-  const gate = await db.runTransaction<CooldownGate>(async (tx) => {
-    const snap = await tx.get(cooldownDocRef);
-    const data = snap.data();
+  const replayResult = (data: Record<string, unknown> | undefined): SendWaveResponse | null => {
+    if (clientId === undefined || data?.lastWaveId !== clientId) return null;
+    const priorCount =
+      typeof data?.lastRecipientCount === 'number' ? data.lastRecipientCount : 0;
+    return { waveId: clientId, recipientCount: priorCount };
+  };
 
-    // Idempotent replay: a retry with the SAME clientId returns the committed
-    // result and does NOT re-fan-out or re-charge the cooldown.
-    if (clientId !== undefined && data?.lastWaveId === clientId) {
-      const priorCount =
-        typeof data?.lastRecipientCount === 'number' ? data.lastRecipientCount : 0;
-      return { kind: 'replay', waveId: clientId, recipientCount: priorCount };
-    }
-
-    const lastSentAt = data?.lastSentAt as Timestamp | undefined;
-    const lastSentAtMs = lastSentAt instanceof Timestamp ? lastSentAt.toMillis() : null;
-    if (isWithinWaveCooldown(lastSentAtMs, nowMs)) {
-      // Hand the client the remaining time so its icon greys for exactly the
-      // right window rather than guessing the server's policy.
-      throw new HttpsError('resource-exhausted', WAVE_RATE_LIMITED_MESSAGE, {
-        retryAfterMs: waveCooldownRemainingMs(lastSentAtMs, nowMs),
-      });
-    }
-
-    const waveId = clientId ?? db.collection('liveWaves').doc().id;
-    tx.set(
-      cooldownDocRef,
-      {
-        uid: actor.uid,
-        lastSentAt: createdAt,
-        lastWaveId: waveId,
-        expireAt: waveCooldownExpiry(now),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    return { kind: 'send', waveId };
-  });
-
-  if (gate.kind === 'replay') {
-    return { waveId: gate.waveId, recipientCount: gate.recipientCount };
+  // Idempotent replay FAST PATH: a retry with the SAME clientId returns the
+  // committed result and does nothing else — checked BEFORE the sharing gate so a
+  // legitimate retry still replays even if the caller has since stopped sharing.
+  if (clientId !== undefined) {
+    const preReplay = replayResult((await cooldownDocRef.get()).data());
+    if (preReplay) return preReplay;
   }
-  const { waveId } = gate;
 
-  // AUTHORITATIVE position: the sender's own discovery doc (written by
-  // live.updatePosition). Absent/expired → they are not actively sharing, so
-  // there is no trustworthy origin to broadcast from.
+  // AUTHORITATIVE position + SHARING GATE, checked BEFORE the cooldown is charged:
+  // a caller who is not actively sharing has no trustworthy origin to broadcast
+  // from, and a rejected (not-sharing) attempt must NOT burn their wave cooldown
+  // and rate-limit their next legitimate wave. The discovery doc is written by
+  // live.updatePosition; the client can NEVER supply a position, so it cannot
+  // spoof a far-away blast radius.
   const selfSnap = await db.collection('liveSessions').doc(actor.uid).get();
   const self = selfSnap.data();
   const selfExpires = self?.expiresAt;
@@ -185,6 +161,50 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     throw new HttpsError('failed-precondition', WAVE_NOT_SHARING_MESSAGE);
   }
   const senderDisplayName = (self?.displayName as string | null) ?? null;
+
+  // ANTI-SPAM GATE (server source of truth). The cooldown re-read + window check +
+  // stamp share ONE transaction, so two rapid taps serialise on the cooldown doc:
+  // the first stamps and proceeds, the second reads the fresh stamp and is
+  // refused. Reached ONLY after the sharing gate above, so a not-sharing attempt
+  // never charges the cooldown. Re-checks idempotency inside the transaction to
+  // cover a retry that raced the original send's commit.
+  const gate = await db.runTransaction<CooldownGate>(async (tx) => {
+    const data = (await tx.get(cooldownDocRef)).data();
+
+    const txReplay = replayResult(data);
+    if (txReplay) {
+      return { kind: 'replay', waveId: txReplay.waveId, recipientCount: txReplay.recipientCount };
+    }
+
+    const lastSentAt = data?.lastSentAt as Timestamp | undefined;
+    const lastSentAtMs = lastSentAt instanceof Timestamp ? lastSentAt.toMillis() : null;
+    if (isWithinWaveCooldown(lastSentAtMs, nowMs)) {
+      // Hand the client the remaining time so its icon greys for exactly the
+      // right window rather than guessing the server's policy.
+      throw new HttpsError('resource-exhausted', WAVE_RATE_LIMITED_MESSAGE, {
+        retryAfterMs: waveCooldownRemainingMs(lastSentAtMs, nowMs),
+      });
+    }
+
+    const newWaveId = clientId ?? db.collection('liveWaves').doc().id;
+    tx.set(
+      cooldownDocRef,
+      {
+        uid: actor.uid,
+        lastSentAt: createdAt,
+        lastWaveId: newWaveId,
+        expireAt: waveCooldownExpiry(now),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return { kind: 'send', waveId: newWaveId };
+  });
+
+  if (gate.kind === 'replay') {
+    return { waveId: gate.waveId, recipientCount: gate.recipientCount };
+  }
+  const { waveId } = gate;
 
   // RECIPIENTS: the same cell-bounded query live.listNearby uses. Radius is the
   // FIXED wave reach (clamped), never client-supplied.
