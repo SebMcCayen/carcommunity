@@ -1194,9 +1194,9 @@
     <string name="crownHunt_instrButton">Instructions</string>
     <string name="crownHunt_instrTitle">How Crown Hunt works</string>
     <string name="crownHunt_instrIntroTitle">What is Crown Hunt?</string>
-    <string name="crownHunt_instrIntroBody">Crown Hunt is a hunt for crowns that appear on the map around the area. Drive near a crown, stop, and collect it to earn Crown Points (KP), climb the leaderboard and unlock Crown Hunter ranks.</string>
+    <string name="crownHunt_instrIntroBody">Crown Hunt is a hunt for crowns that appear on the map around the area. Drive near a crown, stop, and collect it to earn Crown Points (CP), climb the leaderboard and unlock Crown Hunter ranks.</string>
     <string name="crownHunt_instrCollectTitle">How to collect a crown</string>
-    <string name="crownHunt_instrCollectBody">1. Drive near a crown on the map.\n2. Stop the car and hold still for a moment – crowns can only be collected while you\'re parked.\n3. Tap the crown, then tap Collect.\nKeep an eye on the map as you drive and you\'ll see crowns appear around you.</string>
+    <string name="crownHunt_instrCollectBody">1. Drive near a crown on the map.\n2. Stop or slow right down – you can collect a crown while stationary or moving very slowly. Never drive carelessly to reach one.\n3. Tap the crown, then tap Collect. The app quickly confirms you\'re stopped before the crown is yours – there\'s no timer, so take your time.\nKeep an eye on the map as you drive and you\'ll see crowns appear around you.</string>
     <string name="crownHunt_instrRaritiesTitle">Crowns come in different rarities</string>
     <string name="crownHunt_instrRaritiesIntro">Crowns come in four rarities. The rarer the crown, the more points it\'s worth.</string>
     <string name="crownHunt_instrRarityCommonBody">The most common of all and worth the fewest points. Several members can each collect the same crown.</string>
@@ -1209,8 +1209,8 @@
     <string name="crownHunt_instrExpireBody">Every crown has a time limit and disappears on its own when it runs out – even if no one collected it. Rarer crowns tend to stick around a little longer, but don\'t wait too long: grab them while they\'re there.</string>
     <string name="crownHunt_instrSpawnTitle">Where and how often do crowns appear?</string>
     <string name="crownHunt_instrSpawnBody">New crowns appear regularly near places where there\'s life and activity – the busier a place, the more likely a crown shows up there. Rarer crowns are, well … rarer. Exactly when and where the next crown appears is part of the hunt, so keep an eye on the map.</string>
-    <string name="crownHunt_instrPointsTitle">Crown Points (KP)</string>
-    <string name="crownHunt_instrPointsBody">Every crown you collect gives Crown Points (KP). Rarer crowns give more. Your KP add up to your place on the season leaderboard and can be spent in the shop where available.</string>
+    <string name="crownHunt_instrPointsTitle">Crown Points (CP)</string>
+    <string name="crownHunt_instrPointsBody">Every crown you collect gives Crown Points (CP). Rarer crowns give more. Your CP add up to your place on the season leaderboard and can be spent in the shop where available.</string>
     <string name="crownHunt_instrRankTitle">Crown Hunter ranks</string>
     <string name="crownHunt_instrRankBody">The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and finally Platinum at 1,000. The rank is tallied on the server from all the crowns you\'ve collected – it appears automatically as soon as you reach it.</string>
     <string name="leaderboard_title">Leaderboard</string>
