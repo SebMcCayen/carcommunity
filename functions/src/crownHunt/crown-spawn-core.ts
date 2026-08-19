@@ -394,9 +394,13 @@ export interface CrownRaritySpec {
 }
 
 /**
- * The rarity table. TTL rises with value on purpose: a legendary is worth
- * travelling for, so it must survive long enough to be reachable, while a
- * common should churn quickly to keep the map moving.
+ * The rarity table. TTL rises with value from common up to rare — a low-value
+ * common churns quickly to keep the map moving, while a rare survives longer so
+ * it stays reachable. The LEGENDARY is the deliberate exception: it is now
+ * short-lived (2h) so its 500-point payout must be caught in a rush, not farmed
+ * at leisure. At 48h a legendary was caught almost every time (an easy, near-
+ * guaranteed 500 KP that flooded the economy); a 2h window turns it into a
+ * "spotted one — go now" event and sharply cuts how many are collected.
  *
  * Every tier expires. A crown that never expired would become a fixed,
  * publicly known coordinate that a determined user could farm on a schedule
@@ -408,7 +412,7 @@ export const CROWN_RARITY_TABLE: Record<CrownRarity, CrownRaritySpec> = {
   common: { weight: 0.7, points: 10, ttlHours: 6 },
   uncommon: { weight: 0.22, points: 25, ttlHours: 12 },
   rare: { weight: 0.07, points: 100, ttlHours: 24 },
-  legendary: { weight: 0.01, points: 500, ttlHours: 48 },
+  legendary: { weight: 0.01, points: 500, ttlHours: 2 },
 };
 
 /**

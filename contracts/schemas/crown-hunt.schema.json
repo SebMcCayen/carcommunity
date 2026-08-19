@@ -378,7 +378,7 @@
     "crownSpawnRarity": {
       "type": "string",
       "enum": ["common", "uncommon", "rare", "legendary"],
-      "description": "Auto-spawn rarity. Rewards 10/25/100/500 KP; TTL 6/12/24/48 h."
+      "description": "Auto-spawn rarity. Rewards 10/25/100/500 KP; TTL 6/12/24/2 h (legendary deliberately short-lived)."
     },
     "crownCollectMode": {
       "type": "string",

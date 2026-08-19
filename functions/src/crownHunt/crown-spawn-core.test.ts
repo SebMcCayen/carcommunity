@@ -436,17 +436,25 @@ describe('rarity value and TTL', () => {
     expect(crownTtlMs('common')).toBe(6 * 60 * 60 * 1000);
     expect(crownTtlMs('uncommon')).toBe(12 * 60 * 60 * 1000);
     expect(crownTtlMs('rare')).toBe(24 * 60 * 60 * 1000);
-    expect(crownTtlMs('legendary')).toBe(48 * 60 * 60 * 1000);
+    // Legendary is the deliberate exception: short-lived so its 500-point payout
+    // must be caught in a rush rather than farmed at leisure (was 48h).
+    expect(crownTtlMs('legendary')).toBe(2 * 60 * 60 * 1000);
   });
 
-  it('makes rarer crowns worth more AND longer-lived', () => {
+  it('makes rarer crowns worth more and rarer (points up, weight down)', () => {
     for (let i = 1; i < CROWN_RARITIES.length; i += 1) {
       const prev = CROWN_RARITY_TABLE[CROWN_RARITIES[i - 1]!];
       const curr = CROWN_RARITY_TABLE[CROWN_RARITIES[i]!];
       expect(curr.points).toBeGreaterThan(prev.points);
-      expect(curr.ttlHours).toBeGreaterThan(prev.ttlHours);
       expect(curr.weight).toBeLessThan(prev.weight);
     }
+  });
+
+  it('lengthens TTL from common up to rare, but keeps the legendary shortest so it must be caught quickly', () => {
+    expect(CROWN_RARITY_TABLE.common.ttlHours).toBeLessThan(CROWN_RARITY_TABLE.uncommon.ttlHours);
+    expect(CROWN_RARITY_TABLE.uncommon.ttlHours).toBeLessThan(CROWN_RARITY_TABLE.rare.ttlHours);
+    // The legendary breaks the rising curve on purpose: it is the shortest-lived tier.
+    expect(CROWN_RARITY_TABLE.legendary.ttlHours).toBeLessThan(CROWN_RARITY_TABLE.common.ttlHours);
   });
 
   it('every tier expires — no crown becomes a permanent farmable fixture', () => {
@@ -454,7 +462,7 @@ describe('rarity value and TTL', () => {
     for (const rarity of CROWN_RARITIES) {
       const expiry = crownExpiresAt(rarity, now);
       expect(expiry.getTime()).toBeGreaterThan(now.getTime());
-      expect(expiry.getTime() - now.getTime()).toBeLessThanOrEqual(48 * 60 * 60 * 1000);
+      expect(expiry.getTime() - now.getTime()).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
     }
   });
 });

@@ -169,7 +169,7 @@ export const setSpawnCellApproval = onCall(
 
     // Revoking must take effect NOW, not at the end of the longest TTL.
     // Revocation is the lever an admin reaches for after a near-miss or a
-    // complaint; leaving up to 48 hours of legendary crowns standing in an area
+    // complaint; leaving up to a day of crowns standing (a rare lives 24 h) in an area
     // just declared unsafe would make it useless for the one job it has.
     //
     // So this DRAINS the cell rather than deleting one fixed page of it. The

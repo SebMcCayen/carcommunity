@@ -107,11 +107,15 @@ interface CrownTierSpec {
 
 const CROWN_TIER_ORDER: readonly CrownTier[] = ['common', 'rare', 'epic', 'legendary'];
 
+// NOTE: these frontend tier NAMES do not match the backend rarities. This table's
+// 'rare' = backend 'uncommon', 'epic' = backend 'rare' (the backend has no 'epic').
+// points + ttlHours mirror CROWN_RARITY_TABLE (functions/src/crownHunt/crown-spawn-core.ts):
+// common 6h, 'rare'/uncommon 12h, 'epic'/rare 24h, legendary 2h (deliberately short). Keep in sync.
 const CROWN_TIER_TABLE: Record<CrownTier, CrownTierSpec> = {
   common: { points: 10, ttlHours: 6, color: '#9aa0a6' },
   rare: { points: 25, ttlHours: 12, color: '#3b82f6' },
   epic: { points: 100, ttlHours: 24, color: '#a855f7' },
-  legendary: { points: 500, ttlHours: 48, color: '#f5b301' },
+  legendary: { points: 500, ttlHours: 2, color: '#f5b301' },
 };
 
 const DEFAULT_CROWN_TIER: CrownTier = 'common';
