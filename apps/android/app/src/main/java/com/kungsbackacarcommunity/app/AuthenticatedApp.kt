@@ -5056,11 +5056,17 @@ fun AuthenticatedApp(
                                 repository = convoyReactionRepository,
                                 // A convoy POLICE signal drops the SAME persistent
                                 // police pin the standalone report does (source
-                                // 'convoy', ~40 min TTL, member-gated) so there is
-                                // ONE police pin type on the map — visible to every
-                                // nearby driver via police.listNearby, and it feeds
-                                // the proximity alert. Null when the police layer is
-                                // unavailable (config-less build) → broadcast only.
+                                // 'convoy', ~40 min TTL) so there is ONE police pin
+                                // type on the map — visible to every nearby driver
+                                // via police.listNearby, and it feeds the proximity
+                                // alert. This runs ONLY after the reaction was
+                                // actually broadcast (Sent), which already required
+                                // an accepted convoy member (requireMemberActor); the
+                                // same gate police.report applies, so a non-member
+                                // never reaches the pin drop and there is no extra
+                                // client member check to drift out of sync. Null when
+                                // the police layer is unavailable (config-less build)
+                                // → broadcast only.
                                 onPoliceReaction =
                                     policeController?.let { police ->
                                         { police.report(PoliceRepository.SOURCE_CONVOY) }

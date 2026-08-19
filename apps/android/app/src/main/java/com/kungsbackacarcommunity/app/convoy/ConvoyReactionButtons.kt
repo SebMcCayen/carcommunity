@@ -75,7 +75,7 @@ fun convoyReactionButtonTag(kind: ConvoyReactionKind): String = "convoy_reaction
  * @param onPoliceReaction invoked (suspending) once a POLICE reaction has been
  *   broadcast (`Sent`), to drop the persistent police pin. Null in a config-less
  *   build (or when no police layer is available), which simply keeps the old
- *   broadcast-only behaviour.
+ *   broadcast-only behavior.
  */
 @Composable
 fun ConvoyReactionsHost(
