@@ -81,6 +81,32 @@ class PerkPurchaseUnavailableException(cause: Throwable? = null) :
     Exception("buyPerk rejected: shop unavailable.", cause)
 
 /**
+ * Thrown when the buy was refused because the member already holds the maximum of
+ * this perk (per-perk count cap) or their total banked perk value is at the
+ * ceiling — server `details.reason == "hold_cap_reached"`. Distinct so the UI can
+ * say "use some first" rather than a generic error.
+ */
+class PerkPurchaseHoldCapException(cause: Throwable? = null) :
+    Exception("buyPerk rejected: hold cap reached.", cause)
+
+/**
+ * Thrown when the buy was refused because the member bought too recently — server
+ * `details.reason == "purchase_cooldown"`. Distinct so the UI can say "wait a
+ * moment" rather than a generic error.
+ */
+class PerkPurchaseCooldownException(cause: Throwable? = null) :
+    Exception("buyPerk rejected: purchase cooldown.", cause)
+
+/**
+ * Thrown when a deploy was refused because it would exceed the concurrent
+ * activation limit (too many perk effects live at once) — server
+ * `details.reason == "activation_limit"`. Distinct from the collapsed
+ * [PerkDeployUnavailableException] family so the UI can name the reason.
+ */
+class PerkDeployActivationLimitException(cause: Throwable? = null) :
+    Exception("deployPerk rejected: activation limit.", cause)
+
+/**
  * Reads the Kronjakt shop's DISPLAY catalog + the member's owned inventory and
  * runs the buy. Firebase-free interface so the coordinator/UI are testable with
  * a fake.
@@ -351,6 +377,15 @@ class FirebasePerkShopRepository private constructor(
  */
 internal const val PERK_REASON_INSUFFICIENT_FUNDS = "insufficient_funds"
 
+/** Mirrors `PERK_PURCHASE_REASON_HOLD_CAP` in functions `crownHunt/perks-core.ts`. */
+internal const val PERK_REASON_HOLD_CAP = "hold_cap_reached"
+
+/** Mirrors `PERK_PURCHASE_REASON_COOLDOWN` in functions `crownHunt/perks-core.ts`. */
+internal const val PERK_REASON_COOLDOWN = "purchase_cooldown"
+
+/** Mirrors `PERK_DEPLOY_REASON_ACTIVATION_LIMIT` in functions `crownHunt/perks-core.ts`. */
+internal const val PERK_DEPLOY_REASON_ACTIVATION_LIMIT = "activation_limit"
+
 /**
  * Maps a callable failure to the two typed rejection families. The overdraft
  * guard and the shop-unavailable guards both surface as `FAILED_PRECONDITION`,
@@ -384,10 +419,11 @@ internal fun perkPurchaseFailedPreconditionException(
     reason: String?,
     cause: Throwable? = null,
 ): Throwable =
-    if (reason == PERK_REASON_INSUFFICIENT_FUNDS) {
-        PerkPurchaseInsufficientFundsException(cause)
-    } else {
-        PerkPurchaseUnavailableException(cause)
+    when (reason) {
+        PERK_REASON_INSUFFICIENT_FUNDS -> PerkPurchaseInsufficientFundsException(cause)
+        PERK_REASON_HOLD_CAP -> PerkPurchaseHoldCapException(cause)
+        PERK_REASON_COOLDOWN -> PerkPurchaseCooldownException(cause)
+        else -> PerkPurchaseUnavailableException(cause)
     }
 
 /**
@@ -398,8 +434,11 @@ internal fun perkPurchaseFailedPreconditionException(
  *  - `invalid-argument` → [PerkDeployMissingLocationException] (a trap with no
  *    valid current position; the only invalid-argument the deploy path throws
  *    for a well-formed request from this client).
- *  - `failed-precondition` → [PerkDeployUnavailableException] (flag off, unknown
- *    perk, no inventory, trap cap / spacing / daily limit).
+ *  - `failed-precondition` with `details.reason == "activation_limit"` →
+ *    [PerkDeployActivationLimitException] (too many effects live at once — the
+ *    one deploy rejection that DOES carry a structured reason).
+ *  - any other `failed-precondition` → [PerkDeployUnavailableException] (flag
+ *    off, unknown perk, no inventory, trap cap / spacing / daily limit).
  * Anything else (network, internal) propagates unchanged and surfaces as UNKNOWN.
  */
 private fun FirebaseFunctionsException.toPerkDeployException(): Throwable =
@@ -407,7 +446,11 @@ private fun FirebaseFunctionsException.toPerkDeployException(): Throwable =
         FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
             PerkDeployMissingLocationException(this)
         FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
-            PerkDeployUnavailableException(this)
+            if (perkPurchaseReasonOf(details) == PERK_DEPLOY_REASON_ACTIVATION_LIMIT) {
+                PerkDeployActivationLimitException(this)
+            } else {
+                PerkDeployUnavailableException(this)
+            }
         else -> this
     }
 
@@ -460,6 +503,8 @@ private fun Map<String, Any?>.toCatalogEntry(): PerkCatalogEntry? {
     if (costKp < 0) return null
     val iconKey = (this["iconKey"] as? String).orEmpty()
     val blurb = (this["blurb"] as? String).orEmpty()
+    // nameEn arrives with catalog doc version >= 2; empty on an older mirror.
+    val nameEn = (this["nameEn"] as? String).orEmpty()
     return PerkCatalogEntry(
         perkId = perkId,
         kind = kind,
@@ -467,6 +512,7 @@ private fun Map<String, Any?>.toCatalogEntry(): PerkCatalogEntry? {
         iconKey = iconKey,
         costKp = costKp,
         blurb = blurb,
+        nameEn = nameEn,
     )
 }
 

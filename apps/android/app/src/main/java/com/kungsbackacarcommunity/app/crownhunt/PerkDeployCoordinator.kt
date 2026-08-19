@@ -25,6 +25,14 @@ enum class PerkDeployFailureReason {
      */
     UNAVAILABLE,
 
+    /**
+     * Too many perk effects are already live — the concurrent activation limit
+     * ([com.kungsbackacarcommunity.app] mirrors the server's
+     * `MAX_CONCURRENT_ACTIVE_PERKS`) was hit. The one deploy rejection that
+     * carries a structured `details.reason`, so it gets its own message.
+     */
+    ACTIVATION_LIMIT,
+
     /** Anything else (network, unexpected server error). */
     UNKNOWN,
 }
@@ -144,6 +152,9 @@ class PerkDeployCoordinator(
             } catch (cancellation: CancellationException) {
                 state.value = PerkDeployStatus.Idle
                 throw cancellation
+            } catch (activationLimit: PerkDeployActivationLimitException) {
+                state.value =
+                    PerkDeployStatus.Failed(perkId, PerkDeployFailureReason.ACTIVATION_LIMIT)
             } catch (unavailable: PerkDeployUnavailableException) {
                 state.value = PerkDeployStatus.Failed(perkId, PerkDeployFailureReason.UNAVAILABLE)
             } catch (missingLocation: PerkDeployMissingLocationException) {

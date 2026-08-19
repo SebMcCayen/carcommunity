@@ -45,19 +45,24 @@ import {
   CROWN_HUNT_PERKS_FLAG_KEY,
   MAX_ACTIVE_TRAPS_PER_USER,
   MAX_TRAP_DEPLOYS_PER_DAY,
+  PERK_DEPLOY_REASON_ACTIVATION_LIMIT,
   TRAP_DURATION_HOURS,
   TRAP_RADIUS_METERS,
   TRAP_SELF_SPACING_METERS,
   SHIELD_DURATION_HOURS,
   BOOST_DURATION_HOURS,
+  activationAllowed,
   deployRecordDocId,
   hoursFromNow,
+  isTimestampActive,
   parseDeployPerkInput,
   perkById,
   scopeDeployKey,
   trapDeployCounterDocId,
   trapDocId,
+  type ActivePerkEffects,
   type PerkDefinition,
+  type PerkKind,
 } from './perks-core';
 
 const CALLABLE_OPTS = {
@@ -86,6 +91,27 @@ export interface DeployPerkResponse {
 /** TTL horizon for the daily counter docs (operator TTL policy reaps them). */
 function counterExpireAt(now: Date): Timestamp {
   return Timestamp.fromMillis(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+}
+
+/** Epoch-ms of a Firestore `expiresAt` field, or null when absent/wrong type. */
+function expiresAtMillis(value: unknown): number | null {
+  return value instanceof Timestamp ? value.toMillis() : null;
+}
+
+/**
+ * Enforces the concurrent-activation limit: throws a reason-coded
+ * `failed-precondition` when deploying `kind` would exceed
+ * MAX_CONCURRENT_ACTIVE_PERKS distinct live effects. Re-raising an already-active
+ * kind is always allowed (see {@link activationAllowed}).
+ */
+function assertActivationAllowed(active: ActivePerkEffects, kind: PerkKind): void {
+  if (!activationAllowed(active, kind)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Du har redan för många aktiva perks. Vänta tills en går ut.',
+      { reason: PERK_DEPLOY_REASON_ACTIVATION_LIMIT },
+    );
+  }
 }
 
 export const deployPerk = onCall(CALLABLE_OPTS, async (request): Promise<DeployPerkResponse> => {
@@ -292,16 +318,23 @@ async function deployTrap(args: {
     throw capRejection;
   }
 
+  const shieldRef = db.collection('perkShield').doc(uid);
+  const boostRef = db.collection('perkBoost').doc(uid);
+
   const result = await db.runTransaction(async (tx) => {
     // tx.get(query) runs in the read phase (all reads precede all writes). This
     // is the AUTHORITATIVE, race-safe cap/spacing check — a concurrent deploy
-    // that committed a trap since the pre-check is seen here and rejected.
-    const [deploySnap, inventorySnap, counterSnap, armedTxSnap] = await Promise.all([
-      tx.get(deployRef),
-      tx.get(inventoryRef),
-      tx.get(deployCounterRef),
-      tx.get(armedQuery),
-    ]);
+    // that committed a trap since the pre-check is seen here and rejected. The
+    // shield/boost reads back the concurrent-activation limit.
+    const [deploySnap, inventorySnap, counterSnap, armedTxSnap, shieldSnap, boostSnap] =
+      await Promise.all([
+        tx.get(deployRef),
+        tx.get(inventoryRef),
+        tx.get(deployCounterRef),
+        tx.get(armedQuery),
+        tx.get(shieldRef),
+        tx.get(boostRef),
+      ]);
 
     if (deploySnap.exists) {
       const d = deploySnap.data()!;
@@ -332,6 +365,19 @@ async function deployTrap(args: {
     if (deployedToday >= MAX_TRAP_DEPLOYS_PER_DAY) {
       throw new HttpsError('failed-precondition', 'Du har nått dagens gräns för fällor.');
     }
+
+    // Concurrent-activation limit. This deploy adds a NEW armed trap (the
+    // 1-active-trap cap above guarantees the member has none live right now), so
+    // it is refused only when a shield AND a boost are already both live.
+    const nowMs = now.getTime();
+    assertActivationAllowed(
+      {
+        trap: false,
+        shield: isTimestampActive(expiresAtMillis(shieldSnap.data()?.expiresAt), nowMs),
+        boost: isTimestampActive(expiresAtMillis(boostSnap.data()?.expiresAt), nowMs),
+      },
+      'trap',
+    );
 
     tx.set(trapRef, {
       placedByUid: uid,
@@ -402,9 +448,27 @@ async function deployTimedEffect(args: {
   // effects). `shieldedUntil` is the only field clients actually consume; both
   // are harmless to expose, which is the whole point of a separate public doc.
   const publicShieldRef = db.collection('perkShieldPublic').doc(uid);
+  // Concurrent-activation reads: the member's live shield, boost and any armed
+  // trap. One of the effect docs IS effectRef (the kind being raised); reading it
+  // here and writing it below is read-before-write safe.
+  const shieldStateRef = db.collection('perkShield').doc(uid);
+  const boostStateRef = db.collection('perkBoost').doc(uid);
+  const armedTrapQuery = db
+    .collection('activePerks')
+    .where('placedByUid', '==', uid)
+    .where('status', '==', 'armed')
+    .where('expiresAt', '>', Timestamp.fromDate(now))
+    .limit(1);
 
   const result = await db.runTransaction(async (tx) => {
-    const [deploySnap, inventorySnap] = await Promise.all([tx.get(deployRef), tx.get(inventoryRef)]);
+    const [deploySnap, inventorySnap, shieldStateSnap, boostStateSnap, armedTrapSnap] =
+      await Promise.all([
+        tx.get(deployRef),
+        tx.get(inventoryRef),
+        tx.get(shieldStateRef),
+        tx.get(boostStateRef),
+        tx.get(armedTrapQuery),
+      ]);
 
     if (deploySnap.exists) {
       const d = deploySnap.data()!;
@@ -420,6 +484,19 @@ async function deployTimedEffect(args: {
     if (owned < 1) {
       throw new HttpsError('failed-precondition', 'Du äger ingen sådan perk.');
     }
+
+    // Concurrent-activation limit. Re-raising the kind that is already live is
+    // allowed (it replaces, adding no new distinct effect); raising a NEW kind is
+    // refused once the member already has MAX_CONCURRENT_ACTIVE_PERKS live.
+    const nowMs = now.getTime();
+    assertActivationAllowed(
+      {
+        trap: !armedTrapSnap.empty,
+        shield: isTimestampActive(expiresAtMillis(shieldStateSnap.data()?.expiresAt), nowMs),
+        boost: isTimestampActive(expiresAtMillis(boostStateSnap.data()?.expiresAt), nowMs),
+      },
+      kind,
+    );
 
     tx.set(
       effectRef,

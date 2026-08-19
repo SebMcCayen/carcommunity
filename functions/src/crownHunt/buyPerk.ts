@@ -21,7 +21,7 @@
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
@@ -31,14 +31,21 @@ import { DEBIT_OVERDRAFT_MESSAGE } from '../points/points-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
+  PERK_PURCHASE_COOLDOWN_SECONDS,
+  PERK_PURCHASE_REASON_COOLDOWN,
+  PERK_PURCHASE_REASON_HOLD_CAP,
   PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS,
   PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+  evaluateHoldCap,
+  isWithinPurchaseCooldown,
   parseBuyPerkInput,
   perkById,
   perkCost,
   perkPurchaseLedgerKey,
+  purchaseCooldownDocId,
   scopePerkPurchaseKey,
   type PerkId,
+  type PerkInventoryCounts,
 } from './perks-core';
 
 const CALLABLE_OPTS = {
@@ -127,10 +134,19 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
 
   const scopedKey = scopePerkPurchaseKey(uid, idempotencyKey);
   const inventoryRef = db.collection('perkInventory').doc(uid);
+  const cooldownRef = db.collection('perkPurchaseCooldowns').doc(purchaseCooldownDocId(uid));
+  const now = new Date();
+  // TTL horizon for the cooldown doc — comfortably past the cooldown window so
+  // the operator TTL policy (field `expireAt`) reaps stamps a member is no
+  // longer bound by. A day is ample for a seconds-scale cooldown.
+  const cooldownExpireAt = Timestamp.fromMillis(now.getTime() + 24 * 60 * 60 * 1000);
 
   // 4. Debit + grant, atomically. The AtomicExtraWrites hook runs INSIDE the
   // ledger transaction, only when a NEW debit entry is written — an idempotent
-  // replay adds nothing, so the inventory is never double-incremented.
+  // replay adds nothing, so the inventory is never double-incremented. The
+  // AtomicReadGuard runs in the SAME transaction's read phase and enforces the
+  // hold-cap + purchase-cooldown BEFORE the debit, so a concurrent double-buy
+  // cannot slip past either — the buy fails closed with a reason-coded rejection.
   let result: Awaited<ReturnType<typeof debitPoints>>;
   try {
     result = await debitPoints(
@@ -153,6 +169,48 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
           },
           { merge: true },
         );
+        // Stamp the purchase-cooldown doc (deterministic clock = `now`, matching
+        // the read-guard's comparison) with a TTL so it self-reaps.
+        tx.set(
+          cooldownRef,
+          {
+            uid,
+            lastPurchaseAt: Timestamp.fromDate(now),
+            expireAt: cooldownExpireAt,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      },
+      // Read-phase guard: hold cap + purchase cooldown, atomic with the debit.
+      async (tx) => {
+        const [invSnap, cooldownSnap] = await Promise.all([
+          tx.get(inventoryRef),
+          tx.get(cooldownRef),
+        ]);
+
+        const lastPurchaseAt = cooldownSnap.data()?.lastPurchaseAt as Timestamp | undefined;
+        if (
+          isWithinPurchaseCooldown(
+            lastPurchaseAt instanceof Timestamp ? lastPurchaseAt.toMillis() : null,
+            now.getTime(),
+          )
+        ) {
+          throw new HttpsError(
+            'failed-precondition',
+            `Vänta ${PERK_PURCHASE_COOLDOWN_SECONDS} sekunder mellan köp.`,
+            { reason: PERK_PURCHASE_REASON_COOLDOWN },
+          );
+        }
+
+        const inventory = (invSnap.data() ?? {}) as PerkInventoryCounts;
+        if (evaluateHoldCap(inventory, perk.perkId, qty, perk.costKp) !== null) {
+          throw new HttpsError(
+            'failed-precondition',
+            'Du har redan max antal av den här perken. Använd några först.',
+            { reason: PERK_PURCHASE_REASON_HOLD_CAP },
+          );
+        }
       },
     );
   } catch (err) {
@@ -178,9 +236,23 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
         { reason: PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS },
       );
     }
+    // The read-guard's hold-cap / purchase-cooldown rejections (and the ledger's
+    // suspended-account guard) are EXPECTED `failed-precondition`s, not infra
+    // failures — they carry their own member-facing message (+ our reason code)
+    // and must reach the client unchanged, info-logged like every other
+    // reason-coded rejection above. No PII: reason + perk catalog id + qty.
+    if (err instanceof HttpsError && err.code === 'failed-precondition') {
+      const reason = (err.details as { reason?: string } | undefined)?.reason;
+      logger.info('crownHunt.buyPerk rejected', {
+        reason: reason ?? PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+        perkId,
+        qty,
+      });
+      throw err;
+    }
     // Any OTHER debit failure is an unexpected transaction/infrastructure error
-    // (not an ordinary overdraft) — surface it before it propagates so a failed
-    // purchase is diagnosable. No PII: perk catalog id + qty only.
+    // (not an ordinary overdraft or a precondition) — surface it before it
+    // propagates so a failed purchase is diagnosable. No PII: perk catalog id + qty.
     logger.error('crownHunt.buyPerk purchase transaction failed', {
       perkId,
       qty,

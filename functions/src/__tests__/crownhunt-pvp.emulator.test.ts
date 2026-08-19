@@ -85,6 +85,22 @@ async function callableErrorCode(promise: Promise<unknown>): Promise<string> {
   }
 }
 
+/** The callable error's { code, reason } — reason from the HttpsError details. */
+async function callableCodeAndReason(
+  promise: Promise<unknown>,
+): Promise<{ code: string; reason: string | undefined }> {
+  try {
+    await promise;
+    return { code: 'no-error', reason: undefined };
+  } catch (error) {
+    if (error instanceof FirebaseError) {
+      const details = (error as unknown as { details?: { reason?: string } }).details;
+      return { code: error.code, reason: details?.reason };
+    }
+    throw error;
+  }
+}
+
 async function createProvisionedUser(prefix: string): Promise<TestUser> {
   const email = `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}@example.com`;
   const password = 'password-123';
@@ -265,6 +281,52 @@ describe('crownHunt.deployPerk — shield / boost', () => {
     expect(
       await callableErrorCode(call('crownHunt-deployPerk', { perkId: 'shield', idempotencyKey: key() })),
     ).toBe('functions/failed-precondition');
+  });
+});
+
+describe('crownHunt.deployPerk — concurrent activation limit', () => {
+  it('refuses a THIRD distinct live effect and consumes no inventory', async () => {
+    const member = await createProvisionedUser('pvp-actlimit');
+    await setInventory(member.uid, { shield: 1, boost: 1, spike_strip: 1 });
+    await signInAs(member);
+
+    // Raise a shield (1 active) then a boost (2 active) — both allowed.
+    expect(
+      ((await call('crownHunt-deployPerk', { perkId: 'shield', idempotencyKey: key() }))
+        .data as DeployResponse).kind,
+    ).toBe('shield');
+    expect(
+      ((await call('crownHunt-deployPerk', { perkId: 'boost', idempotencyKey: key() }))
+        .data as DeployResponse).kind,
+    ).toBe('boost');
+
+    // A trap would be the third distinct live effect → refused, reason-coded.
+    const rejection = await callableCodeAndReason(
+      call('crownHunt-deployPerk', {
+        perkId: 'spike_strip',
+        ...uniqueSpot(),
+        idempotencyKey: key(),
+      }),
+    );
+    expect(rejection.code).toBe('functions/failed-precondition');
+    expect(rejection.reason).toBe('activation_limit');
+    // The refused trap consumed nothing.
+    expect((await readInventory(member.uid)).spike_strip).toBe(1);
+  });
+
+  it('still lets you re-raise an already-active kind (replaces, not a new effect)', async () => {
+    const member = await createProvisionedUser('pvp-actlimit-reraise');
+    await setInventory(member.uid, { shield: 2, boost: 1 });
+    await signInAs(member);
+
+    await call('crownHunt-deployPerk', { perkId: 'shield', idempotencyKey: key() });
+    await call('crownHunt-deployPerk', { perkId: 'boost', idempotencyKey: key() });
+    // Re-raising the shield (already live) is allowed even at 2 active effects.
+    const res = (await call('crownHunt-deployPerk', { perkId: 'shield', idempotencyKey: key() }))
+      .data as DeployResponse;
+    expect(res.kind).toBe('shield');
+    // It consumed a second shield unit.
+    expect((await readInventory(member.uid)).shield).toBe(0);
   });
 });
 

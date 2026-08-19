@@ -1204,6 +1204,11 @@
     <string name="crownHunt_shopErrorInsufficient">You don\'t have enough Crown Points for this perk.</string>
     <string name="crownHunt_shopErrorUnavailable">The shop isn\'t available right now.</string>
     <string name="crownHunt_shopErrorUnknown">Something went wrong. Try again.</string>
+    <string name="crownHunt_shopErrorHoldCap">You already hold the most of this perk. Use some first.</string>
+    <string name="crownHunt_shopErrorCooldown">Wait a moment between purchases.</string>
+    <string name="crownHunt_perkNameSpikeStrip">Spike strip</string>
+    <string name="crownHunt_perkNameShield">Shield</string>
+    <string name="crownHunt_perkNameBoost">Double points</string>
     <string name="crownHunt_perkKindTrap">Trap</string>
     <string name="crownHunt_perkKindShield">Shield</string>
     <string name="crownHunt_perkKindBoost">Boost</string>
@@ -1225,6 +1230,7 @@
     <string name="crownHunt_deployAlreadyMessage">Already activated.</string>
     <string name="crownHunt_deployErrorNoLocation">Your location is needed to place a trap. Try again.</string>
     <string name="crownHunt_deployErrorUnavailable">Couldn\'t activate the perk right now.</string>
+    <string name="crownHunt_deployErrorActivationLimit">You already have too many active perks. Wait for one to run out.</string>
     <string name="crownHunt_deployErrorUnknown">Something went wrong. Try again.</string>
     <string name="crownHunt_instrButton">Instructions</string>
     <string name="crownHunt_instrTitle">How Crown Hunt works</string>

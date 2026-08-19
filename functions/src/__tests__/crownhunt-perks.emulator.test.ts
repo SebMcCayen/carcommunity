@@ -37,8 +37,12 @@ import {
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { PERK_CATALOG } from '../crownHunt/perks-core';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  MAX_PERK_HOLD_PER_PERK,
+  PERK_CATALOG,
+  PERK_PURCHASE_COOLDOWN_SECONDS,
+} from '../crownHunt/perks-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -140,6 +144,20 @@ async function readInventory(uid: string): Promise<Record<string, number>> {
   return (snap.data() as Record<string, number> | undefined) ?? {};
 }
 
+/** Seeds a member's held perk inventory directly. */
+async function setInventory(uid: string, counts: Record<string, number>): Promise<void> {
+  await adminDb.collection('perkInventory').doc(uid).set(counts, { merge: true });
+}
+
+/**
+ * Clears the purchase-cooldown stamp so a test's back-to-back buys don't trip the
+ * PERK_PURCHASE_COOLDOWN_SECONDS anti-burst window (the emulator runs buys ms
+ * apart). The cooldown itself is covered end-to-end by its dedicated test below.
+ */
+async function clearPurchaseCooldown(uid: string): Promise<void> {
+  await adminDb.collection('perkPurchaseCooldowns').doc(uid).delete();
+}
+
 interface BuyPerkResponse {
   perkId: string;
   qty: number;
@@ -213,6 +231,14 @@ describe('crownHunt.seedPerkCatalog', () => {
 });
 
 describe('crownHunt.buyPerk', () => {
+  // Existing cases fire several buys for `member` milliseconds apart; clear the
+  // anti-burst cooldown before each so only the dedicated cooldown test exercises
+  // it. Also clear the hold-cap surface so an accumulating inventory across cases
+  // never trips the per-perk / total-value ceilings under the wrong assertion.
+  beforeEach(async () => {
+    await clearPurchaseCooldown(member.uid);
+  });
+
   it('debits KP and increments inventory atomically', async () => {
     await setBalance(member.uid, 500);
     await signInAs(member);
@@ -297,5 +323,44 @@ describe('crownHunt.buyPerk', () => {
       'functions/failed-precondition',
     );
     expect(await readInventory(suspended.uid)).toEqual({});
+  });
+});
+
+describe('crownHunt.buyPerk — economy limits (hold cap + purchase cooldown)', () => {
+  it('fails closed on the per-perk hold cap and grants nothing', async () => {
+    const capped = await createProvisionedUser('perk-holdcap');
+    await adminDb.collection('users').doc(capped.uid).set({ activeMember: true }, { merge: true });
+    await setBalance(capped.uid, 5000);
+    // Already holding the maximum of this perk.
+    await setInventory(capped.uid, { shield: MAX_PERK_HOLD_PER_PERK });
+    await signInAs(capped);
+
+    const err = await callableError(
+      call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })),
+    );
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('hold_cap_reached');
+    // No debit, no grant beyond the seeded cap.
+    expect((await readInventory(capped.uid)).shield).toBe(MAX_PERK_HOLD_PER_PERK);
+    expect(await readBalance(capped.uid)).toBe(5000);
+  });
+
+  it('meters purchases: a second buy inside the cooldown window fails closed', async () => {
+    const buyer = await createProvisionedUser('perk-cooldown');
+    await adminDb.collection('users').doc(buyer.uid).set({ activeMember: true }, { merge: true });
+    await setBalance(buyer.uid, 5000);
+    await signInAs(buyer);
+
+    const first = (await call('crownHunt-buyPerk', buyInput({ perkId: 'shield' }))).data as
+      BuyPerkResponse;
+    expect(first.alreadyPurchased).toBe(false);
+    expect(PERK_PURCHASE_COOLDOWN_SECONDS).toBeGreaterThan(0);
+
+    // Immediately buy again (a DIFFERENT key, so not an idempotent replay).
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'boost' })));
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('purchase_cooldown');
+    // The second buy granted nothing.
+    expect((await readInventory(buyer.uid)).boost ?? 0).toBe(0);
   });
 });

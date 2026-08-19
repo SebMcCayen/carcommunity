@@ -253,10 +253,21 @@ export function creditPointsResolved(
   return mutatePoints(params, 1, extraWrites, readGuard, resolveAmount);
 }
 
-/** Spends points (negative entry); never allows overdraft. Internal. */
+/**
+ * Spends points (negative entry); never allows overdraft. Internal.
+ *
+ * An optional {@link AtomicReadGuard} runs in the transaction's READ phase
+ * (after the balance read, before any write) so a caller can enforce an extra
+ * spend precondition ATOMICALLY with the debit and throw to abort it — the perk
+ * shop uses it for the hold-cap and purchase-cooldown checks, so a concurrent
+ * double-buy cannot slip past either. Everything else — idempotency, the
+ * overdraft guard, the paired extra writes — is unchanged, and existing callers
+ * that pass no guard behave exactly as before.
+ */
 export function debitPoints(
   params: PointsMutationParams,
   extraWrites?: AtomicExtraWrites,
+  readGuard?: AtomicReadGuard,
 ): Promise<PointsMutationResult> {
-  return mutatePoints(params, -1, extraWrites);
+  return mutatePoints(params, -1, extraWrites, readGuard);
 }

@@ -29,6 +29,7 @@
 import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { isFirestoreSafeId } from '../points/points-core';
+import { DAILY_POINTS_CAP } from '../points/points-economy-core';
 
 // ---------------------------------------------------------------------------
 // Feature flag (contract default OFF — the whole shop is dark until enabled)
@@ -49,6 +50,30 @@ export const CROWN_HUNT_PERKS_FLAG_DEFAULT = false;
  */
 export const PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS = 'insufficient_funds';
 export const PERK_PURCHASE_REASON_SHOP_UNAVAILABLE = 'shop_unavailable';
+/**
+ * The buy would push the member's HELD count of this perk past
+ * {@link MAX_PERK_HOLD_PER_PERK}, or their total banked perk VALUE past
+ * {@link MAX_PERK_HOLD_VALUE_KP}. A hold-cap rejection is distinct from
+ * insufficient-funds: the member could afford it, but a perk is a working stock,
+ * not a war chest, so the shop refuses to let them hoard.
+ */
+export const PERK_PURCHASE_REASON_HOLD_CAP = 'hold_cap_reached';
+/**
+ * The member bought too recently — the {@link PERK_PURCHASE_COOLDOWN_SECONDS}
+ * anti-burst window between purchases has not elapsed. Metering purchase
+ * frequency stops scripted rapid-fire buying and keeps the ledger from a
+ * write-storm; a normal shopper never sees it.
+ */
+export const PERK_PURCHASE_REASON_COOLDOWN = 'purchase_cooldown';
+
+/**
+ * `details.reason` discriminators deployPerk attaches to the NEW anti-abuse
+ * rejections so the client can show a specific message. The pre-existing deploy
+ * rejections (flag off, unknown perk, no inventory, trap 1-active/3-per-day/
+ * 300 m-spacing) still carry NO reason and collapse to one "couldn't activate"
+ * family on the client — only the limits added in this PR are discriminated.
+ */
+export const PERK_DEPLOY_REASON_ACTIVATION_LIMIT = 'activation_limit';
 
 // ---------------------------------------------------------------------------
 // The catalog
@@ -70,8 +95,15 @@ interface PerkBase {
   kind: PerkKind;
   /** Server-authoritative KP price for ONE unit. */
   costKp: number;
-  /** Swedish display name (mirrored to config/perkCatalog). */
+  /** Swedish display name (mirrored to config/perkCatalog as `name`). */
   name: string;
+  /**
+   * English display name (mirrored to config/perkCatalog as `nameEn`). EVERY
+   * perk carries BOTH a Swedish and an English name so the shop renders in the
+   * member's chosen app language; a perk with only one name is a catalog bug the
+   * unit tests reject.
+   */
+  nameEn: string;
   /** Stable icon key the client maps to a drawable (mirrored). */
   iconKey: string;
   /** Swedish one-line blurb (mirrored). */
@@ -125,6 +157,7 @@ export const PERK_CATALOG: Readonly<Record<PerkId, PerkDefinition>> = {
     kind: 'trap',
     costKp: 150,
     name: 'Spikmatta',
+    nameEn: 'Spike strip',
     iconKey: 'perk_spike_strip',
     blurb: 'Placera en fälla som tömmer kronpoäng från rivaler som kör in i den.',
     radiusMeters: 100,
@@ -136,6 +169,7 @@ export const PERK_CATALOG: Readonly<Record<PerkId, PerkDefinition>> = {
     kind: 'shield',
     costKp: 100,
     name: 'Sköld',
+    nameEn: 'Shield',
     iconKey: 'perk_shield',
     blurb: 'Skydda dig mot fällor under en period.',
     durationHours: 3,
@@ -145,6 +179,7 @@ export const PERK_CATALOG: Readonly<Record<PerkId, PerkDefinition>> = {
     kind: 'boost',
     costKp: 120,
     name: 'Dubbla Poäng',
+    nameEn: 'Double points',
     iconKey: 'perk_boost',
     blurb: 'Dubbla kronpoängen på dina fångster under en period.',
     multiplier: 2,
@@ -256,7 +291,10 @@ export function parseBuyPerkInput(data: unknown): ParseResult<BuyPerkInput> {
 export interface PerkCatalogEntry {
   perkId: PerkId;
   kind: PerkKind;
+  /** Swedish display name. */
   name: string;
+  /** English display name (the client picks by app language). */
+  nameEn: string;
   iconKey: string;
   costKp: number;
   blurb: string;
@@ -268,7 +306,12 @@ export interface PerkCatalogDoc {
   perks: PerkCatalogEntry[];
 }
 
-export const PERK_CATALOG_DOC_VERSION = 1;
+/**
+ * Bumped 1 → 2 when the mirror gained the bilingual `nameEn` field. A client on
+ * an older shape simply falls back to the Swedish `name` (and its own localized
+ * per-perk string resources), so the bump is informational, not a hard gate.
+ */
+export const PERK_CATALOG_DOC_VERSION = 2;
 
 /**
  * The member-readable `config/perkCatalog` document — a DISPLAY MIRROR of the
@@ -283,6 +326,7 @@ export function buildPerkCatalogDoc(): PerkCatalogDoc {
       perkId: perk.perkId,
       kind: perk.kind,
       name: perk.name,
+      nameEn: perk.nameEn,
       iconKey: perk.iconKey,
       costKp: perk.costKp,
       blurb: perk.blurb,
@@ -350,6 +394,46 @@ export const VICTIM_COOLDOWN_HOURS = 2;
 /** New accounts are immune as victims for their first this-many days. */
 export const NEW_ACCOUNT_IMMUNITY_DAYS = 7;
 
+// ===========================================================================
+// PRICING ALGORITHM — cost as a function of each perk's KP "power"
+//
+// A perk is priced at (roughly) the MAXIMUM KP it can swing per deployed unit —
+// its "power" — with a flat defensive FLOOR. The principle keeps the shop a
+// closed economy: a perk can never be a free arbitrage, because a unit costs
+// about as much KP as the best case it can move, so a member profits only by
+// out-PLAYING a rival (better placement, timing), never by simply buying.
+//
+//   costKp = max( PERK_BASE_COST_KP, perkPowerKp(perk) )
+//
+// perkPowerKp per kind, from the SAME server balance constants the effect uses:
+//   • TRAP  — the KP one trap can earn its placer: TRAP_DRAIN_KP × the distinct-
+//     victim cap, clamped by the placer's daily trap-earn cap. 15 × 10 = 150,
+//     clamped to MAX_TRAP_EARN_KP_PER_DAY (150) → 150.
+//   • BOOST — the extra KP a 2× window yields at a representative crown-collect
+//     rate (BOOST_POWER_KP, modeled below) → 120.
+//   • SHIELD — the KP loss it can AVOID over its window: the victim daily-loss
+//     cap MAX_TRAP_LOSS_KP_PER_DAY (45); below the floor, so it prices at the
+//     PERK_BASE_COST_KP floor → 100.
+//
+// The three owner-approved catalog costs (spike_strip 150, shield 100,
+// boost 120) are EXACTLY this formula's output — a unit test pins
+// costKp === referencePerkCostKp(perk) for every perk, so a future price or
+// balance change must move together with its rationale, never drift silently.
+// ===========================================================================
+
+/** The floor every perk prices at, even a purely defensive one. */
+export const PERK_BASE_COST_KP = 100;
+
+/**
+ * Modeled extra KP a single 2× BOOST yields over its {@link BOOST_DURATION_HOURS}
+ * window: a dedicated player collecting ~5 crowns in the hour at the ~24 KP
+ * average crown value earns ~120 KP of claims, which the 2× doubles — i.e.
+ * ~120 KP of BONUS. Named here (not a magic number) because it is the boost's
+ * "power" input to {@link referencePerkCostKp}. Changing the boost's real value
+ * (duration/multiplier) should be reflected here so its price tracks its power.
+ */
+export const BOOST_POWER_KP = 120;
+
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
 
@@ -403,6 +487,177 @@ export function resolveDrainAmount(params: {
 export function trapHasVictimRoom(victimCount: number): boolean {
   const n = Number.isFinite(victimCount) ? victimCount : 0;
   return n < MAX_VICTIMS_PER_TRAP;
+}
+
+// ---------------------------------------------------------------------------
+// Pricing — the perk-power → cost curve (see the PRICING ALGORITHM block above)
+// ---------------------------------------------------------------------------
+
+/**
+ * The maximum KP a single deployed unit of `perk` can SWING — its "power". Used
+ * only to derive the reference price; the actual debit is always the catalog
+ * `costKp`. Defensive perks report the KP they can AVOID losing.
+ */
+export function perkPowerKp(perk: PerkDefinition): number {
+  switch (perk.kind) {
+    case 'trap':
+      // KP one trap can earn its placer, clamped by the daily trap-earn cap.
+      return Math.min(perk.drainKp * MAX_VICTIMS_PER_TRAP, MAX_TRAP_EARN_KP_PER_DAY);
+    case 'boost':
+      return BOOST_POWER_KP;
+    case 'shield':
+      // KP loss the shield can avoid over its window (the victim daily-loss cap).
+      return MAX_TRAP_LOSS_KP_PER_DAY;
+    default:
+      return 0;
+  }
+}
+
+/**
+ * The algorithmic reference price for `perk`: `max(floor, power)`. The catalog
+ * `costKp` MUST equal this for every perk (pinned by perks-core.test.ts), so the
+ * owner-approved prices and their economic rationale can never silently diverge.
+ */
+export function referencePerkCostKp(perk: PerkDefinition): number {
+  return Math.max(PERK_BASE_COST_KP, perkPowerKp(perk));
+}
+
+// ---------------------------------------------------------------------------
+// HOLD CAP — how many perks a member may BUY / HOLD at once
+//
+// A perk is a working stock, not a war chest. Two independent, economy-derived
+// ceilings bound the inventory so a member can never bank more perk-power than
+// the game's own throughput justifies; buyPerk enforces BOTH atomically and
+// FAILS CLOSED (PERK_PURCHASE_REASON_HOLD_CAP) when either would be breached.
+//
+//   1. PER-PERK COUNT — MAX_PERK_HOLD_PER_PERK. Derived from DEPLOY throughput:
+//      the busiest deployable perk (the trap) can be used MAX_TRAP_DEPLOYS_PER_DAY
+//      (3) times a day, so a PERK_HOLD_DAYS_BUFFER (2)-day working stock is
+//      3 × 2 = 6. A member can prep a couple of days ahead, not stockpile weeks.
+//   2. TOTAL VALUE — MAX_PERK_HOLD_VALUE_KP. The summed (count × costKp) a member
+//      may hold is one capped DAY of earnings (DAILY_POINTS_CAP, 1500 KP), so the
+//      aggregate banked perk-power tracks the economy regardless of how cheap any
+//      single perk is. Anchoring to the same DAILY_POINTS_CAP the crown economy
+//      uses keeps the shop balanced against everything else that spends KP.
+// ---------------------------------------------------------------------------
+
+/** How many days of trap-deploy throughput a member may hold as working stock. */
+export const PERK_HOLD_DAYS_BUFFER = 2;
+
+/** Max units of ONE perk a member may hold (3 deploys/day × a 2-day buffer). */
+export const MAX_PERK_HOLD_PER_PERK = MAX_TRAP_DEPLOYS_PER_DAY * PERK_HOLD_DAYS_BUFFER;
+
+/** Max summed KP VALUE of all held perks — one capped day of earnings. */
+export const MAX_PERK_HOLD_VALUE_KP = DAILY_POINTS_CAP;
+
+/** A buy's held-inventory snapshot, as the `{ perkId: count }` map buyPerk reads. */
+export type PerkInventoryCounts = Readonly<Record<string, number>>;
+
+export type HoldCapRejection = 'per_perk' | 'total_value';
+
+/**
+ * PURE hold-cap check, run inside the buy transaction against the member's
+ * current inventory. Returns the reason a buy of `qty` × `perkId` must be
+ * refused, or null when it fits under BOTH ceilings. `costPerUnit` is the
+ * server-authoritative unit cost (never client-supplied).
+ *
+ * Non-numeric / negative stored counts are treated as 0 (defensive — a corrupt
+ * inventory value never lets a member bypass the cap or wrongly get blocked).
+ */
+export function evaluateHoldCap(
+  inventory: PerkInventoryCounts,
+  perkId: string,
+  qty: number,
+  costPerUnit: number,
+): HoldCapRejection | null {
+  const safeCount = (value: unknown): number => {
+    const n = typeof value === 'number' && Number.isFinite(value) ? Math.floor(value) : 0;
+    return n > 0 ? n : 0;
+  };
+
+  const currentOfPerk = safeCount(inventory[perkId]);
+  if (currentOfPerk + qty > MAX_PERK_HOLD_PER_PERK) {
+    return 'per_perk';
+  }
+
+  // Total held VALUE after this buy. The value of OTHER perks uses their own
+  // catalog cost; the bought perk uses the server unit cost passed in.
+  let heldValueAfter = costPerUnit * (currentOfPerk + qty);
+  for (const id of PERK_IDS) {
+    if (id === perkId) continue;
+    const perk = PERK_CATALOG[id];
+    heldValueAfter += perk.costKp * safeCount(inventory[id]);
+  }
+  if (heldValueAfter > MAX_PERK_HOLD_VALUE_KP) {
+    return 'total_value';
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// PURCHASE COOLDOWN — how often a member may buy
+//
+// An anti-burst window between purchase CALLS (a single call may still buy up to
+// MAX_PERK_PURCHASE_QTY units). It stops scripted rapid-fire buying and the
+// ledger write-storm that would cause, while a normal shopper — who buys, then
+// deploys — never trips it. buyPerk reads perkPurchaseCooldowns/{uid} inside the
+// buy transaction and FAILS CLOSED (PERK_PURCHASE_REASON_COOLDOWN) when the
+// window has not elapsed. Deliberately short (seconds, not minutes) so buying a
+// trap and then a shield back-to-back stays smooth.
+// ---------------------------------------------------------------------------
+
+/** Minimum seconds between a member's perk purchases. */
+export const PERK_PURCHASE_COOLDOWN_SECONDS = 30;
+
+/** perkPurchaseCooldowns doc ID — one per member (their last-purchase stamp). */
+export function purchaseCooldownDocId(uid: string): string {
+  return uid;
+}
+
+/** True while a member is still inside the post-purchase cooldown (buy refused). */
+export function isWithinPurchaseCooldown(lastPurchaseAtMs: number | null, nowMs: number): boolean {
+  if (lastPurchaseAtMs === null || !Number.isFinite(lastPurchaseAtMs)) return false;
+  return nowMs - lastPurchaseAtMs < PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
+}
+
+// ---------------------------------------------------------------------------
+// CONCURRENT ACTIVATION LIMIT — how many effects may be LIVE at once
+//
+// Independent of the hold cap (how many you OWN): this bounds how many DISTINCT
+// perk effects a member may have simultaneously ACTIVE — an armed trap, a raised
+// shield, an armed boost. Being fully loaded (all three at once) is denied so a
+// member must choose offense vs defense rather than stack everything.
+// deployPerk enforces it in the deploy transaction and FAILS CLOSED
+// (PERK_DEPLOY_REASON_ACTIVATION_LIMIT). Re-raising an already-active kind does
+// NOT count as a new activation (it replaces, not adds), so it is never blocked
+// by this limit.
+// ---------------------------------------------------------------------------
+
+/** Max DISTINCT perk effects (trap / shield / boost) live at the same time. */
+export const MAX_CONCURRENT_ACTIVE_PERKS = 2;
+
+/** Which of a member's perk effects are currently live. */
+export interface ActivePerkEffects {
+  trap: boolean;
+  shield: boolean;
+  boost: boolean;
+}
+
+/**
+ * PURE concurrent-activation check. Given which effects are already live and the
+ * `kind` about to deploy, returns true when the deploy is allowed. A deploy of a
+ * kind that is ALREADY active is always allowed (it re-raises, adding no new
+ * distinct effect); a deploy of a NEW kind is refused once the count of live
+ * distinct effects has reached {@link MAX_CONCURRENT_ACTIVE_PERKS}.
+ */
+export function activationAllowed(active: ActivePerkEffects, kind: PerkKind): boolean {
+  const liveCount = (active.trap ? 1 : 0) + (active.shield ? 1 : 0) + (active.boost ? 1 : 0);
+  const kindAlreadyActive =
+    (kind === 'trap' && active.trap) ||
+    (kind === 'shield' && active.shield) ||
+    (kind === 'boost' && active.boost);
+  if (kindAlreadyActive) return true;
+  return liveCount < MAX_CONCURRENT_ACTIVE_PERKS;
 }
 
 // ---------------------------------------------------------------------------
