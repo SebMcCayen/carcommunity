@@ -421,6 +421,14 @@ class MapboxMapSurface : MapSurface {
     private val crownAnimator = CrownMarkerAnimator()
     private val crownAnnotationsById = mutableMapOf<String, PointAnnotation>()
     private val crownMarkerById = mutableMapOf<String, MapCrownMarker>()
+    // The style-image id each drawn crown is CURRENTLY showing, keyed by crown id.
+    // A crown's appearance can change while its id stays the same — the
+    // collected-by-you badge flipping on (#929), or the in-range recolour
+    // (out-of-range slate ↔ rarity colours). The per-frame transform update never
+    // touches iconImage, so this records what bitmap each annotation is on and
+    // renderCrownFrame swaps iconImage only when the appearance key actually
+    // changes (never every frame).
+    private val crownRenderedImageById = mutableMapOf<String, String>()
     // Flips true once the crown annotation manager exists (style loaded) and false
     // on teardown, so the animation driver in Content reacts to the manager
     // becoming available and (re)draws the current crowns.
@@ -1986,6 +1994,7 @@ class MapboxMapSurface : MapSurface {
                             // bookkeeping so the driver in Content redraws every
                             // current crown from scratch (a spawn-in, not a jump).
                             crownAnnotationsById.clear()
+                            crownRenderedImageById.clear()
                             crownAnimator.clear()
                             // Signal the animation driver (Content) that the manager
                             // now exists — it reacts by (re)drawing the current
@@ -2267,6 +2276,7 @@ class MapboxMapSurface : MapSurface {
                 crownManagerReadyFlow.value = false
                 crownAnimator.clear()
                 crownAnnotationsById.clear()
+                crownRenderedImageById.clear()
                 crownMarkerById.clear()
                 // Managers are gone, so a later re-init must redraw the overlay,
                 // the incident markers, the crowns, the event pins and the
@@ -2635,6 +2645,19 @@ class MapboxMapSurface : MapSurface {
                 crownAnnotationsById[state.id]
                     ?: createCrownAnnotation(state.id, marker, manager, style, context)
                     ?: continue
+            // Refresh the BITMAP if this crown's appearance changed while its id
+            // stayed the same (collected-by-you flip, in-range recolour). The
+            // transforms below never touch iconImage, so without this the marker
+            // would stay stuck on its old bitmap. Only swap when the key actually
+            // differs — no per-frame bitmap churn.
+            val newImageId = crownImageId(marker)
+            if (crownRenderedImageById[state.id] != newImageId) {
+                val registered = ensureCrownImage(newImageId, marker, style, context)
+                if (registered != null) {
+                    runCatching { annotation.iconImage = registered }
+                    crownRenderedImageById[state.id] = registered
+                }
+            }
             runCatching {
                 annotation.iconSize = state.scale.toDouble()
                 annotation.iconRotate = state.rotationDegrees.toDouble()
@@ -2653,6 +2676,7 @@ class MapboxMapSurface : MapSurface {
                 runCatching { manager.delete(annotation) }
                 crownIdsByAnnotation.remove(annotation.id)
             }
+            crownRenderedImageById.remove(id)
         }
         // Keep the retained appearance cache to exactly the crowns the animator
         // still tracks (a pending spawn keeps its bitmap params; a finished
@@ -2676,35 +2700,7 @@ class MapboxMapSurface : MapSurface {
         style: com.mapbox.maps.Style?,
         context: android.content.Context?,
     ): PointAnnotation? {
-        val imageId =
-            CrownMarkerBitmaps.imageId(
-                iconRes = marker.iconRes,
-                discColorArgb = marker.discColorArgb,
-                glyphColorArgb = marker.glyphColorArgb,
-                glowColorArgb = marker.glowColorArgb,
-                collectedBadge = marker.collectedByYou,
-            )
-        if (imageId !in registeredCrownImages) {
-            val bitmap =
-                if (style != null && context != null) {
-                    CrownMarkerBitmaps.create(
-                        context = context,
-                        iconRes = marker.iconRes,
-                        discColorArgb = marker.discColorArgb,
-                        glyphColorArgb = marker.glyphColorArgb,
-                        glowColorArgb = marker.glowColorArgb,
-                        collectedBadge = marker.collectedByYou,
-                    )
-                } else {
-                    null
-                }
-            val added =
-                bitmap != null &&
-                    style != null &&
-                    runCatching { style.addImage(imageId, bitmap) }.isSuccess
-            if (!added) return null
-            registeredCrownImages.add(imageId)
-        }
+        val imageId = ensureCrownImage(crownImageId(marker), marker, style, context) ?: return null
         return runCatching {
             val annotation =
                 manager.create(
@@ -2719,8 +2715,61 @@ class MapboxMapSurface : MapSurface {
                 )
             crownAnnotationsById[id] = annotation
             crownIdsByAnnotation[annotation.id] = id
+            crownRenderedImageById[id] = imageId
             annotation
         }.getOrNull()
+    }
+
+    /**
+     * The style-image id for [marker]'s appearance — the single source of the
+     * "which bitmap does this crown show" key, so [createCrownAnnotation] and the
+     * per-frame appearance-change check in [renderCrownFrame] agree by construction
+     * (and a JVM test can pin that a state change yields a different key).
+     */
+    private fun crownImageId(marker: MapCrownMarker): String =
+        CrownMarkerBitmaps.imageId(
+            iconRes = marker.iconRes,
+            discColorArgb = marker.discColorArgb,
+            glyphColorArgb = marker.glyphColorArgb,
+            glowColorArgb = marker.glowColorArgb,
+            collectedBadge = marker.collectedByYou,
+        )
+
+    /**
+     * Ensures [imageId]'s bitmap is registered on the current style, building and
+     * uploading it once (subsequent crowns of the same appearance reuse it).
+     * Returns the id on success, or null if the manager/style/context is not ready
+     * or the bitmap could not be built/uploaded — the caller then leaves the
+     * annotation on whatever it already had rather than pointing it at a missing
+     * image.
+     */
+    private fun ensureCrownImage(
+        imageId: String,
+        marker: MapCrownMarker,
+        style: com.mapbox.maps.Style?,
+        context: android.content.Context?,
+    ): String? {
+        if (imageId in registeredCrownImages) return imageId
+        val bitmap =
+            if (style != null && context != null) {
+                CrownMarkerBitmaps.create(
+                    context = context,
+                    iconRes = marker.iconRes,
+                    discColorArgb = marker.discColorArgb,
+                    glyphColorArgb = marker.glyphColorArgb,
+                    glowColorArgb = marker.glowColorArgb,
+                    collectedBadge = marker.collectedByYou,
+                )
+            } else {
+                null
+            }
+        val added =
+            bitmap != null &&
+                style != null &&
+                runCatching { style.addImage(imageId, bitmap) }.isSuccess
+        if (!added) return null
+        registeredCrownImages.add(imageId)
+        return imageId
     }
 
     /**
@@ -2739,6 +2788,7 @@ class MapboxMapSurface : MapSurface {
         val manager = crownMarkerManager ?: return
         runCatching { manager.deleteAll() }
         crownAnnotationsById.clear()
+        crownRenderedImageById.clear()
         crownIdsByAnnotation.clear()
         crownMarkerById.clear()
         crownAnimator.clear()
