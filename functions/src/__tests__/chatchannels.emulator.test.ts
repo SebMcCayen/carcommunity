@@ -1057,3 +1057,191 @@ describe('keyed optimistic send is EXACTLY-ONCE (clientId idempotency)', () => {
     expect(stored.clientId).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// chat replies (reply-to-message): server-side snapshot, cross-channel guard,
+// reply notification, and the chatReplies flag gate
+// ---------------------------------------------------------------------------
+
+/** Flips the global chatReplies flag (config/featureFlags is read uncached). */
+async function setChatRepliesFlag(enabled: boolean): Promise<void> {
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ chatReplies: enabled }, { merge: true });
+}
+
+/** Reads a stored convoy message doc (backend-only collection). */
+async function awaitConvoyMessage(
+  convoyId: string,
+  messageId: string,
+): Promise<Record<string, unknown>> {
+  return pollUntil(async () => {
+    const snap = await adminDb
+      .collection('convoyChats')
+      .doc(convoyId)
+      .collection('messages')
+      .doc(messageId)
+      .get();
+    return snap.exists ? snap.data()! : undefined;
+  });
+}
+
+describe('communityChat-post reply-to snapshot (chatReplies flag)', () => {
+  // Default is OFF; leave it OFF so no other suite is affected. (No other suite
+  // sends replyToMessageId, so the flag is inert for them regardless.)
+  afterAll(async () => {
+    await setChatRepliesFlag(false);
+  });
+
+  it('snapshots the parent SERVER-SIDE and notifies the replied-to author', async () => {
+    const author = await newMember('ReplyAuthor');
+    const replier = await newMember('ReplyReplier');
+
+    await signInAs(author);
+    const parent = (await call('communityChat-post', { text: 'the original question' }))
+      .data as PostedCommunity;
+    await awaitCommunityMessage(parent.messageId);
+
+    await setChatRepliesFlag(true);
+    await signInAs(replier);
+    const reply = (
+      await call('communityChat-post', {
+        text: 'here is my answer',
+        replyToMessageId: parent.messageId,
+      })
+    ).data as PostedCommunity;
+
+    // The stored reply carries the snapshot the SERVER built from the parent —
+    // the client only sent the id, never the author or text (integrity).
+    const stored = await awaitCommunityMessage(reply.messageId);
+    expect(stored.replyTo).toEqual({
+      messageId: parent.messageId,
+      senderUid: author.uid,
+      senderDisplayName: 'ReplyAuthor',
+      textPreview: 'the original question',
+    });
+
+    // ...and the read model hands replyTo to the client on list.
+    const listed = (await call('communityChat-list', {})).data as {
+      messages: Array<ChatMessage & { replyTo?: Record<string, unknown> }>;
+    };
+    const listedReply = listed.messages.find((m) => m.id === reply.messageId)!;
+    expect(listedReply.replyTo).toEqual({
+      messageId: parent.messageId,
+      senderUid: author.uid,
+      senderDisplayName: 'ReplyAuthor',
+      textPreview: 'the original question',
+    });
+
+    // The replied-to author gets a REPLY notice — distinct from an @mention.
+    const items = await pollUntil(async () => {
+      const found = await inboxFor(author.uid, 'community_chat');
+      return found.length > 0 ? found : undefined;
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]!.title).toBe('Svar på ditt meddelande');
+    expect(items[0]!.relatedEntityId).toBe(reply.messageId);
+  });
+
+  it('builds the snapshot but writes NO notice on a self-reply', async () => {
+    const author = await newMember('SelfReplyAuthor');
+    await setChatRepliesFlag(true);
+    await signInAs(author);
+    const parent = (await call('communityChat-post', { text: 'note to self' }))
+      .data as PostedCommunity;
+    await awaitCommunityMessage(parent.messageId);
+
+    const reply = (
+      await call('communityChat-post', { text: 'still me', replyToMessageId: parent.messageId })
+    ).data as PostedCommunity;
+    // The quote is still snapshotted (you can reply to yourself)...
+    const stored = await awaitCommunityMessage(reply.messageId);
+    expect((stored.replyTo as Record<string, unknown>).senderUid).toBe(author.uid);
+    // ...but replying to yourself never notifies yourself. The post call already
+    // awaited the (skipped) notification, so an empty inbox here is deterministic.
+    expect(await inboxFor(author.uid, 'community_chat')).toHaveLength(0);
+  });
+
+  it('posts with NO snapshot when the parent is not in THIS channel (cross-channel/missing)', async () => {
+    const replier = await newMember('CrossChannelReplier');
+    await setChatRepliesFlag(true);
+    await signInAs(replier);
+    // An id that is not a community message (a foreign / non-existent id) is looked
+    // up only in the community channel, found nothing, and the send proceeds with
+    // no quote rather than snapshotting another channel's message.
+    const reply = (
+      await call('communityChat-post', {
+        text: 'reply to nothing',
+        replyToMessageId: 'not-a-community-message',
+      })
+    ).data as PostedCommunity;
+    const stored = await awaitCommunityMessage(reply.messageId);
+    expect(stored).not.toHaveProperty('replyTo');
+  });
+
+  it('IGNORES replyToMessageId while the flag is OFF (feature dark end-to-end)', async () => {
+    const author = await newMember('FlagOffAuthor');
+    await setChatRepliesFlag(true);
+    await signInAs(author);
+    const parent = (await call('communityChat-post', { text: 'parent' })).data as PostedCommunity;
+    await awaitCommunityMessage(parent.messageId);
+
+    // Turn replies OFF, then reply to the same parent: the id must be ignored.
+    await setChatRepliesFlag(false);
+    const reply = (
+      await call('communityChat-post', { text: 'reply', replyToMessageId: parent.messageId })
+    ).data as PostedCommunity;
+    const stored = await awaitCommunityMessage(reply.messageId);
+    expect(stored).not.toHaveProperty('replyTo');
+    // No reply notice either — nothing was processed.
+    expect(await inboxFor(author.uid, 'community_chat')).toHaveLength(0);
+  });
+});
+
+describe('convoyChat-post reply-to snapshot (chatReplies flag)', () => {
+  afterAll(async () => {
+    await setChatRepliesFlag(false);
+  });
+
+  it('snapshots the parent from the SAME convoy; a foreign id yields no snapshot', async () => {
+    const owner = await newMember('ConvReplyOwner');
+    const accepted = await newMember('ConvReplyAccepted');
+    const invited = await newMember('ConvReplyInvited');
+    const convoyId = await seedConvoy(owner, accepted, invited);
+
+    await setChatRepliesFlag(true);
+    // seedConvoy leaves us signed in as the owner; owner posts the parent.
+    const parent = (await call('convoyChat-post', { convoyId, text: 'convoy original' }))
+      .data as { messageId: string };
+    await awaitConvoyMessage(convoyId, parent.messageId);
+
+    // The accepted member replies within the same convoy.
+    await signInAs(accepted);
+    const reply = (
+      await call('convoyChat-post', {
+        convoyId,
+        text: 'convoy answer',
+        replyToMessageId: parent.messageId,
+      })
+    ).data as { messageId: string };
+    const storedReply = await awaitConvoyMessage(convoyId, reply.messageId);
+    expect(storedReply.replyTo).toEqual({
+      messageId: parent.messageId,
+      senderUid: owner.uid,
+      senderDisplayName: 'ConvReplyOwner',
+      textPreview: 'convoy original',
+    });
+
+    // An id not present in THIS convoy resolves to no snapshot; the message posts.
+    const foreign = (
+      await call('convoyChat-post', {
+        convoyId,
+        text: 'reply to nothing',
+        replyToMessageId: 'not-in-this-convoy',
+      })
+    ).data as { messageId: string };
+    const storedForeign = await awaitConvoyMessage(convoyId, foreign.messageId);
+    expect(storedForeign).not.toHaveProperty('replyTo');
+  });
+});

@@ -65,6 +65,7 @@ import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
 import { loadHiddenUids } from '../blocking/blockVisibilityStore';
+import { readFeatureFlag } from '../shared/featureFlags';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   CONVOY_CHAT_RETENTION_DAYS,
@@ -72,6 +73,7 @@ import {
   NOT_DELIVERABLE_MESSAGE,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
+  buildReplyToSnapshot,
   chatMessageExpiry,
   convoyChatNotificationId,
   isAlreadyExistsError,
@@ -83,6 +85,7 @@ import {
   toChatMessageSummary,
   toProfileProjection,
   type ChatMessageSummary,
+  type ChatReplyTo,
   type ProfileProjection,
 } from './chat-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
@@ -158,6 +161,36 @@ async function loadProfile(uid: string): Promise<ProfileProjection | null> {
 // convoy who hasn't accepted → failed-precondition; a total outsider or a
 // missing convoy → not-found, so a convoy can't be probed).
 
+/**
+ * Resolves the inline-reply snapshot for a convoy post, or null when it should
+ * carry none. Same contract as communityChat: gated behind the `chatReplies`
+ * flag (an uncached read, spent only when a reply is actually requested), the id
+ * ignored entirely while the flag is off, and the parent read from THIS convoy's
+ * own messages subcollection so a cross-channel id resolves to not-found and the
+ * send proceeds with no quote (buildReplyToSnapshot returns null) rather than
+ * snapshotting another channel's message.
+ */
+async function resolveReplySnapshot(
+  convoyId: string,
+  replyToMessageId: string | undefined,
+): Promise<ChatReplyTo | null> {
+  if (replyToMessageId === undefined || !(await readFeatureFlag('chatReplies'))) {
+    return null;
+  }
+  const parentSnap = await convoyMessagesRef(convoyId).doc(replyToMessageId).get();
+  const parent = parentSnap.data();
+  return buildReplyToSnapshot(
+    parentSnap.exists
+      ? {
+          messageId: parentSnap.id,
+          senderUid: parent?.senderUid,
+          senderDisplayName: parent?.senderDisplayName,
+          text: parent?.text,
+        }
+      : null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // convoyChat.post
 // ---------------------------------------------------------------------------
@@ -201,7 +234,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { convoyId, text, clientId } = parsed.input;
+  const { convoyId, text, clientId, replyToMessageId } = parsed.input;
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
@@ -212,6 +245,11 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   if (!senderProfile) {
     throw new HttpsError('failed-precondition', NOT_DELIVERABLE_MESSAGE);
   }
+
+  // Server-side reply snapshot (same channel, flag-gated) — null unless this post
+  // is a reply AND chatReplies is on. Read before the create so the snapshot is
+  // part of the message document written below.
+  const replyTo = await resolveReplySnapshot(convoyId, replyToMessageId);
 
   // A client idempotency key is used VERBATIM as the message doc id, so a retry
   // of the same optimistic send lands on the same document (exactly-once) and the
@@ -253,7 +291,16 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   try {
     await messageRef.create(
       buildChatMessageDocument(
-        { senderUid: actor.uid, text, senderProfile, expireAt, clientId },
+        {
+          senderUid: actor.uid,
+          text,
+          senderProfile,
+          expireAt,
+          clientId,
+          // Persisted only when non-null (an actual reply with a resolvable
+          // parent); buildChatMessageDocument omits the field otherwise.
+          ...(replyTo ? { replyTo } : {}),
+        },
         // The fixed logical time captured above, NOT a server sentinel: the
         // aggregate stamp below reuses this exact value so it equals the message's
         // createdAt (see the postedAt comment for the race this closes).
@@ -290,6 +337,14 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostConvoyRes
   // Membership is block-gated at invite time (convoy/manageConvoy.ts), but a
   // block can also happen AFTER both parties joined, which is this case.
   // One document read for the whole fan-out.
+  //
+  // A REPLY needs no separate notification here: a convoy already fans out to
+  // every accepted member on every message, so the replied-to author is notified
+  // by construction (and, if blocked, filtered here the same as anyone else). The
+  // community channel is the only surface where a reply adds a notification,
+  // because it is the only one that does NOT notify the whole audience per
+  // message. Reusing this fan-out also avoids a second 'convoy_chat' notice that
+  // would double up on the one the author is already getting.
   const hidden = await loadHiddenUids(actor.uid);
   const recipients = acceptedConvoyMemberUids(convoy, actor.uid).filter(
     (uid) => !hidden.has(uid),

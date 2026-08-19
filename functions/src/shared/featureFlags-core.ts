@@ -41,6 +41,13 @@ import { z } from 'zod';
  * (failed-precondition) so no comment is ever posted to the public repo, and
  * the client draws no ticket list. Stays dark until the browser UI ships and is
  * deliberately turned on.
+ *
+ * `chatReplies` is default OFF: it switches on inline WhatsApp-style reply-to-
+ * message across the chat surfaces (community, convoy, and DMs). While off the
+ * backend IGNORES any `replyToMessageId` a client sends — no parent is read, no
+ * `replyTo` snapshot is stored, and the Android reply entry point stays hidden —
+ * so the feature is dark end-to-end until it is deliberately turned on. It only
+ * gates PROCESSING of the optional field; an ordinary message is unaffected.
  */
 export const FEATURE_FLAG_DEFAULTS = {
   liveLocation: true,
@@ -56,6 +63,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   partnerInsightsPassBy: false,
   crownHuntPerks: false,
   reportTicketsBrowser: false,
+  chatReplies: false,
 } as const;
 
 export type FeatureFlagKey = keyof typeof FEATURE_FLAG_DEFAULTS;

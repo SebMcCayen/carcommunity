@@ -4,6 +4,7 @@ import {
   DM_MESSAGE_PREVIEW_LENGTH,
   buildMessageDocument,
   buildNewConversationDocument,
+  buildReplyToSnapshot,
   dmMembers,
   dmPairId,
   isConversationMember,
@@ -52,6 +53,28 @@ describe('dm-core parsing', () => {
     // a different id (which would break optimistic de-dupe against the doc id).
     expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: ' abc' }).ok).toBe(false);
     expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'abc ' }).ok).toBe(false);
+  });
+
+  it('accepts an optional replyToMessageId (message doc id) and rejects malformed ones', () => {
+    // Both an auto-id and a prior clientId are valid parent ids.
+    expect(
+      parseSendMessageInput({ toUid: 'u-2', text: 'hi', replyToMessageId: 'AbC0d_1-2' }),
+    ).toEqual({
+      ok: true,
+      input: { toUid: 'u-2', text: 'hi', replyToMessageId: 'AbC0d_1-2' },
+    });
+    // Path separators / dot ids / empty / over-long are rejected (doc-id use).
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', replyToMessageId: 'a/b' }).ok).toBe(
+      false,
+    );
+    expect(parseSendMessageInput({ toUid: 'u-2', text: 'hi', replyToMessageId: '' }).ok).toBe(false);
+    expect(
+      parseSendMessageInput({ toUid: 'u-2', text: 'hi', replyToMessageId: 'x'.repeat(65) }).ok,
+    ).toBe(false);
+    // Reply + idempotency key coexist on one send.
+    expect(
+      parseSendMessageInput({ toUid: 'u-2', text: 'hi', clientId: 'k', replyToMessageId: 'm-1' }).ok,
+    ).toBe(true);
   });
 
   it('parses getMessages with an optional ISO cursor', () => {
@@ -124,6 +147,53 @@ describe('dm-core builders', () => {
     expect(buildMessageDocument({ senderUid: 'a', text: 'hi' }, () => 'TS')).not.toHaveProperty(
       'clientId',
     );
+  });
+
+  it('stores the replyTo snapshot on the message doc only when supplied', () => {
+    const replyTo = buildReplyToSnapshot({
+      messageId: 'parent-1',
+      senderUid: 'a',
+      senderDisplayName: 'Alice',
+      text: '  original  ',
+    })!;
+    expect(buildMessageDocument({ senderUid: 'b', text: 'hi', replyTo }, () => 'TS')).toEqual({
+      senderUid: 'b',
+      text: 'hi',
+      createdAt: 'TS',
+      replyTo: {
+        messageId: 'parent-1',
+        senderUid: 'a',
+        senderDisplayName: 'Alice',
+        textPreview: 'original',
+      },
+    });
+    // Ordinary message: no replyTo field.
+    expect(buildMessageDocument({ senderUid: 'a', text: 'hi' }, () => 'TS')).not.toHaveProperty(
+      'replyTo',
+    );
+  });
+
+  it('builds the reply snapshot server-side, omitting it for a missing/malformed parent', () => {
+    expect(
+      buildReplyToSnapshot({
+        messageId: 'p1',
+        senderUid: 'a',
+        senderDisplayName: 'Alice',
+        text: 'x'.repeat(500),
+      })!.textPreview,
+    ).toHaveLength(DM_MESSAGE_PREVIEW_LENGTH);
+    // A missing/expired parent (null) and a malformed one both yield null — the
+    // send proceeds without a quote rather than failing.
+    expect(buildReplyToSnapshot(null)).toBeNull();
+    expect(
+      buildReplyToSnapshot({ messageId: 'p1', senderUid: '', senderDisplayName: null, text: 'x' }),
+    ).toBeNull();
+    expect(
+      buildReplyToSnapshot({ messageId: '', senderUid: 'a', senderDisplayName: null, text: 'x' }),
+    ).toBeNull();
+    expect(
+      buildReplyToSnapshot({ messageId: 'p1', senderUid: 'a', senderDisplayName: null, text: '  ' }),
+    ).toBeNull();
   });
 
   it('builds a new conversation with recipient unread seeded to 1', () => {
@@ -206,6 +276,38 @@ describe('dm-core summaries', () => {
       createdAt: 'T1',
       clientId: 'c-1',
     });
+  });
+
+  it('surfaces replyTo on a message summary, omitting it when absent or malformed', () => {
+    expect(
+      toMessageSummary(
+        'm1',
+        {
+          senderUid: 'b',
+          text: 'hi',
+          replyTo: {
+            messageId: 'p1',
+            senderUid: 'a',
+            senderDisplayName: 'Alice',
+            textPreview: 'original',
+          },
+        },
+        'T1',
+      ).replyTo,
+    ).toEqual({
+      messageId: 'p1',
+      senderUid: 'a',
+      senderDisplayName: 'Alice',
+      textPreview: 'original',
+    });
+    // Ordinary / pre-reply message: field omitted.
+    expect(toMessageSummary('m2', { senderUid: 'a', text: 'hi' }, 'T2')).not.toHaveProperty(
+      'replyTo',
+    );
+    // Malformed stored snapshot (no messageId) is dropped, not surfaced as junk.
+    expect(
+      toMessageSummary('m3', { senderUid: 'a', text: 'hi', replyTo: { textPreview: 'x' } }, 'T3'),
+    ).not.toHaveProperty('replyTo');
   });
 });
 

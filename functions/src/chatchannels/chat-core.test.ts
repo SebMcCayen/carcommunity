@@ -7,11 +7,14 @@ import {
   CONVOY_CHAT_NOTIFY_WINDOW_MS,
   CONVOY_CHAT_RETENTION_DAYS,
   CONVOY_LAST_READ_MAX_ENTRIES,
+  COMMUNITY_REPLY_NOTIFY_WINDOW_MS,
   MAX_MESSAGE_MENTIONS,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
+  buildReplyToSnapshot,
   chatMessageExpiry,
   communityMentionNotificationId,
+  communityReplyNotificationId,
   convoyChatNotificationId,
   isAcceptedConvoyMember,
   isAlreadyExistsError,
@@ -84,6 +87,37 @@ describe('chat-core parsing', () => {
     expect(parsePostCommunityInput({ text: 'hi', clientId: '' }).ok).toBe(false);
     expect(parsePostCommunityInput({ text: 'hi', clientId: 'x'.repeat(65) }).ok).toBe(false);
     expect(parsePostConvoyInput({ convoyId: 'c-1', text: 'hi', clientId: 'a b' }).ok).toBe(false);
+  });
+
+  it('parses an optional replyToMessageId on both post schemas, rejecting junk ids', () => {
+    // A message doc id round-trips verbatim on the community post.
+    expect(parsePostCommunityInput({ text: 'hi', replyToMessageId: 'msg-123' })).toEqual({
+      ok: true,
+      input: { text: 'hi', replyToMessageId: 'msg-123' },
+    });
+    // ...and on the convoy post.
+    expect(
+      parsePostConvoyInput({ convoyId: 'c-1', text: 'hi', replyToMessageId: 'msg-123' }),
+    ).toEqual({
+      ok: true,
+      input: { convoyId: 'c-1', text: 'hi', replyToMessageId: 'msg-123' },
+    });
+    // The id is a document id — path separators, the dot ids, and empty are out.
+    expect(parsePostCommunityInput({ text: 'hi', replyToMessageId: 'bad/id' }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', replyToMessageId: '..' }).ok).toBe(false);
+    expect(parsePostCommunityInput({ text: 'hi', replyToMessageId: '' }).ok).toBe(false);
+    expect(parsePostConvoyInput({ convoyId: 'c-1', text: 'hi', replyToMessageId: 42 }).ok).toBe(
+      false,
+    );
+    // Reply, mention, and idempotency key coexist on one community post.
+    expect(
+      parsePostCommunityInput({
+        text: 'hi',
+        mentionedUids: ['u1'],
+        clientId: 'k-1',
+        replyToMessageId: 'msg-1',
+      }).ok,
+    ).toBe(true);
   });
 
   it('parses communityChat.list with an optional ISO cursor', () => {
@@ -338,6 +372,150 @@ describe('chat-core projections + builders', () => {
     expect(toChatMessageSummary('m1', { senderUid: 'a', text: 'hi' }, 'T1')).not.toHaveProperty(
       'clientId',
     );
+  });
+});
+
+describe('chat-core reply-to snapshot (server-side quote)', () => {
+  const parent = {
+    messageId: 'parent-1',
+    senderUid: 'author',
+    senderDisplayName: 'Author',
+    text: '  the original message  ',
+  };
+
+  it('snapshots the parent author + a bounded text preview from what the server read', () => {
+    expect(buildReplyToSnapshot(parent)).toEqual({
+      messageId: 'parent-1',
+      senderUid: 'author',
+      senderDisplayName: 'Author',
+      // Reuses messagePreview — trimmed, and truncated to the preview length.
+      textPreview: 'the original message',
+    });
+    expect(
+      buildReplyToSnapshot({ ...parent, text: 'x'.repeat(500) })!.textPreview,
+    ).toHaveLength(CHAT_MESSAGE_PREVIEW_LENGTH);
+  });
+
+  it('omits the snapshot (returns null) for a missing/expired parent', () => {
+    // A parent that was not found / had TTL-expired is passed as null — the send
+    // must still go through, just without a quote.
+    expect(buildReplyToSnapshot(null)).toBeNull();
+    expect(buildReplyToSnapshot(undefined)).toBeNull();
+  });
+
+  it('returns null for a malformed parent (no sender or no text)', () => {
+    expect(buildReplyToSnapshot({ ...parent, senderUid: '' })).toBeNull();
+    expect(buildReplyToSnapshot({ ...parent, senderUid: 42 as unknown as string })).toBeNull();
+    expect(buildReplyToSnapshot({ ...parent, text: '   ' })).toBeNull();
+    expect(buildReplyToSnapshot({ ...parent, text: undefined as unknown as string })).toBeNull();
+    expect(buildReplyToSnapshot({ ...parent, messageId: '' })).toBeNull();
+  });
+
+  it('coalesces a non-string parent display name to null', () => {
+    expect(
+      buildReplyToSnapshot({ ...parent, senderDisplayName: undefined })!.senderDisplayName,
+    ).toBeNull();
+  });
+
+  it('stores replyTo on the message doc only when a snapshot is supplied', () => {
+    const replyTo = buildReplyToSnapshot(parent)!;
+    const doc = buildChatMessageDocument(
+      {
+        senderUid: 'a',
+        text: 'hi',
+        senderProfile: { displayName: 'Al', avatarPath: null },
+        expireAt: 'EXP',
+        replyTo,
+      },
+      () => 'TS',
+    );
+    expect(doc.replyTo).toEqual({
+      messageId: 'parent-1',
+      senderUid: 'author',
+      senderDisplayName: 'Author',
+      textPreview: 'the original message',
+    });
+    // An ordinary message stores no replyTo field at all (like clientId).
+    expect(
+      buildChatMessageDocument(
+        {
+          senderUid: 'a',
+          text: 'hi',
+          senderProfile: { displayName: 'Al', avatarPath: null },
+          expireAt: 'EXP',
+        },
+        () => 'TS',
+      ),
+    ).not.toHaveProperty('replyTo');
+  });
+
+  it('surfaces replyTo on a summary, and omits it for an ordinary message', () => {
+    const withReply = toChatMessageSummary(
+      'm1',
+      {
+        senderUid: 'a',
+        text: 'hi',
+        replyTo: {
+          messageId: 'parent-1',
+          senderUid: 'author',
+          senderDisplayName: 'Author',
+          textPreview: 'the original message',
+        },
+      },
+      'T1',
+    );
+    expect(withReply.replyTo).toEqual({
+      messageId: 'parent-1',
+      senderUid: 'author',
+      senderDisplayName: 'Author',
+      textPreview: 'the original message',
+    });
+    // No replyTo field → omitted (pre-reply messages must still map cleanly).
+    expect(toChatMessageSummary('m2', { senderUid: 'a', text: 'hi' }, 'T2')).not.toHaveProperty(
+      'replyTo',
+    );
+  });
+
+  it('drops a malformed stored replyTo (no messageId or sender) rather than surfacing junk', () => {
+    expect(
+      toChatMessageSummary('m1', { senderUid: 'a', text: 'hi', replyTo: { textPreview: 'x' } }, 'T1'),
+    ).not.toHaveProperty('replyTo');
+    expect(
+      toChatMessageSummary('m2', { senderUid: 'a', text: 'hi', replyTo: 'nope' }, 'T2'),
+    ).not.toHaveProperty('replyTo');
+  });
+});
+
+describe('chat-core community reply notification id (per-sender collapse)', () => {
+  const start = new Date(1_800_000_000_000);
+
+  it('is stable for every reply the same sender posts inside one window', () => {
+    const later = new Date(start.getTime() + COMMUNITY_REPLY_NOTIFY_WINDOW_MS - 1);
+    expect(communityReplyNotificationId('s1', later)).toBe(
+      communityReplyNotificationId('s1', start),
+    );
+  });
+
+  it('changes once the window rolls over and separates different senders', () => {
+    const next = new Date(start.getTime() + COMMUNITY_REPLY_NOTIFY_WINDOW_MS);
+    expect(communityReplyNotificationId('s1', next)).not.toBe(
+      communityReplyNotificationId('s1', start),
+    );
+    expect(communityReplyNotificationId('s1', start)).not.toBe(
+      communityReplyNotificationId('s2', start),
+    );
+  });
+
+  it('never collides with a mention id (separate namespaces), so a reply and a mention coexist', () => {
+    // A member both replied-to AND @mentioned by the same sender in one window
+    // must get two DISTINCT notices — the ids must not collapse into one another.
+    expect(communityReplyNotificationId('s1', start)).not.toBe(
+      communityMentionNotificationId('s1', start),
+    );
+  });
+
+  it('stays within the id charset the markRead callable accepts', () => {
+    expect(communityReplyNotificationId('s1', start)).toMatch(/^[A-Za-z0-9._-]+$/);
   });
 });
 
