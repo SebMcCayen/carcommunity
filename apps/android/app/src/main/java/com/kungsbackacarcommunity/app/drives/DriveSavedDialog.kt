@@ -18,17 +18,25 @@ const val DRIVE_SAVED_DIALOG_HISTORY_TAG = "drive_saved_dialog_history"
 
 /**
  * Confirmation dialog shown when a SINGLE live session stops and its drive is
- * auto-kept (#853/#856): the drive is already saved to History in the background,
- * so this is purely informational — NOT a Keep/Delete decision. The owner asked
- * for a window (rather than the earlier snackbar) so the confirmation can't be
- * missed while it briefly floats past.
+ * auto-kept (#853/#856): the drive is saved to History in the background, so this
+ * is purely informational — NOT a Keep/Delete decision. The owner asked for a
+ * window (rather than the earlier snackbar) so the confirmation can't be missed
+ * while it briefly floats past.
  *
  * Two actions:
  * - [onDismiss] (OK): acknowledge and close.
  * - [onHistory] (History): jump to the Drives/History route, then close.
  *
- * It is only shown on the KEPT (success) path — a save FAILURE is still handled by
- * [SessionSummaryDialog]. Removing an unwanted drive stays available from History.
+ * The host raises it OPTIMISTICALLY the instant the drive is committed to keep —
+ * while the background `drives-save` may still be settling — so ending a session
+ * feels instant rather than waiting on the save's network round-trip (see
+ * [DriveSaveConfirmation] and the reconcile effect in AuthenticatedApp). The
+ * background save then reconciles the optimistic UI: a definitive SUCCESS keeps
+ * this window up (and fills in the ride id its History action deep-links to),
+ * while a definitive FAILURE RETRACTS it so the failure safety-net
+ * ([SessionSummaryDialog]) is the only surface — the app never leaves a "saved"
+ * window standing over a drive that was not persisted. Removing an unwanted drive
+ * stays available from History.
  */
 @Composable
 fun DriveSavedDialog(
