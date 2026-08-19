@@ -5054,6 +5054,17 @@ fun AuthenticatedApp(
                             ConvoyReactionsHost(
                                 convoyId = convoyBarConvoyId,
                                 repository = convoyReactionRepository,
+                                // A convoy POLICE signal drops the SAME persistent
+                                // police pin the standalone report does (source
+                                // 'convoy', ~40 min TTL, member-gated) so there is
+                                // ONE police pin type on the map — visible to every
+                                // nearby driver via police.listNearby, and it feeds
+                                // the proximity alert. Null when the police layer is
+                                // unavailable (config-less build) → broadcast only.
+                                onPoliceReaction =
+                                    policeController?.let { police ->
+                                        { police.report(PoliceRepository.SOURCE_CONVOY) }
+                                    },
                             )
                         }
                     } else {
