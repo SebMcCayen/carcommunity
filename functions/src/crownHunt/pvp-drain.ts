@@ -149,7 +149,7 @@ function ttlDaysFromNow(now: Date, days: number): Timestamp {
  * instant, exactly like the wave inbox); one that is not listening (app
  * backgrounded / not on the map) still gets the durable in-app notification +
  * push instead, so the ephemeral event is pure best-effort live feedback and 10
- * minutes is ample. Requires a Firestore TTL policy on collection-group `events`
+ * minutes is ample. Requires a Firestore TTL policy on collection-group `drains`
  * (field `expireAt`) — an OPERATOR step, like every other perk TTL.
  */
 const DRAIN_EVENT_TTL_MS = 10 * 60 * 1000;
