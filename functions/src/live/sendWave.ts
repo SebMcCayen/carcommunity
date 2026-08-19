@@ -230,9 +230,15 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
         uid: actor.uid,
         lastSentAt: createdAt,
         lastWaveId: newWaveId,
-        // lastRecipientCount is deliberately NOT set here — it is written only
-        // AFTER delivery, as the completion marker that distinguishes a finished
-        // send from this in-flight one.
+        // CLEAR the completion marker as this new send is stamped. The doc is
+        // merge-written and reused across every wave, so the PREVIOUS wave's
+        // `lastRecipientCount` would otherwise persist into this fresh send and
+        // make it look already-completed — replaying a stale count and, worse,
+        // making the waves-sent credit below think this new wave was already
+        // counted (skipping it for every wave after the first). Deleting it makes
+        // in-flight vs completed unambiguous: absent = in-flight (this send has
+        // not delivered yet), present = completed by THIS wave.
+        lastRecipientCount: FieldValue.delete(),
         expireAt: waveCooldownExpiry(now),
         updatedAt: FieldValue.serverTimestamp(),
       },
@@ -327,19 +333,27 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // cooldown doc and increments only when the completion marker is not already
   // recorded for this wave. Two racing resumes serialise on the cooldown doc —
   // the first credits, the second sees the marker and only re-writes the (equal)
-  // count. The counter is per-SEND, never per-recipient, and a wave with zero
-  // recipients still counts (the sender did wave). Raising `badgeProgress.wavesSent`
-  // cascades into onBadgeProgressWritten, which awards the Vinkare ladder; the
-  // monthly bucket feeds the "waves this month" leaderboard.
-  const monthScope = seasonIdForInstant(now);
+  // count. The completion write re-stamps `lastWaveId: waveId` so the marker is
+  // self-contained — the count and the id it belongs to are written together, and
+  // a later wave's stamp clears both. The counter is per-SEND, never per-recipient,
+  // and a wave with zero recipients still counts (the sender did wave). Raising
+  // `badgeProgress.wavesSent` cascades into onBadgeProgressWritten, which awards the
+  // Vinkare ladder; the monthly bucket feeds the "waves this month" leaderboard.
   await db.runTransaction(async (tx) => {
     const data = (await tx.get(cooldownDocRef)).data();
     const alreadyCounted =
       data?.lastWaveId === waveId && typeof data?.lastRecipientCount === 'number';
-    tx.set(cooldownDocRef, { lastRecipientCount: recipients.length }, { merge: true });
+    tx.set(cooldownDocRef, { lastWaveId: waveId, lastRecipientCount: recipients.length }, { merge: true });
     if (alreadyCounted) {
       return;
     }
+    // Bucket the monthly credit into the month the wave was STAMPED in, read from
+    // the cooldown doc's authoritative `lastSentAt` — not `now`. On the crash+
+    // resume path `now` is the resume attempt's time, which can fall in a later
+    // month than the original send; crediting the stamp month keeps the wave in the
+    // calendar month it actually happened. Falls back to `now` if unreadable.
+    const stampedAt = data?.lastSentAt instanceof Timestamp ? data.lastSentAt.toDate() : now;
+    const monthScope = seasonIdForInstant(stampedAt);
     tx.set(
       badgeProgressRef(actor.uid),
       {

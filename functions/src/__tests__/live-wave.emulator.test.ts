@@ -383,6 +383,41 @@ describe('live-sendWave waves-sent stat (Vinkare badge + waves leaderboard)', ()
     expect(await wavesSentCount(sender.uid)).toBe(before + 1);
   });
 
+  it('increments on EVERY completed send — a prior wave marker never skips the next', async () => {
+    const sender = await createProvisionedUser('wave-succ-s', `SuccSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-succ-r', `SuccRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    const before = await wavesSentCount(sender.uid);
+
+    // First completed send.
+    await signInAs(sender);
+    await call('live-sendWave', {});
+    const afterFirst = await pollUntil(async () => {
+      const v = await wavesSentCount(sender.uid);
+      return v === before + 1 ? v : undefined;
+    });
+    expect(afterFirst).toBe(before + 1);
+
+    // The cooldown doc now carries the FIRST wave's lastRecipientCount marker.
+    // Age the window so a second legitimate wave is allowed, WITHOUT clearing that
+    // stale marker — exactly the state that would make a second send look
+    // already-counted if the stamp did not reset the marker.
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({ lastSentAt: new Date(Date.now() - 60_000) }, { merge: true });
+
+    // Second completed send must ALSO increment (not be skipped by the stale marker).
+    await call('live-sendWave', {});
+    const afterSecond = await pollUntil(async () => {
+      const v = await wavesSentCount(sender.uid);
+      return v === before + 2 ? v : undefined;
+    });
+    expect(afterSecond).toBe(before + 2);
+  });
+
   it('counts a RESUMED stamped-but-undelivered send exactly once', async () => {
     const sender = await createProvisionedUser('wave-resume-stat-s', `ResumeStatS-${SFX}`);
     const recipient = await createProvisionedUser('wave-resume-stat-r', `ResumeStatR-${SFX}`);

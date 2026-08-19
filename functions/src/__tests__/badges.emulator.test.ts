@@ -623,7 +623,7 @@ describe('tiered badge ladders', () => {
 
 /**
  * badges-getMyProgress — the owner-only callable that hands a member a read-only
- * projection of their OWN seven ladder counters (issue #799). The document it
+ * projection of their OWN eight ladder counters (issue #799). The document it
  * reads (badgeProgress/{uid}) is denied to every client by the rules, so this
  * callable is the only client-reachable path to those numbers, and only ever
  * for the caller's own uid.
@@ -659,6 +659,8 @@ describe('badges-getMyProgress (owner counters)', () => {
       convoysLed: 3,
       vehiclesInGarage: 4,
       seasonsWon: 0,
+      // Absent from the seeded doc → sanitises to 0 (Vinkare / waves-sent).
+      wavesSent: 0,
     });
   }, 120_000);
 
@@ -677,6 +679,7 @@ describe('badges-getMyProgress (owner counters)', () => {
       convoysLed: 0,
       vehiclesInGarage: 0,
       seasonsWon: 0,
+      wavesSent: 0,
     });
   }, 120_000);
 
