@@ -32,7 +32,12 @@ object ChatUrlOpener {
             Log.w(TAG, "Refusing to open non-web scheme: $scheme")
             return
         }
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+        // FLAG_ACTIVITY_NEW_TASK so the launch is safe even from a non-Activity
+        // Context (application/service): startActivity() throws without it outside an
+        // Activity, and it is harmless when the caller IS an Activity (the resolved
+        // browser owns its own task regardless).
+        val intent =
+            Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         try {
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {

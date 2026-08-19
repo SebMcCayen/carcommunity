@@ -49,6 +49,7 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.ChatLinkSpans
 import com.kungsbackacarcommunity.app.chat.ChatUrlOpener
 import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
@@ -497,8 +498,13 @@ private sealed interface ChatLinkMatch {
  * identically everywhere and a malformed token is never linkified. A pasted
  * `http(s)://` URL becomes a tappable link that opens the phone's default browser via
  * [onOpenUrl] (http/https ONLY — `tel:`/`intent:`/`javascript:`/`file:` are never
- * linkified). Matches are rendered in document order; the token schemes are disjoint
- * (`geo:` / `kccevent:` / `http(s)://`) so their ranges can never overlap.
+ * linkified).
+ *
+ * The three matchers can produce OVERLAPPING ranges — a web URL may contain a
+ * `geo:`/`kccevent:`-looking substring in its path that those matchers also flag —
+ * so [ChatLinkSpans.nonOverlapping] reconciles them to a strictly non-overlapping,
+ * ascending set (the outer URL wins) before rendering. The append loop then only ever
+ * advances, so nothing is duplicated or misordered.
  */
 private fun annotateChatLinks(
     text: String,
@@ -523,7 +529,7 @@ private fun annotateChatLinks(
         WebLinks.findAll(text).forEach {
             add(ChatLinkMatch.Web(it.range, it.link.url))
         }
-    }.sortedBy { it.range.first }
+    }.let { ChatLinkSpans.nonOverlapping(it) { m -> m.range } }
     if (matches.isEmpty()) return AnnotatedString(text)
 
     val linkStyles =
