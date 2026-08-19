@@ -254,6 +254,7 @@ describe('candidateUidsToResolve', () => {
       distance: [],
       events: [],
       convoys: [],
+      waves: [],
       streak: [],
     } as Record<LeaderboardCategoryKey, LeaderboardCandidate[]>;
     expect(candidateUidsToResolve(perCategory, 2).sort()).toEqual(['u0', 'u1']);
