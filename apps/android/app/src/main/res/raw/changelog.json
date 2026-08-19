@@ -2,6 +2,26 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 39,
+      "versionName": "0.8.28",
+      "releaseDate": "2026-08-19",
+      "highlights": [
+        "Ny topplista i appen – se topp-3 i varje kategori",
+        "Vinka till förare i närheten och reagera i konvojchatten",
+        "Polisvarning när någon rapporterat polis nära dig"
+      ],
+      "changes": [
+        "Topplista: se topp-3 per kategori direkt i appen, och du kan välja bort dig i integritetsinställningarna",
+        "Konvoj: nya reaktionsknappar i konvojchatten och möjlighet att vinka till förare i närheten (med egen Vinkare-statistik)",
+        "Chatt: snabb emoji-rad ovanför skrivfältet, klickbara länkar och automatisk stor bokstav",
+        "Kronjakten: ny instruktionsknapp med regler, tydligare insamling (laddningsindikator + bekräftelse), \"insamlad av dig\"-markör för delade kronor, ärligare rangtext, kronor animeras när de dyker upp och försvinner, och legendariska kronor försvinner snabbare",
+        "Polisvarning när någon i närheten rapporterat polis",
+        "Live-läge: bilar utan foto visar nu en tydlig bilikon i stället för en platshållare, och sparade sessioner bekräftas direkt",
+        "Notiser: den röda pricken försvinner när du öppnar Notiser",
+        "Mindre förbättringar, tydligare texter och buggfixar"
+      ]
+    },
+    {
       "versionCode": 38,
       "versionName": "0.8.27",
       "releaseDate": "2026-08-16",
