@@ -2552,6 +2552,7 @@ class MapboxMapSurface : MapSurface {
                     discColorArgb = marker.discColorArgb,
                     glyphColorArgb = marker.glyphColorArgb,
                     glowColorArgb = marker.glowColorArgb,
+                    collectedBadge = marker.collectedByYou,
                 )
             if (imageId !in registeredCrownImages) {
                 val bitmap =
@@ -2562,6 +2563,7 @@ class MapboxMapSurface : MapSurface {
                             discColorArgb = marker.discColorArgb,
                             glyphColorArgb = marker.glyphColorArgb,
                             glowColorArgb = marker.glowColorArgb,
+                            collectedBadge = marker.collectedByYou,
                         )
                     } else {
                         null
