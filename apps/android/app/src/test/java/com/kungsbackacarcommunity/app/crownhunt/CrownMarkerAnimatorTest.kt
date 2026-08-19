@@ -122,16 +122,41 @@ class CrownMarkerAnimatorTest {
     }
 
     @Test
-    fun `a crown that reappears while despawning starts a fresh spawn`() {
+    fun `a crown that reappears mid-despawn snaps back to present and never blinks out`() {
         val a = animator()
         a.sync(setOf("c1"), nowMs = 0)
         a.frame(600)
         a.sync(emptySet(), nowMs = 1000) // start despawn
-        a.frame(1100)
-        a.sync(setOf("c1"), nowMs = 1150) // it came back
+        // Mid-despawn it is shrinking but still drawn.
+        val shrinking = a.frame(1100).byId("c1")!!
+        assertEquals(CrownAnimationPhase.DESPAWNING, shrinking.phase)
 
-        val state = a.frame(1150).byId("c1")!!
-        assertEquals(CrownAnimationPhase.SPAWNING, state.phase)
+        a.sync(setOf("c1"), nowMs = 1150) // it came back
+        // Cancelled despawn: present at steady state, full size/opacity — NOT a
+        // pending future spawn (which would omit it and blink it out).
+        val back = a.frame(1150).byId("c1")!!
+        assertEquals(CrownAnimationPhase.SETTLED, back.phase)
+        assertEquals(1f, back.scale, 1e-4f)
+        assertEquals(1f, back.contentAlpha, 1e-4f)
+    }
+
+    @Test
+    fun `remove then immediately re-add keeps the crown drawn every frame`() {
+        val a = animator()
+        a.sync(setOf("c1"), nowMs = 0)
+        a.frame(600) // settled
+
+        // A quick remove+re-add across two syncs at the SAME instant — a Firestore
+        // id blip. The crown must be drawn on every frame in between, never omitted.
+        a.sync(emptySet(), nowMs = 1000)
+        assertNotNull("still drawn the frame it was removed", a.frame(1000).byId("c1"))
+        a.sync(setOf("c1"), nowMs = 1000)
+        val back = a.frame(1000).byId("c1")
+        assertNotNull("drawn again right after re-add — no blink", back)
+        assertEquals(CrownAnimationPhase.SETTLED, back!!.phase)
+
+        // And it stays present on subsequent frames.
+        assertNotNull(a.frame(1000 + 200).byId("c1"))
     }
 
     // ── isAnimating drives the frame loop ───────────────────────────────────────

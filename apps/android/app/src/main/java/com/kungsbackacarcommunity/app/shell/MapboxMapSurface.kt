@@ -425,6 +425,14 @@ class MapboxMapSurface : MapSurface {
     // on teardown, so the animation driver in Content reacts to the manager
     // becoming available and (re)draws the current crowns.
     private val crownManagerReadyFlow = MutableStateFlow(false)
+    // Bumped by [forceRedrawCrowns] (the drift-repair path, called from the tap
+    // listener OUTSIDE the frame driver). The crown animation LaunchedEffect keys
+    // on it, so a bump re-runs that effect — which re-syncs the animator and
+    // RESTARTS the per-frame loop. Routing the repair through the same effect
+    // means the loop has exactly one owner: re-keying cancels any in-flight loop
+    // before starting the next, so a repair can never spawn a second, competing
+    // ticker.
+    private val crownRedrawTickFlow = MutableStateFlow(0)
 
     // ---- Community events layer (mirrors the incidents layer above) ----------
     // A SEPARATE PointAnnotationManager so event pins are their own layer with
@@ -1460,15 +1468,21 @@ class MapboxMapSurface : MapSurface {
         val incidents by incidentMarkersFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
         val crownManagerReady by crownManagerReadyFlow.collectAsState()
-        // The crown SPAWN/DESPAWN animation driver. Keyed on the crown set AND the
-        // manager becoming ready, so it re-runs whenever crowns change or a style
-        // (re)load recreates the manager. It feeds the new set into the pure
+        val crownRedrawTick by crownRedrawTickFlow.collectAsState()
+        // The crown SPAWN/DESPAWN animation driver, and the SOLE owner of the
+        // per-frame loop. Keyed on the crown set, the manager becoming ready, AND
+        // the redraw nonce (bumped by forceRedrawCrowns), so it re-runs whenever
+        // crowns change, a style (re)load recreates the manager, OR a drift repair
+        // asks for a redraw. Each re-run feeds the current set into the pure
         // [CrownMarkerAnimator] and then ticks once per display frame — updating
         // each annotation's size/rotation/opacity — until nothing is animating, at
-        // which point it idles (no busy loop over a settled, static layer). A crown
-        // set change cancels and restarts this effect; the animator is a field, so
-        // in-flight spawns/despawns carry across the restart rather than resetting.
-        LaunchedEffect(crowns, crownManagerReady) {
+        // which point it idles (no busy loop over a settled, static layer).
+        //
+        // Because every trigger flows through THIS effect, Compose cancels the
+        // previous run (and its loop) before starting the next: there is only ever
+        // one ticker. The animator is a field, so in-flight spawns/despawns carry
+        // across a restart rather than resetting.
+        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick) {
             if (!crownManagerReady) return@LaunchedEffect
             syncCrownMarkers(crowns, SystemClock.uptimeMillis())
             while (isActive) {
@@ -2564,12 +2578,6 @@ class MapboxMapSurface : MapSurface {
     }
 
     /**
-     * Redraws the crown markers only when the set differs from the last one
-     * applied. Same incomplete-draw rule as the incidents layer: a draw that
-     * could not upload one of its images is NOT cached, so the next update
-     * repairs it rather than leaving a permanently blank annotation.
-     */
-    /**
      * Feeds the incoming crown set into the pure [CrownMarkerAnimator] and retains
      * each crown's latest appearance.
      *
@@ -2717,10 +2725,15 @@ class MapboxMapSurface : MapSurface {
 
     /**
      * Repairs a drifted crown layer (a tap that resolved to no id) by wiping the
-     * annotations and re-syncing the animator to the current marker set, so the
-     * crowns are drawn fresh. Rare path; the re-spawn animation it triggers is
-     * acceptable — it means the layer visibly re-appears rather than silently
-     * healing.
+     * annotations and asking the animation driver to redraw from scratch.
+     *
+     * It does NOT draw a frame itself: this runs on the tap listener, OUTSIDE the
+     * per-frame loop, so drawing one frame here would schedule fresh spawns that
+     * then never advance (the crowns would sit stuck at their initial, invisible
+     * frame). Instead it bumps [crownRedrawTickFlow], which re-runs the single
+     * animation LaunchedEffect — re-syncing the animator AND restarting the
+     * per-frame loop, so the repaired crowns actually animate in. Routing through
+     * that one effect also guarantees no second, competing loop is started.
      */
     private fun forceRedrawCrowns() {
         val manager = crownMarkerManager ?: return
@@ -2729,9 +2742,8 @@ class MapboxMapSurface : MapSurface {
         crownIdsByAnnotation.clear()
         crownMarkerById.clear()
         crownAnimator.clear()
-        val now = SystemClock.uptimeMillis()
-        syncCrownMarkers(crownMarkersFlow.value, now)
-        renderCrownFrame(now)
+        // Re-run the animation effect (re-sync + restart the frame loop).
+        crownRedrawTickFlow.value += 1
     }
 
     /**

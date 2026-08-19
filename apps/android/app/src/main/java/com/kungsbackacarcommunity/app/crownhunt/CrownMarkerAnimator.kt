@@ -69,25 +69,41 @@ class CrownMarkerAnimator(
      * Reconciles the tracked set against [currentIds] — the ids that should be on
      * the map right now — at [nowMs].
      *
-     * New ids start a (staggered) spawn; ids that dropped out of [currentIds]
-     * start a despawn. An id that reappears while it was despawning restarts a
-     * fresh spawn. Idempotent for an unchanged set: a crown already spawning or
-     * settled is left exactly as it is, so re-syncing the same ids never
-     * re-triggers an animation.
+     * A genuinely NEW id starts a (staggered) spawn; an id that dropped out of
+     * [currentIds] starts a despawn.
+     *
+     * An id that REAPPEARS while it was despawning is NOT re-spawned on a future
+     * stagger offset — that would blink it out (a pending spawn is not drawn, and
+     * the surface deletes an annotation it did not draw this frame), which is
+     * exactly the flicker seen when Firestore momentarily drops an id or a crown
+     * is removed and re-added across two quick syncs. Instead its despawn is
+     * CANCELLED and it snaps back to a steady, present state immediately, so it
+     * never leaves the map.
+     *
+     * Idempotent for an unchanged set: a crown already spawning or settled is left
+     * exactly as it is, so re-syncing the same ids never re-triggers an animation.
      */
     fun sync(currentIds: Set<String>, nowMs: Long) {
-        // Newly-appearing ids: absent, or currently despawning (a re-appear).
-        // Sorted for a STABLE stagger order so the reveal sequence is
-        // deterministic and testable rather than dependent on set iteration.
-        val appearing =
-            currentIds
-                .filter { id ->
-                    val existing = records[id]
-                    existing == null || existing.kind == Kind.DESPAWNING
-                }
-                .sorted()
+        // Genuinely-new ids (never seen). Sorted for a STABLE stagger order so the
+        // reveal sequence is deterministic and testable rather than dependent on
+        // set iteration. A reappearing (despawning) id is handled separately below
+        // — it must NOT be given a delayed spawn.
+        val newlyAppearing = ArrayList<String>()
+        for (id in currentIds) {
+            val existing = records[id]
+            when {
+                existing == null -> newlyAppearing += id
+                // Reappeared mid-despawn: cancel the despawn and treat it as
+                // present RIGHT NOW (steady state), so it never blinks out.
+                existing.kind == Kind.DESPAWNING ->
+                    records[id] = Record(Kind.SETTLED, startAtMs = nowMs)
+                // Already spawning or settled — leave its timeline untouched.
+                else -> Unit
+            }
+        }
 
-        appearing.forEachIndexed { index, id ->
+        newlyAppearing.sort()
+        newlyAppearing.forEachIndexed { index, id ->
             // Cap the stagger so a large batch cannot push the last crown minutes
             // into the future — beyond the cap they share the maximum offset.
             val steps = min(index, maxStaggerSteps)
