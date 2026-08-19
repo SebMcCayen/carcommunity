@@ -326,6 +326,11 @@ fun MapHome(
     // ReactionOverlay), composed ON TOP of the map chrome like [convoyReactions] so
     // it is never hidden. Null in the default harness composes nothing.
     waveOverlay: (@Composable () -> Unit)? = null,
+    // Police-proximity alert (the mid-screen ReactionOverlay pop fired when the
+    // driver comes near a user-reported police pin). Composed ON TOP of the map
+    // chrome like [convoyReactions]; null (no police layer / config-less build)
+    // composes nothing. Non-blocking — the overlay takes no touches.
+    policeProximity: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -804,6 +809,10 @@ fun MapHome(
         // TOP of the map chrome so it is never hidden. Null (no WaveRepository)
         // composes nothing at all.
         waveOverlay?.invoke()
+
+        // Police-proximity alert pop, composed on TOP of the map chrome so it is
+        // never hidden behind a control. Null (no police layer) composes nothing.
+        policeProximity?.invoke()
 
         // Incident-report flow, in three steps (see the state block above).
         //

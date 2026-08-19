@@ -170,6 +170,8 @@ import { confirm as confirmIncident } from './incidents/confirm';
 import { reportCleared as reportIncidentCleared } from './incidents/reportCleared';
 import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled';
 import { syncTrafikverket } from './incidents/trafikverket';
+import { report as reportPolice } from './police/report';
+import { listNearby as listNearbyPolice } from './police/listNearby';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import { estimate as financeEstimate } from './finance/estimate';
 import {
@@ -958,6 +960,29 @@ export const incidents = {
   reportCleared: reportIncidentCleared,
   cleanupExpired: cleanupExpiredIncidents,
   syncTrafikverket,
+};
+
+/**
+ * User-reported POLICE pins domain (grouped export → deployed as `police-report`
+ * and `police-listNearby`) — the police-proximity alert feature.
+ *
+ * A member drops a SHORT-LIVED police pin via `police.report` (rate-limited so
+ * the map can't be flooded with fakes); the write carries a computed `geoCell`
+ * and a ~40 min `expiresAt` TTL. Any active signed-in user reads ACTIVE,
+ * unexpired pins near a point via `police.listNearby` (chunked `geoCell in`
+ * queries + Haversine radius filter), which the Android map polls on the incident
+ * camera-idle cadence to draw distinct police markers AND to fire the mid-screen
+ * ReactionOverlay once when the driver comes within the proximity radius of a pin.
+ *
+ * NO scheduled sweep: a pin has no sub-collections and both the security read
+ * rule (`status=='active' && expiresAt > request.time`) and listNearby hide an
+ * expired pin immediately, so a field-scoped Firestore TTL policy on
+ * `policeReports.expiresAt` is the only reclaim needed (one-time deploy note in
+ * police/report.ts, alongside the two rate-limit counter TTL policies).
+ */
+export const police = {
+  report: reportPolice,
+  listNearby: listNearbyPolice,
 };
 
 /**

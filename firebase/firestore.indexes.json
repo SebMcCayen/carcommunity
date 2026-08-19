@@ -637,6 +637,24 @@
       ]
     },
     {
+      "collectionGroup": "policeReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "geoCell",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "expiresAt",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "crownSpawns",
       "queryScope": "COLLECTION",
       "fields": [

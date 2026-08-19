@@ -1697,6 +1697,7 @@
     <string name="turnByTurn_resumeBody">You were navigating to %1$s. Continue where you left off?</string>
     <string name="turnByTurn_resumeConfirm">Continue</string>
     <string name="turnByTurn_resumeDismiss">Dismiss</string>
+    <string name="policeAlert_caption">Police nearby!</string>
     <string name="incidents_reportButton">Report incident</string>
     <string name="incidents_reportTitle">Report an incident</string>
     <string name="incidents_reportSubtitle">Pick what you see on the road ahead. Reports are shared with everyone and expire on their own.</string>
