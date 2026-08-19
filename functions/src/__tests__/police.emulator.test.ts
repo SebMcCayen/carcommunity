@@ -145,13 +145,23 @@ describe('police.report + listNearby', () => {
         latitude: KBA.latitude,
         longitude: KBA.longitude,
       })
-    ).data as { id: string; source: string; expiresAt: string; reporterUid: string };
+    ).data as {
+      id: string;
+      source: string;
+      expiresAt: string;
+      mine: boolean;
+      reporterUid?: unknown;
+    };
 
     expect(created.source).toBe('manual');
-    expect(created.reporterUid).toBe(member.uid);
+    // The creator owns the pin (mine), and the raw reporterUid is NEVER on the
+    // client view (privacy) — only the per-caller boolean.
+    expect(created.mine).toBe(true);
+    expect(created.reporterUid).toBeUndefined();
     expect(typeof created.expiresAt).toBe('string');
 
     // Persisted with a geoCell + reporterUid + active status + future expiry.
+    // (reporterUid stays STORED server-side; it is just never returned to clients.)
     const stored = await adminDb.collection('policeReports').doc(created.id).get();
     expect(stored.data()?.geoCell).toBeTypeOf('string');
     expect(stored.data()?.reporterUid).toBe(member.uid);
@@ -164,8 +174,15 @@ describe('police.report + listNearby', () => {
         longitude: KBA.longitude,
         radiusMeters: 5000,
       })
-    ).data as { policeReports: Array<{ id: string; source: string }> };
-    expect(nearby.policeReports.some((p) => p.id === created.id)).toBe(true);
+    ).data as {
+      policeReports: Array<{ id: string; source: string; mine: boolean; reporterUid?: unknown }>;
+    };
+    const own = nearby.policeReports.find((p) => p.id === created.id);
+    expect(own).toBeDefined();
+    // The reporter sees their own pin flagged `mine` (so the client suppresses its
+    // self-alert) and still never receives a reporterUid.
+    expect(own?.mine).toBe(true);
+    expect(own?.reporterUid).toBeUndefined();
 
     const farAway = (
       await call('police-listNearby', {
@@ -175,6 +192,33 @@ describe('police.report + listNearby', () => {
       })
     ).data as { policeReports: Array<{ id: string }> };
     expect(farAway.policeReports.some((p) => p.id === created.id)).toBe(false);
+  });
+
+  it('does not leak the reporter uid and flags mine=false for another member', async () => {
+    // The reporter creates a pin...
+    await signInAs(member);
+    const created = (
+      await call('police-report', { latitude: KBA.latitude, longitude: KBA.longitude })
+    ).data as { id: string };
+
+    // ...and a DIFFERENT member lists nearby: they see the pin, but it is NOT
+    // theirs (so their proximity alert still fires) and carries no reporterUid.
+    const other = await createProvisionedUser('pol-other');
+    await makeMember(other);
+    await signInAs(other);
+    const nearby = (
+      await call('police-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as {
+      policeReports: Array<{ id: string; mine: boolean; reporterUid?: unknown }>;
+    };
+    const seen = nearby.policeReports.find((p) => p.id === created.id);
+    expect(seen).toBeDefined();
+    expect(seen?.mine).toBe(false);
+    expect(seen?.reporterUid).toBeUndefined();
   });
 
   it('accepts a convoy-sourced report', async () => {

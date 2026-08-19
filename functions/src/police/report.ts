@@ -78,7 +78,10 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<PoliceRepor
     id: ref.id,
     latitude: fields.latitude,
     longitude: fields.longitude,
-    reporterUid: fields.reporterUid,
+    // The caller just created this pin, so it is unconditionally theirs — the
+    // client marks it `mine` and suppresses its own proximity alert (and never
+    // sees a raw reporterUid).
+    mine: true,
     source: fields.source,
     // The stored createdAt is a server timestamp resolved by Firestore, which may
     // not equal `now`; clients read the authoritative value via listNearby.

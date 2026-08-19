@@ -18,6 +18,9 @@ import com.kungsbackacarcommunity.app.navigation.LatLng
  *    The caller keeps an accumulating set of alerted pin ids and passes it back on
  *    every location update, so a driver sitting next to a patrol is warned once,
  *    not on every GPS tick.
+ *  - NOT YOUR OWN: a pin the driver reported themselves ([PoliceReport.mine]) never
+ *    fires — you don't need a mid-screen warning about the patrol you just tapped.
+ *    The pin is still DRAWN on the map (that suppression is only for the alert).
  *
  * Liveness is the caller's responsibility (the pins come from a listNearby that
  * already excludes expired ones); [PoliceReport.isLiveAt] is available for a
@@ -39,7 +42,8 @@ object PoliceProximity {
      * nearest-first if it wishes; in practice it fires one and records the rest.
      *
      * A null driver location (no fix yet) yields nothing. A pin with a corrupt
-     * coordinate is skipped (never alerts) rather than throwing.
+     * coordinate is skipped (never alerts) rather than throwing. A pin the driver
+     * reported themselves ([PoliceReport.mine]) is skipped too — no self-alert.
      */
     fun newAlerts(
         driver: LatLng?,
@@ -53,6 +57,11 @@ object PoliceProximity {
         val out = ArrayList<PoliceReport>()
         for (pin in pins) {
             if (pin.id in seen) continue
+            // Never alert a driver about their OWN reported pin (still drawn, just
+            // not warned about). This is the cross-session/device-correct suppression
+            // — the server resolves ownership per caller, so it holds even after an
+            // app restart when the client-only "ids I reported" memory is gone.
+            if (pin.mine) continue
             if (!pin.latitude.isFinite() || !pin.longitude.isFinite()) continue
             val distance =
                 ViewportRadius.haversineMeters(

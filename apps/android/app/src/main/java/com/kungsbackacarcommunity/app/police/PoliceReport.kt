@@ -13,6 +13,10 @@ package com.kungsbackacarcommunity.app.police
  * @property expiresAtIso the pin's server expiry as an ISO-8601 instant, or null
  *   when the payload carried none. [PoliceReport.isLiveAt] treats a null/malformed
  *   expiry as NOT live, matching the server rule that hides an expired pin.
+ * @property mine true when THIS caller reported the pin (the server resolves it
+ *   per-caller from the private reporterUid, which is never sent to the client).
+ *   A driver's own pin is still DRAWN, but its proximity alert is SUPPRESSED — you
+ *   do not need warning about the patrol you just reported (see [PoliceProximity]).
  */
 data class PoliceReport(
     val id: String,
@@ -20,6 +24,7 @@ data class PoliceReport(
     val longitude: Double,
     val source: String,
     val expiresAtIso: String?,
+    val mine: Boolean = false,
 ) {
     /**
      * Whether this pin is still live at [nowMillis] — active and strictly before

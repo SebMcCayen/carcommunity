@@ -18,8 +18,15 @@ class PoliceProximityTest {
     /** A point [metres] north of the base (1 deg lat ≈ 111_320 m). */
     private fun north(metres: Double) = LatLng(longitude = baseLng, latitude = baseLat + metres / 111_320.0)
 
-    private fun pin(id: String, at: LatLng, expiresIso: String? = FAR_FUTURE) =
-        PoliceReport(id = id, latitude = at.latitude, longitude = at.longitude, source = "manual", expiresAtIso = expiresIso)
+    private fun pin(id: String, at: LatLng, expiresIso: String? = FAR_FUTURE, mine: Boolean = false) =
+        PoliceReport(
+            id = id,
+            latitude = at.latitude,
+            longitude = at.longitude,
+            source = "manual",
+            expiresAtIso = expiresIso,
+            mine = mine,
+        )
 
     @Test
     fun `alerts a pin within the threshold that has not alerted yet`() {
@@ -62,6 +69,28 @@ class PoliceProximityTest {
         val at = north(50.0)
         val pins = listOf(pin("dup", at), pin("dup", at))
         assertEquals(1, PoliceProximity.newAlerts(driver, pins, emptySet()).size)
+    }
+
+    @Test
+    fun `never alerts a pin the driver reported themselves - no self-alert`() {
+        val driver = north(10.0)
+        // In range and never alerted before, but it's the driver's OWN pin.
+        val pins = listOf(pin("mine", LatLng(longitude = baseLng, latitude = baseLat), mine = true))
+        assertTrue(PoliceProximity.newAlerts(driver, pins, emptySet()).isEmpty())
+    }
+
+    @Test
+    fun `alerts a nearby other-reported pin but never the driver's own in the same batch`() {
+        val driver = LatLng(longitude = baseLng, latitude = baseLat)
+        val pins =
+            listOf(
+                pin("mine", north(50.0), mine = true),
+                pin("theirs", north(80.0)),
+            )
+        assertEquals(
+            listOf("theirs"),
+            PoliceProximity.newAlerts(driver, pins, emptySet()).map { it.id },
+        )
     }
 
     @Test
