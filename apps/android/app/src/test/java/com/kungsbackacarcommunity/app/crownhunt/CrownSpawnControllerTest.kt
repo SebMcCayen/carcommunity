@@ -412,6 +412,49 @@ class CrownSpawnControllerTest {
     }
 
     /**
+     * The SERVER's rarity wins over a stale local one. If the local spawn says
+     * COMMON (shared) but the awarded outcome carries RARE (exclusive) — a
+     * mismatched or out-of-date local document — the crown must be DROPPED, not
+     * kept and marked: an exclusive crown is gone for everyone, and trusting the
+     * local rarity would strand a "collected" marker on a crown nobody can take.
+     */
+    @Test
+    fun `an awarded crown follows the server rarity, not a stale local one`() = runTest {
+        val staleLocalShared = spawn("mismatch", rarity = CrownRarity.COMMON)
+        val repo =
+            FakeRepo(
+                spawns = listOf(staleLocalShared),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.AWARDED,
+                        100,
+                        210,
+                        // Server says this was an EXCLUSIVE rare crown.
+                        CrownRarity.RARE,
+                    ),
+            )
+        val controller = CrownSpawnController(repo)
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+
+        val now = 1_000_000L
+        controller.collect(
+            spawn = staleLocalShared,
+            current = CrownFix(57.5, 12.0, now),
+            previous = CrownFix(57.5, 12.0, now - 10_000),
+            idempotencyKey = "k1",
+        )
+
+        assertTrue(
+            "an exclusive award (per the server) drops the crown despite a stale local shared rarity",
+            controller.nearbySpawns.value.isEmpty(),
+        )
+        assertTrue(
+            "and it is never marked collected-by-you",
+            controller.collectedSpawnIds.value.isEmpty(),
+        )
+    }
+
+    /**
      * Collecting a SHARED crown (common/uncommon) for the FIRST time returns
      * `awarded`, but the crown stays `live` for OTHER members — so it must be KEPT
      * on the map and marked collected-by-you, exactly like a later re-tap. Dropping

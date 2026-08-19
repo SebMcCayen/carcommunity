@@ -292,7 +292,14 @@ class CrownSpawnController(
                 // is claimed, so it is dropped now rather than lingering as a
                 // collectable-looking marker until the next refresh notices.
                 CrownSpawnClaimResult.AWARDED ->
-                    when (spawn.rarity.collectMode) {
+                    // The SERVER's rarity is authoritative here, so the collect mode
+                    // is read from outcome.rarity when present and only falls back to
+                    // the local spawn's rarity if the response omitted it. This is the
+                    // one branch where a stale/mismatched local rarity would be
+                    // dangerous — it could keep+mark an EXCLUSIVE crown that is
+                    // actually gone for everyone, or drop a SHARED crown that should
+                    // stay marked — so it defers to what the backend just awarded.
+                    when ((outcome.rarity ?: spawn.rarity).collectMode) {
                         CrownCollectMode.SHARED -> markCollected(spawn)
                         CrownCollectMode.EXCLUSIVE -> dropSpawn(spawn.id)
                     }
