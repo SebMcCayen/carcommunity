@@ -1201,7 +1201,7 @@
     <string name="crownHunt_instrRaritiesIntro">Crowns come in four rarities. The rarer the crown, the more points it\'s worth.</string>
     <string name="crownHunt_instrRarityCommonBody">The most common of all and worth the fewest points. Several members can each collect the same crown.</string>
     <string name="crownHunt_instrRarityUncommonBody">A little rarer and worth a bit more. Several members can still each collect it.</string>
-    <string name="crownHunt_instrRarityRareBody">Uncommon and worth much more. The first person to reach it takes it – then it\'s gone for everyone else.</string>
+    <string name="crownHunt_instrRarityRareBody">Scarce and worth much more. The first person to reach it takes it – then it\'s gone for everyone else.</string>
     <string name="crownHunt_instrRarityLegendaryBody">The rarest of all and worth the most. Only one person gets to take it before it\'s gone.</string>
     <string name="crownHunt_instrSharedTitle">Shared and exclusive crowns</string>
     <string name="crownHunt_instrSharedBody">Common and uncommon crowns are shared – several members can each collect the same crown, and it stays on the map for a while. Rare and legendary crowns are exclusive – whoever gets there first takes them, and then they disappear for everyone else immediately. A crown you\'ve already collected can\'t be collected again.</string>

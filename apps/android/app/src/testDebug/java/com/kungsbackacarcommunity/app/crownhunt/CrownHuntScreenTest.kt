@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -10,6 +12,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BadgeTier
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -96,20 +100,28 @@ class CrownHuntScreenTest {
     }
 
     @Test
-    fun instructionsButton_opensInstructionsSurface() {
+    fun instructionsButton_opensSurface_andBackReturnsToHub() {
         composeTestRule.setContent {
             KccTheme {
-                CrownHuntScreen(
-                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
-                    passesMemberGate = true,
-                    onBack = {},
-                )
+                // LocalAeroBackAvailable == true (as under the shell's RouteHost) so
+                // the shared Aero Back arrow renders and can be tapped to return.
+                CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+                    CrownHuntScreen(
+                        statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                        passesMemberGate = true,
+                        onBack = {},
+                    )
+                }
             }
         }
-        // The hub shows an Instructions button; tapping it opens the rules surface,
-        // whose first section header is then displayed.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_instrButton)).performClick()
+        // Hub is shown first.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        // Tapping the Instructions button (by testTag) opens the rules surface.
+        composeTestRule.onNodeWithTag(CrownHuntInstructionsButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_instrIntroTitle)).assertIsDisplayed()
+        // Pressing the Aero Back arrow returns to the hub, not out of the route.
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
     }
 
     @Test

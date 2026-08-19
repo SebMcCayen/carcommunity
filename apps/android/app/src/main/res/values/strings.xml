@@ -1201,7 +1201,7 @@
     <string name="crownHunt_instrRaritiesIntro">Kronor finns i fyra sällsyntheter. Ju ovanligare krona, desto mer poäng ger den.</string>
     <string name="crownHunt_instrRarityCommonBody">Vanligast av alla och ger minst poäng. Flera medlemmar kan plocka samma krona var för sig.</string>
     <string name="crownHunt_instrRarityUncommonBody">Lite ovanligare och värd lite mer. Flera kan fortfarande plocka den var för sig.</string>
-    <string name="crownHunt_instrRarityRareBody">Ovanlig och värd betydligt mer. Först till kronan tar den – sedan försvinner den för alla andra.</string>
+    <string name="crownHunt_instrRarityRareBody">Svår att hitta och värd betydligt mer. Först till kronan tar den – sedan försvinner den för alla andra.</string>
     <string name="crownHunt_instrRarityLegendaryBody">Allra ovanligast och värd allra mest. Bara en enda hinner ta den innan den är borta.</string>
     <string name="crownHunt_instrSharedTitle">Delade och exklusiva kronor</string>
     <string name="crownHunt_instrSharedBody">Vanliga och ovanliga kronor är delade – flera medlemmar kan plocka samma krona var för sig, och den ligger kvar på kartan ett tag. Sällsynta och legendariska kronor är exklusiva – den som hinner först tar dem, och då försvinner de direkt för alla andra. En krona du redan plockat kan du inte ta igen.</string>
