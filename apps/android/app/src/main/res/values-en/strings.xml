@@ -1111,6 +1111,8 @@
     <string name="crownHunt_spawnCollecting">Collecting...</string>
     <string name="crownHunt_spawnMoveCloser">Move closer</string>
     <string name="crownHunt_spawnMoveCloserDetail">You need to be within %1$d m of the crown.</string>
+    <string name="crownHunt_spawnProximityLabel">Get closer</string>
+    <string name="crownHunt_spawnProximityRemaining">%1$d m to go</string>
     <string name="crownHunt_spawnStopFirst">Stop the car first</string>
     <string name="crownHunt_spawnStopFirstDetail">Crowns can only be collected when you are parked. Park somewhere safe, then collect — there is no rush and no timer.</string>
     <string name="crownHunt_spawnNoPosition">Waiting for your position</string>

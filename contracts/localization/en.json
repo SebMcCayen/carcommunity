@@ -1192,6 +1192,8 @@
     "spawnCollecting": "Collecting...",
     "spawnMoveCloser": "Move closer",
     "spawnMoveCloserDetail": "You need to be within %1$d m of the crown.",
+    "spawnProximityLabel": "Get closer",
+    "spawnProximityRemaining": "%1$d m to go",
     "spawnStopFirst": "Stop the car first",
     "spawnStopFirstDetail": "Crowns can only be collected when you are parked. Park somewhere safe, then collect — there is no rush and no timer.",
     "spawnNoPosition": "Waiting for your position",
