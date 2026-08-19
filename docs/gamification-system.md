@@ -103,7 +103,7 @@ Reading the current code, the system is roughly half-built. This is the honest i
 | Risk scoring, threshold 60 → `risk_review` | **Built** | `functions/src/crownHunt/crown-hunt-risk.ts` |
 | Idempotency + concurrent-award guards | **Built** | `crownhunt-core.ts`, `submitClaim.ts` |
 | **Spawn algorithm** | **Built, backend only** | `functions/src/crownHunt/crown-spawn-core.ts`, `spawnScheduled.ts` |
-| **Rarity tiers / TTL** | **Built** (`CROWN_RARITY_TABLE`: 10/25/100/500 KP, 6/12/24/48 h) | `crown-spawn-core.ts` |
+| **Rarity tiers / TTL** | **Built** (`CROWN_RARITY_TABLE`: 10/25/100/500 KP, 6/12/24/2 h — legendary deliberately short) | `crown-spawn-core.ts` |
 | **Auto-spawn claim** (`crownHunt.claimSpawn`) | **Built, backend only** — stopped + dwelling required | `functions/src/crownHunt/claimSpawn.ts` |
 | Admin cell allow-list (`setSpawnCellApproval`) | **Built, backend only** | `functions/src/crownHunt/spawnCells.ts` |
 | Activity aggregate `A(cell)` | **Built, backend only** | `functions/src/crownHunt/spawnActivity.ts` |
@@ -180,7 +180,7 @@ At the time this document was first written there was no progression, no tiering
     │  admin-approved cells only · flag default OFF  │
     │  N_target = ceil(1.5 · ln(1+A)), cap 5         │
     │  top-up to target · 150 m min separation       │
-    │  rarity 70/22/7/1 · TTL 6/12/24/48 h           │
+    │  rarity 70/22/7/1 · TTL 6/12/24/2 h            │
     └──────────────────────┬─────────────────────────┘
                            │ crowns appear on map
                            ▼
@@ -420,7 +420,7 @@ before 150 m separation becomes impossible. We place at most **5**, roughly 15% 
 | Vanlig (common) | 0.70 | 10 | 6 h | 75 m |
 | Ovanlig (uncommon) | 0.22 | 25 | 12 h | 75 m |
 | Sällsynt (rare) | 0.07 | 100 | 24 h | 75 m |
-| Legendarisk (legendary) | 0.01 | 500 | 48 h | 75 m |
+| Legendarisk (legendary) | 0.01 | 500 | 2 h | 75 m |
 
 Weights sum to 1.00. **Expected value per crown:**
 
@@ -432,7 +432,7 @@ E[KP] = 0.70·10 + 0.22·25 + 0.07·100 + 0.01·500
 
 Each rarity tier contributes 5–7 KP to the expectation — the distribution is *balanced*, meaning no single tier dominates the economy. If legendaries were removed the expected value only drops 20%, so the economy does not depend on the jackpot; the jackpot exists for the feel (§9), not the maths.
 
-**Rarity and TTL move together, deliberately.** A rare crown that expires in 6 hours is a rare crown nobody ever sees. A 48 h legendary is findable — someone will realistically pass it, and it can be worth planning a Saturday around. Meanwhile the 6 h common TTL is what keeps the map **churning**: the majority of crowns turn over four times a day, so the map looks different every time you open it, and no fixed location is farmable — the thing that made hand-placed points feel stale.
+**Rarity and TTL rise together up to rare — then the legendary breaks the pattern on purpose.** A rare crown that expires in 6 hours is a rare crown nobody ever sees, so TTL rises from common to rare. The legendary is the deliberate exception: at 2 h it is short-lived, so its 500-point payout must be caught in a rush rather than found at leisure — at 48 h it was caught almost every time (an easy, near-guaranteed 500 KP that flooded the economy). Meanwhile the 6 h common TTL is what keeps the map **churning**: the majority of crowns turn over four times a day, so the map looks different every time you open it, and no fixed location is farmable — the thing that made hand-placed points feel stale.
 
 **Collect radius 75 m** sits mid-range in the existing 20–150 m admin bounds. Rationale: 75 m plus the accuracy buffer in `isWithinGeofence` (`radius + 0.5 · accuracy`) means a device reporting a typical urban 20 m accuracy has an effective 85 m radius — enough to collect from the parking spot you actually found rather than requiring you to walk to a precise pin, but far too small to collect from a passing road at any useful distance.
 
@@ -466,7 +466,7 @@ Gate 2 is the one that replaces `safeLocationConfirmed`, and it is deliberately 
 
 Three properties of the allow-list worth knowing, because each closes a failure the naive version has:
 
-- **Approval is re-checked at write time, inside a transaction.** A pass reads the allow-list once and may then run for minutes. Without the re-check, a revocation landing mid-pass would commit fresh crowns into an area an admin had just declared unsafe — and nothing downstream would remove them, because the sweeper only takes *expired* crowns, so they would stand for their full TTL (up to 48 h for a legendary). Both orderings are now safe.
+- **Approval is re-checked at write time, inside a transaction.** A pass reads the allow-list once and may then run for minutes. Without the re-check, a revocation landing mid-pass would commit fresh crowns into an area an admin had just declared unsafe — and nothing downstream would remove them, because the sweeper only takes *expired* crowns, so they would stand for their full TTL (up to 24 h for a rare). Both orderings are now safe.
 - **Revoking is cheaper than approving, and takes effect immediately.** Revocation needs no confirmation literal (turning an area off must never be harder than turning it on) and it **deletes the cell's live crowns** in pages rather than waiting out their TTL — revocation is the lever an admin reaches for after a near-miss or a complaint.
 - **Re-approval reseeds the round-robin cursor to the epoch sentinel**, so a re-approved area is repopulated on the next pass rather than waiting out a full cycle.
 
@@ -946,7 +946,7 @@ Caps are the real anti-abuse mechanism. The risk pipeline exists to catch the ca
 | Mechanic | Why it works |
 |---|---|
 | **Variable-ratio reward** (rarity) | The single strongest engagement driver known. Unpredictable payoff size sustains interest where a fixed payoff does not. Here it is bounded by a 10-claim daily cap, so the loop has a built-in end. |
-| ~~**Poisson spawning**~~ | ~~You cannot learn the schedule, so the map is worth checking.~~ **Not built** — the spawner runs on a fixed 10-minute cron and tops straight up to target (§4.4), so the schedule *is* learnable. What stays unpredictable is which rarity appears and where in the cell, plus the churn from 6–48 h TTLs. Weaker than intended, and worth knowing before citing this row as a live engagement mechanic. |
+| ~~**Poisson spawning**~~ | ~~You cannot learn the schedule, so the map is worth checking.~~ **Not built** — the spawner runs on a fixed 10-minute cron and tops straight up to target (§4.4), so the schedule *is* learnable. What stays unpredictable is which rarity appears and where in the cell, plus the churn from 2–24 h TTLs. Weaker than intended, and worth knowing before citing this row as a live engagement mechanic. |
 | **Streaks** | Low-cost daily re-entry ritual — capped at ×1.7, so it is a nudge, not a hook. |
 | **Tiered progression** | Long-horizon goals that survive the novelty. The one mechanic still working in month six. |
 | **Near-miss visibility** | Crowns are shown on the map with rarity colour and remaining TTL **before** collection. Seeing a legendary you did not reach is a real, honest near-miss, and it is motivating. |
@@ -1098,7 +1098,7 @@ Everything an implementer needs, in one table. Crown-side values have been check
 | Collect radius `r_collect` | 75 m (stored radius trusted only if `0 < r ≤ 250`) | `COLLECT_RADIUS_METERS` |
 | Rarity weights | 0.70 / 0.22 / 0.07 / 0.01 | `CROWN_RARITY_TABLE` |
 | Rarity KP | 10 / 25 / 100 / 500 | `CROWN_RARITY_TABLE` |
-| Rarity TTL | 6 h / 12 h / 24 h / 48 h | `CROWN_RARITY_TABLE` |
+| Rarity TTL | 6 h / 12 h / 24 h / 2 h (legendary short) | `CROWN_RARITY_TABLE` |
 | Expected KP per crown | 24.5 | (derived) |
 | Stationary gate — hand-placed | ≤ **1.4 m/s**, single sample, omittable | `MAX_CLAIM_SPEED_MPS` |
 | Stationary gate — spawned | ≤ **2.0 m/s** on both fixes **and** on the server-derived speed | `MAX_COLLECT_SPEED_MPS` |
