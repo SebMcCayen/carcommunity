@@ -720,8 +720,6 @@
     <string name="convoyReaction_hello_caption">Hi!</string>
     <string name="convoyReaction_followMe_label">Follow me</string>
     <string name="convoyReaction_followMe_caption">Follow me!</string>
-    <!-- Wave to nearby live users -->
-    <string name="shell_waveButton">Wave to nearby drivers</string>
     <string name="wave_caption">%1$s waved</string>
     <string name="wave_captionAnonymous">Someone waved</string>
     <string name="wave_captionSelf">You waved</string>
@@ -1572,6 +1570,7 @@
     <string name="shell_chatEmpty">You\'re all caught up — no new messages.</string>
     <string name="shell_chatComingSoon">Community chat isn\'t available yet. For now, chat lives inside each event you\'re going to.</string>
     <string name="shell_layersButton">Map layers</string>
+    <string name="shell_waveButton">Wave to nearby drivers</string>
     <string name="shell_layersTitle">Map layers</string>
     <string name="shell_layersClose">Close map layers</string>
     <string name="shell_layersTraffic">Traffic</string>

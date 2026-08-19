@@ -784,6 +784,11 @@
       "caption": "Följ mig!"
     }
   },
+  "wave": {
+    "caption": "%1$s vinkade",
+    "captionAnonymous": "Någon vinkade",
+    "captionSelf": "Du vinkade"
+  },
   "memberProfile": {
     "title": "Profil",
     "unknownMember": "Medlem",
@@ -1684,6 +1689,7 @@
     "chatEmpty": "Du är ikapp — inga nya meddelanden.",
     "chatComingSoon": "Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.",
     "layersButton": "Kartlager",
+    "waveButton": "Vinka till förare i närheten",
     "layersTitle": "Kartlager",
     "layersClose": "Stäng kartlager",
     "layersTraffic": "Trafik",

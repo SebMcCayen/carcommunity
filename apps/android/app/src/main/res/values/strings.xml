@@ -720,8 +720,6 @@
     <string name="convoyReaction_hello_caption">Hej!</string>
     <string name="convoyReaction_followMe_label">Följ mig</string>
     <string name="convoyReaction_followMe_caption">Följ mig!</string>
-    <!-- Wave to nearby live users -->
-    <string name="shell_waveButton">Vinka till förare i närheten</string>
     <string name="wave_caption">%1$s vinkade</string>
     <string name="wave_captionAnonymous">Någon vinkade</string>
     <string name="wave_captionSelf">Du vinkade</string>
@@ -1572,6 +1570,7 @@
     <string name="shell_chatEmpty">Du är ikapp — inga nya meddelanden.</string>
     <string name="shell_chatComingSoon">Gemenskapschatten är inte tillgänglig ännu. Just nu finns chatten inne i varje evenemang du ska på.</string>
     <string name="shell_layersButton">Kartlager</string>
+    <string name="shell_waveButton">Vinka till förare i närheten</string>
     <string name="shell_layersTitle">Kartlager</string>
     <string name="shell_layersClose">Stäng kartlager</string>
     <string name="shell_layersTraffic">Trafik</string>
