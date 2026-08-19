@@ -158,11 +158,13 @@ data class ReactionOverlayEvent(
      */
     val holdMs: Long = ReactionOverlayTiming.HOLD_MS,
     /**
-     * When true a TAP on the badge dismisses the pop EARLY — it runs the normal
-     * EXIT fade (never an instant cut) from wherever it is. Used by the longer
-     * "Police nearby" alert so a driver can clear it once seen. Defaults false: the
-     * social pops stay fully non-blocking (no node takes pointer input), so the map
-     * underneath is untouched.
+     * When true a TAP on the badge dismisses the pop EARLY: it ends the HOLD phase
+     * as soon as the tap is observed and then runs the normal EXIT fade — never an
+     * instant cut. (A tap during the brief enter takes effect the moment the enter
+     * completes, since the badge only becomes tap-dismissible at the hold.) Used by
+     * the longer "Police nearby" alert so a driver can clear it once seen. Defaults
+     * false: the social pops stay fully non-blocking (no node takes pointer input),
+     * so the map underneath is untouched.
      */
     val dismissOnTap: Boolean = false,
 )
@@ -201,9 +203,10 @@ fun ReactionOverlay(
         val spin = remember(current.id) { Animatable(ReactionOverlayTiming.ENTER_START_SPIN) }
         val finished by rememberUpdatedState(onFinished)
 
-        // A tap on the badge (when dismissOnTap) requests an EARLY end. It cuts the
-        // hold short but still runs the exit fade below — never an instant cut. Keyed
-        // to the id so each fresh pop starts un-dismissed.
+        // A tap on the badge (when dismissOnTap) requests an EARLY end. It is only
+        // observed during the hold below (via snapshotFlow), where it cuts the hold
+        // short but still runs the exit fade — never an instant cut. Keyed to the id
+        // so each fresh pop starts un-dismissed.
         var dismissRequested by remember(current.id) { mutableStateOf(false) }
         // Created unconditionally (never inside the conditional clickable) so the
         // remember-slot count is stable across pops with/without dismissOnTap.
