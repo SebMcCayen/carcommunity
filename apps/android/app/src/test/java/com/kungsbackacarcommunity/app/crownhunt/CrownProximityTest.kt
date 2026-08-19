@@ -85,6 +85,34 @@ class CrownProximityTest {
     }
 
     @Test
+    fun remainingToRingIsTheGapToTheEdgeNotToTheCentre() {
+        // 76 m against a 75 m ring → ~1 m left, not 76.
+        assertEquals(1.0, CrownProximity.remainingToRingMeters(76.0, radiusMeters = 75.0), 1e-9)
+        // A far crown keeps a real to-ring gap (drives the km-formatted label).
+        assertEquals(4925.0, CrownProximity.remainingToRingMeters(5000.0, radiusMeters = 75.0), 1e-9)
+    }
+
+    @Test
+    fun remainingToRingIsZeroAtOrInsideTheRing() {
+        assertEquals(0.0, CrownProximity.remainingToRingMeters(75.0, radiusMeters = 75.0), 1e-9)
+        assertEquals(0.0, CrownProximity.remainingToRingMeters(40.0, radiusMeters = 75.0), 1e-9)
+        assertEquals(0.0, CrownProximity.remainingToRingMeters(0.0, radiusMeters = 75.0), 1e-9)
+    }
+
+    @Test
+    fun remainingToRingFailsClosedToZeroForBrokenDistance() {
+        assertEquals(0.0, CrownProximity.remainingToRingMeters(Double.NaN, radiusMeters = 75.0), 1e-9)
+        assertEquals(0.0, CrownProximity.remainingToRingMeters(-10.0, radiusMeters = 75.0), 1e-9)
+    }
+
+    @Test
+    fun remainingToRingResolvesAnAbsurdRadiusToTheDefaultRing() {
+        // Absurd stored radius resolves to 75 m, so 200 m away is 125 m to go —
+        // NOT clamped to 0 as if the giant radius were honoured.
+        assertEquals(125.0, CrownProximity.remainingToRingMeters(200.0, radiusMeters = 100_000.0), 1e-9)
+    }
+
+    @Test
     fun resultIsAlwaysClampedToUnit() {
         // Sweep a range of distances; nothing escapes 0..1.
         for (d in -100..6000 step 37) {

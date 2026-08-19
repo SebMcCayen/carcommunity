@@ -376,14 +376,18 @@ private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Doubl
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            // "1,4 km kvar" / "120 m to go" — the SAME locale-aware metre/kilometre
-            // form the distance line uses ([crownDistanceShort]), so a far crown
-            // reads "5,0 km kvar", not a runaway "5000 m".
+            // "1,4 km kvar" / "120 m to go" — the distance left to reach the RING,
+            // not to the crown's centre ([CrownProximity.remainingToRingMeters]), so
+            // it lands on "0 m" as the bar fills instead of stalling at the radius.
+            // Same locale-aware metre/kilometre form as the distance line
+            // ([crownDistanceShort]), so a far crown reads "4,9 km kvar", not "4925 m".
             Text(
                 text =
                     stringResource(
                         R.string.crownHunt_spawnProximityRemaining,
-                        crownDistanceShort(distanceMeters),
+                        crownDistanceShort(
+                            CrownProximity.remainingToRingMeters(distanceMeters, collectRadiusMeters),
+                        ),
                     ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

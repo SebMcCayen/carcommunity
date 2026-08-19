@@ -66,4 +66,27 @@ object CrownProximity {
         if (distanceMeters >= outer) return 0f
         return ((outer - distanceMeters) / window).toFloat().coerceIn(0f, 1f)
     }
+
+    /**
+     * How far is left to REACH THE RING — `max(distance - radius, 0)` — for the
+     * "x m to go" label beside the bar.
+     *
+     * The raw distance is to the crown's CENTRE, but the member only has to reach
+     * the collect ring, so the honest "to go" is the gap to the ring's edge: at
+     * 76 m against a 75 m radius there is ~1 m left, not 76. It reaches **0** at (or
+     * inside) the ring, so the label lands on "0 m" exactly as the bar fills — the
+     * two never disagree, because both resolve the radius the same way
+     * ([CrownSpawnLimits.resolveCollectRadiusMeters]) and read the same distance.
+     *
+     * A null-shaped distance collapses to 0, matching how the bar reads an unknown
+     * position (nothing to travel that can be drawn).
+     */
+    fun remainingToRingMeters(
+        distanceMeters: Double,
+        radiusMeters: Double = CrownSpawnLimits.COLLECT_RADIUS_METERS,
+    ): Double {
+        if (!distanceMeters.isFinite() || distanceMeters < 0.0) return 0.0
+        val radius = CrownSpawnLimits.resolveCollectRadiusMeters(radiusMeters)
+        return (distanceMeters - radius).coerceAtLeast(0.0)
+    }
 }
