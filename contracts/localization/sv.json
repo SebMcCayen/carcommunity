@@ -1098,7 +1098,11 @@
       "sasongsmastare_brons": "Säsongsmästare Brons",
       "sasongsmastare_silver": "Säsongsmästare Silver",
       "sasongsmastare_guld": "Säsongsmästare Guld",
-      "sasongsmastare_platina": "Säsongsmästare Platina"
+      "sasongsmastare_platina": "Säsongsmästare Platina",
+      "vinkare_brons": "Vinkare Brons",
+      "vinkare_silver": "Vinkare Silver",
+      "vinkare_guld": "Vinkare Guld",
+      "vinkare_platina": "Vinkare Platina"
     }
   },
   "badgeShowcase": {
@@ -1134,7 +1138,8 @@
       "trogen": "Trogen",
       "konvojledare": "Konvojledare",
       "samlare": "Samlare",
-      "sasongsmastare": "Säsongsmästare"
+      "sasongsmastare": "Säsongsmästare",
+      "vinkare": "Vinkare"
     },
     "ladderRequirements": {
       "kronjagare": "Samla %1$s kronor i Kronjakten.",
@@ -1143,7 +1148,8 @@
       "trogen": "Öppna appen %1$s dagar i rad.",
       "konvojledare": "Led %1$s konvojer.",
       "samlare": "Ha %1$s fordon i ditt garage.",
-      "sasongsmastare": "Vinn %1$s säsonger av Kronjakten."
+      "sasongsmastare": "Vinn %1$s säsonger av Kronjakten.",
+      "vinkare": "Skicka %1$s vinkningar till andra förare."
     },
     "ladderTaglines": {
       "kronjagare": "Kronor du plockat på kartan.",
@@ -1152,7 +1158,8 @@
       "trogen": "Dagar i rad i appen.",
       "konvojledare": "Konvojer du lett.",
       "samlare": "Fordon i ditt garage.",
-      "sasongsmastare": "Säsonger du vunnit."
+      "sasongsmastare": "Säsonger du vunnit.",
+      "vinkare": "Vinkningar du skickat."
     }
   },
   "points": {
@@ -1336,10 +1343,12 @@
     "categoryDistance": "Sträcka",
     "categoryEvents": "Besökta event",
     "categoryConvoys": "Ledda konvojer",
+    "categoryWaves": "Vinkningar",
     "categoryStreak": "Längsta svit",
     "valueCrownPoints": "%1$d KP",
     "valueDistance": "%1$d km",
     "valueCount": "%1$d",
+    "valueWaves": "%1$d vinkningar",
     "valueDays": "%1$d dagar",
     "rank": "#%1$d",
     "you": "Du",

@@ -1021,6 +1021,10 @@
     <string name="badges_badgeNames_sasongsmastare_silver">Säsongsmästare Silver</string>
     <string name="badges_badgeNames_sasongsmastare_guld">Säsongsmästare Guld</string>
     <string name="badges_badgeNames_sasongsmastare_platina">Säsongsmästare Platina</string>
+    <string name="badges_badgeNames_vinkare_brons">Vinkare Brons</string>
+    <string name="badges_badgeNames_vinkare_silver">Vinkare Silver</string>
+    <string name="badges_badgeNames_vinkare_guld">Vinkare Guld</string>
+    <string name="badges_badgeNames_vinkare_platina">Vinkare Platina</string>
     <string name="badgeShowcase_title">Mina utmärkelser</string>
     <string name="badgeShowcase_subtitle">%1$d av %2$d upplåsta</string>
     <string name="badgeShowcase_emptyTitle">Din samling börjar här</string>
@@ -1051,6 +1055,7 @@
     <string name="badgeShowcase_ladderNames_konvojledare">Konvojledare</string>
     <string name="badgeShowcase_ladderNames_samlare">Samlare</string>
     <string name="badgeShowcase_ladderNames_sasongsmastare">Säsongsmästare</string>
+    <string name="badgeShowcase_ladderNames_vinkare">Vinkare</string>
     <string name="badgeShowcase_ladderRequirements_kronjagare">Samla %1$s kronor i Kronjakten.</string>
     <string name="badgeShowcase_ladderRequirements_vagfarare">Kör %1$s totalt.</string>
     <string name="badgeShowcase_ladderRequirements_traffrav">Delta i %1$s träffar.</string>
@@ -1058,6 +1063,7 @@
     <string name="badgeShowcase_ladderRequirements_konvojledare">Led %1$s konvojer.</string>
     <string name="badgeShowcase_ladderRequirements_samlare">Ha %1$s fordon i ditt garage.</string>
     <string name="badgeShowcase_ladderRequirements_sasongsmastare">Vinn %1$s säsonger av Kronjakten.</string>
+    <string name="badgeShowcase_ladderRequirements_vinkare">Skicka %1$s vinkningar till andra förare.</string>
     <string name="badgeShowcase_ladderTaglines_kronjagare">Kronor du plockat på kartan.</string>
     <string name="badgeShowcase_ladderTaglines_vagfarare">Milen du lagt bakom dig.</string>
     <string name="badgeShowcase_ladderTaglines_traffrav">Träffar du varit med på.</string>
@@ -1065,6 +1071,7 @@
     <string name="badgeShowcase_ladderTaglines_konvojledare">Konvojer du lett.</string>
     <string name="badgeShowcase_ladderTaglines_samlare">Fordon i ditt garage.</string>
     <string name="badgeShowcase_ladderTaglines_sasongsmastare">Säsonger du vunnit.</string>
+    <string name="badgeShowcase_ladderTaglines_vinkare">Vinkningar du skickat.</string>
     <string name="points_screenTitle">Poäng</string>
     <string name="points_balanceLabel">Ditt saldo</string>
     <string name="points_shortForm">KP</string>
@@ -1241,10 +1248,12 @@
     <string name="leaderboard_categoryDistance">Sträcka</string>
     <string name="leaderboard_categoryEvents">Besökta event</string>
     <string name="leaderboard_categoryConvoys">Ledda konvojer</string>
+    <string name="leaderboard_categoryWaves">Vinkningar</string>
     <string name="leaderboard_categoryStreak">Längsta svit</string>
     <string name="leaderboard_valueCrownPoints">%1$d KP</string>
     <string name="leaderboard_valueDistance">%1$d km</string>
     <string name="leaderboard_valueCount">%1$d</string>
+    <string name="leaderboard_valueWaves">%1$d vinkningar</string>
     <string name="leaderboard_valueDays">%1$d dagar</string>
     <string name="leaderboard_rank">#%1$d</string>
     <string name="leaderboard_you">Du</string>

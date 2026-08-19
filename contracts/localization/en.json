@@ -1098,7 +1098,11 @@
       "sasongsmastare_brons": "Season Champion Bronze",
       "sasongsmastare_silver": "Season Champion Silver",
       "sasongsmastare_guld": "Season Champion Gold",
-      "sasongsmastare_platina": "Season Champion Platinum"
+      "sasongsmastare_platina": "Season Champion Platinum",
+      "vinkare_brons": "Waver Bronze",
+      "vinkare_silver": "Waver Silver",
+      "vinkare_guld": "Waver Gold",
+      "vinkare_platina": "Waver Platinum"
     }
   },
   "badgeShowcase": {
@@ -1134,7 +1138,8 @@
       "trogen": "Faithful",
       "konvojledare": "Convoy Leader",
       "samlare": "Collector",
-      "sasongsmastare": "Season Champion"
+      "sasongsmastare": "Season Champion",
+      "vinkare": "Waver"
     },
     "ladderRequirements": {
       "kronjagare": "Collect %1$s crowns in Crown Hunt.",
@@ -1143,7 +1148,8 @@
       "trogen": "Open the app %1$s days in a row.",
       "konvojledare": "Lead %1$s convoys.",
       "samlare": "Keep %1$s vehicles in your garage.",
-      "sasongsmastare": "Win %1$s Crown Hunt seasons."
+      "sasongsmastare": "Win %1$s Crown Hunt seasons.",
+      "vinkare": "Send %1$s waves to other drivers."
     },
     "ladderTaglines": {
       "kronjagare": "Crowns you have picked up on the map.",
@@ -1152,7 +1158,8 @@
       "trogen": "Days in a row in the app.",
       "konvojledare": "Convoys you have led.",
       "samlare": "Vehicles in your garage.",
-      "sasongsmastare": "Seasons you have won."
+      "sasongsmastare": "Seasons you have won.",
+      "vinkare": "Waves you have sent."
     }
   },
   "points": {
@@ -1336,10 +1343,12 @@
     "categoryDistance": "Distance",
     "categoryEvents": "Events attended",
     "categoryConvoys": "Convoys led",
+    "categoryWaves": "Waves sent",
     "categoryStreak": "Longest streak",
     "valueCrownPoints": "%1$d CP",
     "valueDistance": "%1$d km",
     "valueCount": "%1$d",
+    "valueWaves": "%1$d waves",
     "valueDays": "%1$d days",
     "rank": "#%1$d",
     "you": "You",

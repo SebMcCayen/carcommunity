@@ -804,6 +804,21 @@ All user-facing names are **Swedish**, matching the existing catalog convention.
 
 *Icon design:* A five-point crown resting inside an open laurel wreath — the Kronjägare crown silhouette cradled by two curved laurel branches meeting at the base. The wreath is what distinguishes a championship from a mere collection count. Tier is the ring treatment as usual; no speed imagery, ever.
 
+#### Vinkare · *Waver*
+
+| Tier | Requirement |
+|---|---|
+| Brons | 25 waves sent |
+| Silver | 100 |
+| Guld | 500 |
+| Platina | 2 000 |
+
+*How to earn:* Send a wave to nearby live drivers (`live.sendWave`). The counter (`wavesSent`) is a LIFETIME tally, incremented exactly once per completed send — never per recipient, and a resend/retry of an already-counted wave does not re-credit it. A wave that reaches nobody in range still counts (you did wave). This is a purely SOCIAL greeting, never a speed or competition metric.
+
+*On the thresholds:* a wave carries a ~45-second cooldown, so waves accrue moderately. Brons (25) is an achievable first-week rung, Silver (100) a regular greeter, and Guld (500) / Platina (2 000) reward the members who keep making the road friendlier over the long run. Forward-only, like Konvojledare: there is no external source to reconcile from, so historic waves are not back-filled — the ladder is earned from waves sent after it shipped.
+
+*Icon design:* An open raised hand mid-wave — a rounded palm with four short fingers and a splayed thumb, tilted slightly. The only hand silhouette in the set, so it reads unmistakably as a greeting. Tier is the ring treatment as usual. **No speed imagery, ever:** no vehicle, no motion lines — a wave is about the person, not the car.
+
 ### 7.3 The five existing badges
 
 `first_event`, `five_events`, `helpful_member`, `early_member`, `garage_created` are **retained unchanged.** Badge award documents use the badge key as their document ID (`users/{uid}/badges/{badgeKey}`) and already exist on real accounts; removing a key orphans a member's award history for no gain.

@@ -172,6 +172,7 @@ describe('ladder definitions', () => {
       konvojledare: [1, 5, 25, 100],
       samlare: [1, 3, 6, 10],
       sasongsmastare: [1, 3, 5, 10],
+      vinkare: [25, 100, 500, 2_000],
     });
   });
 
@@ -264,6 +265,23 @@ describe('threshold boundaries', () => {
       'konvojledare_platina',
     );
     expect(qualifiedTierBadges(counters({ convoysLed: 100 }))).toContain('konvojledare_platina');
+  });
+
+  it('Vinkare: 24 waves earns nothing, 25 earns Brons, and the ladder is monotonic', () => {
+    expect(qualifiedTierBadges(counters({ wavesSent: 24 }))).toEqual([]);
+    expect(qualifiedTierBadges(counters({ wavesSent: 25 }))).toEqual(['vinkare_brons']);
+    expect(qualifiedTierBadges(counters({ wavesSent: 100 }))).toEqual([
+      'vinkare_brons',
+      'vinkare_silver',
+    ]);
+    // 1999 is one short of the published Platina threshold.
+    expect(qualifiedTierBadges(counters({ wavesSent: 1_999 }))).not.toContain('vinkare_platina');
+    expect(qualifiedTierBadges(counters({ wavesSent: 2_000 }))).toEqual([
+      'vinkare_brons',
+      'vinkare_silver',
+      'vinkare_guld',
+      'vinkare_platina',
+    ]);
   });
 
   it('Trogen tops out at Guld — there is no 365-day Platina rung (Q6, §9)', () => {
@@ -832,6 +850,7 @@ describe('agrees with docs/gamification-system.md §7.2', () => {
     Konvojledare: 'konvojledare',
     Samlare: 'samlare',
     Säsongsmästare: 'sasongsmastare',
+    Vinkare: 'vinkare',
   };
   const TIER_BY_HEADING: Record<string, string> = {
     Brons: 'brons',

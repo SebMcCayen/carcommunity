@@ -23,11 +23,11 @@
  *  out is never in the source document and therefore never in this file.
  *
  * SCOPES + CATEGORIES.
- *  - `alltime` publishes all five categories: crownPoints, distance, events,
- *    convoys, streak.
- *  - `month` publishes the four monthly categories: crownPoints, distance,
- *    events, convoys — NO streak (a monthly "longest streak" is not a category
- *    the monthly board tracks). The month block is OMITTED entirely (null) when
+ *  - `alltime` publishes all six categories: crownPoints, distance, events,
+ *    convoys, waves, streak.
+ *  - `month` publishes the five monthly categories: crownPoints, distance,
+ *    events, convoys, waves — NO streak (a monthly "longest streak" is not a
+ *    category the monthly board tracks). The month block is OMITTED entirely (null) when
  *    no `leaderboards/{YYYY-MM}` document exists yet — the monthly board is a
  *    separate PR (#887); until it merges and runs, the site simply shows the
  *    all-time board.
@@ -42,21 +42,23 @@
 /** How many ranked rows per category the PUBLIC web page shows (a podium). */
 export const PUBLIC_LEADERBOARD_TOP_N = 3;
 
-/** All-time public categories, in render order. Includes `streak`. */
+/** All-time public categories, in render order. Includes `waves` and `streak`. */
 export const PUBLIC_ALLTIME_CATEGORIES = [
   'crownPoints',
   'distance',
   'events',
   'convoys',
+  'waves',
   'streak',
 ] as const;
 
-/** Monthly public categories, in render order. NO `streak`. */
+/** Monthly public categories, in render order. Includes `waves`; NO `streak`. */
 export const PUBLIC_MONTH_CATEGORIES = [
   'crownPoints',
   'distance',
   'events',
   'convoys',
+  'waves',
 ] as const;
 
 export type PublicAlltimeCategoryKey = (typeof PUBLIC_ALLTIME_CATEGORIES)[number];

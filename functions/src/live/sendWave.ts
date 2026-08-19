@@ -60,6 +60,11 @@ import {
 import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
 import { LIVE_SESSION_ACTIVE_STATUS } from './nearby-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { badgeProgressRef } from '../badges/tierAwards';
+import { BADGE_METRIC_FIELD } from '../badges/badge-tiers';
+import { MEMBER_MONTHLY_STAT_FIELDS } from '../leaderboard/leaderboard-core';
+import { memberMonthlyStatsRef, memberMonthlyStatPayload } from '../leaderboard/monthly-stats';
+import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
 import {
   WAVE_NOT_SHARING_MESSAGE,
   WAVE_RADIUS_METERS,
@@ -310,12 +315,45 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     await batch.commit();
   }
 
-  // COMPLETION MARKER: record the delivered count on the cooldown doc. This is
-  // what turns a stamped in-flight send into a COMPLETED one — a retry before this
-  // write resumes delivery (never drops the wave); a retry after it replays the
-  // stored count. Idempotent (same value on a resumed retry), so writing it twice
-  // is harmless.
-  await cooldownDocRef.set({ lastRecipientCount: recipients.length }, { merge: true });
+  // COMPLETION MARKER + WAVES-SENT STAT, in ONE transaction so the counter is
+  // credited EXACTLY ONCE per completed send. Recording `lastRecipientCount` is
+  // what turns a stamped in-flight send into a COMPLETED one — a retry before
+  // this write resumes delivery (never drops the wave); a completed retry short-
+  // circuits at the replay fast path above and never reaches here at all.
+  //
+  // The wavesSent credit must NOT double-count on a resumed delivery (a crash
+  // between stamp and this write) nor on a raced double-resume, so it is gated on
+  // the FIRST transition into completed for THIS waveId: the transaction reads the
+  // cooldown doc and increments only when the completion marker is not already
+  // recorded for this wave. Two racing resumes serialise on the cooldown doc —
+  // the first credits, the second sees the marker and only re-writes the (equal)
+  // count. The counter is per-SEND, never per-recipient, and a wave with zero
+  // recipients still counts (the sender did wave). Raising `badgeProgress.wavesSent`
+  // cascades into onBadgeProgressWritten, which awards the Vinkare ladder; the
+  // monthly bucket feeds the "waves this month" leaderboard.
+  const monthScope = seasonIdForInstant(now);
+  await db.runTransaction(async (tx) => {
+    const data = (await tx.get(cooldownDocRef)).data();
+    const alreadyCounted =
+      data?.lastWaveId === waveId && typeof data?.lastRecipientCount === 'number';
+    tx.set(cooldownDocRef, { lastRecipientCount: recipients.length }, { merge: true });
+    if (alreadyCounted) {
+      return;
+    }
+    tx.set(
+      badgeProgressRef(actor.uid),
+      {
+        [BADGE_METRIC_FIELD.wavesSent]: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    tx.set(
+      memberMonthlyStatsRef(monthScope, actor.uid),
+      memberMonthlyStatPayload(monthScope, actor.uid, MEMBER_MONTHLY_STAT_FIELDS.waves, 1),
+      { merge: true },
+    );
+  });
 
   return { waveId, recipientCount: recipients.length };
 });

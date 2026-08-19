@@ -49,6 +49,8 @@ import {
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
+import { memberMonthlyStatsDocId } from '../leaderboard/leaderboard-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -150,6 +152,23 @@ async function shareAt(user: TestUser, point: { latitude: number; longitude: num
 
 async function inboxDocs(recipientUid: string) {
   return (await adminDb.collection('liveWaves').doc(recipientUid).collection('waves').get()).docs;
+}
+
+/** The lifetime waves-sent counter on badgeProgress/{uid} (0 when absent). */
+async function wavesSentCount(uid: string): Promise<number> {
+  const data = (await adminDb.collection('badgeProgress').doc(uid).get()).data();
+  const value = data?.wavesSent;
+  return typeof value === 'number' ? value : 0;
+}
+
+/** This member's waves count in the current month's memberMonthlyStats bucket. */
+async function monthlyWavesCount(uid: string): Promise<number> {
+  const scope = seasonIdForInstant(new Date());
+  const data = (
+    await adminDb.collection('memberMonthlyStats').doc(memberMonthlyStatsDocId(scope, uid)).get()
+  ).data();
+  const value = data?.waves;
+  return typeof value === 'number' ? value : 0;
 }
 
 beforeAll(async () => {
@@ -309,6 +328,91 @@ describe('live-sendWave idempotency', () => {
     const cd = (await adminDb.collection('liveWaveCooldowns').doc(sender.uid).get()).data();
     expect((cd?.lastSentAt as { toMillis(): number }).toMillis()).toBe(stampedAt.getTime());
     expect(cd?.lastRecipientCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('live-sendWave waves-sent stat (Vinkare badge + waves leaderboard)', () => {
+  it('increments wavesSent + the monthly bucket by exactly one per COMPLETED send', async () => {
+    const sender = await createProvisionedUser('wave-stat-s', `StatSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-stat-r', `StatRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    const beforeLifetime = await wavesSentCount(sender.uid);
+    const beforeMonthly = await monthlyWavesCount(sender.uid);
+
+    await signInAs(sender);
+    const res = (await call('live-sendWave', {})).data as { recipientCount: number };
+    expect(res.recipientCount).toBeGreaterThanOrEqual(1);
+
+    // Credited ONCE per SEND (never per recipient), on both the lifetime badge
+    // counter and this month's leaderboard bucket.
+    const lifetime = await pollUntil(async () => {
+      const v = await wavesSentCount(sender.uid);
+      return v === beforeLifetime + 1 ? v : undefined;
+    });
+    expect(lifetime).toBe(beforeLifetime + 1);
+    const monthly = await pollUntil(async () => {
+      const v = await monthlyWavesCount(sender.uid);
+      return v === beforeMonthly + 1 ? v : undefined;
+    });
+    expect(monthly).toBe(beforeMonthly + 1);
+  });
+
+  it('does NOT double-count a replay of an already-counted send (same clientId)', async () => {
+    const sender = await createProvisionedUser('wave-nodup-s', `NoDupSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-nodup-r', `NoDupRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    const before = await wavesSentCount(sender.uid);
+
+    await signInAs(sender);
+    const clientId = `nodup-${SFX}-1`;
+    await call('live-sendWave', { clientId });
+    const afterFirst = await pollUntil(async () => {
+      const v = await wavesSentCount(sender.uid);
+      return v === before + 1 ? v : undefined;
+    });
+    expect(afterFirst).toBe(before + 1);
+
+    // A replay of the SAME completed clientId returns the stored result WITHOUT
+    // re-crediting the counter (it short-circuits at the replay fast path).
+    await call('live-sendWave', { clientId });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await wavesSentCount(sender.uid)).toBe(before + 1);
+  });
+
+  it('counts a RESUMED stamped-but-undelivered send exactly once', async () => {
+    const sender = await createProvisionedUser('wave-resume-stat-s', `ResumeStatS-${SFX}`);
+    const recipient = await createProvisionedUser('wave-resume-stat-r', `ResumeStatR-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    const before = await wavesSentCount(sender.uid);
+
+    // A cooldown doc stamped by a prior attempt that crashed BEFORE delivery
+    // (lastWaveId + lastSentAt, but NO lastRecipientCount) — so nothing was
+    // credited yet. The resume delivers AND credits exactly once.
+    const clientId = `resume-stat-${SFX}-1`;
+    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
+      uid: sender.uid,
+      lastWaveId: clientId,
+      lastSentAt: new Date(),
+      expireAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await signInAs(sender);
+    await call('live-sendWave', { clientId });
+    const after = await pollUntil(async () => {
+      const v = await wavesSentCount(sender.uid);
+      return v === before + 1 ? v : undefined;
+    });
+    expect(after).toBe(before + 1);
+    // And a further replay after completion still does not double-count.
+    await call('live-sendWave', { clientId });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(await wavesSentCount(sender.uid)).toBe(before + 1);
   });
 });
 

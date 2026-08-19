@@ -59,6 +59,7 @@ async function seedBadgeProgress(u: string, base: number): Promise<void> {
     completedEventsAttended: base,
     convoysLed: base,
     bestDayStreak: base,
+    wavesSent: base,
   });
 }
 
@@ -89,7 +90,12 @@ async function seedCrownPointsForScope(scope: string, u: string, points: number)
 async function seedMonthlyBucket(
   scope: string,
   u: string,
-  fields: { distanceMeters?: number; eventsAttended?: number; convoysLed?: number },
+  fields: {
+    distanceMeters?: number;
+    eventsAttended?: number;
+    convoysLed?: number;
+    waves?: number;
+  },
 ): Promise<void> {
   await adminDb
     .collection(MEMBER_MONTHLY_STATS_COLLECTION)
@@ -149,6 +155,11 @@ describe('leaderboard generator', () => {
     expect(distance.map((r) => r.uid)).toEqual([champ, normal]);
     expect(distance.find((r) => r.uid === normal)?.displayName).toBe('Normal');
     expect(distance.find((r) => r.uid === normal)?.avatarPath).toBeNull();
+
+    // waves (all-time, from badgeProgress.wavesSent) is a real category too.
+    const waves = mine(categories.waves);
+    expect(waves.map((r) => r.uid)).toEqual([champ, normal]);
+    expect(waves.find((r) => r.uid === champ)?.value).toBe(BIG + 30);
   });
 });
 
@@ -165,26 +176,30 @@ describe('monthly leaderboard generator', () => {
     await seedCrownPointsForScope(MONTH, ghost, BIG + 20); // higher, but no users doc
     await seedCrownPointsForScope(MONTH, normal, BIG + 10);
 
-    // distance/events/convoys from that month's memberMonthlyStats buckets.
+    // distance/events/convoys/waves from that month's memberMonthlyStats buckets.
     await seedMonthlyBucket(MONTH, champ, {
       distanceMeters: BIG + 30,
       eventsAttended: BIG + 30,
       convoysLed: BIG + 30,
+      waves: BIG + 30,
     });
     await seedMonthlyBucket(MONTH, optout, {
       distanceMeters: BIG + 40,
       eventsAttended: BIG + 40,
       convoysLed: BIG + 40,
+      waves: BIG + 40,
     });
     await seedMonthlyBucket(MONTH, ghost, {
       distanceMeters: BIG + 20,
       eventsAttended: BIG + 20,
       convoysLed: BIG + 20,
+      waves: BIG + 20,
     });
     await seedMonthlyBucket(MONTH, normal, {
       distanceMeters: BIG + 10,
       eventsAttended: BIG + 10,
       convoysLed: BIG + 10,
+      waves: BIG + 10,
     });
 
     // A DIFFERENT month's bucket for champ that must NOT leak into 2099-01: a
@@ -194,6 +209,7 @@ describe('monthly leaderboard generator', () => {
       distanceMeters: BIG * 9,
       eventsAttended: BIG * 9,
       convoysLed: BIG * 9,
+      waves: BIG * 9,
     });
 
     await seedUser(champ, 'MChamp', 'profileImages/mchamp/a.jpg');

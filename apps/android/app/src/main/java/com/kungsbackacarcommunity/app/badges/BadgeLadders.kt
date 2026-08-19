@@ -65,6 +65,7 @@ enum class BadgeLadderId(val key: String) {
     KONVOJLEDARE("konvojledare"),
     SAMLARE("samlare"),
     SASONGSMASTARE("sasongsmastare"),
+    VINKARE("vinkare"),
     ;
 
     companion object {
@@ -85,7 +86,7 @@ data class BadgeLadder(
 
 private const val METRES_PER_KM = 1_000L
 
-/** The seven ladders, in the catalog's display order. */
+/** The eight ladders, in the catalog's display order. */
 val BADGE_LADDERS: List<BadgeLadder> =
     listOf(
         BadgeLadder(
@@ -174,6 +175,20 @@ val BADGE_LADDERS: List<BadgeLadder> =
                     BadgeRung(BadgeTier.SILVER, "sasongsmastare_silver", 3),
                     BadgeRung(BadgeTier.GULD, "sasongsmastare_guld", 5),
                     BadgeRung(BadgeTier.PLATINA, "sasongsmastare_platina", 10),
+                ),
+        ),
+        // Vinkare — the waves-sent ladder (metric wavesSent, incremented once per
+        // completed live.sendWave). Four rungs 25/100/500/2000, matching the
+        // backend catalog. A social greeting counter, never speed or competition.
+        BadgeLadder(
+            id = BadgeLadderId.VINKARE,
+            unit = BadgeLadderUnit.COUNT,
+            rungs =
+                listOf(
+                    BadgeRung(BadgeTier.BRONS, "vinkare_brons", 25),
+                    BadgeRung(BadgeTier.SILVER, "vinkare_silver", 100),
+                    BadgeRung(BadgeTier.GULD, "vinkare_guld", 500),
+                    BadgeRung(BadgeTier.PLATINA, "vinkare_platina", 2_000),
                 ),
         ),
     )

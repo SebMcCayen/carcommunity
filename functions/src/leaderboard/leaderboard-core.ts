@@ -55,11 +55,12 @@ export const LEADERBOARD_CANDIDATE_RETENTION = 50;
  *  - `distance`     badgeProgress/{uid}.lifetimeDistanceMeters
  *  - `events`       badgeProgress/{uid}.completedEventsAttended
  *  - `convoys`      badgeProgress/{uid}.convoysLed
+ *  - `waves`        badgeProgress/{uid}.wavesSent
  *  - `streak`       badgeProgress/{uid}.bestDayStreak
  *
  * NOTE ON `events`: the stored field is `completedEventsAttended`, the historic
  * name the Träffräv badge ladder already reads (badges/badge-tiers.ts) — NOT a
- * field literally named `events`. The four badgeProgress counters are running
+ * field literally named `events`. The five badgeProgress counters are running
  * MAXIMA / monotonic sums, which is exactly right for these all-time "most / best
  * ever" categories.
  */
@@ -68,6 +69,7 @@ export const LEADERBOARD_CATEGORIES = [
   'distance',
   'events',
   'convoys',
+  'waves',
   'streak',
 ] as const;
 
@@ -84,16 +86,17 @@ export type LeaderboardCategoryKey = (typeof LEADERBOARD_CATEGORIES)[number];
  *  - `crownPoints`  crownHuntLeaderboardEntries where scope == the month id
  *    (`{YYYY-MM}__{uid}.points`) — the Kronjakt season counter, already
  *    maintained per season by the crown stats layer.
- *  - `distance` / `events` / `convoys` — the per-month buckets in
+ *  - `distance` / `events` / `convoys` / `waves` — the per-month buckets in
  *    `memberMonthlyStats/{YYYY-MM}__{uid}` (distanceMeters / eventsAttended /
- *    convoysLed), incremented additively by the same three triggers that feed the
- *    all-time badgeProgress counters.
+ *    convoysLed / waves), incremented additively by the same source paths that
+ *    feed the all-time badgeProgress counters (waves by live.sendWave itself).
  */
 export const LEADERBOARD_MONTHLY_CATEGORIES = [
   'crownPoints',
   'distance',
   'events',
   'convoys',
+  'waves',
 ] as const satisfies readonly LeaderboardCategoryKey[];
 
 export type LeaderboardMonthlyCategoryKey = (typeof LEADERBOARD_MONTHLY_CATEGORIES)[number];
@@ -116,6 +119,7 @@ export const MEMBER_MONTHLY_STAT_FIELDS = {
   distance: 'distanceMeters',
   events: 'eventsAttended',
   convoys: 'convoysLed',
+  waves: 'waves',
 } as const satisfies Record<Exclude<LeaderboardMonthlyCategoryKey, 'crownPoints'>, string>;
 
 /** `memberMonthlyStats/{scope}__{uid}` — one bucket per (month, member). */

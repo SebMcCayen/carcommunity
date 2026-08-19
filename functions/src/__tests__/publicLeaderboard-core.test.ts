@@ -38,6 +38,7 @@ function fullCategories(): StoredCategories {
     distance: storedRows(4),
     events: storedRows(2),
     convoys: storedRows(1),
+    waves: storedRows(3),
     streak: storedRows(5),
   };
 }
@@ -101,7 +102,7 @@ describe('publicCategoryRows', () => {
 });
 
 describe('buildPublicLeaderboardFile', () => {
-  it('publishes all five categories in the all-time block, streak included', () => {
+  it('publishes all six categories in the all-time block, waves + streak included', () => {
     const file = parse(buildPublicLeaderboardFile(fullCategories(), null, GENERATED_AT));
     expect(Object.keys(file.alltime).sort()).toEqual([
       'convoys',
@@ -109,8 +110,10 @@ describe('buildPublicLeaderboardFile', () => {
       'distance',
       'events',
       'streak',
+      'waves',
     ]);
     expect(file.alltime.streak).toHaveLength(3);
+    expect(file.alltime.waves).toHaveLength(3);
     expect(file.alltime.crownPoints).toHaveLength(3);
   });
 
@@ -127,6 +130,7 @@ describe('buildPublicLeaderboardFile', () => {
       distance: [],
       events: [],
       convoys: [],
+      waves: [],
       streak: [],
     });
     expect(file.month).toBeNull();
@@ -137,7 +141,7 @@ describe('buildPublicLeaderboardFile', () => {
     expect(file.month).toBeNull();
   });
 
-  it('the MONTHLY block carries the four monthly categories and NO streak', () => {
+  it('the MONTHLY block carries the five monthly categories and NO streak', () => {
     const monthBlock = buildPublicMonthBlock('2026-08', fullCategories());
     const file = parse(buildPublicLeaderboardFile(fullCategories(), monthBlock, GENERATED_AT));
     expect(file.month).not.toBeNull();
@@ -147,6 +151,7 @@ describe('buildPublicLeaderboardFile', () => {
       'crownPoints',
       'distance',
       'events',
+      'waves',
       'yyyymm',
     ]);
     // streak is an all-time-only category — it must never leak into the month block.
