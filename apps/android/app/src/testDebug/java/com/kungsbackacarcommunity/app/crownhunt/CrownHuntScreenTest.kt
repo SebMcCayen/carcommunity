@@ -3,6 +3,8 @@ package com.kungsbackacarcommunity.app.crownhunt
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
@@ -84,10 +86,30 @@ class CrownHuntScreenTest {
         // Season leaderboard block + a top scorer's name.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
-        // The crown legend (types + "does it disappear?" answer) is present.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle)).assertIsDisplayed()
+        // The crown legend (types + "does it disappear?" answer) is present. It now
+        // sits below the Instructions button + stats, so scroll it into view first.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle))
+            .performScrollTo()
+            .assertIsDisplayed()
         // The crowns-list collect button is gone.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
+    }
+
+    @Test
+    fun instructionsButton_opensInstructionsSurface() {
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
+                    onBack = {},
+                )
+            }
+        }
+        // The hub shows an Instructions button; tapping it opens the rules surface,
+        // whose first section header is then displayed.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_instrButton)).performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_instrIntroTitle)).assertIsDisplayed()
     }
 
     @Test
