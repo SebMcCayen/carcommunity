@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.design
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,7 +37,7 @@ fun chatQuickEmojiTestTag(glyph: String): String = "chat-quick-emoji-$glyph"
  * chat message on tap, plus [contentDescriptionRes] naming it for screen readers
  * (a bare emoji glyph otherwise announces as an unlabeled button).
  */
-data class QuickEmoji(val glyph: String, val contentDescriptionRes: Int)
+data class QuickEmoji(val glyph: String, @StringRes val contentDescriptionRes: Int)
 
 /**
  * The fixed, ordered quick-emoji set every chat composer shows in a single row
