@@ -97,17 +97,19 @@ fun ChatQuickEmojiRow(
     ) {
         items(ChatQuickEmojis, key = { it.glyph }) { emoji ->
             val label = stringResource(emoji.contentDescriptionRes)
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceVariant,
+            // The TAP TARGET is 48.dp — the Material/Android minimum touch target —
+            // while the visible chip stays a tidy 40.dp centred inside it. Sizing
+            // the clickable (not just the glyph) to 48.dp keeps this one-tap send
+            // row comfortably tappable on small screens without enlarging the chips.
+            Box(
                 modifier =
                     Modifier
-                        .size(40.dp)
-                        // Material's disabled-content alpha, so a gated row reads as
-                        // greyed-out in step with the Send button next to it.
+                        .size(48.dp)
+                        // Dim the whole chip in step with the Send button when the
+                        // row is gated (Material's disabled-content alpha).
                         .alpha(if (enabled) 1f else 0.38f)
                         // clip BEFORE clickable so the tap ripple is bounded to the
-                        // circular chip rather than painting a square behind it.
+                        // circular target rather than painting a square behind it.
                         .clip(CircleShape)
                         .clickable(
                             enabled = enabled,
@@ -116,13 +118,20 @@ fun ChatQuickEmojiRow(
                         )
                         .semantics { contentDescription = label }
                         .testTag(chatQuickEmojiTestTag(emoji.glyph)),
+                contentAlignment = Alignment.Center,
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = emoji.glyph,
-                        style = MaterialTheme.typography.titleLarge,
-                        textAlign = TextAlign.Center,
-                    )
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = emoji.glyph,
+                            style = MaterialTheme.typography.titleLarge,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
