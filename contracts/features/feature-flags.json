@@ -1,5 +1,5 @@
 {
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Canonical feature flag registry: key, default value, operator-facing label, what the flag controls (and what turning it off stops), and how sensitive flipping it is. THIS FILE is the single source of truth. Every surface must carry exactly these keys — no more, no fewer: functions/src/shared/featureFlags-core.ts (mirrored, sync-tested), apps/android/.../config/FeatureFlags.kt (mirrored, sync-tested), and the admin portal's feature-flags page, which reads this file directly so it can never fall behind. Keys are camelCase. Defaults are the fallback when the backend document (or an individual field) is absent, and the initial static backend response. Flag values are backend-managed (admin.setFeatureFlag); clients never persist flag changes locally as authoritative. `sensitivity` drives the admin UI's warning treatment: \"safety\" = flipping it changes what members are invited to physically drive to and stop at, \"privacy\" = it governs data collected about members, \"standard\" = ordinary product surface.",
   "flags": [
     {
@@ -92,6 +92,13 @@
       "label": "Report a problem — open-tickets browser",
       "sensitivity": "standard",
       "description": "In-app 'open tickets' browser on the Report-a-problem page. On lets members read the openTickets Firestore mirror of open public GitHub issues (labelled android-issue, refreshed by the scheduled feedback-syncOpenTickets job) and, once each per issue, +1 or add a comment via feedback.interactWithIssue — the +1 posts a fixed 'Another user is affected by this issue.' comment and a member comment is neutralised, length-bounded, posted to the public repo AND mirrored to the moderationReports admin queue. Default OFF: while off the callable rejects (failed-precondition) so nothing is posted publicly and the client draws no ticket list. Stays dark until the browser UI ships."
+    },
+    {
+      "key": "chatReplies",
+      "default": false,
+      "label": "Chat replies (reply to a message)",
+      "sensitivity": "standard",
+      "description": "Inline WhatsApp-style reply-to-message across the chat surfaces (community, convoy, and direct messages). On, the backend snapshots the replied-to message (author + a short text preview) onto the replying message so the quote renders without a lookup and survives the parent expiring, and a reply on the community channel notifies the replied-to author. Default OFF: while off the backend IGNORES any replyToMessageId a client sends (no parent read, no snapshot stored) and the Android reply action stays hidden, so the feature is dark end-to-end. Gates only reply PROCESSING — ordinary messages are unaffected. Message reactions are a separate future feature keyed off the same stable message id."
     }
   ]
 }

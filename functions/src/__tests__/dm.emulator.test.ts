@@ -561,3 +561,105 @@ describe('dm-sendMessage in-app notification producer', () => {
     expect(items.map((i) => i.previewText).sort()).toEqual(['first', 'fourth']);
   });
 });
+
+// ---------------------------------------------------------------------------
+// dm reply-to snapshot (server-side quote), behind the chatReplies flag
+// ---------------------------------------------------------------------------
+
+/** Flips the global chatReplies flag (config/featureFlags is read uncached). */
+async function setChatRepliesFlag(enabled: boolean): Promise<void> {
+  await adminDb
+    .collection('config')
+    .doc('featureFlags')
+    .set({ chatReplies: enabled }, { merge: true });
+}
+
+/** Reads a stored DM message doc (backend-only). */
+async function awaitDmMessage(
+  conversationId: string,
+  messageId: string,
+): Promise<Record<string, unknown>> {
+  return pollUntil(async () => {
+    const snap = await adminDb
+      .collection('conversations')
+      .doc(conversationId)
+      .collection('messages')
+      .doc(messageId)
+      .get();
+    return snap.exists ? snap.data()! : undefined;
+  });
+}
+
+describe('dm-sendMessage reply-to snapshot (chatReplies flag)', () => {
+  afterAll(async () => {
+    await setChatRepliesFlag(false);
+  });
+
+  it('snapshots the parent server-side and returns replyTo on getMessages', async () => {
+    const alice = await newMember('ReplyAliceDM');
+    const bob = await newMember('ReplyBobDM');
+    await makeFriends(alice, bob);
+    const conversationId = pairId(alice.uid, bob.uid);
+
+    await signInAs(alice);
+    const parent = (await call('dm-sendMessage', { toUid: bob.uid, text: 'the original DM' }))
+      .data as { messageId: string };
+    await awaitDmMessage(conversationId, parent.messageId);
+
+    await setChatRepliesFlag(true);
+    await signInAs(bob);
+    const reply = (
+      await call('dm-sendMessage', {
+        toUid: alice.uid,
+        text: 'my reply',
+        replyToMessageId: parent.messageId,
+      })
+    ).data as { messageId: string };
+
+    // Author + preview are resolved SERVER-SIDE (the client only sent the id);
+    // the DM author name comes from the pair's member profiles.
+    const stored = await awaitDmMessage(conversationId, reply.messageId);
+    expect(stored.replyTo).toEqual({
+      messageId: parent.messageId,
+      senderUid: alice.uid,
+      senderDisplayName: 'ReplyAliceDM',
+      textPreview: 'the original DM',
+    });
+
+    const page = (await call('dm-getMessages', { conversationId })).data as {
+      messages: Array<{ id: string; replyTo?: Record<string, unknown> }>;
+    };
+    expect(page.messages.find((m) => m.id === reply.messageId)!.replyTo).toEqual({
+      messageId: parent.messageId,
+      senderUid: alice.uid,
+      senderDisplayName: 'ReplyAliceDM',
+      textPreview: 'the original DM',
+    });
+  });
+
+  it('IGNORES replyToMessageId while the flag is OFF', async () => {
+    const alice = await newMember('FlagOffAliceDM');
+    const bob = await newMember('FlagOffBobDM');
+    await makeFriends(alice, bob);
+    const conversationId = pairId(alice.uid, bob.uid);
+
+    await setChatRepliesFlag(true);
+    await signInAs(alice);
+    const parent = (await call('dm-sendMessage', { toUid: bob.uid, text: 'parent' })).data as {
+      messageId: string;
+    };
+    await awaitDmMessage(conversationId, parent.messageId);
+
+    await setChatRepliesFlag(false);
+    await signInAs(bob);
+    const reply = (
+      await call('dm-sendMessage', {
+        toUid: alice.uid,
+        text: 'reply',
+        replyToMessageId: parent.messageId,
+      })
+    ).data as { messageId: string };
+    const stored = await awaitDmMessage(conversationId, reply.messageId);
+    expect(stored).not.toHaveProperty('replyTo');
+  });
+});

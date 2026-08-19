@@ -64,6 +64,20 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
      * end-to-end (contract, backend, this client, admin console).
      */
     REPORT_TICKETS_BROWSER("reportTicketsBrowser", false),
+
+    /**
+     * Inline WhatsApp-style reply-to-message across the chat surfaces (community,
+     * convoy, and DMs). Default OFF: while off the backend ignores any
+     * replyToMessageId a client sends (no reply snapshot is stored) and the
+     * reply action must stay hidden in the chat UI, so the feature is dark
+     * end-to-end until it is deliberately switched on.
+     *
+     * Registered here so the flag is operable end-to-end (contract, backend,
+     * this client, admin console). The Android reply UI lands in a later slice
+     * (PR2) and gates its entry point on this flag; nothing reads it on Android
+     * until then. Message reactions are a separate future feature.
+     */
+    CHAT_REPLIES("chatReplies", false),
 }
 
 /**

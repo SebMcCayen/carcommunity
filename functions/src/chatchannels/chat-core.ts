@@ -246,6 +246,29 @@ export interface ProfileProjection {
   avatarPath: string | null;
 }
 
+/**
+ * Denormalized snapshot of the message an inline reply is quoting (WhatsApp-style
+ * quote, NOT a thread). Persisted on the replying message so a channel renders the
+ * quote with no N+1 fetch and the quote survives the parent TTL-expiring or being
+ * deleted — it shows what was replied to AT THE TIME. Built SERVER-SIDE from the
+ * parent read in the SAME channel (see buildReplyToSnapshot): the client never
+ * supplies the author or text, so a quote can't be forged.
+ *
+ * `messageId` is the parent's own, STABLE id — kept stable on purpose so a future
+ * message-reactions feature (a separate `messageReactions/{messageId}__{uid}`
+ * collection keyed by this same id) can attach with no migration. This shape is
+ * identical across all chat surfaces (community, convoy, and DM's own
+ * dm-core.MessageSummary), so the client renders one quote component everywhere.
+ */
+export interface ChatReplyTo {
+  /** The parent message's stable id (what tap-to-scroll targets, reactions key). */
+  messageId: string;
+  senderUid: string;
+  senderDisplayName: string | null;
+  /** messagePreview(parent.text) — bounded quote text captured at reply time. */
+  textPreview: string;
+}
+
 /** One chat message as returned by communityChat.list / convoyChat.list. */
 export interface ChatMessageSummary {
   id: string;
@@ -254,6 +277,15 @@ export interface ChatMessageSummary {
   senderDisplayName: string | null;
   senderAvatarPath: string | null;
   createdAt: string;
+  /**
+   * The message this one is an inline reply to, snapshotted server-side at send
+   * time. Present only on a reply whose parent was found in the same channel when
+   * chatReplies was on; omitted otherwise (an ordinary message, a reply whose
+   * parent had already expired, or a send made while the flag was off). The read
+   * model stays additive so future per-message features (e.g. reactions) can add
+   * their own optional field without disturbing this one.
+   */
+  replyTo?: ChatReplyTo;
   /**
    * The uids this message @mentions, as RESOLVED by the server (self-mentions,
    * duplicates, non-members and blocked pairs already removed). The client
@@ -305,6 +337,13 @@ const postCommunitySchema = z
     // enforces the same limit, so exceeding it is a client bug worth surfacing.
     mentionedUids: z.array(idSchema).max(MAX_MESSAGE_MENTIONS).optional(),
     clientId: clientMessageIdSchema.optional(),
+    // Inline reply target: the id of the message being replied to (WhatsApp-style
+    // quote, not a thread). The client sends ONLY this id — never the quoted
+    // author or text — and the server snapshots the parent itself (see
+    // buildReplyToSnapshot + the chatReplies flag). Reuses the message-id alphabet;
+    // a parent in a DIFFERENT channel is never matched because the callable only
+    // ever looks it up in this channel's own messages subcollection.
+    replyToMessageId: idSchema.optional(),
   })
   .strict();
 
@@ -326,6 +365,10 @@ const postConvoySchema = z
     convoyId: idSchema,
     text: z.string().min(1).max(CHAT_MESSAGE_MAX_LENGTH),
     clientId: clientMessageIdSchema.optional(),
+    // Inline reply target — same contract as the community channel: the client
+    // sends only the parent message id, the server snapshots the parent from
+    // THIS convoy's messages subcollection (see buildReplyToSnapshot).
+    replyToMessageId: idSchema.optional(),
   })
   .strict();
 
@@ -352,9 +395,9 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
-export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids?, clientId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters, at most ${MAX_MESSAGE_MENTIONS} mentioned uids, and clientId matching [A-Za-z0-9_-]{1,64}.`;
+export const POST_COMMUNITY_EXPECTED = `Expected { text, mentionedUids?, clientId?, replyToMessageId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters, at most ${MAX_MESSAGE_MENTIONS} mentioned uids, and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const LIST_COMMUNITY_EXPECTED = 'Expected { before? } where before is an ISO-8601 timestamp.';
-export const POST_CONVOY_EXPECTED = `Expected { convoyId, text, clientId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
+export const POST_CONVOY_EXPECTED = `Expected { convoyId, text, clientId?, replyToMessageId? } with text 1..${CHAT_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
 export const LIST_CONVOY_EXPECTED = 'Expected { convoyId, before? } where before is an ISO-8601 timestamp.';
 export const MARK_READ_CONVOY_EXPECTED = 'Expected { convoyId }.';
 
@@ -440,6 +483,7 @@ export function buildChatMessageDocument(
     expireAt: unknown;
     mentionedUids?: readonly string[];
     clientId?: string;
+    replyTo?: ChatReplyTo;
   },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
@@ -458,7 +502,80 @@ export function buildChatMessageDocument(
   if (input.clientId !== undefined) {
     doc.clientId = input.clientId;
   }
+  // Stored only for a reply whose parent was resolved (server-side, same channel)
+  // — an ordinary message stores no `replyTo` field, exactly like `clientId`. The
+  // snapshot is spread into a plain object so nothing but the four snapshot fields
+  // is ever persisted (the caller's ChatReplyTo carries no extras today, but this
+  // keeps the stored shape pinned to the snapshot).
+  if (input.replyTo) {
+    doc.replyTo = {
+      messageId: input.replyTo.messageId,
+      senderUid: input.replyTo.senderUid,
+      senderDisplayName: input.replyTo.senderDisplayName,
+      textPreview: input.replyTo.textPreview,
+    };
+  }
   return doc;
+}
+
+/**
+ * Builds the denormalized reply snapshot from the PARENT message the caller
+ * already read IN THE SAME channel. Returns null when there is no usable parent
+ * (not found, TTL-expired, or a malformed doc with no sender/text) so the send
+ * proceeds WITHOUT a snapshot rather than failing — a reply to a vanished message
+ * is still a message. The caller must only ever pass a parent looked up in this
+ * channel's own messages subcollection, which is what makes a cross-channel quote
+ * impossible: another channel's id simply isn't found here and resolves to null.
+ *
+ * `textPreview` reuses messagePreview so the stored quote is bounded regardless of
+ * the parent's length. `messageId` is the parent's stable id, carried verbatim so
+ * tap-to-scroll and a future reactions feature key off the same value.
+ */
+export function buildReplyToSnapshot(
+  parent:
+    | { messageId: string; senderUid: unknown; senderDisplayName: unknown; text: unknown }
+    | null
+    | undefined,
+): ChatReplyTo | null {
+  if (!parent) {
+    return null;
+  }
+  const senderUid = typeof parent.senderUid === 'string' ? parent.senderUid : '';
+  const text = typeof parent.text === 'string' ? parent.text : '';
+  if (!parent.messageId || !senderUid || !text.trim()) {
+    return null;
+  }
+  return {
+    messageId: parent.messageId,
+    senderUid,
+    senderDisplayName:
+      typeof parent.senderDisplayName === 'string' ? parent.senderDisplayName : null,
+    textPreview: messagePreview(text),
+  };
+}
+
+/**
+ * Reads a stored `replyTo` map back into the client snapshot, coalescing missing
+ * or non-string fields defensively (a message written before replies existed, or
+ * an ordinary message, carries no field at all → undefined). Mirrors the tolerant
+ * mapping toChatMessageSummary applies to every other stored field.
+ */
+function toChatReplyTo(value: unknown): ChatReplyTo | undefined {
+  if (value === null || typeof value !== 'object') {
+    return undefined;
+  }
+  const v = value as Record<string, unknown>;
+  const messageId = typeof v.messageId === 'string' ? v.messageId : '';
+  const senderUid = typeof v.senderUid === 'string' ? v.senderUid : '';
+  if (!messageId || !senderUid) {
+    return undefined;
+  }
+  return {
+    messageId,
+    senderUid,
+    senderDisplayName: typeof v.senderDisplayName === 'string' ? v.senderDisplayName : null,
+    textPreview: typeof v.textPreview === 'string' ? v.textPreview : '',
+  };
 }
 
 /**
@@ -511,6 +628,12 @@ export function toChatMessageSummary(
   // it simply won't match any of the caller's pending bubbles.
   if (typeof data.clientId === 'string') {
     summary.clientId = data.clientId;
+  }
+  // Present only on a reply whose snapshot was stored; omitted for an ordinary
+  // message so the read shape stays additive.
+  const replyTo = toChatReplyTo(data.replyTo);
+  if (replyTo) {
+    summary.replyTo = replyTo;
   }
   return summary;
 }
@@ -612,4 +735,30 @@ export const COMMUNITY_MENTION_NOTIFY_WINDOW_MS = 15 * 60 * 1000;
  */
 export function communityMentionNotificationId(senderUid: string, now: Date): string {
   return `commention-${senderUid}-${windowBucket(now, COMMUNITY_MENTION_NOTIFY_WINDOW_MS)}`;
+}
+
+/**
+ * Throttle window for community REPLY notifications, per SENDER. A reply on the
+ * town square is directed reach into the replied-to author's inbox — the same
+ * shape as an @mention — so it gets the same anti-harassment collapse: replying
+ * to someone's messages over and over in one window produces at most one notice.
+ * Reuses the mention window; the two are kept as separate notification-id
+ * NAMESPACES (below) so a reply and a mention by the same sender in the same
+ * window don't collapse into one another.
+ */
+export const COMMUNITY_REPLY_NOTIFY_WINDOW_MS = COMMUNITY_MENTION_NOTIFY_WINDOW_MS;
+
+/**
+ * Deterministic notification id for a community REPLY notice: stable within a
+ * COMMUNITY_REPLY_NOTIFY_WINDOW_MS bucket FOR ONE SENDER, so a replay of the same
+ * post and every further reply by that sender in the same window collapse to the
+ * one notice. A DIFFERENT id namespace (`commreply-`) from the mention id, so a
+ * reply and a mention are never mistaken for one another's duplicate — a member
+ * both replied-to AND @mentioned in the same window still gets the two distinct
+ * notices (the callable additionally dedups the reply notice when it is already
+ * covered by a mention — see communityChat.post). Stays within the notificationId
+ * charset the markRead callable accepts.
+ */
+export function communityReplyNotificationId(senderUid: string, now: Date): string {
+  return `commreply-${senderUid}-${windowBucket(now, COMMUNITY_REPLY_NOTIFY_WINDOW_MS)}`;
 }

@@ -51,6 +51,7 @@ import { toUserAccessState } from '../shared/access';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
 import { loadHiddenUids } from '../blocking/blockVisibilityStore';
+import { readFeatureFlag } from '../shared/featureFlags';
 import { BLOCKED_PAIR_FIELD } from './blockedConversation';
 import {
   CONVERSATION_NOT_FOUND_MESSAGE,
@@ -63,6 +64,7 @@ import {
   SELF_MESSAGE_MESSAGE,
   buildMessageDocument,
   buildNewConversationDocument,
+  buildReplyToSnapshot,
   conversationCounterparty,
   dmPairId,
   isConversationMember,
@@ -75,6 +77,7 @@ import {
   toMessageSummary,
   toProfileProjection,
   type ConversationSummary,
+  type MessageReplyTo,
   type MessageSummary,
   type ProfileProjection,
 } from './dm-core';
@@ -152,7 +155,7 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { toUid, text, clientId } = parsed.input;
+  const { toUid, text, clientId, replyToMessageId } = parsed.input;
 
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
@@ -194,6 +197,40 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
       ? convRef.collection('messages').doc(clientId)
       : convRef.collection('messages').doc();
   const recipientAggRef = unreadAggregateRef(toUid);
+
+  // Server-side inline-reply snapshot (same conversation, flag-gated). Read
+  // before the transaction — the parent is an existing message so a plain get
+  // suffices, and the snapshot is written as part of the message doc inside the
+  // tx below. The author's display name is resolved from the pair's profiles
+  // already loaded (DM messages, unlike channel messages, don't denormalize it
+  // per-message). Stays null unless this send is a reply AND chatReplies is on; a
+  // missing/expired/cross-conversation parent also yields null (the lookup is
+  // scoped to THIS conversation's messages), so the send still goes through with
+  // no quote. NO separate reply notification is needed: a 1:1 DM already notifies
+  // the recipient, and the replied-to author is either that recipient (already
+  // notified) or the sender themselves (a self-reply, which never notifies).
+  let replyTo: MessageReplyTo | null = null;
+  if (replyToMessageId !== undefined && (await readFeatureFlag('chatReplies'))) {
+    const parentSnap = await convRef.collection('messages').doc(replyToMessageId).get();
+    const parent = parentSnap.data();
+    const parentSender = typeof parent?.senderUid === 'string' ? parent.senderUid : '';
+    const parentName =
+      parentSender === actor.uid
+        ? senderProfile.displayName
+        : parentSender === toUid
+          ? recipientProfile.displayName
+          : null;
+    replyTo = buildReplyToSnapshot(
+      parentSnap.exists
+        ? {
+            messageId: parentSnap.id,
+            senderUid: parentSender,
+            senderDisplayName: parentName,
+            text: parent?.text,
+          }
+        : null,
+    );
+  }
 
   // Returns the recipient's unread count for this conversation BEFORE this
   // message, read straight off the transaction's existing conversation get (no
@@ -269,7 +306,12 @@ export const sendMessage = onCall(CALLABLE_OPTS, async (request): Promise<SendMe
 
     tx.set(
       messageRef,
-      buildMessageDocument({ senderUid: actor.uid, text, clientId }, () => ts),
+      buildMessageDocument(
+        // Persisted only when non-null (an actual reply with a resolvable parent);
+        // buildMessageDocument omits the field otherwise.
+        { senderUid: actor.uid, text, clientId, ...(replyTo ? { replyTo } : {}) },
+        () => ts,
+      ),
     );
 
     // Keep the per-user aggregate in lock-step (owner-only readable badge source).

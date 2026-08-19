@@ -81,6 +81,28 @@ export interface ConversationSummary {
   lastReadAt: string | null;
 }
 
+/**
+ * Denormalized snapshot of the message an inline reply is quoting (WhatsApp-style
+ * quote, NOT a thread). Persisted on the replying message so the thread renders
+ * the quote with no N+1 fetch and it survives the parent being deleted. Built
+ * SERVER-SIDE from the parent read in the SAME conversation — the client sends
+ * only the parent id, never the author or text, so a quote can't be forged.
+ *
+ * Identical in shape to chatchannels/chat-core's ChatReplyTo (the two chat cores
+ * are deliberately independent modules, so the shape is mirrored rather than
+ * imported), so the client renders one quote component across DMs and channels.
+ * `messageId` is the parent's stable id — kept stable so a future message
+ * reactions feature keyed by that id attaches with no migration.
+ */
+export interface MessageReplyTo {
+  /** The parent message's stable id (tap-to-scroll target; future reactions key). */
+  messageId: string;
+  senderUid: string;
+  senderDisplayName: string | null;
+  /** messagePreview(parent.text) — bounded quote text captured at reply time. */
+  textPreview: string;
+}
+
 /** One message as returned by dm.getMessages. */
 export interface MessageSummary {
   id: string;
@@ -93,6 +115,13 @@ export interface MessageSummary {
    * bubble by the same key the live listener uses.
    */
   clientId?: string;
+  /**
+   * The message this one is an inline reply to, snapshotted server-side at send
+   * time. Present only on a reply whose parent was found in the same conversation
+   * while chatReplies was on; omitted otherwise. Additive so future per-message
+   * features can extend the read model without disturbing this field.
+   */
+  replyTo?: MessageReplyTo;
 }
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
@@ -123,6 +152,12 @@ const sendMessageSchema = z
     toUid: uidSchema,
     text: z.string().min(1).max(DM_MESSAGE_MAX_LENGTH),
     clientId: clientMessageIdSchema.optional(),
+    // Inline reply target: the id of the message being replied to. The client
+    // sends ONLY this id — never the quoted author/text — and the server
+    // snapshots the parent from THIS conversation's messages subcollection (see
+    // buildReplyToSnapshot + the chatReplies flag). A stored message id is either
+    // an auto-id or a prior clientId, both of which fit this alphabet.
+    replyToMessageId: clientMessageIdSchema.optional(),
   })
   .strict();
 
@@ -158,7 +193,7 @@ function parse<T>(schema: z.ZodType<T>, data: unknown, expected: string): ParseR
   return { ok: true, input: result.data };
 }
 
-export const SEND_MESSAGE_EXPECTED = `Expected { toUid, text, clientId? } with text 1..${DM_MESSAGE_MAX_LENGTH} characters and clientId matching [A-Za-z0-9_-]{1,64}.`;
+export const SEND_MESSAGE_EXPECTED = `Expected { toUid, text, clientId?, replyToMessageId? } with text 1..${DM_MESSAGE_MAX_LENGTH} characters and clientId/replyToMessageId matching [A-Za-z0-9_-]{1,64}.`;
 export const GET_MESSAGES_EXPECTED =
   'Expected { conversationId, before? } where before is an ISO-8601 timestamp.';
 export const MARK_READ_EXPECTED = 'Expected { conversationId }.';
@@ -226,7 +261,7 @@ export function messagePreview(text: string): string {
  * optimistic bubble. A key-less (legacy) send stores no `clientId` field.
  */
 export function buildMessageDocument(
-  input: { senderUid: string; text: string; clientId?: string },
+  input: { senderUid: string; text: string; clientId?: string; replyTo?: MessageReplyTo },
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
   const doc: Record<string, unknown> = {
@@ -237,7 +272,72 @@ export function buildMessageDocument(
   if (input.clientId !== undefined) {
     doc.clientId = input.clientId;
   }
+  // Stored only for a reply whose parent was resolved (server-side, same
+  // conversation) — an ordinary message stores no `replyTo` field, like clientId.
+  if (input.replyTo) {
+    doc.replyTo = {
+      messageId: input.replyTo.messageId,
+      senderUid: input.replyTo.senderUid,
+      senderDisplayName: input.replyTo.senderDisplayName,
+      textPreview: input.replyTo.textPreview,
+    };
+  }
   return doc;
+}
+
+/**
+ * Builds the denormalized reply snapshot from the PARENT message the caller
+ * already read IN THE SAME conversation. Returns null when there is no usable
+ * parent (not found, deleted, or malformed) so the send proceeds WITHOUT a
+ * snapshot rather than failing. The caller resolves `senderDisplayName` from the
+ * conversation's member profiles (DM messages don't denormalize the author name
+ * per-message, unlike channel messages) and passes it in. Mirrors
+ * chatchannels/chat-core's buildReplyToSnapshot; textPreview reuses this module's
+ * messagePreview so the stored quote is bounded.
+ */
+export function buildReplyToSnapshot(
+  parent:
+    | { messageId: string; senderUid: unknown; senderDisplayName: string | null; text: unknown }
+    | null
+    | undefined,
+): MessageReplyTo | null {
+  if (!parent) {
+    return null;
+  }
+  const senderUid = typeof parent.senderUid === 'string' ? parent.senderUid : '';
+  const text = typeof parent.text === 'string' ? parent.text : '';
+  if (!parent.messageId || !senderUid || !text.trim()) {
+    return null;
+  }
+  return {
+    messageId: parent.messageId,
+    senderUid,
+    senderDisplayName: parent.senderDisplayName,
+    textPreview: messagePreview(text),
+  };
+}
+
+/**
+ * Reads a stored `replyTo` map back into the client snapshot, coalescing missing
+ * or non-string fields defensively (a message written before replies existed
+ * carries no field → undefined).
+ */
+function toMessageReplyTo(value: unknown): MessageReplyTo | undefined {
+  if (value === null || typeof value !== 'object') {
+    return undefined;
+  }
+  const v = value as Record<string, unknown>;
+  const messageId = typeof v.messageId === 'string' ? v.messageId : '';
+  const senderUid = typeof v.senderUid === 'string' ? v.senderUid : '';
+  if (!messageId || !senderUid) {
+    return undefined;
+  }
+  return {
+    messageId,
+    senderUid,
+    senderDisplayName: typeof v.senderDisplayName === 'string' ? v.senderDisplayName : null,
+    textPreview: typeof v.textPreview === 'string' ? v.textPreview : '',
+  };
 }
 
 /**
@@ -350,6 +450,10 @@ export function toMessageSummary(
   };
   if (typeof data.clientId === 'string') {
     summary.clientId = data.clientId;
+  }
+  const replyTo = toMessageReplyTo(data.replyTo);
+  if (replyTo) {
+    summary.replyTo = replyTo;
   }
   return summary;
 }

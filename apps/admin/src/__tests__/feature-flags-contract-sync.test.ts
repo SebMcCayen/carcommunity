@@ -150,6 +150,7 @@ describe('feature flags — defaults are not drifting', () => {
       partnerInsightsPassBy: false,
       crownHuntPerks: false,
       reportTicketsBrowser: false,
+      chatReplies: false,
     });
   });
 });

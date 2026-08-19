@@ -87,6 +87,7 @@ import { memberGateAllows } from '../shared/memberGating';
 import { writeInAppNotification } from '../notifications/deliver';
 import { filterHiddenAuthors } from '../blocking/block-visibility';
 import { loadHiddenUids } from '../blocking/blockVisibilityStore';
+import { readFeatureFlag } from '../shared/featureFlags';
 import {
   CHAT_MESSAGES_PAGE_SIZE,
   COMMUNITY_CHANNEL_ID,
@@ -94,8 +95,10 @@ import {
   EMPTY_MESSAGE_MESSAGE,
   NOT_DELIVERABLE_MESSAGE,
   buildChatMessageDocument,
+  buildReplyToSnapshot,
   chatMessageExpiry,
   communityMentionNotificationId,
+  communityReplyNotificationId,
   isAlreadyExistsError,
   messagePreview,
   normalizeMentionCandidates,
@@ -105,6 +108,7 @@ import {
   toChatMessageSummary,
   toProfileProjection,
   type ChatMessageSummary,
+  type ChatReplyTo,
   type ProfileProjection,
 } from './chat-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
@@ -206,6 +210,40 @@ async function resolveMentions(candidates: string[], senderUid: string): Promise
   });
 }
 
+/**
+ * Resolves the inline-reply snapshot for a post, or null when it should carry
+ * none. Gated behind the `chatReplies` flag, and the flag read (a single
+ * uncached config document read — readFeatureFlag is not memoized, so the
+ * functions-emulator module-cache pitfall never applies here) is spent ONLY when
+ * a replyToMessageId is actually present, so an ordinary post pays nothing. While
+ * the flag is OFF the id is ignored entirely and no snapshot is stored — the
+ * feature stays dark end-to-end.
+ *
+ * The parent is read from THIS channel's own messages subcollection, which is
+ * what makes a cross-channel quote impossible: an id belonging to a convoy/DM
+ * message simply isn't found here, buildReplyToSnapshot returns null, and the
+ * send proceeds with no quote (a missing/expired parent takes the same path).
+ */
+async function resolveReplySnapshot(
+  replyToMessageId: string | undefined,
+): Promise<ChatReplyTo | null> {
+  if (replyToMessageId === undefined || !(await readFeatureFlag('chatReplies'))) {
+    return null;
+  }
+  const parentSnap = await communityMessagesRef().doc(replyToMessageId).get();
+  const parent = parentSnap.data();
+  return buildReplyToSnapshot(
+    parentSnap.exists
+      ? {
+          messageId: parentSnap.id,
+          senderUid: parent?.senderUid,
+          senderDisplayName: parent?.senderDisplayName,
+          text: parent?.text,
+        }
+      : null,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // communityChat.post
 // ---------------------------------------------------------------------------
@@ -262,7 +300,7 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   if (!parsed.ok) {
     throw new HttpsError('invalid-argument', parsed.message);
   }
-  const { text, mentionedUids, clientId } = parsed.input;
+  const { text, mentionedUids, clientId, replyToMessageId } = parsed.input;
   if (!text.trim()) {
     throw new HttpsError('invalid-argument', EMPTY_MESSAGE_MESSAGE);
   }
@@ -279,11 +317,14 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   const messageRef =
     clientId !== undefined ? communityMessagesRef().doc(clientId) : communityMessagesRef().doc();
 
-  // Dedup + drop self first (free), so only the remainder costs lookups.
-  const mentions = await resolveMentions(
-    normalizeMentionCandidates(mentionedUids, actor.uid),
-    actor.uid,
-  );
+  // Dedup + drop self first (free), so only the remainder costs lookups. The
+  // reply snapshot is resolved in parallel (server-side, same channel — the
+  // client never supplies the quoted author/text); it stays null unless this
+  // post is a reply AND chatReplies is on.
+  const [mentions, replyTo] = await Promise.all([
+    resolveMentions(normalizeMentionCandidates(mentionedUids, actor.uid), actor.uid),
+    resolveReplySnapshot(replyToMessageId),
+  ]);
 
   // TTL: community messages are retained COMMUNITY_CHAT_RETENTION_DAYS days. A
   // Firestore TTL policy on `expireAt` auto-deletes them after that (one-time
@@ -306,7 +347,17 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
   try {
     await messageRef.create(
       buildChatMessageDocument(
-        { senderUid: actor.uid, text, senderProfile, expireAt, mentionedUids: mentions, clientId },
+        {
+          senderUid: actor.uid,
+          text,
+          senderProfile,
+          expireAt,
+          mentionedUids: mentions,
+          clientId,
+          // Persisted only when non-null (an actual reply with a resolvable
+          // parent) — buildChatMessageDocument omits the field otherwise.
+          ...(replyTo ? { replyTo } : {}),
+        },
         () => FieldValue.serverTimestamp(),
       ),
     );
@@ -361,6 +412,35 @@ export const post = onCall(CALLABLE_OPTS, async (request): Promise<PostCommunity
         ).catch(() => undefined),
       ),
     );
+  }
+
+  // A reply NOTIFIES the replied-to author — directed reach into their inbox, the
+  // same shape as a mention, so it reuses the notification plumbing: the block +
+  // member check goes through resolveMentions and per-recipient eligibility
+  // (opt-out/suspended/deleted) is left to writeInAppNotification. It stays a
+  // SEPARATE concept from an @mention, though — no @token is injected into the
+  // text, the notice reads as a reply, and it carries its own per-(sender,window)
+  // id so a repeat-replier collapses to one notice without colliding with the
+  // mention id. Skipped on a self-reply, and skipped when the author is already in
+  // `mentions` (they got a mention notice for this very post — no double notice).
+  // Best-effort, never fails a post that already landed, and only reached when
+  // this post is actually a reply with a resolvable parent.
+  if (replyTo && replyTo.senderUid !== actor.uid && !mentions.includes(replyTo.senderUid)) {
+    const [replyRecipient] = await resolveMentions([replyTo.senderUid], actor.uid);
+    if (replyRecipient !== undefined) {
+      const senderName = senderProfile.displayName ?? 'En medlem';
+      await writeInAppNotification(
+        replyRecipient,
+        {
+          category: 'community_chat',
+          title: 'Svar på ditt meddelande',
+          previewText: `${senderName}: ${messagePreview(text)}`,
+          actionType: 'open_notifications',
+          relatedEntityId: messageRef.id,
+        },
+        communityReplyNotificationId(actor.uid, new Date()),
+      ).catch(() => undefined);
+    }
   }
 
   return { messageId: messageRef.id, mentionedUids: mentions };
