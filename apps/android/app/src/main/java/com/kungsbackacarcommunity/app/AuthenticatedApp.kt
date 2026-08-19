@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
@@ -197,7 +198,10 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownPointMarkers
 import com.kungsbackacarcommunity.app.crownhunt.CrownProofSelection
 import com.kungsbackacarcommunity.app.crownhunt.CrownRange
 import com.kungsbackacarcommunity.app.crownhunt.FirebaseCrownHuntStatsRepository
+import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkDrainEventRepository
 import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkShopRepository
+import com.kungsbackacarcommunity.app.crownhunt.PerkDrainPresence
+import com.kungsbackacarcommunity.app.crownhunt.TrapDrainVibration
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
@@ -5149,6 +5153,62 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // CROWN HUNT TRAP-TRIGGER — victim side. When the member drives onto a
+                // rival's Spikmatta the server moves KP and writes a per-victim event
+                // to perkDrainEvents/{uid}/events; the app listens on that inbox and,
+                // for each fresh drain, fires a short phone VIBRATION + the mid-screen
+                // "Du körde på en Spikmatta! −N KP" pop (the shared ReactionOverlay).
+                // DARK until the contract-default-OFF crownHuntPerks flag is ON: the
+                // repository is only observed while the flag is on AND the member is
+                // sharing (a drain can only fire on a live position sample). The
+                // durable notification-centre entry is delivered separately by the
+                // backend, so a member not on the map still learns they were caught.
+                val perkTrapEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS)
+                val perkDrainRepository =
+                    remember(waveContext, perkTrapEnabled) {
+                        if (perkTrapEnabled) {
+                            FirebasePerkDrainEventRepository.createIfAvailable(waveContext)
+                        } else {
+                            null
+                        }
+                    }
+                var trapDrainOverlayEvent by remember { mutableStateOf<ReactionOverlayEvent?>(null) }
+                val trapHitFmt = stringResource(R.string.crownHunt_trapHitOverlay)
+                val trapTint = MaterialTheme.colorScheme.error
+
+                LaunchedEffect(perkDrainRepository, uid, isSharing) {
+                    val repo = perkDrainRepository
+                    if (repo == null || !PerkDrainPresence.shouldListen(perkTrapEnabled, isSharing)) {
+                        return@LaunchedEffect
+                    }
+                    val since = System.currentTimeMillis()
+                    repo.observeIncomingDrains(uid, since).collect { drain ->
+                        // Best-effort game feedback: a brief buzz, then the non-modal pop.
+                        TrapDrainVibration.buzz(waveContext)
+                        val caption = trapHitFmt.format(drain.amountKp)
+                        trapDrainOverlayEvent =
+                            ReactionOverlayEvent(
+                                id = drain.id,
+                                icon = Icons.Filled.Warning,
+                                caption = caption,
+                                tint = trapTint,
+                                contentDescription = caption,
+                            )
+                    }
+                }
+
+                val trapDrainOverlaySlot: (@Composable () -> Unit)? =
+                    if (perkDrainRepository != null) {
+                        {
+                            ReactionOverlay(
+                                event = trapDrainOverlayEvent,
+                                onFinished = { trapDrainOverlayEvent = null },
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 // Police-proximity mid-screen alert, composed over the map like the
                 // convoy reactions. REUSES the same ReactionOverlay + police visuals,
                 // driven here by MAP PROXIMITY to user-reported police pins. Always
@@ -5962,6 +6022,11 @@ fun AuthenticatedApp(
                                     // nearby user-reported police pins. Null when the
                                     // police layer is unavailable (config-less build).
                                     policeProximity = policeProximitySlot,
+                                    // Crown Hunt trap-trigger pop ("Du körde på en
+                                    // Spikmatta! −N KP") + the paired vibration, driven
+                                    // by the per-victim perkDrainEvents inbox. Null until
+                                    // the crownHuntPerks flag is ON (dark pre-launch).
+                                    trapDrainOverlay = trapDrainOverlaySlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its

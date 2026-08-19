@@ -126,6 +126,21 @@ async function readInventory(uid: string): Promise<Record<string, number>> {
   return (snap.data() as Record<string, number> | undefined) ?? {};
 }
 
+/** The victim's real-time trap-trigger events (perkDrainEvents/{uid}/events). */
+async function readDrainEvents(uid: string): Promise<Array<{ amount: number; trapId: string }>> {
+  const snap = await adminDb.collection('perkDrainEvents').doc(uid).collection('events').get();
+  return snap.docs.map((d) => ({
+    amount: (d.data().amount as number | undefined) ?? 0,
+    trapId: (d.data().trapId as string | undefined) ?? '',
+  }));
+}
+
+/** The titles of every durable in-app notification in a user's inbox. */
+async function readNotificationTitles(uid: string): Promise<string[]> {
+  const snap = await adminDb.collection('notifications').doc(uid).collection('items').get();
+  return snap.docs.map((d) => (d.data().title as string | undefined) ?? '');
+}
+
 /** Ages an account past the 7-day new-account victim-immunity window. */
 async function ageAccount(uid: string): Promise<void> {
   await adminDb
@@ -447,6 +462,112 @@ describe('trap DRAIN (inline in live.updatePosition)', () => {
 
     expect(await readBalance(victim.uid)).toBe(100); // untouched
     expect(await readBalance(placer.uid)).toBe(0);
+  });
+
+  it('on a drain, writes a victim real-time event + victim and placer notifications', async () => {
+    const placer = await createProvisionedUser('pvp-notify-placer');
+    const victim = await createProvisionedUser('pvp-notify-victim');
+    await ageAccount(victim.uid);
+    await setInventory(placer.uid, { spike_strip: 1 });
+    await setBalance(victim.uid, 100);
+    await setBalance(placer.uid, 0);
+    const spot = uniqueSpot();
+
+    await signInAs(placer);
+    const trap = (
+      await call('crownHunt-deployPerk', {
+        perkId: 'spike_strip',
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        idempotencyKey: key(),
+      })
+    ).data as DeployResponse;
+
+    await startShare(victim);
+    await move(victim, spot.latitude, spot.longitude);
+    await pollUntil(async () =>
+      (await readBalance(victim.uid)) === 100 - TRAP_DRAIN_KP ? true : undefined,
+    );
+
+    // VICTIM real-time signal: one event carrying the drain amount + trap id.
+    const events = await pollUntil(async () => {
+      const e = await readDrainEvents(victim.uid);
+      return e.length > 0 ? e : undefined;
+    });
+    expect(events).toHaveLength(1);
+    const event = events[0];
+    expect(event?.amount).toBe(TRAP_DRAIN_KP);
+    expect(event?.trapId).toBe(trap.effectId);
+
+    // BOTH sides get a durable in-app notification.
+    const victimTitles = await pollUntil(async () => {
+      const t = await readNotificationTitles(victim.uid);
+      return t.length > 0 ? t : undefined;
+    });
+    expect(victimTitles).toContain('Du körde på en Spikmatta!');
+    const placerTitles = await pollUntil(async () => {
+      const t = await readNotificationTitles(placer.uid);
+      return t.length > 0 ? t : undefined;
+    });
+    expect(placerTitles).toContain('Någon körde på din Spikmatta!');
+  });
+
+  it('emits no drain, event, or notification while crownHuntPerks is OFF', async () => {
+    const placer = await createProvisionedUser('pvp-off-placer');
+    const victim = await createProvisionedUser('pvp-off-victim');
+    await ageAccount(victim.uid);
+    await setInventory(placer.uid, { spike_strip: 1 });
+    await setBalance(victim.uid, 100);
+    await setBalance(placer.uid, 0);
+    const spot = uniqueSpot();
+
+    // Deploy WHILE on (deploy is separately gated), then flip perks OFF so the
+    // DRAIN path no-ops. The flag cache is bypassed under the emulator, so the
+    // change takes effect on the very next position sample.
+    await signInAs(placer);
+    await call('crownHunt-deployPerk', {
+      perkId: 'spike_strip',
+      latitude: spot.latitude,
+      longitude: spot.longitude,
+      idempotencyKey: key(),
+    });
+    await setFlags({ crownHuntPerks: false });
+    try {
+      await startShare(victim);
+      await move(victim, spot.latitude, spot.longitude);
+      await new Promise((r) => setTimeout(r, 1500));
+
+      expect(await readBalance(victim.uid)).toBe(100); // no drain
+      expect(await readDrainEvents(victim.uid)).toHaveLength(0);
+      expect(await readNotificationTitles(victim.uid)).not.toContain('Du körde på en Spikmatta!');
+    } finally {
+      await setFlags({ crownHuntPerks: true });
+    }
+  });
+
+  it('never drains, signals, or notifies a placer who drives onto their OWN trap', async () => {
+    const placer = await createProvisionedUser('pvp-self-placer');
+    await ageAccount(placer.uid);
+    await setInventory(placer.uid, { spike_strip: 1 });
+    await setBalance(placer.uid, 100);
+    const spot = uniqueSpot();
+
+    await signInAs(placer);
+    await call('crownHunt-deployPerk', {
+      perkId: 'spike_strip',
+      latitude: spot.latitude,
+      longitude: spot.longitude,
+      idempotencyKey: key(),
+    });
+    await startShare(placer);
+    await move(placer, spot.latitude, spot.longitude);
+    await new Promise((r) => setTimeout(r, 1500));
+
+    expect(await readBalance(placer.uid)).toBe(100); // a self-trap never drains
+    expect(await readDrainEvents(placer.uid)).toHaveLength(0);
+    expect(await readNotificationTitles(placer.uid)).not.toContain(
+      'Någon körde på din Spikmatta!',
+    );
   });
 
   it('is immune to a brand-new account (no ageAccount)', async () => {

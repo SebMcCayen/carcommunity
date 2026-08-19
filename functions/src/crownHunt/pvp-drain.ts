@@ -41,6 +41,7 @@ import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
+import { writeInAppNotification } from '../notifications/deliver';
 import {
   applyDelta,
   buildLedgerEntry,
@@ -139,6 +140,19 @@ export function __resetPerksFlagCacheForTest(): void {
 function ttlDaysFromNow(now: Date, days: number): Timestamp {
   return Timestamp.fromMillis(now.getTime() + days * 24 * 60 * 60 * 1000);
 }
+
+/**
+ * How long a per-victim real-time drain-event doc lives before the TTL sweep
+ * removes it. Short: the doc's ONLY job is to fire the on-screen text + vibration
+ * on the victim's map the moment they drive onto a trap. A victim listening at
+ * drain time pops it once (the client filters to docs newer than its subscribe
+ * instant, exactly like the wave inbox); one that is not listening (app
+ * backgrounded / not on the map) still gets the durable in-app notification +
+ * push instead, so the ephemeral event is pure best-effort live feedback and 10
+ * minutes is ample. Requires a Firestore TTL policy on collection-group `events`
+ * (field `expireAt`) — an OPERATOR step, like every other perk TTL.
+ */
+const DRAIN_EVENT_TTL_MS = 10 * 60 * 1000;
 
 interface DrainContext {
   victimUid: string;
@@ -320,6 +334,15 @@ function isAlreadyExistsError(error: unknown): boolean {
  * two concurrent samples for the same (trap, victim) serialise on it and the
  * loser aborts, so a victim sitting in a trap is drained exactly once.
  *
+ * The victim's REAL-TIME trap-trigger signal (perkDrainEvents/{victim}/events)
+ * is written INSIDE the transaction, so it is atomic with the KP move — if the
+ * drain commits the signal is guaranteed, and if it aborts no phantom signal is
+ * left behind. The durable in-app notifications (victim + placer) and their
+ * pushes are emitted AFTER commit (see notifyDrainParticipants): they call the
+ * shared notification writer, which does its own reads and cannot be nested in
+ * this transaction, and — being best-effort — must never be able to fail or
+ * roll back a committed drain.
+ *
  * Returns TRUE when it actually moved KP (so the caller can early-exit — a
  * drained victim is now on cooldown and no other trap can catch them this
  * update), FALSE for every skip (placer restricted, trap gone/full, already
@@ -343,11 +366,11 @@ async function applyTrapDrain(
   const lossRef = db.collection('perkTrapLoss').doc(trapLossCounterDocId(victimUid, dayKey));
   const earnRef = db.collection('perkTrapEarn').doc(trapEarnCounterDocId(placerUid, dayKey));
 
-  return db.runTransaction(async (tx) => {
+  const drainedAmount = await db.runTransaction(async (tx): Promise<number> => {
     const trapSnap = await tx.get(trapRef);
     const trap = trapSnap.data();
     if (!trapSnap.exists || !trap) {
-      return false;
+      return 0;
     }
     // Re-validate the trap inside the transaction.
     const expiresAt = trap.expiresAt as Timestamp | undefined;
@@ -358,10 +381,10 @@ async function applyTrapDrain(
       trap.placedByUid !== placerUid ||
       trap.placedByUid === victimUid
     ) {
-      return false;
+      return 0;
     }
     if (!trapHasVictimRoom((trap.victimCount as number | undefined) ?? 0)) {
-      return false; // trap full (10 distinct victims)
+      return 0; // trap full (10 distinct victims)
     }
 
     const markerRef = db
@@ -398,7 +421,7 @@ async function applyTrapDrain(
     // earns nothing from a trap either. Read here rather than pre-transaction,
     // so it is re-validated at commit time.
     if (!placerUserSnap.exists || !memberGateAllows(toUserAccessState(placerUserSnap.data()))) {
-      return false;
+      return 0;
     }
 
     // Victim eligibility RE-CHECKED inside the transaction (runTrapDrains already
@@ -408,7 +431,7 @@ async function applyTrapDrain(
     // server-enforced shield/immunity guarantee under concurrency.
     const victimData = victimUserSnap.data();
     if (!victimData || !memberGateAllows(toUserAccessState(victimData))) {
-      return false; // victim now restricted/deleted/non-member
+      return 0; // victim now restricted/deleted/non-member
     }
     const victimCreatedAt = victimData.createdAt as Timestamp | undefined;
     if (
@@ -417,21 +440,21 @@ async function applyTrapDrain(
         nowMs,
       )
     ) {
-      return false; // new-account immunity
+      return 0; // new-account immunity
     }
     const victimShieldExp = victimShieldSnap.data()?.expiresAt as Timestamp | undefined;
     if (isTimestampActive(victimShieldExp instanceof Timestamp ? victimShieldExp.toMillis() : null, nowMs)) {
-      return false; // victim raised a shield before commit
+      return 0; // victim raised a shield before commit
     }
 
     if (markerSnap.exists) {
-      return false; // already caught by THIS trap
+      return 0; // already caught by THIS trap
     }
     const lastDrainAt = cooldownSnap.data()?.lastDrainAt as Timestamp | undefined;
     if (
       isWithinVictimCooldown(lastDrainAt instanceof Timestamp ? lastDrainAt.toMillis() : null, nowMs)
     ) {
-      return false; // victim in 2h cooldown
+      return 0; // victim in 2h cooldown
     }
 
     const victimBalance = toStoredBalance(victimLedgerSnap.data()?.balance);
@@ -439,19 +462,19 @@ async function applyTrapDrain(
     const placerEarnToday = (earnSnap.data()?.total as number | undefined) ?? 0;
     const drain = resolveDrainAmount({ victimBalance, victimLossToday, placerEarnToday });
     if (drain <= 0) {
-      return false; // broke or a daily cap already spent
+      return 0; // broke or a daily cap already spent
     }
 
     // Paired ledger writes — victim debited, placer credited, both serialised on
     // their own balance docs (append-only entries + denormalised balance).
     const victimCheck = applyDelta(victimBalance, -drain);
     if (!victimCheck.ok) {
-      return false; // cannot go negative (belt-and-braces; resolveDrainAmount clamps)
+      return 0; // cannot go negative (belt-and-braces; resolveDrainAmount clamps)
     }
     const placerBalance = toStoredBalance(placerLedgerSnap.data()?.balance);
     const placerCheck = applyDelta(placerBalance, drain);
     if (!placerCheck.ok) {
-      return false; // unreachable for a positive credit; keeps the type narrowed
+      return 0; // unreachable for a positive credit; keeps the type narrowed
     }
     const ts = () => FieldValue.serverTimestamp();
 
@@ -551,6 +574,86 @@ async function applyTrapDrain(
       createdAt: ts(),
     });
 
-    return true; // KP moved — the caller early-exits (one trap per update)
+    // VICTIM real-time trap-trigger signal — per-victim inbox
+    // perkDrainEvents/{victim}/events (owner-read, backend-write; same shape as
+    // the wave inbox liveWaves/{uid}/waves). Written IN-TXN so it is atomic with
+    // the KP move: the Android map listens here and, on a new doc, fires the
+    // phone vibration + the on-screen "Du körde på en Spikmatta! −N KP" pop.
+    // ANONYMOUS by design — it never carries the placer's uid, so the client
+    // signal can never expose who owns the trap (mirrors perkDrains staying
+    // backend-only). A short expireAt TTL sweeps it (operator TTL policy).
+    tx.set(db.collection('perkDrainEvents').doc(victimUid).collection('events').doc(), {
+      amount: drain,
+      trapId: trapRef.id,
+      createdAt: Timestamp.fromDate(now),
+      expireAt: Timestamp.fromMillis(nowMs + DRAIN_EVENT_TTL_MS),
+    });
+
+    return drain; // KP moved — the caller early-exits (one trap per update)
+  });
+
+  if (drainedAmount <= 0) {
+    return false;
+  }
+
+  // Durable in-app notifications + push for BOTH sides, AFTER commit and fully
+  // best-effort: the shared writer does its own reads (it cannot run inside the
+  // drain transaction), and a notification failure must never roll back a
+  // committed KP move. A throw here is swallowed by runTrapDrains' per-trap
+  // catch, but notifyDrainParticipants also never throws on its own.
+  await notifyDrainParticipants({
+    victimUid,
+    placerUid,
+    trapId: trapRef.id,
+    amount: drainedAmount,
+  });
+  return true;
+}
+
+/**
+ * Writes the durable in-app notification (which the notifications-onNotification
+ * Created trigger then turns into an FCM push, inheriting the recipient's
+ * eligibility + opt-outs) for both sides of a committed drain:
+ *   - the VICTIM: "Du körde på en Spikmatta! — Du förlorade N KP." Kept ANONYMOUS
+ *     (never names the placer) for the same reason the drain audit is backend-
+ *     only.
+ *   - the PLACER: "Någon körde på din Spikmatta! — Du fick N KP." The shared
+ *     writer skips a deleted/suspended placer on its own, and the drain never
+ *     reaches here for a self-trap (placer === victim is refused in-txn), so no
+ *     extra guard is needed.
+ * Best-effort throughout: each write is caught independently so one failing does
+ * not suppress the other, and the function never throws — a notification is a
+ * courtesy on top of an already-committed drain.
+ */
+async function notifyDrainParticipants(args: {
+  victimUid: string;
+  placerUid: string;
+  trapId: string;
+  amount: number;
+}): Promise<void> {
+  const { victimUid, placerUid, amount } = args;
+  await writeInAppNotification(victimUid, {
+    category: 'system_notice',
+    title: 'Du körde på en Spikmatta!',
+    previewText: `Du förlorade ${amount} KP.`,
+    actionType: 'open_notifications',
+    relatedEntityId: null,
+  }).catch((error) => {
+    logger.warn('Victim drain notification failed; drain unaffected', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
+  });
+  await writeInAppNotification(placerUid, {
+    category: 'system_notice',
+    title: 'Någon körde på din Spikmatta!',
+    previewText: `Du fick ${amount} KP.`,
+    actionType: 'open_notifications',
+    relatedEntityId: null,
+  }).catch((error) => {
+    logger.warn('Placer drain notification failed; drain unaffected', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return undefined;
   });
 }

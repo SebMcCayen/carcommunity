@@ -17,6 +17,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Short game-feedback buzz when a Crown Hunt trap (Spikmatta) drains you. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <!-- Play-policy justification (#849): this app's core function includes
          recording a GPS drive that continues while the app is backgrounded /
