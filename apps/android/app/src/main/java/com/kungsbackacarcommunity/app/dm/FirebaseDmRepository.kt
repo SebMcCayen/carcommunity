@@ -202,15 +202,25 @@ class FirebaseDmRepository private constructor(
     }
 
     override suspend fun sendMessage(toUid: String, text: String, clientId: String?): DmSendResult =
+        sendMessage(toUid, text, clientId, replyToMessageId = null)
+
+    override suspend fun sendMessage(
+        toUid: String,
+        text: String,
+        clientId: String?,
+        replyToMessageId: String?,
+    ): DmSendResult =
         callForData(
             SEND_MESSAGE,
-            // Only include clientId when present, so the payload stays byte-identical
-            // to the legacy shape for a null (the strict backend schema rejects a
-            // literal null on the optional field).
+            // Only include the optional keys when present, so the payload stays
+            // byte-identical to the legacy shape for a null (the strict backend
+            // schema rejects a literal null on an optional field). replyToMessageId
+            // is snapshotted server-side (and ignored while chatReplies is off).
             buildMap {
                 put("toUid", toUid)
                 put("text", text.trim())
                 if (clientId != null) put("clientId", clientId)
+                if (replyToMessageId != null) put("replyToMessageId", replyToMessageId)
             },
         ).fold(
             onSuccess = { DmResponseParser.parseSendSuccess(it) },
@@ -338,6 +348,9 @@ private fun DocumentSnapshot.toMessage(): DmMessage? {
         // Echoed idempotency key: lets the live snapshot reconcile against the
         // sender's optimistic bubble (doc id == clientId for optimistic sends).
         clientId = getString("clientId"),
+        // Present only on a reply whose parent the server snapshotted; the shared
+        // parser tolerates a missing/malformed map (ordinary message → null).
+        replyTo = DmResponseParser.parseReplyTo(get("replyTo")),
     )
 }
 

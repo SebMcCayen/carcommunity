@@ -169,6 +169,13 @@ class FirebaseCommunityChatRepository private constructor(
         text: String,
         mentionedUids: List<String>,
         clientId: String?,
+    ): ChannelSendResult = post(text, mentionedUids, clientId, replyToMessageId = null)
+
+    override suspend fun post(
+        text: String,
+        mentionedUids: List<String>,
+        clientId: String?,
+        replyToMessageId: String?,
     ): ChannelSendResult =
         functions.callChannel(
             POST,
@@ -183,6 +190,10 @@ class FirebaseCommunityChatRepository private constructor(
                 // Only sent when present, so an omitted key is a legacy auto-id doc
                 // rather than a null the strict backend schema would reject.
                 if (clientId != null) put("clientId", clientId)
+                // Inline reply target — snapshotted server-side (and ignored while
+                // chatReplies is off). Omitted when null so ordinary posts stay
+                // byte-identical to the legacy shape.
+                if (replyToMessageId != null) put("replyToMessageId", replyToMessageId)
             },
         ).fold(
             onSuccess = { ChannelResponseParser.parsePostSuccess(it) },

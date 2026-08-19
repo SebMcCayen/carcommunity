@@ -43,6 +43,24 @@ interface CommunityChatRepository {
         clientId: String? = null,
     ): ChannelSendResult
 
+    /**
+     * `communityChat-post` with an inline reply target. [replyToMessageId] is the
+     * id of the message being replied to (WhatsApp-style quote, not a thread): the
+     * client sends only the id and the server snapshots the parent from THIS
+     * channel itself (ignored while the `chatReplies` flag is off). Null is an
+     * ordinary, non-reply message.
+     *
+     * Defaults to delegating to the 3-arg overload, so a fake predating replies
+     * keeps working (it drops the reply target); the Firebase repository overrides
+     * this to forward the id.
+     */
+    suspend fun post(
+        text: String,
+        mentionedUids: List<String>,
+        clientId: String?,
+        replyToMessageId: String?,
+    ): ChannelSendResult = post(text, mentionedUids, clientId)
+
     /** `communityChat-list` — an older page before the [before] ISO cursor. */
     suspend fun loadOlder(before: String): ChannelOlderResult
 

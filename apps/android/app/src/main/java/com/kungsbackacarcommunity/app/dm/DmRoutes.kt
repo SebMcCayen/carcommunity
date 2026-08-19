@@ -178,6 +178,9 @@ fun ChatRoute(
     // Opens an event by id from a shared "Open event" chip in a message; null
     // leaves such tokens as plain text (no event navigation wired).
     onOpenEvent: ((String) -> Unit)? = null,
+    // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
+    // entry point; off, the thread behaves exactly as before.
+    chatRepliesEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val conversationId = remember(uid, otherUid) { dmPairId(uid, otherUid) }
@@ -251,11 +254,12 @@ fun ChatRoute(
         threadLoading = threadState is DmThreadState.Loading,
         canLoadOlder = pageStatus != DmPageStatus.End && displayed.size >= DM_MESSAGES_PAGE_SIZE,
         isLoadingOlder = pageStatus == DmPageStatus.Loading,
-        onSend = { text -> scope.launch { coordinator.send(text) } },
+        onSend = { text, replyTo -> scope.launch { coordinator.send(text, replyTo) } },
         onRetry = { message ->
             message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
         },
         onLoadOlder = { scope.launch { coordinator.loadOlder(DmThread.oldestCursor(displayed)) } },
+        chatRepliesEnabled = chatRepliesEnabled,
         // Guarded on a resolvable target: a blank otherUid would open a dead
         // profile route (dmPairId can be derived from a malformed conversation).
         onViewProfile =

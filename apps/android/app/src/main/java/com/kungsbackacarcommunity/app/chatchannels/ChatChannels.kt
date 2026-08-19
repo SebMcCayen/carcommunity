@@ -42,6 +42,25 @@ enum class ChannelDeliveryState {
 }
 
 /**
+ * Denormalized snapshot of the message an inline reply is quoting (WhatsApp-style
+ * quote, not a thread), mirroring the backend `ChatReplyTo` the server writes onto
+ * the replying message. It renders the quote header with no extra lookup and
+ * survives the parent TTL-expiring, since it captures what was replied to AT THE
+ * TIME. [messageId] is the parent's stable id — the tap-to-scroll target, and the
+ * key a future message-reactions feature would attach on.
+ *
+ * The server builds this authoritatively (the client only ever sends the parent's
+ * id); the client constructs one locally ONLY for its own optimistic reply bubble,
+ * which the delivered document then supersedes.
+ */
+data class ChannelReplyTo(
+    val messageId: String,
+    val senderUid: String,
+    val senderDisplayName: String?,
+    val textPreview: String,
+)
+
+/**
  * One rendered channel message. [createdAtIso] is the pagination cursor for
  * older pages (the `before` argument the `*-list` callables expect). The
  * denormalized sender profile lets the channel render the author's name/avatar
@@ -78,6 +97,14 @@ data class ChannelMessage(
      * whether a retry is offered ([ChannelSendError.isRetryable]). Null otherwise.
      */
     val sendError: ChannelSendError? = null,
+    /**
+     * The server-built snapshot of the message this one inline-replies to, present
+     * only on a reply whose parent was resolved (an ordinary message carries none).
+     * Drives the quote header above the bubble. On the caller's OWN optimistic
+     * reply bubble this is the client-built snapshot, superseded by the delivered
+     * document's authoritative copy on reconcile.
+     */
+    val replyTo: ChannelReplyTo? = null,
 )
 
 /**
@@ -400,6 +427,26 @@ object ChannelResponseParser {
             createdAtIso = iso,
             mentionedUids = parseMentionedUids(map["mentionedUids"]),
             clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
+            replyTo = parseReplyTo(map["replyTo"]),
+        )
+    }
+
+    /**
+     * Reads a stored/echoed `replyTo` map into [ChannelReplyTo], defensively
+     * coalescing missing or non-string fields (an ordinary message, or one written
+     * before replies existed, carries no `replyTo` at all → null). A snapshot with
+     * no usable messageId or senderUid is dropped rather than rendered as a
+     * half-quote, mirroring the backend's own tolerant mapping.
+     */
+    fun parseReplyTo(raw: Any?): ChannelReplyTo? {
+        val map = raw as? Map<*, *> ?: return null
+        val messageId = (map["messageId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        val senderUid = (map["senderUid"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        return ChannelReplyTo(
+            messageId = messageId,
+            senderUid = senderUid,
+            senderDisplayName = map["senderDisplayName"] as? String,
+            textPreview = map["textPreview"] as? String ?: "",
         )
     }
 

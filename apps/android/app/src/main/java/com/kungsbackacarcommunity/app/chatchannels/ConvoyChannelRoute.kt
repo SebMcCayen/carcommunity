@@ -52,6 +52,9 @@ fun ConvoyChannelRoute(
     onViewProfile: ((String) -> Unit)? = null,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
+    // entry point; off, the screen behaves exactly as before.
+    chatRepliesEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val blockingCoordinator =
@@ -68,8 +71,16 @@ fun ConvoyChannelRoute(
                 // convoyChat-post takes no mentions; the uid list is always empty
                 // here and is dropped rather than forwarded. The clientId makes the
                 // optimistic send idempotent + reconcilable (backend uses it as the
-                // message doc id).
-                sender = { text, _, clientId -> repository.post(convoyId, text, clientId) },
+                // message doc id); replyToMessageId is the inline-reply target.
+                sender = { text, _, clientId, replyToMessageId ->
+                    // Ordinary sends take the 3-arg overload verbatim; only a reply
+                    // uses the 4-arg overload.
+                    if (replyToMessageId == null) {
+                        repository.post(convoyId, text, clientId)
+                    } else {
+                        repository.post(convoyId, text, clientId, replyToMessageId)
+                    }
+                },
                 pager = { before -> repository.loadOlder(convoyId, before) },
                 selfUid = uid,
                 marker = { repository.markRead(convoyId) },
@@ -121,12 +132,13 @@ fun ConvoyChannelRoute(
             displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
             olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
-        onSend = { text, _ -> scope.launch { coordinator.send(text) } },
+        onSend = { text, _, replyTo -> scope.launch { coordinator.send(text, replyTo = replyTo) } },
         onRetry = { message ->
             message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
         },
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         modifier = modifier,
+        chatRepliesEnabled = chatRepliesEnabled,
         onViewProfile = onViewProfile,
         onShowLocationOnMap = onShowLocationOnMap,
         surface = ChatSurface.ConvoyChannel,

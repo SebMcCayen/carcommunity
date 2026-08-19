@@ -454,6 +454,10 @@
     <string name="chat_reportReasonOther">Other</string>
     <string name="chat_reportSubmitted">Thanks for your report.</string>
     <string name="chat_reportError">Could not report. Please try again.</string>
+    <string name="chat_replyCancel">Cancel reply</string>
+    <string name="chat_replyComposerReplyingTo">Replying to %1$s</string>
+    <string name="chat_replyComposerBanner">Replying to a message from %1$s</string>
+    <string name="chat_replyQuoteHeaderAction">Reply to %1$s: %2$s. Tap to view the original.</string>
     <string name="common_placeholder">Coming soon</string>
     <string name="auth_loginTitle">Sign in</string>
     <string name="auth_loginSubtitle">Sign in to use the app.</string>
@@ -1766,6 +1770,7 @@
     <string name="whatsNew_entryTitle">Version %1$s · %2$s</string>
     <string name="whatsNew_empty">No release notes yet.</string>
     <string name="moderation_messageActionsTitle">Message from %1$s</string>
+    <string name="moderation_reply">Reply</string>
     <string name="moderation_blockMember">Block %1$s</string>
     <string name="moderation_reportMessage">Report message</string>
     <string name="moderation_reportUser">Report user</string>

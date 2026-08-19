@@ -82,6 +82,9 @@ internal fun DocumentSnapshot.toChannelMessage(): ChannelMessage? {
         // Present when the sender posted optimistically (it equals this doc id).
         // Reconciliation matches on the doc id, so this is carried only for parity.
         clientId = getString("clientId")?.takeIf { it.isNotBlank() },
+        // Present only on a reply whose parent the server snapshotted; the shared
+        // parser tolerates a missing/malformed map (ordinary message → null).
+        replyTo = ChannelResponseParser.parseReplyTo(get("replyTo")),
     )
 }
 

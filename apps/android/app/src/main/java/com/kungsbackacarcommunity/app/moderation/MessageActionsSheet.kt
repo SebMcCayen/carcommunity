@@ -23,26 +23,34 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /** Test tags so UI tests can address the sheet's rows without matching copy. */
 const val MESSAGE_ACTIONS_SHEET_TEST_TAG = "message_actions_sheet"
+const val MESSAGE_ACTIONS_REPLY_TEST_TAG = "message_actions_reply"
 const val MESSAGE_ACTIONS_BLOCK_TEST_TAG = "message_actions_block"
 const val MESSAGE_ACTIONS_REPORT_TEST_TAG = "message_actions_report"
 
 /**
- * The long-press action sheet for another member's chat message — the single
- * shared moderation menu behind every chat surface (community + convoy channels,
- * DMs, event chat).
+ * The long-press action sheet behind every chat surface (community + convoy
+ * channels, DMs, event chat) — the single shared, EXTENSIBLE context menu a
+ * message bubble long-presses to. It ships Reply + the moderation actions (block,
+ * report) today and is the reserved anchor for the message actions that
+ * fast-follow: a future React / Copy row slots in here beside these, keyed off the
+ * same long-pressed message, with no new menu.
  *
- * The caller only composes this for a message it has already cleared with
- * [MessageModeration.canActOn], so the sheet never appears on your own message
- * (nor on one with no resolvable author), and only when
- * [MessageModeration.hasActions] — otherwise every row below would be omitted
- * and the sheet would offer nothing but its own Close button.
+ * The caller composes this whenever the sheet has ANY action to offer: Reply is
+ * available on any message (including the caller's OWN — you can quote yourself),
+ * while block/report only apply to ANOTHER member's message (the caller passes
+ * [canBlock]/[reportAvailability] already narrowed by [MessageModeration.canActOn]),
+ * so an own-message long-press opens a sheet with just Reply + Close.
  *
  * @param memberName the author's display name, or null when unknown — the block
  *   row then falls back to the generic "Block user" label rather than rendering
  *   "Block null".
- * @param canBlock false in a config-less build with no blocking repository; the
- *   block row is then omitted entirely (an action that cannot run is not an
- *   action).
+ * @param canReply whether the Reply row is shown (the chatReplies flag, threaded
+ *   down from the route). Off leaves the menu at its prior moderation-only shape.
+ * @param onReply chosen "Svara" (Reply) — the caller opens the composer quote chip
+ *   for the long-pressed message.
+ * @param canBlock false in a config-less build with no blocking repository, or on
+ *   the caller's own message; the block row is then omitted entirely (an action
+ *   that cannot run is not an action).
  * @param reportAvailability [ReportAvailability.Wired] renders the report row;
  *   [ReportAvailability.BackendMissing] omits it entirely, on the same principle
  *   as [canBlock] — the user is never shown a report they cannot file, whether
@@ -58,6 +66,8 @@ fun MessageActionsSheet(
     onBlock: () -> Unit,
     onReport: () -> Unit,
     onDismiss: () -> Unit,
+    canReply: Boolean = false,
+    onReply: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState()
     val name = memberName?.takeIf { it.isNotBlank() }
@@ -88,6 +98,16 @@ fun MessageActionsSheet(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = KccSpacing.s2),
             )
+
+            // Reply is the primary action, so it leads. A future React / Copy row
+            // would sit here beside it — this ordering is the reserved anchor.
+            if (canReply) {
+                SheetAction(
+                    text = stringResource(R.string.moderation_reply),
+                    onClick = onReply,
+                    testTag = MESSAGE_ACTIONS_REPLY_TEST_TAG,
+                )
+            }
 
             if (canBlock) {
                 SheetAction(
