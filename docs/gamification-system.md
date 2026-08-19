@@ -441,10 +441,12 @@ Each rarity tier contributes 5–7 KP to the expectation — the distribution is
 At **30 active members** and, say, 25 qualifying cells averaging `N_target = 3`:
 
 - Live crowns at steady state: **~75**
-- Mean TTL: `0.70·6 + 0.22·12 + 0.07·24 + 0.01·48 = **9.0 h**`
-- Spawn rate: `75 / 9.0 ≈ **8.3 crowns/h ≈ 200/day**`
-- Of which: ~14 rare/day, **~2 legendary/day** nationally
-- Total KP *supply*: `200 · 24.5 ≈ **4 900 KP/day**` across 30 users
+- Mean TTL: `0.70·6 + 0.22·12 + 0.07·24 + 0.01·2 = **8.54 h**` (legendary's 2 h barely moves the mean at 1% weight)
+- Spawn rate: `75 / 8.54 ≈ **8.8 crowns/h ≈ 210/day**` (a shorter mean TTL turns the fixed ~75 live crowns over slightly faster)
+- Of which: ~15 rare/day, **~2 legendary/day** nationally
+- Total KP *supply*: `210 · 24.5 ≈ **5 150 KP/day**` across 30 users
+
+*The legendary TTL cut barely changes total **supply** (crowns still turn over to hold ~75 live) — its real effect is on what's **caught**: a 2 h window means most legendaries expire uncaught, where a 48 h one was collected almost every time. The lever is catch rate, not spawn count.*
 
 Nobody collects anything close to all of them — realistic collection is 15–25%. **Supply comfortably exceeds demand**, which is what we want: the map always has something on it, and the binding constraint on earning is the **per-user caps** (§5), not scarcity. Scarcity-limited economies produce hoarding, sniping and resentment; cap-limited economies produce "I've done my bit for today", which is the healthier stopping cue.
 
