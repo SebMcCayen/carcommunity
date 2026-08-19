@@ -454,6 +454,16 @@
     "empty": "Inga meddelanden ännu.",
     "inputPlaceholder": "Skriv ett meddelande",
     "sendButton": "Skicka",
+    "quickEmojiRow": "Snabbemojis",
+    "quickEmoji": {
+      "happy": "Skicka glad smiley",
+      "laughing": "Skicka skrattande smiley",
+      "sad": "Skicka ledsen smiley",
+      "thumbsUp": "Skicka tummen upp",
+      "heart": "Skicka hjärta",
+      "car": "Skicka bil",
+      "crown": "Skicka krona"
+    },
     "reportMessage": "Rapportera meddelande",
     "reportReasonPrompt": "Välj anledning",
     "reportReason": {

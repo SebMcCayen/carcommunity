@@ -454,6 +454,16 @@
     "empty": "No messages yet.",
     "inputPlaceholder": "Write a message",
     "sendButton": "Send",
+    "quickEmojiRow": "Quick emojis",
+    "quickEmoji": {
+      "happy": "Send happy face",
+      "laughing": "Send laughing face",
+      "sad": "Send sad face",
+      "thumbsUp": "Send thumbs up",
+      "heart": "Send heart",
+      "car": "Send car",
+      "crown": "Send crown"
+    },
     "reportMessage": "Report message",
     "reportReasonPrompt": "Choose a reason",
     "reportReason": {

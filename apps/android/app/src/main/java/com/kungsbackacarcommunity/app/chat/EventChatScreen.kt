@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
+import com.kungsbackacarcommunity.app.design.ChatQuickEmojiRow
 import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
@@ -267,6 +268,16 @@ fun EventChatScreen(
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
+
+            // One-tap emoji reactions, pinned directly above the input. Tapping one
+            // posts it as a whole message via the SAME send path as the button; the
+            // typed draft is left untouched (unlike the button, this doesn't set
+            // awaitingSend, so a successful emoji send never clears the draft).
+            // Disabled while a send is already in flight, mirroring the Send button.
+            ChatQuickEmojiRow(
+                onEmojiSelected = { glyph -> onSend(glyph) },
+                enabled = sendStatus != ChatSendStatus.Sending,
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

@@ -57,6 +57,7 @@ import com.kungsbackacarcommunity.app.chattime.DaySeparatorRow
 import com.kungsbackacarcommunity.app.chattime.MessageTimeText
 import com.kungsbackacarcommunity.app.chattime.rememberChatDateContext
 import com.kungsbackacarcommunity.app.design.ChatComposerKeyboardOptions
+import com.kungsbackacarcommunity.app.design.ChatQuickEmojiRow
 import com.kungsbackacarcommunity.app.design.KccRadius
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.events.EventShareLinks
@@ -196,6 +197,15 @@ fun ChatScreen(
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+
+        // One-tap emoji reactions, pinned directly above the input. Tapping one
+        // sends it straight down the SAME optimistic path as the Send button — the
+        // emoji is the whole message and the typed draft (if any) is left untouched.
+        // Always enabled: the DM composer's only send gate is a non-empty draft,
+        // which a one-tap emoji doesn't need.
+        ChatQuickEmojiRow(
+            onEmojiSelected = { glyph -> onSend(glyph) },
+        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
