@@ -108,10 +108,21 @@ export interface SendWaveResponse {
   recipientCount: number;
 }
 
-/** Outcome of the cooldown transaction: replay, or a fresh send cleared to proceed. */
+/**
+ * Outcome of the cooldown transaction:
+ *  - `replay`  — a COMPLETED send (delivery already confirmed via
+ *    `lastRecipientCount`); return the stored result, do nothing.
+ *  - `send`    — a fresh send; the cooldown was stamped, proceed to delivery.
+ *  - `resume`  — an IN-FLIGHT send (the cooldown was stamped by a prior attempt
+ *    that crashed BEFORE recording delivery); proceed to delivery WITHOUT
+ *    re-charging the cooldown so the wave is never silently dropped nor
+ *    double-charged. Delivery is idempotent (fan-out overwrites the same
+ *    per-recipient `{waveId}` doc), so a raced double-resume is harmless.
+ */
 type CooldownGate =
   | { kind: 'replay'; waveId: string; recipientCount: number }
-  | { kind: 'send'; waveId: string };
+  | { kind: 'send'; waveId: string }
+  | { kind: 'resume'; waveId: string };
 
 export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveResponse> => {
   const actor = await requireActiveActor(request);
@@ -127,18 +138,31 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   const createdAt = Timestamp.fromDate(now);
   const cooldownDocRef = cooldownRef(actor.uid);
 
-  const replayResult = (data: Record<string, unknown> | undefined): SendWaveResponse | null => {
+  // A COMPLETED replay: the same clientId whose delivery is CONFIRMED (a numeric
+  // `lastRecipientCount` was recorded after fan-out). Only a confirmed send
+  // replays — a stamped-but-undelivered (in-flight) doc must NOT be mistaken for a
+  // finished one, or a crash between stamp and delivery would silently drop the
+  // wave on retry.
+  const completedReplay = (
+    data: Record<string, unknown> | undefined,
+  ): SendWaveResponse | null => {
     if (clientId === undefined || data?.lastWaveId !== clientId) return null;
-    const priorCount =
-      typeof data?.lastRecipientCount === 'number' ? data.lastRecipientCount : 0;
-    return { waveId: clientId, recipientCount: priorCount };
+    if (typeof data?.lastRecipientCount !== 'number') return null;
+    return { waveId: clientId, recipientCount: data.lastRecipientCount };
   };
 
-  // Idempotent replay FAST PATH: a retry with the SAME clientId returns the
-  // committed result and does nothing else — checked BEFORE the sharing gate so a
-  // legitimate retry still replays even if the caller has since stopped sharing.
+  /** True for the same clientId stamped but NOT yet delivery-confirmed — resumable. */
+  const isInFlight = (data: Record<string, unknown> | undefined): boolean =>
+    clientId !== undefined &&
+    data?.lastWaveId === clientId &&
+    typeof data?.lastRecipientCount !== 'number';
+
+  // Idempotent replay FAST PATH: a retry of a COMPLETED send returns the committed
+  // result and does nothing else — checked BEFORE the sharing gate so a legitimate
+  // retry still replays even if the caller has since stopped sharing. An in-flight
+  // (undelivered) retry deliberately falls through to resume delivery below.
   if (clientId !== undefined) {
-    const preReplay = replayResult((await cooldownDocRef.get()).data());
+    const preReplay = completedReplay((await cooldownDocRef.get()).data());
     if (preReplay) return preReplay;
   }
 
@@ -166,14 +190,22 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // stamp share ONE transaction, so two rapid taps serialise on the cooldown doc:
   // the first stamps and proceeds, the second reads the fresh stamp and is
   // refused. Reached ONLY after the sharing gate above, so a not-sharing attempt
-  // never charges the cooldown. Re-checks idempotency inside the transaction to
-  // cover a retry that raced the original send's commit.
+  // never charges the cooldown. Inside the transaction it distinguishes three
+  // cases for a retried clientId: a COMPLETED send (replay), an IN-FLIGHT send
+  // (resume delivery WITHOUT re-charging), or a fresh send (window-check + stamp).
   const gate = await db.runTransaction<CooldownGate>(async (tx) => {
     const data = (await tx.get(cooldownDocRef)).data();
 
-    const txReplay = replayResult(data);
+    const txReplay = completedReplay(data);
     if (txReplay) {
       return { kind: 'replay', waveId: txReplay.waveId, recipientCount: txReplay.recipientCount };
+    }
+
+    // Resume a stamped-but-undelivered send: the cooldown was already charged by
+    // the crashed attempt, so proceed to (idempotent) delivery WITHOUT stamping
+    // again — the wave is neither dropped nor double-charged.
+    if (isInFlight(data)) {
+      return { kind: 'resume', waveId: clientId as string };
     }
 
     const lastSentAt = data?.lastSentAt as Timestamp | undefined;
@@ -193,6 +225,9 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
         uid: actor.uid,
         lastSentAt: createdAt,
         lastWaveId: newWaveId,
+        // lastRecipientCount is deliberately NOT set here — it is written only
+        // AFTER delivery, as the completion marker that distinguishes a finished
+        // send from this in-flight one.
         expireAt: waveCooldownExpiry(now),
         updatedAt: FieldValue.serverTimestamp(),
       },
@@ -275,9 +310,11 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     await batch.commit();
   }
 
-  // Record the delivered count on the cooldown doc so an idempotent replay reports
-  // the same number. Outside the gate transaction: within the 45s window this
-  // caller is the only writer of its own cooldown doc, so there is no race.
+  // COMPLETION MARKER: record the delivered count on the cooldown doc. This is
+  // what turns a stamped in-flight send into a COMPLETED one — a retry before this
+  // write resumes delivery (never drops the wave); a retry after it replays the
+  // stored count. Idempotent (same value on a resumed retry), so writing it twice
+  // is harmless.
   await cooldownDocRef.set({ lastRecipientCount: recipients.length }, { merge: true });
 
   return { waveId, recipientCount: recipients.length };

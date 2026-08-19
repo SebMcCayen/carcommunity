@@ -276,6 +276,40 @@ describe('live-sendWave idempotency', () => {
     // Only ONE delivered doc for that waveId in the recipient's inbox.
     expect((await inboxDocs(recipient.uid)).filter((d) => d.id === first.waveId).length).toBe(1);
   });
+
+  it('resumes a stamped-but-undelivered send on retry (no drop, no double-charge)', async () => {
+    const sender = await createProvisionedUser('wave-resume-s', `ResumeSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-resume-r', `ResumeRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    // Simulate a crash AFTER the cooldown was stamped but BEFORE delivery: a
+    // cooldown doc carrying lastWaveId + lastSentAt but NO lastRecipientCount.
+    const clientId = `resume-${SFX}-1`;
+    const stampedAt = new Date();
+    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
+      uid: sender.uid,
+      lastWaveId: clientId,
+      lastSentAt: stampedAt,
+      expireAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    await signInAs(sender);
+    const res = (await call('live-sendWave', { clientId })).data as {
+      waveId: string;
+      recipientCount: number;
+    };
+    expect(res.waveId).toBe(clientId);
+    // The wave was actually DELIVERED (not silently dropped as a "completed" replay).
+    expect(res.recipientCount).toBeGreaterThanOrEqual(1);
+    expect((await inboxDocs(recipient.uid)).some((d) => d.id === clientId)).toBe(true);
+
+    // Not double-charged: the resume did NOT restamp lastSentAt (the window was
+    // never reset), and lastRecipientCount is now recorded (the completion marker).
+    const cd = (await adminDb.collection('liveWaveCooldowns').doc(sender.uid).get()).data();
+    expect((cd?.lastSentAt as { toMillis(): number }).toMillis()).toBe(stampedAt.getTime());
+    expect(cd?.lastRecipientCount).toBeGreaterThanOrEqual(1);
+  });
 });
 
 describe('liveWaves Firestore rules', () => {
