@@ -42,7 +42,10 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runCrownAreaSpawnPass } from '../crownHunt/spawnScheduled';
+import {
+  MAX_NEW_CROWNS_PER_CELL_PER_PASS,
+  runCrownAreaSpawnPass,
+} from '../crownHunt/spawnScheduled';
 import {
   COLLECT_RADIUS_METERS,
   CROWN_BASELINE_TARGET_PER_CELL,
@@ -668,13 +671,20 @@ describe('marked-area BASELINE spawn (low/zero-activity approved areas)', () => 
     // Run 2 — busy cell: A = 12 ⇒ activityDerived = ceil(1.5·ln13) = 4, plus the
     // baseline of 1 ⇒ target 5, exactly the per-cell cap. Six POIs are available,
     // so the target (not the POI supply) is what limits the count.
+    //
+    // STAGGERING: one pass now creates at most MAX_NEW_CROWNS_PER_CELL_PER_PASS,
+    // so the cell fills across SUCCESSIVE passes (2 → 4 → 5) rather than in one
+    // burst. Loop the pass until it converges to assert it still reaches full
+    // density, and separately (below) assert the per-pass cap itself.
     await clearSpawns();
     await seedActivity(CELL_KEY, 12, new Date());
-    await runCrownAreaSpawnPass(
-      new Date(),
-      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
-      createSeededRng(12),
-    );
+    for (let pass = 0; pass < 4; pass += 1) {
+      await runCrownAreaSpawnPass(
+        new Date(),
+        { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+        createSeededRng(12 + pass),
+      );
+    }
     const busySpawns = await adminDb
       .collection('crownSpawns')
       .where('areaId', '==', created.areaId)
@@ -706,6 +716,47 @@ describe('marked-area BASELINE spawn (low/zero-activity approved areas)', () => 
         ).toBeGreaterThanOrEqual(MIN_CROWN_SEPARATION_METERS);
       }
     }
+
+    await call('crownHunt-deleteSpawnArea', { areaId: created.areaId });
+    await clearActivity(CELL_KEY);
+  });
+
+  it('STAGGERS: one pass over an empty busy cell creates at most the per-pass cap', async () => {
+    await clearSpawns();
+    await clearActivity(CELL_KEY);
+    await signInAs(adminUser);
+    const created = (
+      await call('crownHunt-createSpawnArea', {
+        shape: AREA_CIRCLE,
+        active: true,
+        safeAreaConfirmed: true,
+      })
+    ).data as AreaMutation;
+    await seedAreaPois(created.areaId, BASELINE_CAP_POIS);
+
+    // A busy cell whose target is the full per-cell cap (well above the per-pass
+    // cap), starting from EMPTY — so the only thing bounding a single pass is the
+    // staggering cap, not the target or the POI supply.
+    await seedActivity(CELL_KEY, 12, new Date());
+
+    const firstPass = await runCrownAreaSpawnPass(
+      new Date(),
+      { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+      createSeededRng(77),
+    );
+
+    // One pass writes at most MAX_NEW_CROWNS_PER_CELL_PER_PASS into the cell, even
+    // though the target (5) and the POI supply (6) would both allow more — the
+    // rest is left for the next pass so the client never sees the whole deficit
+    // pop at once.
+    expect(firstPass.spawned).toBeGreaterThan(0);
+    expect(firstPass.spawned).toBeLessThanOrEqual(MAX_NEW_CROWNS_PER_CELL_PER_PASS);
+    const afterOne = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', created.areaId)
+      .get();
+    expect(afterOne.size).toBeLessThanOrEqual(MAX_NEW_CROWNS_PER_CELL_PER_PASS);
+    expect(afterOne.size).toBe(firstPass.spawned);
 
     await call('crownHunt-deleteSpawnArea', { areaId: created.areaId });
     await clearActivity(CELL_KEY);

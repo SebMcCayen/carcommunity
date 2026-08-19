@@ -49,6 +49,17 @@
  * pass rather than starved — an area that misses a round is at most 10 minutes
  * below target.
  *
+ * ## Staggering (so crowns don't all appear at once)
+ * A single pass never fills a cell's WHOLE deficit: it creates at most
+ * {@link MAX_NEW_CROWNS_PER_CELL_PER_PASS} new crowns per cell, so an empty cell
+ * fills over successive 10-minute passes rather than writing every crown in one
+ * batch that a client's listener then pops onto the map simultaneously. The cell
+ * still converges to its target; it just gets there across a few ticks. The
+ * finer, in-pass spread (several cells of one area filling on the same tick) is
+ * the client marker animator's job — it reveals a batch of newly-arrived crowns
+ * a few hundred ms apart. Overall spawn DENSITY is unchanged: only the timing of
+ * the fill is spread out.
+ *
  * ## Cost per run
  * One allow-list query, then per grid cell of an approved area: one bounded
  * `recentUsers` read and one 9-cell neighbourhood read, and only for cells that
@@ -137,6 +148,35 @@ export const MAX_AREA_CELLS_PER_RUN = 60;
 
 /** Crowns created per area run, across all areas — the hard write budget. */
 export const MAX_AREA_SPAWNS_PER_RUN = 100;
+
+/**
+ * The most NEW crowns one pass may create in a SINGLE cell — the staggering
+ * cap.
+ *
+ * Without it a cell that is empty (freshly approved, or just swept) fills its
+ * ENTIRE per-cell deficit in one pass: up to {@link MAX_CROWNS_PER_CELL} crowns
+ * written in the same batch, with the same `createdAt` instant. A client's
+ * Firestore listener then receives them in one snapshot and every marker
+ * pops onto the map at the same moment — the "they all appear at once" the
+ * owner asked us to stop.
+ *
+ * Capping the per-cell deficit at a small number turns a cell's fill into a
+ * SEQUENCE across successive 10-minute passes (2, then 2, then 1 for a cell
+ * targeting the full 5) rather than a single burst — natural staggering with no
+ * new schema, no client contract, and no slowdown of the overall sweep (a cell
+ * still reaches its target; it just takes a few passes to get there). The
+ * remaining in-pass / in-batch spread — several cells of one area filling on the
+ * same tick — is handled on the client by the crown marker animator, which
+ * reveals a batch of newly-arrived crowns a few hundred ms apart rather than
+ * simultaneously.
+ *
+ * 2, not 1: one-per-pass would take a cell 5 passes (~50 min) to reach full
+ * density after a sweep, which reads as an empty area for the better part of an
+ * hour; 2 halves that to ~30 min while still guaranteeing a cell never dumps its
+ * whole deficit in one instant. Exported so the emulator test can assert the
+ * per-pass cap directly rather than hard-coding the number.
+ */
+export const MAX_NEW_CROWNS_PER_CELL_PER_PASS = 2;
 
 /**
  * Cached safe-stop POIs read for ONE grid cell when it has a spawn deficit to
@@ -464,7 +504,18 @@ export async function runCrownAreaSpawnPass(
         if (data.cellKey === cellKey) liveInCell += 1;
       }
 
-      const deficit = Math.min(target - liveInCell, limits.maxSpawns - result.spawned);
+      // STAGGERING: never create a cell's whole deficit in one pass. Capped at
+      // MAX_NEW_CROWNS_PER_CELL_PER_PASS so an empty cell fills over successive
+      // passes instead of dumping every crown into one snapshot the client then
+      // pops onto the map simultaneously. Still bounded by the target, the
+      // per-cell density cap (via `target`), and the run's remaining write
+      // budget — this only ever LOWERS the count, never raises it, so the cell
+      // still converges to its target, just across a few ticks.
+      const deficit = Math.min(
+        target - liveInCell,
+        limits.maxSpawns - result.spawned,
+        MAX_NEW_CROWNS_PER_CELL_PER_PASS,
+      );
       if (deficit <= 0) continue;
 
       // ONLY NOW load this cell's cached safe-stop POIs — after we know there is a

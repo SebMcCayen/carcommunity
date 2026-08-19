@@ -5,6 +5,7 @@ import android.os.SystemClock
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -72,6 +73,7 @@ import com.mapbox.maps.extension.style.layers.properties.generated.IconAnchor
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.CircleAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.PolylineAnnotationManager
@@ -94,10 +96,13 @@ import com.mapbox.maps.plugin.locationcomponent.OnIndicatorPositionChangedListen
 import com.mapbox.maps.plugin.locationcomponent.createDefault2DPuck
 import com.mapbox.maps.plugin.locationcomponent.location
 import com.mapbox.maps.plugin.scalebar.scalebar
+import com.kungsbackacarcommunity.app.crownhunt.CrownAnimationPhase
+import com.kungsbackacarcommunity.app.crownhunt.CrownMarkerAnimator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -398,7 +403,44 @@ class MapboxMapSurface : MapSurface {
 
     private var crownClickListener: OnPointAnnotationClickListener? = null
     private val registeredCrownImages = mutableSetOf<String>()
-    private var lastAppliedCrowns: List<MapCrownMarker>? = null
+
+    // ---- Kronjakt crown SPAWN/DESPAWN animation ------------------------------
+    // The animation state lives in a PURE holder ([CrownMarkerAnimator]) so the
+    // phase/timing is unit-tested; this surface only pushes the per-frame numbers
+    // it produces onto each annotation (iconSize / iconRotate / iconOpacity).
+    //
+    // A newly-appearing crown pops up, spins and settles; a removed crown shrinks,
+    // spins out and fades — which is why a crown that has left the marker list is
+    // kept on the map until its despawn finishes. To do that the surface holds a
+    // STABLE annotation per crown id (so a transform can be applied across frames)
+    // and the last appearance each id was drawn with (so a despawning crown, no
+    // longer in the incoming list, still has a bitmap to draw). This is compatible
+    // with the baked-in "collected-by-you" badge (#929) and the zoom-cull-safe
+    // single-bitmap marker (#867/#897): the animation only changes an existing
+    // annotation's size/rotation/opacity, it never adds a separately-culled layer.
+    private val crownAnimator = CrownMarkerAnimator()
+    private val crownAnnotationsById = mutableMapOf<String, PointAnnotation>()
+    private val crownMarkerById = mutableMapOf<String, MapCrownMarker>()
+    // The style-image id each drawn crown is CURRENTLY showing, keyed by crown id.
+    // A crown's appearance can change while its id stays the same — the
+    // collected-by-you badge flipping on (#929), or the in-range recolour
+    // (out-of-range slate ↔ rarity colours). The per-frame transform update never
+    // touches iconImage, so this records what bitmap each annotation is on and
+    // renderCrownFrame swaps iconImage only when the appearance key actually
+    // changes (never every frame).
+    private val crownRenderedImageById = mutableMapOf<String, String>()
+    // Flips true once the crown annotation manager exists (style loaded) and false
+    // on teardown, so the animation driver in Content reacts to the manager
+    // becoming available and (re)draws the current crowns.
+    private val crownManagerReadyFlow = MutableStateFlow(false)
+    // Bumped by [forceRedrawCrowns] (the drift-repair path, called from the tap
+    // listener OUTSIDE the frame driver). The crown animation LaunchedEffect keys
+    // on it, so a bump re-runs that effect — which re-syncs the animator and
+    // RESTARTS the per-frame loop. Routing the repair through the same effect
+    // means the loop has exactly one owner: re-keying cancels any in-flight loop
+    // before starting the next, so a repair can never spawn a second, competing
+    // ticker.
+    private val crownRedrawTickFlow = MutableStateFlow(0)
 
     // ---- Community events layer (mirrors the incidents layer above) ----------
     // A SEPARATE PointAnnotationManager so event pins are their own layer with
@@ -1433,6 +1475,32 @@ class MapboxMapSurface : MapSurface {
         val overlay by routeOverlayFlow.collectAsState()
         val incidents by incidentMarkersFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
+        val crownManagerReady by crownManagerReadyFlow.collectAsState()
+        val crownRedrawTick by crownRedrawTickFlow.collectAsState()
+        // The crown SPAWN/DESPAWN animation driver, and the SOLE owner of the
+        // per-frame loop. Keyed on the crown set, the manager becoming ready, AND
+        // the redraw nonce (bumped by forceRedrawCrowns), so it re-runs whenever
+        // crowns change, a style (re)load recreates the manager, OR a drift repair
+        // asks for a redraw. Each re-run feeds the current set into the pure
+        // [CrownMarkerAnimator] and then ticks once per display frame — updating
+        // each annotation's size/rotation/opacity — until nothing is animating, at
+        // which point it idles (no busy loop over a settled, static layer).
+        //
+        // Because every trigger flows through THIS effect, Compose cancels the
+        // previous run (and its loop) before starting the next: there is only ever
+        // one ticker. The animator is a field, so in-flight spawns/despawns carry
+        // across a restart rather than resetting.
+        LaunchedEffect(crowns, crownManagerReady, crownRedrawTick) {
+            if (!crownManagerReady) return@LaunchedEffect
+            syncCrownMarkers(crowns, SystemClock.uptimeMillis())
+            while (isActive) {
+                val settled = renderCrownFrame(SystemClock.uptimeMillis())
+                if (settled) break
+                // Wait for the next display frame before the next tick, so the
+                // animation is smooth and costs nothing between frames.
+                withFrameNanos { }
+            }
+        }
         val events by eventMarkersFlow.collectAsState()
         val billboards by billboardMarkersFlow.collectAsState()
         // The caller's marker only carries live-sharing state now (its position
@@ -1920,10 +1988,18 @@ class MapboxMapSurface : MapSurface {
                             crownClickListener = crownClick
                             crownManager.addClickListener(crownClick)
                             crownMarkerManager = crownManager
-                            lastAppliedCrowns = null
                             // Style images die with the style that owned them.
                             registeredCrownImages.clear()
-                            applyCrownMarkersIfChanged(crownMarkersFlow.value)
+                            // A fresh style has no annotations; reset the animation
+                            // bookkeeping so the driver in Content redraws every
+                            // current crown from scratch (a spawn-in, not a jump).
+                            crownAnnotationsById.clear()
+                            crownRenderedImageById.clear()
+                            crownAnimator.clear()
+                            // Signal the animation driver (Content) that the manager
+                            // now exists — it reacts by (re)drawing the current
+                            // crowns and running the spawn/despawn animations.
+                            crownManagerReadyFlow.value = true
                         }
                         // Community events manager (the shared events layer),
                         // created once the style is ready — a SEPARATE manager from
@@ -2060,10 +2136,10 @@ class MapboxMapSurface : MapSurface {
                 // (Re)draw the incident markers only when the set actually
                 // changes; a no-op until the manager exists (style loaded).
                 runCatching { applyIncidentMarkersIfChanged(incidents) }
-                // Same for the crown layer — a no-op until its manager exists,
-                // and a no-op whenever the set is unchanged (which, with the flag
-                // off, is "empty" forever).
-                runCatching { applyCrownMarkersIfChanged(crowns) }
+                // The crown layer is NOT redrawn here: it is animated (spawn-in,
+                // despawn-out), so it is driven by its own per-frame effect keyed
+                // on the crown set + manager readiness (see the crown animation
+                // LaunchedEffect in Content), not by this recomposition callback.
                 // (Re)draw the community event pins only when the set actually
                 // changes; a no-op until the manager exists (style loaded).
                 runCatching { applyEventMarkersIfChanged(events) }
@@ -2193,12 +2269,20 @@ class MapboxMapSurface : MapSurface {
                 crownIdsByAnnotation.clear()
                 eventIdsByAnnotation.clear()
                 billboardIdsByAnnotation.clear()
+                // The crown animation driver keys on this flow, so dropping it to
+                // false stops the per-frame ticker; the animator + its per-id
+                // caches are reset so a later map redraws (and re-animates) every
+                // crown from scratch rather than from stale annotation handles.
+                crownManagerReadyFlow.value = false
+                crownAnimator.clear()
+                crownAnnotationsById.clear()
+                crownRenderedImageById.clear()
+                crownMarkerById.clear()
                 // Managers are gone, so a later re-init must redraw the overlay,
                 // the incident markers, the crowns, the event pins and the
                 // billboards.
                 lastAppliedOverlay = null
                 lastAppliedIncidents = null
-                lastAppliedCrowns = null
                 lastAppliedEvents = null
                 lastAppliedBillboards = null
                 // The style (and every image registered on it) dies with this
@@ -2499,95 +2583,217 @@ class MapboxMapSurface : MapSurface {
             emitCrownTap(spawnId)
             return true
         }
-        lastAppliedCrowns = null
-        applyCrownMarkersIfChanged(crownMarkersFlow.value)
+        forceRedrawCrowns()
         return true
     }
 
     /**
-     * Redraws the crown markers only when the set differs from the last one
-     * applied. Same incomplete-draw rule as the incidents layer: a draw that
-     * could not upload one of its images is NOT cached, so the next update
-     * repairs it rather than leaving a permanently blank annotation.
+     * Feeds the incoming crown set into the pure [CrownMarkerAnimator] and retains
+     * each crown's latest appearance.
+     *
+     * The appearance is retained (rather than only held in the incoming list)
+     * because a crown that has DISAPPEARED from the list must keep animating OUT,
+     * and to draw it during its despawn the surface still needs the bitmap params
+     * it was last shown with. A crown still present just has its appearance
+     * refreshed (so a rarity recolour or the collected-by-you badge takes effect).
+     *
+     * Pure-holder diff: [CrownMarkerAnimator.sync] compares the incoming ids
+     * against what it tracks and schedules spawns/despawns — this method does not
+     * touch any annotation, it only updates state. The drawing happens in
+     * [renderCrownFrame], called every frame while an animation is in flight.
      */
-    private fun applyCrownMarkersIfChanged(markers: List<MapCrownMarker>) {
-        if (markers == lastAppliedCrowns) return
-        if (applyCrownMarkers(markers)) {
-            lastAppliedCrowns = markers
-        }
+    private fun syncCrownMarkers(markers: List<MapCrownMarker>, nowMs: Long) {
+        for (marker in markers) crownMarkerById[marker.id] = marker
+        crownAnimator.sync(markers.map { it.id }.toSet(), nowMs)
     }
 
     /**
-     * Clears and redraws the Kronjakt crowns — one rarity marker per crown — and
-     * rebuilds the annotation-id → spawn-id lookup taps resolve through. A no-op
-     * until the manager exists (style loaded), and every native call is wrapped
-     * defensively so a partial draw degrades rather than crashing.
+     * Draws ONE animation frame: reconciles the crown annotations to the animator's
+     * current [CrownMarkerAnimator.frame] states and pushes each crown's transform
+     * (scale → `iconSize`, rotation → `iconRotate`, opacity → `iconOpacity`) onto
+     * its annotation. Returns true once nothing is animating any more (the driver
+     * then stops ticking until the crown set next changes).
      *
-     * Deliberately a near-copy of [applyIncidentMarkers] rather than a shared
-     * generic helper. The two differ in the manager, the bitmap builder (crowns
-     * carry an optional halo) and the lookup they populate — so a shared version
-     * would take all three as parameters and be a worse description of either
-     * layer, while coupling a change to one into a change to both.
+     * Unlike the old redraw, this does NOT clear and recreate every annotation: an
+     * annotation is CREATED when its crown first becomes visible (its staggered
+     * spawn start arrives), UPDATED in place each frame, and DELETED only when its
+     * crown is gone from the animator's state (a finished despawn, or a spawn still
+     * waiting out its stagger). Keeping a stable annotation per id is what lets a
+     * transform be applied across frames, and is compatible with the baked-in
+     * collected-by-you badge (#929) and the single-bitmap, zoom-cull-safe marker
+     * (#867/#897) — only size/rotation/opacity change, never the layer count.
      *
-     * ACCESSIBILITY: as with the incident badges, these annotations carry no
-     * content description because there is no semantics node to put one on (they
-     * are style images inside the GL surface). The crown POPUP that a tap opens
-     * is ordinary Compose and is fully readable — rarity, value and distance are
-     * all text.
+     * A no-op returning true (settled) until the manager exists (style loaded);
+     * every native call is wrapped defensively so a partial frame degrades rather
+     * than crashing.
      *
      * On-device verification note: annotation rendering and hit-testing run only
-     * on a token-provisioned device, so they are verified on device.
+     * on a token-provisioned device, so the visuals are verified on device; the
+     * phase/timing that drives them is unit-tested in [CrownMarkerAnimator].
      */
-    private fun applyCrownMarkers(markers: List<MapCrownMarker>): Boolean {
-        val manager = crownMarkerManager ?: return false
+    private fun renderCrownFrame(nowMs: Long): Boolean {
+        val manager = crownMarkerManager ?: return true
         val style = mapViewRef?.mapboxMap?.style
         val context = appContext
-        var complete = true
-        runCatching { manager.deleteAll() }
-        crownIdsByAnnotation.clear()
-        for (marker in markers) {
-            val imageId =
-                CrownMarkerBitmaps.imageId(
+        val states = crownAnimator.frame(nowMs)
+        val liveIds = HashSet<String>(states.size)
+
+        for (state in states) {
+            liveIds += state.id
+            val marker = crownMarkerById[state.id] ?: continue
+            val annotation =
+                crownAnnotationsById[state.id]
+                    ?: createCrownAnnotation(state.id, marker, manager, style, context)
+                    ?: continue
+            // Refresh the BITMAP if this crown's appearance changed while its id
+            // stayed the same (collected-by-you flip, in-range recolour). The
+            // transforms below never touch iconImage, so without this the marker
+            // would stay stuck on its old bitmap. Only swap when the key actually
+            // differs — no per-frame bitmap churn.
+            val newImageId = crownImageId(marker)
+            if (crownRenderedImageById[state.id] != newImageId) {
+                val registered = ensureCrownImage(newImageId, marker, style, context)
+                if (registered != null) {
+                    runCatching { annotation.iconImage = registered }
+                    crownRenderedImageById[state.id] = registered
+                }
+            }
+            runCatching {
+                annotation.iconSize = state.scale.toDouble()
+                annotation.iconRotate = state.rotationDegrees.toDouble()
+                annotation.iconOpacity = state.contentAlpha.toDouble()
+                manager.update(annotation)
+            }
+        }
+
+        // Delete the annotation of any crown NOT drawn this frame — a finished
+        // despawn, or a spawn still waiting out its stagger (it will be recreated
+        // when it appears). Its lookup entry goes with it so a stale tap can never
+        // resolve to a removed crown.
+        val undrawn = crownAnnotationsById.keys.filter { it !in liveIds }
+        for (id in undrawn) {
+            crownAnnotationsById.remove(id)?.let { annotation ->
+                runCatching { manager.delete(annotation) }
+                crownIdsByAnnotation.remove(annotation.id)
+            }
+            crownRenderedImageById.remove(id)
+        }
+        // Keep the retained appearance cache to exactly the crowns the animator
+        // still tracks (a pending spawn keeps its bitmap params; a finished
+        // despawn drops them), so it cannot grow without bound over a session.
+        val tracked = crownAnimator.trackedIds()
+        crownMarkerById.keys.retainAll(tracked)
+        return !crownAnimator.isAnimating(nowMs)
+    }
+
+    /**
+     * Creates one crown annotation for [id] from [marker], registering its style
+     * image once, and records the annotation ↔ id lookups a tap resolves through.
+     * Returns null (and leaves nothing drawn) if the manager/style/context is not
+     * ready or the bitmap cannot be built — the same defensive degrade as the rest
+     * of this surface.
+     */
+    private fun createCrownAnnotation(
+        id: String,
+        marker: MapCrownMarker,
+        manager: PointAnnotationManager,
+        style: com.mapbox.maps.Style?,
+        context: android.content.Context?,
+    ): PointAnnotation? {
+        val imageId = ensureCrownImage(crownImageId(marker), marker, style, context) ?: return null
+        return runCatching {
+            val annotation =
+                manager.create(
+                    PointAnnotationOptions()
+                        .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
+                        .withIconImage(imageId)
+                        // Centre-anchored: the disc marks the point, it is not a pin
+                        // whose tip is the location. Rotation is applied about this
+                        // same centre, so the spin reads as the crown turning in
+                        // place rather than orbiting the point.
+                        .withIconAnchor(IconAnchor.CENTER),
+                )
+            crownAnnotationsById[id] = annotation
+            crownIdsByAnnotation[annotation.id] = id
+            crownRenderedImageById[id] = imageId
+            annotation
+        }.getOrNull()
+    }
+
+    /**
+     * The style-image id for [marker]'s appearance — the single source of the
+     * "which bitmap does this crown show" key, so [createCrownAnnotation] and the
+     * per-frame appearance-change check in [renderCrownFrame] agree by construction
+     * (and a JVM test can pin that a state change yields a different key).
+     */
+    private fun crownImageId(marker: MapCrownMarker): String =
+        CrownMarkerBitmaps.imageId(
+            iconRes = marker.iconRes,
+            discColorArgb = marker.discColorArgb,
+            glyphColorArgb = marker.glyphColorArgb,
+            glowColorArgb = marker.glowColorArgb,
+            collectedBadge = marker.collectedByYou,
+        )
+
+    /**
+     * Ensures [imageId]'s bitmap is registered on the current style, building and
+     * uploading it once (subsequent crowns of the same appearance reuse it).
+     * Returns the id on success, or null if the manager/style/context is not ready
+     * or the bitmap could not be built/uploaded — the caller then leaves the
+     * annotation on whatever it already had rather than pointing it at a missing
+     * image.
+     */
+    private fun ensureCrownImage(
+        imageId: String,
+        marker: MapCrownMarker,
+        style: com.mapbox.maps.Style?,
+        context: android.content.Context?,
+    ): String? {
+        if (imageId in registeredCrownImages) return imageId
+        val bitmap =
+            if (style != null && context != null) {
+                CrownMarkerBitmaps.create(
+                    context = context,
                     iconRes = marker.iconRes,
                     discColorArgb = marker.discColorArgb,
                     glyphColorArgb = marker.glyphColorArgb,
                     glowColorArgb = marker.glowColorArgb,
                     collectedBadge = marker.collectedByYou,
                 )
-            if (imageId !in registeredCrownImages) {
-                val bitmap =
-                    if (style != null && context != null) {
-                        CrownMarkerBitmaps.create(
-                            context = context,
-                            iconRes = marker.iconRes,
-                            discColorArgb = marker.discColorArgb,
-                            glyphColorArgb = marker.glyphColorArgb,
-                            glowColorArgb = marker.glowColorArgb,
-                            collectedBadge = marker.collectedByYou,
-                        )
-                    } else {
-                        null
-                    }
-                val added =
-                    bitmap != null &&
-                        style != null &&
-                        runCatching { style.addImage(imageId, bitmap) }.isSuccess
-                if (added) registeredCrownImages.add(imageId) else complete = false
+            } else {
+                null
             }
-            runCatching {
-                val annotation =
-                    manager.create(
-                        PointAnnotationOptions()
-                            .withPoint(Point.fromLngLat(marker.longitude, marker.latitude))
-                            .withIconImage(imageId)
-                            // Centre-anchored: the disc marks the point, it is not
-                            // a pin whose tip is the location.
-                            .withIconAnchor(IconAnchor.CENTER),
-                    )
-                crownIdsByAnnotation[annotation.id] = marker.id
-            }
-        }
-        return complete
+        val added =
+            bitmap != null &&
+                style != null &&
+                runCatching { style.addImage(imageId, bitmap) }.isSuccess
+        if (!added) return null
+        registeredCrownImages.add(imageId)
+        return imageId
+    }
+
+    /**
+     * Repairs a drifted crown layer (a tap that resolved to no id) by wiping the
+     * annotations and asking the animation driver to redraw from scratch.
+     *
+     * It does NOT draw a frame itself: this runs on the tap listener, OUTSIDE the
+     * per-frame loop, so drawing one frame here would schedule fresh spawns that
+     * then never advance (the crowns would sit stuck at their initial, invisible
+     * frame). Instead it bumps [crownRedrawTickFlow], which re-runs the single
+     * animation LaunchedEffect — re-syncing the animator AND restarting the
+     * per-frame loop, so the repaired crowns actually animate in. Routing through
+     * that one effect also guarantees no second, competing loop is started.
+     */
+    private fun forceRedrawCrowns() {
+        val manager = crownMarkerManager ?: return
+        runCatching { manager.deleteAll() }
+        crownAnnotationsById.clear()
+        crownRenderedImageById.clear()
+        crownIdsByAnnotation.clear()
+        crownMarkerById.clear()
+        crownAnimator.clear()
+        // Re-run the animation effect (re-sync + restart the frame loop).
+        crownRedrawTickFlow.value += 1
     }
 
     /**

@@ -26,7 +26,10 @@ process.env.GCLOUD_PROJECT ??= 'demo-test';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { runCrownAreaSpawnPass } from '../crownHunt/spawnScheduled';
+import {
+  MAX_NEW_CROWNS_PER_CELL_PER_PASS,
+  runCrownAreaSpawnPass,
+} from '../crownHunt/spawnScheduled';
 import { runAreaPoiIngestion, type OverpassFetcher } from '../crownHunt/poiIngestion';
 import {
   crownActivityUserHash,
@@ -384,27 +387,45 @@ describe('POI-anchored spawn pass', () => {
       return poisFor[cellKey] ?? [];
     };
 
-    // First tick: there IS a deficit, so the loader is invoked and crowns are placed
-    // up to target (BASELINE + activity-derived = 3), one per far-apart POI.
+    // First tick: there IS a deficit, so the loader is invoked and crowns are
+    // placed — but STAGGERING caps a pass at MAX_NEW_CROWNS_PER_CELL_PER_PASS, so
+    // the cell does not reach its target (3) in one tick; the rest come on the
+    // next passes.
     const first = await runCrownAreaSpawnPass(
       now,
       { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
       createSeededRng(1234),
       { loadCellPois: countingLoader },
     );
-    expect(first.spawned).toBe(3);
+    expect(first.spawned).toBe(MAX_NEW_CROWNS_PER_CELL_PER_PASS);
     expect(loaderCalls).toBeGreaterThan(0);
 
-    // Second tick: the cell is now at target, so NO cell reaches the POI load — the
-    // loader must not be called at all (zero POI reads on an idle/at-target tick).
+    // Keep ticking until the cell converges to its target (BASELINE +
+    // activity-derived = 3), each pass still capped at the per-pass maximum.
+    for (let pass = 0; pass < 4; pass += 1) {
+      await runCrownAreaSpawnPass(
+        now,
+        { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
+        createSeededRng(1234 + pass),
+        { loadCellPois: countingLoader },
+      );
+    }
+    const atTarget = await adminDb
+      .collection('crownSpawns')
+      .where('areaId', '==', areaId)
+      .get();
+    expect(atTarget.size).toBe(3);
+
+    // Now-idle tick: the cell is at target, so NO cell reaches the POI load — the
+    // loader must not be called at all (zero POI reads on an at-target tick).
     loaderCalls = 0;
-    const second = await runCrownAreaSpawnPass(
+    const idle = await runCrownAreaSpawnPass(
       now,
       { maxAreas: 10, maxCells: 60, maxSpawns: 50 },
       createSeededRng(1234),
       { loadCellPois: countingLoader },
     );
-    expect(second.spawned).toBe(0);
+    expect(idle.spawned).toBe(0);
     expect(loaderCalls).toBe(0);
 
     await clearSpawns();
