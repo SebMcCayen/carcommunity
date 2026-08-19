@@ -1106,13 +1106,15 @@
     <string name="crownHunt_spawnReward">%1$d KP</string>
     <string name="crownHunt_spawnDistance">%1$d m bort</string>
     <string name="crownHunt_spawnDistanceKm">%1$s km bort</string>
+    <string name="crownHunt_spawnDistanceValue">%1$d m</string>
+    <string name="crownHunt_spawnDistanceValueKm">%1$s km</string>
     <string name="crownHunt_spawnCollect">Hämta</string>
     <string name="crownHunt_spawnCollecting">Hämtar...</string>
     <string name="crownHunt_spawnClose">Stäng</string>
     <string name="crownHunt_spawnMoveCloser">Kör närmare</string>
     <string name="crownHunt_spawnMoveCloserDetail">Du behöver vara inom %1$d m från kronan.</string>
     <string name="crownHunt_spawnProximityLabel">Kom närmare</string>
-    <string name="crownHunt_spawnProximityRemaining">%1$d m kvar</string>
+    <string name="crownHunt_spawnProximityRemaining">%1$s kvar</string>
     <string name="crownHunt_spawnStopFirst">Stanna bilen först</string>
     <string name="crownHunt_spawnStopFirstDetail">Kronor kan bara hämtas när du står parkerad. Parkera på ett säkert ställe och hämta sedan — det är ingen brådska och ingen tid som tickar.</string>
     <string name="crownHunt_spawnNoPosition">Väntar på din position</string>

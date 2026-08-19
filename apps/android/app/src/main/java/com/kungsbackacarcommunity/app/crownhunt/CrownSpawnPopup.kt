@@ -376,13 +376,14 @@ private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Doubl
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            // "x m to go" — the same whole-metre form the distance line uses, so the
-            // number that drives the bar is spelled out beside it.
+            // "1,4 km kvar" / "120 m to go" — the SAME locale-aware metre/kilometre
+            // form the distance line uses ([crownDistanceShort]), so a far crown
+            // reads "5,0 km kvar", not a runaway "5000 m".
             Text(
                 text =
                     stringResource(
                         R.string.crownHunt_spawnProximityRemaining,
-                        CrownDistanceFormat.wholeMetres(distanceMeters),
+                        crownDistanceShort(distanceMeters),
                     ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -462,4 +463,27 @@ private fun crownDistanceText(meters: Double): String =
         )
     } else {
         stringResource(R.string.crownHunt_spawnDistance, CrownDistanceFormat.wholeMetres(meters))
+    }
+
+/**
+ * The BARE distance — "120 m" / "1,4 km" — with no "away"/"bort" suffix, for
+ * places that supply their own trailing word (the proximity bar's "… kvar" /
+ * "… to go"). The same metre-vs-kilometre switch and the same locale-aware decimal
+ * as [crownDistanceText], off the same pure [CrownDistanceFormat], so a far crown
+ * reads "5,0 km" here exactly as it would read "5,0 km bort" on the distance line
+ * — never a five-thousand-metre integer.
+ */
+@Composable
+private fun crownDistanceShort(meters: Double): String =
+    if (CrownDistanceFormat.useKilometres(meters)) {
+        stringResource(
+            R.string.crownHunt_spawnDistanceValueKm,
+            String.format(
+                LocalLocale.current.platformLocale,
+                "%.1f",
+                CrownDistanceFormat.kilometres(meters),
+            ),
+        )
+    } else {
+        stringResource(R.string.crownHunt_spawnDistanceValue, CrownDistanceFormat.wholeMetres(meters))
     }
