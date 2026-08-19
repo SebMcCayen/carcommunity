@@ -1,11 +1,16 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -13,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -21,10 +27,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -33,6 +43,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import kotlinx.coroutines.launch
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccRadius
@@ -46,6 +57,9 @@ const val CROWN_SPAWN_COLLECT_TAG = "crown_spawn_collect"
 
 /** Test tag on the Navigate action. */
 const val CROWN_SPAWN_NAVIGATE_TAG = "crown_spawn_navigate"
+
+/** Test tag on the proximity loading bar shown while still out of range. */
+const val CROWN_SPAWN_PROXIMITY_TAG = "crown_spawn_proximity"
 
 /**
  * The panel opened by TAPPING a Kronjakt crown on the map.
@@ -194,34 +208,45 @@ private fun CrownCollectBody(
     onCollect: () -> Unit,
     onNavigate: () -> Unit,
 ) {
-    if (distanceMeters != null && distanceMeters.isFinite()) {
+    // TooFar owns its own distance display inside the proximity bar (the label
+    // carries "x m to go"), so the generic distance line is suppressed for it to
+    // avoid printing the same number twice. Every other state keeps the line.
+    val tooFar = state as? CrownCollectState.TooFar
+    if (tooFar == null && distanceMeters != null && distanceMeters.isFinite()) {
         Text(
             text = crownDistanceText(distanceMeters),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
-    CrownSpawnMessages.refusalTitleRes(state)?.let { titleRes ->
-        Text(
-            text = stringResource(titleRes),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-    }
-    CrownSpawnMessages.refusalDetailRes(state)?.let { detailRes ->
-        Text(
-            text =
-                if (detailRes == R.string.crownHunt_spawnMoveCloserDetail) {
-                    // The only refusal detail that takes an argument: how close
-                    // you actually have to get. The crown's OWN radius, read off
-                    // the document, so a server-side retune is honest here too.
-                    stringResource(detailRes, CrownDistanceFormat.wholeMetres(collectRadiusMeters))
-                } else {
-                    stringResource(detailRes)
-                },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    if (tooFar != null) {
+        // The loading bar that fills as you close in, in place of a flat
+        // "move closer" line: watch it fill rather than re-read a sentence. The
+        // fraction is pure ([CrownProximity]); this only animates and draws it.
+        CrownProximityBar(distanceMeters = tooFar.distanceMeters, collectRadiusMeters = collectRadiusMeters)
+    } else {
+        CrownSpawnMessages.refusalTitleRes(state)?.let { titleRes ->
+            Text(
+                text = stringResource(titleRes),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        CrownSpawnMessages.refusalDetailRes(state)?.let { detailRes ->
+            Text(
+                text =
+                    if (detailRes == R.string.crownHunt_spawnMoveCloserDetail) {
+                        // The only refusal detail that takes an argument: how close
+                        // you actually have to get. The crown's OWN radius, read off
+                        // the document, so a server-side retune is honest here too.
+                        stringResource(detailRes, CrownDistanceFormat.wholeMetres(collectRadiusMeters))
+                    } else {
+                        stringResource(detailRes)
+                    },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
     // "Wait a moment" — the app has no second fix yet, so it cannot ASK, let
     // alone be refused. Distinct from a refusal on purpose: nothing has gone
@@ -257,9 +282,52 @@ private fun CrownCollectBody(
         } else {
             stringResource(CrownSpawnMessages.collectActionLabelRes(state, collecting))
         }
+    // When the gate flips to Ready — in range AND stopped AND the dwell proof has
+    // aged in — the button POPS IN: a brief spring from small-and-tilted up to its
+    // resting size, a car/game-flavoured "go!" that rewards arriving. It is purely
+    // a transition effect: out of range, moving, or still confirming, the button
+    // sits at its normal size, visible-but-disabled, so the honesty of #915's
+    // "confirming you're stopped…" step is untouched.
+    val isReady = state == CrownCollectState.Ready
+    val popScale = remember { Animatable(1f) }
+    val popRotation = remember { Animatable(0f) }
+    LaunchedEffect(isReady) {
+        if (isReady) {
+            popScale.snapTo(0.62f)
+            popRotation.snapTo(-14f)
+            // Two springs in parallel: an overshooting scale (dampingRatio < 1 so it
+            // bounces just past full size and settles) and a small spin that unwinds
+            // to level. Brief by construction — springs, not a looped animation.
+            launch {
+                popScale.animateTo(
+                    targetValue = 1f,
+                    animationSpec = spring(dampingRatio = 0.42f, stiffness = Spring.StiffnessMedium),
+                )
+            }
+            launch {
+                popRotation.animateTo(
+                    targetValue = 0f,
+                    animationSpec = spring(dampingRatio = 0.5f, stiffness = Spring.StiffnessLow),
+                )
+            }
+        } else {
+            // Leaving Ready (or opening not-Ready): rest at normal size, no lingering
+            // tilt — the disabled button must look ordinary, not mid-animation.
+            popScale.snapTo(1f)
+            popRotation.snapTo(0f)
+        }
+    }
     Button(
         onClick = onCollect,
-        modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_COLLECT_TAG),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = popScale.value
+                    scaleY = popScale.value
+                    rotationZ = popRotation.value
+                }
+                .testTag(CROWN_SPAWN_COLLECT_TAG),
         // The gate is the single source of truth for enablement; the in-flight
         // guard is the only thing added here, so one press is one call.
         enabled = CrownCollectGate.isCollectEnabled(state) && !collecting,
@@ -274,6 +342,66 @@ private fun CrownCollectBody(
         modifier = Modifier.fillMaxWidth().testTag(CROWN_SPAWN_NAVIGATE_TAG),
     ) {
         Text(text = stringResource(R.string.crownHunt_navigate))
+    }
+}
+
+/**
+ * The proximity LOADING BAR, shown while the member is still out of range in place
+ * of a flat "you're too far" sentence: a "Kom närmare" label with the metres left,
+ * over a bar that fills as the gap closes and reaches full at the collect ring.
+ *
+ * The fill is [CrownProximity.proximityFraction] — pure, unit-tested, resolving the
+ * radius the same way the gate does, so the bar hits full at exactly the distance
+ * the Collect button can go live. Here we only animate it: a soft spring on the
+ * fill so an incoming distance update slides the bar rather than snapping it, which
+ * reads as "getting closer" rather than a jittery readout. No timer, no ETA, no
+ * speed — just the gap shrinking, matching the rest of this feature's stance.
+ */
+@Composable
+private fun CrownProximityBar(distanceMeters: Double, collectRadiusMeters: Double) {
+    val target = CrownProximity.proximityFraction(distanceMeters, collectRadiusMeters)
+    val animatedFraction by animateFloatAsState(
+        targetValue = target,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessLow),
+        label = "crownProximityFill",
+    )
+    Column(verticalArrangement = Arrangement.spacedBy(KccSpacing.s2)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_spawnProximityLabel),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            // "1,4 km kvar" / "120 m to go" — the distance left to reach the RING,
+            // not to the crown's centre ([CrownProximity.remainingToRingMeters]), so
+            // it lands on "0 m" as the bar fills instead of stalling at the radius.
+            // Same locale-aware metre/kilometre form as the distance line
+            // ([crownDistanceShort]), so a far crown reads "4,9 km kvar", not "4925 m".
+            Text(
+                text =
+                    stringResource(
+                        R.string.crownHunt_spawnProximityRemaining,
+                        crownDistanceShort(
+                            CrownProximity.remainingToRingMeters(distanceMeters, collectRadiusMeters),
+                        ),
+                    ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { animatedFraction },
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(KccSpacing.s2)
+                    .clip(RoundedCornerShape(KccRadius.sm))
+                    .testTag(CROWN_SPAWN_PROXIMITY_TAG),
+        )
     }
 }
 
@@ -339,4 +467,27 @@ private fun crownDistanceText(meters: Double): String =
         )
     } else {
         stringResource(R.string.crownHunt_spawnDistance, CrownDistanceFormat.wholeMetres(meters))
+    }
+
+/**
+ * The BARE distance — "120 m" / "1,4 km" — with no "away"/"bort" suffix, for
+ * places that supply their own trailing word (the proximity bar's "… kvar" /
+ * "… to go"). The same metre-vs-kilometre switch and the same locale-aware decimal
+ * as [crownDistanceText], off the same pure [CrownDistanceFormat], so a far crown
+ * reads "5,0 km" here exactly as it would read "5,0 km bort" on the distance line
+ * — never a five-thousand-metre integer.
+ */
+@Composable
+private fun crownDistanceShort(meters: Double): String =
+    if (CrownDistanceFormat.useKilometres(meters)) {
+        stringResource(
+            R.string.crownHunt_spawnDistanceValueKm,
+            String.format(
+                LocalLocale.current.platformLocale,
+                "%.1f",
+                CrownDistanceFormat.kilometres(meters),
+            ),
+        )
+    } else {
+        stringResource(R.string.crownHunt_spawnDistanceValue, CrownDistanceFormat.wholeMetres(meters))
     }

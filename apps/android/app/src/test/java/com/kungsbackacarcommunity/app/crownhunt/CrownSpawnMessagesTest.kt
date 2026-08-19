@@ -327,6 +327,25 @@ class CrownSpawnMessagesTest {
         assertEquals(1.4, CrownDistanceFormat.kilometres(1_440.0), 0.001)
     }
 
+    /**
+     * The exact metre-vs-kilometre decision the proximity bar's "… kvar / … to go"
+     * line rides on (via `crownDistanceShort`): a nearby crown stays whole metres,
+     * a far one flips to a one-decimal kilometre — so a 5 km crown never renders as
+     * a runaway "5000 m".
+     */
+    @Test
+    fun proximityRemainingUsesMetresWhenNearAndKilometresWhenFar() {
+        // 120 m -> "120 m" (metres branch, whole number).
+        assertFalse(CrownDistanceFormat.useKilometres(120.0))
+        assertEquals(120, CrownDistanceFormat.wholeMetres(120.0))
+        // 1400 m -> "1.4 km" (kilometre branch, one decimal).
+        assertTrue(CrownDistanceFormat.useKilometres(1_400.0))
+        assertEquals(1.4, CrownDistanceFormat.kilometres(1_400.0), 0.001)
+        // A far crown that used to read "5000 m" is 5.0 km, not 5000.
+        assertTrue(CrownDistanceFormat.useKilometres(5_000.0))
+        assertEquals(5.0, CrownDistanceFormat.kilometres(5_000.0), 0.001)
+    }
+
     /** A broken distance renders as 0, never as "NaN m". */
     @Test
     fun aBrokenDistanceNeverReachesTheScreenAsNaN() {
