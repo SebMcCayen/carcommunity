@@ -126,9 +126,9 @@ async function readInventory(uid: string): Promise<Record<string, number>> {
   return (snap.data() as Record<string, number> | undefined) ?? {};
 }
 
-/** The victim's real-time trap-trigger events (perkDrainEvents/{uid}/events). */
+/** The victim's real-time trap-trigger events (perkDrainEvents/{uid}/drains). */
 async function readDrainEvents(uid: string): Promise<Array<{ amount: number; trapId: string }>> {
-  const snap = await adminDb.collection('perkDrainEvents').doc(uid).collection('events').get();
+  const snap = await adminDb.collection('perkDrainEvents').doc(uid).collection('drains').get();
   return snap.docs.map((d) => ({
     amount: (d.data().amount as number | undefined) ?? 0,
     trapId: (d.data().trapId as string | undefined) ?? '',

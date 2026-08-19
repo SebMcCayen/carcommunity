@@ -334,7 +334,7 @@ function isAlreadyExistsError(error: unknown): boolean {
  * two concurrent samples for the same (trap, victim) serialise on it and the
  * loser aborts, so a victim sitting in a trap is drained exactly once.
  *
- * The victim's REAL-TIME trap-trigger signal (perkDrainEvents/{victim}/events)
+ * The victim's REAL-TIME trap-trigger signal (perkDrainEvents/{victim}/drains)
  * is written INSIDE the transaction, so it is atomic with the KP move — if the
  * drain commits the signal is guaranteed, and if it aborts no phantom signal is
  * left behind. The durable in-app notifications (victim + placer) and their
@@ -575,14 +575,14 @@ async function applyTrapDrain(
     });
 
     // VICTIM real-time trap-trigger signal — per-victim inbox
-    // perkDrainEvents/{victim}/events (owner-read, backend-write; same shape as
+    // perkDrainEvents/{victim}/drains (owner-read, backend-write; same shape as
     // the wave inbox liveWaves/{uid}/waves). Written IN-TXN so it is atomic with
     // the KP move: the Android map listens here and, on a new doc, fires the
     // phone vibration + the on-screen "Du körde på en Spikmatta! −N KP" pop.
     // ANONYMOUS by design — it never carries the placer's uid, so the client
     // signal can never expose who owns the trap (mirrors perkDrains staying
     // backend-only). A short expireAt TTL sweeps it (operator TTL policy).
-    tx.set(db.collection('perkDrainEvents').doc(victimUid).collection('events').doc(), {
+    tx.set(db.collection('perkDrainEvents').doc(victimUid).collection('drains').doc(), {
       amount: drain,
       trapId: trapRef.id,
       createdAt: Timestamp.fromDate(now),
