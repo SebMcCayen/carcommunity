@@ -180,7 +180,7 @@ At the time this document was first written there was no progression, no tiering
     │  admin-approved cells only · flag default OFF  │
     │  N_target = ceil(1.5 · ln(1+A)), cap 5         │
     │  top-up to target · 150 m min separation       │
-    │  rarity 70/22/7/1 · TTL 6/12/24/2 h            │
+    │  rarity 70/22/7/1 · TTL 6/12/24/2 h (leg=2h)   │
     └──────────────────────┬─────────────────────────┘
                            │ crowns appear on map
                            ▼
