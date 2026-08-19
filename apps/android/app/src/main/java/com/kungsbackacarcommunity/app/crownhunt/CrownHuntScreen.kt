@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -12,16 +13,20 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,6 +35,7 @@ import com.kungsbackacarcommunity.app.badges.BadgeLadderId
 import com.kungsbackacarcommunity.app.badges.ladderNameRes
 import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 
 /**
  * Kronjakt (crown hunt) hub screen. Stateless.
@@ -71,6 +77,27 @@ fun CrownHuntScreen(
     buyStatus: PerkBuyStatus = PerkBuyStatus.Idle,
     onBuyPerk: (PerkShopItem) -> Unit = {},
 ) {
+    // The Instructions surface is a self-contained sub-view of this same route: a
+    // full-screen page rendered in place of the hub, dismissed by the shared Aero
+    // Back affordance (which fires the back dispatcher, intercepted here) so it
+    // returns to the hub rather than popping the whole Kronjakt route. No new nav
+    // graph entry and no repository data — the copy is static.
+    var showInstructions by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = showInstructions) { showInstructions = false }
+    if (showInstructions) {
+        // Provide LocalAeroBackAvailable = true AROUND the Instructions surface so
+        // its AeroPage renders the pinned in-app Back arrow regardless of the
+        // ambient routing context. RouteHost already provides this true on the live
+        // path, but providing it here makes the surface's back affordance
+        // self-contained instead of depending on an ancestor two levels up — the
+        // arrow's tap fires the back dispatcher, caught by the BackHandler above,
+        // returning to the hub.
+        CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+            CrownHuntInstructionsScreen(modifier = modifier)
+        }
+        return
+    }
+
     AeroPage(title = stringResource(R.string.crownHunt_screenTitle), modifier = modifier) {
         if (!passesMemberGate) {
             InfoCard(
@@ -83,7 +110,7 @@ fun CrownHuntScreen(
         // Flag OFF (the shipped default): no tab bar at all — render exactly the
         // pre-shop hub so the shop is invisible until an operator enables it.
         if (!perksEnabled) {
-            CrownHuntHubContent(statsState, kronjagare)
+            CrownHuntHubContent(statsState, kronjagare, onShowInstructions = { showInstructions = true })
             return@AeroPage
         }
 
@@ -103,7 +130,7 @@ fun CrownHuntScreen(
         }
         when (selectedTab) {
             1 -> PerkShopContent(shopState, buyStatus, onBuyPerk)
-            else -> CrownHuntHubContent(statsState, kronjagare)
+            else -> CrownHuntHubContent(statsState, kronjagare, onShowInstructions = { showInstructions = true })
         }
     }
 }
@@ -117,7 +144,18 @@ fun CrownHuntScreen(
 private fun ColumnScope.CrownHuntHubContent(
     statsState: CrownStatsUiState,
     kronjagare: KronjagareStanding?,
+    onShowInstructions: () -> Unit,
 ) {
+    // A clearly-placed entry into the full rules/description surface, at the very
+    // top of the hub so a first-time member finds "how does this work?" before the
+    // stats. Opens the read-only [CrownHuntInstructionsScreen].
+    OutlinedButton(
+        onClick = onShowInstructions,
+        modifier = Modifier.fillMaxWidth().testTag(CrownHuntInstructionsButtonTag),
+    ) {
+        Text(stringResource(R.string.crownHunt_instrButton))
+    }
+
     // The member's own badge-ladder standing (the "badges" facet of the
     // personal stats). Omitted, not blanked, until the badge listener resolves.
     kronjagare?.let { KronjagareStatsCard(it) }
@@ -152,6 +190,126 @@ private fun ColumnScope.CrownHuntHubContent(
     // Read-only copy; grounded in the two claim paths (submitClaim /
     // claimSpawn) and the rarity table.
     CrownLegendCard()
+}
+
+/** testTag on the "Instructions" button, for UI tests. */
+const val CrownHuntInstructionsButtonTag = "crownHuntInstructionsButton"
+
+/**
+ * The full Crown Hunt rules/description surface, opened from the hub's
+ * "Instructions" button. A read-only, scrollable [AeroPage] — it awards nothing
+ * and reads no repository data; the copy is static and localized (sv primary +
+ * en) via the `crownHunt.instr*` contract keys.
+ *
+ * The prose is grounded in the backend but deliberately PLAYER-FRIENDLY:
+ *  - rarities/points/shared-vs-exclusive mirror the rarity table
+ *    (`crown-spawn-core.ts`: common/uncommon shared, rare/legendary exclusive;
+ *    rarer = more KP) and the Kronjägare ladder thresholds (10/50/250/1000);
+ *  - spawn frequency is intentionally VAGUE — no replenish cadence, density
+ *    formula or TTL hours — so the exact mechanics stay part of the hunt.
+ *
+ * Dismissed by the shared Aero Back arrow: the parent [CrownHuntScreen] provides
+ * `LocalAeroBackAvailable = true` around this surface so the arrow is always
+ * visible, and intercepts its back dispatch (a [BackHandler]) to return to the
+ * hub rather than pop the whole route.
+ */
+@Composable
+private fun CrownHuntInstructionsScreen(modifier: Modifier = Modifier) {
+    AeroPage(title = stringResource(R.string.crownHunt_instrTitle), modifier = modifier) {
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrIntroTitle),
+            body = stringResource(R.string.crownHunt_instrIntroBody),
+        )
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrCollectTitle),
+            body = stringResource(R.string.crownHunt_instrCollectBody),
+        )
+        InstructionRaritiesSection()
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrSharedTitle),
+            body = stringResource(R.string.crownHunt_instrSharedBody),
+        )
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrExpireTitle),
+            body = stringResource(R.string.crownHunt_instrExpireBody),
+        )
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrSpawnTitle),
+            body = stringResource(R.string.crownHunt_instrSpawnBody),
+        )
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrPointsTitle),
+            body = stringResource(R.string.crownHunt_instrPointsBody),
+        )
+        InstructionSection(
+            title = stringResource(R.string.crownHunt_instrRankTitle),
+            body = stringResource(R.string.crownHunt_instrRankBody),
+        )
+    }
+}
+
+/** One "heading over a paragraph" instruction card. */
+@Composable
+private fun InstructionSection(title: String, body: String) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/**
+ * The rarities card: an intro line, then one bold-rarity-name + description row per
+ * tier. Reuses the shared rarity name strings so it can never disagree with the
+ * crown popups.
+ */
+@Composable
+private fun InstructionRaritiesSection() {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.crownHunt_instrRaritiesTitle),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = stringResource(R.string.crownHunt_instrRaritiesIntro),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_rarityCommon),
+                body = stringResource(R.string.crownHunt_instrRarityCommonBody),
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_rarityUncommon),
+                body = stringResource(R.string.crownHunt_instrRarityUncommonBody),
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_rarityRare),
+                body = stringResource(R.string.crownHunt_instrRarityRareBody),
+            )
+            LegendEntry(
+                title = stringResource(R.string.crownHunt_rarityLegendary),
+                body = stringResource(R.string.crownHunt_instrRarityLegendaryBody),
+            )
+        }
+    }
 }
 
 /**

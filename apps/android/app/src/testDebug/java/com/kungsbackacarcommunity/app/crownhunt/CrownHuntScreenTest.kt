@@ -2,12 +2,16 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.badges.BadgeTier
 import com.kungsbackacarcommunity.app.design.KccTheme
+import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -84,10 +88,39 @@ class CrownHuntScreenTest {
         // Season leaderboard block + a top scorer's name.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
-        // The crown legend (types + "does it disappear?" answer) is present.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle)).assertIsDisplayed()
+        // The crown legend (types + "does it disappear?" answer) is present. It now
+        // sits below the Instructions button + stats, so scroll it into view first.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle))
+            .performScrollTo()
+            .assertIsDisplayed()
         // The crowns-list collect button is gone.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
+    }
+
+    @Test
+    fun instructionsButton_opensSurface_andBackArrowReturnsToHub() {
+        // NB: no LocalAeroBackAvailable is provided here — the Instructions surface
+        // must provide it itself, so this proves the VISIBLE Aero Back arrow shows
+        // on the surface without relying on the ambient routing context.
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
+                    onBack = {},
+                )
+            }
+        }
+        // Hub is shown first, and has no Back arrow of its own here.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).assertDoesNotExist()
+        // Tapping the Instructions button (by testTag) opens the rules surface.
+        composeTestRule.onNodeWithTag(CrownHuntInstructionsButtonTag).performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_instrIntroTitle)).assertIsDisplayed()
+        // The surface shows the pinned Aero Back arrow; tapping it returns to the
+        // hub (via the BackHandler), not out of the route.
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed().performClick()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
     }
 
     @Test
