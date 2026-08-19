@@ -80,4 +80,47 @@ jobs:
       - name: Deploy Cloud Functions
         # Run from the repo root so firebase-tools auto-discovers ./firebase.json,
         # whose functions source ("functions") sits inside the project directory.
-        run: ./functions/node_modules/.bin/firebase deploy --only functions --project kungsbacka-car-community --non-interactive
+        #
+        # Retry wrapper: a full deploy touches all ~170 functions, which routinely
+        # trips the Cloud Functions "Per project mutation requests per minute per
+        # region" quota (HTTP 429) mid-rollout. firebase-tools retries internally
+        # but can exhaust its budget with a handful of functions still throttled,
+        # exiting non-zero even though nothing is actually broken. A manual re-run
+        # always converges because `firebase deploy` is idempotent — the next
+        # attempt only re-touches the functions that still differ, so it issues
+        # far fewer mutations and stays under the per-minute quota. Automate that:
+        # retry the same command up to 3 times, pausing 90s (> the 60s quota
+        # window) between attempts so the mutation budget refills.
+        #
+        # Retry ONLY on the per-minute mutation-quota 429 — it is the only
+        # transient, self-healing failure here. Any other failure (auth, config,
+        # compile, an orphaned function needing deletion) will not be fixed by
+        # waiting, so we fail fast on it instead of masking the real error behind
+        # 3 attempts x 90s.
+        shell: bash
+        run: |
+          set +e
+          attempt=1
+          max_attempts=3
+          log="$RUNNER_TEMP/functions-deploy.log"
+          while [ "$attempt" -le "$max_attempts" ]; do
+            echo "::group::Deploy attempt $attempt/$max_attempts"
+            ./functions/node_modules/.bin/firebase deploy --only functions --project kungsbacka-car-community --non-interactive 2>&1 | tee "$log"
+            status=${PIPESTATUS[0]}
+            echo "::endgroup::"
+            if [ "$status" -eq 0 ]; then
+              echo "Deploy succeeded on attempt $attempt."
+              exit 0
+            fi
+            if ! grep -qiE "Quota exceeded|HTTP Error: 429|Per project mutation requests" "$log"; then
+              echo "::error::Functions deploy failed with a non-quota error (exit $status) — not a transient throttle, so not retrying."
+              exit "$status"
+            fi
+            if [ "$attempt" -lt "$max_attempts" ]; then
+              echo "::warning::Deploy attempt $attempt hit the per-minute mutation quota (429). Waiting 90s for the window to reset before retrying."
+              sleep 90
+            fi
+            attempt=$((attempt + 1))
+          done
+          echo "::error::Functions deploy still hitting the mutation quota after $max_attempts attempts."
+          exit 1
