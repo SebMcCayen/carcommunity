@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.AnnotatedString
@@ -48,8 +49,10 @@ import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.ChatUrlOpener
 import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
+import com.kungsbackacarcommunity.app.chat.WebLinks
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -370,6 +373,12 @@ private fun MessageBubble(
     val eventLinkLabel = stringResource(R.string.events_shareEventLinkLabel)
     val canShowLocation = onShowLocationOnMap != null
     val canOpenEvent = onOpenEvent != null
+    // Tapping an auto-linkified http/https URL opens it in the phone's DEFAULT
+    // browser (an ACTION_VIEW intent the OS resolves), guarded against a missing
+    // browser. The handler captures the (stable) context, so it is deliberately NOT
+    // a remember key below — only the message content drives a rebuild.
+    val context = LocalContext.current
+    val onOpenUrl: (String) -> Unit = remember(context) { { url -> ChatUrlOpener.open(context, url) } }
     val body =
         remember(message.text, linkColor, linkLabel, eventLinkLabel, canShowLocation, canOpenEvent) {
             annotateChatLinks(
@@ -379,6 +388,7 @@ private fun MessageBubble(
                 eventLabel = eventLinkLabel,
                 onShowLocationOnMap = onShowLocationOnMap,
                 onOpenEvent = onOpenEvent,
+                onOpenUrl = onOpenUrl,
             )
         }
     // The time sits on the line ABOVE the bubble, aligned to the bubble's own
@@ -459,7 +469,10 @@ private fun MessageBubble(
     }
 }
 
-/** One tappable link found in a message body — a `geo:` map link or a `kccevent:` event link. */
+/**
+ * One tappable link found in a message body — a `geo:` map link, a `kccevent:` event
+ * link, or a plain `http(s)://` web URL the sender pasted.
+ */
 private sealed interface ChatLinkMatch {
     val range: IntRange
 
@@ -467,6 +480,8 @@ private sealed interface ChatLinkMatch {
         ChatLinkMatch
 
     data class Event(override val range: IntRange, val eventId: String) : ChatLinkMatch
+
+    data class Web(override val range: IntRange, val url: String) : ChatLinkMatch
 }
 
 /**
@@ -477,11 +492,13 @@ private sealed interface ChatLinkMatch {
  *  - a `kccevent:<id>` token → an [eventLabel] chip that opens that event's detail
  *    page (only when [onOpenEvent] is wired).
  *
- * Uses the SAME [GeoLinks.findAll] / [EventShareLinks.findAll] parsers as the
- * writers, so a shared location or event reads identically everywhere and a
- * malformed token is never linkified. When neither handler is wired the raw text is
- * returned untouched. Matches are rendered in document order; the two token schemes
- * are disjoint (`geo:` vs `kccevent:`) so their ranges can never overlap.
+ * Uses the SAME [GeoLinks.findAll] / [EventShareLinks.findAll] / [WebLinks.findAll]
+ * parsers as the writers, so a shared location, event, or pasted URL reads
+ * identically everywhere and a malformed token is never linkified. A pasted
+ * `http(s)://` URL becomes a tappable link that opens the phone's default browser via
+ * [onOpenUrl] (http/https ONLY — `tel:`/`intent:`/`javascript:`/`file:` are never
+ * linkified). Matches are rendered in document order; the token schemes are disjoint
+ * (`geo:` / `kccevent:` / `http(s)://`) so their ranges can never overlap.
  */
 private fun annotateChatLinks(
     text: String,
@@ -490,6 +507,7 @@ private fun annotateChatLinks(
     eventLabel: String,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     onOpenEvent: ((String) -> Unit)?,
+    onOpenUrl: (String) -> Unit,
 ): AnnotatedString {
     val matches = buildList {
         if (onShowLocationOnMap != null) {
@@ -501,6 +519,9 @@ private fun annotateChatLinks(
             EventShareLinks.findAll(text).forEach {
                 add(ChatLinkMatch.Event(it.range, it.link.eventId))
             }
+        }
+        WebLinks.findAll(text).forEach {
+            add(ChatLinkMatch.Web(it.range, it.link.url))
         }
     }.sortedBy { it.range.first }
     if (matches.isEmpty()) return AnnotatedString(text)
@@ -541,6 +562,17 @@ private fun annotateChatLinks(
                         ),
                     ) {
                         append(eventLabel)
+                    }
+
+                is ChatLinkMatch.Web ->
+                    withLink(
+                        LinkAnnotation.Url(
+                            url = match.url,
+                            styles = linkStyles,
+                            linkInteractionListener = { onOpenUrl(match.url) },
+                        ),
+                    ) {
+                        append(match.url)
                     }
             }
             index = match.range.last + 1
