@@ -406,6 +406,11 @@ import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
+import com.kungsbackacarcommunity.app.police.PoliceController
+import com.kungsbackacarcommunity.app.police.PoliceMapMarkers
+import com.kungsbackacarcommunity.app.police.PoliceProximityHost
+import com.kungsbackacarcommunity.app.police.PoliceReport
+import com.kungsbackacarcommunity.app.police.PoliceRepository
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPlaceRequest
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -1334,6 +1339,25 @@ fun AuthenticatedApp(
                         )
                     }
                 }
+            // ── Police-proximity layer (user-reported police pins) ──────────────
+            // A SEPARATE short-TTL layer (police.listNearby), rendered THROUGH the
+            // same incident marker layer (PoliceMapMarkers → a distinct red police
+            // badge, namespaced ids) so no second Mapbox annotation layer is added,
+            // and used to fire the mid-screen ReactionOverlay when the driver comes
+            // close (PoliceProximityHost, mounted below). Guarded → null in a
+            // config-less/CI build, which simply omits the layer + alert.
+            val policeController =
+                remember(context) { PoliceController.createIfAvailable(context) }
+            val policeFlow =
+                remember(policeController) {
+                    policeController?.nearbyPolice ?: MutableStateFlow(emptyList<PoliceReport>())
+                }
+            val nearbyPolice by policeFlow.collectAsState()
+            val policeMarkers = remember(nearbyPolice) { PoliceMapMarkers.markers(nearbyPolice) }
+            // The combined marker list handed to every map: incidents plus the
+            // police pins, one shared IncidentMarkerLayer draw.
+            val mapIncidentMarkers =
+                remember(incidentMarkers, policeMarkers) { incidentMarkers + policeMarkers }
             // Whether the VISIBLE incidents include any Trafikverket-imported row,
             // i.e. whether their open data is actually on screen. Gates the
             // "Källa: Trafikverket" credit in the layers popup — computed off the
@@ -1865,6 +1889,29 @@ fun AuthenticatedApp(
                                 is ReportLocation.Chosen ->
                                     controller.reportAt(type, location.location)
                             }
+                        // A "Police" incident report ALSO drops a short-TTL police
+                        // PROXIMITY pin (police.report), so the same tap that adds
+                        // the incident marker also feeds the mid-screen proximity
+                        // alert for nearby drivers. Best-effort and fire-and-forget:
+                        // it never changes the incident report's own feedback below,
+                        // and a config-less build (null controller) simply skips it.
+                        if (type == IncidentType.POLICE &&
+                            outcome is ReportOutcome.Success
+                        ) {
+                            policeController?.let { police ->
+                                scope.launch {
+                                    when (location) {
+                                        ReportLocation.Current ->
+                                            police.report(PoliceRepository.SOURCE_MANUAL)
+                                        is ReportLocation.Chosen ->
+                                            police.reportAt(
+                                                location.location,
+                                                PoliceRepository.SOURCE_MANUAL,
+                                            )
+                                    }
+                                }
+                            }
+                        }
                         val text =
                             when (outcome) {
                                 is ReportOutcome.Success -> incidentReportSuccessText
@@ -2020,6 +2067,34 @@ fun AuthenticatedApp(
                     // Re-query shortly after the camera settles from a meaningful
                     // pan/zoom, coalesced with the keep-alive above.
                     requeryTicks = incidentRequeryTicks,
+                )
+            }
+
+            // Keep the police-pin layer LIVE around the visible map, so both the
+            // markers AND the proximity alert see freshly-reported police. Anchored
+            // to the same camera centre + radius as the incident poll (the nav
+            // viewport wins while navigating, then the shell camera, then a GPS
+            // fallback). Its OWN keep-alive poll (no shared requery channel — a
+            // ReceiveChannel has a single consumer, which the incident poll owns);
+            // police pins are short-TTL and the 15 s keep-alive surfaces new ones.
+            // Deliberately NOT gated on the traffic-alerts toggle: a police alert is
+            // a safety cue that must fire whether or not the incident layer is shown.
+            LaunchedEffect(selectedTab, policeController, mapSurface) {
+                val controller = policeController ?: return@LaunchedEffect
+                if (selectedTab != ShellTab.Map) return@LaunchedEffect
+                val appContext = context.applicationContext
+                controller.pollNearby(
+                    radiusProvider = {
+                        navQueryViewport.value?.radiusMeters
+                            ?: mapSurface.visibleRadiusMeters()
+                    },
+                    centerProvider = {
+                        navQueryViewport.value?.let { viewport ->
+                            LatLng(longitude = viewport.longitude, latitude = viewport.latitude)
+                        } ?: mapSurface.cameraSnapshot.value?.let { snapshot ->
+                            LatLng(longitude = snapshot.longitude, latitude = snapshot.latitude)
+                        } ?: CurrentLocation.lastKnown(appContext)
+                    },
                 )
             }
 
@@ -5062,9 +5137,37 @@ fun AuthenticatedApp(
                     } else {
                         null
                     }
+
                 val waveOverlaySlot: (@Composable () -> Unit)? =
                     if (waveRepository != null) {
                         { ReactionOverlay(event = waveOverlayEvent, onFinished = { waveOverlayEvent = null }) }
+                    } else {
+                        null
+                    }
+
+                // Police-proximity mid-screen alert, composed over the map like the
+                // convoy reactions. REUSES the same ReactionOverlay + police visuals,
+                // driven here by MAP PROXIMITY to user-reported police pins. Always
+                // present when the police layer is available (not convoy-gated); the
+                // host itself renders nothing until the driver comes near a live pin.
+                val policeProximitySlot: (@Composable () -> Unit)? =
+                    if (policeController != null) {
+                        {
+                            val proximityContext = context.applicationContext
+                            PoliceProximityHost(
+                                pins = nearbyPolice,
+                                // lastKnown (NOT currentFix): the monitor ticks every
+                                // few seconds, and forcing a fresh getCurrentLocation
+                                // each tick would churn battery/CPU in a driving app.
+                                // With the map open the Mapbox location component is
+                                // already requesting updates, so the cached fix stays
+                                // current; lastKnown also falls back to a single fresh
+                                // fix only when there is no cache at all.
+                                locationProvider = {
+                                    CurrentLocation.lastKnown(proximityContext)
+                                },
+                            )
+                        }
                     } else {
                         null
                     }
@@ -5213,7 +5316,7 @@ fun AuthenticatedApp(
                         // navigation map's own layer. No second query and no
                         // second renderer — the screen hands it to the shared
                         // IncidentMarkerLayer the shell surface uses.
-                        incidentMarkers = incidentMarkers,
+                        incidentMarkers = mapIncidentMarkers,
                         // ...and the navigation camera becomes the anchor for the
                         // one incident poll while it exists, so the layer keeps
                         // up with the driver instead of with the stood-down shell
@@ -5790,7 +5893,7 @@ fun AuthenticatedApp(
                                     // if the callable is re-locked without this
                                     // gate, non-members would see an action that
                                     // fails on submit.
-                                    incidentMarkers = incidentMarkers,
+                                    incidentMarkers = mapIncidentMarkers,
                                     // Community event pins for everyone (published,
                                     // upcoming, positioned). No layer toggle — event
                                     // locations are public. Tapping one opens the
@@ -5848,6 +5951,10 @@ fun AuthenticatedApp(
                                     // no WaveRepository (config-less / CI build).
                                     waveControl = waveControlSlot,
                                     waveOverlay = waveOverlaySlot,
+                                    // Police-proximity mid-screen alert, driven by
+                                    // nearby user-reported police pins. Null when the
+                                    // police layer is unavailable (config-less build).
+                                    policeProximity = policeProximitySlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its

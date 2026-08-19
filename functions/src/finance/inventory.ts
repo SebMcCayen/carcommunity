@@ -466,6 +466,8 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'incidents.remove': 'variable-member',
   'incidents.confirm': 'variable-member',
   'incidents.reportCleared': 'variable-member',
+  'police.report': 'variable-member',
+  'police.listNearby': 'variable-member',
   // The finance board's own callables — an admin opens the board a few times a
   // day and edits the recurring-costs list rarely.
   'finance.estimate': 'admin-rare',

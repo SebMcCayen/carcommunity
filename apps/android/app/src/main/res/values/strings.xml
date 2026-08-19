@@ -1697,6 +1697,7 @@
     <string name="turnByTurn_resumeBody">Du navigerade till %1$s. Vill du fortsätta där du var?</string>
     <string name="turnByTurn_resumeConfirm">Fortsätt</string>
     <string name="turnByTurn_resumeDismiss">Avvisa</string>
+    <string name="policeAlert_caption">Polis i närheten!</string>
     <string name="incidents_reportButton">Rapportera händelse</string>
     <string name="incidents_reportTitle">Rapportera en händelse</string>
     <string name="incidents_reportSubtitle">Välj vad du ser på vägen framför dig. Rapporter delas med alla och försvinner av sig själva.</string>

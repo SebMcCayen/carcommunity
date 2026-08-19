@@ -1106,6 +1106,53 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // policeReports – user-reported short-lived POLICE pins (police-proximity
+    // alert feature). MEMBER-read (least-privilege, per the feature spec): an
+    // active member reads ACTIVE, unexpired pins to draw the layer + drive the
+    // proximity alert. isActiveMember() is the shared member gate (today it
+    // resolves to authenticated + non-suspended while member gating is disabled
+    // repo-wide; it re-locks to real membership with every other call site — see
+    // the helper), which also matches police.listNearby's requireMemberActor.
+    // Double-gated on top: status == 'active' AND expiresAt still in the future,
+    // so an expired pin is hidden immediately even before the Firestore TTL
+    // policy on expiresAt reclaims it (there is no scheduled sweep — a pin has no
+    // sub-collections). ALL writes go through the member-gated, rate-limited
+    // police.report callable (Admin SDK) — no client writes, so a member cannot
+    // forge another user's pin or backdate its expiry.
+    // -------------------------------------------------------------------------
+    match /policeReports/{reportId} {
+      allow read: if isActiveMember()
+        && resource.data.status == 'active'
+        && resource.data.expiresAt > request.time;
+      // No client writes — police.report (callable) only.
+    }
+
+    // -------------------------------------------------------------------------
+    // policeReportRateLimits – per-user fixed-window counter for police.report
+    // (anti-spam: caps how often a member can drop a police pin). Deterministic
+    // doc id `{uid}_{epochMinute}`; police.report reads it by id and bumps it
+    // with FieldValue.increment via the Admin SDK before writing the pin. Fully
+    // backend-only: never client-readable or client-writable, so a member cannot
+    // inspect or reset their own throttle. `expireAt` carries a Firestore TTL
+    // policy so spent windows self-delete. (Same shape/reasoning as
+    // incidentListRateLimits.)
+    // -------------------------------------------------------------------------
+    match /policeReportRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // policeListRateLimits – per-user fixed-window counter for police.listNearby
+    // (runaway / abuse guard on the hot map read). Same mechanism, same backend-
+    // only posture and same `expireAt` TTL as policeReportRateLimits, in a
+    // SEPARATE collection so a burst of map refreshes can never consume a
+    // member's ability to report a police pin.
+    // -------------------------------------------------------------------------
+    match /policeListRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
     // memberSearchRateLimits – per-user fixed-window counter for
     // userSearch.members (the member typeahead). Same shape and same reasoning
     // as incidentListRateLimits above: deterministic doc id

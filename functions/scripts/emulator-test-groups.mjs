@@ -86,6 +86,7 @@ export const GROUPS = [
       'points*',
       'badges',
       'incidents',
+      'police',
       'phase11',
       'partner*',
       'insights',

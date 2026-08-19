@@ -78,7 +78,7 @@ None of these can be done from the repository.
 
 | #   | Action                                                                                                                                                                                                                                                                                                                                                                                   | Checklist origin      |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| S1  | **Enable the Firestore TTL policies.** Verified live: the project has **43 composite indexes deployed and zero `fieldOverrides`** — i.e. _no TTL policy exists on any collection_. Eight collection groups write an `expireAt` that nothing currently reaps. See the table below.                                                                                                        | Parts 12.12, 15       |
+| S1  | **Enable the Firestore TTL policies.** Verified live: the project has **43 composite indexes deployed and zero `fieldOverrides`** — i.e. _no TTL policy exists on any collection_. Thirteen collection groups need a TTL policy on an `expireAt` (or, for `policeReports`, an `expiresAt`) that nothing currently reaps. See the table below.                                                                                                        | Parts 12.12, 15       |
 | S2  | **Enable Firebase Authentication sign-in providers.** Deliberately deferred to end of MVP. Until Google Sign-In is enabled in the console, the physical-device sign-in test (Part 8.8) cannot run.                                                                                                                                                                                       | Part 8.8              |
 | S3  | **Google Play setup.** Play is not enabled, so: no release SHA-1/SHA-256 exists yet (needed for the API-key restriction, the Firebase Android app, and a re-download of `google-services.json`); there is no `member_monthly` product and no signed build on a track. Blocks C9, Part 13.2 and the Play half of C15. **Launch must start as a closed test group**, not a public release. | Parts 13.2, 16.1(b)   |
 | S4  | **Configure Firestore backups.** Nothing exists: no scheduled export, no PITR, no IaC, no documented procedure — only an aspiration at `docs/architecture.md:249`. Then verify one restore.                                                                                                                                                                                              | Part 15.2             |
@@ -89,7 +89,7 @@ None of these can be done from the repository.
 | S9  | **Record owner approval of the App Check enforcement plan.** The plan is documented; the approval is not written down anywhere.                                                                                                                                                                                                                                                          | Part 17.7             |
 | S10 | **Physical-device verification pass on Android** (Part 14): live-location start/stop/hide, background location, push delivery, and Mapbox rendering with real GPS.                                                                                                                                                                                                                       | Part 14               |
 
-#### S1 detail — the eight TTL policies that do not exist
+#### S1 detail — the thirteen TTL policies that do not exist
 
 Each is a one-time
 `gcloud firestore fields ttls update expireAt --collection-group=<group> --enable-ttl`. Writing an
@@ -107,6 +107,16 @@ Each is a one-time
 | `recentUsers`             | `crownHunt/spawnActivity.ts`                     | Per-(cell, user) presence rows — **pseudonymous location data** |
 | `waves`                   | `live/sendWave.ts`                               | Delivered wave docs (`liveWaves/{uid}/waves/`), ~5 min each     |
 | `liveWaveCooldowns`       | `live/sendWave.ts`                               | Spent per-user wave anti-spam cooldown docs                     |
+| `policeReports` †         | `police/report.ts`                               | Expired police pins (no scheduled sweep — TTL policy is the only reclaim) |
+| `policeReportRateLimits`  | `police/report.ts`                               | Spent report rate-limit windows                                 |
+| `policeListRateLimits`    | `police/listNearby.ts`                           | Spent list rate-limit windows                                   |
+
+† `policeReports` is the ONE row whose TTL field is **`expiresAt`**, not `expireAt` (it is the pin
+document's own expiry, mirroring the field name incidents uses). Its command is therefore
+`gcloud firestore fields ttls update expiresAt --collection-group=policeReports --enable-ttl`.
+An expired pin is already invisible (the read rule and `police.listNearby` both gate on
+`expiresAt > now`); the policy only reclaims storage. The two `police*RateLimits` rows use
+`expireAt` like every other rate-limit counter above.
 
 `crownSpawnDailyClaims` (`crownHunt/claimSpawn.ts:452`) also writes an `expireAt` with no documented
 command; add it to the same sweep. `recentUsers` is the one with a privacy edge —

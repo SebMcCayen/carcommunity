@@ -1825,6 +1825,9 @@
     "resumeConfirm": "Fortsätt",
     "resumeDismiss": "Avvisa"
   },
+  "policeAlert": {
+    "caption": "Polis i närheten!"
+  },
   "incidents": {
     "reportButton": "Rapportera händelse",
     "reportTitle": "Rapportera en händelse",

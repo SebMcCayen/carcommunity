@@ -1825,6 +1825,9 @@
     "resumeConfirm": "Continue",
     "resumeDismiss": "Dismiss"
   },
+  "policeAlert": {
+    "caption": "Police nearby!"
+  },
   "incidents": {
     "reportButton": "Report incident",
     "reportTitle": "Report an incident",
