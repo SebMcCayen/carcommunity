@@ -69,6 +69,7 @@ import com.kungsbackacarcommunity.app.feedback.FeedbackCoordinator
 import com.kungsbackacarcommunity.app.feedback.FirebaseFeedbackRepository
 import com.kungsbackacarcommunity.app.groupdrive.FirebaseGroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveCoordinator
+import com.kungsbackacarcommunity.app.leaderboard.FirebaseLeaderboardRepository
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationSettingsRepository
 import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsRepository
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
@@ -220,6 +221,8 @@ class MainActivity : ComponentActivity() {
         val crownHuntCoordinator = crownHuntRepository?.let { CrownHuntCoordinator(it) }
         val partnersRepository = FirebasePartnersRepository.createIfAvailable(applicationContext)
         val offerCodeCoordinator = partnersRepository?.let { OfferCodeCoordinator(it) }
+        val leaderboardRepository =
+            FirebaseLeaderboardRepository.createIfAvailable(applicationContext)
         val notificationsRepository =
             FirebaseNotificationsRepository.createIfAvailable(applicationContext)
         val notificationsCoordinator =
@@ -481,6 +484,7 @@ class MainActivity : ComponentActivity() {
                         groupDriveCoordinator = groupDriveCoordinator,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
+                        leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
                         notificationsRepository = notificationsRepository,

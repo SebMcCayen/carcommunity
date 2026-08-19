@@ -1273,6 +1273,24 @@
     "deployErrorUnavailable": "Det gick inte att aktivera perken just nu.",
     "deployErrorUnknown": "Något gick fel. Försök igen."
   },
+  "leaderboard": {
+    "title": "Topplista",
+    "scopeAllTime": "Genom tiderna",
+    "scopeThisMonth": "Denna månad",
+    "categoryCrownPoints": "Kronpoäng",
+    "categoryDistance": "Sträcka",
+    "categoryEvents": "Besökta event",
+    "categoryConvoys": "Ledda konvojer",
+    "categoryStreak": "Längsta svit",
+    "valueCrownPoints": "%1$d KP",
+    "valueDistance": "%1$d km",
+    "valueCount": "%1$d",
+    "valueDays": "%1$d dagar",
+    "rank": "#%1$d",
+    "you": "Du",
+    "categoryEmpty": "Inga resultat än – bli först på listan.",
+    "error": "Det gick inte att ladda topplistan. Försök igen."
+  },
   "partners": {
     "screenTitle": "KCC Företagspartner",
     "statusLabel": "Samarbetspartner",
@@ -1587,6 +1605,7 @@
     "socialEvents": "Event",
     "socialNotifications": "Aviseringar",
     "socialCrownHunt": "Kronjakt",
+    "socialLeaderboard": "Topplista",
     "socialPartners": "Partners",
     "garageFriends": "Vänner",
     "garageBadges": "Utmärkelser",
