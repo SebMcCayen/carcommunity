@@ -1204,11 +1204,11 @@
     <string name="crownHunt_shopErrorInsufficient">Du har inte tillräckligt med Kronpoäng för den här perken.</string>
     <string name="crownHunt_shopErrorUnavailable">Butiken är inte tillgänglig just nu.</string>
     <string name="crownHunt_shopErrorUnknown">Något gick fel. Försök igen.</string>
-    <string name="crownHunt_shopErrorHoldCap">Du har redan max antal av den här perken. Använd några först.</string>
+    <string name="crownHunt_shopErrorHoldCap">Du har nått gränsen för hur många perks du kan lagra. Använd några först.</string>
     <string name="crownHunt_shopErrorCooldown">Vänta en liten stund mellan köp.</string>
     <string name="crownHunt_perkNameSpikeStrip">Spikmatta</string>
     <string name="crownHunt_perkNameShield">Sköld</string>
-    <string name="crownHunt_perkNameBoost">Dubbla poäng</string>
+    <string name="crownHunt_perkNameBoost">Dubbla Poäng</string>
     <string name="crownHunt_perkKindTrap">Fälla</string>
     <string name="crownHunt_perkKindShield">Skydd</string>
     <string name="crownHunt_perkKindBoost">Boost</string>

@@ -1204,7 +1204,7 @@
     <string name="crownHunt_shopErrorInsufficient">You don\'t have enough Crown Points for this perk.</string>
     <string name="crownHunt_shopErrorUnavailable">The shop isn\'t available right now.</string>
     <string name="crownHunt_shopErrorUnknown">Something went wrong. Try again.</string>
-    <string name="crownHunt_shopErrorHoldCap">You already hold the most of this perk. Use some first.</string>
+    <string name="crownHunt_shopErrorHoldCap">You\'ve reached the limit of how many perks you can store. Use some first.</string>
     <string name="crownHunt_shopErrorCooldown">Wait a moment between purchases.</string>
     <string name="crownHunt_perkNameSpikeStrip">Spike strip</string>
     <string name="crownHunt_perkNameShield">Shield</string>

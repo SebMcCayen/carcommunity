@@ -1297,7 +1297,7 @@
     "shopErrorInsufficient": "You don't have enough Crown Points for this perk.",
     "shopErrorUnavailable": "The shop isn't available right now.",
     "shopErrorUnknown": "Something went wrong. Try again.",
-    "shopErrorHoldCap": "You already hold the most of this perk. Use some first.",
+    "shopErrorHoldCap": "You've reached the limit of how many perks you can store. Use some first.",
     "shopErrorCooldown": "Wait a moment between purchases.",
     "perkNameSpikeStrip": "Spike strip",
     "perkNameShield": "Shield",

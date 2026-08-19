@@ -231,12 +231,14 @@ describe('crownHunt.seedPerkCatalog', () => {
 });
 
 describe('crownHunt.buyPerk', () => {
-  // Existing cases fire several buys for `member` milliseconds apart; clear the
-  // anti-burst cooldown before each so only the dedicated cooldown test exercises
-  // it. Also clear the hold-cap surface so an accumulating inventory across cases
-  // never trips the per-perk / total-value ceilings under the wrong assertion.
+  // Existing cases fire several buys for `member` milliseconds apart; reset both
+  // per-member limit surfaces before each so only the dedicated limit tests
+  // exercise them: clear the anti-burst purchase cooldown, and clear the accrued
+  // inventory so an accumulating hold across cases never trips the per-perk /
+  // total-value ceilings under the wrong assertion.
   beforeEach(async () => {
     await clearPurchaseCooldown(member.uid);
+    await adminDb.collection('perkInventory').doc(member.uid).delete();
   });
 
   it('debits KP and increments inventory atomically', async () => {

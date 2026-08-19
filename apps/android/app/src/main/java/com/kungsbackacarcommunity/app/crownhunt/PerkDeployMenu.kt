@@ -186,7 +186,7 @@ private fun PerkDeployRow(
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
             Text(
-                text = perkDisplayName(item.perkId, item.name),
+                text = perkDisplayName(item.perkId, item.name, item.nameEn),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -264,7 +264,7 @@ private fun DeployStatusBanner(
                     ?.items
                     ?.firstOrNull { it.perkId == status.perkId }
             val perkName =
-                deployedItem?.let { perkDisplayName(it.perkId, it.name) } ?: status.perkId
+                deployedItem?.let { perkDisplayName(it.perkId, it.name, it.nameEn) } ?: status.perkId
             val message =
                 if (status.alreadyDeployed) {
                     stringResource(R.string.crownHunt_deployAlreadyMessage)
