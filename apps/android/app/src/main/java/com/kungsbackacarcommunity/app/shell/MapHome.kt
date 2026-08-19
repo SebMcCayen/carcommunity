@@ -331,6 +331,11 @@ fun MapHome(
     // chrome like [convoyReactions]; null (no police layer / config-less build)
     // composes nothing. Non-blocking — the overlay takes no touches.
     policeProximity: (@Composable () -> Unit)? = null,
+    // Crown Hunt trap-trigger pop (the mid-screen "Du körde på en Spikmatta!
+    // −N KP" ReactionOverlay fired when the driver drives onto a rival's trap).
+    // Composed ON TOP of the map chrome like [waveOverlay]; null (crownHuntPerks
+    // off / config-less build) composes nothing. Non-blocking.
+    trapDrainOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -813,6 +818,11 @@ fun MapHome(
         // Police-proximity alert pop, composed on TOP of the map chrome so it is
         // never hidden behind a control. Null (no police layer) composes nothing.
         policeProximity?.invoke()
+
+        // Crown Hunt trap-trigger pop (the mid-screen "Du körde på en Spikmatta!
+        // −N KP" ReactionOverlay), composed ON TOP of the map chrome so it is never
+        // hidden. Null (crownHuntPerks off / config-less build) composes nothing.
+        trapDrainOverlay?.invoke()
 
         // Incident-report flow, in three steps (see the state block above).
         //

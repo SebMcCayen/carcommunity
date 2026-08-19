@@ -1493,6 +1493,25 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // perkDrainEvents/{uid}/events – the per-VICTIM REAL-TIME trap-trigger inbox
+    // The ONE client-readable trap signal: when a victim drives onto a trap the
+    // drain transaction writes a doc here { amount, trapId, createdAt, expireAt }
+    // that the victim's map listens to, firing the phone vibration + the on-screen
+    // "Du körde på en Spikmatta! −N KP" pop. SAME per-user-inbox shape as
+    // notifications/{uid}/items and liveWaves/{uid}/waves: owner-only READ, and
+    // NO client writes — the doc is written by the trap-drain processor (Admin
+    // SDK) inside the drain transaction, so a client can neither forge a drain
+    // signal nor clear one to hide it. It is deliberately ANONYMOUS (no placer
+    // uid) so this readable surface never exposes who owns a trap. A short
+    // expireAt TTL sweeps consumed/stale events (operator TTL policy on the
+    // collection-group `events`).
+    // -------------------------------------------------------------------------
+    match /perkDrainEvents/{userId}/events/{eventId} {
+      allow read: if isOwner(userId);
+      // No client writes: written by the trap-drain processor (Admin SDK) only.
+    }
+
+    // -------------------------------------------------------------------------
     // perkTrapVictims – once-per-(trap, victim) marker (idempotency guard)
     // Backend-only. Created inside the drain transaction so a victim sitting in
     // a trap is drained exactly once by it; a client that could read or clear
