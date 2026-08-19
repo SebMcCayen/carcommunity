@@ -247,6 +247,10 @@ data class MapBillboardMarker(
  * @property glowColorArgb a soft halo drawn OUTSIDE the rings, or null for the
  *   tiers that have none. Only the legendary tier glows — see
  *   `CrownMarkerStyle.glowColorArgb` for why it is not on all four.
+ * @property collectedByYou whether to stamp the distinct "you already collected
+ *   this" check badge on the marker — true only for a SHARED crown the current
+ *   member has picked up but which stays live on the map for others. Baked into
+ *   the marker image (not a separate layer), so it scales at every zoom.
  */
 data class MapCrownMarker(
     val id: String,
@@ -256,6 +260,7 @@ data class MapCrownMarker(
     @DrawableRes val iconRes: Int,
     val glyphColorArgb: Int,
     val glowColorArgb: Int?,
+    val collectedByYou: Boolean = false,
 )
 
 /**

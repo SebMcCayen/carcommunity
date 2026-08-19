@@ -408,6 +408,136 @@ class CrownMarkerStyleTest {
         }
     }
 
+    // ---- Collected-by-you marker ------------------------------------------
+
+    /**
+     * The decision the whole feature turns on: a SHARED crown the member already
+     * collected gets the distinct "collected by you" marker — the dimmed collected
+     * disc, no glow, and the check badge — REGARDLESS of range and rarity. It stays
+     * on the map for others, so it must never revert to looking collectable for the
+     * member who already has it.
+     */
+    @Test
+    fun `a collected crown gets the collected marker at every rarity and range`() {
+        for (rarity in CrownRarity.entries) {
+            for (inRange in listOf(true, false)) {
+                val appearance =
+                    CrownMarkerStyle.spawnMarkerAppearance(
+                        rarity = rarity,
+                        inRange = inRange,
+                        collectedByYou = true,
+                    )
+                assertTrue(
+                    "$rarity inRange=$inRange collected: must carry the check badge",
+                    appearance.collectedBadge,
+                )
+                assertEquals(
+                    "$rarity inRange=$inRange collected: must use the collected disc",
+                    CrownMarkerStyle.COLLECTED_DISC,
+                    appearance.discColorArgb,
+                )
+                assertNull(
+                    "$rarity inRange=$inRange collected: must not glow",
+                    appearance.glowColorArgb,
+                )
+            }
+        }
+    }
+
+    /**
+     * A crown you have NOT collected follows the existing collectable rule: no
+     * badge, the rarity colour in range and the neutral slate out of range, a halo
+     * only on a legendary in range. The decision helper must not change any of
+     * that — it only adds the collected branch.
+     */
+    @Test
+    fun `an uncollected crown gets no badge and follows the range rule`() {
+        for (rarity in CrownRarity.entries) {
+            for (inRange in listOf(true, false)) {
+                val appearance =
+                    CrownMarkerStyle.spawnMarkerAppearance(
+                        rarity = rarity,
+                        inRange = inRange,
+                        collectedByYou = false,
+                    )
+                assertTrue(
+                    "$rarity inRange=$inRange uncollected: no badge",
+                    !appearance.collectedBadge,
+                )
+                assertEquals(
+                    CrownMarkerStyle.discColorArgb(rarity, inRange),
+                    appearance.discColorArgb,
+                )
+                assertEquals(
+                    CrownMarkerStyle.glyphColorArgb(rarity, inRange),
+                    appearance.glyphColorArgb,
+                )
+                assertEquals(
+                    CrownMarkerStyle.glowColorArgb(rarity, inRange),
+                    appearance.glowColorArgb,
+                )
+            }
+        }
+    }
+
+    /**
+     * The collected disc must not be confused with the out-of-range slate — the
+     * two greyed states mean different things (done vs still-yours-to-get). The
+     * check BADGE is the primary "collected" channel (a shape cue that survives any
+     * colour-vision deficiency), but the disc must still be plainly different from
+     * the slate as reinforcement: ΔE ≥ 10 under normal vision AND each simulated
+     * dichromacy. (It sits below the ΔE 20 tier bar on purpose — the badge, not the
+     * disc, carries the guarantee here, exactly as the silhouette does for rarity.)
+     */
+    @Test
+    fun `the collected disc stays distinct from the out-of-range slate`() {
+        val collected = CrownMarkerStyle.COLLECTED_DISC
+        val slate = CrownMarkerStyle.OUT_OF_RANGE_DISC
+        val measurements =
+            buildList {
+                add("normal vision" to Cvd.deltaE(collected, slate))
+                for (deficiency in Cvd.Deficiency.entries) {
+                    add(
+                        deficiency.label to
+                            Cvd.deltaE(
+                                Cvd.simulate(collected, deficiency),
+                                Cvd.simulate(slate, deficiency),
+                            ),
+                    )
+                }
+            }
+        for ((label, delta) in measurements) {
+            assertTrue(
+                "collected vs out-of-range under $label: ΔE %.2f, below the 10.0 floor"
+                    .format(delta),
+                delta >= 10.0,
+            )
+        }
+    }
+
+    /** The collected crown's glyph and the badge tick both clear the contrast floor. */
+    @Test
+    fun `the collected glyph and badge tick are readable`() {
+        val glyph =
+            IncidentMarkerStyle.contrastRatio(
+                CrownMarkerStyle.collectedGlyphColorArgb(),
+                CrownMarkerStyle.COLLECTED_DISC,
+            )
+        assertTrue(
+            "collected glyph contrast is %.2f:1, below the %.1f:1 floor".format(glyph, minGlyphContrast),
+            glyph >= minGlyphContrast,
+        )
+        val tick =
+            IncidentMarkerStyle.contrastRatio(
+                CrownMarkerStyle.collectedBadgeGlyphColorArgb(),
+                CrownMarkerStyle.COLLECTED_BADGE_FILL,
+            )
+        assertTrue(
+            "badge tick contrast is %.2f:1, below the %.1f:1 floor".format(tick, minGlyphContrast),
+            tick >= minGlyphContrast,
+        )
+    }
+
     // ---- Geometry ---------------------------------------------------------
 
     /**
@@ -464,5 +594,18 @@ class CrownMarkerStyleTest {
         val withoutGlow =
             com.kungsbackacarcommunity.app.shell.CrownMarkerBitmaps.imageId(1, 2, 3, null)
         assertNotEquals(withGlow, withoutGlow)
+
+        // The collected badge is part of the key too: a collected crown carries
+        // extra pixels (the check badge) and must not reuse the plain image.
+        val plain =
+            com.kungsbackacarcommunity.app.shell.CrownMarkerBitmaps.imageId(1, 2, 3, null)
+        val collected =
+            com.kungsbackacarcommunity.app.shell.CrownMarkerBitmaps
+                .imageId(1, 2, 3, null, collectedBadge = true)
+        assertNotEquals(plain, collected)
+        assertTrue(
+            "'$collected' must be namespaced to the crown layer",
+            collected.startsWith("kcc-crown-"),
+        )
     }
 }

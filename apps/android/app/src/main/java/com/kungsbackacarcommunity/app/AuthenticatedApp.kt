@@ -2056,6 +2056,15 @@ fun AuthenticatedApp(
                         ?: MutableStateFlow(emptyList<CrownSpawn>())
                 }
             val crownSpawns by crownSpawnsFlow.collectAsState()
+            // The SHARED crowns this member already collected but which stay live
+            // for others — drawn with the distinct "collected by you" marker rather
+            // than hidden. Survives a map refresh and self-prunes on expiry.
+            val crownCollectedIdsFlow =
+                remember(crownSpawnController) {
+                    crownSpawnController?.collectedSpawnIds
+                        ?: MutableStateFlow(emptySet<String>())
+                }
+            val crownCollectedIds by crownCollectedIdsFlow.collectAsState()
             val crownRequeryTicks =
                 remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
             LaunchedEffect(selectedTab, crownSpawnController, crownSpawnEnabled, mapSurface) {
@@ -2193,7 +2202,7 @@ fun AuthenticatedApp(
             // neutral out-of-range slate; it lights up to its rarity colour once
             // the member is close enough — the same rule that gates the popup.
             val crownMarkers =
-                remember(crownSpawns, crownSpawnEnabled, inRangeSpawnIds) {
+                remember(crownSpawns, crownSpawnEnabled, inRangeSpawnIds, crownCollectedIds) {
                     if (!crownSpawnEnabled) {
                         emptyList()
                     } else {
@@ -2203,18 +2212,26 @@ fun AuthenticatedApp(
                             // once a real location proves the member is inside the
                             // ring; before the first fix nothing looks collectible.
                             val inRange = inRangeSpawnIds != null && spawn.id in inRangeSpawnIds
+                            // A SHARED crown this member already collected stays on
+                            // the map (it is still live for others) but is drawn with
+                            // the distinct "collected by you" marker. The pure helper
+                            // owns the collectable-vs-collected decision, so the
+                            // choice is unit-tested rather than inlined here.
+                            val appearance =
+                                CrownMarkerStyle.spawnMarkerAppearance(
+                                    rarity = spawn.rarity,
+                                    inRange = inRange,
+                                    collectedByYou = spawn.id in crownCollectedIds,
+                                )
                             MapCrownMarker(
                                 id = spawn.id,
                                 longitude = spawn.longitude,
                                 latitude = spawn.latitude,
-                                discColorArgb = CrownMarkerStyle.discColorArgb(spawn.rarity, inRange),
+                                discColorArgb = appearance.discColorArgb,
                                 iconRes = crownGlyphRes(spawn.rarity),
-                                glyphColorArgb =
-                                    CrownMarkerStyle.glyphColorArgb(spawn.rarity, inRange),
-                                // Only a legendary IN range glows; out of range it
-                                // carries no halo, so "walk to that one" is reserved
-                                // for a legendary the member can actually reach.
-                                glowColorArgb = CrownMarkerStyle.glowColorArgb(spawn.rarity, inRange),
+                                glyphColorArgb = appearance.glyphColorArgb,
+                                glowColorArgb = appearance.glowColorArgb,
+                                collectedByYou = appearance.collectedBadge,
                             )
                         }
                     }

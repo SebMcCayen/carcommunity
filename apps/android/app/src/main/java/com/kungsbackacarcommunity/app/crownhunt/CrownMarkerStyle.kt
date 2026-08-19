@@ -153,6 +153,115 @@ object CrownMarkerStyle {
         if (inRange) ADMIN_POINT_DISC else OUT_OF_RANGE_DISC
 
     /**
+     * The disc colour for a SHARED crown the current member has ALREADY collected.
+     *
+     * A common/uncommon crown is collectable once per member but stays `live` on
+     * the shared map to its TTL, because OTHER members can still take it — so a
+     * member who already picked one up keeps seeing the very same crown. Rather
+     * than hide it (#874's original fix) or leave it looking collectable, it is
+     * redrawn in this dimmed pine-slate and stamped with the check badge
+     * ([COLLECTED_BADGE_FILL]) so the meaning is unmistakable: "you already got
+     * this one; it is still here for others."
+     *
+     * A THIRD greyed state after [OUT_OF_RANGE_DISC], and deliberately its own
+     * colour: an out-of-range crown is inactive-but-still-yours-to-get, a
+     * collected crown is done. The two must not read alike, so this carries a
+     * green cast (the universal "done") where the out-of-range slate is neutral,
+     * and the check badge — a SHAPE cue that survives any colour-vision deficiency
+     * — is the primary "collected" channel, exactly as the rarity silhouette is
+     * the primary rarity channel. The crown silhouette itself is left untouched,
+     * so a member still recognises WHICH crown they collected.
+     */
+    const val COLLECTED_DISC: Int = 0xFF3F5147.toInt()
+
+    /**
+     * The fill of the small "collected by you" check badge stamped on the lower
+     * right of a collected shared crown — a clear success green, the same "done"
+     * signal a checkpoint-cleared marker carries in a driving game.
+     */
+    const val COLLECTED_BADGE_FILL: Int = 0xFF2E9E5B.toInt()
+
+    /** Diameter of the check badge, in dp. Baked into the marker bitmap so it
+     * scales with the crown at every zoom rather than being a separately-culled
+     * layer (the zoom-cull class of bug #867/#897 fixed). */
+    const val COLLECTED_BADGE_DIAMETER_DP: Float = 14f
+
+    /**
+     * The glyph tint for a collected crown's silhouette — whichever of
+     * [IncidentMarkerStyle.GLYPH_LIGHT] / [IncidentMarkerStyle.GLYPH_DARK]
+     * contrasts better with [COLLECTED_DISC], chosen the same computed way as
+     * every other tint so a retune of the disc cannot leave an unreadable glyph.
+     */
+    fun collectedGlyphColorArgb(): Int {
+        val light = IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_LIGHT, COLLECTED_DISC)
+        val dark = IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_DARK, COLLECTED_DISC)
+        return if (light >= dark) IncidentMarkerStyle.GLYPH_LIGHT else IncidentMarkerStyle.GLYPH_DARK
+    }
+
+    /**
+     * The check-mark tint on the badge — computed for contrast against
+     * [COLLECTED_BADGE_FILL] the same way, so the tick stays legible if the badge
+     * fill is ever retuned.
+     */
+    fun collectedBadgeGlyphColorArgb(): Int {
+        val light =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_LIGHT, COLLECTED_BADGE_FILL)
+        val dark =
+            IncidentMarkerStyle.contrastRatio(IncidentMarkerStyle.GLYPH_DARK, COLLECTED_BADGE_FILL)
+        return if (light >= dark) IncidentMarkerStyle.GLYPH_LIGHT else IncidentMarkerStyle.GLYPH_DARK
+    }
+
+    /**
+     * The complete set of ARGB draw inputs for one auto-spawned crown marker.
+     *
+     * @property collectedBadge whether to stamp the "you already collected this"
+     *   check badge — true only for a shared crown the current member has picked
+     *   up, false for a still-collectable (or out-of-range) crown.
+     */
+    data class SpawnMarkerAppearance(
+        val discColorArgb: Int,
+        val glyphColorArgb: Int,
+        val glowColorArgb: Int?,
+        val collectedBadge: Boolean,
+    )
+
+    /**
+     * The ONE place the "which marker style does this spawn get" decision lives,
+     * pure so the map layer, any preview and a JVM test all agree and a test pins
+     * it — collectable, out-of-range, or already-collected-by-you.
+     *
+     * [collectedByYou] WINS over range: a shared crown you already picked up is
+     * never collectable-for-you again, so it shows the dimmed [COLLECTED_DISC] and
+     * the check badge REGARDLESS of whether you happen to be standing in its ring
+     * (its rarity silhouette is left untouched, so you still recognise which crown
+     * you got). Only shared crowns ever reach that branch — an exclusive crown is
+     * removed for everyone the instant it is claimed, so it is never both live and
+     * collected-by-you. Otherwise the existing rule: the rarity colour in range,
+     * the neutral [OUT_OF_RANGE_DISC] slate out of range, and a halo only on a
+     * legendary in range.
+     */
+    fun spawnMarkerAppearance(
+        rarity: CrownRarity,
+        inRange: Boolean,
+        collectedByYou: Boolean,
+    ): SpawnMarkerAppearance =
+        if (collectedByYou) {
+            SpawnMarkerAppearance(
+                discColorArgb = COLLECTED_DISC,
+                glyphColorArgb = collectedGlyphColorArgb(),
+                glowColorArgb = null,
+                collectedBadge = true,
+            )
+        } else {
+            SpawnMarkerAppearance(
+                discColorArgb = discColorArgb(rarity, inRange),
+                glyphColorArgb = glyphColorArgb(rarity, inRange),
+                glowColorArgb = glowColorArgb(rarity, inRange),
+                collectedBadge = false,
+            )
+        }
+
+    /**
      * The glyph tint for a spawned crown, following [discColorArgb] so an
      * out-of-range crown's silhouette stays legible against the slate disc.
      */
