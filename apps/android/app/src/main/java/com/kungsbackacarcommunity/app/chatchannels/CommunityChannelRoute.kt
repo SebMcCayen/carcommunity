@@ -67,6 +67,10 @@ fun CommunityChannelRoute(
     onViewProfile: ((String) -> Unit)? = null,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    // The `chatReplies` flag, threaded down from the hub. Gates the inline-reply
+    // entry point (the long-press "Svara" row + the composer quote chip); off, the
+    // screen behaves exactly as before.
+    chatRepliesEnabled: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     val blockingCoordinator =
@@ -81,9 +85,16 @@ fun CommunityChannelRoute(
         remember(repository, uid, crashTelemetry) {
             ChannelChatCoordinator(
                 // The clientId makes the optimistic send idempotent + reconcilable
-                // (backend uses it as the message doc id).
-                sender = { text, mentionedUids, clientId ->
-                    repository.post(text, mentionedUids, clientId)
+                // (backend uses it as the message doc id); replyToMessageId is the
+                // inline-reply target (null for an ordinary message).
+                sender = { text, mentionedUids, clientId, replyToMessageId ->
+                    // Ordinary sends take the 3-arg overload verbatim (byte-identical
+                    // to the pre-reply path); only a reply uses the 4-arg overload.
+                    if (replyToMessageId == null) {
+                        repository.post(text, mentionedUids, clientId)
+                    } else {
+                        repository.post(text, mentionedUids, clientId, replyToMessageId)
+                    }
                 },
                 pager = { before -> repository.loadOlder(before) },
                 selfUid = uid,
@@ -156,12 +167,15 @@ fun CommunityChannelRoute(
             displayed.size >= CHANNEL_MESSAGES_PAGE_SIZE &&
             olderCursor != null,
         isLoadingOlder = pageStatus == ChannelPageStatus.Loading,
-        onSend = { text, mentionedUids -> scope.launch { coordinator.send(text, mentionedUids) } },
+        onSend = { text, mentionedUids, replyTo ->
+            scope.launch { coordinator.send(text, mentionedUids, replyTo) }
+        },
         onRetry = { message ->
             message.clientId?.let { clientId -> scope.launch { coordinator.retry(clientId) } }
         },
         onLoadOlder = { scope.launch { coordinator.loadOlder(olderCursor) } },
         modifier = modifier,
+        chatRepliesEnabled = chatRepliesEnabled,
         mentionCandidates = mentionCandidates,
         mentionDisplayNames = mentionDisplayNames,
         droppedMentionCount = droppedMentions,

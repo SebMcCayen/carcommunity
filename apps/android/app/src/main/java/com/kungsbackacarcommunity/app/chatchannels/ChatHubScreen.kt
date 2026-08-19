@@ -154,6 +154,9 @@ fun ChatHubRoute(
     // leaves such links as plain text. Same as [ChatHubPopup].
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)? = null,
     blockingRepository: BlockingRepository? = null,
+    // The `chatReplies` flag, forwarded to the message-bearing tabs. Off by
+    // default (the flag's own default), so replies stay dark until switched on.
+    chatRepliesEnabled: Boolean = false,
     // Set when the hub was opened by tapping a push, so it lands on the tab (and
     // convoy channel) the notification was about instead of the default
     // Community tab. Consumed once — backing out must not re-apply it.
@@ -187,6 +190,7 @@ fun ChatHubRoute(
             onViewProfile = onViewProfile,
             onShowLocationOnMap = onShowLocationOnMap,
             blockingRepository = blockingRepository,
+            chatRepliesEnabled = chatRepliesEnabled,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
             onOpenEvent = onOpenEvent,
@@ -261,6 +265,8 @@ fun ChatHubPopup(
     // hub opens on that convoy's channel instead of on Community. Same parameter
     // (and same one-shot consumption) as the push taps [ChatHubRoute] forwards.
     pushDeepLink: PushDeepLink? = null,
+    // The `chatReplies` flag, forwarded to the message-bearing tabs (default off).
+    chatRepliesEnabled: Boolean = false,
 ) {
     // The whole overlay — the bottom-anchored translucent card, the uncovered
     // tappable map strip above it, the drag handle + drag-to-dismiss, the
@@ -297,6 +303,7 @@ fun ChatHubPopup(
             onViewProfile = onViewProfile,
             onShowLocationOnMap = onShowLocationOnMap,
             blockingRepository = blockingRepository,
+            chatRepliesEnabled = chatRepliesEnabled,
             pushDeepLink = pushDeepLink,
             convoyLink = convoyLink,
             onOpenEvent = onOpenEvent,
@@ -371,6 +378,9 @@ private fun ChatHubContent(
     onViewProfile: ((String) -> Unit)?,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     blockingRepository: BlockingRepository?,
+    // The `chatReplies` flag, forwarded to every message-bearing tab so the
+    // inline-reply entry point is gated end-to-end. Off = the hub behaves as before.
+    chatRepliesEnabled: Boolean = false,
     pushDeepLink: PushDeepLink? = null,
     convoyLink: ConvoyNotificationLink? = null,
     onOpenEvent: ((String) -> Unit)? = null,
@@ -657,6 +667,7 @@ private fun ChatHubContent(
                                 onViewProfile = onViewProfile,
                                 onShowLocationOnMap = onShowLocationOnMap,
                                 blockingRepository = blockingRepository,
+                                chatRepliesEnabled = chatRepliesEnabled,
                             )
                         } else {
                             TabPlaceholder(stringResource(R.string.chatHub_unavailable))
@@ -672,6 +683,7 @@ private fun ChatHubContent(
                                     onViewProfile = onViewProfile,
                                     onShowLocationOnMap = onShowLocationOnMap,
                                     blockingRepository = blockingRepository,
+                                    chatRepliesEnabled = chatRepliesEnabled,
                                 )
                             } else {
                                 ConvoyListRoute(
@@ -697,6 +709,7 @@ private fun ChatHubContent(
                                     onViewProfile = onViewProfile,
                                     blockingRepository = blockingRepository,
                                     onShowLocationOnMap = onShowLocationOnMap,
+                                    chatRepliesEnabled = chatRepliesEnabled,
                                 )
                             } else {
                                 ConversationListRoute(

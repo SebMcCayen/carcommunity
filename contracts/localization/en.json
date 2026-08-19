@@ -492,7 +492,11 @@
     "reportReasonPrivacy": "Privacy",
     "reportReasonOther": "Other",
     "reportSubmitted": "Thanks for your report.",
-    "reportError": "Could not report. Please try again."
+    "reportError": "Could not report. Please try again.",
+    "replyCancel": "Cancel reply",
+    "replyComposerReplyingTo": "Replying to %1$s",
+    "replyComposerBanner": "Replying to a message from %1$s",
+    "replyQuoteHeaderAction": "Reply to %1$s: %2$s. Tap to view the original."
   },
   "common": {
     "placeholder": "Coming soon"
@@ -1883,6 +1887,7 @@
   },
   "moderation": {
     "messageActionsTitle": "Message from %1$s",
+    "reply": "Reply",
     "blockMember": "Block %1$s",
     "reportMessage": "Report message",
     "reportUser": "Report user",

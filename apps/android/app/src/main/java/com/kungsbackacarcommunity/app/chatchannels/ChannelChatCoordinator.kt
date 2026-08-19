@@ -52,7 +52,10 @@ sealed interface ChannelPageStatus {
  * (channel docs already exist), but kept for parity + tests.
  */
 class ChannelChatCoordinator(
-    private val sender: suspend (String, List<String>, String) -> ChannelSendResult,
+    // (text, mentionedUids, clientId, replyToMessageId) -> result. The route wires
+    // this to the channel's `*-post`; replyToMessageId is null for an ordinary
+    // (non-reply) message.
+    private val sender: suspend (String, List<String>, String, String?) -> ChannelSendResult,
     private val pager: suspend (String) -> ChannelOlderResult,
     private val selfUid: String,
     private val marker: (suspend () -> Unit)? = null,
@@ -110,12 +113,20 @@ class ChannelChatCoordinator(
     val droppedMentionCount: StateFlow<Int> = dropped.asStateFlow()
 
     /**
-     * Optimistically sends [text] (optionally @mentioning [mentionedUids]). Adds
-     * the "sending" bubble synchronously (the first thing this does, so the UI
-     * updates before the suspending callable), then dispatches the `*-post`
-     * callable with a fresh idempotency key.
+     * Optimistically sends [text] (optionally @mentioning [mentionedUids], and
+     * optionally as an inline reply to [replyTo]). Adds the "sending" bubble
+     * synchronously (the first thing this does, so the UI updates before the
+     * suspending callable), then dispatches the `*-post` callable with a fresh
+     * idempotency key. When [replyTo] is present the bubble carries the
+     * client-built quote snapshot (so its quote header shows at once) and the
+     * parent's [ChannelReplyTo.messageId] is sent as `replyToMessageId`; the server
+     * rebuilds the authoritative snapshot on the delivered document.
      */
-    suspend fun send(text: String, mentionedUids: List<String> = emptyList()) {
+    suspend fun send(
+        text: String,
+        mentionedUids: List<String> = emptyList(),
+        replyTo: ChannelReplyTo? = null,
+    ) {
         if (!ChannelThread.isSendable(text)) return
         val trimmed = text.trim()
         val clientId = idGenerator()
@@ -136,9 +147,10 @@ class ChannelChatCoordinator(
                 mentionedUids = picked,
                 clientId = clientId,
                 deliveryState = ChannelDeliveryState.Sending,
+                replyTo = replyTo,
             )
         pending.update { it + optimistic }
-        dispatch(clientId, trimmed, picked)
+        dispatch(clientId, trimmed, picked, replyTo?.messageId)
     }
 
     /**
@@ -161,12 +173,19 @@ class ChannelChatCoordinator(
                 }
             }
         }
-        dispatch(clientId, target.text, target.mentionedUids)
+        // Resend carries the SAME reply target the failed bubble held, so a retried
+        // reply stays a reply.
+        dispatch(clientId, target.text, target.mentionedUids, target.replyTo?.messageId)
     }
 
-    private suspend fun dispatch(clientId: String, text: String, mentionedUids: List<String>) {
+    private suspend fun dispatch(
+        clientId: String,
+        text: String,
+        mentionedUids: List<String>,
+        replyToMessageId: String?,
+    ) {
         try {
-            when (val result = sender(text, mentionedUids, clientId)) {
+            when (val result = sender(text, mentionedUids, clientId, replyToMessageId)) {
                 is ChannelSendResult.Sent -> {
                     // Flip to Sent so the "sending" affordance clears on the ack;
                     // the bubble is removed for good once the listener delivers the

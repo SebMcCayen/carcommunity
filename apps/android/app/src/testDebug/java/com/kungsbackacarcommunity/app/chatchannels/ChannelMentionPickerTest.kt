@@ -48,7 +48,7 @@ class ChannelMentionPickerTest {
                     emptyText = "empty",
                     canLoadOlder = false,
                     isLoadingOlder = false,
-                    onSend = { text, mentions ->
+                    onSend = { text, mentions, _ ->
                         sentText = text
                         sentMentions = mentions
                     },

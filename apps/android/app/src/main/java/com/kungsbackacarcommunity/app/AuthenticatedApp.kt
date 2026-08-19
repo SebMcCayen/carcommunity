@@ -5319,6 +5319,7 @@ fun AuthenticatedApp(
                                 memberGated = false,
                                 isActiveMember = profile?.activeMember == true,
                             ),
+                        chatRepliesEnabled = flags.isEnabled(FeatureFlag.CHAT_REPLIES),
                         groupDriveRepository = groupDriveRepository,
                         groupDriveCoordinator = groupDriveCoordinator,
                         mapParticipantUids = mapParticipantUids,
@@ -7165,6 +7166,10 @@ fun AuthenticatedApp(
                         // sheet and its confirm dialog compose inside it, and
                         // blocking from chat should leave the user where they were.
                         blockingRepository = blockingRepository,
+                        // Gates the inline reply-to-message entry point across the
+                        // channels + DMs. Default OFF, so replies stay dark until
+                        // the flag is switched on.
+                        chatRepliesEnabled = flags.isEnabled(FeatureFlag.CHAT_REPLIES),
                     )
                 }
 
@@ -7480,6 +7485,8 @@ private fun RouteHost(
     chatRepository: EventChatRepository?,
     chatCoordinator: ChatCoordinator?,
     chatEnabled: Boolean,
+    // The `chatReplies` flag, forwarded to the full-screen chat hub route.
+    chatRepliesEnabled: Boolean,
     groupDriveRepository: GroupDriveRepository?,
     groupDriveCoordinator: GroupDriveCoordinator?,
     mapParticipantUids: List<String>,
@@ -8218,6 +8225,7 @@ private fun RouteHost(
                 },
                 // Backs the block action on the hub's long-press message sheet.
                 blockingRepository = blockingRepository,
+                chatRepliesEnabled = chatRepliesEnabled,
                 pushDeepLink = chatHubPushLink,
                 convoyLink = convoyNotificationLink,
                 onOpenEvent = openEventFromNotification,

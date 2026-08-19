@@ -492,7 +492,11 @@
     "reportReasonPrivacy": "Integritet",
     "reportReasonOther": "Annat",
     "reportSubmitted": "Tack för din rapport.",
-    "reportError": "Kunde inte rapportera. Försök igen."
+    "reportError": "Kunde inte rapportera. Försök igen.",
+    "replyCancel": "Avbryt svar",
+    "replyComposerReplyingTo": "Svarar %1$s",
+    "replyComposerBanner": "Svarar på ett meddelande från %1$s",
+    "replyQuoteHeaderAction": "Svar till %1$s: %2$s. Tryck för att visa originalet."
   },
   "common": {
     "placeholder": "Kommer snart"
@@ -1883,6 +1887,7 @@
   },
   "moderation": {
     "messageActionsTitle": "Meddelande från %1$s",
+    "reply": "Svara",
     "blockMember": "Blockera %1$s",
     "reportMessage": "Rapportera meddelande",
     "reportUser": "Rapportera användare",

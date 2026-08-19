@@ -88,11 +88,16 @@ class DmThreadCoordinator(
     val sentCount: StateFlow<Int> = sent.asStateFlow()
 
     /**
-     * Optimistically sends [text]. Adds the "sending" bubble synchronously (the
-     * first thing this does, so the UI updates before the suspending callable),
-     * then dispatches `dm-sendMessage` with a fresh idempotency key.
+     * Optimistically sends [text], optionally as an inline reply to [replyTo].
+     * Adds the "sending" bubble synchronously (the first thing this does, so the
+     * UI updates before the suspending callable), then dispatches `dm-sendMessage`
+     * with a fresh idempotency key. When [replyTo] is present the bubble carries
+     * the client-built quote snapshot (so its quote header shows at once) and its
+     * [ChatReplyTo.messageId][com.kungsbackacarcommunity.app.dm.DmReplyTo.messageId]
+     * is sent as `replyToMessageId`; the server rebuilds the authoritative snapshot
+     * on the delivered document.
      */
-    suspend fun send(text: String) {
+    suspend fun send(text: String, replyTo: DmReplyTo? = null) {
         if (!DmThread.isSendable(text)) return
         val trimmed = text.trim()
         val clientId = idGenerator()
@@ -105,9 +110,10 @@ class DmThreadCoordinator(
                 createdAtIso = null,
                 clientId = clientId,
                 deliveryState = DmDeliveryState.Sending,
+                replyTo = replyTo,
             )
         pending.update { it + optimistic }
-        dispatch(clientId, trimmed)
+        dispatch(clientId, trimmed, replyTo?.messageId)
     }
 
     /**
@@ -131,12 +137,24 @@ class DmThreadCoordinator(
                 }
             }
         }
-        dispatch(clientId, target.text)
+        // Resend carries the SAME reply target the failed bubble held, so a retried
+        // reply stays a reply.
+        dispatch(clientId, target.text, target.replyTo?.messageId)
     }
 
-    private suspend fun dispatch(clientId: String, text: String) {
+    private suspend fun dispatch(clientId: String, text: String, replyToMessageId: String?) {
         try {
-            when (val result = repository.sendMessage(otherUid, text, clientId)) {
+            // An ordinary (non-reply) send takes the 3-arg overload verbatim, so the
+            // call is byte-identical to the pre-reply path — and a repository that
+            // predates replies (or is composed via interface delegation) is never
+            // routed through the reply overload it doesn't implement.
+            val result =
+                if (replyToMessageId == null) {
+                    repository.sendMessage(otherUid, text, clientId)
+                } else {
+                    repository.sendMessage(otherUid, text, clientId, replyToMessageId)
+                }
+            when (result) {
                 is DmSendResult.Sent -> {
                     // Flip to Sent so the "sending" affordance clears on the ack;
                     // the bubble is removed for good once the listener delivers the

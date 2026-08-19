@@ -68,6 +68,24 @@ interface DmRepository {
     suspend fun sendMessage(toUid: String, text: String, clientId: String? = null): DmSendResult
 
     /**
+     * `dm-sendMessage` with an inline reply target. [replyToMessageId] is the id of
+     * the message being replied to (WhatsApp-style quote, not a thread): the client
+     * sends only the id and the server snapshots the parent from THIS conversation
+     * itself (ignored entirely while the `chatReplies` flag is off). A null
+     * [replyToMessageId] is an ordinary, non-reply message.
+     *
+     * Defaults to delegating to the 3-arg overload, so a fake or repository that
+     * predates replies keeps working unchanged (it drops the reply target); the
+     * Firebase repository overrides this to forward the id.
+     */
+    suspend fun sendMessage(
+        toUid: String,
+        text: String,
+        clientId: String?,
+        replyToMessageId: String?,
+    ): DmSendResult = sendMessage(toUid, text, clientId)
+
+    /**
      * `dm-getMessages` — an older page before the [before] ISO cursor (page 30).
      * Returns [DmOlderResult.Failed] on a transient callable failure so the
      * caller can distinguish it from a genuine end-of-pagination

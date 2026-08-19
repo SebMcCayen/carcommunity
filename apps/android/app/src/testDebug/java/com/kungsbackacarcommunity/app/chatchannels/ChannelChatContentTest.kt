@@ -58,7 +58,7 @@ class ChannelChatContentTest {
                     emptyText = "empty",
                     canLoadOlder = false,
                     isLoadingOlder = false,
-                    onSend = { _, _ -> },
+                    onSend = { _, _, _ -> },
                     onRetry = {},
                     onLoadOlder = {},
                     surface = surface,

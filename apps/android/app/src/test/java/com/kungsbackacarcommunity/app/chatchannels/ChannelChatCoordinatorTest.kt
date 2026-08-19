@@ -36,12 +36,15 @@ class ChannelChatCoordinatorTest {
         /** When set, [sender] suspends on it until completed — models an in-flight callable. */
         var gate: CompletableDeferred<Unit>? = null
 
-        val sender: suspend (String, List<String>, String) -> ChannelSendResult =
-            { text, mentionedUids, clientId ->
+        var lastReplyToMessageId: String? = null
+
+        val sender: suspend (String, List<String>, String, String?) -> ChannelSendResult =
+            { text, mentionedUids, clientId, replyToMessageId ->
                 sendCalls++
                 lastSendText = text
                 lastSendMentions = mentionedUids
                 sentClientIds += clientId
+                lastReplyToMessageId = replyToMessageId
                 gate?.await()
                 sendResult
             }
@@ -95,6 +98,35 @@ class ChannelChatCoordinatorTest {
         assertEquals(ChannelDeliveryState.Sent, c.pendingMessages.value.single().deliveryState)
         assertEquals(1, c.sentCount.value)
         assertEquals("hello", f.lastSendText)
+    }
+
+    @Test
+    fun `an inline reply carries the parent snapshot on the bubble and its id to the callable`() =
+        runTest {
+            val f = Fakes()
+            val c = coordinator(f)
+            val parent =
+                ChannelReplyTo(
+                    messageId = "parent-1",
+                    senderUid = "author",
+                    senderDisplayName = "Alice",
+                    textPreview = "the original",
+                )
+            c.send("my reply", replyTo = parent)
+
+            // The optimistic bubble shows the quote at once…
+            assertEquals(parent, c.pendingMessages.value.single().replyTo)
+            // …and only the parent id is sent to the callable (the server snapshots).
+            assertEquals("parent-1", f.lastReplyToMessageId)
+        }
+
+    @Test
+    fun `a plain message sends no reply target`() = runTest {
+        val f = Fakes()
+        val c = coordinator(f)
+        c.send("just a message")
+        assertNull(c.pendingMessages.value.single().replyTo)
+        assertNull(f.lastReplyToMessageId)
     }
 
     @Test

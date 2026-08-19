@@ -56,6 +56,24 @@ enum class DmDeliveryState {
 }
 
 /**
+ * Denormalized snapshot of the message an inline reply is quoting, mirroring the
+ * backend `MessageReplyTo` the server writes onto the replying DM. Identical in
+ * shape to the channels' [com.kungsbackacarcommunity.app.chatchannels.ChannelReplyTo]
+ * (the two chat domains stay independent, so the shape is mirrored, not shared) so
+ * the same quote component renders across DMs and channels. [messageId] is the
+ * parent's stable id — the tap-to-scroll target and a future reactions key.
+ *
+ * Server-built and authoritative; the client constructs one locally only for its
+ * own optimistic reply bubble, which the delivered document supersedes.
+ */
+data class DmReplyTo(
+    val messageId: String,
+    val senderUid: String,
+    val senderDisplayName: String?,
+    val textPreview: String,
+)
+
+/**
  * A single rendered DM. [createdAtIso] is the pagination cursor for older pages.
  *
  * [clientId] is the idempotency key the SENDER attached on the optimistic path.
@@ -85,6 +103,13 @@ data class DmMessage(
      * whether a retry is offered ([DmSendError.isRetryable]). Null otherwise.
      */
     val sendError: DmSendError? = null,
+    /**
+     * The server-built snapshot of the message this DM inline-replies to, present
+     * only on a reply whose parent was resolved. Drives the quote header above the
+     * bubble; on the caller's OWN optimistic bubble it is the client-built
+     * snapshot, superseded by the delivered document on reconcile.
+     */
+    val replyTo: DmReplyTo? = null,
 )
 
 /** Denormalized last-message preview shown on an inbox row. */
@@ -412,6 +437,24 @@ object DmResponseParser {
             createdAtMillis = iso?.let(::isoToMillisOrNull),
             createdAtIso = iso,
             clientId = (map["clientId"] as? String)?.takeIf { it.isNotBlank() },
+            replyTo = parseReplyTo(map["replyTo"]),
+        )
+    }
+
+    /**
+     * Reads a stored/echoed `replyTo` map into [DmReplyTo], defensively coalescing
+     * missing or non-string fields (an ordinary message → null). A snapshot with no
+     * usable messageId or senderUid is dropped rather than rendered as a half-quote.
+     */
+    fun parseReplyTo(raw: Any?): DmReplyTo? {
+        val map = raw as? Map<*, *> ?: return null
+        val messageId = (map["messageId"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        val senderUid = (map["senderUid"] as? String)?.takeIf { it.isNotBlank() } ?: return null
+        return DmReplyTo(
+            messageId = messageId,
+            senderUid = senderUid,
+            senderDisplayName = map["senderDisplayName"] as? String,
+            textPreview = map["textPreview"] as? String ?: "",
         )
     }
 

@@ -106,6 +106,23 @@ interface ConvoyChatRepository {
      */
     suspend fun post(convoyId: String, text: String, clientId: String? = null): ChannelSendResult
 
+    /**
+     * `convoyChat-post` with an inline reply target. [replyToMessageId] is the id
+     * of the message being replied to (WhatsApp-style quote, not a thread): the
+     * client sends only the id and the server snapshots the parent from THIS
+     * convoy's channel itself (ignored while the `chatReplies` flag is off). Null
+     * is an ordinary, non-reply message.
+     *
+     * Defaults to delegating to the 3-arg overload, so a fake predating replies
+     * keeps working; the Firebase repository overrides this to forward the id.
+     */
+    suspend fun post(
+        convoyId: String,
+        text: String,
+        clientId: String?,
+        replyToMessageId: String?,
+    ): ChannelSendResult = post(convoyId, text, clientId)
+
     /** `convoyChat-list` — an older page of [convoyId] before the [before] ISO cursor. */
     suspend fun loadOlder(convoyId: String, before: String): ChannelOlderResult
 }
