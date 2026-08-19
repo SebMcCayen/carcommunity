@@ -92,6 +92,12 @@ fun PoliceProximityHost(
                             // Safety alert → interrupt TalkBack, matching the
                             // convoy police reaction.
                             assertive = true,
+                            // Hold ~5s (vs the shared ~1.1s social pop): a hazard
+                            // warning the driver should have time to read.
+                            holdMs = POLICE_ALERT_HOLD_MS,
+                            // Let the driver clear it with a tap once seen (runs the
+                            // normal exit fade, not an instant cut).
+                            dismissOnTap = true,
                         )
                 }
             }
@@ -112,3 +118,10 @@ fun PoliceProximityHost(
  * costing only a cheap last-known-fix read per tick.
  */
 private const val MONITOR_INTERVAL_MS = 4_000L
+
+/**
+ * How long the "Police nearby" alert badge holds before fading — ~5s, much longer
+ * than the shared ~1.1s social pop, because this is a safety warning the driver
+ * needs time to register. A tap dismisses it early (see [ReactionOverlayEvent.dismissOnTap]).
+ */
+private const val POLICE_ALERT_HOLD_MS = 5_000L
