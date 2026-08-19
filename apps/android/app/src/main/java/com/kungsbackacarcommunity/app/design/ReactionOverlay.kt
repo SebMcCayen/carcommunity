@@ -26,7 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -109,7 +112,17 @@ data class ReactionOverlayEvent(
     val caption: String? = null,
     /** null = [MaterialTheme] primary. */
     val tint: Color? = null,
+    /**
+     * What TalkBack announces when this pops (a live-region announcement, since the
+     * pop is transient and non-focusable). Null announces nothing.
+     */
     val contentDescription: String? = null,
+    /**
+     * When true the announcement INTERRUPTS whatever TalkBack is saying
+     * (LiveRegionMode.Assertive) rather than queueing politely — for a
+     * safety-relevant pop like the police alert. Defaults false (polite).
+     */
+    val assertive: Boolean = false,
 )
 
 /**
@@ -117,10 +130,14 @@ data class ReactionOverlayEvent(
  * bouncy spring and a small settle-spin, holds briefly, fades out, then calls
  * [onFinished] so the host can clear it. Renders nothing when [event] is null.
  *
- * Draws over the map WITHOUT capturing touches or blocking it: the root Box has
- * no pointer input and is removed from the semantics tree, so the map stays fully
- * interactive underneath and TalkBack is not handed a stray focusable node. The
- * badge sits in the CENTRE by default; the host aligns the whole overlay.
+ * Draws over the map WITHOUT capturing touches or blocking it: no node here takes
+ * pointer input (the badge is a non-clickable Surface), so the map stays fully
+ * interactive underneath. It is INTENTIONALLY ACCESSIBLE rather than hidden: the
+ * badge carries a LIVE-REGION announcement built from [ReactionOverlayEvent.contentDescription]
+ * (assertive for a safety-relevant pop like the police alert), so a TalkBack user
+ * HEARS the reaction ("Police reported" / "<name> says hi") even though the pop is
+ * transient and never grabs focus. The badge sits in the CENTRE by default; the
+ * host aligns the whole overlay.
  *
  * Timing comes from [ReactionOverlayTiming]; only the scale/spin easing is a
  * spring here, for the car/game-inspired pop.
@@ -132,7 +149,7 @@ fun ReactionOverlay(
     onFinished: () -> Unit = {},
 ) {
     Box(
-        modifier = modifier.fillMaxSize().clearAndSetSemantics {},
+        modifier = modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
         val current = event ?: return@Box
@@ -189,6 +206,18 @@ fun ReactionOverlay(
                         scaleY = scale.value
                         rotationZ = spin.value
                     }
+                    // ONE merged, non-interactive semantics node that ANNOUNCES the
+                    // reaction via a live region (assertive interrupts, for the police
+                    // alert). The icon + caption below are decorative to a11y — the
+                    // announcement here is the single spoken description, so nothing is
+                    // read twice and no dead contentDescription is left on the icon.
+                    // A semantics modifier takes no pointer input, so the map underneath
+                    // stays interactive.
+                    .semantics(mergeDescendants = true) {
+                        liveRegion =
+                            if (current.assertive) LiveRegionMode.Assertive else LiveRegionMode.Polite
+                        current.contentDescription?.let { contentDescription = it }
+                    }
                     .testTag(REACTION_OVERLAY_TAG),
         ) {
             Surface(
@@ -200,7 +229,9 @@ fun ReactionOverlay(
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = current.icon,
-                        contentDescription = current.contentDescription,
+                        // Decorative: the merged live-region node above carries the
+                        // spoken description, so the icon must not also announce.
+                        contentDescription = null,
                         tint = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.size(52.dp),
                     )

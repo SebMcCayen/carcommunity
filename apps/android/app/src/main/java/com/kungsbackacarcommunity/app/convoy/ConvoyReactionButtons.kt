@@ -94,12 +94,15 @@ fun ConvoyReactionsHost(
 
     val overlayEvent: ReactionOverlayEvent? =
         incoming?.let { reaction ->
+            val caption = reactionOverlayCaption(reaction.kind, reaction.senderName)
             ReactionOverlayEvent(
                 id = reaction.id,
                 icon = reactionIcon(reaction.kind),
-                caption = reactionOverlayCaption(reaction.kind, reaction.senderName),
+                caption = caption,
                 tint = reactionColor(reaction.kind),
-                contentDescription = reactionOverlayCaption(reaction.kind, reaction.senderName),
+                // TalkBack announcement text; police interrupts (safety-relevant).
+                contentDescription = caption,
+                assertive = reaction.kind == ConvoyReactionKind.Police,
             )
         }
 
