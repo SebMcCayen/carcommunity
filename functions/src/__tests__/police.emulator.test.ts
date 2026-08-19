@@ -318,6 +318,47 @@ describe('police.report rate limit', () => {
     );
     expect(counts.every((c) => c === 0)).toBe(true);
   });
+
+  it('serializes a concurrent burst so no window admits more than the cap (atomic limiter)', async () => {
+    // The whole point of the transaction: N parallel reports from one uid must
+    // NOT all read a pre-increment count of 0 and slip through. Fire more than
+    // twice the cap in parallel so a rejection is guaranteed even if the burst
+    // happens to straddle a minute boundary (each window is independently capped).
+    const user = await createProvisionedUser('pol-rl-concurrent');
+    await makeMember(user);
+    await signInAs(user);
+    const burst = 2 * POLICE_REPORT_RATE_LIMIT_MAX + 2;
+    const results = await Promise.allSettled(
+      Array.from({ length: burst }, () =>
+        call('police-report', { latitude: KBA.latitude, longitude: KBA.longitude }),
+      ),
+    );
+    const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+    const rejected = results.length - succeeded;
+    // The overflow is rejected — the non-atomic version would let many/all slip.
+    expect(succeeded).toBeGreaterThanOrEqual(1);
+    expect(rejected).toBeGreaterThan(0);
+
+    // Boundary-safe atomicity invariants (never flake on a minute-straddle):
+    //  - no single window counter exceeds the cap (the property the transaction
+    //    guarantees), and
+    //  - the counters sum EXACTLY to the number of successful reports (every
+    //    success incremented its window once; no lost or doubled increments).
+    const docs = await rateLimits().where('uid', '==', user.uid).get();
+    let totalCounted = 0;
+    for (const d of docs.docs) {
+      const count = d.data().count as number;
+      expect(count).toBeLessThanOrEqual(POLICE_REPORT_RATE_LIMIT_MAX);
+      totalCounted += count;
+    }
+    expect(totalCounted).toBe(succeeded);
+    // Together with the per-window cap above, this means at most the cap
+    // succeeded per window — in the common single-window case, at most the cap
+    // in total.
+    if (docs.size === 1) {
+      expect(succeeded).toBeLessThanOrEqual(POLICE_REPORT_RATE_LIMIT_MAX);
+    }
+  });
 });
 
 describe('police.listNearby rate limit', () => {

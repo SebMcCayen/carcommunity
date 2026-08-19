@@ -88,14 +88,30 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<PoliceRepor
 });
 
 /**
- * Fixed-window per-user rate limit for `police.report`.
+ * Fixed-window per-user rate limit for `police.report` — enforced ATOMICALLY.
  *
- * Reads the deterministic counter doc for (uid, current minute) BY ID — no query,
- * no index — and throws `resource-exhausted` once the uid has already made
- * POLICE_REPORT_RATE_LIMIT_MAX reports this window. Otherwise it bumps the counter
- * with FieldValue.increment(1) (a commutative, contention-free server op — no
- * transaction) and stamps `expireAt` so a Firestore TTL policy reaps the spent
- * window (deploy note below). A rejected call performs the single get and NO write.
+ * The read (count), the cap check, and the increment run inside ONE Firestore
+ * transaction on the deterministic counter doc for (uid, current minute), so N
+ * concurrent reports from the same uid in the same window SERIALIZE on that doc
+ * and only the first POLICE_REPORT_RATE_LIMIT_MAX succeed — the rest get
+ * `resource-exhausted` and write no pin. This is deliberately STRICTER than the
+ * read-path `police.listNearby` guard (which uses a non-transactional
+ * FieldValue.increment and tolerates a few boundary slips, because its only job
+ * is to stop a runaway, not to be exact): here a slip lets a burst of parallel
+ * calls FLOOD every nearby driver's map with fake pins, so the cap must hold
+ * under concurrency. This matches the codebase's other WRITE-path limiters
+ * (feedback.reportIssue / errors.reportClientError / moderation reports), which
+ * are likewise transactional. Cross-uid there is NO contention (different uids →
+ * different docs); the only serialization is a single user's own burst, which is
+ * exactly what we want to bound.
+ *
+ * FAILS OPEN on a corrupt (non-finite) counter — a garbled rate-limit doc must
+ * never stop a member warning others about a patrol (isUnderPoliceReportRateLimit
+ * treats a non-finite count as admitted). The count is written as an ABSOLUTE
+ * value (read + 1) rather than FieldValue.increment precisely because the
+ * transaction already gives us the consistent pre-value, and an absolute write is
+ * what lets the cap be enforced against a corrupt prior value without compounding
+ * it. `expireAt` is stamped so a Firestore TTL policy reaps the spent window.
  */
 async function enforceReportRateLimit(uid: string): Promise<void> {
   const nowMs = Date.now();
@@ -103,23 +119,33 @@ async function enforceReportRateLimit(uid: string): Promise<void> {
     .collection(POLICE_REPORT_RATE_LIMIT_COLLECTION)
     .doc(policeReportRateLimitDocId(uid, nowMs));
 
-  const snap = await ref.get();
-  const currentCount = snap.get('count');
-  if (!isUnderPoliceReportRateLimit(typeof currentCount === 'number' ? currentCount : 0)) {
-    throw new HttpsError(
-      'resource-exhausted',
-      'Too many police reports in a short time — please slow down and try again shortly.',
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const stored = snap.get('count');
+    const currentCount = typeof stored === 'number' ? stored : 0;
+    if (!isUnderPoliceReportRateLimit(currentCount)) {
+      // Thrown inside the transaction: it aborts (no write) and propagates. Not a
+      // Firestore contention error, so it is NOT retried — a clean reject.
+      throw new HttpsError(
+        'resource-exhausted',
+        'Too many police reports in a short time — please slow down and try again shortly.',
+      );
+    }
+    // Absolute write of the consistent read + 1 (see KDoc: exactness under
+    // concurrency is the whole point, and it also caps a corrupt prior value
+    // rather than compounding it). A non-finite currentCount only reaches here
+    // when the guard failed open; `+ 1` on it stays non-finite, so the next call
+    // also fails open rather than locking the user out.
+    tx.set(
+      ref,
+      {
+        count: currentCount + 1,
+        uid,
+        expireAt: Timestamp.fromDate(policeReportRateLimitExpiry(nowMs)),
+      },
+      { merge: true },
     );
-  }
-
-  await ref.set(
-    {
-      count: FieldValue.increment(1),
-      uid,
-      expireAt: Timestamp.fromDate(policeReportRateLimitExpiry(nowMs)),
-    },
-    { merge: true },
-  );
+  });
 }
 
 // One-time deploy step for the counter's TTL (spent windows self-delete so the
