@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Storefront
+import androidx.compose.material.icons.filled.WavingHand
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -94,6 +95,8 @@ import com.kungsbackacarcommunity.app.config.FeatureFlag
 import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.LocalSnackbarHostState
+import com.kungsbackacarcommunity.app.design.ReactionOverlay
+import com.kungsbackacarcommunity.app.design.ReactionOverlayEvent
 import com.kungsbackacarcommunity.app.account.AccountDeletionCoordinator
 import com.kungsbackacarcommunity.app.account.AccountDeletionRoute
 import com.kungsbackacarcommunity.app.badges.BadgeCounters
@@ -273,7 +276,11 @@ import com.kungsbackacarcommunity.app.live.LiveLocation
 import com.kungsbackacarcommunity.app.live.LiveLocationCoordinator
 import com.kungsbackacarcommunity.app.live.LiveLocationRepository
 import com.kungsbackacarcommunity.app.live.LiveLocationScreen
+import com.kungsbackacarcommunity.app.live.FirebaseWaveRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
+import com.kungsbackacarcommunity.app.live.WaveCircleControl
+import com.kungsbackacarcommunity.app.live.WavePresence
+import com.kungsbackacarcommunity.app.live.WaveSendResult
 import com.kungsbackacarcommunity.app.live.LiveSharerPopup
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
 import com.kungsbackacarcommunity.app.live.LiveSessionLoad
@@ -448,6 +455,7 @@ import com.kungsbackacarcommunity.app.whatsnew.WhatsNewRoute
 import com.kungsbackacarcommunity.app.whatsnew.WhatsNewStore
 import java.io.File
 import java.util.Calendar
+import java.util.UUID
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -4969,6 +4977,98 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // WAVE to nearby live users — the transient "👋" broadcast. The
+                // repository (guarded: null in a config-less / CI build → no wave UI)
+                // both SENDS the wave (live-sendWave callable, which finds nearby
+                // sharers + enforces the anti-spam cooldown server-side) and RECEIVES
+                // via a listener on the caller's own inbox liveWaves/{uid}/waves. The
+                // wave icon + the mid-screen pop reuse the SAME nearby state the live
+                // chips do (nearbyLiveMarkers) and the SHARED ReactionOverlay.
+                val waveContext = LocalContext.current
+                val waveRepository =
+                    remember(waveContext) { FirebaseWaveRepository.createIfAvailable(waveContext) }
+                var waveOverlayEvent by remember { mutableStateOf<ReactionOverlayEvent?>(null) }
+                // The client cooldown MIRROR: greys the icon optimistically. The
+                // SERVER is the source of truth (it refuses an early send and returns
+                // the exact remaining window, applied below on RateLimited).
+                var waveCooldownUntilMs by remember { mutableLongStateOf(0L) }
+                val waveCaptionFmt = stringResource(R.string.wave_caption)
+                val waveCaptionAnon = stringResource(R.string.wave_captionAnonymous)
+                val waveCaptionSelf = stringResource(R.string.wave_captionSelf)
+
+                // Receive: while sharing, listen to MY inbox and pop each incoming
+                // wave with a "who waved" caption. Keyed on (repo, uid, isSharing) so
+                // the listener is torn down the moment sharing stops.
+                LaunchedEffect(waveRepository, uid, isSharing) {
+                    val repo = waveRepository
+                    if (repo == null || !isSharing) return@LaunchedEffect
+                    val since = System.currentTimeMillis()
+                    repo.observeIncomingWaves(uid, since).collect { wave ->
+                        val name = wave.senderName?.takeIf { it.isNotBlank() }
+                        val caption = if (name != null) waveCaptionFmt.format(name) else waveCaptionAnon
+                        waveOverlayEvent =
+                            ReactionOverlayEvent(
+                                id = wave.id,
+                                icon = Icons.Filled.WavingHand,
+                                caption = caption,
+                                contentDescription = caption,
+                            )
+                    }
+                }
+
+                // Send: broadcast a wave, greying the icon + popping your OWN "You
+                // waved" optimistically. A server RateLimited refusal re-grounds the
+                // cooldown on the exact remaining window; a hard failure clears the
+                // optimistic cooldown so the user can retry.
+                val onWaveTap: () -> Unit =
+                    onWaveTap@{
+                        val repo = waveRepository ?: return@onWaveTap
+                        val clientId = UUID.randomUUID().toString().replace("-", "")
+                        waveCooldownUntilMs = WavePresence.cooldownUntil(System.currentTimeMillis())
+                        waveOverlayEvent =
+                            ReactionOverlayEvent(
+                                id = "self-$clientId",
+                                icon = Icons.Filled.WavingHand,
+                                caption = waveCaptionSelf,
+                                contentDescription = waveCaptionSelf,
+                            )
+                        scope.launch {
+                            when (val result = repo.send(clientId)) {
+                                is WaveSendResult.RateLimited ->
+                                    if (result.retryAfterMs > 0) {
+                                        waveCooldownUntilMs =
+                                            System.currentTimeMillis() + result.retryAfterMs
+                                    }
+                                is WaveSendResult.Sent -> Unit // keep the optimistic cooldown + pop
+                                WaveSendResult.NotSharing, WaveSendResult.Failed ->
+                                    waveCooldownUntilMs = 0L // let them retry; the pop just fades
+                            }
+                        }
+                    }
+
+                val waveControlSlot: (@Composable () -> Unit)? =
+                    if (waveRepository != null) {
+                        {
+                            WaveCircleControl(
+                                visible =
+                                    WavePresence.isWaveControlVisible(
+                                        isSharingLive = isSharing,
+                                        nearbyLiveUserCount = nearbyLiveMarkers.size,
+                                    ),
+                                cooldownUntilMs = waveCooldownUntilMs,
+                                onWave = onWaveTap,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+                val waveOverlaySlot: (@Composable () -> Unit)? =
+                    if (waveRepository != null) {
+                        { ReactionOverlay(event = waveOverlayEvent, onFinished = { waveOverlayEvent = null }) }
+                    } else {
+                        null
+                    }
+
                 // The one true way out of navigation: tears down the nav view AND
                 // forgets the persisted record, so a user-confirmed exit can never
                 // later resurface as a "continue navigation?" prompt. Shared by the
@@ -5742,6 +5842,12 @@ fun AuthenticatedApp(
                                     // the bottom bar) + the mid-screen reaction pop.
                                     // Null unless in an active convoy.
                                     convoyReactions = convoyReactionsSlot,
+                                    // Wave-to-nearby control (top of the right-side
+                                    // stack, shown only when sharing + someone nearby)
+                                    // + the mid-screen "👋 <name> waved" pop. Null when
+                                    // no WaveRepository (config-less / CI build).
+                                    waveControl = waveControlSlot,
+                                    waveOverlay = waveOverlaySlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its

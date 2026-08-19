@@ -720,6 +720,11 @@
     <string name="convoyReaction_hello_caption">Hej!</string>
     <string name="convoyReaction_followMe_label">Följ mig</string>
     <string name="convoyReaction_followMe_caption">Följ mig!</string>
+    <!-- Wave to nearby live users -->
+    <string name="shell_waveButton">Vinka till förare i närheten</string>
+    <string name="wave_caption">%1$s vinkade</string>
+    <string name="wave_captionAnonymous">Någon vinkade</string>
+    <string name="wave_captionSelf">Du vinkade</string>
     <string name="memberProfile_title">Profil</string>
     <string name="memberProfile_unknownMember">Medlem</string>
     <string name="memberProfile_unavailable">Den här profilen är inte tillgänglig.</string>

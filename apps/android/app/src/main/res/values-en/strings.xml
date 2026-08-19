@@ -720,6 +720,11 @@
     <string name="convoyReaction_hello_caption">Hi!</string>
     <string name="convoyReaction_followMe_label">Follow me</string>
     <string name="convoyReaction_followMe_caption">Follow me!</string>
+    <!-- Wave to nearby live users -->
+    <string name="shell_waveButton">Wave to nearby drivers</string>
+    <string name="wave_caption">%1$s waved</string>
+    <string name="wave_captionAnonymous">Someone waved</string>
+    <string name="wave_captionSelf">You waved</string>
     <string name="memberProfile_title">Profile</string>
     <string name="memberProfile_unknownMember">Member</string>
     <string name="memberProfile_unavailable">This profile isn\'t available.</string>

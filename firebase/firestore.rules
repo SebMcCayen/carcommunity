@@ -1142,6 +1142,23 @@ service cloud.firestore {
     }
 
     // -------------------------------------------------------------------------
+    // liveWaves/{uid}/waves – the per-user WAVE inbox (live.sendWave)
+    // A wave is a short-lived event (~5 min TTL on expireAt) that pops a
+    // mid-screen "👋 <name> waved" on a nearby live sharer's map. live.sendWave
+    // fans one doc out to each nearby recipient's OWN inbox here — the SAME
+    // per-user-inbox shape as notifications/{uid}/items (a DISTINCT subcollection
+    // name, `waves`, so the TTL policy on collection-group `waves` never touches
+    // the durable notifications `items` group): owner-only read, backend-only
+    // writes (all writes go through the callable, which reads the sender's
+    // authoritative position, applies the block matrix, and enforces the
+    // anti-spam cooldown). No client writes.
+    // -------------------------------------------------------------------------
+    match /liveWaves/{userId}/waves/{waveId} {
+      allow read: if isOwner(userId);
+      // No client writes: live.sendWave callable only.
+    }
+
+    // -------------------------------------------------------------------------
     // crownHuntPoints – Kronjakt reward points (Phase 9h)
     // Members read ACTIVE points (map display); drafts/paused/ended are
     // admin-territory via the Admin SDK. All writes go through the
@@ -1453,6 +1470,13 @@ service cloud.firestore {
     // deterministic ids (convoyId__uid), read and stamped inside the sendReaction
     // transaction. A member must never inspect or reset their own cooldown.
     match /convoyReactionCooldowns/{cooldownId} {
+      allow read, write: if false;
+    }
+    // liveWaveCooldowns – the per-user anti-spam cooldown for live.sendWave (45s).
+    // Backend-only, doc id = uid, read and stamped inside the sendWave
+    // transaction (BEFORE the nearby geo-query). A user must never inspect or
+    // reset their own wave cooldown.
+    match /liveWaveCooldowns/{cooldownId} {
       allow read, write: if false;
     }
     match /perkTrapDeploys/{counterId} {

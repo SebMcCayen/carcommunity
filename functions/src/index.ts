@@ -140,6 +140,7 @@ import {
   updatePosition,
 } from './live/session';
 import { listNearby as listNearbyLive } from './live/listNearby';
+import { sendWave as sendWaveLive } from './live/sendWave';
 import { cleanupExpired as cleanupExpiredLive } from './live/scheduled';
 import { grantEntitlement, verify as verifySubscription } from './subscription/verify';
 import { expireLapsed as expireLapsedSubscriptions } from './subscription/scheduled';
@@ -985,7 +986,7 @@ export const account = {
 /**
  * Live location domain (grouped export → deployed as `live-startSession`,
  * `live-updatePosition`, `live-stopSession`, `live-extendSession`,
- * `live-hideMeNow`, `live-listNearby`, and the scheduled
+ * `live-hideMeNow`, `live-listNearby`, `live-sendWave`, and the scheduled
  * `live-cleanupExpired`) — Phase 10, the first RTDB domain.
  *
  * All liveLocation/ writes are backend-only (RTDB rules deny every client
@@ -1010,6 +1011,16 @@ export const account = {
  * users cannot refresh a discovery doc and age out. See functions/src/live/
  * nearby-core.ts for why the position stream stays in RTDB and only the geo
  * index is in Firestore.
+ *
+ * live.sendWave is the SOCIAL broadcast on the same discovery substrate: a live
+ * sharer fans a transient "👋 <name> waved" out to every OTHER live sharer within
+ * WAVE_RADIUS_METERS (found by the same listNearby geo-query + block matrix, from
+ * the sender's OWN authoritative discovery-doc position), delivered to each
+ * recipient's per-user `liveWaves/{uid}/waves` inbox (owner-read, backend-write,
+ * TTL-swept — the notifications-inbox shape). Anti-spam is server-enforced: a
+ * per-user 45s cooldown (liveWaveCooldowns/{uid}) is checked+stamped in a
+ * transaction BEFORE the geo-query. See functions/src/live/sendWave.ts +
+ * wave-core.ts.
  */
 export const live = {
   startSession,
@@ -1018,6 +1029,7 @@ export const live = {
   extendSession,
   hideMeNow,
   listNearby: listNearbyLive,
+  sendWave: sendWaveLive,
   cleanupExpired: cleanupExpiredLive,
 };
 

@@ -340,6 +340,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'live.hideMeNow': 'variable-member',
   'live.extendSession': 'variable-member',
   'live.listNearby': 'variable-member',
+  'live.sendWave': 'variable-member',
   'drives.save': 'variable-member',
   'drives.delete': 'variable-member',
   'blocking.block': 'variable-member',
