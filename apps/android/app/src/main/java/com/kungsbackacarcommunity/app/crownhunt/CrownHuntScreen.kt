@@ -18,6 +18,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +35,7 @@ import com.kungsbackacarcommunity.app.badges.BadgeLadderId
 import com.kungsbackacarcommunity.app.badges.ladderNameRes
 import com.kungsbackacarcommunity.app.badges.tierNameRes
 import com.kungsbackacarcommunity.app.shell.AeroPage
+import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
 
 /**
  * Kronjakt (crown hunt) hub screen. Stateless.
@@ -83,7 +85,16 @@ fun CrownHuntScreen(
     var showInstructions by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = showInstructions) { showInstructions = false }
     if (showInstructions) {
-        CrownHuntInstructionsScreen(modifier = modifier)
+        // Provide LocalAeroBackAvailable = true AROUND the Instructions surface so
+        // its AeroPage renders the pinned in-app Back arrow regardless of the
+        // ambient routing context. RouteHost already provides this true on the live
+        // path, but providing it here makes the surface's back affordance
+        // self-contained instead of depending on an ancestor two levels up — the
+        // arrow's tap fires the back dispatcher, caught by the BackHandler above,
+        // returning to the hub.
+        CompositionLocalProvider(LocalAeroBackAvailable provides true) {
+            CrownHuntInstructionsScreen(modifier = modifier)
+        }
         return
     }
 
@@ -197,8 +208,10 @@ const val CrownHuntInstructionsButtonTag = "crownHuntInstructionsButton"
  *  - spawn frequency is intentionally VAGUE — no replenish cadence, density
  *    formula or TTL hours — so the exact mechanics stay part of the hunt.
  *
- * Dismissed by the shared Aero Back affordance, which the parent
- * [CrownHuntScreen] intercepts to return to the hub.
+ * Dismissed by the shared Aero Back arrow: the parent [CrownHuntScreen] provides
+ * `LocalAeroBackAvailable = true` around this surface so the arrow is always
+ * visible, and intercepts its back dispatch (a [BackHandler]) to return to the
+ * hub rather than pop the whole route.
  */
 @Composable
 private fun CrownHuntInstructionsScreen(modifier: Modifier = Modifier) {
