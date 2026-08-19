@@ -9,6 +9,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
@@ -290,6 +291,7 @@ private fun DrawScope.drawGlyph(glyph: BadgeGlyph, box: Rect, ink: Color, field:
                 // silhouette and is told apart by its tier ring. A dedicated
                 // laurel-wreath glyph is a later polish for the social screen.
                 BadgeLadderId.SASONGSMASTARE -> drawCrownGlyph(box, ink)
+                BadgeLadderId.VINKARE -> drawWaveHandGlyph(box, ink)
             }
 
         is BadgeGlyph.Milestone ->
@@ -504,6 +506,48 @@ private fun DrawScope.drawHandsGlyph(box: Rect, ink: Color) {
         }
     drawPath(bowl, ink, style = Stroke(width = box.len(0.15f)))
     fillDot(box, ink, 0.50f, 0.24f, 0.16f)
+}
+
+/**
+ * Vinkare — an open raised hand mid-wave. A rounded palm with four finger
+ * capsules and a splayed thumb; the only hand silhouette in the set, so it reads
+ * as a greeting. Deliberately depicts a person waving, never a vehicle or any
+ * speed/motion imagery (no motion line, no speedometer) — see BadgeLadderCatalogParityTest.
+ */
+private fun DrawScope.drawWaveHandGlyph(box: Rect, ink: Color) {
+    // Palm: a filled block with a rounded lower edge (the dot rounds the wrist).
+    drawPath(
+        box.polygon(
+            listOf(
+                0.30f to 0.56f,
+                0.70f to 0.56f,
+                0.70f to 0.82f,
+                0.30f to 0.82f,
+            ),
+        ),
+        ink,
+    )
+    fillDot(box, ink, 0.50f, 0.80f, 0.20f)
+    // Four fingers as round-capped capsules; the two middle fingers stand tallest.
+    val fingerWidth = box.len(0.11f)
+    val fingers = listOf(0.36f to 0.34f, 0.47f to 0.24f, 0.58f to 0.24f, 0.68f to 0.34f)
+    for ((x, topY) in fingers) {
+        drawLine(
+            color = ink,
+            start = box.at(x, 0.60f),
+            end = box.at(x, topY),
+            strokeWidth = fingerWidth,
+            cap = StrokeCap.Round,
+        )
+    }
+    // Thumb splayed out to the lower left.
+    drawLine(
+        color = ink,
+        start = box.at(0.32f, 0.64f),
+        end = box.at(0.13f, 0.52f),
+        strokeWidth = box.len(0.12f),
+        cap = StrokeCap.Round,
+    )
 }
 
 /** early_member — a sunrise: a half-disc on a horizon bar with three short rays. */

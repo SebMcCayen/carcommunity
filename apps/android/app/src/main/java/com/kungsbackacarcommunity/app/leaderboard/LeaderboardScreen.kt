@@ -388,6 +388,7 @@ private fun categoryTitleRes(category: LeaderboardCategory): Int =
         LeaderboardCategory.DISTANCE -> R.string.leaderboard_categoryDistance
         LeaderboardCategory.EVENTS -> R.string.leaderboard_categoryEvents
         LeaderboardCategory.CONVOYS -> R.string.leaderboard_categoryConvoys
+        LeaderboardCategory.WAVES -> R.string.leaderboard_categoryWaves
         LeaderboardCategory.STREAK -> R.string.leaderboard_categoryStreak
     }
 
@@ -400,6 +401,7 @@ private fun formattedValue(format: LeaderboardValueFormat, value: Double): Strin
             LeaderboardValueFormat.CROWN_POINTS -> R.string.leaderboard_valueCrownPoints
             LeaderboardValueFormat.DISTANCE_KM -> R.string.leaderboard_valueDistance
             LeaderboardValueFormat.COUNT -> R.string.leaderboard_valueCount
+            LeaderboardValueFormat.WAVES -> R.string.leaderboard_valueWaves
             LeaderboardValueFormat.DAYS -> R.string.leaderboard_valueDays
         }
     return stringResource(template, magnitude)

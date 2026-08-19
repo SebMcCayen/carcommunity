@@ -48,6 +48,7 @@ class LeaderboardBoardTest {
                 LeaderboardCategory.DISTANCE,
                 LeaderboardCategory.EVENTS,
                 LeaderboardCategory.CONVOYS,
+                LeaderboardCategory.WAVES,
                 LeaderboardCategory.STREAK,
             ),
             LeaderboardBoard.categoriesFor(LeaderboardScope.ALL_TIME),
@@ -63,6 +64,7 @@ class LeaderboardBoardTest {
                 LeaderboardCategory.DISTANCE,
                 LeaderboardCategory.EVENTS,
                 LeaderboardCategory.CONVOYS,
+                LeaderboardCategory.WAVES,
             ),
             monthly,
         )

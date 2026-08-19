@@ -60,6 +60,11 @@ import {
 import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
 import { LIVE_SESSION_ACTIVE_STATUS } from './nearby-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { badgeProgressRef } from '../badges/tierAwards';
+import { BADGE_METRIC_FIELD } from '../badges/badge-tiers';
+import { MEMBER_MONTHLY_STAT_FIELDS } from '../leaderboard/leaderboard-core';
+import { memberMonthlyStatsRef, memberMonthlyStatPayload } from '../leaderboard/monthly-stats';
+import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
 import {
   WAVE_NOT_SHARING_MESSAGE,
   WAVE_RADIUS_METERS,
@@ -225,9 +230,15 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
         uid: actor.uid,
         lastSentAt: createdAt,
         lastWaveId: newWaveId,
-        // lastRecipientCount is deliberately NOT set here — it is written only
-        // AFTER delivery, as the completion marker that distinguishes a finished
-        // send from this in-flight one.
+        // CLEAR the completion marker as this new send is stamped. The doc is
+        // merge-written and reused across every wave, so the PREVIOUS wave's
+        // `lastRecipientCount` would otherwise persist into this fresh send and
+        // make it look already-completed — replaying a stale count and, worse,
+        // making the waves-sent credit below think this new wave was already
+        // counted (skipping it for every wave after the first). Deleting it makes
+        // in-flight vs completed unambiguous: absent = in-flight (this send has
+        // not delivered yet), present = completed by THIS wave.
+        lastRecipientCount: FieldValue.delete(),
         expireAt: waveCooldownExpiry(now),
         updatedAt: FieldValue.serverTimestamp(),
       },
@@ -310,12 +321,53 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     await batch.commit();
   }
 
-  // COMPLETION MARKER: record the delivered count on the cooldown doc. This is
-  // what turns a stamped in-flight send into a COMPLETED one — a retry before this
-  // write resumes delivery (never drops the wave); a retry after it replays the
-  // stored count. Idempotent (same value on a resumed retry), so writing it twice
-  // is harmless.
-  await cooldownDocRef.set({ lastRecipientCount: recipients.length }, { merge: true });
+  // COMPLETION MARKER + WAVES-SENT STAT, in ONE transaction so the counter is
+  // credited EXACTLY ONCE per completed send. Recording `lastRecipientCount` is
+  // what turns a stamped in-flight send into a COMPLETED one — a retry before
+  // this write resumes delivery (never drops the wave); a completed retry short-
+  // circuits at the replay fast path above and never reaches here at all.
+  //
+  // The wavesSent credit must NOT double-count on a resumed delivery (a crash
+  // between stamp and this write) nor on a raced double-resume, so it is gated on
+  // the FIRST transition into completed for THIS waveId: the transaction reads the
+  // cooldown doc and increments only when the completion marker is not already
+  // recorded for this wave. Two racing resumes serialise on the cooldown doc —
+  // the first credits, the second sees the marker and only re-writes the (equal)
+  // count. The completion write re-stamps `lastWaveId: waveId` so the marker is
+  // self-contained — the count and the id it belongs to are written together, and
+  // a later wave's stamp clears both. The counter is per-SEND, never per-recipient,
+  // and a wave with zero recipients still counts (the sender did wave). Raising
+  // `badgeProgress.wavesSent` cascades into onBadgeProgressWritten, which awards the
+  // Vinkare ladder; the monthly bucket feeds the "waves this month" leaderboard.
+  await db.runTransaction(async (tx) => {
+    const data = (await tx.get(cooldownDocRef)).data();
+    const alreadyCounted =
+      data?.lastWaveId === waveId && typeof data?.lastRecipientCount === 'number';
+    tx.set(cooldownDocRef, { lastWaveId: waveId, lastRecipientCount: recipients.length }, { merge: true });
+    if (alreadyCounted) {
+      return;
+    }
+    // Bucket the monthly credit into the month the wave was STAMPED in, read from
+    // the cooldown doc's authoritative `lastSentAt` — not `now`. On the crash+
+    // resume path `now` is the resume attempt's time, which can fall in a later
+    // month than the original send; crediting the stamp month keeps the wave in the
+    // calendar month it actually happened. Falls back to `now` if unreadable.
+    const stampedAt = data?.lastSentAt instanceof Timestamp ? data.lastSentAt.toDate() : now;
+    const monthScope = seasonIdForInstant(stampedAt);
+    tx.set(
+      badgeProgressRef(actor.uid),
+      {
+        [BADGE_METRIC_FIELD.wavesSent]: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    tx.set(
+      memberMonthlyStatsRef(monthScope, actor.uid),
+      memberMonthlyStatPayload(monthScope, actor.uid, MEMBER_MONTHLY_STAT_FIELDS.waves, 1),
+      { merge: true },
+    );
+  });
 
   return { waveId, recipientCount: recipients.length };
 });

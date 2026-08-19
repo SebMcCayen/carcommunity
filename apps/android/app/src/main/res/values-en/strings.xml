@@ -1021,6 +1021,10 @@
     <string name="badges_badgeNames_sasongsmastare_silver">Season Champion Silver</string>
     <string name="badges_badgeNames_sasongsmastare_guld">Season Champion Gold</string>
     <string name="badges_badgeNames_sasongsmastare_platina">Season Champion Platinum</string>
+    <string name="badges_badgeNames_vinkare_brons">Waver Bronze</string>
+    <string name="badges_badgeNames_vinkare_silver">Waver Silver</string>
+    <string name="badges_badgeNames_vinkare_guld">Waver Gold</string>
+    <string name="badges_badgeNames_vinkare_platina">Waver Platinum</string>
     <string name="badgeShowcase_title">My awards</string>
     <string name="badgeShowcase_subtitle">%1$d of %2$d unlocked</string>
     <string name="badgeShowcase_emptyTitle">Your collection starts here</string>
@@ -1051,6 +1055,7 @@
     <string name="badgeShowcase_ladderNames_konvojledare">Convoy Leader</string>
     <string name="badgeShowcase_ladderNames_samlare">Collector</string>
     <string name="badgeShowcase_ladderNames_sasongsmastare">Season Champion</string>
+    <string name="badgeShowcase_ladderNames_vinkare">Waver</string>
     <string name="badgeShowcase_ladderRequirements_kronjagare">Collect %1$s crowns in Crown Hunt.</string>
     <string name="badgeShowcase_ladderRequirements_vagfarare">Drive %1$s in total.</string>
     <string name="badgeShowcase_ladderRequirements_traffrav">Attend %1$s meets.</string>
@@ -1058,6 +1063,7 @@
     <string name="badgeShowcase_ladderRequirements_konvojledare">Lead %1$s convoys.</string>
     <string name="badgeShowcase_ladderRequirements_samlare">Keep %1$s vehicles in your garage.</string>
     <string name="badgeShowcase_ladderRequirements_sasongsmastare">Win %1$s Crown Hunt seasons.</string>
+    <string name="badgeShowcase_ladderRequirements_vinkare">Send %1$s waves to other drivers.</string>
     <string name="badgeShowcase_ladderTaglines_kronjagare">Crowns you have picked up on the map.</string>
     <string name="badgeShowcase_ladderTaglines_vagfarare">The distance you have put behind you.</string>
     <string name="badgeShowcase_ladderTaglines_traffrav">Meets you have taken part in.</string>
@@ -1065,6 +1071,7 @@
     <string name="badgeShowcase_ladderTaglines_konvojledare">Convoys you have led.</string>
     <string name="badgeShowcase_ladderTaglines_samlare">Vehicles in your garage.</string>
     <string name="badgeShowcase_ladderTaglines_sasongsmastare">Seasons you have won.</string>
+    <string name="badgeShowcase_ladderTaglines_vinkare">Waves you have sent.</string>
     <string name="points_screenTitle">Points</string>
     <string name="points_balanceLabel">Your balance</string>
     <string name="points_shortForm">CP</string>
@@ -1241,10 +1248,12 @@
     <string name="leaderboard_categoryDistance">Distance</string>
     <string name="leaderboard_categoryEvents">Events attended</string>
     <string name="leaderboard_categoryConvoys">Convoys led</string>
+    <string name="leaderboard_categoryWaves">Waves sent</string>
     <string name="leaderboard_categoryStreak">Longest streak</string>
     <string name="leaderboard_valueCrownPoints">%1$d CP</string>
     <string name="leaderboard_valueDistance">%1$d km</string>
     <string name="leaderboard_valueCount">%1$d</string>
+    <string name="leaderboard_valueWaves">%1$d waves</string>
     <string name="leaderboard_valueDays">%1$d days</string>
     <string name="leaderboard_rank">#%1$d</string>
     <string name="leaderboard_you">You</string>

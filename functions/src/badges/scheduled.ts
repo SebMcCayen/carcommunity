@@ -19,14 +19,18 @@
  *     before the ladders shipped, and who therefore can never create another
  *     vehicle, would otherwise never earn a Samlare tier at all.
  *
- * WHAT IS *NOT* BACK-FILLED. Four ladders measure counters that this phase
- * introduces — Kronjägare, Vägfarare, Trogen and Konvojledare start from zero
- * at deploy and are earned from activity onwards; historic crowns, rides and
- * convoys are not replayed (there is no bounded way to do so, and re-scanning
- * them would double-count against the live triggers). Träffräv is retroactive
- * because its counter predates the ladders, and Samlare is retroactive because
- * it is re-derived above. This is a deliberate product decision, not an
- * oversight.
+ * WHAT IS *NOT* BACK-FILLED. Five ladders measure forward-only counters —
+ * Kronjägare, Vägfarare, Trogen, Konvojledare and Vinkare — that start from zero
+ * at deploy and are earned from activity onwards; historic crowns, rides,
+ * convoys and waves are not replayed (there is no bounded way to do so, and
+ * re-scanning them would double-count against the live triggers). Vinkare in
+ * particular has NO external source to reconcile from: `wavesSent` is incremented
+ * exactly once inside live.sendWave (the delivery is ephemeral, TTL-swept), so —
+ * unlike crownsCollected (Kronjakt leaderboard) or vehiclesInGarage (a live
+ * count) — reconcileDerivedBadgeCounters has nothing to raise it to and needs no
+ * wavesSent case. Träffräv is retroactive because its counter predates the
+ * ladders, and Samlare is retroactive because it is re-derived above. This is a
+ * deliberate product decision, not an oversight.
  *
  * REACH. The sweep walks `badgeProgress`, so it only sees members who have such
  * a document — but auth.recordLogin stamps `userLifecycle/{uid}.lastLoginAt` on

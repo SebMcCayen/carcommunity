@@ -10,7 +10,7 @@ import com.kungsbackacarcommunity.app.R
  *
  * Every key in the backend catalog (functions/src/badges/badge-core.ts) must
  * appear here, otherwise an English-locale member sees the Swedish fallback:
- * the five original milestones plus the 22 tiered ladder rungs. The strings
+ * the eight milestone keys plus the 31 tiered ladder rungs. The strings
  * themselves come from contracts/localization/{sv,en}.json via
  * apps/android/scripts/generate-strings.mjs — never hand-edited.
  */
@@ -52,6 +52,10 @@ fun badgeNameRes(key: String): Int? =
         "sasongsmastare_silver" -> R.string.badges_badgeNames_sasongsmastare_silver
         "sasongsmastare_guld" -> R.string.badges_badgeNames_sasongsmastare_guld
         "sasongsmastare_platina" -> R.string.badges_badgeNames_sasongsmastare_platina
+        "vinkare_brons" -> R.string.badges_badgeNames_vinkare_brons
+        "vinkare_silver" -> R.string.badges_badgeNames_vinkare_silver
+        "vinkare_guld" -> R.string.badges_badgeNames_vinkare_guld
+        "vinkare_platina" -> R.string.badges_badgeNames_vinkare_platina
         else -> null
     }
 
@@ -71,6 +75,7 @@ fun ladderNameRes(id: BadgeLadderId): Int =
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderNames_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderNames_samlare
         BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderNames_sasongsmastare
+        BadgeLadderId.VINKARE -> R.string.badgeShowcase_ladderNames_vinkare
     }
 
 /** One-line "what this ladder measures" caption. */
@@ -84,6 +89,7 @@ fun ladderTaglineRes(id: BadgeLadderId): Int =
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderTaglines_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderTaglines_samlare
         BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderTaglines_sasongsmastare
+        BadgeLadderId.VINKARE -> R.string.badgeShowcase_ladderTaglines_vinkare
     }
 
 /** Requirement sentence with a single `%1$s` threshold placeholder. */
@@ -97,6 +103,7 @@ fun ladderRequirementRes(id: BadgeLadderId): Int =
         BadgeLadderId.KONVOJLEDARE -> R.string.badgeShowcase_ladderRequirements_konvojledare
         BadgeLadderId.SAMLARE -> R.string.badgeShowcase_ladderRequirements_samlare
         BadgeLadderId.SASONGSMASTARE -> R.string.badgeShowcase_ladderRequirements_sasongsmastare
+        BadgeLadderId.VINKARE -> R.string.badgeShowcase_ladderRequirements_vinkare
     }
 
 @StringRes

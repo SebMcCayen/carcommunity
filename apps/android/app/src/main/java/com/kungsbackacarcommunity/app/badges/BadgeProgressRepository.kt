@@ -100,6 +100,7 @@ object BadgeProgressResponseParser {
             convoysLed = data.counter("convoysLed"),
             vehiclesInGarage = data.counter("vehiclesInGarage"),
             seasonsWon = data.counter("seasonsWon"),
+            wavesSent = data.counter("wavesSent"),
         )
 
     /**

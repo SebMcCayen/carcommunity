@@ -63,6 +63,9 @@ enum class LeaderboardValueFormat {
     /** A plain count (events attended, convoys led). */
     COUNT,
 
+    /** A count of waves sent — shown as "N waves" / "N vinkningar". */
+    WAVES,
+
     /** A day count (the collection streak). */
     DAYS,
 }
@@ -82,6 +85,7 @@ enum class LeaderboardCategory(
     DISTANCE("distance", LeaderboardValueFormat.DISTANCE_KM, allTimeOnly = false),
     EVENTS("events", LeaderboardValueFormat.COUNT, allTimeOnly = false),
     CONVOYS("convoys", LeaderboardValueFormat.COUNT, allTimeOnly = false),
+    WAVES("waves", LeaderboardValueFormat.WAVES, allTimeOnly = false),
     STREAK("streak", LeaderboardValueFormat.DAYS, allTimeOnly = true),
 }
 

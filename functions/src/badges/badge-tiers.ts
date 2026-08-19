@@ -53,6 +53,7 @@ export const ZERO_BADGE_COUNTERS: BadgeCounters = {
   convoysLed: 0,
   vehiclesInGarage: 0,
   seasonsWon: 0,
+  wavesSent: 0,
 };
 
 /**
@@ -86,6 +87,10 @@ export function readBadgeCounters(data: Record<string, unknown> | undefined): Ba
     // the season-rollover finalizer (crownHunt/seasonRollover.ts), which is the
     // authoritative server writer — never a client number.
     seasonsWon: toCounter(data?.seasonsWon),
+    // Lifetime waves sent to nearby live drivers. Incremented once per COMPLETED
+    // live.sendWave (live/sendWave.ts), a forward-only social counter — never a
+    // client-reported number (badgeProgress denies all client writes).
+    wavesSent: toCounter(data?.wavesSent),
   };
 }
 
@@ -101,6 +106,7 @@ export const BADGE_METRIC_FIELD: Readonly<Record<BadgeMetric, string>> = {
   convoysLed: 'convoysLed',
   vehiclesInGarage: 'vehiclesInGarage',
   seasonsWon: 'seasonsWon',
+  wavesSent: 'wavesSent',
 };
 
 // ---------------------------------------------------------------------------

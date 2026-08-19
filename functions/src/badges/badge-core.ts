@@ -126,6 +126,16 @@ export const TIER_BADGE_KEYS = [
   'sasongsmastare_silver',
   'sasongsmastare_guld',
   'sasongsmastare_platina',
+  // Vinkare — the waves-sent ladder. A FORWARD-ONLY counter like Konvojledare
+  // (`wavesSent`, incremented once per completed live.sendWave): a social nudge
+  // to nearby drivers, never a speed or competition metric. No external source
+  // to reconcile from, so — unlike crownsCollected/vehiclesInGarage — the sweep
+  // does NOT back-fill it (see badges/scheduled.ts): earned from waves sent after
+  // deploy onwards.
+  'vinkare_brons',
+  'vinkare_silver',
+  'vinkare_guld',
+  'vinkare_platina',
 ] as const;
 export type TierBadgeKey = (typeof TIER_BADGE_KEYS)[number];
 
@@ -151,6 +161,7 @@ export const BADGE_LADDER_KEYS = [
   'konvojledare',
   'samlare',
   'sasongsmastare',
+  'vinkare',
 ] as const;
 export type BadgeLadderKey = (typeof BADGE_LADDER_KEYS)[number];
 
@@ -167,6 +178,7 @@ export const BADGE_METRICS = [
   'convoysLed',
   'vehiclesInGarage',
   'seasonsWon',
+  'wavesSent',
 ] as const;
 export type BadgeMetric = (typeof BADGE_METRICS)[number];
 
@@ -379,6 +391,31 @@ export const BADGE_LADDERS: readonly BadgeLadderDefinition[] = [
       { tier: 'silver', key: 'sasongsmastare_silver', threshold: 3 },
       { tier: 'guld', key: 'sasongsmastare_guld', threshold: 5 },
       { tier: 'platina', key: 'sasongsmastare_platina', threshold: 10 },
+    ],
+  },
+  {
+    ladder: 'vinkare',
+    name: 'Vinkare',
+    nameEn: 'Waver',
+    metric: 'wavesSent',
+    descriptionTemplate: 'Skickat {n} vinkningar till andra förare.',
+    descriptionTemplateOne: 'Skickat {n} vinkning till en annan förare.',
+    formatThreshold: (n) => String(n),
+    // A friendly SOCIAL nudge, never speed or competition. NO SPEED IMAGERY
+    // (standing rule): a raised open hand only — no car, no motion lines.
+    glyphBrief:
+      'An open raised hand seen palm-on, waving: a rounded palm with four short ' +
+      'fingers and a splayed thumb, tilted slightly as if mid-wave. A single ' +
+      'compact hand silhouette — no other glyph in the set is a hand, so it reads ' +
+      'unmistakably as a greeting. Never any vehicle, speed or motion imagery.',
+    // Waves carry a ~45s cooldown, so they accrue moderately over a lifetime.
+    // Brons is an achievable first-week rung; Platina is a genuinely dedicated
+    // social greeter. Tuned against the economy in docs/gamification-system.md.
+    tiers: [
+      { tier: 'brons', key: 'vinkare_brons', threshold: 25 },
+      { tier: 'silver', key: 'vinkare_silver', threshold: 100 },
+      { tier: 'guld', key: 'vinkare_guld', threshold: 500 },
+      { tier: 'platina', key: 'vinkare_platina', threshold: 2_000 },
     ],
   },
 ];

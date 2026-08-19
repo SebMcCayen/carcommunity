@@ -16,7 +16,7 @@ import org.junit.Test
 class BadgeProgressResponseParserTest {
 
     @Test
-    fun `a full payload maps one to one onto the seven counters`() {
+    fun `a full payload maps one to one onto the eight counters`() {
         val counters =
             BadgeProgressResponseParser.parse(
                 mapOf(
@@ -27,6 +27,7 @@ class BadgeProgressResponseParserTest {
                     "convoysLed" to 3L,
                     "vehiclesInGarage" to 4L,
                     "seasonsWon" to 1L,
+                    "wavesSent" to 42L,
                 ),
             )
 
@@ -37,6 +38,7 @@ class BadgeProgressResponseParserTest {
         assertEquals(3L, counters.convoysLed)
         assertEquals(4L, counters.vehiclesInGarage)
         assertEquals(1L, counters.seasonsWon)
+        assertEquals(42L, counters.wavesSent)
 
         // Every ladder therefore observes a value → every ladder can draw a bar.
         for (id in BadgeLadderId.entries) {
@@ -70,6 +72,7 @@ class BadgeProgressResponseParserTest {
         assertNull(counters.convoysLed)
         assertNull(counters.vehiclesInGarage)
         assertNull(counters.seasonsWon)
+        assertNull(counters.wavesSent)
     }
 
     @Test

@@ -16,8 +16,9 @@
  *    collection is one small document per member who has ever collected, so the
  *    whole all-time scope fits one query (the same approach as
  *    seasonRollover.readScopeEntries).
- *  - distance / events / convoys / streak — the four badgeProgress counters
- *    (lifetimeDistanceMeters, completedEventsAttended, convoysLed, bestDayStreak).
+ *  - distance / events / convoys / waves / streak — the five badgeProgress
+ *    counters (lifetimeDistanceMeters, completedEventsAttended, convoysLed,
+ *    wavesSent, bestDayStreak).
  *    `badgeProgress` is BACKEND-ONLY (denied to every client in firestore.rules),
  *    so it is read here directly with the Admin SDK, PAGED by document id — the
  *    same cursor pattern as the badge sweep (badges/scheduled.ts) — but walked to
@@ -95,6 +96,7 @@ const BADGE_CATEGORY_FIELD: Readonly<Record<Exclude<LeaderboardCategoryKey, 'cro
     distance: 'lifetimeDistanceMeters',
     events: 'completedEventsAttended',
     convoys: 'convoysLed',
+    waves: 'wavesSent',
     streak: 'bestDayStreak',
   };
 
@@ -106,6 +108,7 @@ function emptyCandidates(): CategoryCandidates {
     distance: [],
     events: [],
     convoys: [],
+    waves: [],
     streak: [],
   };
 }
@@ -166,7 +169,7 @@ async function scanBadgeCandidates(): Promise<CategoryCandidates> {
     }
     for (const doc of page.docs) {
       const data = doc.data();
-      for (const key of ['distance', 'events', 'convoys', 'streak'] as const) {
+      for (const key of ['distance', 'events', 'convoys', 'waves', 'streak'] as const) {
         const value = readCandidateValue(data[BADGE_CATEGORY_FIELD[key]]);
         if (value > 0) {
           candidates[key].push({ uid: doc.id, value });
@@ -297,13 +300,14 @@ export async function runLeaderboardGeneration(): Promise<
 // Monthly board
 // ---------------------------------------------------------------------------
 
-/** The three additive monthly categories read from `memberMonthlyStats`. */
+/** The additive monthly categories read from `memberMonthlyStats`. */
 type MonthlyStatCategory = keyof typeof MEMBER_MONTHLY_STAT_FIELDS;
-const MONTHLY_STAT_CATEGORIES = ['distance', 'events', 'convoys'] as const satisfies readonly [
-  MonthlyStatCategory,
-  MonthlyStatCategory,
-  MonthlyStatCategory,
-];
+const MONTHLY_STAT_CATEGORIES = [
+  'distance',
+  'events',
+  'convoys',
+  'waves',
+] as const satisfies readonly MonthlyStatCategory[];
 
 /**
  * The distance/events/convoys candidates for one month, from a paged scan of
@@ -326,6 +330,7 @@ async function scanMonthlyStatCandidates(
     distance: [],
     events: [],
     convoys: [],
+    waves: [],
   };
   const idPrefix = `${scope}__`;
   let cursor: string | null = null;
@@ -411,6 +416,7 @@ export async function runMonthlyLeaderboardGeneration(
     distance: monthlyStats.distance,
     events: monthlyStats.events,
     convoys: monthlyStats.convoys,
+    waves: monthlyStats.waves,
     streak: [],
   };
 

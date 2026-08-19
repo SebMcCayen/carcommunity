@@ -59,11 +59,12 @@ data class BadgeCounters(
     val convoysLed: Long? = null,
     val vehiclesInGarage: Long? = null,
     val seasonsWon: Long? = null,
+    val wavesSent: Long? = null,
 ) {
     /**
      * The observable value for [ladder], or null when the client does not yet
      * hold that counter. Every ladder now maps to a counter — the server hands
-     * over all seven — so a bar is drawn for each ladder whose number is known.
+     * over all eight — so a bar is drawn for each ladder whose number is known.
      * The counters arrive already sanitised (finite, non-negative, floored) from
      * the callable; a stray negative is still floored out here as defence.
      */
@@ -76,6 +77,7 @@ data class BadgeCounters(
             BadgeLadderId.KONVOJLEDARE -> convoysLed
             BadgeLadderId.SAMLARE -> vehiclesInGarage
             BadgeLadderId.SASONGSMASTARE -> seasonsWon
+            BadgeLadderId.VINKARE -> wavesSent
         }?.takeIf { it >= 0 }
 
     companion object {

@@ -37,7 +37,7 @@ function identitiesFor(uids: readonly string[]): Map<string, LeaderboardIdentity
 }
 
 describe('constants', () => {
-  it('exposes the all-time scope and a top-10 board of five categories', () => {
+  it('exposes the all-time scope and a top-10 board of six categories', () => {
     expect(LEADERBOARD_ALL_TIME_SCOPE).toBe('alltime');
     expect(LEADERBOARD_TOP_N).toBe(10);
     expect([...LEADERBOARD_CATEGORIES]).toEqual([
@@ -45,18 +45,20 @@ describe('constants', () => {
       'distance',
       'events',
       'convoys',
+      'waves',
       'streak',
     ]);
   });
 });
 
 describe('monthly board constants', () => {
-  it('is the all-time set MINUS streak (a streak spans months)', () => {
+  it('is the all-time set MINUS streak (a streak spans months); waves is both', () => {
     expect([...LEADERBOARD_MONTHLY_CATEGORIES]).toEqual([
       'crownPoints',
       'distance',
       'events',
       'convoys',
+      'waves',
     ]);
     // streak is all-time only and must never appear on a monthly board.
     expect([...LEADERBOARD_MONTHLY_CATEGORIES]).not.toContain('streak');
@@ -66,11 +68,12 @@ describe('monthly board constants', () => {
     }
   });
 
-  it('maps the three additive monthly categories to their bucket fields', () => {
+  it('maps the four additive monthly categories to their bucket fields', () => {
     expect(MEMBER_MONTHLY_STAT_FIELDS).toEqual({
       distance: 'distanceMeters',
       events: 'eventsAttended',
       convoys: 'convoysLed',
+      waves: 'waves',
     });
   });
 
@@ -251,6 +254,7 @@ describe('candidateUidsToResolve', () => {
       distance: [],
       events: [],
       convoys: [],
+      waves: [],
       streak: [],
     } as Record<LeaderboardCategoryKey, LeaderboardCandidate[]>;
     expect(candidateUidsToResolve(perCategory, 2).sort()).toEqual(['u0', 'u1']);
