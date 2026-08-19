@@ -221,8 +221,9 @@ private const val DASH = "—"
 
 /**
  * The sharer's main-car photo (the same image the chip shows) in a round frame,
- * with a generic car glyph — the same fallback the tapped chip shows — while the
- * URL resolves or when there is no photo.
+ * with the generic car glyph — the same fallback the tapped chip shows — shown
+ * whenever the photo URL is unavailable: no photo set, the URL still resolving,
+ * or resolution failed.
  */
 @Composable
 private fun SharerAvatar(imagePath: String?) {

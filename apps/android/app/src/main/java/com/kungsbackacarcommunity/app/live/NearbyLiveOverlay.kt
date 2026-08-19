@@ -232,8 +232,9 @@ private fun LiveMarker.spokenName(): String =
 
 /**
  * One nearby sharer's main-car photo in a coloured ring, centred on their
- * projected screen position. Falls back to a generic side-profile car glyph
- * while the Storage URL resolves, or forever when they have no main-car photo.
+ * projected screen position. Falls back to the generic side-profile car glyph
+ * whenever the main-car photo URL is unavailable — no photo set, the Storage URL
+ * still resolving, or resolution failed.
  */
 @Composable
 private fun NearbySharerChip(

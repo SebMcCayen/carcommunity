@@ -507,9 +507,9 @@ private fun ConvoyMemberChip(
 
 /**
  * The member's garage main-car photo — the same identity the live marker
- * already carries — in a circular ring. Falls back to a generic side-profile
- * car glyph while the Storage URL resolves, or forever if they have no main-car
- * photo.
+ * already carries — in a circular ring. Falls back to the generic side-profile
+ * car glyph whenever the main-car photo URL is unavailable — no photo set, the
+ * Storage URL still resolving, or resolution failed.
  */
 @Composable
 private fun ConvoyMemberPhoto(
