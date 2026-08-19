@@ -67,8 +67,11 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
+import com.kungsbackacarcommunity.app.chat.ChatLinkSpans
+import com.kungsbackacarcommunity.app.chat.ChatUrlOpener
 import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
+import com.kungsbackacarcommunity.app.chat.WebLinks
 import com.kungsbackacarcommunity.app.chattime.ChatDateContext
 import com.kungsbackacarcommunity.app.chattime.ChatTimeline
 import com.kungsbackacarcommunity.app.chattime.ChatTimelineItem
@@ -782,6 +785,12 @@ private fun ChannelBubble(
     // its behaviour (move the map to a fixed point) is stable, so a captured-but-
     // slightly-stale handler is harmless.
     val canShowLocation = onShowLocationOnMap != null
+    // Tapping an auto-linkified http/https URL opens it in the phone's DEFAULT
+    // browser (an ACTION_VIEW intent the OS resolves), guarded against a missing
+    // browser. The handler captures the (stable) context, so it is deliberately
+    // NOT a remember key below — only the message content drives a rebuild.
+    val context = LocalContext.current
+    val onOpenUrl: (String) -> Unit = remember(context) { { url -> ChatUrlOpener.open(context, url) } }
     val body =
         remember(
             message.text,
@@ -800,6 +809,7 @@ private fun ChannelBubble(
                 linkColor = linkColor,
                 linkLabel = linkLabel,
                 onShowLocationOnMap = onShowLocationOnMap,
+                onOpenUrl = onOpenUrl,
             )
         }
     Surface(
@@ -849,9 +859,30 @@ private fun ChannelBubble(
  * out-of-range token is not returned by [GeoLinks.findAll], so it likewise stays
  * plain text and can never move the map to a garbage coordinate.
  *
- * Mentions and location links cannot overlap (one begins with `@`, the other with
- * `geo:`), so the two range sets are simply interleaved over the text in order.
+ * Web links: [WebLinks.findAll] detects each `http://`/`https://` URL a user pasted
+ * and it becomes a tappable span (the URL text itself, styled + underlined) that
+ * opens the phone's default browser via [onOpenUrl]. Only http/https are ever
+ * detected — dangerous schemes (`tel:`, `intent:`, `javascript:`, `file:`) never
+ * become links — and nothing opens without an explicit tap.
+ *
+ * Mentions (`@`), location links (`geo:`) and web links (`http(s)://`) are matched
+ * independently and their ranges are NOT guaranteed disjoint — a pasted URL can
+ * contain a `geo:`-looking substring in its path that [GeoLinks] also flags — so
+ * [ChatLinkSpans.nonOverlapping] reconciles the three sets into one strictly
+ * non-overlapping, ascending list (the outer URL wins) before rendering. The append
+ * loop then only ever advances, so nothing is duplicated or misordered.
  */
+private sealed interface BodySpan {
+    val range: IntRange
+
+    data class Mention(override val range: IntRange) : BodySpan
+
+    data class Geo(override val range: IntRange, val latitude: Double, val longitude: Double) :
+        BodySpan
+
+    data class Web(override val range: IntRange, val url: String) : BodySpan
+}
+
 private fun annotateMessageBody(
     text: String,
     mentionedUids: List<String>,
@@ -860,10 +891,20 @@ private fun annotateMessageBody(
     linkColor: Color,
     linkLabel: String,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
+    onOpenUrl: (String) -> Unit,
 ): AnnotatedString {
-    val mentionRanges = MentionRendering.highlightRanges(text, mentionedUids, displayNames)
-    val geoMatches = if (onShowLocationOnMap != null) GeoLinks.findAll(text) else emptyList()
-    if (mentionRanges.isEmpty() && geoMatches.isEmpty()) return AnnotatedString(text)
+    val spans = buildList<BodySpan> {
+        if (onShowLocationOnMap != null) {
+            GeoLinks.findAll(text).forEach {
+                add(BodySpan.Geo(it.range, it.link.latitude, it.link.longitude))
+            }
+        }
+        WebLinks.findAll(text).forEach { add(BodySpan.Web(it.range, it.link.url)) }
+        MentionRendering.highlightRanges(text, mentionedUids, displayNames).forEach {
+            add(BodySpan.Mention(it))
+        }
+    }.let { ChatLinkSpans.nonOverlapping(it) { span -> span.range } }
+    if (spans.isEmpty()) return AnnotatedString(text)
 
     val linkStyles =
         TextLinkStyles(
@@ -877,41 +918,41 @@ private fun annotateMessageBody(
 
     return buildAnnotatedString {
         var index = 0
-        while (index < text.length) {
-            val geo = geoMatches.firstOrNull { it.range.first == index }
-            if (geo != null) {
-                val link = geo.link
-                withLink(
-                    LinkAnnotation.Clickable(
-                        tag = "geo",
-                        styles = linkStyles,
-                        linkInteractionListener = {
-                            onShowLocationOnMap?.invoke(link.latitude, link.longitude)
-                        },
-                    ),
-                ) {
-                    append(linkLabel)
-                }
-                index = geo.range.last + 1
-                continue
+        for (span in spans) {
+            if (span.range.first > index) append(text.substring(index, span.range.first))
+            when (span) {
+                is BodySpan.Geo ->
+                    withLink(
+                        LinkAnnotation.Clickable(
+                            tag = "geo",
+                            styles = linkStyles,
+                            linkInteractionListener = {
+                                onShowLocationOnMap?.invoke(span.latitude, span.longitude)
+                            },
+                        ),
+                    ) {
+                        append(linkLabel)
+                    }
+
+                is BodySpan.Web ->
+                    withLink(
+                        LinkAnnotation.Url(
+                            url = span.url,
+                            styles = linkStyles,
+                            linkInteractionListener = { onOpenUrl(span.url) },
+                        ),
+                    ) {
+                        append(span.url)
+                    }
+
+                is BodySpan.Mention ->
+                    withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold)) {
+                        append(text.substring(span.range.first, span.range.last + 1))
+                    }
             }
-            val mention = mentionRanges.firstOrNull { it.first == index }
-            if (mention != null) {
-                withStyle(SpanStyle(color = mentionColor, fontWeight = FontWeight.SemiBold)) {
-                    append(text.substring(mention.first, mention.last + 1))
-                }
-                index = mention.last + 1
-                continue
-            }
-            // Plain run up to the next mention/link boundary.
-            val nextBoundary =
-                (geoMatches.map { it.range.first } + mentionRanges.map { it.first })
-                    .filter { it > index }
-                    .minOrNull()
-                    ?: text.length
-            append(text.substring(index, nextBoundary))
-            index = nextBoundary
+            index = span.range.last + 1
         }
+        if (index < text.length) append(text.substring(index))
     }
 }
 

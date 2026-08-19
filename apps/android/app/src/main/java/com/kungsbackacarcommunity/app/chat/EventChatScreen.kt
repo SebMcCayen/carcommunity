@@ -29,12 +29,23 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
@@ -437,14 +448,70 @@ private fun MessageRow(
                     }
                 }
 
-                else ->
+                else -> {
+                    // Auto-linkify any http/https URL the author pasted so it opens in
+                    // the phone's default browser on tap. Detection is content-only, so
+                    // the AnnotatedString is keyed on the message text (the context-
+                    // capturing opener is deliberately not a key).
+                    val context = LocalContext.current
+                    val linkColor = MaterialTheme.colorScheme.primary
+                    val body =
+                        remember(message.message, linkColor) {
+                            annotateWebLinks(message.message, linkColor) { url ->
+                                ChatUrlOpener.open(context, url)
+                            }
+                        }
                     Text(
-                        text = message.message,
+                        text = body,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
+                }
             }
         }
+    }
+}
+
+/**
+ * [text] with each pasted `http://`/`https://` URL turned into a tappable link (the
+ * URL text itself, styled + underlined) that opens the phone's default browser via
+ * [onOpenUrl]. Only http/https are linkified (see [WebLinks]); the rest of the
+ * message stays plain. Returns a plain [AnnotatedString] when there is no URL.
+ */
+private fun annotateWebLinks(
+    text: String,
+    linkColor: Color,
+    onOpenUrl: (String) -> Unit,
+): AnnotatedString {
+    val webMatches = WebLinks.findAll(text)
+    if (webMatches.isEmpty()) return AnnotatedString(text)
+
+    val linkStyles =
+        TextLinkStyles(
+            style =
+                SpanStyle(
+                    color = linkColor,
+                    fontWeight = FontWeight.SemiBold,
+                    textDecoration = TextDecoration.Underline,
+                ),
+        )
+    return buildAnnotatedString {
+        var index = 0
+        for (match in webMatches) {
+            if (match.range.first > index) append(text.substring(index, match.range.first))
+            val url = match.link.url
+            withLink(
+                LinkAnnotation.Url(
+                    url = url,
+                    styles = linkStyles,
+                    linkInteractionListener = { onOpenUrl(url) },
+                ),
+            ) {
+                append(url)
+            }
+            index = match.range.last + 1
+        }
+        if (index < text.length) append(text.substring(index))
     }
 }
 
