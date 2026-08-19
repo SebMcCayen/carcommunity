@@ -75,7 +75,9 @@ import com.kungsbackacarcommunity.app.notifications.FirebaseNotificationsReposit
 import com.kungsbackacarcommunity.app.notifications.NotificationSettingsCoordinator
 import com.kungsbackacarcommunity.app.notifications.NotificationsCoordinator
 import com.kungsbackacarcommunity.app.points.FirebasePointsRepository
+import com.kungsbackacarcommunity.app.privacy.FirebaseLeaderboardVisibilityRepository
 import com.kungsbackacarcommunity.app.privacy.FirebasePartnerStatsRepository
+import com.kungsbackacarcommunity.app.privacy.LeaderboardVisibilityCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.partners.FirebasePartnerApplicationRepository
 import com.kungsbackacarcommunity.app.partners.FirebasePartnersRepository
@@ -260,6 +262,10 @@ class MainActivity : ComponentActivity() {
         val partnerStatsRepository =
             FirebasePartnerStatsRepository.createIfAvailable(applicationContext)
         val partnerStatsCoordinator = partnerStatsRepository?.let { PartnerStatsCoordinator(it) }
+        val leaderboardVisibilityRepository =
+            FirebaseLeaderboardVisibilityRepository.createIfAvailable(applicationContext)
+        val leaderboardVisibilityCoordinator =
+            leaderboardVisibilityRepository?.let { LeaderboardVisibilityCoordinator(it) }
         // "Report a problem" → feedback.reportIssue callable (files a public
         // GitHub issue). Guarded like the rest of the Firebase wiring.
         val feedbackCoordinator =
@@ -510,6 +516,8 @@ class MainActivity : ComponentActivity() {
                         accountDeletionCoordinator = accountDeletionCoordinator,
                         partnerStatsRepository = partnerStatsRepository,
                         partnerStatsCoordinator = partnerStatsCoordinator,
+                        leaderboardVisibilityRepository = leaderboardVisibilityRepository,
+                        leaderboardVisibilityCoordinator = leaderboardVisibilityCoordinator,
                         feedbackCoordinator = feedbackCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,

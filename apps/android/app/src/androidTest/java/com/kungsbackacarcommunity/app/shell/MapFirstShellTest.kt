@@ -146,6 +146,8 @@ class MapFirstShellTest {
                     accountDeletionCoordinator = null,
                     partnerStatsRepository = null,
                     partnerStatsCoordinator = null,
+                    leaderboardVisibilityRepository = null,
+                    leaderboardVisibilityCoordinator = null,
                     feedbackCoordinator = null,
                     billingRepository = null,
                     subscriptionVerifier = null,

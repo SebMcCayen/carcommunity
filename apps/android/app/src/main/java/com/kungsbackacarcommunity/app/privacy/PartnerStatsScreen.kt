@@ -36,6 +36,12 @@ fun PartnerStatsScreen(
     onSave: (Boolean) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    // Leaderboard-visibility opt-out (Leaderboard PR4). Optional so existing
+    // callers/tests are unaffected; the section renders only when a save handler
+    // is supplied.
+    leaderboardVisibility: LeaderboardVisibilityState = LeaderboardVisibilityState.Unknown,
+    leaderboardSaveStatus: LeaderboardVisibilitySaveStatus = LeaderboardVisibilitySaveStatus.Idle,
+    onSaveLeaderboard: ((shown: Boolean) -> Unit)? = null,
 ) {
     // Seed the pending toggle from the first DEFINITIVE read ONCE — decoupled
     // from later Firestore emissions so a live update doesn't overwrite an edit
@@ -139,6 +145,14 @@ fun PartnerStatsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(text = stringResource(R.string.privacySettings_saveButton))
+            }
+
+            if (onSaveLeaderboard != null) {
+                LeaderboardVisibilitySection(
+                    visibility = leaderboardVisibility,
+                    saveStatus = leaderboardSaveStatus,
+                    onSave = onSaveLeaderboard,
+                )
             }
     }
 }

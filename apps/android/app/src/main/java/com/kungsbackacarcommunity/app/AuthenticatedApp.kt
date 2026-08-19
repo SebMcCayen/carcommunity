@@ -267,6 +267,8 @@ import com.kungsbackacarcommunity.app.points.Points
 import com.kungsbackacarcommunity.app.points.PointsEntriesState
 import com.kungsbackacarcommunity.app.points.PointsRepository
 import com.kungsbackacarcommunity.app.points.PointsRoute
+import com.kungsbackacarcommunity.app.privacy.LeaderboardVisibilityCoordinator
+import com.kungsbackacarcommunity.app.privacy.LeaderboardVisibilityRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsCoordinator
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRepository
 import com.kungsbackacarcommunity.app.privacy.PartnerStatsRoute
@@ -735,6 +737,8 @@ fun AuthenticatedApp(
     accountDeletionCoordinator: AccountDeletionCoordinator?,
     partnerStatsRepository: PartnerStatsRepository?,
     partnerStatsCoordinator: PartnerStatsCoordinator?,
+    leaderboardVisibilityRepository: LeaderboardVisibilityRepository?,
+    leaderboardVisibilityCoordinator: LeaderboardVisibilityCoordinator?,
     feedbackCoordinator: FeedbackCoordinator?,
     billingRepository: BillingRepository?,
     subscriptionVerifier: SubscriptionVerifier?,
@@ -5659,6 +5663,8 @@ fun AuthenticatedApp(
                         accountDeletionCoordinator = accountDeletionCoordinator,
                         partnerStatsRepository = partnerStatsRepository,
                         partnerStatsCoordinator = partnerStatsCoordinator,
+                        leaderboardVisibilityRepository = leaderboardVisibilityRepository,
+                        leaderboardVisibilityCoordinator = leaderboardVisibilityCoordinator,
                         feedbackCoordinator = feedbackCoordinator,
                         reportTicketsEnabled = flags.isEnabled(FeatureFlag.REPORT_TICKETS_BROWSER),
                         billingRepository = billingRepository,
@@ -7796,6 +7802,8 @@ private fun RouteHost(
     accountDeletionCoordinator: AccountDeletionCoordinator?,
     partnerStatsRepository: PartnerStatsRepository?,
     partnerStatsCoordinator: PartnerStatsCoordinator?,
+    leaderboardVisibilityRepository: LeaderboardVisibilityRepository?,
+    leaderboardVisibilityCoordinator: LeaderboardVisibilityCoordinator?,
     feedbackCoordinator: FeedbackCoordinator?,
     // The `reportTicketsBrowser` flag (contract default FALSE), resolved at the
     // call site. Gates the "View open tickets" entry on the report screen and the
@@ -8514,6 +8522,8 @@ private fun RouteHost(
                     coordinator = partnerStatsCoordinator,
                     uid = uid,
                     onBack = onClose,
+                    leaderboardRepository = leaderboardVisibilityRepository,
+                    leaderboardCoordinator = leaderboardVisibilityCoordinator,
                 )
             } else {
                 LoadingScreen()

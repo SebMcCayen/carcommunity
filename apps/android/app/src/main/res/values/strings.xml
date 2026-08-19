@@ -203,6 +203,9 @@
     <string name="privacySettings_partnerStatsOptOut">Du kan stänga av funktionen när som helst.</string>
     <string name="privacySettings_partnerStatsOptIn">Bidra med anonymiserad partnerstatistik</string>
     <string name="privacySettings_partnerStatsNote">På som standard. Du kan stänga av det när som helst.</string>
+    <string name="privacySettings_leaderboardTitle">Topplista</string>
+    <string name="privacySettings_leaderboardBody">Visa mig på topplistan</string>
+    <string name="privacySettings_leaderboardExplainer">På: du visas på topplistan i appen och på webbplatsen. Av: du döljs på båda.</string>
     <string name="privacySettings_saveButton">Spara</string>
     <string name="privacySettings_loading">Sparar...</string>
     <string name="privacySettings_error">Något gick fel. Försök igen.</string>

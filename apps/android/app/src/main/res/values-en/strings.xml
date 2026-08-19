@@ -203,6 +203,9 @@
     <string name="privacySettings_partnerStatsOptOut">You can turn the feature off at any time.</string>
     <string name="privacySettings_partnerStatsOptIn">Contribute anonymised partner statistics</string>
     <string name="privacySettings_partnerStatsNote">On by default. You can turn it off at any time.</string>
+    <string name="privacySettings_leaderboardTitle">Leaderboard</string>
+    <string name="privacySettings_leaderboardBody">Show me on the leaderboard</string>
+    <string name="privacySettings_leaderboardExplainer">On: you appear on the leaderboard in the app and on the website. Off: you\'re hidden from both.</string>
     <string name="privacySettings_saveButton">Save</string>
     <string name="privacySettings_loading">Saving...</string>
     <string name="privacySettings_error">Something went wrong. Please try again.</string>
