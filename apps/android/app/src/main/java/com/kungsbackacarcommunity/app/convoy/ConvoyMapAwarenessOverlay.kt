@@ -536,9 +536,10 @@ private fun ConvoyMemberPhoto(
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
         } else {
-            // No main-car photo: a recognisable generic side-profile car rather
-            // than the Material front-on default, so a photoless convoy member
-            // still reads as a car on the map.
+            // No resolved photo (none set, or still loading / failed to
+            // resolve): a recognisable generic side-profile car rather than the
+            // Material front-on default, so a photoless convoy member still
+            // reads as a car on the map.
             Icon(
                 painter = painterResource(R.drawable.ic_generic_car),
                 contentDescription = null,
