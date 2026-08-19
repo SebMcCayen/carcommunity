@@ -770,6 +770,20 @@
     "leave": "Lämna konvojen",
     "errorNotLeader": "Bara konvojledaren kan avsluta konvojen för alla. Du kan lämna den i stället."
   },
+  "convoyReaction": {
+    "police": {
+      "label": "Polis",
+      "caption": "Polis framför!"
+    },
+    "hello": {
+      "label": "Hej/Hejdå",
+      "caption": "Hej!"
+    },
+    "followMe": {
+      "label": "Följ mig",
+      "caption": "Följ mig!"
+    }
+  },
   "memberProfile": {
     "title": "Profil",
     "unknownMember": "Medlem",

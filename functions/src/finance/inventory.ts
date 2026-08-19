@@ -451,6 +451,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'convoy.invite': 'variable-member',
   'convoy.setDestination': 'variable-member',
   'convoy.clearDestination': 'variable-member',
+  'convoy.sendReaction': 'variable-member',
   'communityChat.post': 'variable-member',
   'communityChat.list': 'variable-member',
   'communityChat.markRead': 'variable-member',

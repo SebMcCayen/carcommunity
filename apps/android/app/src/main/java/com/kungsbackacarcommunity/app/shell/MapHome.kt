@@ -303,6 +303,16 @@ fun MapHome(
     // slot from the convoy layer so the two live-marker kinds stay visually
     // distinct and either can be present without the other.
     nearbyOverlay: (@Composable () -> Unit)? = null,
+    // Optional convoy REACTIONS layer: the bottom-centre reaction buttons (police /
+    // hello-goodbye / follow-me) ABOVE the shell's bottom bar, plus the mid-screen
+    // reaction overlay that pops when a member reacts. A slot for the same reason
+    // [convoyBar] is one — the shell stays ignorant of the convoy domain, and "not
+    // in a convoy" is the host passing null, which composes NOTHING (no buttons, no
+    // gap). Composed on TOP of the map chrome (fills the map area, but only the
+    // buttons capture touches) so the pop is never hidden behind a control and the
+    // map stays interactive. Absent in the default shell harness (convoyRepository
+    // null → no active convoy → host passes null), so MapFirstShellTest is untouched.
+    convoyReactions: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -763,6 +773,12 @@ fun MapHome(
                 }
             }
         }
+
+        // Convoy reactions (buttons bottom-centre + the mid-screen pop), composed
+        // ON TOP of the map chrome so the pop is never hidden behind a control and
+        // the buttons sit above the shell's bottom bar. Null (not in a convoy)
+        // composes nothing at all — no layer, no reserved space.
+        convoyReactions?.invoke()
 
         // Incident-report flow, in three steps (see the state block above).
         //

@@ -714,6 +714,12 @@
     <string name="convoy_nowLeaderNotice">Du är nu konvojledare.</string>
     <string name="convoy_leave">Lämna konvojen</string>
     <string name="convoy_errorNotLeader">Bara konvojledaren kan avsluta konvojen för alla. Du kan lämna den i stället.</string>
+    <string name="convoyReaction_police_label">Polis</string>
+    <string name="convoyReaction_police_caption">Polis framför!</string>
+    <string name="convoyReaction_hello_label">Hej/Hejdå</string>
+    <string name="convoyReaction_hello_caption">Hej!</string>
+    <string name="convoyReaction_followMe_label">Följ mig</string>
+    <string name="convoyReaction_followMe_caption">Följ mig!</string>
     <string name="memberProfile_title">Profil</string>
     <string name="memberProfile_unknownMember">Medlem</string>
     <string name="memberProfile_unavailable">Den här profilen är inte tillgänglig.</string>

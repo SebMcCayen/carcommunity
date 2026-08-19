@@ -815,6 +815,23 @@ service cloud.firestore {
       // No client writes: convoyChat.post callable only.
     }
 
+    // convoyChats/{convoyId}/reactions – the transient REACTION channel
+    // (convoy.sendReaction: police / hello-goodbye / follow-me). A reaction is a
+    // short-lived event (~5 min TTL on expireAt) that pops a mid-screen animation
+    // on every other member's map. It rides the SAME convoy-scoped channel as the
+    // messages subcollection, so it takes the IDENTICAL accepted-member read gate:
+    // readable ONLY by an accepted member of the parent convoy. ALL writes go
+    // through the convoy.sendReaction callable (which re-checks accepted
+    // membership AND enforces the anti-spam cooldown) — no client writes.
+    match /convoyChats/{convoyId}/reactions/{reactionId} {
+      allow read: if isAuthenticated()
+        && request.auth.uid in
+          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
+        && get(/databases/$(database)/documents/convoys/$(convoyId))
+          .data.members[request.auth.uid].inviteStatus == 'accepted';
+      // No client writes: convoy.sendReaction callable only.
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------
@@ -1429,6 +1446,13 @@ service cloud.firestore {
     // able to inspect or reset their own caps.
     // -------------------------------------------------------------------------
     match /perkDrainCooldowns/{victimId} {
+      allow read, write: if false;
+    }
+    // convoyReactionCooldowns – the per-(convoy, member) anti-spam cooldown for
+    // convoy.sendReaction (police 60s, hello 15s, follow_me 30s). Backend-only,
+    // deterministic ids (convoyId__uid), read and stamped inside the sendReaction
+    // transaction. A member must never inspect or reset their own cooldown.
+    match /convoyReactionCooldowns/{cooldownId} {
       allow read, write: if false;
     }
     match /perkTrapDeploys/{counterId} {
