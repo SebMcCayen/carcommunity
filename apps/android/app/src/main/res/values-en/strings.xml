@@ -706,6 +706,12 @@
     <string name="convoy_nowLeaderNotice">You\'re now the convoy leader.</string>
     <string name="convoy_leave">Leave convoy</string>
     <string name="convoy_errorNotLeader">Only the convoy leader can end the convoy for everyone. You can leave it instead.</string>
+    <string name="convoyReaction_police_label">Police</string>
+    <string name="convoyReaction_police_caption">Police ahead!</string>
+    <string name="convoyReaction_hello_label">Hi/Bye</string>
+    <string name="convoyReaction_hello_caption">Hi!</string>
+    <string name="convoyReaction_followMe_label">Follow me</string>
+    <string name="convoyReaction_followMe_caption">Follow me!</string>
     <string name="memberProfile_title">Profile</string>
     <string name="memberProfile_unknownMember">Member</string>
     <string name="memberProfile_unavailable">This profile isn\'t available.</string>

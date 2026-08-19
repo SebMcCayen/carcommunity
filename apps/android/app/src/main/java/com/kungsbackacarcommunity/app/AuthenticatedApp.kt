@@ -168,6 +168,8 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyListStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
+import com.kungsbackacarcommunity.app.convoy.ConvoyReactionsHost
+import com.kungsbackacarcommunity.app.convoy.FirebaseConvoyReactionRepository
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
@@ -4053,6 +4055,16 @@ fun AuthenticatedApp(
                 // stable and cannot rebuild the coordinator on recomposition.
                 val convoyLiveProfiles =
                     FirebaseLiveProfileRepository.sharedOrEmpty(LocalContext.current)
+                // Convoy REACTIONS (police / hello-goodbye / follow-me): sends the
+                // convoy-sendReaction callable and listens on the convoy reactions
+                // channel. Null in a config-less / CI build, which wires no reaction
+                // UI at all (the slot below stays null). Independent of the coordinator
+                // — reactions are a transient broadcast, not part of the convoy roster.
+                val convoyReactionsContext = LocalContext.current
+                val convoyReactionRepository =
+                    remember(convoyReactionsContext) {
+                        FirebaseConvoyReactionRepository.createIfAvailable(convoyReactionsContext)
+                    }
                 val convoyBarCoordinator =
                     remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles) {
                         convoyRepository?.let {
@@ -4918,6 +4930,28 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // Convoy REACTIONS layer (bottom-centre buttons + mid-screen pop),
+                // shown ONLY while the caller is in an active convoy AND a reaction
+                // repository is configured AND the bar is actually on screen (same
+                // on-screen gate as the convoy chat unread listener, so the reaction
+                // listener isn't left running behind a covering route). Null → MapHome
+                // composes nothing, so the default shell (convoyRepository null → no
+                // active convoy) never shows it and MapFirstShellTest is untouched.
+                val convoyReactionsSlot: (@Composable () -> Unit)? =
+                    if (convoyReactionRepository != null &&
+                        convoyBarConvoyId != null &&
+                        convoyBarOnScreen
+                    ) {
+                        {
+                            ConvoyReactionsHost(
+                                convoyId = convoyBarConvoyId,
+                                repository = convoyReactionRepository,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 // The one true way out of navigation: tears down the nav view AND
                 // forgets the persisted record, so a user-confirmed exit can never
                 // later resurface as a "continue navigation?" prompt. Shared by the
@@ -5687,6 +5721,10 @@ fun AuthenticatedApp(
                                     // arrows, drawn on the map under the chrome.
                                     convoyOverlay = convoyOverlaySlot,
                                     nearbyOverlay = nearbyOverlaySlot,
+                                    // Convoy reaction buttons (bottom-centre, above
+                                    // the bottom bar) + the mid-screen reaction pop.
+                                    // Null unless in an active convoy.
+                                    convoyReactions = convoyReactionsSlot,
                                 )
 
                                 // Tapping an incident badge on the map opens its

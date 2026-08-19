@@ -202,6 +202,7 @@ import {
   setDestination as setConvoyDestination,
   start as startConvoy,
 } from './convoy/manageConvoy';
+import { sendReaction as sendConvoyReaction } from './convoy/reactions';
 import {
   list as communityChatList,
   markRead as communityChatMarkRead,
@@ -1163,7 +1164,7 @@ export const dm = {
  * Convoy domain (grouped export → deployed as `convoy-create`,
  * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`,
  * `convoy-leave`, `convoy-invite`, `convoy-setDestination`,
- * `convoy-clearDestination`).
+ * `convoy-clearDestination`, `convoy-sendReaction`).
  *
  * The convoy FOUNDATION (contracts/functions/functions.json:
  * convoy.create/respond/start/end/list/leave/invite/setDestination/
@@ -1199,6 +1200,17 @@ export const dm = {
  * reuse the live-location domain: the response's livePositionUids (accepted
  * members) are the uids the convoy map subscribes to at RTDB
  * liveLocation/{uid}/latest — the convoy never duplicates GPS storage.
+ *
+ * REACTIONS (`convoy-sendReaction`): an accepted member broadcasts a transient
+ * reaction (police alert / hello-goodbye / follow-me) to the rest of the convoy.
+ * It writes ONE short-lived doc to convoyChats/{convoyId}/reactions — the SAME
+ * real-time channel convoy chat uses — so every member's existing per-convoy
+ * listener delivers it and each client pops a mid-screen animation for a couple
+ * of seconds. The police alert is rate-limited SERVER-SIDE (60s/member/convoy)
+ * via a per-(convoy, member) cooldown doc read-and-written in the same
+ * transaction as the reaction; hello/follow-me get shorter windows. No
+ * notification fan-out and no long-term storage (a short expireAt TTL sweeps
+ * both docs). See functions/src/convoy/reactions.ts + reaction-core.ts.
  */
 export const convoy = {
   create: createConvoy,
@@ -1210,6 +1222,7 @@ export const convoy = {
   invite: inviteToConvoy,
   setDestination: setConvoyDestination,
   clearDestination: clearConvoyDestination,
+  sendReaction: sendConvoyReaction,
 };
 
 /**

@@ -760,6 +760,20 @@
     "leave": "Leave convoy",
     "errorNotLeader": "Only the convoy leader can end the convoy for everyone. You can leave it instead."
   },
+  "convoyReaction": {
+    "police": {
+      "label": "Police",
+      "caption": "Police ahead!"
+    },
+    "hello": {
+      "label": "Hi/Bye",
+      "caption": "Hi!"
+    },
+    "followMe": {
+      "label": "Follow me",
+      "caption": "Follow me!"
+    }
+  },
   "memberProfile": {
     "title": "Profile",
     "unknownMember": "Member",
