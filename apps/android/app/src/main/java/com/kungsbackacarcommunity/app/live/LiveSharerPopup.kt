@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -221,7 +221,8 @@ private const val DASH = "—"
 
 /**
  * The sharer's main-car photo (the same image the chip shows) in a round frame,
- * with a person glyph while the URL resolves or when there is no photo.
+ * with a generic car glyph — the same fallback the tapped chip shows — while the
+ * URL resolves or when there is no photo.
  */
 @Composable
 private fun SharerAvatar(imagePath: String?) {
@@ -243,10 +244,10 @@ private fun SharerAvatar(imagePath: String?) {
             )
         } else {
             Icon(
-                imageVector = Icons.Filled.Person,
+                painter = painterResource(R.drawable.ic_generic_car),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp),
+                modifier = Modifier.size(26.dp),
             )
         }
     }
