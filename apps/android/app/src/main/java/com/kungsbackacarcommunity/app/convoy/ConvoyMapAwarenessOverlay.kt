@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +35,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLocale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -508,8 +507,9 @@ private fun ConvoyMemberChip(
 
 /**
  * The member's garage main-car photo — the same identity the live marker
- * already carries — in a circular ring. Falls back to a car glyph while the
- * Storage URL resolves, or forever if they have no main-car photo.
+ * already carries — in a circular ring. Falls back to the generic side-profile
+ * car glyph whenever the main-car photo URL is unavailable — no photo set, the
+ * Storage URL still resolving, or resolution failed.
  */
 @Composable
 private fun ConvoyMemberPhoto(
@@ -536,11 +536,15 @@ private fun ConvoyMemberPhoto(
                 modifier = Modifier.fillMaxSize().clip(CircleShape),
             )
         } else {
+            // No resolved photo (none set, or still loading / failed to
+            // resolve): a recognisable generic side-profile car rather than the
+            // Material front-on default, so a photoless convoy member still
+            // reads as a car on the map.
             Icon(
-                imageVector = Icons.Filled.DirectionsCar,
+                painter = painterResource(R.drawable.ic_generic_car),
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(PHOTO_SIZE * 0.55f),
+                modifier = Modifier.size(PHOTO_SIZE * 0.68f),
             )
         }
     }

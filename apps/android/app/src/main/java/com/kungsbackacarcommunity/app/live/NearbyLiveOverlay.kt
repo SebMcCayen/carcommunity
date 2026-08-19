@@ -8,8 +8,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Podcasts
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -28,6 +26,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -233,8 +232,9 @@ private fun LiveMarker.spokenName(): String =
 
 /**
  * One nearby sharer's main-car photo in a coloured ring, centred on their
- * projected screen position. Falls back to a broadcast glyph while the Storage
- * URL resolves, or forever when they have no main-car photo.
+ * projected screen position. Falls back to the generic side-profile car glyph
+ * whenever the main-car photo URL is unavailable — no photo set, the Storage URL
+ * still resolving, or resolution failed.
  */
 @Composable
 private fun NearbySharerChip(
@@ -310,11 +310,15 @@ private fun NearbySharerChip(
                     modifier = Modifier.fillMaxSize().clip(CircleShape),
                 )
             } else {
+                // No resolved photo (none set, or still loading / failed to
+                // resolve): a recognisable generic side-profile car, not a
+                // broadcast glyph, so a photoless live sharer still reads as a
+                // car on the map.
                 Icon(
-                    imageVector = Icons.Filled.Podcasts,
+                    painter = painterResource(R.drawable.ic_generic_car),
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(PHOTO_SIZE * 0.5f),
+                    modifier = Modifier.size(PHOTO_SIZE * 0.62f),
                 )
             }
         }
