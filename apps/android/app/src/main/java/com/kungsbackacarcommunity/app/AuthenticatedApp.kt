@@ -202,6 +202,8 @@ import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkDrainEventRepository
 import com.kungsbackacarcommunity.app.crownhunt.FirebasePerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.PerkDrainPresence
 import com.kungsbackacarcommunity.app.crownhunt.TrapDrainVibration
+import com.kungsbackacarcommunity.app.crownhunt.CrownLayerAction
+import com.kungsbackacarcommunity.app.crownhunt.CrownLayerLifecycle
 import com.kungsbackacarcommunity.app.crownhunt.CrownPointPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownQueryCenter
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawn
@@ -2162,12 +2164,29 @@ fun AuthenticatedApp(
                 remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
             LaunchedEffect(selectedTab, crownSpawnController, crownSpawnEnabled, mapSurface) {
                 val controller = crownSpawnController ?: return@LaunchedEffect
-                if (selectedTab != ShellTab.Map || !crownSpawnEnabled) {
-                    // Leaving the map (or the flag going off) takes the layer down
-                    // rather than freezing it: crowns are claimed once globally, so
-                    // a frozen layer is a set of markers that may already be gone.
-                    controller.clear()
-                    return@LaunchedEffect
+                // Retain-vs-clear-vs-poll, delegated to the pure
+                // [CrownLayerLifecycle] so the rule is unit-tested. Merely covering
+                // the map with another tab must NOT clear the layer: the map surface
+                // is composed once and never disposed (crowns stay drawn on it
+                // underneath the covering page), so clearing here tore every marker
+                // down and returning cold-re-polled + re-spawned them all — the
+                // reload flash. Only the feature genuinely going away (flag off /
+                // opt-out) still clears; a covered-but-enabled map RETAINS the
+                // crowns and just stops the poll, and the next poll on return diffs
+                // against the retained set (CrownMarkerAnimator.sync is idempotent,
+                // so nothing re-animates).
+                when (
+                    CrownLayerLifecycle.actionFor(
+                        onMapTab = selectedTab == ShellTab.Map,
+                        enabled = crownSpawnEnabled,
+                    )
+                ) {
+                    CrownLayerAction.CLEAR -> {
+                        controller.clear()
+                        return@LaunchedEffect
+                    }
+                    CrownLayerAction.RETAIN -> return@LaunchedEffect
+                    CrownLayerAction.POLL -> Unit
                 }
                 val appContext = context.applicationContext
                 controller.pollNearby(
