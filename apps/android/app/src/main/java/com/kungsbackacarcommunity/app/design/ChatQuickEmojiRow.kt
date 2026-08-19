@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyRow
@@ -13,6 +14,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -37,6 +39,7 @@ fun chatQuickEmojiTestTag(glyph: String): String = "chat-quick-emoji-$glyph"
  * chat message on tap, plus [contentDescriptionRes] naming it for screen readers
  * (a bare emoji glyph otherwise announces as an unlabeled button).
  */
+@Immutable
 data class QuickEmoji(val glyph: String, @StringRes val contentDescriptionRes: Int)
 
 /**
@@ -125,7 +128,10 @@ fun ChatQuickEmojiRow(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     modifier = Modifier.size(40.dp),
                 ) {
-                    Box(contentAlignment = Alignment.Center) {
+                    // fillMaxSize so the Box spans the whole 40.dp chip; without a
+                    // size it would shrink-wrap the glyph and strand it at the
+                    // Surface's top-start instead of centring it.
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text(
                             text = emoji.glyph,
                             style = MaterialTheme.typography.titleLarge,
