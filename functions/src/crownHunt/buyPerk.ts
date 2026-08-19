@@ -20,6 +20,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { readFeatureFlag } from '../shared/featureFlags';
@@ -79,6 +80,15 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // 1. Feature flag. The shop is off by default; a member must never be able to
   // spend KP against a system that is officially disabled.
   if (!(await readFeatureFlag(CROWN_HUNT_PERKS_FLAG_KEY))) {
+    // Reason-coded rejection log (no PII: perk catalog id + qty only, never the
+    // uid) so an operator can see the shop being hit while it is officially off
+    // — mirrors the reason-per-rejection logging in claimSpawn/claimLagDetector.
+    logger.info('crownHunt.buyPerk rejected', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+      cause: 'flag_off',
+      perkId,
+      qty,
+    });
     throw new HttpsError('failed-precondition', 'Kronjaktsbutiken är inte tillgänglig just nu.', {
       reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
     });
@@ -88,6 +98,12 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // enforces this, but reject early with a member-facing message).
   const userSnap = await db.collection('users').doc(uid).get();
   if (!memberGateAllows(toUserAccessState(userSnap.data()))) {
+    logger.info('crownHunt.buyPerk rejected', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+      cause: 'account_blocked',
+      perkId,
+      qty,
+    });
     throw new HttpsError('failed-precondition', 'Ditt konto kan inte köpa perks just nu.', {
       reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
     });
@@ -98,6 +114,12 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   const perk = perkById(perkId);
   const cost = perkCost(perkId, qty);
   if (!perk || cost === null) {
+    logger.info('crownHunt.buyPerk rejected', {
+      reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+      cause: 'unknown_perk',
+      perkId,
+      qty,
+    });
     throw new HttpsError('failed-precondition', 'Okänd perk.', {
       reason: PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
     });
@@ -144,12 +166,26 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
       err.code === 'failed-precondition' &&
       err.message === DEBIT_OVERDRAFT_MESSAGE
     ) {
+      logger.info('crownHunt.buyPerk rejected', {
+        reason: PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS,
+        perkId,
+        qty,
+        costKp: cost,
+      });
       throw new HttpsError(
         'failed-precondition',
         'Du har inte tillräckligt med Kronpoäng för den här perken.',
         { reason: PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS },
       );
     }
+    // Any OTHER debit failure is an unexpected transaction/infrastructure error
+    // (not an ordinary overdraft) — surface it before it propagates so a failed
+    // purchase is diagnosable. No PII: perk catalog id + qty only.
+    logger.error('crownHunt.buyPerk purchase transaction failed', {
+      perkId,
+      qty,
+      error: String(err),
+    });
     throw err;
   }
 

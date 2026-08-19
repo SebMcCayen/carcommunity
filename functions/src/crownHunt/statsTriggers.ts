@@ -219,7 +219,10 @@ export const onCrownLedgerEntryForStats = onDocumentCreated(
         tx.set(statsRef, patch, { merge: true });
       });
     } catch (error) {
-      logger.warn('Crown leaderboard fold failed', { uid, entryId, error: String(error) });
+      // No raw uid in logs (hard no-identifiers rule) — the entryId (a random
+      // ledger doc id, not a user identifier) is enough to trace the failed fold,
+      // matching how foldPerkStat below hashes its source id instead of logging it.
+      logger.warn('Crown leaderboard fold failed', { entryId, error: String(error) });
     }
   },
 );

@@ -15,6 +15,7 @@
  */
 
 import { onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireAdminActor } from '../admin/actorContext';
@@ -65,6 +66,13 @@ export const seedPerkCatalog = onCall(
       ),
     );
     await batch.commit();
+
+    // One structured line per successful reseed so an operator can confirm the
+    // admin action ran and see what was written (no PII — version + perk count).
+    logger.info('crownHunt.seedPerkCatalog: catalog mirror written', {
+      version: doc.version,
+      perkCount: doc.perks.length,
+    });
 
     // Report the version actually written, not the constant — if the builder
     // and the constant ever drift, the response reflects the persisted doc.
