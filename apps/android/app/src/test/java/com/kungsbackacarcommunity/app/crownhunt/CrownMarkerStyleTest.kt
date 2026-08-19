@@ -183,6 +183,22 @@ class CrownMarkerStyleTest {
         assertNull(CrownRarity.fromWire("Common"))
     }
 
+    /**
+     * The client's shared/exclusive cutoff must match the server's
+     * `crownCollectMode` (`MIN_EXCLUSIVE_CROWN_RANK` = rare): common/uncommon are
+     * SHARED (collectable once per member, stay live), rare/legendary EXCLUSIVE
+     * (first taker removes them). This is what decides whether a just-collected
+     * crown is kept-and-marked or dropped, so a drift from the backend would either
+     * strand a rare crown on the map or flicker a common one.
+     */
+    @Test
+    fun `the collect mode matches the server rarity cutoff`() {
+        assertEquals(CrownCollectMode.SHARED, CrownRarity.COMMON.collectMode)
+        assertEquals(CrownCollectMode.SHARED, CrownRarity.UNCOMMON.collectMode)
+        assertEquals(CrownCollectMode.EXCLUSIVE, CrownRarity.RARE.collectMode)
+        assertEquals(CrownCollectMode.EXCLUSIVE, CrownRarity.LEGENDARY.collectMode)
+    }
+
     // ---- The colour claims ------------------------------------------------
 
     /**

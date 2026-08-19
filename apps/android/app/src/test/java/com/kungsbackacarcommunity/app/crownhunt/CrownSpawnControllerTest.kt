@@ -366,21 +366,32 @@ class CrownSpawnControllerTest {
     }
 
     /**
-     * A successful claim removes the crown from the layer straight away.
-     *
-     * It is claimed once GLOBALLY, so waiting for the next refresh to notice
-     * would leave a collectable-looking marker on the map for up to a minute.
+     * Collecting an EXCLUSIVE crown (rare/legendary) removes it from the layer
+     * straight away: it is claimed once GLOBALLY and gone for everyone, so waiting
+     * for the next refresh to notice would leave a collectable-looking marker on
+     * the map for up to a minute.
      */
     @Test
-    fun `an awarded crown leaves the map immediately`() = runTest {
-        val repo = FakeRepo(spawns = listOf(spawn("gone"), spawn("stays")))
+    fun `an awarded exclusive crown leaves the map immediately`() = runTest {
+        val repo =
+            FakeRepo(
+                spawns =
+                    listOf(spawn("gone", rarity = CrownRarity.RARE), spawn("stays")),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.AWARDED,
+                        100,
+                        210,
+                        CrownRarity.RARE,
+                    ),
+            )
         val controller = CrownSpawnController(repo)
         controller.refreshOnce(true, centre, 1_000.0, force = true)
         assertEquals(2, controller.nearbySpawns.value.size)
 
         val now = 1_000_000L
         controller.collect(
-            spawn = spawn("gone"),
+            spawn = spawn("gone", rarity = CrownRarity.RARE),
             current = CrownFix(57.5, 12.0, now),
             previous = CrownFix(57.5, 12.0, now - 10_000),
             idempotencyKey = "k1",
@@ -388,12 +399,65 @@ class CrownSpawnControllerTest {
 
         assertEquals(1, repo.claimCalls)
         assertEquals(listOf("stays"), controller.nearbySpawns.value.map { it.id })
+        assertTrue(
+            "an exclusive crown is gone for everyone, not marked collected",
+            controller.collectedSpawnIds.value.isEmpty(),
+        )
         val status = controller.claimStatus.value
         assertTrue(status is CrownClaimStatus.Done)
         assertEquals(
             CrownSpawnClaimResult.AWARDED,
             (status as CrownClaimStatus.Done).outcome.result,
         )
+    }
+
+    /**
+     * Collecting a SHARED crown (common/uncommon) for the FIRST time returns
+     * `awarded`, but the crown stays `live` for OTHER members — so it must be KEPT
+     * on the map and marked collected-by-you, exactly like a later re-tap. Dropping
+     * it on `awarded` would make it flicker away and reappear looking collectable
+     * on the very next refresh, which is the confusion this feature removes.
+     */
+    @Test
+    fun `an awarded shared crown is kept and marked collected`() = runTest {
+        val shared = spawn("shared", rarity = CrownRarity.COMMON) // expiresAtMillis = null
+        val repo =
+            FakeRepo(
+                spawns = listOf(shared),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.AWARDED,
+                        10,
+                        110,
+                        CrownRarity.COMMON,
+                    ),
+            )
+        val controller = CrownSpawnController(repo)
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+
+        val now = 1_000_000L
+        controller.collect(
+            spawn = shared,
+            current = CrownFix(57.5, 12.0, now),
+            previous = CrownFix(57.5, 12.0, now - 10_000),
+            idempotencyKey = "k1",
+        )
+
+        // Kept on the map and flagged collected — the distinct marker appears on
+        // the first collect, not only after a redundant re-tap.
+        assertEquals(
+            listOf("shared"),
+            controller.nearbySpawns.value.map { it.id },
+        )
+        assertEquals(setOf("shared"), controller.collectedSpawnIds.value)
+
+        // And it stays marked across a refresh, since it is still live for others.
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        assertEquals(
+            listOf("shared"),
+            controller.nearbySpawns.value.map { it.id },
+        )
+        assertEquals(setOf("shared"), controller.collectedSpawnIds.value)
     }
 
     /**

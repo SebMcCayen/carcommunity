@@ -35,11 +35,38 @@ enum class CrownRarity(val wire: String, val rewardPoints: Int) {
     LEGENDARY("legendary", 500),
     ;
 
+    /**
+     * Whether a crown of this tier is collectable once per member and stays live
+     * for others ([CrownCollectMode.SHARED]), or removed for everyone by the first
+     * taker ([CrownCollectMode.EXCLUSIVE]).
+     *
+     * Mirrors `crownCollectMode` / `MIN_EXCLUSIVE_CROWN_RANK` in
+     * `functions/src/crownHunt/crown-spawn-core.ts`: a tier at or above the RARE
+     * rank is exclusive, everything below is shared — so today common/uncommon are
+     * shared and rare/legendary exclusive. The cutoff is ONE comparison here, as it
+     * is one constant on the backend, and [entries] is declared low→high so the
+     * ordinal IS the rank (pinned by the wire-order test in `CrownMarkerStyleTest`).
+     */
+    val collectMode: CrownCollectMode
+        get() = if (ordinal >= RARE.ordinal) CrownCollectMode.EXCLUSIVE else CrownCollectMode.SHARED
+
     companion object {
         /** Maps a backend wire value to a rarity, or null when unknown. */
         fun fromWire(value: String?): CrownRarity? = entries.firstOrNull { it.wire == value }
     }
 }
+
+/**
+ * How a crown may be collected — mirrors `CROWN_COLLECT_MODES` in
+ * `functions/src/crownHunt/crown-spawn-core.ts`.
+ *
+ * [SHARED] crowns (common/uncommon) may each be collected ONCE by many distinct
+ * members and stay `live` on the map to their TTL; a member's second attempt is
+ * refused `already_collected`. [EXCLUSIVE] crowns (rare/legendary) are removed
+ * for everyone the moment the first member takes one. This is what decides
+ * whether a just-collected crown is kept-and-marked or dropped from the map.
+ */
+enum class CrownCollectMode { SHARED, EXCLUSIVE }
 
 /**
  * `crownHunt.claimSpawn` result codes — mirror `CROWN_SPAWN_CLAIM_RESULTS`

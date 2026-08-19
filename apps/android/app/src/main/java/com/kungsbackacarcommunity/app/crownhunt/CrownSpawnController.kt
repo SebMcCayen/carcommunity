@@ -281,10 +281,24 @@ class CrownSpawnController(
         try {
             val outcome = repository.claimSpawn(spawn.id, current, previous, idempotencyKey)
             when (outcome.result) {
-                // Gone for everyone the moment it is claimed. Drop it now so a
-                // collectable-looking marker does not linger until the next
-                // refresh notices; the server already hides it from listNearby.
-                CrownSpawnClaimResult.AWARDED,
+                // The user's FIRST successful collect. What happens next depends on
+                // the crown's collect mode, NOT just the result: a SHARED crown
+                // (common/uncommon) stays `live` for OTHER members and comes back on
+                // the next refresh, so dropping it would make it flicker away and
+                // reappear looking collectable — instead it is KEPT and marked
+                // collected-by-you, the SAME distinct marker a later re-tap
+                // (ALREADY_COLLECTED) shows, so first-collect and re-tap agree. An
+                // EXCLUSIVE crown (rare/legendary) is gone for everyone the moment it
+                // is claimed, so it is dropped now rather than lingering as a
+                // collectable-looking marker until the next refresh notices.
+                CrownSpawnClaimResult.AWARDED ->
+                    when (spawn.rarity.collectMode) {
+                        CrownCollectMode.SHARED -> markCollected(spawn)
+                        CrownCollectMode.EXCLUSIVE -> dropSpawn(spawn.id)
+                    }
+                // Gone for everyone: an exclusive crown someone else already took, or
+                // one that expired. Drop it now; the server already hides it from
+                // listNearby, so no refresh will re-add it.
                 CrownSpawnClaimResult.ALREADY_TAKEN,
                 CrownSpawnClaimResult.CROWN_EXPIRED -> dropSpawn(spawn.id)
                 // A SHARED crown the user already picked up. It legitimately stays
@@ -333,10 +347,17 @@ class CrownSpawnController(
 
     /**
      * Prunes collected entries whose crown has since expired so the set never
-     * grows without bound, then republishes [collectedSpawnIds]. A null expiry
-     * (the document omitted one) is kept until the feature is toggled off, since
-     * there is no known moment at which it is safe to forget — the crown could
-     * still be live.
+     * grows without bound, then republishes [collectedSpawnIds].
+     *
+     * Lifecycle: an entry with a known expiry is dropped once that expiry passes.
+     * An entry with a null expiry (the document omitted one) is kept for the rest
+     * of the SESSION — there is no known moment at which it is safe to forget,
+     * since the crown could still be live. Nothing clears the collected set on the
+     * way out: [clear] deliberately resets only [nearbySpawns] and the query
+     * anchor, so a member who leaves the map (or toggles the feature) and comes
+     * back still sees their collected crowns marked rather than looking
+     * collectable again. The set is process-lifetime and bounded by the distinct
+     * shared crowns a member collects before the app is next killed.
      */
     private fun pruneCollected() {
         if (collectedSpawnExpiries.isNotEmpty()) {
