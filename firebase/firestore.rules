@@ -1503,9 +1503,9 @@ service cloud.firestore {
     // SDK) inside the drain transaction, so a client can neither forge a drain
     // signal nor clear one to hide it. It is deliberately ANONYMOUS (no placer
     // uid) so this readable surface never exposes who owns a trap. A short
-    // expireAt TTL sweeps consumed/stale events (operator TTL policy on the
-    // UNIQUE collection-group `drains` — deliberately NOT `events`, which would
-    // also match the top-level meetup `events` collection-group).
+    // expireAt TTL sweeps consumed/stale docs. IMPORTANT: set that TTL on the
+    // UNIQUE collection-group `drains`, never `events` — a TTL on an `events`
+    // collection-group would also reap the top-level meetup `events` collection.
     // -------------------------------------------------------------------------
     match /perkDrainEvents/{userId}/drains/{eventId} {
       allow read: if isOwner(userId);
