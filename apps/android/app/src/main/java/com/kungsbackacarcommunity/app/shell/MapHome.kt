@@ -313,6 +313,19 @@ fun MapHome(
     // map stays interactive. Absent in the default shell harness (convoyRepository
     // null → no active convoy → host passes null), so MapFirstShellTest is untouched.
     convoyReactions: (@Composable () -> Unit)? = null,
+    // Optional WAVE control: a round icon that appears at the TOP of the right-side
+    // stack (entering with a smooth slide/scale) when you are sharing live AND ≥1
+    // other live user is nearby; tapping it broadcasts a wave to everyone in range.
+    // A SLOT (not a MapCircleControlKind) so the pinned MapControlSet.rightSideStack
+    // parity contract with turn-by-turn stays untouched and the police-proximity PR
+    // (which edits that enum) does not collide. Rendered as the first child of the
+    // right-side Column; the host wraps it in its own AnimatedVisibility. Null in the
+    // default shell harness (no WaveRepository), so MapFirstShellTest is untouched.
+    waveControl: (@Composable () -> Unit)? = null,
+    // Optional WAVE overlay: the mid-screen "👋 <name> waved" pop (the shared
+    // ReactionOverlay), composed ON TOP of the map chrome like [convoyReactions] so
+    // it is never hidden. Null in the default harness composes nothing.
+    waveOverlay: (@Composable () -> Unit)? = null,
 ) {
     val loadState by mapSurface.loadState.collectAsState()
     val trafficOn by mapSurface.trafficEnabled.collectAsState()
@@ -648,6 +661,13 @@ fun MapHome(
             horizontalAlignment = Alignment.End,
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s3),
         ) {
+            // WAVE control at the TOP of the stack — a host-owned slot rendered ABOVE
+            // the pinned rightSideStack so MapControlSet's parity contract is untouched
+            // (see the [waveControl] param). The host wraps it in AnimatedVisibility so
+            // it slides/scales in when a nearby live user appears and out when none
+            // remain. Null (no WaveRepository / default harness) composes nothing.
+            waveControl?.invoke()
+
             // The live-location broadcast control that used to sit in this stack
             // has been REMOVED. Starting a session is the centre "+" → Create →
             // Single session; while a session runs, the centre control's manage
@@ -780,6 +800,11 @@ fun MapHome(
         // composes nothing at all — no layer, no reserved space.
         convoyReactions?.invoke()
 
+        // Wave pop (the mid-screen "👋 <name> waved" ReactionOverlay), composed ON
+        // TOP of the map chrome so it is never hidden. Null (no WaveRepository)
+        // composes nothing at all.
+        waveOverlay?.invoke()
+
         // Incident-report flow, in three steps (see the state block above).
         //
         // Step 1 — pick a category. Picking one does NOT report yet: it advances
@@ -899,6 +924,9 @@ fun MapHome(
 
 /** Test tag on the floating map-layers control. */
 const val MAP_HOME_LAYERS_TAG = "map_home_layers"
+
+/** Test tag on the wave control (top of the right-side stack; conditionally shown). */
+const val MAP_HOME_WAVE_TAG = "map_home_wave"
 
 /** Test tag on the floating compass control (directly above the my-location control). */
 const val MAP_HOME_COMPASS_TAG = "map_home_compass"

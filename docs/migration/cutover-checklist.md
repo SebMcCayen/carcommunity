@@ -105,6 +105,8 @@ Each is a one-time
 | `incidentClearRateLimits` | `incidents/reportCleared.ts`                     | Spent rate-limit windows                                        |
 | `crownCellActivity`       | `crownHunt/spawnActivity.ts`                     | Heat-map cell rows                                              |
 | `recentUsers`             | `crownHunt/spawnActivity.ts`                     | Per-(cell, user) presence rows — **pseudonymous location data** |
+| `waves`                   | `live/sendWave.ts`                               | Delivered wave docs (`liveWaves/{uid}/waves/`), ~5 min each     |
+| `liveWaveCooldowns`       | `live/sendWave.ts`                               | Spent per-user wave anti-spam cooldown docs                     |
 
 `crownSpawnDailyClaims` (`crownHunt/claimSpawn.ts:452`) also writes an `expireAt` with no documented
 command; add it to the same sweep. `recentUsers` is the one with a privacy edge —

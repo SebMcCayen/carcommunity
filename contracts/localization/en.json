@@ -784,6 +784,11 @@
       "caption": "Follow me!"
     }
   },
+  "wave": {
+    "caption": "%1$s waved",
+    "captionAnonymous": "Someone waved",
+    "captionSelf": "You waved"
+  },
   "memberProfile": {
     "title": "Profile",
     "unknownMember": "Member",
@@ -1684,6 +1689,7 @@
     "chatEmpty": "You're all caught up — no new messages.",
     "chatComingSoon": "Community chat isn't available yet. For now, chat lives inside each event you're going to.",
     "layersButton": "Map layers",
+    "waveButton": "Wave to nearby drivers",
     "layersTitle": "Map layers",
     "layersClose": "Close map layers",
     "layersTraffic": "Traffic",
