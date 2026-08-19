@@ -5155,7 +5155,7 @@ fun AuthenticatedApp(
 
                 // CROWN HUNT TRAP-TRIGGER — victim side. When the member drives onto a
                 // rival's Spikmatta the server moves KP and writes a per-victim event
-                // to perkDrainEvents/{uid}/events; the app listens on that inbox and,
+                // to perkDrainEvents/{uid}/drains; the app listens on that inbox and,
                 // for each fresh drain, fires a short phone VIBRATION + the mid-screen
                 // "Du körde på en Spikmatta! −N KP" pop (the shared ReactionOverlay).
                 // DARK until the contract-default-OFF crownHuntPerks flag is ON: the

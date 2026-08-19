@@ -15,7 +15,7 @@ import java.util.Date
 /**
  * A trap DRAIN that landed on the signed-in member — the victim side of a Crown
  * Hunt Spikmatta. It arrives in the member's OWN real-time inbox
- * `perkDrainEvents/{uid}/events` the instant they drive onto a rival's trap and
+ * `perkDrainEvents/{uid}/drains` the instant they drive onto a rival's trap and
  * the server moves KP, and drives the on-screen "Du körde på en Spikmatta! −N KP"
  * pop + the phone vibration.
  *
@@ -77,7 +77,7 @@ interface PerkDrainEventRepository {
 
 /**
  * [PerkDrainEventRepository] backed by a live listener on
- * `perkDrainEvents/{uid}/events` (owner-only read; backend-only writes). Guarded
+ * `perkDrainEvents/{uid}/drains` (owner-only read; backend-only writes). Guarded
  * ([createIfAvailable]) so a config-less / CI build gets a null repository and no
  * trap-trigger UI is wired. Mirrors live.FirebaseWaveRepository's receive path.
  */
@@ -95,7 +95,7 @@ class FirebasePerkDrainEventRepository private constructor(
                 firestore
                     .collection(PERK_DRAIN_EVENTS)
                     .document(uid)
-                    .collection(EVENTS)
+                    .collection(DRAINS)
                     .whereGreaterThan(CREATED_AT, since)
                     .orderBy(CREATED_AT, Query.Direction.ASCENDING)
                     .addSnapshotListener { snapshot, error ->
@@ -115,7 +115,7 @@ class FirebasePerkDrainEventRepository private constructor(
 
     companion object {
         private const val PERK_DRAIN_EVENTS = "perkDrainEvents"
-        private const val EVENTS = "events"
+        private const val DRAINS = "drains"
         private const val CREATED_AT = "createdAt"
 
         fun createIfAvailable(context: Context): PerkDrainEventRepository? {
