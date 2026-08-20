@@ -723,7 +723,7 @@ private fun PerkCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = item.entry.name,
+                    text = perkDisplayName(item.entry.perkId, item.entry.name, item.entry.nameEn),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
@@ -793,8 +793,9 @@ private fun BuyStatusBanner(buyStatus: PerkBuyStatus, items: List<PerkShopItem>)
         PerkBuyStatus.Idle, is PerkBuyStatus.Buying -> Unit
 
         is PerkBuyStatus.Bought -> {
+            val boughtEntry = items.firstOrNull { it.entry.perkId == buyStatus.perkId }?.entry
             val perkName =
-                items.firstOrNull { it.entry.perkId == buyStatus.perkId }?.entry?.name
+                boughtEntry?.let { perkDisplayName(it.perkId, it.name, it.nameEn) }
                     ?: buyStatus.perkId
             val message =
                 if (buyStatus.alreadyPurchased) {
@@ -830,6 +831,8 @@ private fun perkKindLabelRes(kind: PerkKind): Int =
 private fun buyFailureMessageRes(reason: PerkBuyFailureReason): Int =
     when (reason) {
         PerkBuyFailureReason.INSUFFICIENT_FUNDS -> R.string.crownHunt_shopErrorInsufficient
+        PerkBuyFailureReason.HOLD_CAP -> R.string.crownHunt_shopErrorHoldCap
+        PerkBuyFailureReason.COOLDOWN -> R.string.crownHunt_shopErrorCooldown
         PerkBuyFailureReason.UNAVAILABLE -> R.string.crownHunt_shopErrorUnavailable
         PerkBuyFailureReason.UNKNOWN -> R.string.crownHunt_shopErrorUnknown
     }

@@ -39,7 +39,15 @@ package com.kungsbackacarcommunity.app.crownhunt
 data class PerkDeployItem(
     val perkId: String,
     val kind: PerkKind,
+    /** Swedish display name (from the catalog entry). */
     val name: String,
+    /**
+     * English display name (from the catalog entry, empty on an older mirror). Lets
+     * the menu's [perkDisplayName] fall back to the catalog's bilingual pair for an
+     * unknown/future perk, matching the PerkNames.kt contract; the three known
+     * perks resolve via their localized string resource regardless.
+     */
+    val nameEn: String = "",
     /** Owned units of this perk (0 when absent from the inventory map). */
     val ownedCount: Long,
     /**
@@ -179,6 +187,7 @@ object PerkDeploy {
                     perkId = entry.perkId,
                     kind = entry.kind,
                     name = entry.name,
+                    nameEn = entry.nameEn,
                     ownedCount = ownedCount,
                     activeUntilMillis = null,
                     activeTrapCount = activeTrapCount,
@@ -210,6 +219,7 @@ object PerkDeploy {
             perkId = entry.perkId,
             kind = entry.kind,
             name = entry.name,
+            nameEn = entry.nameEn,
             ownedCount = ownedCount,
             activeUntilMillis = activeUntilMillis,
             activeTrapCount = 0,

@@ -186,7 +186,7 @@ private fun PerkDeployRow(
             verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
         ) {
             Text(
-                text = item.name,
+                text = perkDisplayName(item.perkId, item.name, item.nameEn),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
@@ -259,12 +259,12 @@ private fun DeployStatusBanner(
         PerkDeployStatus.Idle, is PerkDeployStatus.Deploying -> Unit
 
         is PerkDeployStatus.Deployed -> {
-            val perkName =
+            val deployedItem =
                 (menuState as? PerkDeployMenuState.Loaded)
                     ?.items
                     ?.firstOrNull { it.perkId == status.perkId }
-                    ?.name
-                    ?: status.perkId
+            val perkName =
+                deployedItem?.let { perkDisplayName(it.perkId, it.name, it.nameEn) } ?: status.perkId
             val message =
                 if (status.alreadyDeployed) {
                     stringResource(R.string.crownHunt_deployAlreadyMessage)
@@ -310,6 +310,7 @@ private fun deploySuccessMessageRes(kind: PerkKind): Int =
 private fun deployFailureMessageRes(reason: PerkDeployFailureReason): Int =
     when (reason) {
         PerkDeployFailureReason.NO_LOCATION -> R.string.crownHunt_deployErrorNoLocation
+        PerkDeployFailureReason.ACTIVATION_LIMIT -> R.string.crownHunt_deployErrorActivationLimit
         PerkDeployFailureReason.UNAVAILABLE -> R.string.crownHunt_deployErrorUnavailable
         PerkDeployFailureReason.UNKNOWN -> R.string.crownHunt_deployErrorUnknown
     }

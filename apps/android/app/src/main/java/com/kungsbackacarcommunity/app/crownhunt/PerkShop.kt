@@ -49,10 +49,18 @@ enum class PerkKind {
 data class PerkCatalogEntry(
     val perkId: String,
     val kind: PerkKind,
+    /** Swedish display name (the mirror's `name`). */
     val name: String,
     val iconKey: String,
     val costKp: Long,
     val blurb: String,
+    /**
+     * English display name (the mirror's `nameEn`, catalog doc version >= 2).
+     * Empty on an older mirror; the UI then falls back to the localized per-perk
+     * string resource for the known perks or the Swedish [name]. Appended (with a
+     * default) so existing positional constructions stay valid.
+     */
+    val nameEn: String = "",
 )
 
 /** UI-facing state of the perk catalog listener. */

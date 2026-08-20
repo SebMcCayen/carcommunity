@@ -11,18 +11,34 @@ import { describe, expect, it } from 'vitest';
 import {
   CROWN_HUNT_PERKS_FLAG_DEFAULT,
   CROWN_HUNT_PERKS_FLAG_KEY,
+  MAX_CONCURRENT_ACTIVE_PERKS,
+  MAX_PERK_HOLD_PER_PERK,
+  MAX_PERK_HOLD_VALUE_KP,
   MAX_PERK_PURCHASE_QTY,
+  PERK_BASE_COST_KP,
   PERK_CATALOG,
+  PERK_CATALOG_DOC_VERSION,
+  PERK_HOLD_DAYS_BUFFER,
   PERK_IDS,
+  PERK_PURCHASE_COOLDOWN_SECONDS,
+  activationAllowed,
   buildPerkCatalogDoc,
+  evaluateHoldCap,
   isBuyable,
   isPerkId,
+  isWithinPurchaseCooldown,
   parseBuyPerkInput,
   perkById,
   perkCost,
+  perkPowerKp,
   perkPurchaseLedgerKey,
+  purchaseCooldownBlocks,
+  purchaseCooldownDocId,
+  referencePerkCostKp,
   scopePerkPurchaseKey,
+  type ActivePerkEffects,
   type BoostPerk,
+  type PerkKind,
   type ShieldPerk,
   type TrapPerk,
 } from './perks-core';
@@ -164,6 +180,147 @@ describe('perks-core display mirror', () => {
       expect(entry).not.toHaveProperty('multiplier');
       expect(entry).not.toHaveProperty('durationHours');
     }
+  });
+
+  it('mirrors BOTH the Swedish and the English name at doc version 2', () => {
+    const doc = buildPerkCatalogDoc();
+    expect(doc.version).toBe(PERK_CATALOG_DOC_VERSION);
+    expect(PERK_CATALOG_DOC_VERSION).toBe(2);
+    for (const entry of doc.perks) {
+      const perk = PERK_CATALOG[entry.perkId];
+      expect(entry.nameEn).toBe(perk.nameEn);
+      expect(entry.name.length).toBeGreaterThan(0);
+      expect(entry.nameEn.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('perks-core bilingual names (every perk has BOTH languages)', () => {
+  it('gives each catalog perk a non-empty Swedish + English name that differ', () => {
+    for (const id of PERK_IDS) {
+      const perk = PERK_CATALOG[id];
+      expect(perk.name.trim().length).toBeGreaterThan(0);
+      expect(perk.nameEn.trim().length).toBeGreaterThan(0);
+      // Every perk has a REAL English name, not the Swedish one copied over.
+      expect(perk.nameEn).not.toBe(perk.name);
+    }
+  });
+
+  it('wires the approved Spikmatta/Sköld/Dubbla Poäng ↔ Spike strip/Shield/Double points pairs', () => {
+    expect([PERK_CATALOG.spike_strip.name, PERK_CATALOG.spike_strip.nameEn]).toEqual([
+      'Spikmatta',
+      'Spike strip',
+    ]);
+    expect([PERK_CATALOG.shield.name, PERK_CATALOG.shield.nameEn]).toEqual(['Sköld', 'Shield']);
+    expect([PERK_CATALOG.boost.name, PERK_CATALOG.boost.nameEn]).toEqual([
+      'Dubbla Poäng',
+      'Double points',
+    ]);
+  });
+});
+
+describe('perks-core pricing algorithm (cost === reference price)', () => {
+  it('prices every perk at exactly max(floor, power) — no silent drift', () => {
+    for (const id of PERK_IDS) {
+      const perk = PERK_CATALOG[id];
+      expect(perk.costKp).toBe(referencePerkCostKp(perk));
+    }
+  });
+
+  it('derives the trap price from its earn ceiling and the boost from its power', () => {
+    expect(perkPowerKp(PERK_CATALOG.spike_strip)).toBe(150);
+    expect(referencePerkCostKp(PERK_CATALOG.spike_strip)).toBe(150);
+    expect(referencePerkCostKp(PERK_CATALOG.boost)).toBe(120);
+  });
+
+  it('floors a purely defensive perk at the base cost', () => {
+    // The shield can avoid at most 45 KP/day of loss — below the floor — so it
+    // prices at PERK_BASE_COST_KP, not its raw power.
+    expect(perkPowerKp(PERK_CATALOG.shield)).toBeLessThan(PERK_BASE_COST_KP);
+    expect(referencePerkCostKp(PERK_CATALOG.shield)).toBe(PERK_BASE_COST_KP);
+  });
+});
+
+describe('perks-core hold cap (buy/hold ceiling)', () => {
+  it('derives the per-perk cap from trap throughput × the day buffer', () => {
+    expect(MAX_PERK_HOLD_PER_PERK).toBe(3 * PERK_HOLD_DAYS_BUFFER);
+    expect(MAX_PERK_HOLD_PER_PERK).toBe(6);
+  });
+
+  it('allows a buy that fits under both ceilings', () => {
+    expect(evaluateHoldCap({}, 'shield', 1, 100)).toBeNull();
+    expect(evaluateHoldCap({ shield: 5 }, 'shield', 1, 100)).toBeNull();
+  });
+
+  it('refuses a buy that would exceed the per-perk count cap', () => {
+    expect(evaluateHoldCap({ shield: MAX_PERK_HOLD_PER_PERK }, 'shield', 1, 100)).toBe('per_perk');
+    expect(evaluateHoldCap({ shield: 5 }, 'shield', 2, 100)).toBe('per_perk');
+  });
+
+  it('refuses a buy that would exceed the total held VALUE cap', () => {
+    // 6 spike strips (900) + 6 boosts (720) = 1620 held value already caps out;
+    // a first shield (100) would push to 1720 > 1500.
+    const inventory = { spike_strip: 6, boost: 6 };
+    expect(evaluateHoldCap(inventory, 'shield', 1, 100)).toBe('total_value');
+    expect(MAX_PERK_HOLD_VALUE_KP).toBe(1500);
+  });
+
+  it('treats a corrupt/negative stored count as zero (never bypasses the cap)', () => {
+    expect(evaluateHoldCap({ shield: -5 as unknown as number }, 'shield', 6, 100)).toBeNull();
+    expect(evaluateHoldCap({ shield: Number.NaN }, 'shield', 7, 100)).toBe('per_perk');
+  });
+});
+
+describe('perks-core purchase cooldown', () => {
+  it('scopes the cooldown doc to the member', () => {
+    expect(purchaseCooldownDocId('user-1')).toBe('user-1');
+  });
+
+  it('blocks a buy inside the window and allows it after', () => {
+    const now = 1_000_000;
+    const windowMs = PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
+    expect(isWithinPurchaseCooldown(now - 1, now)).toBe(true);
+    expect(isWithinPurchaseCooldown(now - (windowMs - 1), now)).toBe(true);
+    expect(isWithinPurchaseCooldown(now - windowMs, now)).toBe(false);
+    expect(isWithinPurchaseCooldown(null, now)).toBe(false);
+  });
+
+  it('purchaseCooldownBlocks fails CLOSED on a corrupt cooldown doc', () => {
+    const now = 1_000_000;
+    const windowMs = PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
+    // No doc = genuine first purchase = allowed.
+    expect(purchaseCooldownBlocks(false, null, now)).toBe(false);
+    // Doc exists with a valid, in-window timestamp = blocked; past the window = allowed.
+    expect(purchaseCooldownBlocks(true, now - 1, now)).toBe(true);
+    expect(purchaseCooldownBlocks(true, now - windowMs, now)).toBe(false);
+    // Doc EXISTS but the timestamp is missing/invalid = fail closed (blocked), so
+    // corrupt data cannot disable the anti-burst control.
+    expect(purchaseCooldownBlocks(true, null, now)).toBe(true);
+    expect(purchaseCooldownBlocks(true, Number.NaN, now)).toBe(true);
+  });
+});
+
+describe('perks-core concurrent activation limit', () => {
+  const none: ActivePerkEffects = { trap: false, shield: false, boost: false };
+  const deploy = (active: ActivePerkEffects, kind: PerkKind) => activationAllowed(active, kind);
+
+  it('caps distinct live effects at MAX_CONCURRENT_ACTIVE_PERKS (2)', () => {
+    expect(MAX_CONCURRENT_ACTIVE_PERKS).toBe(2);
+  });
+
+  it('allows a deploy while under the limit', () => {
+    expect(deploy(none, 'trap')).toBe(true);
+    expect(deploy({ trap: true, shield: false, boost: false }, 'shield')).toBe(true);
+  });
+
+  it('refuses a NEW third distinct effect', () => {
+    expect(deploy({ trap: true, shield: true, boost: false }, 'boost')).toBe(false);
+    expect(deploy({ trap: true, shield: false, boost: true }, 'shield')).toBe(false);
+  });
+
+  it('always allows re-raising an already-active kind (replaces, adds nothing)', () => {
+    expect(deploy({ trap: true, shield: true, boost: false }, 'shield')).toBe(true);
+    expect(deploy({ trap: true, shield: true, boost: false }, 'trap')).toBe(true);
   });
 });
 
