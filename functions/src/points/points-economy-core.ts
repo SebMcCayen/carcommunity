@@ -193,7 +193,7 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * reversed award consumed either. This counter records what was paid out
  * during the day; it is not a live mirror of the balance.
  *
- * CALIBRATION (raised 300 → 1500, issue: "legit grinders hit the daily cap").
+ * CALIBRATION (raised 300 → 1500 → 2000, issue: "legit grinders hit the daily cap").
  * The original 300 was calibrated for a 10-crown day: 10 hand-placed claims
  * (MAX_DAILY_SUCCESSFUL_CLAIMS) × ~24.5 KP expected value ≈ 245 KP, so an
  * honest maximum landed just under 300. That calibration PRE-DATES the
@@ -208,9 +208,13 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * i.e. the crown-count caps already let an honest, boost-using player earn
  * roughly 1470 KP/day from crowns alone — far above 300 — so the OLD cap
  * starved legit grinders the moment they collected ~12 average crowns
- * (300 / 24.5), or a single legendary (500). 1500 is set just above that
- * boosted-maximum ceiling (rounded up from ~1470, with headroom for the handful
- * of non-crown economy awards) so the daily points cap no longer bites honest
+ * (300 / 24.5), or a single legendary (500). 1500 was originally set just above
+ * that boosted-maximum ceiling (rounded up from ~1470), but in practice legit
+ * high-volume players were STILL hitting 1500: a lucky rarity streak, the handful
+ * of non-crown economy awards on top of a full boosted crown day, and the spawn
+ * lane running hot all push a genuine grind past the ~1470 average. So the cap is
+ * now 2000 — a clear headroom margin above the boosted crown maximum plus the
+ * non-crown awards — so the daily points cap no longer bites honest
  * play: the crown-count caps (MAX_DAILY_SUCCESSFUL_CLAIMS / MAX_DAILY_SPAWN_CLAIMS)
  * remain the true anti-farm bound on crowns, and the per-rule limits bound the
  * rest. SINGLE TUNABLE — change this one number to retune; every doc, test and
@@ -218,7 +222,7 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * because this cap is spent, points-detectDailyCapReached auto-files one GitHub
  * issue per day so the ceiling can be observed and retuned (see dailyCapDetector.ts).
  */
-export const DAILY_POINTS_CAP = 1500;
+export const DAILY_POINTS_CAP = 2000;
 
 /**
  * Ceiling on DRIVING-derived points (rules with `driving: true`) in one
@@ -605,7 +609,7 @@ const CAP_REASON_TEXT: Readonly<Record<Exclude<EconomyCapClip, 'none'>, string>>
 /**
  * The ledger entry description. When a cap clipped the award, the ORIGINAL
  * amount, the paid amount and the reason are all in the text — the member
- * opens their points history and reads "15 p -> 10 p (daglig gräns 1500 p
+ * opens their points history and reads "15 p -> 10 p (daglig gräns 2000 p
  * nådd)" instead of silently wondering where five points went.
  */
 export function buildAwardDescription(
