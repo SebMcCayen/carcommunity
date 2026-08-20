@@ -2,6 +2,28 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 40,
+      "versionName": "0.8.29",
+      "releaseDate": "2026-08-20",
+      "highlights": [
+        "Ny topplista i appen – se topp-3 i varje kategori",
+        "Konvoj: reagera i chatten och vinka till förare i närheten",
+        "Polisvarning när någon i närheten rapporterat polis"
+      ],
+      "changes": [
+        "Topplista: se topp-3 per kategori direkt i appen (kan väljas bort i integritetsinställningarna)",
+        "Konvoj: nya reaktionsknappar i chatten, vinka till förare i närheten (med egen Vinkare-statistik), och körhistoriken visar vilka du körde med",
+        "Chatt: snabb emoji-rad ovanför skrivfältet, klickbara länkar och automatisk stor bokstav",
+        "Kronjakten: instruktionsknapp med regler, tydligare insamling (laddningsindikator + bekräftelse), \"insamlad av dig\"-markör för delade kronor, kronor tonas fram/ut och samlas mer pålitligt, och legendariska kronor försvinner snabbare",
+        "Polisvarning när någon i närheten rapporterat polis",
+        "Notiser: olästa visas som en röd prick per flik (Community, Konvojer, Vänner, Notiser) och pricken försvinner när du öppnar Notiser",
+        "Live-läge: bilar utan foto får en tydlig bilikon i stället för en platshållare, och sparade sessioner bekräftas direkt",
+        "Karta och navigering: rutten ritas upp korrekt efter omstart, konvojvyn ramar in alla deltagare bättre, och live-användare försvinner inte när du zoomar in",
+        "Ny välkomstguide på kartan första gången du öppnar appen",
+        "Mindre förbättringar, tydligare texter och buggfixar"
+      ]
+    },
+    {
       "versionCode": 39,
       "versionName": "0.8.28",
       "releaseDate": "2026-08-19",
