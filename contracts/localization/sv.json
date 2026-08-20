@@ -1845,6 +1845,9 @@
   "policeAlert": {
     "caption": "Polis i närheten!"
   },
+  "reactionOverlay": {
+    "dismissAlert": "Stäng varningen"
+  },
   "incidents": {
     "reportButton": "Rapportera händelse",
     "reportTitle": "Rapportera en händelse",
