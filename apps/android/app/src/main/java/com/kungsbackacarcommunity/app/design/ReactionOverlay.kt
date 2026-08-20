@@ -4,6 +4,8 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,23 +20,31 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Test tag on the reaction overlay's animated badge. */
 const val REACTION_OVERLAY_TAG = "reaction_overlay"
@@ -56,6 +66,15 @@ enum class ReactionOverlayPhase { Hidden, Entering, Holding, Exiting }
  */
 object ReactionOverlayTiming {
     const val ENTER_MS: Long = 240
+
+    /**
+     * DEFAULT hold — the social reactions (convoy hello/follow-me, wave) and the
+     * convoy police broadcast all use this ~1.1s so the pop never lingers over the
+     * map. A single pop MAY override its own hold via [ReactionOverlayEvent.holdMs]
+     * (the map-proximity "Police nearby" alert holds ~5s, being a safety warning);
+     * every duration below is therefore computed against a passed hold so the two
+     * cannot drift.
+     */
     const val HOLD_MS: Long = 1_100
     const val EXIT_MS: Long = 380
     const val TOTAL_MS: Long = ENTER_MS + HOLD_MS + EXIT_MS
@@ -66,34 +85,45 @@ object ReactionOverlayTiming {
     /** The small entry tilt (degrees) the badge settles from, for a playful pop. */
     const val ENTER_START_SPIN: Float = -14f
 
-    /** The phase at [elapsedMs] into the pop. Negative or past-total is [Hidden]. */
-    fun phaseAt(elapsedMs: Long): ReactionOverlayPhase =
-        when {
-            elapsedMs < 0L -> ReactionOverlayPhase.Hidden
-            elapsedMs < ENTER_MS -> ReactionOverlayPhase.Entering
-            elapsedMs < ENTER_MS + HOLD_MS -> ReactionOverlayPhase.Holding
-            elapsedMs < TOTAL_MS -> ReactionOverlayPhase.Exiting
-            else -> ReactionOverlayPhase.Hidden
-        }
-
-    /** True once the pop has fully finished (the host may clear the event). */
-    fun isFinished(elapsedMs: Long): Boolean = elapsedMs >= TOTAL_MS
+    /** Total visible duration for a pop that holds for [holdMs]. */
+    fun totalMs(holdMs: Long = HOLD_MS): Long = ENTER_MS + holdMs.coerceAtLeast(0L) + EXIT_MS
 
     /**
-     * The badge's alpha at [elapsedMs]: 0 -> 1 across the enter, a solid 1 through
-     * the hold, then 1 -> 0 across the exit, and 0 outside the pop. Clamped to
-     * [0, 1] so a caller that over-runs the clock never produces a bad alpha.
+     * The phase at [elapsedMs] into a pop that holds for [holdMs]. Negative or
+     * past-total is [Hidden].
      */
-    fun alphaAt(elapsedMs: Long): Float =
-        when (phaseAt(elapsedMs)) {
+    fun phaseAt(elapsedMs: Long, holdMs: Long = HOLD_MS): ReactionOverlayPhase {
+        val hold = holdMs.coerceAtLeast(0L)
+        return when {
+            elapsedMs < 0L -> ReactionOverlayPhase.Hidden
+            elapsedMs < ENTER_MS -> ReactionOverlayPhase.Entering
+            elapsedMs < ENTER_MS + hold -> ReactionOverlayPhase.Holding
+            elapsedMs < totalMs(hold) -> ReactionOverlayPhase.Exiting
+            else -> ReactionOverlayPhase.Hidden
+        }
+    }
+
+    /** True once a pop holding for [holdMs] has fully finished (host may clear it). */
+    fun isFinished(elapsedMs: Long, holdMs: Long = HOLD_MS): Boolean = elapsedMs >= totalMs(holdMs)
+
+    /**
+     * The badge's alpha at [elapsedMs] for a pop holding [holdMs]: 0 -> 1 across the
+     * enter, a solid 1 through the hold, then 1 -> 0 across the exit, and 0 outside
+     * the pop. Clamped to [0, 1] so a caller that over-runs the clock never produces
+     * a bad alpha.
+     */
+    fun alphaAt(elapsedMs: Long, holdMs: Long = HOLD_MS): Float {
+        val hold = holdMs.coerceAtLeast(0L)
+        return when (phaseAt(elapsedMs, hold)) {
             ReactionOverlayPhase.Hidden -> 0f
             ReactionOverlayPhase.Entering -> (elapsedMs.toFloat() / ENTER_MS).coerceIn(0f, 1f)
             ReactionOverlayPhase.Holding -> 1f
             ReactionOverlayPhase.Exiting -> {
-                val intoExit = elapsedMs - (ENTER_MS + HOLD_MS)
+                val intoExit = elapsedMs - (ENTER_MS + hold)
                 (1f - intoExit.toFloat() / EXIT_MS).coerceIn(0f, 1f)
             }
         }
+    }
 }
 
 /**
@@ -123,6 +153,24 @@ data class ReactionOverlayEvent(
      * safety-relevant pop like the police alert. Defaults false (polite).
      */
     val assertive: Boolean = false,
+    /**
+     * How long the badge holds at rest before it fades out, in ms. Defaults to the
+     * shared [ReactionOverlayTiming.HOLD_MS] (~1.1s) that the social reactions and
+     * the convoy police broadcast use; the map-proximity "Police nearby" alert
+     * passes a longer hold (~5s) because it is a safety warning the driver should
+     * have time to read. Only the HOLD is overridden — the enter/exit are shared.
+     */
+    val holdMs: Long = ReactionOverlayTiming.HOLD_MS,
+    /**
+     * When true a TAP on the badge dismisses the pop EARLY: it ends the HOLD phase
+     * as soon as the tap is observed and then runs the normal EXIT fade — never an
+     * instant cut. (A tap during the brief enter takes effect the moment the enter
+     * completes, since the badge only becomes tap-dismissible at the hold.) Used by
+     * the longer "Police nearby" alert so a driver can clear it once seen. Defaults
+     * false: the social pops stay fully non-blocking (no node takes pointer input),
+     * so the map underneath is untouched.
+     */
+    val dismissOnTap: Boolean = false,
 )
 
 /**
@@ -159,6 +207,18 @@ fun ReactionOverlay(
         val spin = remember(current.id) { Animatable(ReactionOverlayTiming.ENTER_START_SPIN) }
         val finished by rememberUpdatedState(onFinished)
 
+        // A tap on the badge (when dismissOnTap) requests an EARLY end. It is only
+        // observed during the hold below (via snapshotFlow), where it cuts the hold
+        // short but still runs the exit fade — never an instant cut. Keyed to the id
+        // so each fresh pop starts un-dismissed.
+        var dismissRequested by remember(current.id) { mutableStateOf(false) }
+        // Created unconditionally (never inside the conditional clickable) so the
+        // remember-slot count is stable across pops with/without dismissOnTap.
+        val tapInteractionSource = remember(current.id) { MutableInteractionSource() }
+        // Resolved unconditionally (a composable call must not be conditional); only
+        // USED when dismissOnTap, as the tap action's a11y label.
+        val dismissAlertLabel = stringResource(R.string.reactionOverlay_dismissAlert)
+
         // The LaunchedEffect block is a CoroutineScope, so the bouncy scale/spin
         // springs run as CHILD jobs (fire-and-forget, structured) while the parent
         // drives the timed enter-fade -> hold -> exit-fade sequence off
@@ -189,7 +249,20 @@ fun ReactionOverlay(
                 )
             }
             alpha.animateTo(1f, animationSpec = tween(ReactionOverlayTiming.ENTER_MS.toInt()))
-            delay(ReactionOverlayTiming.HOLD_MS)
+            // Hold at rest for this pop's own holdMs. Only when the pop is
+            // tap-dismissible do we watch dismissRequested — ending the hold EARLY on
+            // a tap, whichever comes first. The common social pops (dismissOnTap
+            // false — convoy/wave, the hot path) take a plain delay with NO
+            // snapshotFlow collection. Either way the exit fade runs afterwards, so a
+            // dismissed pop animates out rather than blinking away.
+            val hold = current.holdMs.coerceAtLeast(0L)
+            if (current.dismissOnTap) {
+                withTimeoutOrNull(hold) {
+                    snapshotFlow { dismissRequested }.first { it }
+                }
+            } else {
+                delay(hold)
+            }
             alpha.animateTo(0f, animationSpec = tween(ReactionOverlayTiming.EXIT_MS.toInt()))
             finished()
         }
@@ -218,6 +291,25 @@ fun ReactionOverlay(
                             if (current.assertive) LiveRegionMode.Assertive else LiveRegionMode.Polite
                         current.contentDescription?.let { contentDescription = it }
                     }
+                    // Tap-to-dismiss ONLY when the event opts in (the police alert):
+                    // taps the exit early via dismissRequested. No ripple (indication
+                    // null) — it is a dismiss, not a button. A11y: a Button role + a
+                    // localized onClickLabel ("Dismiss alert") so TalkBack announces
+                    // the ACTION rather than a generic "double tap to activate". When
+                    // off, no pointer input is taken here, so the social pops stay
+                    // non-blocking over the map.
+                    .then(
+                        if (current.dismissOnTap) {
+                            Modifier.clickable(
+                                interactionSource = tapInteractionSource,
+                                indication = null,
+                                onClickLabel = dismissAlertLabel,
+                                role = Role.Button,
+                            ) { dismissRequested = true }
+                        } else {
+                            Modifier
+                        },
+                    )
                     .testTag(REACTION_OVERLAY_TAG),
         ) {
             Surface(

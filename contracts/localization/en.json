@@ -1845,6 +1845,9 @@
   "policeAlert": {
     "caption": "Police nearby!"
   },
+  "reactionOverlay": {
+    "dismissAlert": "Dismiss alert"
+  },
   "incidents": {
     "reportButton": "Report incident",
     "reportTitle": "Report an incident",

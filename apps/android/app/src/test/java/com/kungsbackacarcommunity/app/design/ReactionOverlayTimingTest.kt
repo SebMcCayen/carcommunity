@@ -91,4 +91,53 @@ class ReactionOverlayTimingTest {
             t += 17
         }
     }
+
+    // ---- Per-pop hold override (the ~5s "Police nearby" alert) ----------------
+
+    @Test
+    fun default_hold_arg_matches_the_constant_overloads() {
+        // The no-arg overloads must be exactly the holdMs=HOLD_MS case, so social
+        // pops are unchanged by the parameterisation.
+        val hold = ReactionOverlayTiming.HOLD_MS
+        assertEquals(ReactionOverlayTiming.TOTAL_MS, ReactionOverlayTiming.totalMs(hold))
+        for (t in longArrayOf(-1, 0, 100, hold + ReactionOverlayTiming.ENTER_MS, ReactionOverlayTiming.TOTAL_MS)) {
+            assertEquals(ReactionOverlayTiming.phaseAt(t), ReactionOverlayTiming.phaseAt(t, hold))
+            assertEquals(ReactionOverlayTiming.alphaAt(t), ReactionOverlayTiming.alphaAt(t, hold), 0f)
+        }
+    }
+
+    @Test
+    fun a_longer_hold_stretches_the_holding_phase_and_total_only() {
+        val enter = ReactionOverlayTiming.ENTER_MS
+        val exit = ReactionOverlayTiming.EXIT_MS
+        val longHold = 5_000L
+
+        assertEquals(enter + longHold + exit, ReactionOverlayTiming.totalMs(longHold))
+
+        // Still holding well past where the default (1.1s) pop would have exited.
+        assertEquals(
+            ReactionOverlayPhase.Holding,
+            ReactionOverlayTiming.phaseAt(enter + ReactionOverlayTiming.HOLD_MS + 500, longHold),
+        )
+        assertEquals(1f, ReactionOverlayTiming.alphaAt(enter + longHold - 1, longHold), 0f)
+        // Exit begins only at enter + longHold.
+        assertEquals(
+            ReactionOverlayPhase.Exiting,
+            ReactionOverlayTiming.phaseAt(enter + longHold, longHold),
+        )
+        assertFalse(ReactionOverlayTiming.isFinished(ReactionOverlayTiming.totalMs(longHold) - 1, longHold))
+        assertTrue(ReactionOverlayTiming.isFinished(ReactionOverlayTiming.totalMs(longHold), longHold))
+    }
+
+    @Test
+    fun alpha_stays_in_unit_range_for_a_long_hold() {
+        val longHold = 5_000L
+        var t = -50L
+        val total = ReactionOverlayTiming.totalMs(longHold)
+        while (t <= total + 50) {
+            val a = ReactionOverlayTiming.alphaAt(t, longHold)
+            assertTrue("alpha out of range at $t: $a", a in 0f..1f)
+            t += 37
+        }
+    }
 }
