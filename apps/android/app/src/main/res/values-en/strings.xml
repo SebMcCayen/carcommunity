@@ -428,7 +428,7 @@
     <string name="chat_quickEmoji_sad">Send sad face</string>
     <string name="chat_quickEmoji_thumbsUp">Send thumbs up</string>
     <string name="chat_quickEmoji_heart">Send heart</string>
-    <string name="chat_quickEmoji_car">Send car</string>
+    <string name="chat_quickEmoji_eyes">Send eyes</string>
     <string name="chat_quickEmoji_crown">Send crown</string>
     <string name="chat_reportMessage">Report message</string>
     <string name="chat_reportReasonPrompt">Choose a reason</string>
