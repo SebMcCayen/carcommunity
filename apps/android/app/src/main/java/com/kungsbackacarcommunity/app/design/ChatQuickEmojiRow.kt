@@ -52,7 +52,7 @@ data class QuickEmoji(val glyph: String, @StringRes val contentDescriptionRes: I
  * The three the owner asked for are load-bearing and pinned by
  * [ChatQuickEmojiRowTest]: 😊 happy, 😢 sad, 👑 crown (the app's motif). The rest
  * are the everyday car-community reactions — a laugh, a thumbs-up, a heart, and a
- * car.
+ * pair of eyes.
  */
 val ChatQuickEmojis: List<QuickEmoji> =
     listOf(
@@ -61,7 +61,7 @@ val ChatQuickEmojis: List<QuickEmoji> =
         QuickEmoji("😢", R.string.chat_quickEmoji_sad),
         QuickEmoji("👍", R.string.chat_quickEmoji_thumbsUp),
         QuickEmoji("❤️", R.string.chat_quickEmoji_heart),
-        QuickEmoji("🚗", R.string.chat_quickEmoji_car),
+        QuickEmoji("👀", R.string.chat_quickEmoji_eyes),
         QuickEmoji("👑", R.string.chat_quickEmoji_crown),
     )
 
