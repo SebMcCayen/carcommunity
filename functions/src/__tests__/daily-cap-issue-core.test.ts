@@ -59,7 +59,7 @@ describe('dedup decision maps one fingerprint to one issue', () => {
 });
 
 describe('the auto-filed issue payload', () => {
-  const cluster = buildDailyCapCluster('points', 1500, '2026-08-18', 4);
+  const cluster = buildDailyCapCluster('points', 2000, '2026-08-18', 4);
   const meta = { firstSeenIso: '2026-08-18T09:00:00.000Z', count: 3 };
 
   it('uses ONLY labels that already exist on the repo', () => {
@@ -72,14 +72,14 @@ describe('the auto-filed issue payload', () => {
 
   it('states the cap value, cap type and day in the title', () => {
     const title = buildDailyCapIssueTitle(cluster);
-    expect(title).toContain('1500 KP');
+    expect(title).toContain('2000 KP');
     expect(title).toContain('points');
     expect(title).toContain('2026-08-18');
   });
 
   it('reports the cap value, cap type, aggregate member count and day in the body', () => {
     const body = buildDailyCapIssueBody(cluster, meta);
-    expect(body).toContain('1500 KP');
+    expect(body).toContain('2000 KP');
     expect(body).toContain('points');
     expect(body).toContain('2026-08-18');
     // The aggregate headcount is present as a plain count.
@@ -105,12 +105,12 @@ describe('the auto-filed issue payload', () => {
 
 describe('the placeholder link doc', () => {
   it('carries only the fingerprint + cap scalars, status creating, count 1', () => {
-    const cluster = buildDailyCapCluster('points', 1500, '2026-08-18', 4);
+    const cluster = buildDailyCapCluster('points', 2000, '2026-08-18', 4);
     const link = buildNewDailyCapIssueLink(cluster, () => 'TS');
     expect(link).toMatchObject({
       fingerprint: cluster.fingerprint,
       capType: 'points',
-      capValue: 1500,
+      capValue: 2000,
       day: '2026-08-18',
       status: 'creating',
       count: 1,

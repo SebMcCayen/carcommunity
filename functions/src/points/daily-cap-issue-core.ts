@@ -37,7 +37,7 @@ import { buildNewIssueLink } from '../shared/issueLinks-core';
 /**
  * The kind of ceiling that was reached. This detector instruments the DAILY
  * POINTS cap (`DAILY_POINTS_CAP`) — the one legit crown grinders actually hit,
- * because crown point values (10-500) fill 1500 KP long before the crown-COUNT
+ * because crown point values (10-500) fill 2000 KP long before the crown-COUNT
  * caps (10 hand-placed + 20 spawned = 30 claims/day) bind. `'points'` names that
  * lane; a future crown-count instrument could file under a distinct type and get
  * its own fingerprint (and therefore its own issue) for free.
@@ -146,7 +146,7 @@ function inlineCodeScalar(value: string): string {
 }
 
 /**
- * Issue title: `[Auto-economy] daily points cap reached (1500 KP) — YYYY-MM-DD`.
+ * Issue title: `[Auto-economy] daily points cap reached (2000 KP) — YYYY-MM-DD`.
  * Every token is a server constant — no uid, no per-member data.
  */
 export function buildDailyCapIssueTitle(cluster: DailyCapCluster): string {
