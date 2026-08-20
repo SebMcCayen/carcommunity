@@ -60,11 +60,18 @@ fun SpikeStripOverlay(
     val camera by mapSurface.cameraSnapshot.collectAsState()
 
     // A coarse ticker so a just-expired trap drops off, and the spike glyph has a
-    // gentle idle shimmer, without a per-frame recomposition storm.
+    // gentle idle shimmer, without a per-frame recomposition storm. Runs ONLY while
+    // there is at least one still-live trap: with none there is nothing to render,
+    // so the per-second wake is pointless (keyed on [traps], so it restarts when a
+    // trap appears), and it stops once the last trap has expired.
     var now by remember { mutableLongStateOf(nowProvider()) }
     LaunchedEffect(traps) {
+        if (traps.isEmpty()) return@LaunchedEffect
         while (true) {
             now = nowProvider()
+            // Stop once the last trap has expired — but only AFTER publishing this
+            // tick, so the just-expired trap is dropped from the render first.
+            if (PerkMapVisuals.liveTraps(traps, now).isEmpty()) break
             delay(1_000L)
         }
     }
@@ -116,10 +123,19 @@ fun OwnDotPerkOverlay(
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
 
+    // A coarse ticker that runs ONLY while an effect is actually live: the expiry
+    // timestamps stay non-null after an effect ends, so an unconditional loop would
+    // wake every second forever with nothing to draw. Publish each tick first, then
+    // stop once both effects are expired (the just-expired effect is cleared from
+    // the render first); re-triggers on a new activation (keyed on the expiries).
     var now by remember { mutableLongStateOf(nowProvider()) }
     LaunchedEffect(shieldActiveUntilMillis, boostActiveUntilMillis) {
         while (true) {
             now = nowProvider()
+            val anyActive =
+                PerkMapVisuals.isEffectActive(shieldActiveUntilMillis, now) ||
+                    PerkMapVisuals.isEffectActive(boostActiveUntilMillis, now)
+            if (!anyActive) break
             delay(1_000L)
         }
     }
