@@ -270,6 +270,95 @@ export function isUnderPoliceListRateLimit(
 }
 
 // ---------------------------------------------------------------------------
+// Verify ledger — confirm / dispute a pin (mirrors incidents.confirm/reportCleared)
+// ---------------------------------------------------------------------------
+//
+// A police pin is tappable, and a member who is NOT the reporter can "verify" it
+// two ways, modelled on the incidents layer's confirm/clear pair but deliberately
+// leaner:
+//  - CONFIRM ("Är den kvar?/Still there") corroborates the pin — social proof for
+//    the next driver. Unlike incidents.confirm it does NOT extend the pin's life:
+//    police-core's whole design is that a still-relevant patrol is RE-REPORTED
+//    (see POLICE_REPORT_TTL_MS), so a confirm-to-extend would fight that and let a
+//    popular pin outlive the patrol. It only bumps a count shown on the sheet.
+//  - DISPUTE ("Borta/Not here") records that a driver believes the patrol has
+//    moved on. It bumps a separate count shown alongside the confirmations so the
+//    reader weighs both signals itself (never a single netted verdict), exactly as
+//    the incident sheet shows confirmationCount + clearedCount side by side.
+//
+// ONE vote per (uid, pin): a single ledger doc `policeReports/{id}/votes/{uid}`
+// carries the caller's current `kind`. Switching sides moves the caller from one
+// count to the other in the SAME transaction, so a member is never counted on both
+// sides (the mirror of incidents.confirm's confirm↔clear switch). The reporter can
+// neither confirm nor dispute their own pin — they have Remove.
+//
+// DELIBERATELY NO auto-expire on dispute (the incidents net-threshold removal is
+// NOT ported). Taking a pin off everyone's map on a vote is only trustworthy with
+// a PRESENCE proof — incidents.reportCleared carries a fresh, geofenced position
+// and risk-scores it — and reproducing that fresh-fix + geofence machinery is a
+// large lift for a pin that already self-expires in ~40 min and is re-reportable.
+// So a dispute INFORMS (a count on the sheet) but does not remove; the removal
+// paths stay the reporter's own Remove and the short TTL. Porting the geofenced
+// auto-expire is a clean, separable follow-up if the signal proves worth acting on.
+
+/** Sub-collection holding the per-uid verify ledger (one doc per voter). */
+export const POLICE_VOTES_SUBCOLLECTION = 'votes';
+
+/** The two ways a non-reporter can verify a pin. */
+export const POLICE_VOTE_KINDS = ['confirm', 'dispute'] as const;
+export type PoliceVoteKind = (typeof POLICE_VOTE_KINDS)[number];
+
+/**
+ * A vote count is valid iff it is a non-negative safe integer. Mirrors the
+ * incidents layer's isValidConfirmationCount: this is a write path (the reply and
+ * the next vote build on the number, and NaN survives `+ 1`), so a PRESENT but
+ * corrupt value must be caught rather than silently defaulted.
+ */
+export function isValidVoteCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
+/** Reads a stored vote count, normalising absent/corrupt to 0 (the read path). */
+export function readVoteCount(value: unknown): number {
+  return isValidVoteCount(value) ? value : 0;
+}
+
+// Verify rate limit — ONE shared fixed-window budget for confirm + dispute, in its
+// own collection so a burst of map refreshes / reports can never starve it (and
+// vice versa). Same cheap deterministic-counter mechanism as the other limiters.
+
+/** Backend-only fixed-window verify-rate-limit counter collection (client-denied). */
+export const POLICE_VOTE_RATE_LIMIT_COLLECTION = 'policeVoteRateLimits';
+
+/**
+ * Max admitted verify calls (confirm + dispute combined) per uid per 60 s window.
+ *
+ * A verify is a deliberate human tap on a pin you drove past — nobody honestly
+ * verifies ten different patrols a minute. 10 is generous headroom for tapping a
+ * few pins plus a fat-fingered re-tap, while bounding a flood; looser than the
+ * report cap (5) because a verify cannot forge a new pin, only nudge a count.
+ */
+export const POLICE_VOTE_RATE_LIMIT_MAX = 10;
+
+/** Deterministic counter doc id for (uid, window) — shares the window index. */
+export function policeVoteRateLimitDocId(uid: string, nowMs: number): string {
+  return `${uid}_${policeReportRateLimitWindowIndex(nowMs)}`;
+}
+
+/** `expireAt` for a verify-limit window's counter doc — shares the window/grace. */
+export function policeVoteRateLimitExpiry(nowMs: number): Date {
+  return policeReportRateLimitExpiry(nowMs);
+}
+
+/** Pure verify-limit decision (fails OPEN on a corrupt counter, as report does). */
+export function isUnderPoliceVoteRateLimit(
+  currentCount: number,
+  max: number = POLICE_VOTE_RATE_LIMIT_MAX,
+): boolean {
+  return isUnderPoliceReportRateLimit(currentCount, max);
+}
+
+// ---------------------------------------------------------------------------
 // Geo-cell indexing (self-contained; mirrors incidents-core's grid)
 // ---------------------------------------------------------------------------
 
@@ -386,8 +475,22 @@ const listNearbyInputSchema = z
   })
   .strict();
 
+// Firestore-safe document id: reject path separators and the `.`/`..` segments so
+// `policeReports.doc(policeReportId)` can't throw and turn a bad request into an
+// internal error (mirrors incidents-core's incidentIdSchema).
+const policeReportIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .refine((id) => id !== '.' && id !== '..');
+
+const voteInputSchema = z.object({ policeReportId: policeReportIdSchema }).strict();
+
 export type ReportInput = z.infer<typeof reportInputSchema>;
 export type ListNearbyInput = z.infer<typeof listNearbyInputSchema>;
+export type VoteInput = z.infer<typeof voteInputSchema>;
 
 export type ParseResult<T> = { ok: true; input: T } | { ok: false; message: string };
 
@@ -403,6 +506,7 @@ export const parseReportInput = (d: unknown) =>
   parse(reportInputSchema, d, 'Expected { latitude, longitude, source? }.');
 export const parseListNearbyInput = (d: unknown) =>
   parse(listNearbyInputSchema, d, 'Expected { latitude, longitude, radiusMeters? }.');
+export const parseVoteInput = (d: unknown) => parse(voteInputSchema, d, 'Expected { policeReportId }.');
 
 // ---------------------------------------------------------------------------
 // Builders + views
@@ -460,6 +564,18 @@ export interface PoliceReportView {
   source: PoliceReportSource;
   createdAt: string | null;
   expiresAt: string | null;
+  /**
+   * How many OTHER members have confirmed the pin is still there (0 when none).
+   * Shown on the tap sheet as social proof; never netted with {@link disputeCount}.
+   */
+  confirmationCount: number;
+  /**
+   * How many members have disputed the pin ("Borta/Not here"), 0 when none. Sent
+   * ALONGSIDE {@link confirmationCount}, never netted into it: the client shows
+   * both so a driver approaching the spot weighs the two signals itself. A dispute
+   * informs only — it does NOT remove the pin (see the verify-ledger note above).
+   */
+  disputeCount: number;
 }
 
 // ---------------------------------------------------------------------------

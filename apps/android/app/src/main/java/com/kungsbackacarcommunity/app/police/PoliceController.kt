@@ -22,6 +22,14 @@ sealed interface PoliceReportOutcome {
     data class Failed(val cause: Throwable) : PoliceReportOutcome
 }
 
+/** Outcome of a confirm/dispute verify action, so the UI can show the right feedback. */
+sealed interface PoliceVerifyOutcome {
+    /** [alreadyVoted] lets the UI say "you already verified this" vs "thanks". */
+    data class Success(val alreadyVoted: Boolean) : PoliceVerifyOutcome
+
+    data class Failed(val cause: Throwable) : PoliceVerifyOutcome
+}
+
 /**
  * The small police-pin API surfaced to the map shell: keep a live list of nearby
  * police pins to draw + drive the proximity alert, and report a pin at the user's
@@ -80,6 +88,70 @@ class PoliceController(
             throw cancellation
         } catch (error: Throwable) {
             PoliceReportOutcome.Failed(error)
+        }
+    }
+
+    /**
+     * Removes the caller's OWN pin [policeReportId] (`police.remove`) and drops it
+     * from [nearbyPolice] so the marker + any open sheet disappear at once. Returns
+     * true on success (including the idempotent no-op for an already-gone pin);
+     * false on failure, leaving the pin in place so the user can retry.
+     */
+    suspend fun remove(policeReportId: String): Boolean {
+        return try {
+            repository.remove(policeReportId)
+            nearbyFlow.value = nearbyFlow.value.filterNot { it.id == policeReportId }
+            true
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Throwable) {
+            false
+        }
+    }
+
+    /**
+     * Confirms someone else's pin [policeReportId] is still there and reflects the
+     * new tallies on [nearbyPolice], so an open sheet updates without a refetch.
+     * The local counts are patched only AFTER the backend accepts.
+     */
+    suspend fun confirm(policeReportId: String): PoliceVerifyOutcome = verify(policeReportId) {
+        repository.confirm(policeReportId)
+    }
+
+    /**
+     * Disputes someone else's pin [policeReportId] ("Borta/Not here") and reflects
+     * the new tallies on [nearbyPolice]. A dispute informs only — the pin is never
+     * dropped here, only its counts patched.
+     */
+    suspend fun dispute(policeReportId: String): PoliceVerifyOutcome = verify(policeReportId) {
+        repository.dispute(policeReportId)
+    }
+
+    private suspend fun verify(
+        policeReportId: String,
+        call: suspend () -> PoliceVerifyResult,
+    ): PoliceVerifyOutcome {
+        return try {
+            val result = call()
+            nearbyFlow.value =
+                nearbyFlow.value.map { pin ->
+                    if (pin.id == policeReportId) {
+                        // Both counts move together: a confirm can SWITCH the
+                        // caller's earlier dispute (and vice versa), so patching one
+                        // count alone would leave the other stale until the next poll.
+                        pin.copy(
+                            confirmationCount = result.confirmationCount,
+                            disputeCount = result.disputeCount,
+                        )
+                    } else {
+                        pin
+                    }
+                }
+            PoliceVerifyOutcome.Success(alreadyVoted = result.alreadyVoted)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (error: Throwable) {
+            PoliceVerifyOutcome.Failed(error)
         }
     }
 

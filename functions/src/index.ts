@@ -172,6 +172,8 @@ import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled
 import { syncTrafikverket } from './incidents/trafikverket';
 import { report as reportPolice } from './police/report';
 import { listNearby as listNearbyPolice } from './police/listNearby';
+import { remove as removePolice } from './police/remove';
+import { confirm as confirmPolice, dispute as disputePolice } from './police/verify';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import { estimate as financeEstimate } from './finance/estimate';
 import {
@@ -974,15 +976,27 @@ export const incidents = {
  * camera-idle cadence to draw distinct police markers AND to fire the mid-screen
  * ReactionOverlay once when the driver comes within the proximity radius of a pin.
  *
- * NO scheduled sweep: a pin has no sub-collections and both the security read
- * rule (`status=='active' && expiresAt > request.time`) and listNearby hide an
- * expired pin immediately, so a field-scoped Firestore TTL policy on
+ * A tapped pin is interactive, modelled on the incidents sheet:
+ *  - the REPORTER removes their own pin via `police.remove` (owner-only);
+ *  - a NON-reporter verifies it via `police.confirm` (still there) or
+ *    `police.dispute` (gone) — one vote per (uid, pin) in a `votes/{uid}` ledger,
+ *    switchable, surfaced as confirmation/dispute counts on the sheet. A dispute
+ *    informs only; it does NOT auto-remove the pin (see police/verify.ts).
+ *
+ * NO scheduled sweep: both the security read rule
+ * (`status=='active' && expiresAt > request.time`) and listNearby hide an expired
+ * pin immediately, so a field-scoped Firestore TTL policy on
  * `policeReports.expiresAt` is the only reclaim needed (one-time deploy note in
- * police/report.ts, alongside the two rate-limit counter TTL policies).
+ * police/report.ts, alongside the rate-limit counter TTL policies — the verify
+ * counter TTL note is in police/verify.ts). `police.remove` recursiveDeletes a
+ * pin's `votes` sub-collection on removal.
  */
 export const police = {
   report: reportPolice,
   listNearby: listNearbyPolice,
+  remove: removePolice,
+  confirm: confirmPolice,
+  dispute: disputePolice,
 };
 
 /**

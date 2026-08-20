@@ -46,6 +46,23 @@ class FirebasePoliceRepository private constructor(
         return PoliceResponseParser.parseListNearby(data)
     }
 
+    override suspend fun remove(policeReportId: String): Boolean {
+        val data = callForData(REMOVE, mapOf("policeReportId" to policeReportId))
+        return (data?.get("removed") as? Boolean) ?: false
+    }
+
+    override suspend fun confirm(policeReportId: String): PoliceVerifyResult {
+        val data = callForData(CONFIRM, mapOf("policeReportId" to policeReportId))
+        return PoliceResponseParser.parseVerify(data)
+            ?: throw IllegalStateException("$CONFIRM returned no usable result")
+    }
+
+    override suspend fun dispute(policeReportId: String): PoliceVerifyResult {
+        val data = callForData(DISPUTE, mapOf("policeReportId" to policeReportId))
+        return PoliceResponseParser.parseVerify(data)
+            ?: throw IllegalStateException("$DISPUTE returned no usable result")
+    }
+
     private suspend fun callForData(name: String, payload: Map<String, Any?>): Map<String, Any?>? =
         suspendCancellableCoroutine { continuation ->
             functions
@@ -70,6 +87,9 @@ class FirebasePoliceRepository private constructor(
         private const val REGION = "europe-west1"
         private const val REPORT = "police-report"
         private const val LIST_NEARBY = "police-listNearby"
+        private const val REMOVE = "police-remove"
+        private const val CONFIRM = "police-confirm"
+        private const val DISPUTE = "police-dispute"
 
         fun createIfAvailable(context: Context): PoliceRepository? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
@@ -92,6 +112,18 @@ object PoliceResponseParser {
     /** Parses `police-report` — the created pin itself (the same row shape). */
     fun parseReport(data: Map<String, Any?>?): PoliceReport? = parseRow(data)
 
+    /** Parses `police-confirm` / `police-dispute` — the updated verify tallies. */
+    fun parseVerify(data: Map<String, Any?>?): PoliceVerifyResult? {
+        val id = data?.get("policeReportId") as? String ?: return null
+        return PoliceVerifyResult(
+            policeReportId = id,
+            confirmationCount = (data["confirmationCount"] as? Number)?.toInt() ?: 0,
+            disputeCount = (data["disputeCount"] as? Number)?.toInt() ?: 0,
+            alreadyVoted = (data["alreadyVoted"] as? Boolean) ?: false,
+            switched = (data["switched"] as? Boolean) ?: false,
+        )
+    }
+
     private fun parseRow(row: Any?): PoliceReport? {
         val map = row as? Map<*, *> ?: return null
         val id = map["id"] as? String ?: return null
@@ -106,6 +138,9 @@ object PoliceResponseParser {
             // Server-resolved per-caller ownership; absent/legacy payloads default
             // to false (not mine), so an old row simply keeps alerting as before.
             mine = (map["mine"] as? Boolean) ?: false,
+            // Verify tallies shown on the tap sheet; absent/legacy payloads → 0.
+            confirmationCount = (map["confirmationCount"] as? Number)?.toInt() ?: 0,
+            disputeCount = (map["disputeCount"] as? Number)?.toInt() ?: 0,
         )
     }
 }

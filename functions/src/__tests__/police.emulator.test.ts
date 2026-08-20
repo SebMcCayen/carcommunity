@@ -45,8 +45,11 @@ import {
   POLICE_REPORT_RATE_LIMIT_COLLECTION,
   POLICE_REPORT_RATE_LIMIT_MAX,
   POLICE_REPORT_RATE_LIMIT_WINDOW_MS,
+  POLICE_VOTE_RATE_LIMIT_COLLECTION,
+  POLICE_VOTE_RATE_LIMIT_MAX,
   policeListRateLimitDocId,
   policeReportRateLimitDocId,
+  policeVoteRateLimitDocId,
 } from '../police/police-core';
 
 const PROJECT_ID = 'demo-test';
@@ -424,6 +427,139 @@ describe('police.listNearby rate limit', () => {
         radiusMeters: 5000,
       }),
     );
+    expect(code).toBe('functions/resource-exhausted');
+  });
+});
+
+interface VerifyResult {
+  policeReportId: string;
+  confirmationCount: number;
+  disputeCount: number;
+  alreadyVoted: boolean;
+  switched: boolean;
+}
+
+/** Reports a pin AS `reporter`, then returns its id (leaves the reporter signed in). */
+async function reportPinAs(reporter: TestUser): Promise<string> {
+  await signInAs(reporter);
+  const created = (
+    await call('police-report', { latitude: KBA.latitude, longitude: KBA.longitude })
+  ).data as { id: string };
+  return created.id;
+}
+
+describe('police.remove', () => {
+  it('removes the reporter own pin and hides it from listNearby', async () => {
+    const id = await reportPinAs(member);
+    const res = (await call('police-remove', { policeReportId: id })).data as { removed: boolean };
+    expect(res.removed).toBe(true);
+
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(false);
+
+    const nearby = (
+      await call('police-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { policeReports: Array<{ id: string }> };
+    expect(nearby.policeReports.some((p) => p.id === id)).toBe(false);
+  });
+
+  it('is an idempotent no-op for a missing pin', async () => {
+    await signInAs(member);
+    const res = (
+      await call('police-remove', { policeReportId: 'does-not-exist-1234' })
+    ).data as { removed: boolean };
+    expect(res.removed).toBe(false);
+  });
+
+  it('rejects removing another member pin (owner-only) and leaves it live', async () => {
+    const id = await reportPinAs(member);
+    const other = await createProvisionedUser('pol-rm-other');
+    await makeMember(other);
+    await signInAs(other);
+    const code = await callableErrorCode(call('police-remove', { policeReportId: id }));
+    expect(code).toBe('functions/permission-denied');
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(true);
+  });
+});
+
+describe('police.confirm / police.dispute (verify)', () => {
+  it('confirms someone else pin, dedups a repeat, and surfaces the count on listNearby', async () => {
+    const id = await reportPinAs(member);
+    const other = await createProvisionedUser('pol-cf-other');
+    await makeMember(other);
+    await signInAs(other);
+
+    const first = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(first.confirmationCount).toBe(1);
+    expect(first.disputeCount).toBe(0);
+    expect(first.alreadyVoted).toBe(false);
+
+    // A repeat is idempotent — no double count.
+    const again = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(again.confirmationCount).toBe(1);
+    expect(again.alreadyVoted).toBe(true);
+
+    const nearby = (
+      await call('police-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { policeReports: Array<{ id: string; confirmationCount: number; disputeCount: number }> };
+    const seen = nearby.policeReports.find((p) => p.id === id);
+    expect(seen?.confirmationCount).toBe(1);
+    expect(seen?.disputeCount).toBe(0);
+  });
+
+  it('switches a confirm to a dispute without counting the member on both sides', async () => {
+    const id = await reportPinAs(member);
+    const other = await createProvisionedUser('pol-sw-other');
+    await makeMember(other);
+    await signInAs(other);
+
+    await call('police-confirm', { policeReportId: id });
+    const switched = (await call('police-dispute', { policeReportId: id })).data as VerifyResult;
+    expect(switched.confirmationCount).toBe(0);
+    expect(switched.disputeCount).toBe(1);
+    expect(switched.switched).toBe(true);
+
+    // The pin still exists — a dispute informs, it does NOT auto-remove.
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(true);
+  });
+
+  it('rejects the reporter verifying their own pin', async () => {
+    const id = await reportPinAs(member); // member is signed in and owns it
+    const code = await callableErrorCode(call('police-confirm', { policeReportId: id }));
+    expect(code).toBe('functions/permission-denied');
+  });
+
+  it('is not-found for a missing pin', async () => {
+    await signInAs(member);
+    const code = await callableErrorCode(
+      call('police-confirm', { policeReportId: 'missing-pin-9999' }),
+    );
+    expect(code).toBe('functions/not-found');
+  });
+
+  it('throws resource-exhausted once the shared verify budget is at the cap', async () => {
+    const id = await reportPinAs(member);
+    const other = await createProvisionedUser('pol-vote-rl');
+    await makeMember(other);
+    await signInAs(other);
+    const nowMs = Date.now();
+    for (const ms of [nowMs, nowMs + POLICE_REPORT_RATE_LIMIT_WINDOW_MS]) {
+      await adminDb
+        .collection(POLICE_VOTE_RATE_LIMIT_COLLECTION)
+        .doc(policeVoteRateLimitDocId(other.uid, ms))
+        .set({ uid: other.uid, count: POLICE_VOTE_RATE_LIMIT_MAX });
+    }
+    const code = await callableErrorCode(call('police-confirm', { policeReportId: id }));
     expect(code).toBe('functions/resource-exhausted');
   });
 });
