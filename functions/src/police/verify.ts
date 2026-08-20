@@ -222,7 +222,13 @@ async function enforceVoteRateLimit(uid: string): Promise<void> {
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const stored = snap.get('count');
-    const currentCount = typeof stored === 'number' ? stored : 0;
+    // Normalize a non-finite/corrupt count to 0 (NaN/Infinity are `number`s but
+    // would make isUnderPoliceVoteRateLimit fail open AND keep `+ 1` non-finite
+    // forever). Unlike enforceReportRateLimit — which deliberately fails open so a
+    // corrupt counter never blocks a safety warning about police — this is an
+    // anti-spam limiter, so it SELF-HEALS: a corrupt window resets to 1 and
+    // throttling resumes on the next call.
+    const currentCount = typeof stored === 'number' && Number.isFinite(stored) ? stored : 0;
     if (!isUnderPoliceVoteRateLimit(currentCount)) {
       // Thrown inside the transaction: it aborts (no write) and propagates. Not a
       // Firestore contention error, so it is NOT retried — a clean reject.
