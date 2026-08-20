@@ -151,6 +151,12 @@ fun OwnDotPerkOverlay(
         label = "own_dot_boost_appear",
     )
 
+    // Reusable Paths for the shield silhouette + its check tick, so the animated
+    // Canvas re-fills them (reset per frame) rather than allocating fresh Paths —
+    // both are static shapes that only scale/pulse.
+    val shieldPath = remember { Path() }
+    val tickPath = remember { Path() }
+
     Box(modifier = modifier.fillMaxSize().testTag(OWN_DOT_PERK_OVERLAY_TAG)) {
         camera ?: return@Box
         if (!shieldActive && !boostActive) return@Box
@@ -162,7 +168,7 @@ fun OwnDotPerkOverlay(
             if (!point.trustworthy) return@Canvas
             val centre = Offset(point.x, point.y)
             if (boostActive) drawBoostPluses(centre, boostAppear)
-            if (shieldActive) drawShieldAura(centre, shieldPulse)
+            if (shieldActive) drawShieldAura(centre, shieldPulse, shieldPath, tickPath)
         }
     }
 }
@@ -201,9 +207,16 @@ private fun rememberPerkPulse(): Float {
 /**
  * The own-dot SHIELD: a slowly pulsing GREEN shield hung on the member's position
  * — an expanding, fading halo ("pulsates around the dot") plus a shield badge that
- * gently breathes with the same [pulse].
+ * gently breathes with the same [pulse]. Re-fills the caller's reusable
+ * [shieldPath] / [tickPath] each frame (both static shapes that only scale) so the
+ * animated draw allocates no per-frame Path garbage.
  */
-private fun DrawScope.drawShieldAura(centre: Offset, pulse: Float) {
+private fun DrawScope.drawShieldAura(
+    centre: Offset,
+    pulse: Float,
+    shieldPath: Path,
+    tickPath: Path,
+) {
     // Expanding, fading outer pulse ring.
     val haloBase = 24.dp.toPx()
     drawCircle(
@@ -223,24 +236,22 @@ private fun DrawScope.drawShieldAura(centre: Offset, pulse: Float) {
     // scales uniformly through the pulse instead of distorting near the point.
     val controlInset = 8.dp.toPx() * scale
 
-    val shield = androidx.compose.ui.graphics.Path().apply {
-        moveTo(centre.x, top)
-        lineTo(centre.x + halfW, shoulder)
-        quadraticBezierTo(centre.x + halfW, bottom - controlInset, centre.x, bottom)
-        quadraticBezierTo(centre.x - halfW, bottom - controlInset, centre.x - halfW, shoulder)
-        close()
-    }
+    shieldPath.reset()
+    shieldPath.moveTo(centre.x, top)
+    shieldPath.lineTo(centre.x + halfW, shoulder)
+    shieldPath.quadraticBezierTo(centre.x + halfW, bottom - controlInset, centre.x, bottom)
+    shieldPath.quadraticBezierTo(centre.x - halfW, bottom - controlInset, centre.x - halfW, shoulder)
+    shieldPath.close()
     // Soft translucent fill + a solid green outline so it reads on any map style.
-    drawPath(shield, color = SHIELD_COLOR.copy(alpha = 0.22f + 0.10f * pulse))
-    drawPath(shield, color = SHIELD_COLOR.copy(alpha = 0.90f), style = Stroke(width = 3.dp.toPx()))
+    drawPath(shieldPath, color = SHIELD_COLOR.copy(alpha = 0.22f + 0.10f * pulse))
+    drawPath(shieldPath, color = SHIELD_COLOR.copy(alpha = 0.90f), style = Stroke(width = 3.dp.toPx()))
 
     // A check tick to read as "protected".
-    val tick = androidx.compose.ui.graphics.Path().apply {
-        moveTo(centre.x - 6.dp.toPx(), centre.y + 1.dp.toPx())
-        lineTo(centre.x - 1.dp.toPx(), centre.y + 6.dp.toPx())
-        lineTo(centre.x + 7.dp.toPx(), centre.y - 5.dp.toPx())
-    }
-    drawPath(tick, color = SHIELD_COLOR.copy(alpha = 0.95f), style = Stroke(width = 3.dp.toPx()))
+    tickPath.reset()
+    tickPath.moveTo(centre.x - 6.dp.toPx(), centre.y + 1.dp.toPx())
+    tickPath.lineTo(centre.x - 1.dp.toPx(), centre.y + 6.dp.toPx())
+    tickPath.lineTo(centre.x + 7.dp.toPx(), centre.y - 5.dp.toPx())
+    drawPath(tickPath, color = SHIELD_COLOR.copy(alpha = 0.95f), style = Stroke(width = 3.dp.toPx()))
 }
 
 /**
