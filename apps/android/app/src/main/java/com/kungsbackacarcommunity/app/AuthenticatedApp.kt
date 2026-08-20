@@ -5379,24 +5379,33 @@ fun AuthenticatedApp(
                 // effect is active but no shared position exists, fall back to a cheap
                 // device fix (mirrors the crown-range poll) — exactly where the Mapbox
                 // puck sits. Traps are unaffected (they carry their own coordinates).
-                val ownEffectActive =
-                    perkMapOverlayState.shieldActiveUntilMillis != null ||
-                        perkMapOverlayState.boostActiveUntilMillis != null
-                val needOwnFix = perkMapActive && ownEffectActive &&
+                // The later of the two effect expiries (null when neither is set).
+                // These stay non-null AFTER expiry, so the poll loop below stops
+                // itself once the window has passed (rather than spinning forever).
+                val ownEffectExpiry =
+                    laterOf(
+                        perkMapOverlayState.shieldActiveUntilMillis,
+                        perkMapOverlayState.boostActiveUntilMillis,
+                    )
+                val needOwnFix = perkMapActive && ownEffectExpiry != null &&
                     perkMapOverlayState.ownLatitude == null
                 var perkOwnDeviceFix by remember { mutableStateOf<LatLng?>(null) }
-                LaunchedEffect(needOwnFix) {
-                    if (!needOwnFix) {
+                LaunchedEffect(needOwnFix, ownEffectExpiry) {
+                    if (!needOwnFix || ownEffectExpiry == null) {
                         perkOwnDeviceFix = null
                         return@LaunchedEffect
                     }
                     val appCtx = context.applicationContext
-                    while (true) {
+                    // Poll only while the effect is still live; a re-activation that
+                    // extends the window restarts this effect (keyed on the expiry).
+                    while (System.currentTimeMillis() < ownEffectExpiry) {
                         perkOwnDeviceFix =
                             CurrentLocation.currentFix(appCtx)
                                 ?: CurrentLocation.lastKnown(appCtx)
                         delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
                     }
+                    // Window elapsed: drop the fix so a stale position isn't reused.
+                    perkOwnDeviceFix = null
                 }
 
                 val perkOverlaySlot: (@Composable () -> Unit)? =
