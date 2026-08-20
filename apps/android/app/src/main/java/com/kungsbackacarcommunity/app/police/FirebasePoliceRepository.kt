@@ -48,7 +48,14 @@ class FirebasePoliceRepository private constructor(
 
     override suspend fun remove(policeReportId: String): Boolean {
         val data = callForData(REMOVE, mapOf("policeReportId" to policeReportId))
-        return (data?.get("removed") as? Boolean) ?: false
+        // A GENUINE idempotent no-op comes back as removed:false (a real Boolean) —
+        // that is a valid result and returned as-is. A MISSING payload or a
+        // non-boolean `removed` is a parse/server fault, NOT "nothing was removed":
+        // conflating the two would show the user "couldn't remove" for a call that
+        // may have failed to even reach the handler. Throw so the caller surfaces a
+        // real error (mirrors report/confirm/dispute).
+        return (data?.get("removed") as? Boolean)
+            ?: throw IllegalStateException("$REMOVE returned no usable result")
     }
 
     override suspend fun confirm(policeReportId: String): PoliceVerifyResult {

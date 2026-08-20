@@ -141,7 +141,17 @@ async function castVote(data: unknown, uid: string, kind: PoliceVoteKind): Promi
     const storedConfirm = readVoteCount(doc.confirmationCount);
     const storedDispute = readVoteCount(doc.disputeCount);
 
-    const existingKind = existingVote.exists ? (existingVote.get('kind') as unknown) : null;
+    const rawExistingKind = existingVote.exists ? (existingVote.get('kind') as unknown) : null;
+    // Normalise the ledger's stored kind to a KNOWN side, treating anything that is
+    // not exactly 'confirm'/'dispute' (absent, or present-but-corrupt from a
+    // hand-edit — this callable only ever writes valid kinds) as "no recorded
+    // side". A corrupt kind is thus HEALED as a fresh vote: this write overwrites
+    // the doc with a valid kind and bumps the chosen side once. It deliberately
+    // does NOT throw (a garbled ledger doc must not wedge verifying a transient
+    // pin) and does NOT decrement a side it cannot trust the value of — so it can
+    // never double-count off a corrupt value.
+    const existingKind: PoliceVoteKind | null =
+      rawExistingKind === 'confirm' || rawExistingKind === 'dispute' ? rawExistingKind : null;
 
     // Already on this side → idempotent success, nothing written.
     if (existingKind === kind) {
@@ -154,8 +164,9 @@ async function castVote(data: unknown, uid: string, kind: PoliceVoteKind): Promi
       };
     }
 
-    // A switch is any existing vote that is not this side (i.e. the opposite kind).
-    const switched = existingKind === 'confirm' || existingKind === 'dispute';
+    // A switch is a VALID existing vote on the opposite side (the only remaining
+    // case now that same-side returned above and corrupt/absent normalised to null).
+    const switched = existingKind !== null;
     let nextConfirm = storedConfirm;
     let nextDispute = storedDispute;
     if (kind === 'confirm') {

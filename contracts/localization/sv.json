@@ -1854,6 +1854,24 @@
   "reactionOverlay": {
     "dismissAlert": "Stäng varningen"
   },
+  "police": {
+    "sheetTitle": "Polis",
+    "reportedByMember": "Rapporterad av en medlem",
+    "stillHereQuestion": "Är den kvar?",
+    "stillHereYes": "Ja, den är kvar",
+    "stillHereNo": "Nej, den är borta",
+    "removeAction": "Ta bort",
+    "ownPinHint": "Du rapporterade den här.",
+    "confirmedBy": "Bekräftad av %1$d",
+    "disputedBy": "Rapporterad som borta av %1$d",
+    "confirmSuccess": "Tack – du bekräftade att polisen finns kvar.",
+    "confirmAlready": "Du har redan bekräftat den här.",
+    "disputeSuccess": "Tack – vi har noterat att den är borta.",
+    "disputeAlready": "Du har redan rapporterat den som borta.",
+    "verifyError": "Det gick inte just nu. Försök igen.",
+    "removeSuccess": "Din polismarkering togs bort.",
+    "removeError": "Det gick inte att ta bort markeringen. Försök igen."
+  },
   "incidents": {
     "reportButton": "Rapportera händelse",
     "reportTitle": "Rapportera en händelse",

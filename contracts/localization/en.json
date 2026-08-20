@@ -1854,6 +1854,24 @@
   "reactionOverlay": {
     "dismissAlert": "Dismiss alert"
   },
+  "police": {
+    "sheetTitle": "Police",
+    "reportedByMember": "Reported by a member",
+    "stillHereQuestion": "Is it still there?",
+    "stillHereYes": "Yes, it's still there",
+    "stillHereNo": "No, it's gone",
+    "removeAction": "Remove",
+    "ownPinHint": "You reported this.",
+    "confirmedBy": "Confirmed by %1$d",
+    "disputedBy": "Reported gone by %1$d",
+    "confirmSuccess": "Thanks — you confirmed the police are still there.",
+    "confirmAlready": "You've already confirmed this one.",
+    "disputeSuccess": "Thanks — we've noted that it's gone.",
+    "disputeAlready": "You've already reported this one as gone.",
+    "verifyError": "Couldn't do that right now. Try again.",
+    "removeSuccess": "Your police pin was removed.",
+    "removeError": "Couldn't remove the pin. Try again."
+  },
   "incidents": {
     "reportButton": "Report incident",
     "reportTitle": "Report an incident",

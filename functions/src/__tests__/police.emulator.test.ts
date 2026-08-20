@@ -533,6 +533,36 @@ describe('police.confirm / police.dispute (verify)', () => {
     expect(stored.exists).toBe(true);
   });
 
+  it('heals a corrupt vote-ledger kind as a fresh vote (no throw, no double-count)', async () => {
+    const id = await reportPinAs(member);
+    const other = await createProvisionedUser('pol-corrupt-kind');
+    await makeMember(other);
+    // Seed a CORRUPT ledger doc for this voter (only this callable writes valid
+    // kinds, so this mimics a hand-edit / schema drift).
+    await adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc(other.uid)
+      .set({ uid: other.uid, kind: 'garbage' });
+
+    await signInAs(other);
+    // A confirm must NOT throw on the corrupt kind — it heals the doc and counts
+    // the new side ONCE (fresh vote: 0 → 1), never decrementing an untrusted side.
+    const res = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(res.confirmationCount).toBe(1);
+    expect(res.disputeCount).toBe(0);
+    expect(res.alreadyVoted).toBe(false);
+    // The ledger doc is overwritten with a valid kind.
+    const healed = await adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc(other.uid)
+      .get();
+    expect(healed.data()?.kind).toBe('confirm');
+  });
+
   it('rejects the reporter verifying their own pin', async () => {
     const id = await reportPinAs(member); // member is signed in and owns it
     const code = await callableErrorCode(call('police-confirm', { policeReportId: id }));

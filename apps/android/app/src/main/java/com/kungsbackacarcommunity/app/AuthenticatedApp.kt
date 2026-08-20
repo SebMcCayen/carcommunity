@@ -6470,7 +6470,14 @@ fun AuthenticatedApp(
                                             if (!policeRemoveInFlight) {
                                                 policeRemoveInFlight = true
                                                 scope.launch {
-                                                    val removed =
+                                                    // NOTE: this is whether the remove
+                                                    // call SUCCEEDED (true also for the
+                                                    // idempotent no-op when the pin had
+                                                    // already aged out) — not proof a
+                                                    // live pin was just deleted. It only
+                                                    // gates the success snackbar + tap
+                                                    // consume.
+                                                    val removeSucceeded =
                                                         try {
                                                             policeController.remove(openPolice.id)
                                                         } finally {
@@ -6480,9 +6487,9 @@ fun AuthenticatedApp(
                                                     // nearbyPolice, so the sheet closes
                                                     // itself; consume the tap too so a
                                                     // stale id can't re-open anything.
-                                                    if (removed) mapSurface.consumeIncidentTap()
+                                                    if (removeSucceeded) mapSurface.consumeIncidentTap()
                                                     snackbarHostState.showSnackbar(
-                                                        if (removed) {
+                                                        if (removeSucceeded) {
                                                             policeRemoveSuccessText
                                                         } else {
                                                             policeRemoveErrorText
