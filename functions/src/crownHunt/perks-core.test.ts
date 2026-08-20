@@ -258,11 +258,12 @@ describe('perks-core hold cap (buy/hold ceiling)', () => {
   });
 
   it('refuses a buy that would exceed the total held VALUE cap', () => {
-    // 6 spike strips (900) + 6 boosts (720) = 1620 held value already caps out;
-    // a first shield (100) would push to 1720 > 1500.
-    const inventory = { spike_strip: 6, boost: 6 };
+    // 6 spike strips (900) + 6 boosts (720) + 3 shields (300) = 1920 held value;
+    // a 4th shield (100) would push to 2020 > 2000 (the DAILY_POINTS_CAP the
+    // hold-value cap is anchored to, raised 1500 → 2000).
+    const inventory = { spike_strip: 6, boost: 6, shield: 3 };
     expect(evaluateHoldCap(inventory, 'shield', 1, 100)).toBe('total_value');
-    expect(MAX_PERK_HOLD_VALUE_KP).toBe(1500);
+    expect(MAX_PERK_HOLD_VALUE_KP).toBe(2000);
   });
 
   it('treats a corrupt/negative stored count as zero (never bypasses the cap)', () => {
