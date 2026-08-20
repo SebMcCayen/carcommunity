@@ -45,8 +45,12 @@ import {
   POLICE_REPORT_RATE_LIMIT_COLLECTION,
   POLICE_REPORT_RATE_LIMIT_MAX,
   POLICE_REPORT_RATE_LIMIT_WINDOW_MS,
+  POLICE_VOTE_RATE_LIMIT_COLLECTION,
+  POLICE_VOTE_RATE_LIMIT_MAX,
+  geoCellKey,
   policeListRateLimitDocId,
   policeReportRateLimitDocId,
+  policeVoteRateLimitDocId,
 } from '../police/police-core';
 
 const PROJECT_ID = 'demo-test';
@@ -425,5 +429,227 @@ describe('police.listNearby rate limit', () => {
       }),
     );
     expect(code).toBe('functions/resource-exhausted');
+  });
+});
+
+interface VerifyResult {
+  policeReportId: string;
+  confirmationCount: number;
+  disputeCount: number;
+  alreadyVoted: boolean;
+  switched: boolean;
+}
+
+/**
+ * Seeds an ACTIVE, unexpired police pin DIRECTLY via the Admin SDK (bypassing the
+ * police.report callable), so a test's SETUP never consumes the caller's 5/60 s
+ * report rate-limit budget — the emulator Firestore is shared across the whole
+ * file with no per-test isolation, so routing every setup pin through the callable
+ * with one reporter uid would trip that limit across the block. The pin carries
+ * exactly the fields listNearby / the verify + remove callables read, at KBA with
+ * the correct geoCell. `reporterUid` is a caller-supplied uid so `mine` resolves
+ * correctly (the reporter-verifies-own test passes its own uid; the others pass a
+ * different uid than the caller).
+ */
+async function seedPin(reporterUid: string): Promise<string> {
+  const ref = adminDb.collection('policeReports').doc();
+  await ref.set({
+    latitude: KBA.latitude,
+    longitude: KBA.longitude,
+    geoCell: geoCellKey(KBA.latitude, KBA.longitude),
+    status: 'active',
+    source: 'manual',
+    reporterUid,
+    createdAt: Timestamp.fromDate(new Date()),
+    // Counts left ABSENT (default 0 via readVoteCount), matching what police.report
+    // writes — the verify path must build them up from nothing.
+    expiresAt: Timestamp.fromDate(new Date(Date.now() + 30 * 60_000)),
+  });
+  return ref.id;
+}
+
+describe('police.remove', () => {
+  it('removes the reporter own pin and hides it from listNearby', async () => {
+    // The remover must be the reporter (owner-only), so the caller uid IS the pin's
+    // reporterUid. A fresh owner keeps this test independent of the shared member.
+    const owner = await createProvisionedUser('pol-rm-owner');
+    await makeMember(owner);
+    const id = await seedPin(owner.uid);
+    await signInAs(owner);
+    const res = (await call('police-remove', { policeReportId: id })).data as { removed: boolean };
+    expect(res.removed).toBe(true);
+
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(false);
+
+    const nearby = (
+      await call('police-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { policeReports: Array<{ id: string }> };
+    expect(nearby.policeReports.some((p) => p.id === id)).toBe(false);
+  });
+
+  it('is an idempotent no-op for a missing pin', async () => {
+    await signInAs(member);
+    const res = (
+      await call('police-remove', { policeReportId: 'does-not-exist-1234' })
+    ).data as { removed: boolean };
+    expect(res.removed).toBe(false);
+  });
+
+  it('rejects removing another member pin (owner-only) and leaves it live', async () => {
+    const owner = await createProvisionedUser('pol-rm-owner2');
+    const id = await seedPin(owner.uid);
+    const other = await createProvisionedUser('pol-rm-other');
+    await makeMember(other);
+    await signInAs(other);
+    const code = await callableErrorCode(call('police-remove', { policeReportId: id }));
+    expect(code).toBe('functions/permission-denied');
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(true);
+  });
+});
+
+describe('police.confirm / police.dispute (verify)', () => {
+  it('confirms someone else pin, dedups a repeat, and surfaces the count on listNearby', async () => {
+    const owner = await createProvisionedUser('pol-cf-owner');
+    const id = await seedPin(owner.uid);
+    const other = await createProvisionedUser('pol-cf-other');
+    await makeMember(other);
+    await signInAs(other);
+
+    const first = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(first.confirmationCount).toBe(1);
+    expect(first.disputeCount).toBe(0);
+    expect(first.alreadyVoted).toBe(false);
+
+    // A repeat is idempotent — no double count.
+    const again = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(again.confirmationCount).toBe(1);
+    expect(again.alreadyVoted).toBe(true);
+
+    const nearby = (
+      await call('police-listNearby', {
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        radiusMeters: 5000,
+      })
+    ).data as { policeReports: Array<{ id: string; confirmationCount: number; disputeCount: number }> };
+    const seen = nearby.policeReports.find((p) => p.id === id);
+    expect(seen?.confirmationCount).toBe(1);
+    expect(seen?.disputeCount).toBe(0);
+  });
+
+  it('switches a confirm to a dispute without counting the member on both sides', async () => {
+    const owner = await createProvisionedUser('pol-sw-owner');
+    const id = await seedPin(owner.uid);
+    const other = await createProvisionedUser('pol-sw-other');
+    await makeMember(other);
+    await signInAs(other);
+
+    await call('police-confirm', { policeReportId: id });
+    const switched = (await call('police-dispute', { policeReportId: id })).data as VerifyResult;
+    expect(switched.confirmationCount).toBe(0);
+    expect(switched.disputeCount).toBe(1);
+    expect(switched.switched).toBe(true);
+
+    // The pin still exists — a dispute informs, it does NOT auto-remove.
+    const stored = await adminDb.collection('policeReports').doc(id).get();
+    expect(stored.exists).toBe(true);
+  });
+
+  it('heals a corrupt vote-ledger kind as a fresh vote (no throw, no double-count)', async () => {
+    const owner = await createProvisionedUser('pol-corrupt-owner');
+    const id = await seedPin(owner.uid);
+    const other = await createProvisionedUser('pol-corrupt-kind');
+    await makeMember(other);
+    // Seed a CORRUPT ledger doc for this voter (only this callable writes valid
+    // kinds, so this mimics a hand-edit / schema drift).
+    await adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc(other.uid)
+      .set({ uid: other.uid, kind: 'garbage' });
+
+    await signInAs(other);
+    // A confirm must NOT throw on the corrupt kind — it heals the doc and counts
+    // the new side ONCE (fresh vote: 0 → 1), never decrementing an untrusted side.
+    const res = (await call('police-confirm', { policeReportId: id })).data as VerifyResult;
+    expect(res.confirmationCount).toBe(1);
+    expect(res.disputeCount).toBe(0);
+    expect(res.alreadyVoted).toBe(false);
+    // The ledger doc is overwritten with a valid kind.
+    const healed = await adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc(other.uid)
+      .get();
+    expect(healed.data()?.kind).toBe('confirm');
+  });
+
+  it('rejects the reporter verifying their own pin', async () => {
+    // The caller IS the reporter here, so seed the pin under the caller's own uid.
+    const owner = await createProvisionedUser('pol-self');
+    await makeMember(owner);
+    const id = await seedPin(owner.uid);
+    await signInAs(owner);
+    const code = await callableErrorCode(call('police-confirm', { policeReportId: id }));
+    expect(code).toBe('functions/permission-denied');
+  });
+
+  it('is not-found for a missing pin', async () => {
+    await signInAs(member);
+    const code = await callableErrorCode(
+      call('police-confirm', { policeReportId: 'missing-pin-9999' }),
+    );
+    expect(code).toBe('functions/not-found');
+  });
+
+  it('throws resource-exhausted once the shared verify budget is at the cap', async () => {
+    // No report call in setup — this pin is seeded directly, so the ONLY limiter
+    // this can trip is the VERIFY budget seeded at the cap below.
+    const owner = await createProvisionedUser('pol-vote-owner');
+    const id = await seedPin(owner.uid);
+    const other = await createProvisionedUser('pol-vote-rl');
+    await makeMember(other);
+    await signInAs(other);
+    const nowMs = Date.now();
+    for (const ms of [nowMs, nowMs + POLICE_REPORT_RATE_LIMIT_WINDOW_MS]) {
+      await adminDb
+        .collection(POLICE_VOTE_RATE_LIMIT_COLLECTION)
+        .doc(policeVoteRateLimitDocId(other.uid, ms))
+        .set({ uid: other.uid, count: POLICE_VOTE_RATE_LIMIT_MAX });
+    }
+    const code = await callableErrorCode(call('police-confirm', { policeReportId: id }));
+    expect(code).toBe('functions/resource-exhausted');
+  });
+});
+
+describe('police.onReportDeleted (votes-ledger cleanup trigger)', () => {
+  it('recursiveDeletes a pin votes ledger when the pin document is deleted (TTL/admin path)', async () => {
+    const owner = await createProvisionedUser('pol-del-owner');
+    const id = await seedPin(owner.uid);
+    // Seed a vote in the ledger so there is a sub-collection to reclaim.
+    const voteRef = adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc('voter-uid');
+    await voteRef.set({ uid: 'voter-uid', kind: 'confirm' });
+    expect((await voteRef.get()).exists).toBe(true);
+
+    // Delete the pin DOCUMENT directly — this mimics the common reclaim path (a
+    // Firestore TTL expiry deletes only the doc, not its sub-collections; TTL
+    // deletes fire onDocumentDeleted, as does an admin console delete).
+    await adminDb.collection('policeReports').doc(id).delete();
+
+    // The trigger recursiveDeletes the votes sub-collection asynchronously; poll
+    // until the orphan is gone rather than leaking storage.
+    await pollUntil(async () => ((await voteRef.get()).exists ? undefined : true));
   });
 });

@@ -17,6 +17,13 @@ package com.kungsbackacarcommunity.app.police
  *   per-caller from the private reporterUid, which is never sent to the client).
  *   A driver's own pin is still DRAWN, but its proximity alert is SUPPRESSED — you
  *   do not need warning about the patrol you just reported (see [PoliceProximity]).
+ *   `mine` also decides the tap sheet's actions: the reporter is offered Remove,
+ *   everyone else Confirm / Dispute ([PoliceDetailsSheet]).
+ * @property confirmationCount how many OTHER members have confirmed the pin is
+ *   still there (verify "still here"); 0 when none. Shown on the tap sheet.
+ * @property disputeCount how many members have disputed the pin ("Borta/Not
+ *   here"); 0 when none. Shown ALONGSIDE [confirmationCount], never netted — a
+ *   dispute informs only, it does not remove the pin.
  */
 data class PoliceReport(
     val id: String,
@@ -25,6 +32,8 @@ data class PoliceReport(
     val source: String,
     val expiresAtIso: String?,
     val mine: Boolean = false,
+    val confirmationCount: Int = 0,
+    val disputeCount: Int = 0,
 ) {
     /**
      * Whether this pin is still live at [nowMillis] — active and strictly before

@@ -172,6 +172,9 @@ import { cleanupExpired as cleanupExpiredIncidents } from './incidents/scheduled
 import { syncTrafikverket } from './incidents/trafikverket';
 import { report as reportPolice } from './police/report';
 import { listNearby as listNearbyPolice } from './police/listNearby';
+import { remove as removePolice } from './police/remove';
+import { confirm as confirmPolice, dispute as disputePolice } from './police/verify';
+import { onReportDeleted as onPoliceReportDeleted } from './police/onDeleted';
 import { captureDaily as metricsCaptureDaily } from './metrics/scheduled';
 import { estimate as financeEstimate } from './finance/estimate';
 import {
@@ -968,21 +971,41 @@ export const incidents = {
  *
  * A member drops a SHORT-LIVED police pin via `police.report` (rate-limited so
  * the map can't be flooded with fakes); the write carries a computed `geoCell`
- * and a ~40 min `expiresAt` TTL. Any active signed-in user reads ACTIVE,
- * unexpired pins near a point via `police.listNearby` (chunked `geoCell in`
+ * and a ~40 min `expiresAt` TTL. An active MEMBER reads ACTIVE,
+ * unexpired pins near a point via `police.listNearby` (member-gated —
+ * requireMemberActor + the isActiveMember read rule; chunked `geoCell in`
  * queries + Haversine radius filter), which the Android map polls on the incident
  * camera-idle cadence to draw distinct police markers AND to fire the mid-screen
  * ReactionOverlay once when the driver comes within the proximity radius of a pin.
  *
- * NO scheduled sweep: a pin has no sub-collections and both the security read
- * rule (`status=='active' && expiresAt > request.time`) and listNearby hide an
- * expired pin immediately, so a field-scoped Firestore TTL policy on
- * `policeReports.expiresAt` is the only reclaim needed (one-time deploy note in
- * police/report.ts, alongside the two rate-limit counter TTL policies).
+ * A tapped pin is interactive, modelled on the incidents sheet:
+ *  - the REPORTER removes their own pin via `police.remove` (owner-only);
+ *  - a NON-reporter verifies it via `police.confirm` (still there) or
+ *    `police.dispute` (gone) — one vote per (uid, pin) in a `votes/{uid}` ledger,
+ *    switchable, surfaced as confirmation/dispute counts on the sheet. A dispute
+ *    informs only; it does NOT auto-remove the pin (see police/verify.ts).
+ *
+ * NO scheduled sweep for the PIN document: both the security read rule
+ * (`status=='active' && expiresAt > request.time`) and listNearby hide an expired
+ * pin immediately, and a field-scoped Firestore TTL policy on
+ * `policeReports.expiresAt` reclaims the document (one-time deploy note in
+ * police/report.ts, alongside the rate-limit counter TTL policies — the verify
+ * counter TTL note is in police/verify.ts).
+ *
+ * A pin's `votes/{uid}` verify ledger is NOT reclaimed by that TTL (Firestore TTL
+ * deletes the document but does NOT cascade into sub-collections). Sub-collection
+ * cleanup is trigger-based: `police.onReportDeleted` (onDocumentDeleted) fires on
+ * EVERY pin delete — TTL expiry (the common path), `police.remove`, or an admin
+ * delete — and recursiveDeletes the votes. `police.remove` also recursiveDeletes
+ * inline; the two compose (whichever runs second finds it already empty).
  */
 export const police = {
   report: reportPolice,
   listNearby: listNearbyPolice,
+  remove: removePolice,
+  confirm: confirmPolice,
+  dispute: disputePolice,
+  onReportDeleted: onPoliceReportDeleted,
 };
 
 /**

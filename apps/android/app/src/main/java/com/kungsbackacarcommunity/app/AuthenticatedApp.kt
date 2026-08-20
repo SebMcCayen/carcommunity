@@ -418,10 +418,12 @@ import com.kungsbackacarcommunity.app.shell.MapCrownMarker
 import com.kungsbackacarcommunity.app.shell.MapBillboardMarker
 import com.kungsbackacarcommunity.app.shell.MapEventMarker
 import com.kungsbackacarcommunity.app.police.PoliceController
+import com.kungsbackacarcommunity.app.police.PoliceDetailsSheet
 import com.kungsbackacarcommunity.app.police.PoliceMapMarkers
 import com.kungsbackacarcommunity.app.police.PoliceProximityHost
 import com.kungsbackacarcommunity.app.police.PoliceReport
 import com.kungsbackacarcommunity.app.police.PoliceRepository
+import com.kungsbackacarcommunity.app.police.PoliceVerifyOutcome
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
 import com.kungsbackacarcommunity.app.shell.MapPlaceRequest
 import com.kungsbackacarcommunity.app.shell.MapPoint
@@ -1484,6 +1486,20 @@ fun AuthenticatedApp(
                 remember(tappedIncidentId, nearbyIncidents) {
                     tappedIncidentId?.let { id -> nearbyIncidents.firstOrNull { it.id == id } }
                 }
+            // Police pins render THROUGH the incident marker layer, so their tap
+            // arrives on the SAME incidentTap seam — but with a namespaced id
+            // (PoliceMapMarkers.POLICE_MARKER_ID_PREFIX). A prefixed id never
+            // matches an incident (above), so we resolve it here to the police pin
+            // it names and open the police sheet instead. Derived from nearbyPolice
+            // (not snapshotted) so a pin that ages out / is removed while its sheet
+            // is open closes it rather than describing a marker no longer on the map.
+            val tappedPolice =
+                remember(tappedIncidentId, nearbyPolice) {
+                    tappedIncidentId
+                        ?.takeIf { it.startsWith(PoliceMapMarkers.POLICE_MARKER_ID_PREFIX) }
+                        ?.removePrefix(PoliceMapMarkers.POLICE_MARKER_ID_PREFIX)
+                        ?.let { pinId -> nearbyPolice.firstOrNull { it.id == pinId } }
+                }
 
             // Community event pins on the map, visible to EVERY signed-in user
             // (deliberate 2026-07 open-up: event locations are public). Reuses the
@@ -1619,6 +1635,15 @@ fun AuthenticatedApp(
                 remember(tappedIncidentId) { mutableStateOf(false) }
             // Same one-call-per-press guard for the "Nej, den är borta" clear vote.
             var incidentClearInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
+            // One-call-per-press guards for the police pin sheet (confirm / dispute
+            // / remove). Keyed to the tapped id so a flag left set by a previous
+            // sheet does not arrive disabled on the next.
+            var policeConfirmInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
+            var policeDisputeInFlight by
+                remember(tappedIncidentId) { mutableStateOf(false) }
+            var policeRemoveInFlight by
                 remember(tappedIncidentId) { mutableStateOf(false) }
             // The viewer's own position, read ONCE per opened sheet, purely to
             // decide whether to OFFER the clear vote. It is not the position the
@@ -1924,6 +1949,14 @@ fun AuthenticatedApp(
                 stringResource(R.string.incidents_clearedNoLocation)
             val incidentClearedImportedText =
                 stringResource(R.string.incidents_clearedImportedExplanation)
+            // Police pin tap-sheet feedback (confirm / dispute / remove).
+            val policeConfirmSuccessText = stringResource(R.string.police_confirmSuccess)
+            val policeConfirmAlreadyText = stringResource(R.string.police_confirmAlready)
+            val policeDisputeSuccessText = stringResource(R.string.police_disputeSuccess)
+            val policeDisputeAlreadyText = stringResource(R.string.police_disputeAlready)
+            val policeVerifyErrorText = stringResource(R.string.police_verifyError)
+            val policeRemoveSuccessText = stringResource(R.string.police_removeSuccess)
+            val policeRemoveErrorText = stringResource(R.string.police_removeError)
 
             // ── The ONE incident-reporting path ─────────────────────────────
             //
@@ -6359,6 +6392,115 @@ fun AuthenticatedApp(
                                         removeInProgress = incidentRemoveInFlight,
                                         confirmInProgress = incidentConfirmInFlight,
                                         clearInProgress = incidentClearInFlight,
+                                        onDismiss = { mapSurface.consumeIncidentTap() },
+                                    )
+                                }
+                                // Tapping a police pin opens ITS sheet — the same
+                                // map-chrome subtree as the incident sheet (so a tap
+                                // just before a tab switch can't strand a dialog).
+                                // Rendered only while the tapped pin still resolves to
+                                // a live pin: one that ages out or is removed under an
+                                // open sheet closes it (tappedPolice → null). The
+                                // reporter is offered Remove; everyone else Confirm /
+                                // Dispute. All three close the sheet on success and
+                                // leave it open to retry on failure.
+                                val openPolice = tappedPolice
+                                if (openPolice != null && policeController != null) {
+                                    PoliceDetailsSheet(
+                                        pin = openPolice,
+                                        onConfirm = {
+                                            if (!policeConfirmInFlight) {
+                                                policeConfirmInFlight = true
+                                                scope.launch {
+                                                    val outcome =
+                                                        try {
+                                                            policeController.confirm(openPolice.id)
+                                                        } finally {
+                                                            policeConfirmInFlight = false
+                                                        }
+                                                    when (outcome) {
+                                                        is PoliceVerifyOutcome.Success -> {
+                                                            mapSurface.consumeIncidentTap()
+                                                            snackbarHostState.showSnackbar(
+                                                                if (outcome.alreadyVoted) {
+                                                                    policeConfirmAlreadyText
+                                                                } else {
+                                                                    policeConfirmSuccessText
+                                                                },
+                                                            )
+                                                        }
+                                                        is PoliceVerifyOutcome.Failed ->
+                                                            snackbarHostState.showSnackbar(
+                                                                policeVerifyErrorText,
+                                                            )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onDispute = {
+                                            if (!policeDisputeInFlight) {
+                                                policeDisputeInFlight = true
+                                                scope.launch {
+                                                    val outcome =
+                                                        try {
+                                                            policeController.dispute(openPolice.id)
+                                                        } finally {
+                                                            policeDisputeInFlight = false
+                                                        }
+                                                    when (outcome) {
+                                                        is PoliceVerifyOutcome.Success -> {
+                                                            mapSurface.consumeIncidentTap()
+                                                            snackbarHostState.showSnackbar(
+                                                                if (outcome.alreadyVoted) {
+                                                                    policeDisputeAlreadyText
+                                                                } else {
+                                                                    policeDisputeSuccessText
+                                                                },
+                                                            )
+                                                        }
+                                                        is PoliceVerifyOutcome.Failed ->
+                                                            snackbarHostState.showSnackbar(
+                                                                policeVerifyErrorText,
+                                                            )
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        onRemove = {
+                                            if (!policeRemoveInFlight) {
+                                                policeRemoveInFlight = true
+                                                scope.launch {
+                                                    // NOTE: this is whether the remove
+                                                    // call SUCCEEDED (true also for the
+                                                    // idempotent no-op when the pin had
+                                                    // already aged out) — not proof a
+                                                    // live pin was just deleted. It only
+                                                    // gates the success snackbar + tap
+                                                    // consume.
+                                                    val removeSucceeded =
+                                                        try {
+                                                            policeController.remove(openPolice.id)
+                                                        } finally {
+                                                            policeRemoveInFlight = false
+                                                        }
+                                                    // On success the pin leaves
+                                                    // nearbyPolice, so the sheet closes
+                                                    // itself; consume the tap too so a
+                                                    // stale id can't re-open anything.
+                                                    if (removeSucceeded) mapSurface.consumeIncidentTap()
+                                                    snackbarHostState.showSnackbar(
+                                                        if (removeSucceeded) {
+                                                            policeRemoveSuccessText
+                                                        } else {
+                                                            policeRemoveErrorText
+                                                        },
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        confirmInProgress = policeConfirmInFlight,
+                                        disputeInProgress = policeDisputeInFlight,
+                                        removeInProgress = policeRemoveInFlight,
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }

@@ -87,6 +87,11 @@ export const report = onCall(CALLABLE_OPTS, async (request): Promise<PoliceRepor
     // not equal `now`; clients read the authoritative value via listNearby.
     createdAt: null,
     expiresAt: expiresAt.toISOString(),
+    // A freshly-created pin has no verify votes yet. The counts are not written to
+    // the document (absent == 0, read via readVoteCount) — this keeps the create
+    // write minimal, exactly as incidents.report leaves confirmationCount absent.
+    confirmationCount: 0,
+    disputeCount: 0,
   };
 });
 

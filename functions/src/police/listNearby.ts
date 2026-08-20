@@ -34,6 +34,7 @@ import {
   parseListNearbyInput,
   policeListRateLimitDocId,
   policeListRateLimitExpiry,
+  readVoteCount,
   type PoliceReportSource,
   type PoliceReportView,
 } from './police-core';
@@ -121,6 +122,12 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         source: (data.source as PoliceReportSource) ?? 'manual',
         createdAt: tsToIso(data.createdAt),
         expiresAt: tsToIso(data.expiresAt),
+        // Both verify tallies travel to the client on every pin so the tap sheet
+        // shows "confirmed by N / disputed by N". A bulk read degrades a corrupt
+        // counter to 0 (readVoteCount) rather than dropping the marker — the
+        // opposite branch to the verify callable, which refuses to build on one.
+        confirmationCount: readVoteCount(data.confirmationCount),
+        disputeCount: readVoteCount(data.disputeCount),
       });
     }
   }

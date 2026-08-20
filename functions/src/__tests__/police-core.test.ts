@@ -21,6 +21,7 @@ import {
   POLICE_REPORT_RATE_LIMIT_WINDOW_MS,
   POLICE_REPORT_TTL_MS,
   POLICE_LIST_RATE_LIMIT_MAX,
+  POLICE_VOTE_RATE_LIMIT_MAX,
   boundingBox,
   buildPoliceReportFields,
   chunk,
@@ -38,6 +39,11 @@ import {
   policeReportRateLimitDocId,
   policeReportRateLimitExpiry,
   policeReportRateLimitWindowIndex,
+  policeVoteRateLimitDocId,
+  isValidVoteCount,
+  isUnderPoliceVoteRateLimit,
+  parseVoteInput,
+  readVoteCount,
   shouldAlertForPolice,
 } from '../police/police-core';
 
@@ -311,5 +317,50 @@ describe('input parsing', () => {
   it('isReportable rejects a NaN coordinate', () => {
     expect(isReportable(BASE_LAT, BASE_LNG)).toBe(true);
     expect(isReportable(Number.NaN, BASE_LNG)).toBe(false);
+  });
+});
+
+describe('verify ledger helpers', () => {
+  it('isValidVoteCount accepts non-negative safe integers only', () => {
+    expect(isValidVoteCount(0)).toBe(true);
+    expect(isValidVoteCount(7)).toBe(true);
+    expect(isValidVoteCount(-1)).toBe(false);
+    expect(isValidVoteCount(1.5)).toBe(false);
+    expect(isValidVoteCount(Number.NaN)).toBe(false);
+    expect(isValidVoteCount(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isValidVoteCount(undefined)).toBe(false);
+    expect(isValidVoteCount('3')).toBe(false);
+  });
+
+  it('readVoteCount normalises absent/corrupt to 0 but keeps a valid count', () => {
+    expect(readVoteCount(undefined)).toBe(0);
+    expect(readVoteCount(Number.NaN)).toBe(0);
+    expect(readVoteCount(-4)).toBe(0);
+    expect(readVoteCount(5)).toBe(5);
+  });
+
+  it('parseVoteInput requires a Firestore-safe policeReportId and rejects extras', () => {
+    expect(parseVoteInput({ policeReportId: 'abc123' }).ok).toBe(true);
+    expect(parseVoteInput({}).ok).toBe(false);
+    expect(parseVoteInput({ policeReportId: '' }).ok).toBe(false);
+    // Path separators / dot segments are rejected so .doc(id) can't throw.
+    expect(parseVoteInput({ policeReportId: 'a/b' }).ok).toBe(false);
+    expect(parseVoteInput({ policeReportId: '..' }).ok).toBe(false);
+    expect(parseVoteInput({ policeReportId: 'abc', extra: 1 }).ok).toBe(false);
+  });
+
+  it('isUnderPoliceVoteRateLimit throttles at the cap and fails OPEN on a corrupt counter', () => {
+    expect(isUnderPoliceVoteRateLimit(0)).toBe(true);
+    expect(isUnderPoliceVoteRateLimit(POLICE_VOTE_RATE_LIMIT_MAX - 1)).toBe(true);
+    expect(isUnderPoliceVoteRateLimit(POLICE_VOTE_RATE_LIMIT_MAX)).toBe(false);
+    // A garbled counter must never lock a member out of verifying.
+    expect(isUnderPoliceVoteRateLimit(Number.NaN)).toBe(true);
+  });
+
+  it('policeVoteRateLimitDocId shares the report window index', () => {
+    const nowMs = 1_770_000_000_000;
+    expect(policeVoteRateLimitDocId('uid-9', nowMs)).toBe(
+      `uid-9_${policeReportRateLimitWindowIndex(nowMs)}`,
+    );
   });
 });

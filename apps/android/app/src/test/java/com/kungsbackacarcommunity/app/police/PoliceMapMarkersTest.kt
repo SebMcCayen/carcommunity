@@ -1,5 +1,7 @@
 package com.kungsbackacarcommunity.app.police
 
+import com.kungsbackacarcommunity.app.incidents.IncidentPalette
+import com.kungsbackacarcommunity.app.incidents.IncidentType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -7,7 +9,7 @@ import org.junit.Test
 /**
  * The pure police-pin → map-marker mapping. Police markers render THROUGH the
  * shared incident marker layer, so this only pins the id namespacing and the
- * distinct police look; the actual Mapbox draw is device-only.
+ * police look; the actual Mapbox draw is device-only.
  */
 class PoliceMapMarkersTest {
     private fun pin(id: String) =
@@ -21,11 +23,18 @@ class PoliceMapMarkersTest {
     }
 
     @Test
-    fun `uses the distinct red disc and white glyph and never the reported-gone fade`() {
+    fun `uses the police-blue disc and white glyph and never the reported-gone fade`() {
         val marker = PoliceMapMarkers.markers(listOf(pin("a"))).single()
         assertEquals(PoliceMapMarkers.DISC_COLOR_ARGB, marker.colorArgb)
         assertEquals(PoliceMapMarkers.GLYPH_COLOR_ARGB, marker.glyphColorArgb)
         assertEquals(false, marker.reportedCleared)
+    }
+
+    @Test
+    fun `police disc is the same blue as the incidents Police category`() {
+        // Seb chose the shared "police = blue" look. Pin the disc equal to the
+        // incidents police blue so the two layers cannot silently drift apart.
+        assertEquals(IncidentPalette.colorArgb(IncidentType.POLICE), PoliceMapMarkers.DISC_COLOR_ARGB)
     }
 
     @Test

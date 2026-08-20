@@ -1115,8 +1115,10 @@ service cloud.firestore {
     // the helper), which also matches police.listNearby's requireMemberActor.
     // Double-gated on top: status == 'active' AND expiresAt still in the future,
     // so an expired pin is hidden immediately even before the Firestore TTL
-    // policy on expiresAt reclaims it (there is no scheduled sweep — a pin has no
-    // sub-collections). ALL writes go through the member-gated, rate-limited
+    // policy on expiresAt reclaims it. No scheduled sweep for the pin doc; its
+    // `votes/{uid}` verify-ledger sub-collection (which the TTL delete does NOT
+    // cascade to) is reclaimed by the police-onReportDeleted onDelete trigger.
+    // ALL writes go through the member-gated, rate-limited
     // police.report callable (Admin SDK) — no client writes, so a member cannot
     // forge another user's pin or backdate its expiry.
     // -------------------------------------------------------------------------
@@ -1124,7 +1126,16 @@ service cloud.firestore {
       allow read: if isActiveMember()
         && resource.data.status == 'active'
         && resource.data.expiresAt > request.time;
-      // No client writes — police.report (callable) only.
+      // No client writes — police.report / police.remove / police.confirm /
+      // police.dispute (callables) only.
+      //
+      // The `votes/{uid}` sub-collection (the one-per-user verify ledger written by
+      // police.confirm / police.dispute) is deliberately NOT matched here: this
+      // block does not recurse into sub-collections, so the deny-all catch-all
+      // governs it and it stays callable-only — a member must not be able to forge
+      // a vote, enumerate who verified a pin, or bump a count directly. The vote
+      // state a client needs comes back from the callables and from listNearby
+      // (confirmationCount / disputeCount on each pin).
     }
 
     // -------------------------------------------------------------------------
@@ -1149,6 +1160,18 @@ service cloud.firestore {
     // member's ability to report a police pin.
     // -------------------------------------------------------------------------
     match /policeListRateLimits/{windowId} {
+      allow read, write: if false;
+    }
+
+    // -------------------------------------------------------------------------
+    // policeVoteRateLimits – per-user fixed-window counter SHARED by police.confirm
+    // and police.dispute (the pin verify actions). Same mechanism, same backend-
+    // only posture and same `expireAt` TTL as policeListRateLimits, in a SEPARATE
+    // collection so a burst of verifies can never consume a member's ability to
+    // report a police pin (or refresh the map). Never client-readable or
+    // client-writable: a member must not inspect or reset their own verify throttle.
+    // -------------------------------------------------------------------------
+    match /policeVoteRateLimits/{windowId} {
       allow read, write: if false;
     }
 
