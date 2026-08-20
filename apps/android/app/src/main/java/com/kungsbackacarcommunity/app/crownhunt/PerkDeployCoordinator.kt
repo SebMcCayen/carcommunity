@@ -26,10 +26,11 @@ enum class PerkDeployFailureReason {
     UNAVAILABLE,
 
     /**
-     * Too many perk effects are already live — the concurrent activation limit
-     * ([com.kungsbackacarcommunity.app] mirrors the server's
-     * `MAX_CONCURRENT_ACTIVE_PERKS`) was hit. The one deploy rejection that
-     * carries a structured `details.reason`, so it gets its own message.
+     * Too many perk effects are already live — the server-side concurrent
+     * activation limit (`MAX_CONCURRENT_ACTIVE_PERKS` in functions
+     * `crownHunt/perks-core.ts`, enforced in the deploy transaction) was hit. The
+     * one deploy rejection that carries a structured `details.reason`, so it gets
+     * its own message.
      */
     ACTIVATION_LIMIT,
 

@@ -196,11 +196,13 @@ describe('perks-core display mirror', () => {
 });
 
 describe('perks-core bilingual names (every perk has BOTH languages)', () => {
-  it('gives each catalog perk a non-empty distinct Swedish + English name', () => {
+  it('gives each catalog perk a non-empty Swedish + English name that differ', () => {
     for (const id of PERK_IDS) {
       const perk = PERK_CATALOG[id];
       expect(perk.name.trim().length).toBeGreaterThan(0);
       expect(perk.nameEn.trim().length).toBeGreaterThan(0);
+      // Every perk has a REAL English name, not the Swedish one copied over.
+      expect(perk.nameEn).not.toBe(perk.name);
     }
   });
 
