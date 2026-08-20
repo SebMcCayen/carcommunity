@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { DAILY_POINTS_CAP } from '../points/points-economy-core';
 import {
   CROWN_HUNT_PERKS_FLAG_DEFAULT,
   CROWN_HUNT_PERKS_FLAG_KEY,
@@ -258,12 +259,31 @@ describe('perks-core hold cap (buy/hold ceiling)', () => {
   });
 
   it('refuses a buy that would exceed the total held VALUE cap', () => {
-    // 6 spike strips (900) + 6 boosts (720) = 1620 held value; buying 4 shields
-    // (400) would push to 2020 > 2000, while shield's post-buy count (4) stays
-    // under the 6-per-perk count cap so it is the VALUE ceiling that bites.
-    const inventory = { spike_strip: 6, boost: 6 };
-    expect(evaluateHoldCap(inventory, 'shield', 4, 100)).toBe('total_value');
-    expect(MAX_PERK_HOLD_VALUE_KP).toBe(2000);
+    // Derive the scenario from the constants rather than hardcoding a cap value
+    // — a stale hardcoded cap is exactly what broke this test last time. Max out
+    // the two OTHER perks, then buy the smallest shield quantity whose added
+    // value tips the summed hold over the ceiling, while staying under the
+    // per-perk COUNT cap so it is provably the VALUE ceiling that bites.
+    const boughtPerk = 'shield';
+    const otherPerkIds = PERK_IDS.filter((id) => id !== boughtPerk);
+    const inventory = Object.fromEntries(
+      otherPerkIds.map((id) => [id, MAX_PERK_HOLD_PER_PERK]),
+    );
+    const heldValue = otherPerkIds.reduce(
+      (sum, id) => sum + PERK_CATALOG[id].costKp * MAX_PERK_HOLD_PER_PERK,
+      0,
+    );
+    const unitCost = PERK_CATALOG[boughtPerk].costKp;
+    const qty = Math.floor((MAX_PERK_HOLD_VALUE_KP - heldValue) / unitCost) + 1;
+
+    // The scenario only tests the VALUE ceiling if the tipping buy still fits
+    // under the per-perk COUNT cap; assert that so a future constant change that
+    // makes it infeasible fails loudly here instead of silently passing.
+    expect(qty).toBeGreaterThan(0);
+    expect(qty).toBeLessThanOrEqual(MAX_PERK_HOLD_PER_PERK);
+    expect(evaluateHoldCap(inventory, boughtPerk, qty, unitCost)).toBe('total_value');
+    // The value ceiling is anchored to the daily points cap by design.
+    expect(MAX_PERK_HOLD_VALUE_KP).toBe(DAILY_POINTS_CAP);
   });
 
   it('treats a corrupt/negative stored count as zero (never bypasses the cap)', () => {
