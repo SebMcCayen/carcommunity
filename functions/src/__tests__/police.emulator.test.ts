@@ -629,3 +629,27 @@ describe('police.confirm / police.dispute (verify)', () => {
     expect(code).toBe('functions/resource-exhausted');
   });
 });
+
+describe('police.onReportDeleted (votes-ledger cleanup trigger)', () => {
+  it('recursiveDeletes a pin votes ledger when the pin document is deleted (TTL/admin path)', async () => {
+    const owner = await createProvisionedUser('pol-del-owner');
+    const id = await seedPin(owner.uid);
+    // Seed a vote in the ledger so there is a sub-collection to reclaim.
+    const voteRef = adminDb
+      .collection('policeReports')
+      .doc(id)
+      .collection('votes')
+      .doc('voter-uid');
+    await voteRef.set({ uid: 'voter-uid', kind: 'confirm' });
+    expect((await voteRef.get()).exists).toBe(true);
+
+    // Delete the pin DOCUMENT directly — this mimics the common reclaim path (a
+    // Firestore TTL expiry deletes only the doc, not its sub-collections; TTL
+    // deletes fire onDocumentDeleted, as does an admin console delete).
+    await adminDb.collection('policeReports').doc(id).delete();
+
+    // The trigger recursiveDeletes the votes sub-collection asynchronously; poll
+    // until the orphan is gone rather than leaking storage.
+    await pollUntil(async () => ((await voteRef.get()).exists ? undefined : true));
+  });
+});
