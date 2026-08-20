@@ -113,7 +113,11 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
         id: doc.id,
         latitude: lat,
         longitude: lng,
-        reporterUid: (data.reporterUid as string | null) ?? null,
+        // Per-caller ownership only — the raw reporterUid is NEVER returned to a
+        // client (privacy), it is compared here to the authenticated caller so the
+        // reporter's own pin can suppress its proximity alert without leaking who
+        // reported any other pin.
+        mine: (data.reporterUid as string | null) === actor.uid,
         source: (data.source as PoliceReportSource) ?? 'manual',
         createdAt: tsToIso(data.createdAt),
         expiresAt: tsToIso(data.expiresAt),

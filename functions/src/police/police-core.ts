@@ -438,12 +438,25 @@ export function buildPoliceReportFields(params: {
   };
 }
 
-/** Shape returned to clients by `police.report` / `police.listNearby`. */
+/**
+ * Shape returned to clients by `police.report` / `police.listNearby`.
+ *
+ * PRIVACY: the pin's `reporterUid` is stored server-side but is DELIBERATELY NOT
+ * on this view — who reported a patrol must never leak to other members. Instead
+ * the callable resolves a single boolean, {@link mine}, for the CURRENT caller, so
+ * a client can tell "this is my own pin" without ever learning anyone else's uid.
+ */
 export interface PoliceReportView {
   id: string;
   latitude: number;
   longitude: number;
-  reporterUid: string | null;
+  /**
+   * True when the CURRENT caller reported this pin. The client uses it to SUPPRESS
+   * the proximity alert for a driver's own report (you don't need warning about
+   * the patrol you just tapped) while STILL drawing the pin on their map. Derived
+   * per-caller from the private `reporterUid`; the uid itself is never exposed.
+   */
+  mine: boolean;
   source: PoliceReportSource;
   createdAt: string | null;
   expiresAt: string | null;

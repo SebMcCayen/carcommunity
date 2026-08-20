@@ -103,6 +103,9 @@ object PoliceResponseParser {
             longitude = longitude,
             source = (map["source"] as? String) ?: PoliceRepository.SOURCE_MANUAL,
             expiresAtIso = map["expiresAt"] as? String,
+            // Server-resolved per-caller ownership; absent/legacy payloads default
+            // to false (not mine), so an old row simply keeps alerting as before.
+            mine = (map["mine"] as? Boolean) ?: false,
         )
     }
 }
