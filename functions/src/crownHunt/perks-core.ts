@@ -517,9 +517,12 @@ export function perkPowerKp(perk: PerkDefinition): number {
     case 'shield':
       // KP loss the shield can avoid over its window (the victim daily-loss cap).
       return MAX_TRAP_LOSS_KP_PER_DAY;
-    default:
-      return 0;
   }
+  // Exhaustiveness guard (NO `default`): adding a PerkKind narrows `perk` to that
+  // new member here instead of `never` and fails to compile, forcing a deliberate
+  // power definition rather than silently pricing the new perk at the floor.
+  const exhaustive: never = perk;
+  return exhaustive;
 }
 
 /**

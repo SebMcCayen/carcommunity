@@ -427,18 +427,19 @@ internal fun perkPurchaseFailedPreconditionException(
     }
 
 /**
- * Maps a `deployPerk` callable failure to the two typed rejection families.
- * Unlike `buyPerk`, the deploy callable attaches NO structured `details.reason`
- * — it distinguishes cases only by HttpsError CODE + a (localizable) message —
- * so the mapping keys on the CODE, never on a substring of the message:
+ * Maps a `deployPerk` callable failure to its typed rejection family. The deploy
+ * callable reason-codes EXACTLY ONE rejection — the concurrent-activation limit —
+ * via a structured `details.reason`; every OTHER `failed-precondition` carries no
+ * reason and is distinguished only by its HttpsError CODE (never by substring-
+ * matching a localizable message):
  *  - `invalid-argument` → [PerkDeployMissingLocationException] (a trap with no
  *    valid current position; the only invalid-argument the deploy path throws
  *    for a well-formed request from this client).
  *  - `failed-precondition` with `details.reason == "activation_limit"` →
  *    [PerkDeployActivationLimitException] (too many effects live at once — the
- *    one deploy rejection that DOES carry a structured reason).
- *  - any other `failed-precondition` → [PerkDeployUnavailableException] (flag
- *    off, unknown perk, no inventory, trap cap / spacing / daily limit).
+ *    one deploy rejection that carries a structured reason).
+ *  - any other `failed-precondition` (no reason) → [PerkDeployUnavailableException]
+ *    (flag off, unknown perk, no inventory, trap cap / spacing / daily limit).
  * Anything else (network, internal) propagates unchanged and surfaces as UNKNOWN.
  */
 private fun FirebaseFunctionsException.toPerkDeployException(): Throwable =
