@@ -44,10 +44,11 @@ const val OWN_DOT_PERK_OVERLAY_TAG = "perk_own_dot_overlay"
  * (same seam as the nearby-live overlay), NOT a Mapbox annotation, so it stays
  * out of the map-surface file and is testable without a device.
  *
- * A car/game-inspired glyph: a dark road strip studded with spikes, ringed by a
- * faint dashed "only you can see this" halo. Expired traps are filtered against a
- * moving now ([nowProvider]) so a trap that runs out while the map is open drops
- * off without a Firestore re-emit.
+ * A car/game-inspired glyph: a purple bear-trap — two opposing jaws of
+ * inward-pointing teeth around a spring plate — with a slow purple pulse and a
+ * faint "only you can see this" halo. Expired traps are filtered against a moving
+ * now ([nowProvider]) so a trap that runs out while the map is open drops off
+ * without a Firestore re-emit.
  */
 @Composable
 fun SpikeStripOverlay(
