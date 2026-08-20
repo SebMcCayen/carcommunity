@@ -303,6 +303,12 @@ fun MapHome(
     // slot from the convoy layer so the two live-marker kinds stay visually
     // distinct and either can be present without the other.
     nearbyOverlay: (@Composable () -> Unit)? = null,
+    // Optional Kronjakt PERK map layer: the placer-only hidden spike-strip markers
+    // + the own-dot shield/double-points effects. Same map-layer slot idiom as
+    // [nearbyOverlay] (a Compose layer ON the map, UNDER the floating chrome),
+    // projected through the map surface. Null (crownHuntPerks off / nothing active)
+    // composes nothing.
+    perkOverlay: (@Composable () -> Unit)? = null,
     // Optional convoy REACTIONS layer: the bottom-centre reaction buttons (police /
     // hello-goodbye / follow-me) ABOVE the shell's bottom bar, plus the mid-screen
     // reaction overlay that pops when a member reacts. A slot for the same reason
@@ -589,6 +595,11 @@ fun MapHome(
         // same map layer, just above the convoy layer and still UNDER all the
         // floating chrome.
         nearbyOverlay?.invoke()
+
+        // Kronjakt perk map layer: the placer-only hidden spike-strip markers and
+        // the own-dot shield / double-points effects. Same map layer as the live
+        // overlays, under the floating chrome.
+        perkOverlay?.invoke()
 
         // The long-press place pin: an animated marker on the picked point while
         // the place menu is open, so the menu and the pin reference the SAME spot.

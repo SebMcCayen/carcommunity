@@ -416,8 +416,21 @@ describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () 
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'perkInventory', OWNER), { shield: 2, boost: 1 });
       await setDoc(doc(ctx.firestore(), 'config', 'perkCatalog'), {
-        version: 1,
-        perks: [{ perkId: 'shield', kind: 'shield', name: 'Sköld', iconKey: 'x', costKp: 100 }],
+        version: 2,
+        perks: [
+          { perkId: 'shield', kind: 'shield', name: 'Sköld', nameEn: 'Shield', iconKey: 'x', costKp: 100 },
+        ],
+      });
+      // An armed spike-strip trap the OWNER placed — the placer-only hidden-trap
+      // map marker reads exactly this (activePerks where placedByUid == uid).
+      await setDoc(doc(ctx.firestore(), 'activePerks', 'trap-owner'), {
+        placedByUid: OWNER,
+        status: 'armed',
+        lat: 57.48,
+        lng: 12.07,
+        radiusM: 100,
+        victimCount: 0,
+        expiresAt: Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000),
       });
     });
   });
@@ -437,6 +450,34 @@ describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () 
     await assertFails(updateDoc(doc(ownerFs, 'perkInventory', OWNER), { shield: 999 }));
     await assertFails(setDoc(doc(ownerFs, 'perkInventory', OWNER), { boost: 999 }));
     await assertFails(deleteDoc(doc(ownerFs, 'perkInventory', OWNER)));
+  });
+
+  it('a spike-strip trap is readable ONLY by the placer (hidden from everyone else)', async () => {
+    // The placer sees their own armed trap — both by id and via the map query
+    // (placedByUid == uid, status == armed) — so the placer-only marker can draw.
+    const ownerFs = testEnv.authenticatedContext(OWNER).firestore();
+    await assertSucceeds(getDoc(doc(ownerFs, 'activePerks', 'trap-owner')));
+    await assertSucceeds(
+      getDocs(
+        query(
+          collection(ownerFs, 'activePerks'),
+          where('placedByUid', '==', OWNER),
+          where('status', '==', 'armed'),
+        ),
+      ),
+    );
+
+    // Nobody else may read it — a Spikmatta is invisible to rivals. Neither a
+    // direct get nor a scoped query for the placer's traps is allowed.
+    const otherFs = testEnv.authenticatedContext(OTHER).firestore();
+    await assertFails(getDoc(doc(otherFs, 'activePerks', 'trap-owner')));
+    await assertFails(
+      getDocs(query(collection(otherFs, 'activePerks'), where('placedByUid', '==', OWNER))),
+    );
+    // And no client may write a trap (a trap moves KP).
+    await assertFails(
+      setDoc(doc(otherFs, 'activePerks', 'trap-forged'), { placedByUid: OTHER, status: 'armed' }),
+    );
   });
 
   it('any authenticated non-suspended user reads the display catalog; suspended users and clients cannot write it', async () => {

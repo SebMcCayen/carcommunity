@@ -212,12 +212,15 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
+import com.kungsbackacarcommunity.app.crownhunt.OwnDotPerkOverlay
+import com.kungsbackacarcommunity.app.crownhunt.OwnTrapMarker
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeploy
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployMenuState
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployPopup
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployStatus
 import com.kungsbackacarcommunity.app.crownhunt.PerkShopRepository
+import com.kungsbackacarcommunity.app.crownhunt.SpikeStripOverlay
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
@@ -622,6 +625,62 @@ private fun laterOf(a: Long?, b: Long?): Long? =
         b == null -> a
         else -> maxOf(a, b)
     }
+
+/** Everything the Kronjakt perk MAP layer draws, folded into one state. */
+private data class PerkMapOverlayState(
+    /** The caller's own armed spike-strip traps (placer-only, hidden from others). */
+    val ownTraps: List<OwnTrapMarker>,
+    /** The caller's own live position (null when not sharing / unknown). */
+    val ownLatitude: Double?,
+    val ownLongitude: Double?,
+    /** Shield expiry (later of the public doc and this session's deploy), or null. */
+    val shieldActiveUntilMillis: Long?,
+    /** Boost expiry (this session's deploy — perkBoost has no public mirror), or null. */
+    val boostActiveUntilMillis: Long?,
+) {
+    companion object {
+        val EMPTY = PerkMapOverlayState(emptyList(), null, null, null, null)
+    }
+}
+
+/**
+ * Folds the perk map layer's live sources — the caller's own armed traps
+ * ([PerkShopRepository.observeOwnActiveTraps]), their live position, and their
+ * shield/boost active windows — into one [PerkMapOverlayState]. Unlike
+ * [combinePerkDeployMenu] this runs whenever the map is showing (not only while
+ * the deploy menu is open), so a placer sees their own trap and a shielded/boosted
+ * member sees their own-dot effect while driving. Position is [ownPositionFlow]
+ * (empty when not sharing), so the own-dot effects simply do not draw until a
+ * position is known.
+ */
+private fun combinePerkMapOverlay(
+    repository: PerkShopRepository,
+    coordinator: PerkDeployCoordinator,
+    ownPositionFlow: Flow<LiveMarker?>,
+    uid: String,
+): Flow<PerkMapOverlayState> {
+    val session =
+        combine(coordinator.shieldActiveUntilMillis, coordinator.boostActiveUntilMillis) {
+            shieldSession,
+            boostSession,
+            ->
+            shieldSession to boostSession
+        }
+    return combine(
+        repository.observeOwnActiveTraps(uid),
+        repository.observeShieldActiveUntil(uid),
+        ownPositionFlow,
+        session,
+    ) { traps, shieldPublicUntil, ownPosition, (shieldSessionUntil, boostSessionUntil) ->
+        PerkMapOverlayState(
+            ownTraps = traps,
+            ownLatitude = ownPosition?.latitude,
+            ownLongitude = ownPosition?.longitude,
+            shieldActiveUntilMillis = laterOf(shieldPublicUntil, shieldSessionUntil),
+            boostActiveUntilMillis = boostSessionUntil,
+        )
+    }
+}
 
 /**
  * Stable feature key for the end-of-session drive save (the backend fingerprints
@@ -5247,6 +5306,56 @@ fun AuthenticatedApp(
                         null
                     }
 
+                // CROWN HUNT PERK MAP LAYER. The placer-only hidden spike-strip
+                // markers (own armed traps, invisible to everyone else) + the own-dot
+                // shield / double-points effects. Live whenever the flag is on and a
+                // repo + uid exist; the own position feeds it only while sharing (so
+                // the own-dot effects simply don't draw until a position is known),
+                // while own traps show regardless so a placer always sees where they
+                // dropped one. Dark until the contract-default-OFF crownHuntPerks flag.
+                val perkMapActive =
+                    crownHuntPerksEnabled && perkDeployRepository != null &&
+                        perkDeployCoordinator != null && uid.isNotBlank()
+                val perkMapOverlayState by
+                    remember(perkMapActive, liveLocationRepository, isSharing, uid) {
+                        if (perkMapActive) {
+                            val ownPositionFlow: Flow<LiveMarker?> =
+                                if (liveLocationRepository != null && isSharing) {
+                                    liveLocationRepository.observeLatest(uid)
+                                } else {
+                                    flowOf(null)
+                                }
+                            combinePerkMapOverlay(
+                                perkDeployRepository!!,
+                                perkDeployCoordinator!!,
+                                ownPositionFlow,
+                                uid,
+                            )
+                        } else {
+                            flowOf(PerkMapOverlayState.EMPTY)
+                        }
+                    }
+                        .collectAsState(initial = PerkMapOverlayState.EMPTY)
+
+                val perkOverlaySlot: (@Composable () -> Unit)? =
+                    if (perkMapActive) {
+                        {
+                            SpikeStripOverlay(
+                                mapSurface = mapSurface,
+                                traps = perkMapOverlayState.ownTraps,
+                            )
+                            OwnDotPerkOverlay(
+                                mapSurface = mapSurface,
+                                ownLatitude = perkMapOverlayState.ownLatitude,
+                                ownLongitude = perkMapOverlayState.ownLongitude,
+                                shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
+                                boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
                 // Police-proximity mid-screen alert, composed over the map like the
                 // convoy reactions. REUSES the same ReactionOverlay + police visuals,
                 // driven here by MAP PROXIMITY to user-reported police pins. Always
@@ -6046,6 +6155,10 @@ fun AuthenticatedApp(
                                     // arrows, drawn on the map under the chrome.
                                     convoyOverlay = convoyOverlaySlot,
                                     nearbyOverlay = nearbyOverlaySlot,
+                                    // Kronjakt perk map layer: placer-only hidden
+                                    // spike-strip markers + own-dot shield / double-
+                                    // points effects. Null unless crownHuntPerks is on.
+                                    perkOverlay = perkOverlaySlot,
                                     // Convoy reaction buttons (bottom-centre, above
                                     // the bottom bar) + the mid-screen reaction pop.
                                     // Null unless in an active convoy.

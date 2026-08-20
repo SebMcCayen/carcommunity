@@ -27,6 +27,21 @@ data class PerkPurchaseResult(
     val alreadyPurchased: Boolean,
 )
 
+/**
+ * One of the caller's OWN armed spike-strip traps, for the placer-only map
+ * marker. A Spikmatta is INVISIBLE to everyone but the member who placed it
+ * (firestore.rules scopes the `activePerks` read to `placedByUid == uid`), so
+ * this marker only ever renders the caller's own traps — the whole point of a
+ * hidden trap. Carries the drop coordinate (never exposed to any other client)
+ * and the expiry so a just-expired trap can be filtered against a moving now.
+ */
+data class OwnTrapMarker(
+    val trapId: String,
+    val latitude: Double,
+    val longitude: Double,
+    val expiresAtMillis: Long,
+)
+
 /** Outcome of a successful `crownHunt-deployPerk` call. */
 data class PerkDeployResult(
     val perkId: String,
@@ -150,6 +165,18 @@ interface PerkShopRepository {
      * enabled; the server still enforces the cap).
      */
     fun observeActiveTrapExpiries(uid: String): Flow<List<Long>>
+
+    /**
+     * The caller's own currently-armed spike-strip traps WITH their drop
+     * coordinates ([OwnTrapMarker]), for the placer-only hidden-trap map marker.
+     * Same owner-scoped `activePerks` query as [observeActiveTrapExpiries]
+     * (placedByUid == uid, status == 'armed'), but projects the position too so
+     * the map can draw where each of the placer's own traps sits — a trap no
+     * other client may read (firestore.rules). Emits an empty list on absence or
+     * a transient error (fail-safe → no markers), never surfacing an error state
+     * onto the map.
+     */
+    fun observeOwnActiveTraps(uid: String): Flow<List<OwnTrapMarker>>
 
     /**
      * Deploys ONE unit of [perkId] via the `crownHunt-deployPerk` callable.
@@ -304,6 +331,38 @@ class FirebasePerkShopRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeOwnActiveTraps(uid: String): Flow<List<OwnTrapMarker>> = callbackFlow {
+        // Same owner-scoped, generously-lower-bounded armed-trap query as
+        // observeActiveTrapExpiries, but reads the drop coordinate too. The client
+        // filters just-expired traps against a moving now where it renders; here we
+        // only drop rows missing a usable coordinate/expiry. Uses the composite
+        // index activePerks(placedByUid, status, expiresAt).
+        var loadedOnce = false
+        var emittedFallback = false
+        val lowerBound = Timestamp(Date(System.currentTimeMillis() - TRAP_QUERY_MARGIN_MS))
+        val query =
+            firestore
+                .collection(ACTIVE_PERKS)
+                .whereEqualTo(PLACED_BY_UID, uid)
+                .whereEqualTo(STATUS, TRAP_STATUS_ARMED)
+                .whereGreaterThan(EXPIRES_AT, lowerBound)
+        val registration =
+            query.addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    // Fail-safe to empty (never surface a read error onto the map),
+                    // emitted at most once before any successful load.
+                    if (!loadedOnce && !emittedFallback) {
+                        emittedFallback = true
+                        trySend(emptyList())
+                    }
+                    return@addSnapshotListener
+                }
+                loadedOnce = true
+                trySend(snapshot?.documents.orEmpty().mapNotNull { it.toOwnTrapMarker() })
+            }
+        awaitClose { registration.remove() }
+    }
+
     override suspend fun deployPerk(
         perkId: String,
         latitude: Double?,
@@ -349,6 +408,8 @@ class FirebasePerkShopRepository private constructor(
         private const val STATUS = "status"
         private const val EXPIRES_AT = "expiresAt"
         private const val TRAP_STATUS_ARMED = "armed"
+        private const val TRAP_LAT = "lat"
+        private const val TRAP_LNG = "lng"
 
         /**
          * Safety margin (ms) subtracted from `now` for the armed-trap query's
@@ -481,6 +542,28 @@ private fun parseIsoMillis(iso: String?): Long? {
     val value = iso?.takeIf { it.isNotBlank() } ?: return null
     return runCatching { java.time.Instant.parse(value).toEpochMilli() }.getOrNull()
 }
+
+/**
+ * Parses one `activePerks` armed-trap document into an [OwnTrapMarker], or null
+ * when it lacks a usable coordinate or expiry (a malformed row is skipped, not
+ * drawn at a bogus spot). The field names mirror what `crownHunt.deployPerk`
+ * writes (`lat`, `lng`, `expiresAt`).
+ */
+private fun DocumentSnapshot.toOwnTrapMarker(): OwnTrapMarker? {
+    val latitude = (get(TRAP_LAT_FIELD) as? Number)?.toDouble() ?: return null
+    val longitude = (get(TRAP_LNG_FIELD) as? Number)?.toDouble() ?: return null
+    val expiresAtMillis = getTimestamp(EXPIRES_AT_FIELD)?.toDate()?.time ?: return null
+    return OwnTrapMarker(
+        trapId = id,
+        latitude = latitude,
+        longitude = longitude,
+        expiresAtMillis = expiresAtMillis,
+    )
+}
+
+private const val TRAP_LAT_FIELD = "lat"
+private const val TRAP_LNG_FIELD = "lng"
+private const val EXPIRES_AT_FIELD = "expiresAt"
 
 /** Parses the `config/perkCatalog` mirror's `perks` array into display entries. */
 private fun DocumentSnapshot.toCatalogEntries(): List<PerkCatalogEntry> {

@@ -141,6 +141,8 @@ class PerkShopTest {
 
         override fun observeActiveTrapExpiries(uid: String) = throw UnsupportedOperationException()
 
+        override fun observeOwnActiveTraps(uid: String) = throw UnsupportedOperationException()
+
         override suspend fun deployPerk(
             perkId: String,
             latitude: Double?,
