@@ -1115,8 +1115,10 @@ service cloud.firestore {
     // the helper), which also matches police.listNearby's requireMemberActor.
     // Double-gated on top: status == 'active' AND expiresAt still in the future,
     // so an expired pin is hidden immediately even before the Firestore TTL
-    // policy on expiresAt reclaims it (there is no scheduled sweep — a pin has no
-    // sub-collections). ALL writes go through the member-gated, rate-limited
+    // policy on expiresAt reclaims it. No scheduled sweep for the pin doc; its
+    // `votes/{uid}` verify-ledger sub-collection (which the TTL delete does NOT
+    // cascade to) is reclaimed by the police-onReportDeleted onDelete trigger.
+    // ALL writes go through the member-gated, rate-limited
     // police.report callable (Admin SDK) — no client writes, so a member cannot
     // forge another user's pin or backdate its expiry.
     // -------------------------------------------------------------------------

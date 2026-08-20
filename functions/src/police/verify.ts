@@ -80,9 +80,10 @@ async function castVote(data: unknown, uid: string, kind: PoliceVoteKind): Promi
   }
   const policeReportId = parsed.input.policeReportId;
 
-  // A verify cannot forge a pin (one vote per uid, deduped below), so a slip in
-  // this non-transactional counter is harmless — it only caps FREQUENCY. Checked
-  // before the main transaction so a throttled call costs ~one counter get.
+  // A verify cannot forge a pin (one vote per uid, deduped below); this shared
+  // counter only caps FREQUENCY. Enforced in its OWN transaction (exact under
+  // concurrency — see enforceVoteRateLimit) before the main vote transaction, so
+  // a throttled call costs ~one counter read.
   await enforceVoteRateLimit(uid);
 
   const ref = db.collection('policeReports').doc(policeReportId);
