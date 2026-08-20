@@ -27,7 +27,7 @@ import { readFeatureFlag } from '../shared/featureFlags';
 import { toUserAccessState } from '../shared/access';
 import { memberGateAllows } from '../shared/memberGating';
 import { debitPoints } from '../points/ledger';
-import { DEBIT_OVERDRAFT_MESSAGE } from '../points/points-core';
+import { DEBIT_OVERDRAFT_MESSAGE, toStoredBalance } from '../points/points-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
@@ -185,6 +185,17 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
       },
       // Read-phase guard: hold cap + purchase cooldown, atomic with the debit.
       async (tx) => {
+        // Affordability FIRST, so an insufficient-funds rejection always WINS over
+        // a cooldown / hold-cap one. If the member cannot afford the buy, return
+        // without a limit throw and let the ledger's own overdraft guard reject it
+        // (mapped to `insufficient_funds`) — otherwise a broke member at their
+        // cooldown / hold-cap would get the wrong reason. This also skips the
+        // inventory + cooldown reads on what is really an overdraft.
+        const ledgerSnap = await tx.get(db.collection('pointsLedger').doc(uid));
+        if (toStoredBalance(ledgerSnap.data()?.balance) < cost) {
+          return;
+        }
+
         const [invSnap, cooldownSnap] = await Promise.all([
           tx.get(inventoryRef),
           tx.get(cooldownRef),

@@ -36,7 +36,7 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   MAX_PERK_HOLD_PER_PERK,
@@ -382,5 +382,34 @@ describe('crownHunt.buyPerk — economy limits (hold cap + purchase cooldown)', 
     expect(err.code).toBe('functions/failed-precondition');
     expect(err.reason).toBe('purchase_cooldown');
     expect((await readInventory(buyer.uid)).shield ?? 0).toBe(0);
+  });
+
+  it('insufficient funds WINS over an active purchase cooldown (right reason)', async () => {
+    const broke = await createProvisionedUser('perk-broke-cooldown');
+    await adminDb.collection('users').doc(broke.uid).set({ activeMember: true }, { merge: true });
+    await setBalance(broke.uid, 0); // cannot afford anything
+    // …AND is inside an active cooldown.
+    await adminDb
+      .collection('perkPurchaseCooldowns')
+      .doc(broke.uid)
+      .set({ uid: broke.uid, lastPurchaseAt: Timestamp.now() });
+    await signInAs(broke);
+
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
+    // The blocking problem is the empty balance, so that reason must win.
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('insufficient_funds');
+  });
+
+  it('insufficient funds WINS over the hold cap (right reason)', async () => {
+    const broke = await createProvisionedUser('perk-broke-holdcap');
+    await adminDb.collection('users').doc(broke.uid).set({ activeMember: true }, { merge: true });
+    await setBalance(broke.uid, 0); // cannot afford anything
+    await setInventory(broke.uid, { shield: MAX_PERK_HOLD_PER_PERK }); // …AND at the cap
+    await signInAs(broke);
+
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('insufficient_funds');
   });
 });
