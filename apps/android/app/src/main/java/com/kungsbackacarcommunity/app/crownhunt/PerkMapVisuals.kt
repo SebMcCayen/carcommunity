@@ -28,6 +28,22 @@ object PerkMapVisuals {
         expiresAtMillis != null && expiresAtMillis > nowMillis
 
     /**
+     * The 0..1 "appear" fraction of the double-points "+" glyph at [index] of
+     * [total], given a global 0..1 [progress] sweep. Each glyph opens over its own
+     * slice of the sweep so the plus signs fade / scale in one after another (a
+     * staggered bloom) rather than all at once, and the whole ring is fully open at
+     * progress = 1. Pure, so the stagger curve is unit-tested without Compose or a
+     * running animation clock.
+     */
+    fun staggeredAppearAlpha(index: Int, total: Int, progress: Float): Float {
+        if (total <= 0 || index < 0 || index >= total) return 0f
+        val p = progress.coerceIn(0f, 1f)
+        val start = index.toFloat() / total
+        val span = 1f / total
+        return ((p - start) / span).coerceIn(0f, 1f)
+    }
+
+    /**
      * Whether the own-dot overlay has anything to draw: a live shield, a live
      * boost, or at least one live own trap. When false the overlay composes
      * nothing at all, so a member with no active perk adds no map layer.

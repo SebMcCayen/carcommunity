@@ -53,4 +53,35 @@ class PerkMapVisualsTest {
         assertTrue(PerkMapVisuals.hasAnything(emptyList(), 2_000L, null, now))
         assertTrue(PerkMapVisuals.hasAnything(emptyList(), null, 2_000L, now))
     }
+
+    @Test
+    fun `staggeredAppearAlpha opens each glyph over its own slice of the sweep`() {
+        val total = 4
+        // At progress 0 nothing has opened yet.
+        for (i in 0 until total) {
+            assertEquals(0f, PerkMapVisuals.staggeredAppearAlpha(i, total, 0f), 1e-4f)
+        }
+        // At progress 1 every glyph is fully open.
+        for (i in 0 until total) {
+            assertEquals(1f, PerkMapVisuals.staggeredAppearAlpha(i, total, 1f), 1e-4f)
+        }
+        // The first glyph leads the last: partway through, earlier glyphs are more open.
+        val mid = 0.5f
+        assertTrue(
+            PerkMapVisuals.staggeredAppearAlpha(0, total, mid) >
+                PerkMapVisuals.staggeredAppearAlpha(total - 1, total, mid),
+        )
+        // Glyph 0 finishes opening at the end of its own slice (1/total).
+        assertEquals(1f, PerkMapVisuals.staggeredAppearAlpha(0, total, 1f / total), 1e-4f)
+    }
+
+    @Test
+    fun `staggeredAppearAlpha clamps out-of-range indices and progress`() {
+        assertEquals(0f, PerkMapVisuals.staggeredAppearAlpha(0, 0, 0.5f), 1e-4f)
+        assertEquals(0f, PerkMapVisuals.staggeredAppearAlpha(-1, 4, 0.5f), 1e-4f)
+        assertEquals(0f, PerkMapVisuals.staggeredAppearAlpha(4, 4, 0.5f), 1e-4f)
+        // Progress is clamped to 0..1.
+        assertEquals(1f, PerkMapVisuals.staggeredAppearAlpha(0, 4, 5f), 1e-4f)
+        assertEquals(0f, PerkMapVisuals.staggeredAppearAlpha(3, 4, -1f), 1e-4f)
+    }
 }

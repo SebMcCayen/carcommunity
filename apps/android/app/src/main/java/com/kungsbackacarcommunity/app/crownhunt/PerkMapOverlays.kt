@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,7 +21,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.kungsbackacarcommunity.app.shell.MapProjection
@@ -120,22 +118,28 @@ fun OwnDotPerkOverlay(
     val boostActive = PerkMapVisuals.isEffectActive(boostActiveUntilMillis, now)
 
     val transition = rememberInfiniteTransition(label = "own_dot_perk")
-    val pulse by transition.animateFloat(
+    // A slow, smooth 0..1..0 breath (~2 s each leg) for the green shield pulse.
+    val shieldPulse by transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1_400, easing = FastOutSlowInEasing),
+                animation = tween(2_000, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
-        label = "own_dot_pulse",
+        label = "own_dot_shield_pulse",
     )
-    val spin by transition.animateFloat(
+    // A slow 0..1 sweep that staggers the blue "+" glyphs into view (and, on the
+    // reverse leg, gently back out) so double-points "slowly appears" around the dot.
+    val boostAppear by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
+        targetValue = 1f,
         animationSpec =
-            infiniteRepeatable(animation = tween(3_600, easing = LinearEasing)),
-        label = "own_dot_spin",
+            infiniteRepeatable(
+                animation = tween(2_600, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "own_dot_boost_appear",
     )
 
     Box(modifier = modifier.fillMaxSize().testTag(OWN_DOT_PERK_OVERLAY_TAG)) {
@@ -148,8 +152,8 @@ fun OwnDotPerkOverlay(
             val point = mapSurface.screenPositionFor(lat, lng) ?: return@Canvas
             if (!point.trustworthy) return@Canvas
             val centre = Offset(point.x, point.y)
-            if (boostActive) drawBoostRing(centre, spin)
-            if (shieldActive) drawShieldAura(centre, pulse)
+            if (boostActive) drawBoostPluses(centre, boostAppear)
+            if (shieldActive) drawShieldAura(centre, shieldPulse)
         }
     }
 }
@@ -159,17 +163,16 @@ fun OwnDotPerkOverlay(
 // indicators read the same in day/night map styles).
 // ---------------------------------------------------------------------------
 
-/** Shield blue. */
-private val SHIELD_COLOR = Color(0xFF3D9BFF)
+/** Shield green ("protected"). */
+private val SHIELD_COLOR = Color(0xFF34C759)
 
-/** Double-points gold. */
-private val BOOST_COLOR = Color(0xFFFFC233)
+/** Double-points blue. */
+private val BOOST_COLOR = Color(0xFF2F8BFF)
 
-/** Spike-strip road-dark + steel. */
-private val SPIKE_BASE_COLOR = Color(0xFF2B2B2B)
-private val SPIKE_STEEL_COLOR = Color(0xFFC7CDD4)
+/** Spike-strip / bear-trap purple. */
+private val TRAP_PURPLE = Color(0xFF9B5CFF)
 
-/** A slow 0..1 shimmer shared by the spike markers. */
+/** A slow 0..1 shimmer shared by the spike (bear-trap) markers. */
 @Composable
 private fun rememberPerkPulse(): Float {
     val transition = rememberInfiniteTransition(label = "spike_pulse")
@@ -178,7 +181,7 @@ private fun rememberPerkPulse(): Float {
         targetValue = 1f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1_600, easing = FastOutSlowInEasing),
+                animation = tween(1_900, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "spike_pulse_value",
@@ -186,89 +189,140 @@ private fun rememberPerkPulse(): Float {
     return pulse
 }
 
-/** A pulsing protective ring (an expanding, fading halo + a solid inner ring). */
+/**
+ * The own-dot SHIELD: a slowly pulsing GREEN shield hung on the member's position
+ * — an expanding, fading halo ("pulsates around the dot") plus a shield badge that
+ * gently breathes with the same [pulse].
+ */
 private fun DrawScope.drawShieldAura(centre: Offset, pulse: Float) {
-    val base = 26.dp.toPx()
-    // Expanding, fading outer pulse.
+    // Expanding, fading outer pulse ring.
+    val haloBase = 24.dp.toPx()
     drawCircle(
-        color = SHIELD_COLOR.copy(alpha = 0.30f * (1f - pulse)),
-        radius = base + pulse * 16.dp.toPx(),
+        color = SHIELD_COLOR.copy(alpha = 0.35f * (1f - pulse)),
+        radius = haloBase + pulse * 18.dp.toPx(),
         center = centre,
         style = Stroke(width = 4.dp.toPx()),
     )
-    // Solid inner protective ring.
-    drawCircle(
-        color = SHIELD_COLOR.copy(alpha = 0.85f),
-        radius = base,
-        center = centre,
-        style = Stroke(width = 3.dp.toPx()),
-    )
+
+    // The shield badge, gently scaling with the pulse.
+    val scale = 1f + 0.10f * pulse
+    val halfW = 15.dp.toPx() * scale
+    val top = centre.y - 20.dp.toPx() * scale
+    val shoulder = centre.y - 6.dp.toPx() * scale
+    val bottom = centre.y + 16.dp.toPx() * scale
+
+    val shield = androidx.compose.ui.graphics.Path().apply {
+        moveTo(centre.x, top)
+        lineTo(centre.x + halfW, shoulder)
+        quadraticBezierTo(centre.x + halfW, bottom - 8.dp.toPx(), centre.x, bottom)
+        quadraticBezierTo(centre.x - halfW, bottom - 8.dp.toPx(), centre.x - halfW, shoulder)
+        close()
+    }
+    // Soft translucent fill + a solid green outline so it reads on any map style.
+    drawPath(shield, color = SHIELD_COLOR.copy(alpha = 0.22f + 0.10f * pulse))
+    drawPath(shield, color = SHIELD_COLOR.copy(alpha = 0.90f), style = Stroke(width = 3.dp.toPx()))
+
+    // A check tick to read as "protected".
+    val tick = androidx.compose.ui.graphics.Path().apply {
+        moveTo(centre.x - 6.dp.toPx(), centre.y + 1.dp.toPx())
+        lineTo(centre.x - 1.dp.toPx(), centre.y + 6.dp.toPx())
+        lineTo(centre.x + 7.dp.toPx(), centre.y - 5.dp.toPx())
+    }
+    drawPath(tick, color = SHIELD_COLOR.copy(alpha = 0.95f), style = Stroke(width = 3.dp.toPx()))
 }
 
-/** A rotating gold ring of sparkle ticks — the "double points" active effect. */
-private fun DrawScope.drawBoostRing(centre: Offset, spinDegrees: Float) {
-    val radius = 34.dp.toPx()
+/**
+ * The own-dot DOUBLE-POINTS effect: semi-transparent blue "+" glyphs arranged
+ * around the dot that slowly fade / scale in one after another ([appear] 0..1,
+ * staggered per-glyph through [PerkMapVisuals.staggeredAppearAlpha]).
+ */
+private fun DrawScope.drawBoostPluses(centre: Offset, appear: Float) {
+    val count = 6
+    val ringRadius = 30.dp.toPx()
+    val armMax = 6.dp.toPx()
+    val stroke = 3.dp.toPx()
+    for (i in 0 until count) {
+        val a = PerkMapVisuals.staggeredAppearAlpha(i, count, appear)
+        if (a <= 0.01f) continue
+        // Start at the top and space evenly around the dot.
+        val angle = (-Math.PI / 2) + (2.0 * Math.PI * i / count)
+        val pos = centre + Offset(cos(angle).toFloat(), sin(angle).toFloat()) * ringRadius
+        val arm = armMax * (0.5f + 0.5f * a) // scale-in
+        val alpha = 0.65f * a // semi-transparent, fading in
+        drawLine(
+            color = BOOST_COLOR.copy(alpha = alpha),
+            start = Offset(pos.x - arm, pos.y),
+            end = Offset(pos.x + arm, pos.y),
+            strokeWidth = stroke,
+        )
+        drawLine(
+            color = BOOST_COLOR.copy(alpha = alpha),
+            start = Offset(pos.x, pos.y - arm),
+            end = Offset(pos.x, pos.y + arm),
+            strokeWidth = stroke,
+        )
+    }
+}
+
+/**
+ * The placer-only SPIKMATTA marker: a bear-trap glyph — two opposing jaws of
+ * inward-pointing teeth around a spring plate, tinted purple with a slow purple
+ * [pulse]. Drawn with Compose Canvas (no external asset).
+ */
+private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float) {
+    val ringR = 15.dp.toPx() * (1f + 0.06f * pulse)
+    val toothLen = 6.dp.toPx()
+    val alpha = 0.55f + 0.45f * pulse
+
+    // Pulsing "only you can see this" halo.
     drawCircle(
-        color = BOOST_COLOR.copy(alpha = 0.55f),
-        radius = radius,
+        color = TRAP_PURPLE.copy(alpha = 0.28f * (1f - pulse)),
+        radius = ringR + 10.dp.toPx() * pulse,
         center = centre,
         style = Stroke(width = 2.dp.toPx()),
     )
-    // Twelve sparkle ticks rotating around the dot.
-    rotate(degrees = spinDegrees, pivot = centre) {
-        val ticks = 12
-        val tick = 5.dp.toPx()
-        for (i in 0 until ticks) {
-            val angle = (2.0 * Math.PI * i / ticks)
-            val dir = Offset(cos(angle).toFloat(), sin(angle).toFloat())
-            val inner = centre + dir * (radius - tick)
-            val outer = centre + dir * (radius + tick)
-            drawLine(
-                color = BOOST_COLOR,
-                start = inner,
-                end = outer,
-                strokeWidth = 2.5.dp.toPx(),
-            )
-        }
-    }
-}
 
-/** A compact spike-strip glyph: a dark strip studded with steel spikes + a halo. */
-private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float) {
-    val halfW = 14.dp.toPx()
-    val halfH = 4.dp.toPx()
-    val spikeH = 6.dp.toPx()
-
-    // Faint dashed "only you can see this" halo, gently pulsing.
+    // The spring plate (soft fill + purple ring).
+    drawCircle(color = TRAP_PURPLE.copy(alpha = 0.18f), radius = ringR, center = centre)
     drawCircle(
-        color = SPIKE_STEEL_COLOR.copy(alpha = 0.25f + 0.20f * pulse),
-        radius = halfW + 8.dp.toPx(),
+        color = TRAP_PURPLE.copy(alpha = alpha),
+        radius = ringR,
         center = centre,
-        style = Stroke(width = 1.5.dp.toPx()),
+        style = Stroke(width = 2.5.dp.toPx()),
     )
 
-    // The road strip (a dark rounded bar).
-    drawRoundRect(
-        color = SPIKE_BASE_COLOR.copy(alpha = 0.95f),
-        topLeft = Offset(centre.x - halfW, centre.y - halfH),
-        size = androidx.compose.ui.geometry.Size(halfW * 2, halfH * 2),
-        cornerRadius = androidx.compose.ui.geometry.CornerRadius(halfH, halfH),
-    )
-
-    // Steel spikes across the top edge.
-    val spikes = 5
-    val step = (halfW * 2) / spikes
-    for (i in 0 until spikes) {
-        val cx = centre.x - halfW + step * (i + 0.5f)
-        val baseY = centre.y - halfH
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(cx - step * 0.35f, baseY)
-            lineTo(cx, baseY - spikeH)
-            lineTo(cx + step * 0.35f, baseY)
-            close()
+    // Two opposing jaws of inward-pointing teeth, with a gap at each hinge (sides).
+    val teethPerJaw = 6
+    val jaws = listOf(20.0 to 160.0, 200.0 to 340.0)
+    val half = Math.toRadians(7.0)
+    for ((startDeg, endDeg) in jaws) {
+        for (i in 0 until teethPerJaw) {
+            val t = i / (teethPerJaw - 1.0)
+            val ang = Math.toRadians(startDeg + (endDeg - startDeg) * t)
+            val base1 = centre + dir(ang - half) * ringR
+            val base2 = centre + dir(ang + half) * ringR
+            val apex = centre + dir(ang) * (ringR - toothLen)
+            val tooth = androidx.compose.ui.graphics.Path().apply {
+                moveTo(base1.x, base1.y)
+                lineTo(apex.x, apex.y)
+                lineTo(base2.x, base2.y)
+                close()
+            }
+            drawPath(tooth, color = TRAP_PURPLE.copy(alpha = alpha))
         }
-        drawPath(path, color = SPIKE_STEEL_COLOR)
     }
+
+    // Spring nubs at the two hinges (left / right).
+    for (side in listOf(0.0, 180.0)) {
+        val nub = centre + dir(Math.toRadians(side)) * (ringR + 4.dp.toPx())
+        drawCircle(color = TRAP_PURPLE.copy(alpha = alpha), radius = 3.dp.toPx(), center = nub)
+    }
+
+    // The pressure plate at the centre.
+    drawCircle(color = TRAP_PURPLE.copy(alpha = alpha), radius = 3.5.dp.toPx(), center = centre)
 }
+
+private fun dir(angleRad: Double): Offset =
+    Offset(cos(angleRad).toFloat(), sin(angleRad).toFloat())
 
 private operator fun Offset.times(scalar: Float): Offset = Offset(x * scalar, y * scalar)

@@ -5370,6 +5370,35 @@ fun AuthenticatedApp(
                     }
                         .collectAsState(initial = PerkMapOverlayState.EMPTY)
 
+                // The own-dot shield / double-points effects hang on the member's
+                // OWN map position. While live-sharing that comes from the published
+                // live marker (perkMapOverlayState.ownLatitude); but a member can
+                // activate a Shield or Double Points WITHOUT sharing, in which case
+                // the live marker is null and the effect had nothing to hang on (the
+                // reported "shield / double-points show nothing"). So when an own-dot
+                // effect is active but no shared position exists, fall back to a cheap
+                // device fix (mirrors the crown-range poll) — exactly where the Mapbox
+                // puck sits. Traps are unaffected (they carry their own coordinates).
+                val ownEffectActive =
+                    perkMapOverlayState.shieldActiveUntilMillis != null ||
+                        perkMapOverlayState.boostActiveUntilMillis != null
+                val needOwnFix = perkMapActive && ownEffectActive &&
+                    perkMapOverlayState.ownLatitude == null
+                var perkOwnDeviceFix by remember { mutableStateOf<LatLng?>(null) }
+                LaunchedEffect(needOwnFix) {
+                    if (!needOwnFix) {
+                        perkOwnDeviceFix = null
+                        return@LaunchedEffect
+                    }
+                    val appCtx = context.applicationContext
+                    while (true) {
+                        perkOwnDeviceFix =
+                            CurrentLocation.currentFix(appCtx)
+                                ?: CurrentLocation.lastKnown(appCtx)
+                        delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
+                    }
+                }
+
                 val perkOverlaySlot: (@Composable () -> Unit)? =
                     if (perkMapActive) {
                         {
@@ -5379,8 +5408,10 @@ fun AuthenticatedApp(
                             )
                             OwnDotPerkOverlay(
                                 mapSurface = mapSurface,
-                                ownLatitude = perkMapOverlayState.ownLatitude,
-                                ownLongitude = perkMapOverlayState.ownLongitude,
+                                ownLatitude = perkMapOverlayState.ownLatitude
+                                    ?: perkOwnDeviceFix?.latitude,
+                                ownLongitude = perkMapOverlayState.ownLongitude
+                                    ?: perkOwnDeviceFix?.longitude,
                                 shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
                                 boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
                             )
