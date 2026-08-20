@@ -5414,22 +5414,54 @@ fun AuthenticatedApp(
                     perkOwnDeviceFix = null
                 }
 
+                // Whether a shield/boost effect is live RIGHT NOW — the MOUNT GATE for
+                // the own-dot overlay. A self-terminating 1s ticker (only while the
+                // window is open) flips this false exactly at expiry, so the overlay
+                // unmounts and its infinite transition + internal ticker stop; re-keys
+                // on the expiry so a new activation remounts it. Nothing wakes at all
+                // while no effect has been activated (the loop sets false and exits).
+                var perkEffectActive by remember { mutableStateOf(false) }
+                LaunchedEffect(perkMapActive, ownEffectExpiry) {
+                    if (!perkMapActive || ownEffectExpiry == null) {
+                        perkEffectActive = false
+                        return@LaunchedEffect
+                    }
+                    while (true) {
+                        val active =
+                            PerkMapVisuals.isEffectActive(
+                                ownEffectExpiry,
+                                System.currentTimeMillis(),
+                            )
+                        perkEffectActive = active
+                        if (!active) break
+                        delay(1_000L)
+                    }
+                }
+
+                // Gate each overlay at the CALL SITE so it isn't composed while idle:
+                // no rememberInfiniteTransition, no per-second ticker, zero wakes when
+                // there is nothing to draw. Mounts on activation, unmounts on expiry
+                // (own-dot) / when the trap list empties (spike strip).
                 val perkOverlaySlot: (@Composable () -> Unit)? =
                     if (perkMapActive) {
                         {
-                            SpikeStripOverlay(
-                                mapSurface = mapSurface,
-                                traps = perkMapOverlayState.ownTraps,
-                            )
-                            OwnDotPerkOverlay(
-                                mapSurface = mapSurface,
-                                ownLatitude = perkMapOverlayState.ownLatitude
-                                    ?: perkOwnDeviceFix?.latitude,
-                                ownLongitude = perkMapOverlayState.ownLongitude
-                                    ?: perkOwnDeviceFix?.longitude,
-                                shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
-                                boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
-                            )
+                            if (perkMapOverlayState.ownTraps.isNotEmpty()) {
+                                SpikeStripOverlay(
+                                    mapSurface = mapSurface,
+                                    traps = perkMapOverlayState.ownTraps,
+                                )
+                            }
+                            if (perkEffectActive) {
+                                OwnDotPerkOverlay(
+                                    mapSurface = mapSurface,
+                                    ownLatitude = perkMapOverlayState.ownLatitude
+                                        ?: perkOwnDeviceFix?.latitude,
+                                    ownLongitude = perkMapOverlayState.ownLongitude
+                                        ?: perkOwnDeviceFix?.longitude,
+                                    shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
+                                    boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
+                                )
+                            }
                         }
                     } else {
                         null
