@@ -206,32 +206,44 @@ export const dispute = onCall(CALLABLE_OPTS, async (request): Promise<VerifyResp
 });
 
 /**
- * Fixed-window per-user rate limit SHARED by confirm + dispute — same mechanism as
- * police.listNearby (deterministic counter doc read by id, bumped with
- * FieldValue.increment, TTL-reaped via `expireAt`), in its own collection so a
+ * Fixed-window per-user rate limit SHARED by confirm + dispute — a deterministic
+ * counter doc read by id and TTL-reaped via `expireAt`, in its own collection so a
  * burst of verifies can never starve reporting or map refreshes.
+ *
+ * TRANSACTIONAL with an absolute write (read + 1), NOT a plain get→check→increment:
+ * this is a HARD 10/60s cap, so concurrent confirm/dispute calls from the same uid
+ * must not all observe a below-cap count and each increment past the budget. Same
+ * exactness (and rationale) as {@link enforceReportRateLimit} in report.ts.
  */
 async function enforceVoteRateLimit(uid: string): Promise<void> {
   const nowMs = Date.now();
   const ref = db.collection(POLICE_VOTE_RATE_LIMIT_COLLECTION).doc(policeVoteRateLimitDocId(uid, nowMs));
 
-  const snap = await ref.get();
-  const currentCount = snap.get('count');
-  if (!isUnderPoliceVoteRateLimit(typeof currentCount === 'number' ? currentCount : 0)) {
-    throw new HttpsError(
-      'resource-exhausted',
-      'Too many police verifications in a short time — please slow down and try again shortly.',
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const stored = snap.get('count');
+    const currentCount = typeof stored === 'number' ? stored : 0;
+    if (!isUnderPoliceVoteRateLimit(currentCount)) {
+      // Thrown inside the transaction: it aborts (no write) and propagates. Not a
+      // Firestore contention error, so it is NOT retried — a clean reject.
+      throw new HttpsError(
+        'resource-exhausted',
+        'Too many police verifications in a short time — please slow down and try again shortly.',
+      );
+    }
+    // Absolute write of the consistent read + 1 (not FieldValue.increment) so
+    // simultaneous verifies can't each see below-cap and overshoot; it also caps a
+    // corrupt prior value rather than compounding it.
+    tx.set(
+      ref,
+      {
+        count: currentCount + 1,
+        uid,
+        expireAt: Timestamp.fromDate(policeVoteRateLimitExpiry(nowMs)),
+      },
+      { merge: true },
     );
-  }
-
-  await ref.set(
-    {
-      count: FieldValue.increment(1),
-      uid,
-      expireAt: Timestamp.fromDate(policeVoteRateLimitExpiry(nowMs)),
-    },
-    { merge: true },
-  );
+  });
 }
 
 // One-time deploy step for the verify counter's TTL (spent windows self-delete):
