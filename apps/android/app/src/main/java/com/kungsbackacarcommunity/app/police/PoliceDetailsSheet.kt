@@ -96,17 +96,18 @@ fun PoliceDetailsSheet(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // BOTH tallies, always, whenever either is non-zero — never one
-                // netted number. The reader is about to drive into the spot.
-                if (pin.confirmationCount > 0) {
+                // BOTH tallies, TOGETHER, whenever EITHER is non-zero — never one
+                // line on its own (which would read like a single netted verdict).
+                // The reader is about to drive into the spot, so "3 confirm / 1 says
+                // gone" — including the 0 on the empty side — serves them better than
+                // half the picture. Nothing is shown at all until someone has voted.
+                if (pin.confirmationCount > 0 || pin.disputeCount > 0) {
                     Text(
                         text = stringResource(R.string.police_confirmedBy, pin.confirmationCount),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.testTag(POLICE_DETAILS_CONFIRM_COUNT_TAG),
                     )
-                }
-                if (pin.disputeCount > 0) {
                     Text(
                         text = stringResource(R.string.police_disputedBy, pin.disputeCount),
                         style = MaterialTheme.typography.bodySmall,
