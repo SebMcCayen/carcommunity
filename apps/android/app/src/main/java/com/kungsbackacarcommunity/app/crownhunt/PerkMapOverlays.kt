@@ -219,12 +219,15 @@ private fun DrawScope.drawShieldAura(centre: Offset, pulse: Float) {
     val top = centre.y - 20.dp.toPx() * scale
     val shoulder = centre.y - 6.dp.toPx() * scale
     val bottom = centre.y + 16.dp.toPx() * scale
+    // Scale the bottom-Bezier control inset with the badge too, so the whole shape
+    // scales uniformly through the pulse instead of distorting near the point.
+    val controlInset = 8.dp.toPx() * scale
 
     val shield = androidx.compose.ui.graphics.Path().apply {
         moveTo(centre.x, top)
         lineTo(centre.x + halfW, shoulder)
-        quadraticBezierTo(centre.x + halfW, bottom - 8.dp.toPx(), centre.x, bottom)
-        quadraticBezierTo(centre.x - halfW, bottom - 8.dp.toPx(), centre.x - halfW, shoulder)
+        quadraticBezierTo(centre.x + halfW, bottom - controlInset, centre.x, bottom)
+        quadraticBezierTo(centre.x - halfW, bottom - controlInset, centre.x - halfW, shoulder)
         close()
     }
     // Soft translucent fill + a solid green outline so it reads on any map style.
