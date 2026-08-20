@@ -65,6 +65,15 @@ export const PERK_PURCHASE_REASON_HOLD_CAP = 'hold_cap_reached';
  * write-storm; a normal shopper never sees it.
  */
 export const PERK_PURCHASE_REASON_COOLDOWN = 'purchase_cooldown';
+/**
+ * Log-only fallback reason for a `failed-precondition` the buy path did NOT
+ * itself reason-code — chiefly the ledger's suspended/deleted-account guard,
+ * which reaches the buyPerk catch without a `details.reason`. Distinct from
+ * {@link PERK_PURCHASE_REASON_SHOP_UNAVAILABLE} so operational log analysis does
+ * not mislabel an account-state rejection as the shop being off. Never surfaced
+ * to the client as a typed reason (it is a diagnostic label only).
+ */
+export const PERK_PURCHASE_REASON_PRECONDITION_OTHER = 'precondition_other';
 
 /**
  * `details.reason` discriminators deployPerk attaches to the NEW anti-abuse
@@ -618,6 +627,29 @@ export function purchaseCooldownDocId(uid: string): string {
 export function isWithinPurchaseCooldown(lastPurchaseAtMs: number | null, nowMs: number): boolean {
   if (lastPurchaseAtMs === null || !Number.isFinite(lastPurchaseAtMs)) return false;
   return nowMs - lastPurchaseAtMs < PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
+}
+
+/**
+ * Whether a buy must be REFUSED for the purchase cooldown, given whether the
+ * cooldown doc exists and its stored `lastPurchaseAt` (epoch-ms, or null when the
+ * field is absent / the wrong type).
+ *
+ * FAILS CLOSED on corrupt data: a cooldown doc that EXISTS but carries no usable
+ * timestamp is treated as a just-now purchase (refuse), so a missing/garbled
+ * `lastPurchaseAt` cannot silently DISABLE this anti-burst control. No doc at all
+ * is a genuine first purchase and is allowed. Split from
+ * {@link isWithinPurchaseCooldown} because that pure window check cannot tell
+ * "doc absent" (allow) from "doc present but invalid" (refuse) — only the caller,
+ * which knows whether the doc exists, can.
+ */
+export function purchaseCooldownBlocks(
+  cooldownDocExists: boolean,
+  lastPurchaseAtMs: number | null,
+  nowMs: number,
+): boolean {
+  if (!cooldownDocExists) return false;
+  if (lastPurchaseAtMs === null || !Number.isFinite(lastPurchaseAtMs)) return true;
+  return isWithinPurchaseCooldown(lastPurchaseAtMs, nowMs);
 }
 
 // ---------------------------------------------------------------------------

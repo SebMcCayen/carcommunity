@@ -35,10 +35,11 @@ import {
   PERK_PURCHASE_REASON_COOLDOWN,
   PERK_PURCHASE_REASON_HOLD_CAP,
   PERK_PURCHASE_REASON_INSUFFICIENT_FUNDS,
+  PERK_PURCHASE_REASON_PRECONDITION_OTHER,
   PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
   evaluateHoldCap,
-  isWithinPurchaseCooldown,
   parseBuyPerkInput,
+  purchaseCooldownBlocks,
   perkById,
   perkCost,
   perkPurchaseLedgerKey,
@@ -190,8 +191,12 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
         ]);
 
         const lastPurchaseAt = cooldownSnap.data()?.lastPurchaseAt as Timestamp | undefined;
+        // Fail closed: a cooldown doc that exists but has a missing/invalid
+        // lastPurchaseAt is treated as a just-now purchase (refuse), so corrupt
+        // data cannot disable this anti-burst control.
         if (
-          isWithinPurchaseCooldown(
+          purchaseCooldownBlocks(
+            cooldownSnap.exists,
             lastPurchaseAt instanceof Timestamp ? lastPurchaseAt.toMillis() : null,
             now.getTime(),
           )
@@ -242,9 +247,12 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
     // and must reach the client unchanged, info-logged like every other
     // reason-coded rejection above. No PII: reason + perk catalog id + qty.
     if (err instanceof HttpsError && err.code === 'failed-precondition') {
+      // Prefer the rejection's own reason; a precondition WITHOUT one (chiefly the
+      // ledger's suspended/deleted-account guard) logs as `precondition_other`, so
+      // an account-state rejection is not mislabelled as the shop being off.
       const reason = (err.details as { reason?: string } | undefined)?.reason;
       logger.info('crownHunt.buyPerk rejected', {
-        reason: reason ?? PERK_PURCHASE_REASON_SHOP_UNAVAILABLE,
+        reason: reason ?? PERK_PURCHASE_REASON_PRECONDITION_OTHER,
         perkId,
         qty,
       });

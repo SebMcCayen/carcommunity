@@ -365,4 +365,22 @@ describe('crownHunt.buyPerk — economy limits (hold cap + purchase cooldown)', 
     // The second buy granted nothing.
     expect((await readInventory(buyer.uid)).boost ?? 0).toBe(0);
   });
+
+  it('fails CLOSED when the cooldown doc exists but its timestamp is corrupt', async () => {
+    const buyer = await createProvisionedUser('perk-cooldown-corrupt');
+    await adminDb.collection('users').doc(buyer.uid).set({ activeMember: true }, { merge: true });
+    await setBalance(buyer.uid, 5000);
+    // A cooldown doc that EXISTS but carries NO lastPurchaseAt — corrupt data must
+    // not silently disable the anti-burst control.
+    await adminDb
+      .collection('perkPurchaseCooldowns')
+      .doc(buyer.uid)
+      .set({ uid: buyer.uid });
+    await signInAs(buyer);
+
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('purchase_cooldown');
+    expect((await readInventory(buyer.uid)).shield ?? 0).toBe(0);
+  });
 });

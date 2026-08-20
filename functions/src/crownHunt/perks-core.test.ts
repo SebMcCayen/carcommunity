@@ -32,6 +32,7 @@ import {
   perkCost,
   perkPowerKp,
   perkPurchaseLedgerKey,
+  purchaseCooldownBlocks,
   purchaseCooldownDocId,
   referencePerkCostKp,
   scopePerkPurchaseKey,
@@ -280,6 +281,20 @@ describe('perks-core purchase cooldown', () => {
     expect(isWithinPurchaseCooldown(now - (windowMs - 1), now)).toBe(true);
     expect(isWithinPurchaseCooldown(now - windowMs, now)).toBe(false);
     expect(isWithinPurchaseCooldown(null, now)).toBe(false);
+  });
+
+  it('purchaseCooldownBlocks fails CLOSED on a corrupt cooldown doc', () => {
+    const now = 1_000_000;
+    const windowMs = PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
+    // No doc = genuine first purchase = allowed.
+    expect(purchaseCooldownBlocks(false, null, now)).toBe(false);
+    // Doc exists with a valid, in-window timestamp = blocked; past the window = allowed.
+    expect(purchaseCooldownBlocks(true, now - 1, now)).toBe(true);
+    expect(purchaseCooldownBlocks(true, now - windowMs, now)).toBe(false);
+    // Doc EXISTS but the timestamp is missing/invalid = fail closed (blocked), so
+    // corrupt data cannot disable the anti-burst control.
+    expect(purchaseCooldownBlocks(true, null, now)).toBe(true);
+    expect(purchaseCooldownBlocks(true, Number.NaN, now)).toBe(true);
   });
 });
 
