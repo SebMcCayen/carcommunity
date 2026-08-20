@@ -88,11 +88,15 @@ fun SpikeStripOverlay(
 
 /**
  * The own-dot SHIELD aura + DOUBLE-POINTS effect. Both hang on the member's OWN
- * live position marker: a pulsing protective ring for an active Sköld, and a
- * rotating sparkle ring for an active Dubbla poäng. Non-blocking, decorative, and
- * placer-only by construction (it reads the caller's own position + own effect
- * windows). Renders nothing when neither effect is active or the own position is
- * unknown (not sharing yet).
+ * map position: a slowly pulsing GREEN shield badge + halo for an active Sköld,
+ * and semi-transparent BLUE "+" glyphs that fade / scale in staggered around the
+ * dot for an active Dubbla poäng. Non-blocking, decorative, and placer-only by
+ * construction (it reads the caller's own position + own effect windows).
+ *
+ * The own position is supplied by the caller ([ownLatitude] / [ownLongitude]):
+ * the published live marker while live-sharing, else a device-location fallback,
+ * so the effects draw over the dot whether or not the member is sharing. Renders
+ * nothing when neither effect is active or the own position is unknown.
  */
 @Composable
 fun OwnDotPerkOverlay(

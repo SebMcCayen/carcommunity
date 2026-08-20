@@ -5402,9 +5402,12 @@ fun AuthenticatedApp(
                     // loop alive); a re-activation that extends the window restarts this
                     // effect (keyed on the expiry).
                     while (PerkMapVisuals.isEffectActive(ownEffectExpiry, System.currentTimeMillis())) {
-                        perkOwnDeviceFix =
-                            CurrentLocation.currentFix(appCtx)
-                                ?: CurrentLocation.lastKnown(appCtx)
+                        // lastKnown ONLY (cache-first, with its own single fresh
+                        // fallback when there is no cache): a decorative status aura
+                        // doesn't need a bleeding-edge fix, and lastKnown already falls
+                        // back to currentFix internally — chaining `currentFix ?:
+                        // lastKnown` would ask getCurrentLocation twice per tick.
+                        perkOwnDeviceFix = CurrentLocation.lastKnown(appCtx)
                         delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
                     }
                     // Window elapsed: drop the fix so a stale position isn't reused.
