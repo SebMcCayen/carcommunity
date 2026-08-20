@@ -634,8 +634,10 @@ export function isWithinPurchaseCooldown(lastPurchaseAtMs: number | null, nowMs:
 
 /**
  * Whether a buy must be REFUSED for the purchase cooldown, given whether the
- * cooldown doc exists and its stored `lastPurchaseAt` (epoch-ms, or null when the
- * field is absent / the wrong type).
+ * cooldown doc exists and its `lastPurchaseAt` — STORED as a Firestore
+ * `Timestamp` (buyPerk writes `Timestamp.fromDate(now)`) but passed HERE as
+ * epoch-ms after the caller's `.toMillis()`, or null when the field is absent /
+ * the wrong type.
  *
  * FAILS CLOSED on corrupt data: a cooldown doc that EXISTS but carries no usable
  * timestamp is treated as a just-now purchase (refuse), so a missing/garbled
