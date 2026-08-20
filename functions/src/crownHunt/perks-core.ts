@@ -547,7 +547,7 @@ export function referencePerkCostKp(perk: PerkDefinition): number {
 //      (3) times a day, so a PERK_HOLD_DAYS_BUFFER (2)-day working stock is
 //      3 × 2 = 6. A member can prep a couple of days ahead, not stockpile weeks.
 //   2. TOTAL VALUE — MAX_PERK_HOLD_VALUE_KP. The summed (count × costKp) a member
-//      may hold is one capped DAY of earnings (DAILY_POINTS_CAP, 1500 KP), so the
+//      may hold is one capped DAY of earnings (DAILY_POINTS_CAP), so the
 //      aggregate banked perk-power tracks the economy regardless of how cheap any
 //      single perk is. Anchoring to the same DAILY_POINTS_CAP the crown economy
 //      uses keeps the shop balanced against everything else that spends KP.
