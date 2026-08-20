@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
@@ -67,6 +68,10 @@ fun SpikeStripOverlay(
         }
     }
     val pulse = rememberPerkPulse()
+    // One reusable Path for the bear-trap teeth, so the continuously-animated
+    // Canvas re-fills it (reset per tooth) instead of allocating a fresh Path each
+    // frame — the tooth geometry is static, only the purple pulse animates.
+    val toothPath = remember { Path() }
 
     Box(modifier = modifier.fillMaxSize().testTag(SPIKE_STRIP_OVERLAY_TAG)) {
         camera ?: return@Box
@@ -80,7 +85,7 @@ fun SpikeStripOverlay(
                 if (point.x < 0f || point.y < 0f || point.x > size.width || point.y > size.height) {
                     continue
                 }
-                drawSpikeStrip(Offset(point.x, point.y), pulse)
+                drawSpikeStrip(Offset(point.x, point.y), pulse, toothPath)
             }
         }
     }
@@ -269,11 +274,42 @@ private fun DrawScope.drawBoostPluses(centre: Offset, appear: Float) {
 }
 
 /**
+ * One bear-trap tooth as STATIC unit directions (radius 1) from the trap centre:
+ * the two base corners on the ring and the inward apex. Precomputed once — the jaw
+ * geometry never changes frame to frame, only the purple pulse animates — so the
+ * animated Canvas just scales these by the current ring radius per frame.
+ */
+private class TrapTooth(val base1: Offset, val base2: Offset, val apex: Offset)
+
+/** The 12 static bear-trap teeth (two opposing jaws), computed a single time. */
+private val TRAP_TEETH: List<TrapTooth> =
+    run {
+        val teethPerJaw = 6
+        val half = Math.toRadians(7.0)
+        val jaws = listOf(20.0 to 160.0, 200.0 to 340.0)
+        buildList {
+            for ((startDeg, endDeg) in jaws) {
+                for (i in 0 until teethPerJaw) {
+                    val t = i / (teethPerJaw - 1.0)
+                    val ang = Math.toRadians(startDeg + (endDeg - startDeg) * t)
+                    add(TrapTooth(dir(ang - half), dir(ang + half), dir(ang)))
+                }
+            }
+        }
+    }
+
+/** Static hinge directions (left / right) as unit vectors, computed once. */
+private val TRAP_HINGES: List<Offset> = listOf(dir(0.0), dir(Math.toRadians(180.0)))
+
+/**
  * The placer-only SPIKMATTA marker: a bear-trap glyph — two opposing jaws of
  * inward-pointing teeth around a spring plate, tinted purple with a slow purple
- * [pulse]. Drawn with Compose Canvas (no external asset).
+ * [pulse]. Drawn with Compose Canvas (no external asset). The tooth geometry is
+ * precomputed ([TRAP_TEETH] / [TRAP_HINGES]) and each tooth re-fills the caller's
+ * single reusable [toothPath], so this continuously-animated draw allocates no
+ * per-frame Path/list garbage — only the purple paint varies.
  */
-private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float) {
+private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float, toothPath: Path) {
     val ringR = 15.dp.toPx() * (1f + 0.06f * pulse)
     val toothLen = 6.dp.toPx()
     val alpha = 0.55f + 0.45f * pulse
@@ -295,31 +331,28 @@ private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float) {
         style = Stroke(width = 2.5.dp.toPx()),
     )
 
-    // Two opposing jaws of inward-pointing teeth, with a gap at each hinge (sides).
-    val teethPerJaw = 6
-    val jaws = listOf(20.0 to 160.0, 200.0 to 340.0)
-    val half = Math.toRadians(7.0)
-    for ((startDeg, endDeg) in jaws) {
-        for (i in 0 until teethPerJaw) {
-            val t = i / (teethPerJaw - 1.0)
-            val ang = Math.toRadians(startDeg + (endDeg - startDeg) * t)
-            val base1 = centre + dir(ang - half) * ringR
-            val base2 = centre + dir(ang + half) * ringR
-            val apex = centre + dir(ang) * (ringR - toothLen)
-            val tooth = androidx.compose.ui.graphics.Path().apply {
-                moveTo(base1.x, base1.y)
-                lineTo(apex.x, apex.y)
-                lineTo(base2.x, base2.y)
-                close()
-            }
-            drawPath(tooth, color = TRAP_PURPLE.copy(alpha = alpha))
-        }
+    // Two opposing jaws of inward-pointing teeth (static offsets scaled per frame).
+    val apexR = ringR - toothLen
+    for (tooth in TRAP_TEETH) {
+        val base1 = centre + tooth.base1 * ringR
+        val base2 = centre + tooth.base2 * ringR
+        val apex = centre + tooth.apex * apexR
+        toothPath.reset()
+        toothPath.moveTo(base1.x, base1.y)
+        toothPath.lineTo(apex.x, apex.y)
+        toothPath.lineTo(base2.x, base2.y)
+        toothPath.close()
+        drawPath(toothPath, color = TRAP_PURPLE.copy(alpha = alpha))
     }
 
     // Spring nubs at the two hinges (left / right).
-    for (side in listOf(0.0, 180.0)) {
-        val nub = centre + dir(Math.toRadians(side)) * (ringR + 4.dp.toPx())
-        drawCircle(color = TRAP_PURPLE.copy(alpha = alpha), radius = 3.dp.toPx(), center = nub)
+    val nubR = ringR + 4.dp.toPx()
+    for (hinge in TRAP_HINGES) {
+        drawCircle(
+            color = TRAP_PURPLE.copy(alpha = alpha),
+            radius = 3.dp.toPx(),
+            center = centre + hinge * nubR,
+        )
     }
 
     // The pressure plate at the centre.
