@@ -65,12 +65,24 @@ fun convoyReactionButtonTag(kind: ConvoyReactionKind): String = "convoy_reaction
  * exact remaining time (the server is the anti-spam source of truth). The root
  * Box is transparent and non-blocking — only the buttons capture touches, so the
  * map stays fully interactive.
+ *
+ * The POLICE reaction is more than a transient pop: on a successful broadcast it
+ * ALSO drops the standard, persistent police pin (via [onPoliceReaction], wired to
+ * the same `police.report` the standalone report uses) so a convoy police signal
+ * leaves ONE real, map-drawn police marker every nearby driver sees — not a
+ * separate throwaway icon. The mid-screen broadcast to convoy members is kept.
+ *
+ * @param onPoliceReaction invoked (suspending) once a POLICE reaction has been
+ *   broadcast (`Sent`), to drop the persistent police pin. Null in a config-less
+ *   build (or when no police layer is available), which simply keeps the old
+ *   broadcast-only behavior.
  */
 @Composable
 fun ConvoyReactionsHost(
     convoyId: String,
     repository: ConvoyReactionRepository,
     modifier: Modifier = Modifier,
+    onPoliceReaction: (suspend () -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var cooldown by remember(convoyId) { mutableStateOf(ConvoyReactionCooldownState()) }
@@ -134,7 +146,13 @@ fun ConvoyReactionsHost(
                         // A send that never reached the server (offline/transient):
                         // clear the optimistic window so the member can retry.
                         ConvoyReactionSendResult.Failed -> cooldown = cooldown.clear(kind)
-                        ConvoyReactionSendResult.Sent -> Unit
+                        // A POLICE signal that actually went out ALSO drops the
+                        // standard persistent police pin (the same one police.report
+                        // creates), so it is a real, verifiable marker on every
+                        // nearby driver's map — not just a fleeting pop. Only on a
+                        // real send, so a cooldown-blocked tap never drops a pin.
+                        ConvoyReactionSendResult.Sent ->
+                            if (kind == ConvoyReactionKind.Police) onPoliceReaction?.invoke()
                     }
                 }
             },

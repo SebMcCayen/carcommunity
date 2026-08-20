@@ -5073,6 +5073,25 @@ fun AuthenticatedApp(
                             ConvoyReactionsHost(
                                 convoyId = convoyBarConvoyId,
                                 repository = convoyReactionRepository,
+                                // A convoy POLICE signal drops the SAME persistent
+                                // police pin the standalone report does (source
+                                // 'convoy', ~40 min TTL) so there is ONE police pin
+                                // type on the map — visible to every nearby driver
+                                // via police.listNearby, and it feeds the proximity
+                                // alert. No client member-gate: this hook fires ONLY
+                                // after convoy-sendReaction returns Sent, which the
+                                // server grants only to an active convoy member
+                                // (requireMemberActor) — the same gate police.report
+                                // applies — so the caller is already an authorized
+                                // member by the time the pin drops. (A client
+                                // activeMember check would also mis-fire during the
+                                // profile-load race, silently skipping a legit
+                                // member's pin.) Null only when the police layer is
+                                // unavailable (config-less build) → broadcast only.
+                                onPoliceReaction =
+                                    policeController?.let { police ->
+                                        { police.report(PoliceRepository.SOURCE_CONVOY) }
+                                    },
                             )
                         }
                     } else {
