@@ -38,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -242,11 +243,19 @@ fun ReactionOverlay(
                 )
             }
             alpha.animateTo(1f, animationSpec = tween(ReactionOverlayTiming.ENTER_MS.toInt()))
-            // Hold at rest for this pop's own holdMs, but END EARLY the moment a tap
-            // requests dismissal — whichever comes first. The exit fade always runs
-            // afterwards, so a dismissed pop animates out rather than blinking away.
-            withTimeoutOrNull(current.holdMs.coerceAtLeast(0L)) {
-                snapshotFlow { dismissRequested }.first { it }
+            // Hold at rest for this pop's own holdMs. Only when the pop is
+            // tap-dismissible do we watch dismissRequested — ending the hold EARLY on
+            // a tap, whichever comes first. The common social pops (dismissOnTap
+            // false — convoy/wave, the hot path) take a plain delay with NO
+            // snapshotFlow collection. Either way the exit fade runs afterwards, so a
+            // dismissed pop animates out rather than blinking away.
+            val hold = current.holdMs.coerceAtLeast(0L)
+            if (current.dismissOnTap) {
+                withTimeoutOrNull(hold) {
+                    snapshotFlow { dismissRequested }.first { it }
+                }
+            } else {
+                delay(hold)
             }
             alpha.animateTo(0f, animationSpec = tween(ReactionOverlayTiming.EXIT_MS.toInt()))
             finished()
