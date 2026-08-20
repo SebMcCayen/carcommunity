@@ -971,8 +971,9 @@ export const incidents = {
  *
  * A member drops a SHORT-LIVED police pin via `police.report` (rate-limited so
  * the map can't be flooded with fakes); the write carries a computed `geoCell`
- * and a ~40 min `expiresAt` TTL. Any active signed-in user reads ACTIVE,
- * unexpired pins near a point via `police.listNearby` (chunked `geoCell in`
+ * and a ~40 min `expiresAt` TTL. An active MEMBER reads ACTIVE,
+ * unexpired pins near a point via `police.listNearby` (member-gated —
+ * requireMemberActor + the isActiveMember read rule; chunked `geoCell in`
  * queries + Haversine radius filter), which the Android map polls on the incident
  * camera-idle cadence to draw distinct police markers AND to fire the mid-screen
  * ReactionOverlay once when the driver comes within the proximity radius of a pin.
