@@ -5059,18 +5059,21 @@ fun AuthenticatedApp(
                                 // 'convoy', ~40 min TTL) so there is ONE police pin
                                 // type on the map — visible to every nearby driver
                                 // via police.listNearby, and it feeds the proximity
-                                // alert. This runs ONLY after the reaction was
-                                // actually broadcast (Sent), which already required
-                                // an accepted convoy member (requireMemberActor); the
-                                // same gate police.report applies, so a non-member
-                                // never reaches the pin drop and there is no extra
-                                // client member check to drift out of sync. Null when
-                                // the police layer is unavailable (config-less build)
-                                // → broadcast only.
+                                // alert. Client-gated to an ACTIVE MEMBER (the same
+                                // MemberGating signal the incident-report path uses):
+                                // police.report is member-gated server-side, so
+                                // wiring it for a non-member would only produce a
+                                // denied best-effort call + error noise. Null when
+                                // gating fails OR the police layer is unavailable
+                                // (config-less build) → broadcast only.
                                 onPoliceReaction =
-                                    policeController?.let { police ->
-                                        { police.report(PoliceRepository.SOURCE_CONVOY) }
-                                    },
+                                    policeController
+                                        ?.takeIf {
+                                            MemberGating.allows(profile?.activeMember == true)
+                                        }
+                                        ?.let { police ->
+                                            { police.report(PoliceRepository.SOURCE_CONVOY) }
+                                        },
                             )
                         }
                     } else {
