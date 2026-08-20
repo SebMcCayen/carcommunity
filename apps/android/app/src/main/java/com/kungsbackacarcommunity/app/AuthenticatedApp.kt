@@ -219,6 +219,7 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkDeployCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployMenuState
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployPopup
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployStatus
+import com.kungsbackacarcommunity.app.crownhunt.PerkMapVisuals
 import com.kungsbackacarcommunity.app.crownhunt.PerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.SpikeStripOverlay
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
@@ -5396,9 +5397,11 @@ fun AuthenticatedApp(
                         return@LaunchedEffect
                     }
                     val appCtx = context.applicationContext
-                    // Poll only while the effect is still live; a re-activation that
-                    // extends the window restarts this effect (keyed on the expiry).
-                    while (System.currentTimeMillis() < ownEffectExpiry) {
+                    // Poll only while the effect is still live (the same pure predicate
+                    // the overlay draws with, so an expired timestamp never keeps the
+                    // loop alive); a re-activation that extends the window restarts this
+                    // effect (keyed on the expiry).
+                    while (PerkMapVisuals.isEffectActive(ownEffectExpiry, System.currentTimeMillis())) {
                         perkOwnDeviceFix =
                             CurrentLocation.currentFix(appCtx)
                                 ?: CurrentLocation.lastKnown(appCtx)
