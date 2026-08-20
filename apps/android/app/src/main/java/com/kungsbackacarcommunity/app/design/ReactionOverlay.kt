@@ -31,13 +31,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -212,6 +215,9 @@ fun ReactionOverlay(
         // Created unconditionally (never inside the conditional clickable) so the
         // remember-slot count is stable across pops with/without dismissOnTap.
         val tapInteractionSource = remember(current.id) { MutableInteractionSource() }
+        // Resolved unconditionally (a composable call must not be conditional); only
+        // USED when dismissOnTap, as the tap action's a11y label.
+        val dismissAlertLabel = stringResource(R.string.reactionOverlay_dismissAlert)
 
         // The LaunchedEffect block is a CoroutineScope, so the bouncy scale/spin
         // springs run as CHILD jobs (fire-and-forget, structured) while the parent
@@ -287,13 +293,18 @@ fun ReactionOverlay(
                     }
                     // Tap-to-dismiss ONLY when the event opts in (the police alert):
                     // taps the exit early via dismissRequested. No ripple (indication
-                    // null) — it is a dismiss, not a button. When off, no pointer input
-                    // is taken here, so the social pops stay non-blocking over the map.
+                    // null) — it is a dismiss, not a button. A11y: a Button role + a
+                    // localized onClickLabel ("Dismiss alert") so TalkBack announces
+                    // the ACTION rather than a generic "double tap to activate". When
+                    // off, no pointer input is taken here, so the social pops stay
+                    // non-blocking over the map.
                     .then(
                         if (current.dismissOnTap) {
                             Modifier.clickable(
                                 interactionSource = tapInteractionSource,
                                 indication = null,
+                                onClickLabel = dismissAlertLabel,
+                                role = Role.Button,
                             ) { dismissRequested = true }
                         } else {
                             Modifier
