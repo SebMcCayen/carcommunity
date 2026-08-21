@@ -463,6 +463,10 @@ fun ChatHubRoute(
     notificationsUnread: Boolean,
     onClose: () -> Unit,
     modifier: Modifier = Modifier,
+    // Draw a hub-level Back arrow (top-left) wired to [onClose]. The canonical
+    // map-shell presentation sets this true so a gesture-nav user can leave chat;
+    // see [ChatHubContent].
+    showHubBackArrow: Boolean = false,
     onViewProfile: ((String) -> Unit)? = null,
     // Tapping a shared `geo:` location link in a channel message moves the app's
     // OWN map to that point, in-app. Forwarded down to the channel routes; null
@@ -502,6 +506,7 @@ fun ChatHubRoute(
             notificationsUnread = notificationsUnread,
             onClose = onClose,
             applyStatusBarInset = true,
+            showHubBackArrow = showHubBackArrow,
             onViewProfile = onViewProfile,
             onShowLocationOnMap = onShowLocationOnMap,
             blockingRepository = blockingRepository,
@@ -698,6 +703,13 @@ private fun ChatHubContent(
     notificationsUnread: Boolean,
     onClose: () -> Unit,
     applyStatusBarInset: Boolean,
+    // When true the hub draws a Back arrow at the top-left even at HUB level (not
+    // just inside a sub-screen), wired to [onClose]. Set by the canonical map-shell
+    // presentation, where the hub floats over the map with the shell's bottom bar
+    // still showing: a gesture-nav user with no visible system Back button needs an
+    // explicit way out of chat back to the map. The translucent popup form leaves it
+    // false — it is dismissed by dragging its handle down.
+    showHubBackArrow: Boolean = false,
     onViewProfile: ((String) -> Unit)?,
     onShowLocationOnMap: ((latitude: Double, longitude: Double) -> Unit)?,
     blockingRepository: BlockingRepository?,
@@ -889,6 +901,25 @@ private fun ChatHubContent(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
+                }
+            } else if (showHubBackArrow) {
+                // Hub level, canonical map-shell presentation: no title (the tabs
+                // below name the section), but a Back arrow so a gesture-nav user
+                // with no system Back button can leave chat back to the map. It runs
+                // the SAME action system Back does at hub level (onClose) — the hub's
+                // BackHandler already pops an open sub-screen first, so this arrow is
+                // only ever the hub-level exit.
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = KccSpacing.s2),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.chatHub_back),
+                            tint = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
 
