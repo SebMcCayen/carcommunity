@@ -2093,14 +2093,15 @@ fun AuthenticatedApp(
             val perkDeployActive =
                 crownHuntPerksEnabled && perkDeployRepository != null &&
                     perkDeployCoordinator != null && uid.isNotBlank()
-            // Per-second "now" for the active-perk countdown, live only while the
-            // menu is actually SHOWN (perkDeployActive folds in perkDeployOpen AND
-            // the live crownHuntPerks flag) so it holds no ticker once the popup is
-            // gone — including when the flag flips off underneath an open menu, which
-            // would otherwise leave a 1 s wake looping forever behind a hidden popup.
-            // Drives the "Aktiv – 2 min 30 s kvar" countdown next to each active
-            // perk; the menu-state flow keeps its own coarser tick for the
-            // active/activatable recompute, so this stays 1 s without Firestore churn.
+            // Per-second "now" for the active-perk countdown. Keyed/guarded on BOTH
+            // perkDeployActive (the live crownHuntPerks flag + repo/coordinator/uid
+            // availability, above) AND perkDeployOpen, so it runs only while the popup
+            // is actually SHOWN and holds no ticker once it is gone — including when
+            // the flag flips off underneath an open menu, which would otherwise leave
+            // a 1 s wake looping forever behind a hidden popup. Drives the
+            // "Aktiv – 2 min 30 s kvar" countdown next to each active perk; the
+            // menu-state flow keeps its own coarser tick for the active/activatable
+            // recompute, so this stays 1 s without Firestore churn.
             var perkDeployNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
             LaunchedEffect(perkDeployActive, perkDeployOpen) {
                 while (perkDeployActive && perkDeployOpen) {

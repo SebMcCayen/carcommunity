@@ -122,7 +122,7 @@ fun CrownHuntScreen(
             return@AeroPage
         }
 
-        // Flag ON: a two-tab hub — the read-only stats/legend home, and the shop.
+        // Flag ON: a two-tab hub — the read-only stats home, and the shop.
         var selectedTab by rememberSaveable { mutableIntStateOf(0) }
         TabRow(selectedTabIndex = selectedTab) {
             Tab(
