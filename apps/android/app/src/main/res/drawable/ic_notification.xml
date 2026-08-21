@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Notification small icon: a flat single-colour crown silhouette on transparent.
+  Android renders notification small icons as a monochrome mask (tinted white /
+  by the notification accent), so there is NO interior detail by design. minSdk
+  26 => a VectorDrawable is safe here; this replaces the former ic_notification.png
+  density set (same resource name, so no call-site changes).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M2.6,7.9Q2.6,6.5 3.7,7.5L6.9,10.9Q7.4,11.4 7.8,10.8L11.1,5.3Q12,3.9 12.9,5.3L16.2,10.8Q16.6,11.4 17.1,10.9L20.3,7.5Q21.4,6.5 21.4,7.9L21.4,18.4Q21.4,20 19.8,20L4.2,20Q2.6,20 2.6,18.4Z" />
+</vector>
