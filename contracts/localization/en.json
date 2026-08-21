@@ -1348,8 +1348,8 @@
     "instrRankTitle": "Crown Hunter ranks",
     "instrRankBody": "The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and finally Platinum at 1,000. The rank is tallied on the server from all the crowns you've collected – it appears automatically as soon as you reach it.",
     "instrLiveTitle": "Go live for full points",
-    "instrLiveBody": "Collecting a crown while sharing a live session earns full Crown Points. Without live sharing, points are halved.",
-    "liveShareTip": "Tip: share a live session while collecting to earn twice the Crown Points.",
+    "instrLiveBody": "Collecting a crown while sharing a live session earns full Crown Points. Without live sharing, you earn fewer points.",
+    "liveShareTip": "Tip: share a live session while collecting to earn full Crown Points.",
     "trapHitOverlay": "You hit a Spike Strip! −%1$d KP"
   },
   "leaderboard": {

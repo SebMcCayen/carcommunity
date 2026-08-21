@@ -1348,8 +1348,8 @@
     "instrRankTitle": "Kronjägar-nivåer",
     "instrRankBody": "Ju fler kronor du samlar totalt, desto högre Kronjägar-nivå låser du upp: Brons vid 10 kronor, Silver vid 50, Guld vid 250 och Platina vid 1 000. Nivån räknas på servern utifrån alla kronor du plockat – den dyker upp automatiskt så fort du når den.",
     "instrLiveTitle": "Dela live för full poäng",
-    "instrLiveBody": "När du samlar en krona medan du delar en live-session får du full Kronpoäng. Utan live-delning halveras poängen.",
-    "liveShareTip": "Tips: dela en live-session när du samlar för att få dubbelt så mycket Kronpoäng.",
+    "instrLiveBody": "När du samlar en krona medan du delar en live-session får du full Kronpoäng. Utan live-delning får du färre poäng.",
+    "liveShareTip": "Tips: dela en live-session när du samlar för att få full Kronpoäng.",
     "trapHitOverlay": "Du körde på en Spikmatta! −%1$d KP"
   },
   "leaderboard": {
