@@ -28,6 +28,7 @@ import {
   parseBuyPerkInput,
   perkById,
   perkCost,
+  perkHoldCapRejectionMessage,
   perkPowerKp,
   perkPurchaseLedgerKey,
   referencePerkCostKp,
@@ -240,6 +241,12 @@ describe('perks-core pricing algorithm (cost === reference price)', () => {
 describe('perks-core hold cap (buy/hold ceiling)', () => {
   it('caps a member at a flat 3 of each perk', () => {
     expect(MAX_PERK_HOLD_PER_PERK).toBe(3);
+  });
+
+  it('derives the hold-cap rejection message from the constant (cannot drift)', () => {
+    // The buyPerk SERVER message is built from MAX_PERK_HOLD_PER_PERK, so the
+    // authoritative cap and the message it throws can never silently diverge.
+    expect(perkHoldCapRejectionMessage()).toContain(MAX_PERK_HOLD_PER_PERK.toString());
   });
 
   it('allows back-to-back buys that fit under both ceilings', () => {

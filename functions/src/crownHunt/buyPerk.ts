@@ -39,6 +39,7 @@ import {
   parseBuyPerkInput,
   perkById,
   perkCost,
+  perkHoldCapRejectionMessage,
   perkPurchaseLedgerKey,
   scopePerkPurchaseKey,
   type PerkId,
@@ -137,8 +138,10 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
   // replay adds nothing, so the inventory is never double-incremented. The
   // AtomicReadGuard runs in the SAME transaction's read phase and enforces the
   // hold-cap BEFORE the debit, so a concurrent double-buy cannot slip past it —
-  // the buy fails closed with a reason-coded rejection. There is NO purchase
-  // cooldown: buys are back-to-back, bounded only by the per-perk hold cap.
+  // the buy fails closed with a reason-coded rejection. `evaluateHoldCap`
+  // enforces BOTH ceilings — the per-perk COUNT cap and the total-value cap.
+  // There is NO purchase cooldown: buys are back-to-back, bounded only by the
+  // hold cap.
   let result: Awaited<ReturnType<typeof debitPoints>>;
   try {
     result = await debitPoints(
@@ -179,11 +182,9 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
 
         const inventory = (invSnap.data() ?? {}) as PerkInventoryCounts;
         if (evaluateHoldCap(inventory, perk.perkId, qty, perk.costKp) !== null) {
-          throw new HttpsError(
-            'failed-precondition',
-            'Du kan ha max 3 av varje perk just nu. Använd några först.',
-            { reason: PERK_PURCHASE_REASON_HOLD_CAP },
-          );
+          throw new HttpsError('failed-precondition', perkHoldCapRejectionMessage(), {
+            reason: PERK_PURCHASE_REASON_HOLD_CAP,
+          });
         }
       },
     );

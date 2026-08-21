@@ -550,11 +550,29 @@ export function referencePerkCostKp(perk: PerkDefinition): number {
 //      3-of-each this value cap never binds — it stays a harmless backstop.
 // ---------------------------------------------------------------------------
 
-/** Max units of ONE perk a member may hold at once (flat "3 of each perk"). */
+/**
+ * Max units of ONE perk a member may hold at once (flat "3 of each perk").
+ *
+ * The buyPerk SERVER hold-cap message derives its number from this constant, so
+ * changing it keeps the authoritative cap and the server message in sync. The
+ * ANDROID client's localized `shopErrorHoldCap` string (contracts/localization
+ * sv.json + en.json) hardcodes the number "3" as a static display resource — if
+ * this value changes, UPDATE THOSE SV/EN STRINGS too so the client copy matches.
+ */
 export const MAX_PERK_HOLD_PER_PERK = 3;
 
 /** Max summed KP VALUE of all held perks — one capped day of earnings. */
 export const MAX_PERK_HOLD_VALUE_KP = DAILY_POINTS_CAP;
+
+/**
+ * The Swedish member-facing message buyPerk throws when a buy hits the hold cap.
+ * The cap number is DERIVED from {@link MAX_PERK_HOLD_PER_PERK} (not hardcoded)
+ * so the authoritative cap and its message can never silently drift apart — a
+ * unit test pins that the message contains the constant.
+ */
+export function perkHoldCapRejectionMessage(): string {
+  return `Du kan ha max ${MAX_PERK_HOLD_PER_PERK} av varje perk just nu. Använd några först.`;
+}
 
 /** A buy's held-inventory snapshot, as the `{ perkId: count }` map buyPerk reads. */
 export type PerkInventoryCounts = Readonly<Record<string, number>>;
