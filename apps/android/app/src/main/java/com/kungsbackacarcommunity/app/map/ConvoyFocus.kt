@@ -319,10 +319,18 @@ object ConvoyFocusPlanner {
      * — always a count change. A same-count SWAP (one leaves as another joins in
      * the same tick) is the one case count misses; it is far rarer, and the
      * spatial [shouldRefit] gate plus the next position tick still catch it within
-     * the throttle window. A null previous (no fit applied yet) counts as changed.
+     * the throttle window.
+     *
+     * A null [previous] is NOT a set change. The surface resets its applied fit to
+     * null on a transient "nothing to frame" roster gap while KEEPING its throttle
+     * clock (see [MapboxMapSurface.setConvoyFit]); reading that null as a set change
+     * would bypass the interval on every such flicker and re-introduce the
+     * back-to-back refits the #770 throttle exists to stop. The genuine FIRST fit of
+     * a session is not throttled anyway — [shouldRefitNow] returns early when
+     * `lastFitAtMillis` is null — so it needs no bypass here.
      */
     fun memberSetChanged(previous: List<ConvoyLatLng>?, next: List<ConvoyLatLng>): Boolean =
-        previous == null || previous.size != next.size
+        previous != null && previous.size != next.size
 
     /**
      * The zoom a convoy fit should actually apply, clamped to a sane band.

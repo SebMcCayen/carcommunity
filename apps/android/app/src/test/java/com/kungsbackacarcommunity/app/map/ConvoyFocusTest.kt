@@ -375,12 +375,30 @@ class ConvoyFocusTest {
     }
 
     @Test
-    fun `memberSetChanged tracks the fitted point count`() {
-        assertTrue(ConvoyFocusPlanner.memberSetChanged(null, listOf(me)))
+    fun `memberSetChanged tracks the fitted point count for a real previous fit`() {
         assertTrue(ConvoyFocusPlanner.memberSetChanged(listOf(me), listOf(me, other)))
         assertTrue(ConvoyFocusPlanner.memberSetChanged(listOf(me, other), listOf(me)))
         // Same count (a move, or a same-size swap) does not read as a set change.
         assertFalse(ConvoyFocusPlanner.memberSetChanged(listOf(me, other), spreadOut))
+    }
+
+    @Test
+    fun `a null previous fit is not a set change, so a roster flicker cannot bypass the throttle`() {
+        // The surface resets appliedConvoyFit to null on a transient "nothing to
+        // frame" tick while KEEPING its throttle clock. That null must fall through
+        // to the time gate, not force an immediate refit — otherwise a flickering
+        // roster reintroduces the back-to-back refits #770 exists to stop.
+        assertFalse(ConvoyFocusPlanner.memberSetChanged(null, listOf(me, other)))
+        // And through shouldRefitNow: null applied fit, clock kept, only 200 ms on —
+        // the material change is throttled out rather than bypassed.
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = null,
+                next = listOf(me, other),
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
     }
 
     // ---- zoom clamp (never building level, never a whole-country view) ------
