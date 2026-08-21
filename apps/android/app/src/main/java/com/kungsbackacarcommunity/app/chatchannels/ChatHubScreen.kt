@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -490,7 +491,17 @@ fun ChatHubRoute(
 ) {
     Surface(
         modifier = modifier.fillMaxSize().testTag(CHAT_HUB_TEST_TAG),
-        color = MaterialTheme.colorScheme.background,
+        // A LITTLE transparency, not a see-through window: the hub floats over the
+        // live map (the canonical map-shell presentation raises it as an overlay),
+        // so a fully-opaque `background` read as a harsh near-black panel. Applying
+        // the shared Aero alpha (0.92 — the same token the chat peek and every other
+        // floating surface use) softens the black by letting the map beneath show
+        // through faintly, while staying opaque enough that the chat text and bubbles
+        // stay perfectly legible over moving roads. Theme-aware: the alpha rides on
+        // the existing `background` token, so light/dark theming is unaffected. The
+        // tab strip below is made transparent so the whole hub reads as ONE
+        // translucent surface rather than an opaque tab bar over a translucent body.
+        color = MaterialTheme.colorScheme.background.copy(alpha = KccAlpha.aeroSurface),
     ) {
         ChatHubContent(
             uid = uid,
@@ -930,7 +941,18 @@ private fun ChatHubContent(
                 // tabs: the visible tab label already names the section, so the dot
                 // only needs to announce "unread".
                 val unreadDotLabel = stringResource(R.string.chatHub_tabUnread)
-                TabRow(selectedTabIndex = selectedTab.ordinal) {
+                TabRow(
+                    selectedTabIndex = selectedTab.ordinal,
+                    // Transparent so the hub's translucent [Surface] background shows
+                    // through the tab strip too, and the tabs read as part of the one
+                    // frosted panel rather than an opaque `surface` bar sitting on top
+                    // of it. contentColor is pinned to onSurface (the value the opaque
+                    // default derived) so the tab labels and the selection indicator
+                    // keep their prior colour now that the container no longer implies
+                    // it.
+                    containerColor = Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ) {
                     ChatTabItem(
                         tab = ChatTab.Community,
                         selected = selectedTab,
