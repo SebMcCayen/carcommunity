@@ -1185,6 +1185,18 @@ fun AuthenticatedApp(
                 if (!chatHubOpen) chatHubLandingLink = null
             }
 
+            // Address-search + directions overlay ("Where to?"). The Mapbox
+            // search/directions client is guarded: with a blank token (CI / no
+            // token) every call no-ops to empty/null and never hits the network
+            // (see HttpMapboxSearchClient). Origin comes from the fused-location
+            // provider, degrading to null (→ inline hint) without a fix/permission.
+            //
+            // Hoisted here (above the notification-tap handler) so a chat push can
+            // dismiss it: while it is open, mapCover is Transparent, which closes
+            // the chat-hub popup's gate — see the COMMUNITY_CHAT / CONVOY_CHAT
+            // branch below, which clears it before opening the popup.
+            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+
             // Set true immediately before opening ShellRoute.Convoys from the
             // chooser's "Convoy" option so the convoy route deep-links straight
             // into its create-convoy sub-screen. Reset to false when the Social
@@ -1270,13 +1282,18 @@ fun AuthenticatedApp(
                         // bubble raises (chatHubOpen + chatHubLandingLink), NOT the
                         // full opaque ShellRoute.ChatHub — so the notification lands
                         // on the exact surface the in-app chat icon reaches. Force
-                        // the map home first (clear any open route, select the Map
-                        // tab) so the popup's map-cover gate holds even on a cold
-                        // start or from another tab, then land it on the pushed
-                        // channel via the landing link (Community, or a convoy's
-                        // channel — the same param the convoy bar's chat icon uses).
+                        // the map home first so the popup's map-cover gate
+                        // (ShellNavigation.chatHubAllowed) holds even on a cold start
+                        // or from another tab: clear any open route, select the Map
+                        // tab, AND close the nav-search overlay — an open search
+                        // makes mapCover Transparent, which would otherwise keep the
+                        // gate shut and the auto-close effect would immediately drop
+                        // the popup. Then land it on the pushed channel via the
+                        // landing link (Community, or a convoy's channel — the same
+                        // param the convoy bar's chat icon uses).
                         clearRoutes()
                         selectedTab = ShellTab.Map
+                        navSearchOpen = false
                         chatHubLandingLink = link
                         chatHubOpen = true
                     }
@@ -2784,12 +2801,6 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Address-search + directions overlay ("Where to?"). The Mapbox
-            // search/directions client is guarded: with a blank token (CI / no
-            // token) every call no-ops to empty/null and never hits the network
-            // (see HttpMapboxSearchClient). Origin comes from the fused-location
-            // provider, degrading to null (→ inline hint) without a fix/permission.
-            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
             // Turn-by-turn navigation target. Non-null → the full-screen nav view
             // is shown (over the search overlay). The origin is left to the nav
             // view, which navigates from the live GPS fix.
