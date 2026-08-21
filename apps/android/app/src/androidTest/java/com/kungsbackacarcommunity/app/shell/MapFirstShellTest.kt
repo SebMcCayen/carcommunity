@@ -27,7 +27,6 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
-import com.kungsbackacarcommunity.app.chatchannels.CHAT_PEEK_TEST_TAG
 import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
 import com.kungsbackacarcommunity.app.config.FeatureFlags
 import com.kungsbackacarcommunity.app.design.KccSpacing
@@ -900,41 +899,31 @@ class MapFirstShellTest {
     }
 
     @Test
-    fun chatBubble_opensChatPeek_andHomeDismissesIt() {
+    fun chatBubble_opensChatHub_andBackArrowDismissesIt() {
         setShell()
         // The floating chat bubble is present (unread count is 0 → "Chat").
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_chat)).assertExists()
-        // Tapping it opens the full-screen chat PEEK over the map (the map stays
-        // composed behind it, not a full opaque route).
+        // Tapping it opens the FULL-PAGE chat HUB over the map (the map stays
+        // composed behind it, and the shell's bottom bar stays visible).
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
-        // The map stays composed behind the translucent peek.
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
-        // The peek shows the channel-name header (Community, from the plain icon)
-        // and its two-button bottom bar — no swipe-away handle, no tab row.
-        composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatPeek_home)).assertIsDisplayed()
-        composeTestRule.onNodeWithText(str(R.string.chatPeek_goToChat)).assertIsDisplayed()
-        // "Home" dismisses the peek and returns to the map.
-        composeTestRule.onNodeWithText(str(R.string.chatPeek_home)).performClick()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
-    }
-
-    /**
-     * The primary new path this PR introduces: "Go to chat" on the peek closes the
-     * peek and opens the FULL interactive chat (the opaque ShellRoute.ChatHub /
-     * ChatHubRoute), not the peek's preview.
-     */
-    @Test
-    fun chatPeek_goToChat_opensFullInteractiveChatHub() {
-        setShell()
-        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
-        // "Go to chat" closes the peek and opens the full ChatHub route.
-        composeTestRule.onNodeWithText(str(R.string.chatPeek_goToChat)).performClick()
         composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
+        // The map stays composed behind the hub.
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        // The hub shows its four top tabs — Community / Convoys / Friends /
+        // Notifications — not the old two-button peek.
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabCommunity)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabConvoys)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.chatHub_tabNotifications)).assertIsDisplayed()
+        // The shell's bottom bar stays reachable beneath the hub (it is inset above
+        // the bar, not a full-screen takeover).
+        composeTestRule
+            .onNodeWithContentDescription(str(R.string.shell_tabHistory))
+            .assertExists()
+        // The hub-level Back arrow dismisses chat back to the map.
+        composeTestRule.onNodeWithContentDescription(str(R.string.chatHub_back)).performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
     }
 
     @Test
@@ -955,38 +944,38 @@ class MapFirstShellTest {
     }
 
     /**
-     * Regression: the chat peek must not re-open by itself. `chatHubOpen` is
-     * rememberSaveable but the peek only renders while the map shell is the active
-     * branch, so losing that gate has to CLEAR the flag — otherwise the peek
+     * Regression: the chat hub must not re-open by itself. `chatHubOpen` is
+     * rememberSaveable but the hub only renders while the map shell is the active
+     * branch, so losing that gate has to CLEAR the flag — otherwise the hub
      * silently stays "open" and pops up again on returning to the map.
      *
-     * The peek is hosted in the map-shell body ABOVE the bottom bar (like every
-     * other panel), so the shell's tabs stay usable beneath it: tapping one leaves
-     * chat, which drops the map-cover gate and — via the auto-close effect — clears
-     * the saveable open flag. Returning to Map must then NOT re-show the peek. That
-     * gate-clears-the-flag path is exactly what this exercises.
+     * The hub is hosted in the map shell ABOVE the bottom bar, so the shell's tabs
+     * stay usable beneath it: tapping one leaves chat (ShellBottomBar.onSelect
+     * clears the open flag, and the map-cover gate drops via the auto-close effect).
+     * Returning to Map must then NOT re-show the hub. That leave-clears-the-flag
+     * path is exactly what this exercises.
      */
     @Test
-    fun chatPeek_doesNotReappearAfterLeavingAndReturningToMapTab() {
+    fun chatHub_doesNotReappearAfterLeavingAndReturningToMapTab() {
         setShell()
-        // Open the peek over the map.
+        // Open the hub over the map.
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
 
-        // Leaving the Map tab closes the peek: the map-cover gate drops and the
-        // auto-close effect clears the rememberSaveable open flag. (The shell's
+        // Leaving the Map tab closes the hub: tapping a bottom-bar tab clears the
+        // rememberSaveable open flag (and the map-cover gate drops). (The shell's
         // single map surface stays composed across tabs, so this asserts on the
-        // PEEK, not the map.)
+        // HUB, not the map.)
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
 
-        // Returning to the Map tab must NOT re-open the peek — the regression: a
-        // saveable open flag that survived the gate would pop the peek back up here.
+        // Returning to the Map tab must NOT re-open the hub — the regression: a
+        // saveable open flag that survived would pop the hub back up here.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertDoesNotExist()
     }
 
     /**
