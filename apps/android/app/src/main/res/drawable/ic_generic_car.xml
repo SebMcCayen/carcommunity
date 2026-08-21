@@ -1,49 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Generic side-profile car silhouette — the fallback identity for a live-session
-  marker whose owner has NOT set a photo on their main car.
-
-  Where it is used: the photoless fallback inside the live-map car markers
-  (live/NearbyLiveOverlay.kt NearbySharerChip, convoy/ConvoyMapAwarenessOverlay.kt
-  ConvoyMemberPhoto) and the tapped-sharer popup avatar (live/LiveSharerPopup.kt).
-  It replaces the old placeholders there — a broadcast glyph (Podcasts), the
-  Material front-on DirectionsCar and a Person glyph — none of which read as
-  "this is a car with no picture yet". A side profile is the most recognisable
-  car shape at the ~18-20dp the markers draw it, so it carries the meaning on its
-  own the way ic_speedometer does.
-
-  Drawn as a SOLID, filled silhouette (not a hairline outline) so it matches the
-  visual weight of the Material filled icons the markers otherwise show, and so it
-  stays legible when scaled down inside the coloured ring. The two wheels are
-  filled discs with a hub PUNCHED OUT (evenOdd) — the hole lets the ring's inner
-  surface show through, which is what makes them read as wheels rather than bumps
-  in a single flat colour.
-
-  No android:tint: the caller tints it (the markers use
-  MaterialTheme.colorScheme.onSurfaceVariant, matching the glyphs it replaced), so
-  the one asset works on both the light and the dark live-marker surface.
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!--
-      The body: a side profile. Front bumper at x=2.5, hood rising to the
-      windshield base (7.5,12.2), up to the roof (9.8..14.0 at y=8.9), rear
-      window down to the trunk deck and a rounded rear at x=21.5. The belt line
-      sits at y=12.2 and the sill at y=15.5, so the wheels below tuck their tops
-      behind the body.
-    -->
     <path
         android:fillColor="@android:color/white"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.6"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M2.5,15.5L2.5,13.8Q2.6,13.0 3.2,12.9L7.5,12.2L9.8,8.9L14.0,8.9L16.3,12.2L20.8,12.2Q21.5,12.2 21.5,13.0L21.5,15.5Z" />
-    <!-- Front wheel: a disc under the hood with its hub punched out. -->
     <path
         android:fillColor="@android:color/white"
         android:fillType="evenOdd"
         android:pathData="M4.4,17a2.6,2.6 0 1,0 5.2,0a2.6,2.6 0 1,0 -5.2,0M5.95,17a1.05,1.05 0 1,0 2.1,0a1.05,1.05 0 1,0 -2.1,0" />
-    <!-- Rear wheel: a disc under the trunk with its hub punched out. -->
     <path
         android:fillColor="@android:color/white"
         android:fillType="evenOdd"
