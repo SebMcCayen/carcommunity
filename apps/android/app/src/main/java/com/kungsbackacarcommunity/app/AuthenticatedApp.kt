@@ -5542,6 +5542,15 @@ fun AuthenticatedApp(
                         ownEffectExpiry,
                         perkMapOverlayState.ownTraps.maxOfOrNull { it.expiresAtMillis },
                     )
+                // Read the per-tick inputs through rememberUpdatedState so the single
+                // loop always evaluates against CURRENT values even when it is not
+                // re-keyed: the effect keys only on the LATEST expiry, so if a
+                // long-lived trap keeps that key fixed while the member activates a
+                // shield/boost later, a plain capture would keep testing the stale
+                // (null) ownEffectExpiry and never mount the own-dot overlay (Copilot
+                // review). Mirrors crownNearbyInRangeState above.
+                val ownEffectExpiryState = rememberUpdatedState(ownEffectExpiry)
+                val perkOverlayState = rememberUpdatedState(perkMapOverlayState)
                 var perkEffectActive by remember { mutableStateOf(false) }
                 var hasActivePerk by remember { mutableStateOf(false) }
                 LaunchedEffect(perkMapActive, latestPerkExpiry) {
@@ -5552,13 +5561,14 @@ fun AuthenticatedApp(
                     }
                     while (true) {
                         val nowMillis = System.currentTimeMillis()
+                        val overlay = perkOverlayState.value
                         perkEffectActive =
-                            PerkMapVisuals.isEffectActive(ownEffectExpiry, nowMillis)
+                            PerkMapVisuals.isEffectActive(ownEffectExpiryState.value, nowMillis)
                         val anyActive =
                             PerkMapVisuals.hasAnything(
-                                perkMapOverlayState.ownTraps,
-                                perkMapOverlayState.shieldActiveUntilMillis,
-                                perkMapOverlayState.boostActiveUntilMillis,
+                                overlay.ownTraps,
+                                overlay.shieldActiveUntilMillis,
+                                overlay.boostActiveUntilMillis,
                                 nowMillis,
                             )
                         hasActivePerk = anyActive
