@@ -213,9 +213,9 @@ class IncidentReportController(
      * [ConfirmOutcome.Failed].
      */
     suspend fun confirm(incidentId: String): ConfirmOutcome {
-        // Snapshot the marker as it was, so a rejection/failure can restore exactly
-        // it rather than a wholesale list revert that would clobber a concurrent poll.
-        val before = nearbyFlow.value.firstOrNull { it.id == incidentId }
+        // Only roll back a bump we actually applied: if the incident is not on the
+        // layer, the optimistic patch below is a no-op and so must the rollback be.
+        val applied = nearbyFlow.value.any { it.id == incidentId }
         // Optimistic: move the tally now, ahead of the round-trip.
         patchNearby(incidentId) { incident ->
             incident.copy(confirmationCount = incident.confirmationCount + 1)
@@ -239,10 +239,10 @@ class IncidentReportController(
                 alreadyConfirmed = result.alreadyConfirmed,
             )
         } catch (cancellation: CancellationException) {
-            restoreNearby(before)
+            if (applied) undoOptimisticConfirm(incidentId)
             throw cancellation
         } catch (error: Throwable) {
-            restoreNearby(before)
+            if (applied) undoOptimisticConfirm(incidentId)
             ConfirmOutcome.Failed(error)
         }
     }
@@ -280,9 +280,12 @@ class IncidentReportController(
         incidentId: String,
         fixProvider: suspend () -> IncidentClearFix?,
     ): ClearOutcome {
-        // Snapshot the marker as it was, so any bail-out restores exactly it rather
-        // than a wholesale list revert that would clobber a concurrent poll.
+        // Capture the marker's pre-fade state so any bail-out can reverse EXACTLY
+        // the optimistic delta (see undoOptimisticClear). `before` null ⇒ the
+        // incident is not on the layer, so the patch below is a no-op and so is any
+        // rollback.
         val before = nearbyFlow.value.firstOrNull { it.id == incidentId }
+        val wasReportedCleared = before?.reportedCleared ?: false
         // Optimistic fade FIRST — ahead of both the GPS fix and the round-trip.
         patchNearby(incidentId) { incident ->
             incident.copy(
@@ -295,14 +298,14 @@ class IncidentReportController(
             try {
                 fixProvider()
             } catch (cancellation: CancellationException) {
-                restoreNearby(before)
+                if (before != null) undoOptimisticClear(incidentId, wasReportedCleared)
                 throw cancellation
             } catch (_: Throwable) {
                 null
             }
         if (fix == null) {
             // Nothing is sent without a position, so the optimistic fade is undone.
-            restoreNearby(before)
+            if (before != null) undoOptimisticClear(incidentId, wasReportedCleared)
             return ClearOutcome.NoLocation
         }
 
@@ -332,13 +335,13 @@ class IncidentReportController(
                 alreadyVoted = result.alreadyVoted,
             )
         } catch (cancellation: CancellationException) {
-            restoreNearby(before)
+            if (before != null) undoOptimisticClear(incidentId, wasReportedCleared)
             throw cancellation
         } catch (rejected: IncidentClearRejectedException) {
-            restoreNearby(before)
+            if (before != null) undoOptimisticClear(incidentId, wasReportedCleared)
             ClearOutcome.Rejected(rejected.rejection)
         } catch (error: Throwable) {
-            restoreNearby(before)
+            if (before != null) undoOptimisticClear(incidentId, wasReportedCleared)
             ClearOutcome.Failed(error)
         }
     }
@@ -365,16 +368,38 @@ class IncidentReportController(
     }
 
     /**
-     * Rolls an optimistic patch back by restoring [before] — the incident as it was
-     * before the patch — in place, keyed by id. A null [before] (the incident was
-     * not on the layer to begin with) is a no-op, and an incident a concurrent poll
-     * has since dropped is deliberately NOT re-added: restoring a marker the live
-     * layer already removed would be exactly the stale write this guards against.
+     * Reverses the optimistic +1 [confirm] applied, keyed by id and SURGICALLY: it
+     * subtracts one from the count on the CURRENT marker rather than restoring a
+     * pre-vote snapshot, so a refresh that landed during the in-flight window (a
+     * resolving `createdAt`, an edited note, another member's confirmation) is not
+     * clobbered by the rollback. A no-op when a concurrent poll has already dropped
+     * the incident — the poll is authoritative and re-adding it would be a stale
+     * write. Floored at zero so a racing reconcile can never drive the count
+     * negative; the next poll reconciles the exact number regardless.
      */
-    private fun restoreNearby(before: Incident?) {
-        if (before == null) return
-        nearbyFlow.value =
-            nearbyFlow.value.map { if (it.id == before.id) before else it }
+    private fun undoOptimisticConfirm(incidentId: String) {
+        patchNearby(incidentId) { current ->
+            current.copy(confirmationCount = (current.confirmationCount - 1).coerceAtLeast(0))
+        }
+    }
+
+    /**
+     * Reverses the optimistic clear vote [reportCleared] applied, keyed by id and
+     * SURGICALLY: it subtracts one from the clear tally on the CURRENT marker and
+     * restores the fade flag to [previousReportedCleared] — its value BEFORE the
+     * optimistic fade, NOT a blind un-fade, since the marker may already have been
+     * faded by an earlier vote. Reversing only the delta (rather than restoring a
+     * whole snapshot) keeps any field a concurrent poll refreshed in the in-flight
+     * window intact. A no-op when a concurrent poll has already dropped the incident.
+     * Floored at zero for the same reason as [undoOptimisticConfirm].
+     */
+    private fun undoOptimisticClear(incidentId: String, previousReportedCleared: Boolean) {
+        patchNearby(incidentId) { current ->
+            current.copy(
+                clearedCount = (current.clearedCount - 1).coerceAtLeast(0),
+                reportedCleared = previousReportedCleared,
+            )
+        }
     }
 
     /**

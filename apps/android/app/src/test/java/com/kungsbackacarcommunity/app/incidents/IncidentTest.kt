@@ -1000,6 +1000,58 @@ class IncidentReportControllerTest {
                 controller.nearbyIncidents.value.first { it.id == "theirs" }.confirmationCount,
             )
         }
+
+    @Test
+    fun `a rolled-back confirm reverses only its delta and keeps concurrent updates`() = runTest {
+        // Rollback must be SURGICAL — reverse the +1 against the CURRENT marker, not
+        // restore a pre-vote snapshot — so a refresh that landed during the in-flight
+        // window (here: an edited note) survives instead of being clobbered back to
+        // the stale copy.
+        val gate = CompletableDeferred<Unit>()
+        var note: String? = "old"
+        val repository =
+            object : IncidentRepository {
+                override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                    error("unused")
+
+                override suspend fun listNearby(center: LatLng, radiusMeters: Double) =
+                    listOf(
+                        Incident("a", IncidentType.HAZARD, 12.0, 57.5, note = note, confirmationCount = 2),
+                    )
+
+                override suspend fun remove(incidentId: String) = Unit
+
+                override suspend fun confirm(incidentId: String): IncidentConfirmResult {
+                    gate.await()
+                    throw IllegalStateException("permission-denied")
+                }
+
+                override suspend fun reportCleared(incidentId: String, fix: IncidentClearFix) =
+                    IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
+            }
+        val controller = IncidentReportController(repository) { here }
+        controller.refresh(here) // seeds a(count=2, note="old")
+
+        val call = launch { controller.confirm("a") }
+        runCurrent()
+        assertEquals(3, controller.nearbyIncidents.value.first().confirmationCount) // optimistic +1
+
+        // A concurrent poll lands during the in-flight window, bringing a NEW note
+        // (and, being authoritative, no phantom vote). It replaces the whole list.
+        note = "new"
+        controller.refresh(here) // -> a(count=2, note="new")
+
+        gate.complete(Unit) // now the confirm fails and must roll its delta back
+        call.join()
+
+        val marker = controller.nearbyIncidents.value.first()
+        // Delta reversed against the CURRENT count (2 -> 1) — NOT the whole snapshot
+        // restored — so the concurrently-refreshed note is preserved. A snapshot
+        // revert would read "old" here and count 2. (The 1 is a transient
+        // under-count the next poll reconciles; the point is the note is intact.)
+        assertEquals("new", marker.note)
+        assertEquals(1, marker.confirmationCount)
+    }
 }
 
 /**
@@ -1331,5 +1383,44 @@ class IncidentClearVoteTest {
         val marker = controller.nearbyIncidents.value.single()
         assertEquals("optimistic tally must be rolled back", 0, marker.clearedCount)
         assertFalse("optimistic fade must be rolled back", marker.reportedCleared)
+    }
+}
+
+/**
+ * Covers [IncidentVoteGuard] — the one-vote-per-incident-in-flight guard that lets
+ * the optimistic UI dismiss the sheet on tap without opening a double-fire window.
+ */
+class IncidentVoteGuardTest {
+
+    @Test
+    fun `the first vote begins and a second on the same incident is blocked until it ends`() {
+        val guard = IncidentVoteGuard()
+
+        assertTrue("first vote must proceed", guard.tryBegin("a"))
+        assertTrue("its id is now in flight", guard.isInFlight("a"))
+        // The whole point: a second vote on the SAME incident, mid-flight, is refused
+        // — this is what the sheet-scoped boolean flag could not do once the sheet was
+        // dismissed on tap.
+        assertFalse("a second vote while one is in flight must be blocked", guard.tryBegin("a"))
+
+        guard.end("a")
+        assertFalse(guard.isInFlight("a"))
+        // Once finished (success OR rollback), the same incident can be voted again.
+        assertTrue("after completion the incident can be voted again", guard.tryBegin("a"))
+    }
+
+    @Test
+    fun `votes on different incidents are independent`() {
+        val guard = IncidentVoteGuard()
+
+        assertTrue(guard.tryBegin("a"))
+        // A different incident is unaffected by a's in-flight vote.
+        assertTrue(guard.tryBegin("b"))
+        assertTrue(guard.isInFlight("a"))
+        assertTrue(guard.isInFlight("b"))
+
+        guard.end("a")
+        assertFalse(guard.isInFlight("a"))
+        assertTrue("ending one vote must not clear another", guard.isInFlight("b"))
     }
 }

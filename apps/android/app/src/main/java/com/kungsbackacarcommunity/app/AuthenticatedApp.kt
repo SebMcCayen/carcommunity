@@ -407,6 +407,7 @@ import com.kungsbackacarcommunity.app.incidents.ConfirmOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.incidents.IncidentVoteGuard
 import com.kungsbackacarcommunity.app.incidents.LocalIncidentAgeFilterController
 import com.kungsbackacarcommunity.app.incidents.QueryAnchor
 import com.kungsbackacarcommunity.app.incidents.ReportLocation
@@ -1678,14 +1679,15 @@ fun AuthenticatedApp(
             // arrive disabled.
             var incidentRemoveInFlight by
                 remember(tappedIncidentId) { mutableStateOf(false) }
-            // Same one-call-per-press guard for confirming someone else's report.
-            // Keyed to the open incident so a flag left set by a previous sheet
-            // does not arrive disabled on the next one.
-            var incidentConfirmInFlight by
-                remember(tappedIncidentId) { mutableStateOf(false) }
-            // Same one-call-per-press guard for the "Nej, den är borta" clear vote.
-            var incidentClearInFlight by
-                remember(tappedIncidentId) { mutableStateOf(false) }
+            // One-call-per-vote guard for confirm and the "Nej, den är borta" clear
+            // vote, tracked by the INCIDENT ID being voted on rather than a boolean
+            // keyed to the open sheet. Both actions now dismiss the sheet the instant
+            // they are tapped (which changes tappedIncidentId), so a flag scoped to
+            // the sheet would reset mid-flight and let a re-opened marker fire a
+            // SECOND vote on the same incident while the first — its GPS fix and
+            // callable — is still running. The guard outlives the sheet, so a vote is
+            // blocked while its id is already in flight; see IncidentVoteGuard.
+            val incidentVoteGuard = remember { IncidentVoteGuard() }
             // One-call-per-press guards for the police pin sheet (confirm / dispute
             // / remove). Keyed to the tapped id so a flag left set by a previous
             // sheet does not arrive disabled on the next.
@@ -6411,16 +6413,17 @@ fun AuthenticatedApp(
                                         // in-flight guard still makes one press one call.
                                         onConfirm = {
                                             val controller = incidentController
-                                            if (controller != null && !incidentConfirmInFlight) {
-                                                incidentConfirmInFlight = true
-                                                val confirmId = openIncident.id
+                                            val confirmId = openIncident.id
+                                            if (controller != null &&
+                                                incidentVoteGuard.tryBegin(confirmId)
+                                            ) {
                                                 mapSurface.consumeIncidentTap()
                                                 scope.launch {
                                                     val outcome =
                                                         try {
                                                             controller.confirm(confirmId)
                                                         } finally {
-                                                            incidentConfirmInFlight = false
+                                                            incidentVoteGuard.end(confirmId)
                                                         }
                                                     snackbarHostState.showSnackbar(
                                                         when (outcome) {
@@ -6496,9 +6499,10 @@ fun AuthenticatedApp(
                                         // fade back and the snackbar explains why.
                                         onReportCleared = {
                                             val controller = incidentController
-                                            if (controller != null && !incidentClearInFlight) {
-                                                incidentClearInFlight = true
-                                                val clearId = openIncident.id
+                                            val clearId = openIncident.id
+                                            if (controller != null &&
+                                                incidentVoteGuard.tryBegin(clearId)
+                                            ) {
                                                 mapSurface.consumeIncidentTap()
                                                 scope.launch {
                                                     val outcome =
@@ -6511,7 +6515,7 @@ fun AuthenticatedApp(
                                                                 )
                                                             }
                                                         } finally {
-                                                            incidentClearInFlight = false
+                                                            incidentVoteGuard.end(clearId)
                                                         }
                                                     snackbarHostState.showSnackbar(
                                                         when (outcome) {
@@ -6564,8 +6568,11 @@ fun AuthenticatedApp(
                                                 viewerLocation = incidentViewerLocation,
                                             ),
                                         removeInProgress = incidentRemoveInFlight,
-                                        confirmInProgress = incidentConfirmInFlight,
-                                        clearInProgress = incidentClearInFlight,
+                                        // Disabled if this same incident is reopened
+                                        // while its vote is still in flight (the vote
+                                        // dismisses the sheet, so normally it is gone).
+                                        confirmInProgress = incidentVoteGuard.isInFlight(openIncident.id),
+                                        clearInProgress = incidentVoteGuard.isInFlight(openIncident.id),
                                         onDismiss = { mapSurface.consumeIncidentTap() },
                                     )
                                 }
