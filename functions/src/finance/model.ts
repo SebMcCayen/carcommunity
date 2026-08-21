@@ -26,6 +26,7 @@
 
 import {
   DAYS_PER_MONTH,
+  EXTERNAL_FREE_APIS,
   FIRESTORE,
   FUNCTIONS,
   MAPBOX,
@@ -493,23 +494,45 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
   };
 
   // ---- No-cost services (listed, never omitted) ----------------------------
-  const noCostLines: ServiceLine[] = ['App Check', 'Cloud Messaging (FCM)', 'Trafikverket API'].map(
-    (service) => ({
-      service,
-      driver: 'No metered charge',
-      unit: '—',
-      gross: 0,
-      freeTier: 0,
-      billable: 0,
-      sekPerMonth: 0,
-      committed: true,
-      free: true,
-      note:
-        service === 'Trafikverket API'
-          ? 'Open data (CC0); no API fee. Its COST shows up as the Firestore writes above.'
-          : 'No usage-based charge on the current plan.',
-    }),
-  );
+  // Two kinds: (1) Google/vendor services with no usage-based charge on the
+  // current plan, and (2) external free-but-QUOTA-BOUND APIs (GitHub, Overpass)
+  // — 0 kr, but the board still names them so the rate-quota dependency is
+  // honest, not hidden. Both render identically (a $0/"Free" row); the quota
+  // note distinguishes them on hover.
+  const vendorNoCostLines: ServiceLine[] = [
+    'App Check',
+    'Cloud Messaging (FCM)',
+    'Trafikverket API',
+  ].map((service) => ({
+    service,
+    driver: 'No metered charge',
+    unit: '—',
+    gross: 0,
+    freeTier: 0,
+    billable: 0,
+    sekPerMonth: 0,
+    committed: true,
+    free: true,
+    note:
+      service === 'Trafikverket API'
+        ? 'Open data (CC0); no API fee. Its COST shows up as the Firestore writes above.'
+        : 'No usage-based charge on the current plan.',
+  }));
+
+  const externalApiLines: ServiceLine[] = EXTERNAL_FREE_APIS.map((api) => ({
+    service: api.service,
+    driver: api.driver,
+    unit: '—',
+    gross: 0,
+    freeTier: 0,
+    billable: 0,
+    sekPerMonth: 0,
+    committed: true,
+    free: true,
+    note: api.note,
+  }));
+
+  const noCostLines: ServiceLine[] = [...vendorNoCostLines, ...externalApiLines];
 
   const services: ServiceLine[] = [
     writesLine,

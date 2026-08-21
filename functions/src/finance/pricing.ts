@@ -269,3 +269,38 @@ export const MAPBOX = {
     ] as PricingTier[],
   },
 } as const;
+
+// ---------------------------------------------------------------------------
+// External free APIs — no metered CHARGE, but a real QUOTA the board must be
+// honest about. Like App Check / FCM / Trafikverket, these cost 0 SEK; unlike
+// them, they are rate-limited, so the exposure is a quota, not money. Modelled
+// as $0 lines (see model.ts) with the quota called out in the note, so a
+// reviewer sees the dependency even though it never shows up on an invoice.
+// Captured 2026-08-20.
+// ---------------------------------------------------------------------------
+
+/** One external free-but-quota-bound API surfaced as a $0 line on the board. */
+export interface ExternalFreeApi {
+  /** Service name shown in the table. */
+  service: string;
+  /** Billing driver label. */
+  driver: string;
+  /** Note carrying the rate-quota annotation (shown on hover, like other lines). */
+  note: string;
+}
+
+export const EXTERNAL_FREE_APIS: readonly ExternalFreeApi[] = [
+  {
+    service: 'GitHub REST API',
+    driver: 'No metered charge (rate-quota bound)',
+    // ~15 functions call it: in-app feedback tickets, server-error + crash
+    // auto-filing, the daily-cap and claim-lag detectors, leaderboard public-JSON
+    // commits, and the homepage events sync.
+    note: 'Free — no per-request fee. QUOTA: 5,000 requests/hour per token (issueBudget-core.ts rate-limits issue creation against it). Used by ~15 functions (feedback tickets, error/crash auto-filing, daily-cap + claim-lag detectors, leaderboard commits, homepage events sync). Cost is 0 kr; the exposure is the hourly quota.',
+  },
+  {
+    service: 'Overpass / OpenStreetMap API',
+    driver: 'No metered charge (fair-use bound)',
+    note: 'Free + keyless — no per-request fee. QUOTA: public Overpass endpoints are fair-use rate-limited and throttle heavy callers. Used by crownHunt-refreshAreaPois (weekly safe-stop POI ingestion). Cost is 0 kr; the exposure is fair-use throttling.',
+  },
+] as const;
