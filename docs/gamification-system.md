@@ -518,7 +518,14 @@ A crown collected while the collector is **not** sharing a live session pays **h
 
 **Where.** A single resolver, `resolveLiveShareMultiplier(uid, now)` in `functions/src/crownHunt/live-share-multiplier.ts` (exporting `NON_LIVE_SHARE_MULTIPLIER = 0.5`), is called by **both** award paths right after the boost resolver — `claimSpawn.ts` (auto-spawn) and `submitClaim.ts` (hand-placed) — and folded into the reward: `Math.round(rewardPoints × boostMultiplier × liveShareMultiplier)`. It **composes multiplicatively** with the PvP boost (§ the boost is a separate collect-doubler), so a boosted collect while sharing is `× 2`, a boosted collect while dark is `× 2 × 0.5 = × 1`, and an unboosted dark collect is `× 0.5`.
 
-**Fail-open, always.** The halving is returned **only** when the backend can positively confirm the member is not sharing: the flag is on **and** the RTDB live-session node (`liveLocation/{uid}/session`, read exactly like `readLatestTrustedPosition`) is absent or not `active` per `isSessionActive`. The flag being OFF, an active session, **or any error reading the session** all return `1` (full award) — a member who *is* live-sharing is never wrongly penalised by a transient read failure. The flag is read **uncached** (mirroring the boost resolver) so the rule takes effect the instant a member starts or stops sharing.
+**Fail-open, always — we only halve on *positive* confirmation.** With the flag on, the resolver reads the RTDB live-session node (`liveLocation/{uid}/session`, exactly like `readLatestTrustedPosition`) and decides three-way:
+
+- node **absent / null** → positive confirmation there is no session → **halve** (`0.5`);
+- node is a **well-formed** session (a plain object with a string `status` and a parseable `expiresAt`) that is **not `active`** per `isSessionActive` (stopped/expired) → confirmed not sharing → **halve**;
+- node is **present but MALFORMED** (not an object, or a missing/mistyped `status`/`expiresAt`) → *ambiguous*, we cannot confirm → **full** (`1`, fail open);
+- node is a well-formed **active** session → **full**.
+
+And, at the outer edges, the flag being **OFF**, or **any error** reading the flag or the session, also return `1` (full). So the only ways to lose half your KP are the two genuine no-session confirmations above — a corrupt or partial write never triggers the penalty, and a member who *is* live-sharing is never wrongly penalised by a transient failure. The flag is read **uncached** (mirroring the boost resolver) so the rule takes effect the instant a member starts or stops sharing.
 
 **UI is gated on the same flag.** Because the flag governs both the multiplier and the copy, the Android app only *describes* the rule when it is in force: the Kronjakt instructions gain a "go live for full points" section, and the crown-tap popups (auto-spawn and hand-placed) show a one-line tip **only when the flag is on AND the member is not currently live-sharing** — so the copy never advertises an inactive rule and never nags a member already earning full points. While the flag is OFF the multiplier is always `1` and the app shows nothing about it, so the whole feature ships dark.
 
