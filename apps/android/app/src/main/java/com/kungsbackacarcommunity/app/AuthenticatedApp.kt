@@ -211,6 +211,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnController
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
+import com.kungsbackacarcommunity.app.crownhunt.CrownZoomThinning
 import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.OwnDotPerkOverlay
 import com.kungsbackacarcommunity.app.crownhunt.OwnTrapMarker
@@ -2463,12 +2464,36 @@ fun AuthenticatedApp(
             // waiting for a poll pass. A crown OUT of collect range is drawn in the
             // neutral out-of-range slate; it lights up to its rarity colour once
             // the member is close enough — the same rule that gates the popup.
+            // Zoom-based declutter of the auto-spawn crowns. Derived as a DISTINCT
+            // boolean off the existing camera snapshot so the marker list only
+            // rebuilds when the CrownZoomThinning.DECLUTTER_ZOOM threshold is
+            // actually crossed, not on every settled camera frame. Defaults to
+            // "not zoomed out" (full set) before the first camera frame so nothing
+            // is hidden on cold start.
+            val crownsZoomedOut by
+                remember(mapSurface) {
+                    mapSurface.cameraSnapshot
+                        .map {
+                            CrownZoomThinning.isZoomedOut(
+                                it?.zoom ?: CrownZoomThinning.DECLUTTER_ZOOM,
+                            )
+                        }
+                        .distinctUntilChanged()
+                }.collectAsState(initial = false)
             val crownMarkers =
-                remember(crownSpawns, crownSpawnEnabled, inRangeSpawnIds, crownCollectedIds) {
+                remember(
+                    crownSpawns,
+                    crownSpawnEnabled,
+                    inRangeSpawnIds,
+                    crownCollectedIds,
+                    crownsZoomedOut,
+                ) {
                     if (!crownSpawnEnabled) {
                         emptyList()
                     } else {
-                        crownSpawns.map { spawn ->
+                        // Zoomed out → keep only the top tiers (see CrownZoomThinning);
+                        // the full set returns on zoom-in.
+                        CrownZoomThinning.visibleSpawns(crownSpawns, crownsZoomedOut).map { spawn ->
                             // null in-range set = no fix yet → fail closed and grey
                             // every crown. A crown lights to its rarity colour only
                             // once a real location proves the member is inside the

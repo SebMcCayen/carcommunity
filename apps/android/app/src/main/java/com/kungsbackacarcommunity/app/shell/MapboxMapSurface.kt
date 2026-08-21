@@ -1909,6 +1909,52 @@ class MapboxMapSurface : MapSurface {
                         // the night congestion colours without waiting for a toggle.
                         runCatching { addTrafficLayer(style, mapModeFlow.value) }
                         runCatching { applyTrafficVisibility(style, trafficFlow.value) }
+                        // ORDER MATTERS: the crown manager is created FIRST, before
+                        // the route/destination and incident managers below, so the
+                        // crown layer is the LOWEST annotation layer and never draws
+                        // over the navigation route, destination or incident badges
+                        // (annotation managers stack in creation order). Thinning at
+                        // low zoom (CrownZoomThinning) handles density; this handles
+                        // occlusion so the crowns never block navigation.
+                        // Kronjakt crown manager — its OWN PointAnnotationManager,
+                        // so the crown layer and the incidents layer can be drawn,
+                        // emptied and hit-tested independently of each other.
+                        //
+                        // Created unconditionally, even with the crownHuntSpawn
+                        // flag off: an empty manager draws nothing, costs nothing
+                        // and issues no query (the host is what queries, and it is
+                        // gated). Gating the MANAGER on the flag instead would mean
+                        // a flag flipped on mid-session had no manager to draw
+                        // into until the next style load.
+                        runCatching {
+                            val crownManager = annotations.createPointAnnotationManager()
+                            // Same reasoning as the incidents layer: never let
+                            // symbol collision silently drop a crown. Two crowns
+                            // are at least 150 m apart by construction, so overlap
+                            // only happens when zoomed well out — where a hidden
+                            // crown would read as "there is nothing here".
+                            crownManager.iconAllowOverlap = true
+                            crownManager.iconIgnorePlacement = true
+                            val crownClick =
+                                OnPointAnnotationClickListener { annotation ->
+                                    onCrownAnnotationClicked(annotation.id)
+                                }
+                            crownClickListener = crownClick
+                            crownManager.addClickListener(crownClick)
+                            crownMarkerManager = crownManager
+                            // Style images die with the style that owned them.
+                            registeredCrownImages.clear()
+                            // A fresh style has no annotations; reset the animation
+                            // bookkeeping so the driver in Content redraws every
+                            // current crown from scratch (a spawn-in, not a jump).
+                            crownAnnotationsById.clear()
+                            crownRenderedImageById.clear()
+                            crownAnimator.clear()
+                            // Signal the animation driver (Content) that the manager
+                            // now exists — it reacts by (re)drawing the current
+                            // crowns and running the spawn/despawn animations.
+                            crownManagerReadyFlow.value = true
+                        }
                         // Route line + destination marker managers, created once
                         // the style is ready. Drawn from the current flow value
                         // so a route picked while the style was still loading is
@@ -1961,45 +2007,6 @@ class MapboxMapSurface : MapSurface {
                             // still present.
                             registeredIncidentImages.clear()
                             applyIncidentMarkersIfChanged(incidentMarkersFlow.value)
-                        }
-                        // Kronjakt crown manager — its OWN PointAnnotationManager,
-                        // so the crown layer and the incidents layer can be drawn,
-                        // emptied and hit-tested independently of each other.
-                        //
-                        // Created unconditionally, even with the crownHuntSpawn
-                        // flag off: an empty manager draws nothing, costs nothing
-                        // and issues no query (the host is what queries, and it is
-                        // gated). Gating the MANAGER on the flag instead would mean
-                        // a flag flipped on mid-session had no manager to draw
-                        // into until the next style load.
-                        runCatching {
-                            val crownManager = annotations.createPointAnnotationManager()
-                            // Same reasoning as the incidents layer: never let
-                            // symbol collision silently drop a crown. Two crowns
-                            // are at least 150 m apart by construction, so overlap
-                            // only happens when zoomed well out — where a hidden
-                            // crown would read as "there is nothing here".
-                            crownManager.iconAllowOverlap = true
-                            crownManager.iconIgnorePlacement = true
-                            val crownClick =
-                                OnPointAnnotationClickListener { annotation ->
-                                    onCrownAnnotationClicked(annotation.id)
-                                }
-                            crownClickListener = crownClick
-                            crownManager.addClickListener(crownClick)
-                            crownMarkerManager = crownManager
-                            // Style images die with the style that owned them.
-                            registeredCrownImages.clear()
-                            // A fresh style has no annotations; reset the animation
-                            // bookkeeping so the driver in Content redraws every
-                            // current crown from scratch (a spawn-in, not a jump).
-                            crownAnnotationsById.clear()
-                            crownRenderedImageById.clear()
-                            crownAnimator.clear()
-                            // Signal the animation driver (Content) that the manager
-                            // now exists — it reacts by (re)drawing the current
-                            // crowns and running the spawn/despawn animations.
-                            crownManagerReadyFlow.value = true
                         }
                         // Community events manager (the shared events layer),
                         // created once the style is ready — a SEPARATE manager from
