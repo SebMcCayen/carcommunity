@@ -1555,14 +1555,6 @@ service cloud.firestore {
     match /perkDrainCooldowns/{victimId} {
       allow read, write: if false;
     }
-    // perkPurchaseCooldowns – the per-member anti-burst cooldown for
-    // crownHunt.buyPerk (PERK_PURCHASE_COOLDOWN_SECONDS between purchases).
-    // Backend-only, doc id = uid, read and stamped INSIDE the buy transaction's
-    // read guard (BEFORE the debit). A member must never inspect or reset their
-    // own purchase cooldown. TTL swept via field `expireAt` (operator policy).
-    match /perkPurchaseCooldowns/{cooldownId} {
-      allow read, write: if false;
-    }
     // convoyReactionCooldowns – the per-(convoy, member) anti-spam cooldown for
     // convoy.sendReaction (police 60s, hello 15s, follow_me 30s). Backend-only,
     // deterministic ids (convoyId__uid), read and stamped inside the sendReaction

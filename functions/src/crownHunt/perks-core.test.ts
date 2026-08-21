@@ -19,22 +19,18 @@ import {
   PERK_BASE_COST_KP,
   PERK_CATALOG,
   PERK_CATALOG_DOC_VERSION,
-  PERK_HOLD_DAYS_BUFFER,
   PERK_IDS,
-  PERK_PURCHASE_COOLDOWN_SECONDS,
   activationAllowed,
   buildPerkCatalogDoc,
   evaluateHoldCap,
   isBuyable,
   isPerkId,
-  isWithinPurchaseCooldown,
   parseBuyPerkInput,
   perkById,
   perkCost,
+  perkHoldCapRejectionMessage,
   perkPowerKp,
   perkPurchaseLedgerKey,
-  purchaseCooldownBlocks,
-  purchaseCooldownDocId,
   referencePerkCostKp,
   scopePerkPurchaseKey,
   type ActivePerkEffects,
@@ -243,81 +239,64 @@ describe('perks-core pricing algorithm (cost === reference price)', () => {
 });
 
 describe('perks-core hold cap (buy/hold ceiling)', () => {
-  it('derives the per-perk cap from trap throughput × the day buffer', () => {
-    expect(MAX_PERK_HOLD_PER_PERK).toBe(3 * PERK_HOLD_DAYS_BUFFER);
-    expect(MAX_PERK_HOLD_PER_PERK).toBe(6);
+  it('caps a member at a flat 3 of each perk', () => {
+    expect(MAX_PERK_HOLD_PER_PERK).toBe(3);
   });
 
-  it('allows a buy that fits under both ceilings', () => {
+  it('derives the hold-cap rejection message from the constant (cannot drift)', () => {
+    // The buyPerk SERVER message is built from MAX_PERK_HOLD_PER_PERK, so the
+    // authoritative cap and the message it throws can never silently diverge.
+    expect(perkHoldCapRejectionMessage()).toContain(MAX_PERK_HOLD_PER_PERK.toString());
+  });
+
+  it('allows back-to-back buys that fit under both ceilings', () => {
     expect(evaluateHoldCap({}, 'shield', 1, 100)).toBeNull();
-    expect(evaluateHoldCap({ shield: 5 }, 'shield', 1, 100)).toBeNull();
+    // Holding two, buying a third still fits (3 of each is allowed).
+    expect(evaluateHoldCap({ shield: 2 }, 'shield', 1, 100)).toBeNull();
   });
 
-  it('refuses a buy that would exceed the per-perk count cap', () => {
+  it('refuses a 4th of the same perk with the per-perk count cap (no cooldown)', () => {
+    // Already at the cap (3): a further buy is refused for the COUNT, not a cooldown.
     expect(evaluateHoldCap({ shield: MAX_PERK_HOLD_PER_PERK }, 'shield', 1, 100)).toBe('per_perk');
-    expect(evaluateHoldCap({ shield: 5 }, 'shield', 2, 100)).toBe('per_perk');
+    // Holding two, a qty-2 buy would reach four → refused.
+    expect(evaluateHoldCap({ shield: 2 }, 'shield', 2, 100)).toBe('per_perk');
+    // A DIFFERENT perk is unaffected by a capped one — buys succeed immediately.
+    expect(evaluateHoldCap({ shield: MAX_PERK_HOLD_PER_PERK }, 'boost', 1, 120)).toBeNull();
   });
 
-  it('refuses a buy that would exceed the total held VALUE cap', () => {
-    // Derive the scenario from the constants rather than hardcoding a cap value
-    // — a stale hardcoded cap is exactly what broke this test last time. Max out
-    // the two OTHER perks, then buy the smallest shield quantity whose added
-    // value tips the summed hold over the ceiling, while staying under the
-    // per-perk COUNT cap so it is provably the VALUE ceiling that bites.
-    const boughtPerk = 'shield';
-    const otherPerkIds = PERK_IDS.filter((id) => id !== boughtPerk);
-    const inventory = Object.fromEntries(
-      otherPerkIds.map((id) => [id, MAX_PERK_HOLD_PER_PERK]),
-    );
-    const heldValue = otherPerkIds.reduce(
+  it('keeps the total-value cap as a harmless backstop that never binds at 3-of-each', () => {
+    // The value ceiling is anchored to the daily points cap by design.
+    expect(MAX_PERK_HOLD_VALUE_KP).toBe(DAILY_POINTS_CAP);
+
+    // With a flat per-perk cap of 3, the MOST value a member can ever hold is
+    // 3 of every perk at its catalog cost — assert that maximum stays UNDER the
+    // value ceiling, so the per-perk COUNT cap is always what bites first and the
+    // value cap is a dormant backstop (documents the "won't bind at 3-of-each").
+    const maxHeldValue = PERK_IDS.reduce(
       (sum, id) => sum + PERK_CATALOG[id].costKp * MAX_PERK_HOLD_PER_PERK,
       0,
     );
-    const unitCost = PERK_CATALOG[boughtPerk].costKp;
-    const qty = Math.floor((MAX_PERK_HOLD_VALUE_KP - heldValue) / unitCost) + 1;
+    expect(maxHeldValue).toBeLessThan(MAX_PERK_HOLD_VALUE_KP);
+    // A full 3-of-each inventory, then a fresh buy of a not-yet-held-max perk,
+    // still fits (the count cap, not the value cap, governs).
+    expect(evaluateHoldCap({ spike_strip: 3, shield: 3 }, 'boost', 3, 120)).toBeNull();
+  });
 
-    // The scenario only tests the VALUE ceiling if the tipping buy still fits
-    // under the per-perk COUNT cap; assert that so a future constant change that
-    // makes it infeasible fails loudly here instead of silently passing.
-    expect(qty).toBeGreaterThan(0);
-    expect(qty).toBeLessThanOrEqual(MAX_PERK_HOLD_PER_PERK);
-    expect(evaluateHoldCap(inventory, boughtPerk, qty, unitCost)).toBe('total_value');
-    // The value ceiling is anchored to the daily points cap by design.
-    expect(MAX_PERK_HOLD_VALUE_KP).toBe(DAILY_POINTS_CAP);
+  it('still fails closed on the total-value ceiling when it is reached', () => {
+    // The value branch is dormant at real 3-of-each costs, but it must still fail
+    // closed if ever reached — exercise it directly with a synthetic unit cost
+    // large enough to tip the summed hold over the ceiling within the count cap.
+    const overCost = MAX_PERK_HOLD_VALUE_KP + 1;
+    expect(evaluateHoldCap({}, 'boost', 1, overCost)).toBe('total_value');
   });
 
   it('treats a corrupt/negative stored count as zero (never bypasses the cap)', () => {
-    expect(evaluateHoldCap({ shield: -5 as unknown as number }, 'shield', 6, 100)).toBeNull();
-    expect(evaluateHoldCap({ shield: Number.NaN }, 'shield', 7, 100)).toBe('per_perk');
-  });
-});
-
-describe('perks-core purchase cooldown', () => {
-  it('scopes the cooldown doc to the member', () => {
-    expect(purchaseCooldownDocId('user-1')).toBe('user-1');
-  });
-
-  it('blocks a buy inside the window and allows it after', () => {
-    const now = 1_000_000;
-    const windowMs = PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
-    expect(isWithinPurchaseCooldown(now - 1, now)).toBe(true);
-    expect(isWithinPurchaseCooldown(now - (windowMs - 1), now)).toBe(true);
-    expect(isWithinPurchaseCooldown(now - windowMs, now)).toBe(false);
-    expect(isWithinPurchaseCooldown(null, now)).toBe(false);
-  });
-
-  it('purchaseCooldownBlocks fails CLOSED on a corrupt cooldown doc', () => {
-    const now = 1_000_000;
-    const windowMs = PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
-    // No doc = genuine first purchase = allowed.
-    expect(purchaseCooldownBlocks(false, null, now)).toBe(false);
-    // Doc exists with a valid, in-window timestamp = blocked; past the window = allowed.
-    expect(purchaseCooldownBlocks(true, now - 1, now)).toBe(true);
-    expect(purchaseCooldownBlocks(true, now - windowMs, now)).toBe(false);
-    // Doc EXISTS but the timestamp is missing/invalid = fail closed (blocked), so
-    // corrupt data cannot disable the anti-burst control.
-    expect(purchaseCooldownBlocks(true, null, now)).toBe(true);
-    expect(purchaseCooldownBlocks(true, Number.NaN, now)).toBe(true);
+    // Negative treated as 0: a qty AT the cap still fits.
+    expect(evaluateHoldCap({ shield: -5 as unknown as number }, 'shield', MAX_PERK_HOLD_PER_PERK, 100)).toBeNull();
+    // NaN treated as 0: a qty PAST the cap is refused.
+    expect(evaluateHoldCap({ shield: Number.NaN }, 'shield', MAX_PERK_HOLD_PER_PERK + 1, 100)).toBe(
+      'per_perk',
+    );
   });
 });
 

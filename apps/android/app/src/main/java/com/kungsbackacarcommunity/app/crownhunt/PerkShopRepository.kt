@@ -105,14 +105,6 @@ class PerkPurchaseHoldCapException(cause: Throwable? = null) :
     Exception("buyPerk rejected: hold cap reached.", cause)
 
 /**
- * Thrown when the buy was refused because the member bought too recently — server
- * `details.reason == "purchase_cooldown"`. Distinct so the UI can say "wait a
- * moment" rather than a generic error.
- */
-class PerkPurchaseCooldownException(cause: Throwable? = null) :
-    Exception("buyPerk rejected: purchase cooldown.", cause)
-
-/**
  * Thrown when a deploy was refused because it would exceed the concurrent
  * activation limit (too many perk effects live at once) — server
  * `details.reason == "activation_limit"`. Distinct from the collapsed
@@ -441,9 +433,6 @@ internal const val PERK_REASON_INSUFFICIENT_FUNDS = "insufficient_funds"
 /** Mirrors `PERK_PURCHASE_REASON_HOLD_CAP` in functions `crownHunt/perks-core.ts`. */
 internal const val PERK_REASON_HOLD_CAP = "hold_cap_reached"
 
-/** Mirrors `PERK_PURCHASE_REASON_COOLDOWN` in functions `crownHunt/perks-core.ts`. */
-internal const val PERK_REASON_COOLDOWN = "purchase_cooldown"
-
 /** Mirrors `PERK_DEPLOY_REASON_ACTIVATION_LIMIT` in functions `crownHunt/perks-core.ts`. */
 internal const val PERK_DEPLOY_REASON_ACTIVATION_LIMIT = "activation_limit"
 
@@ -483,7 +472,6 @@ internal fun perkPurchaseFailedPreconditionException(
     when (reason) {
         PERK_REASON_INSUFFICIENT_FUNDS -> PerkPurchaseInsufficientFundsException(cause)
         PERK_REASON_HOLD_CAP -> PerkPurchaseHoldCapException(cause)
-        PERK_REASON_COOLDOWN -> PerkPurchaseCooldownException(cause)
         else -> PerkPurchaseUnavailableException(cause)
     }
 

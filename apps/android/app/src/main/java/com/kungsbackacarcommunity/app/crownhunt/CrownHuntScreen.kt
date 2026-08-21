@@ -851,7 +851,6 @@ private fun buyFailureMessageRes(reason: PerkBuyFailureReason): Int =
     when (reason) {
         PerkBuyFailureReason.INSUFFICIENT_FUNDS -> R.string.crownHunt_shopErrorInsufficient
         PerkBuyFailureReason.HOLD_CAP -> R.string.crownHunt_shopErrorHoldCap
-        PerkBuyFailureReason.COOLDOWN -> R.string.crownHunt_shopErrorCooldown
         PerkBuyFailureReason.UNAVAILABLE -> R.string.crownHunt_shopErrorUnavailable
         PerkBuyFailureReason.UNKNOWN -> R.string.crownHunt_shopErrorUnknown
     }

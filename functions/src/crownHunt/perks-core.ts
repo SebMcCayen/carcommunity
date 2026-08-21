@@ -59,13 +59,6 @@ export const PERK_PURCHASE_REASON_SHOP_UNAVAILABLE = 'shop_unavailable';
  */
 export const PERK_PURCHASE_REASON_HOLD_CAP = 'hold_cap_reached';
 /**
- * The member bought too recently — the {@link PERK_PURCHASE_COOLDOWN_SECONDS}
- * anti-burst window between purchases has not elapsed. Metering purchase
- * frequency stops scripted rapid-fire buying and keeps the ledger from a
- * write-storm; a normal shopper never sees it.
- */
-export const PERK_PURCHASE_REASON_COOLDOWN = 'purchase_cooldown';
-/**
  * Log-only fallback reason for a `failed-precondition` the buy path did NOT
  * itself reason-code — chiefly the ledger's suspended/deleted-account guard,
  * which reaches the buyPerk catch without a `details.reason`. Distinct from
@@ -537,30 +530,49 @@ export function referencePerkCostKp(perk: PerkDefinition): number {
 // ---------------------------------------------------------------------------
 // HOLD CAP — how many perks a member may BUY / HOLD at once
 //
-// A perk is a working stock, not a war chest. Two independent, economy-derived
-// ceilings bound the inventory so a member can never bank more perk-power than
-// the game's own throughput justifies; buyPerk enforces BOTH atomically and
-// FAILS CLOSED (PERK_PURCHASE_REASON_HOLD_CAP) when either would be breached.
+// A perk is a working stock, not a war chest. Two independent ceilings bound the
+// inventory so a member can never bank more perk-power than a healthy working
+// stock; buyPerk enforces BOTH atomically and FAILS CLOSED
+// (PERK_PURCHASE_REASON_HOLD_CAP) when either would be breached. There is NO
+// purchase cooldown — buys are back-to-back — so this per-perk cap is the sole
+// brake on stockpiling one perk.
 //
-//   1. PER-PERK COUNT — MAX_PERK_HOLD_PER_PERK. Derived from DEPLOY throughput:
-//      the busiest deployable perk (the trap) can be used MAX_TRAP_DEPLOYS_PER_DAY
-//      (3) times a day, so a PERK_HOLD_DAYS_BUFFER (2)-day working stock is
-//      3 × 2 = 6. A member can prep a couple of days ahead, not stockpile weeks.
+//   1. PER-PERK COUNT — MAX_PERK_HOLD_PER_PERK. A flat "max 3 of each perk" working
+//      stock: a member may hold up to three of any single perk at once and buy
+//      them back-to-back, but not hoard a fourth until they use one. Kept flat
+//      (not derived from deploy throughput) so the shop rule is simple to state
+//      in the UI: "at most 3 of each perk".
 //   2. TOTAL VALUE — MAX_PERK_HOLD_VALUE_KP. The summed (count × costKp) a member
 //      may hold is one capped DAY of earnings (DAILY_POINTS_CAP), so the
 //      aggregate banked perk-power tracks the economy regardless of how cheap any
 //      single perk is. Anchoring to the same DAILY_POINTS_CAP the crown economy
-//      uses keeps the shop balanced against everything else that spends KP.
+//      uses keeps the shop balanced against everything else that spends KP. At
+//      3-of-each this value cap never binds — it stays a harmless backstop.
 // ---------------------------------------------------------------------------
 
-/** How many days of trap-deploy throughput a member may hold as working stock. */
-export const PERK_HOLD_DAYS_BUFFER = 2;
-
-/** Max units of ONE perk a member may hold (3 deploys/day × a 2-day buffer). */
-export const MAX_PERK_HOLD_PER_PERK = MAX_TRAP_DEPLOYS_PER_DAY * PERK_HOLD_DAYS_BUFFER;
+/**
+ * Max units of ONE perk a member may hold at once (flat "3 of each perk").
+ *
+ * The buyPerk SERVER hold-cap message derives its number from this constant, so
+ * changing it keeps the authoritative cap and the server message in sync. The
+ * ANDROID client's localized `shopErrorHoldCap` string (contracts/localization
+ * sv.json + en.json) hardcodes the number "3" as a static display resource — if
+ * this value changes, UPDATE THOSE SV/EN STRINGS too so the client copy matches.
+ */
+export const MAX_PERK_HOLD_PER_PERK = 3;
 
 /** Max summed KP VALUE of all held perks — one capped day of earnings. */
 export const MAX_PERK_HOLD_VALUE_KP = DAILY_POINTS_CAP;
+
+/**
+ * The Swedish member-facing message buyPerk throws when a buy hits the hold cap.
+ * The cap number is DERIVED from {@link MAX_PERK_HOLD_PER_PERK} (not hardcoded)
+ * so the authoritative cap and its message can never silently drift apart — a
+ * unit test pins that the message contains the constant.
+ */
+export function perkHoldCapRejectionMessage(): string {
+  return `Du kan ha max ${MAX_PERK_HOLD_PER_PERK} av varje perk just nu. Använd några först.`;
+}
 
 /** A buy's held-inventory snapshot, as the `{ perkId: count }` map buyPerk reads. */
 export type PerkInventoryCounts = Readonly<Record<string, number>>;
@@ -604,57 +616,6 @@ export function evaluateHoldCap(
     return 'total_value';
   }
   return null;
-}
-
-// ---------------------------------------------------------------------------
-// PURCHASE COOLDOWN — how often a member may buy
-//
-// An anti-burst window between purchase CALLS (a single call may still buy up to
-// MAX_PERK_PURCHASE_QTY units). It stops scripted rapid-fire buying and the
-// ledger write-storm that would cause, while a normal shopper — who buys, then
-// deploys — never trips it. buyPerk reads perkPurchaseCooldowns/{uid} inside the
-// buy transaction and FAILS CLOSED (PERK_PURCHASE_REASON_COOLDOWN) when the
-// window has not elapsed. Deliberately short (seconds, not minutes) so buying a
-// trap and then a shield back-to-back stays smooth.
-// ---------------------------------------------------------------------------
-
-/** Minimum seconds between a member's perk purchases. */
-export const PERK_PURCHASE_COOLDOWN_SECONDS = 30;
-
-/** perkPurchaseCooldowns doc ID — one per member (their last-purchase stamp). */
-export function purchaseCooldownDocId(uid: string): string {
-  return uid;
-}
-
-/** True while a member is still inside the post-purchase cooldown (buy refused). */
-export function isWithinPurchaseCooldown(lastPurchaseAtMs: number | null, nowMs: number): boolean {
-  if (lastPurchaseAtMs === null || !Number.isFinite(lastPurchaseAtMs)) return false;
-  return nowMs - lastPurchaseAtMs < PERK_PURCHASE_COOLDOWN_SECONDS * 1000;
-}
-
-/**
- * Whether a buy must be REFUSED for the purchase cooldown, given whether the
- * cooldown doc exists and its `lastPurchaseAt` — STORED as a Firestore
- * `Timestamp` (buyPerk writes `Timestamp.fromDate(now)`) but passed HERE as
- * epoch-ms after the caller's `.toMillis()`, or null when the field is absent /
- * the wrong type.
- *
- * FAILS CLOSED on corrupt data: a cooldown doc that EXISTS but carries no usable
- * timestamp is treated as a just-now purchase (refuse), so a missing/garbled
- * `lastPurchaseAt` cannot silently DISABLE this anti-burst control. No doc at all
- * is a genuine first purchase and is allowed. Split from
- * {@link isWithinPurchaseCooldown} because that pure window check cannot tell
- * "doc absent" (allow) from "doc present but invalid" (refuse) — only the caller,
- * which knows whether the doc exists, can.
- */
-export function purchaseCooldownBlocks(
-  cooldownDocExists: boolean,
-  lastPurchaseAtMs: number | null,
-  nowMs: number,
-): boolean {
-  if (!cooldownDocExists) return false;
-  if (lastPurchaseAtMs === null || !Number.isFinite(lastPurchaseAtMs)) return true;
-  return isWithinPurchaseCooldown(lastPurchaseAtMs, nowMs);
 }
 
 // ---------------------------------------------------------------------------
