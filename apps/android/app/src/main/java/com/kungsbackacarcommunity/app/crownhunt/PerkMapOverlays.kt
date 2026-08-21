@@ -221,8 +221,13 @@ private fun ActiveTrapLayer(
                             }
                             .size(TRAP_TAP_TARGET)
                             .testTag(SPIKE_STRIP_TAP_TAG + trap.trapId)
-                            .semantics { contentDescription = tapLabel }
-                            .clickable(role = Role.Button) { onTap(trap) },
+                            // clickable BEFORE semantics so the content description and
+                            // the click action merge onto the SAME actionable node
+                            // (matching NearbyLiveOverlay). The reverse order can strand
+                            // the label on an outer, non-actionable node — TalkBack then
+                            // announces an unlabelled button.
+                            .clickable(role = Role.Button) { onTap(trap) }
+                            .semantics { contentDescription = tapLabel },
                 )
             }
         }
