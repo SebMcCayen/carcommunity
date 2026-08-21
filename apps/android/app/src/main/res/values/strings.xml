@@ -1152,6 +1152,7 @@
     <string name="crownHunt_spawnNoPositionDetail">Stå stilla några sekunder så vi hinner se att du står still.</string>
     <string name="crownHunt_spawnConfirming">Bekräftar att du står stilla…</string>
     <string name="crownHunt_spawnConfirmingSeconds">Bekräftar att du står stilla… (%1$d s)</string>
+    <string name="crownHunt_spawnWaitingForSignal">Väntar på bättre GPS-signal…</string>
     <string name="crownHunt_spawnResultAwarded">Kronan är din!</string>
     <string name="crownHunt_spawnResultAwardedPoints">+%1$d KP</string>
     <string name="crownHunt_spawnResultAlreadyTaken">Någon hann före — den här kronan är redan hämtad.</string>

@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -409,12 +410,14 @@ class CrownCollectGateTest {
     }
 
     /**
-     * A KNOWN accuracy coarser than the collect radius is Confirming: the distance
-     * cannot be trusted yet, so wait for GPS to settle rather than sending a pair
-     * one bad sample would fail as outside_radius.
+     * A KNOWN accuracy coarser than the collect radius is [CrownCollectState.WaitingForSignal],
+     * NOT [CrownCollectState.Confirming]: the distance cannot be trusted yet, so wait
+     * for GPS to settle rather than sending a pair one bad sample would fail as
+     * outside_radius. It is its OWN state so the reason shown is GPS, not stillness,
+     * and it never collects.
      */
     @Test
-    fun aPositionTooCoarseToTrustIsConfirmingRatherThanReady() {
+    fun aPositionTooCoarseToTrustIsWaitingForSignalRatherThanReady() {
         val state =
             CrownCollectGate.evaluate(
                 featureEnabled = true,
@@ -423,8 +426,80 @@ class CrownCollectGateTest {
                 dwellProofReady = true,
                 accuracyMeters = radius + 20.0,
             )
-        assertTrue("expected Confirming, got $state", state is CrownCollectState.Confirming)
+        assertEquals(CrownCollectState.WaitingForSignal, state)
         assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * Coarse GPS is [CrownCollectState.WaitingForSignal] even BEFORE the dwell proof
+     * has aged in: the accuracy check runs first, so a member with a fuzzy fix and
+     * no partner yet is told the real (GPS) hold-up, not a dwell countdown they
+     * cannot act on. The distinct-state split is what makes this unambiguous.
+     */
+    @Test
+    fun coarseGpsIsWaitingForSignalEvenWhenTheDwellProofIsAlsoNotReady() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = false,
+                dwellSecondsRemaining = 3,
+                accuracyMeters = radius + 40.0,
+            )
+        assertEquals(CrownCollectState.WaitingForSignal, state)
+        assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * The live fix, end to end at the logic level: a coarse fix reads
+     * WaitingForSignal, and the SAME position with an improved (fine) accuracy —
+     * the dwell already satisfied — flips to Ready, the button enabling itself. No
+     * close/reopen: only the accuracy the gate is fed changed.
+     */
+    @Test
+    fun anAccuracyImprovementFlipsWaitingForSignalStraightToReady() {
+        fun stateAt(accuracy: Double) =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = true,
+                accuracyMeters = accuracy,
+            )
+
+        val coarse = stateAt(radius + 30.0)
+        assertEquals(CrownCollectState.WaitingForSignal, coarse)
+        assertFalse(CrownCollectGate.isCollectEnabled(coarse))
+
+        val fine = stateAt(radius / 5.0)
+        assertEquals(CrownCollectState.Ready, fine)
+        assertTrue(CrownCollectGate.isCollectEnabled(fine))
+    }
+
+    /**
+     * With the coarse-GPS wait now its OWN state, [CrownCollectState.Confirming] is
+     * only ever the DWELL wait — which always has a countable answer. So a
+     * Confirming reached with a settled (fine) position ALWAYS carries its positive
+     * seconds hint: the null-seconds Confirming that used to swallow the countdown
+     * (when GPS was the real hold-up but the dwell reported ready) can no longer
+     * occur, because that case is WaitingForSignal instead.
+     */
+    @Test
+    fun theDwellConfirmingAlwaysCarriesItsSecondsOnceGpsIsSettled() {
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = false,
+                dwellSecondsRemaining = 2,
+                accuracyMeters = 8.0,
+            )
+        assertEquals(CrownCollectState.Confirming(2), state)
+        val seconds = (state as CrownCollectState.Confirming).secondsRemaining
+        assertNotNull("dwell Confirming must carry a countdown", seconds)
+        assertTrue("the countdown must be positive, was $seconds", seconds!! > 0)
     }
 
     /**
@@ -472,6 +547,115 @@ class CrownCollectGateTest {
                 dwellProofReady = false,
             )
         assertEquals(CrownCollectState.Moving, moving)
+    }
+
+    /**
+     * The live-update fix's pure seam: the gate must read accuracy off the
+     * FRESHEST fix, not a pinned proof current.
+     *
+     * The popup's proof pair is chosen for best-accuracy-with-a-valid-in-range-
+     * partner, so it can stay pinned to an older, coarse fix while newer, finer
+     * fixes arrive — which is why the popup used to stay stuck on "confirming"
+     * until a close/reopen. [CrownFixTracker.latest] always reflects the newest
+     * reading, so feeding ITS accuracy to the gate flips WaitingForSignal → Ready
+     * the instant the signal sharpens. This drives the tracker exactly as the
+     * popup loop does and asserts the transition end to end.
+     */
+    @Test
+    fun theFreshestFixAccuracyFlipsTheGateLiveWithoutAReopen() {
+        val tracker = CrownFixTracker()
+        val t0 = 1_000_000L
+        val dwellMs = CrownSpawnLimits.MIN_DWELL_SECONDS * 1000
+        // A warm, aged-in dwell built from COARSE fixes — the proof is ready but
+        // the position is fuzzy.
+        tracker.record(CrownFix(57.5, 12.0, t0, accuracyMeters = 120.0))
+        tracker.record(CrownFix(57.5, 12.0, t0 + dwellMs, accuracyMeters = 120.0))
+
+        val coarseAccuracy = tracker.latest?.accuracyMeters
+        assertEquals(120.0, coarseAccuracy!!, 0.0)
+        val waiting =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 5.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = true,
+                accuracyMeters = coarseAccuracy,
+            )
+        assertEquals(CrownCollectState.WaitingForSignal, waiting)
+        assertFalse(CrownCollectGate.isCollectEnabled(waiting))
+
+        // A newer, FINER fix lands. The freshest accuracy improves...
+        tracker.record(CrownFix(57.5, 12.0, t0 + dwellMs + 2_000, accuracyMeters = 8.0))
+        val fineAccuracy = tracker.latest?.accuracyMeters
+        assertEquals(8.0, fineAccuracy!!, 0.0)
+
+        // ...and the gate, read off the freshest fix, is Ready — button live.
+        val ready =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 5.0,
+                speedMetersPerSecond = 0.0,
+                dwellProofReady = true,
+                accuracyMeters = fineAccuracy,
+            )
+        assertEquals(CrownCollectState.Ready, ready)
+        assertTrue(CrownCollectGate.isCollectEnabled(ready))
+    }
+
+    /**
+     * The gate must judge distance and accuracy off the SAME fix.
+     *
+     * The popup derives one `crownGateFix` and reads distance, speed AND accuracy
+     * off it, so the button can never trust a distance computed from one fix
+     * against the accuracy of another (which could enable Collect on a fuzzy
+     * position, or refuse a clean one). This mirrors that call site: distance is
+     * computed from each fix's OWN coordinates and handed to evaluate together with
+     * that same fix's accuracy, and an improving fix flips the state live.
+     */
+    @Test
+    fun distanceAndAccuracyAreJudgedFromTheSameFixSoAnImprovingFixFlipsLive() {
+        val crownLat = 57.5
+        val crownLon = 12.0
+        fun stateFrom(fix: CrownFix): CrownCollectState {
+            val distance =
+                CrownSpawnQuery.distanceMeters(
+                    fix.latitude,
+                    fix.longitude,
+                    crownLat,
+                    crownLon,
+                )
+            return CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = distance,
+                speedMetersPerSecond = fix.speedMetersPerSecond,
+                dwellProofReady = true,
+                accuracyMeters = fix.accuracyMeters,
+            )
+        }
+
+        // Right on the crown, stopped, but a fuzzy fix.
+        val coarse =
+            CrownFix(
+                crownLat,
+                crownLon,
+                1_000_000L,
+                speedMetersPerSecond = 0.0,
+                accuracyMeters = radius + 25.0,
+            )
+        assertEquals(CrownCollectState.WaitingForSignal, stateFrom(coarse))
+
+        // The same position as a FINE fix — distance and accuracy both off it.
+        val fine =
+            CrownFix(
+                crownLat,
+                crownLon,
+                1_000_002L,
+                speedMetersPerSecond = 0.0,
+                accuracyMeters = 6.0,
+            )
+        val ready = stateFrom(fine)
+        assertEquals(CrownCollectState.Ready, ready)
+        assertTrue(CrownCollectGate.isCollectEnabled(ready))
     }
 
     // ---- The dwell proof --------------------------------------------------

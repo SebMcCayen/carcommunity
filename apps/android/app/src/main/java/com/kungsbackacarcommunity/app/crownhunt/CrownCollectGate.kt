@@ -55,8 +55,31 @@ sealed interface CrownCollectState {
     data object NoPosition : CrownCollectState
 
     /**
-     * Close enough and not moving, but the two-fix stationary PROOF (or a settled
-     * position) is not ready YET.
+     * Close enough and not moving, but the current position fix is too COARSE to
+     * trust the distance against the collect radius — the GPS has not settled yet.
+     *
+     * Split out of [Confirming] on purpose. The two waits feel identical from a
+     * chair but are different problems: [Confirming] is "stand still a moment
+     * longer so a second fix ages in", which the member fixes by doing nothing;
+     * this one is "your position is still fuzzy", which resolves on its own as the
+     * signal sharpens and which no amount of standing-still-longer speeds up. A
+     * single "confirming you're stopped" for both left a member who was in range,
+     * stopped, AND had already dwelled long enough staring at a button that named
+     * a wait that was over — with no countdown and no clue that GPS, not stillness,
+     * was the hold-up. This carries its own label ("waiting for a better GPS
+     * signal") so the reason shown is the real one, and — because it is now its own
+     * state — [Confirming] is only ever the DWELL wait, so its seconds hint stops
+     * collapsing to null.
+     *
+     * The button is disabled here exactly as it is for [Confirming]: nothing has
+     * gone wrong, so it is not a refusal, but the distance cannot be trusted enough
+     * to collect on yet.
+     */
+    data object WaitingForSignal : CrownCollectState
+
+    /**
+     * Close enough and not moving, but the two-fix stationary PROOF is not ready
+     * YET.
      *
      * This is the honest name for the few seconds the server's dwell rule needs:
      * a claim wants two fixes at least [CrownSpawnLimits.MIN_DWELL_SECONDS] apart,
@@ -65,8 +88,13 @@ sealed interface CrownCollectState {
      * silently refusing with `NeedsPosition` — the re-tap loop that made
      * collection feel like "tap, tap, then it works".
      *
+     * A coarse-GPS wait is [WaitingForSignal], not this, so [Confirming] is now
+     * only ever the DWELL wait — which ALWAYS has a countable answer. The seconds
+     * hint is therefore no longer nullable-in-practice: it stops disappearing the
+     * moment GPS is the reason rather than dwell.
+     *
      * @property secondsRemaining a whole-second hint for the button, or null when
-     *   the wait is a settling fix rather than a countable dwell.
+     *   no estimate is available (kept nullable for callers that do not track one).
      */
     data class Confirming(val secondsRemaining: Int?) : CrownCollectState
 
@@ -94,6 +122,7 @@ object CrownCollectGate {
             is CrownCollectState.TooFar -> false
             CrownCollectState.Moving -> false
             CrownCollectState.NoPosition -> false
+            CrownCollectState.WaitingForSignal -> false
             is CrownCollectState.Confirming -> false
             CrownCollectState.FeatureOff -> false
         }
@@ -141,10 +170,13 @@ object CrownCollectGate {
      *   straight through to [CrownCollectState.Confirming].
      * @param accuracyMeters the current fix's reported radius, if any. A KNOWN
      *   accuracy worse than the collect radius means the distance reading cannot
-     *   be trusted, so the state is [CrownCollectState.Confirming] until GPS
+     *   be trusted, so the state is [CrownCollectState.WaitingForSignal] until GPS
      *   settles — but a null/absent accuracy defers (it never blocks), exactly as
      *   an unknown speed does, so a device that never reports accuracy is never
-     *   locked out.
+     *   locked out. Feed this the FRESHEST fix's accuracy, not a pinned proof
+     *   fix's: the gate is "is the live signal good enough to trust the distance",
+     *   and only the newest reading answers that, so an improving accuracy flips
+     *   the state the moment it arrives instead of after a close/reopen.
      */
     fun evaluate(
         featureEnabled: Boolean,
@@ -173,9 +205,12 @@ object CrownCollectGate {
         // In range and stopped, but the position is too coarse to trust the
         // distance yet — wait for GPS to settle rather than sending a pair one bad
         // sample would fail as `outside_radius`. Known-and-too-coarse only; an
-        // absent accuracy defers, like an absent speed.
+        // absent accuracy defers, like an absent speed. Its OWN state, not a
+        // dwell-flavoured Confirming: the reason is GPS, not stillness, and saying
+        // so is the difference between a member standing usefully still and one
+        // standing still at a wait that will not end until the signal sharpens.
         if (isPositionUnsettled(accuracyMeters, radius)) {
-            return CrownCollectState.Confirming(dwellSecondsRemaining)
+            return CrownCollectState.WaitingForSignal
         }
         // In range and stopped, but no two-fix proof has aged in yet — the honest
         // "confirming you're stopped" step that removes the re-tap loop.
