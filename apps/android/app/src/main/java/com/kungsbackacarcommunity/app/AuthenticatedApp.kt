@@ -226,6 +226,7 @@ import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
 import com.kungsbackacarcommunity.app.chatchannels.ChatPeekPage
+import com.kungsbackacarcommunity.app.chatchannels.normalizeChatLandingLink
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
 import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
@@ -7880,7 +7881,10 @@ fun AuthenticatedApp(
                         // `chatHubLandingLink` before flipping `chatHubOpen` captures
                         // it before the close effect clears it.
                         onGoToChat = {
-                            chatHubRouteLink = chatHubLandingLink
+                            // Normalized so the full route reads a blank-id convoy
+                            // link exactly as the peek did (Community, not an empty
+                            // convoy channel) — one shared helper, no drift.
+                            chatHubRouteLink = normalizeChatLandingLink(chatHubLandingLink)
                             chatHubOpen = false
                             openRootRoute(ShellRoute.ChatHub)
                         },

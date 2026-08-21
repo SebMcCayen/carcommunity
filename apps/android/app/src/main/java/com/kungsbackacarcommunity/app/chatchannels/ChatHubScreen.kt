@@ -87,6 +87,22 @@ const val CHAT_HUB_TEST_TAG = "chat_hub"
 /** Test tag on the chat-peek landing page root, so UI tests can assert it renders. */
 const val CHAT_PEEK_TEST_TAG = "chat_peek"
 
+/**
+ * Normalizes a chat landing link so EVERY chat surface interprets it identically.
+ * A `CONVOY_CHAT` link with a blank/absent convoy id names no reachable channel, so
+ * it collapses to null — the Community default — rather than a convoy channel opened
+ * on an empty id (which is what the peek already does, and what [ChatHubContent]
+ * must do too, or the two would disagree). A valid convoy link, a Community link and
+ * null all pass through unchanged. One helper so the peek's preview and the full
+ * chat route can never drift on this edge case.
+ */
+internal fun normalizeChatLandingLink(link: PushDeepLink?): PushDeepLink? =
+    if (link?.target == PushTarget.CONVOY_CHAT && link.entityId.isNullOrBlank()) {
+        null
+    } else {
+        link
+    }
+
 /** How many of the newest messages the read-only peek previews. */
 private const val PEEK_PREVIEW_MESSAGE_COUNT = 12
 
@@ -149,12 +165,12 @@ fun ChatPeekPage(
 ) {
     // Convoy peek iff the link names a convoy channel AND carries its id; every
     // other case (null link, COMMUNITY_CHAT, a convoy link with no id) previews the
-    // Community channel — the hub's own default landing.
+    // Community channel — the hub's own default landing. Normalized through the
+    // shared helper so a blank-id convoy link is Community here AND in the full route.
     val convoyId =
-        pushDeepLink
+        normalizeChatLandingLink(pushDeepLink)
             ?.takeIf { it.target == PushTarget.CONVOY_CHAT }
             ?.entityId
-            ?.takeIf { it.isNotBlank() }
     val isConvoy = convoyId != null
 
     // Reuse the hub's live message listener, unchanged: the convoy's channel when a
@@ -692,12 +708,17 @@ private fun ChatHubContent(
     convoyLink: ConvoyNotificationLink? = null,
     onOpenEvent: ((String) -> Unit)? = null,
 ) {
+    // Normalized once so this body — and therefore the full chat route — reads a
+    // blank-id convoy link exactly as the peek does: as no destination (Community),
+    // never as a convoy channel opened on an empty id. See [normalizeChatLandingLink].
+    val landingLink = normalizeChatLandingLink(pushDeepLink)
+
     // Seeded from any push deep-link so the hub OPENS on the linked tab (and the
     // pager below opens on the matching page with no scroll animation). Absent a
     // link this is Community, the default. rememberSaveable so a swipe/tap survives
     // recomposition and rotation.
     var selectedTab by rememberSaveable {
-        mutableStateOf(chatHubLandingTab(pushDeepLink?.target))
+        mutableStateOf(chatHubLandingTab(landingLink?.target))
     }
 
     // The swipe pager over the four sections. Its page index is [ChatTab.ordinal],
@@ -746,9 +767,9 @@ private fun ChatHubContent(
     // channel) is not undone on the next recomposition. The convoy TITLE is
     // deliberately left null — it is display-only and the channel resolves it
     // itself.
-    LaunchedEffect(pushDeepLink) {
-        if (pushDeepLink != null) {
-            val landing = chatHubLandingTab(pushDeepLink.target)
+    LaunchedEffect(landingLink) {
+        if (landingLink != null) {
+            val landing = chatHubLandingTab(landingLink.target)
             // Jump the pager to the linked page WITHOUT animating — the hub is
             // opening on this section, so it should already be there, not slide in
             // from Community. On the initial open the pager was seeded to this same
@@ -757,8 +778,9 @@ private fun ChatHubContent(
             if (pagerState.currentPage != landing.ordinal) {
                 pagerState.scrollToPage(landing.ordinal)
             }
-            if (pushDeepLink.target == PushTarget.CONVOY_CHAT) {
-                openConvoyId = pushDeepLink.entityId
+            // Normalization guarantees a non-blank id for a CONVOY_CHAT link here.
+            if (landingLink.target == PushTarget.CONVOY_CHAT) {
+                openConvoyId = landingLink.entityId
             }
         }
     }
