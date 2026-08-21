@@ -1770,7 +1770,8 @@
     "locationShared": "Platsen delades med %1$s",
     "locationSharedFriendFallback": "din vän",
     "locationShareFailed": "Det gick inte att dela platsen. Försök igen.",
-    "perksButton": "Använd perk"
+    "perksButton": "Använd perk",
+    "perksButtonActive": "Använd perk · aktiva perkar"
   },
   "addressSearch": {
     "searchPlaceholder": "Sök adress eller plats",

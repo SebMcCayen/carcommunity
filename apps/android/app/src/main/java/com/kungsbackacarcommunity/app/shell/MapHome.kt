@@ -234,6 +234,12 @@ fun MapHome(
     // so existing callers/tests/previews (and turn-by-turn) are unaffected.
     crownHuntPerksEnabled: Boolean = false,
     onOpenPerks: () -> Unit = {},
+    // Whether the member has AT LEAST ONE perk live RIGHT NOW (a shield, a boost,
+    // or a deployed own-trap that hasn't expired). When true the perk control gets
+    // a discreet active tint; it reverts automatically the moment the last perk
+    // expires (the host re-evaluates this against a moving now). Defaults false so
+    // callers that don't wire perks render the control untinted.
+    perkActive: Boolean = false,
     // Whether any of the currently-loaded incidents actually came from
     // Trafikverket (see `hasTrafikverketData`). Gates the "Källa: Trafikverket"
     // credit in the layers popup so it appears exactly where their data is on
@@ -810,7 +816,7 @@ fun MapHome(
                     // tap raises the host-owned deploy popup via onOpenPerks,
                     // mirroring how the chat bubble opens the host's chat hub.
                     MapCircleControlKind.Perks ->
-                        PerkDeployCircleControl(onClick = onOpenPerks)
+                        PerkDeployCircleControl(onClick = onOpenPerks, active = perkActive)
                 }
             }
         }
@@ -1802,14 +1808,38 @@ const val MAP_HOME_PERKS_TAG = "map_home_perks"
  * floating controls (size/shape/elevation/haptics); a tap opens the host-owned
  * "use a perk" menu via [onClick]. `internal` because turn-by-turn draws the
  * SAME right-side stack (see [MapControlSet.rightSideStack]).
+ *
+ * When [active] (the member has a shield / boost / own-trap live right now) the
+ * control takes a DISCREET tonal accent — the muted `secondaryContainer` token,
+ * not a bright alarm — to signal "you have active perks", and appends an
+ * accessibility hint to the label. It reverts to the default surface appearance
+ * automatically the moment the last perk expires (the host stops passing true).
  */
 @Composable
-internal fun PerkDeployCircleControl(onClick: () -> Unit) {
+internal fun PerkDeployCircleControl(onClick: () -> Unit, active: Boolean = false) {
+    val label =
+        if (active) {
+            stringResource(R.string.shell_perksButtonActive)
+        } else {
+            stringResource(R.string.shell_perksButton)
+        }
     CircleControl(
         icon = Icons.Filled.WorkspacePremium,
-        contentDescription = stringResource(R.string.shell_perksButton),
+        contentDescription = label,
         onClick = onClick,
         modifier = Modifier.testTag(MAP_HOME_PERKS_TAG),
+        containerColor =
+            if (active) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                MaterialTheme.colorScheme.surface
+            },
+        contentColor =
+            if (active) {
+                MaterialTheme.colorScheme.onSecondaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
     )
 }
 
