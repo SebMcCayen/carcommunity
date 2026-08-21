@@ -1351,6 +1351,7 @@
     "instrLiveBody": "När du samlar en krona medan du delar en live-session får du full Kronpoäng. Utan live-delning får du färre poäng.",
     "liveShareTip": "Tips: dela en live-session när du samlar för att få full Kronpoäng.",
     "trapHitOverlay": "Du körde på en Spikmatta! −%1$d KP",
+    "perkTrapMapTapLabel": "Spikmatta · visa detaljer",
     "perkTrapEffect": "Tömmer kronpoäng från rivaler som kör in i den.",
     "perkDetailRemainingHms": "%1$d h %2$d min kvar",
     "perkDetailRemainingMs": "%1$d min %2$d s kvar",

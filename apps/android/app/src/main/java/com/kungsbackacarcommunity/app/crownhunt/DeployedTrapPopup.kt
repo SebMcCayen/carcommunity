@@ -23,6 +23,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,14 +73,23 @@ fun DeployedTrapPopup(
     onDismiss: () -> Unit,
     nowProvider: () -> Long = { System.currentTimeMillis() },
 ) {
-    // A self-terminating 1 s ticker for the countdown — runs only while the popup is
-    // composed (the host holds the tapped trap) and stops once the trap has expired,
-    // so a stale popup never wakes forever. Re-keyed per trap.
+    // A self-terminating 1 s ticker for the countdown. Runs only while the popup is
+    // composed (the host holds the tapped trap), and when the trap EXPIRES it actively
+    // DISMISSES the popup rather than only stopping the ticker: `observeOwnActiveTraps`
+    // uses a fixed `expiresAt > now − margin` query plus a local moving-time filter, so
+    // no fresh Firestore snapshot is guaranteed just because time passed — a bare break
+    // would leave this popup lingering over an expired trap. rememberUpdatedState keeps
+    // the dismiss current across recompositions even though the effect is keyed on the
+    // (stable) trap id.
+    val currentOnDismiss by rememberUpdatedState(onDismiss)
     var now by remember(trap.trapId) { mutableLongStateOf(nowProvider()) }
     LaunchedEffect(trap.trapId) {
         while (true) {
             now = nowProvider()
-            if (trap.expiresAtMillis <= now) break
+            if (trap.expiresAtMillis <= now) {
+                currentOnDismiss()
+                break
+            }
             delay(1_000L)
         }
     }

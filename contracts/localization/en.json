@@ -1351,6 +1351,7 @@
     "instrLiveBody": "Collecting a crown while sharing a live session earns full Crown Points. Without live sharing, you earn fewer points.",
     "liveShareTip": "Tip: share a live session while collecting to earn full Crown Points.",
     "trapHitOverlay": "You hit a Spike Strip! −%1$d KP",
+    "perkTrapMapTapLabel": "Spike strip · show details",
     "perkTrapEffect": "Drains Crown Points from rivals who drive into it.",
     "perkDetailRemainingHms": "%1$dh %2$dm left",
     "perkDetailRemainingMs": "%1$dm %2$ds left",

@@ -1258,6 +1258,7 @@
     <string name="crownHunt_instrLiveBody">När du samlar en krona medan du delar en live-session får du full Kronpoäng. Utan live-delning får du färre poäng.</string>
     <string name="crownHunt_liveShareTip">Tips: dela en live-session när du samlar för att få full Kronpoäng.</string>
     <string name="crownHunt_trapHitOverlay">Du körde på en Spikmatta! −%1$d KP</string>
+    <string name="crownHunt_perkTrapMapTapLabel">Spikmatta · visa detaljer</string>
     <string name="crownHunt_perkTrapEffect">Tömmer kronpoäng från rivaler som kör in i den.</string>
     <string name="crownHunt_perkDetailRemainingHms">%1$d h %2$d min kvar</string>
     <string name="crownHunt_perkDetailRemainingMs">%1$d min %2$d s kvar</string>

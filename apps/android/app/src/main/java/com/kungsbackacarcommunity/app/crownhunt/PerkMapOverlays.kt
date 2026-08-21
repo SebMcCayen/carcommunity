@@ -32,10 +32,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlinx.coroutines.delay
 import kotlin.math.cos
@@ -156,6 +160,10 @@ fun SpikeStripOverlay(
         if (onTap != null && viewportSize.width > 0 && viewportSize.height > 0) {
             val w = viewportSize.width.toFloat()
             val h = viewportSize.height.toFloat()
+            // One spoken label for every trap target — the marker is an empty Box, so
+            // without this TalkBack would announce an unlabelled button. Mirrors the
+            // nearby-live chip's contentDescription; read once outside the loop.
+            val tapLabel = stringResource(R.string.crownHunt_perkTrapMapTapLabel)
             for (trap in live) {
                 val point = mapSurface.screenPositionFor(trap.latitude, trap.longitude) ?: continue
                 if (!point.trustworthy) continue
@@ -172,6 +180,7 @@ fun SpikeStripOverlay(
                                 }
                                 .size(TRAP_TAP_TARGET)
                                 .testTag(SPIKE_STRIP_TAP_TAG + trap.trapId)
+                                .semantics { contentDescription = tapLabel }
                                 .clickable(role = Role.Button) { onTap(trap) },
                     )
                 }
