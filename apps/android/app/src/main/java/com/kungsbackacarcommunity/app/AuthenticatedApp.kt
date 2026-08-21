@@ -219,6 +219,7 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkDeployCoordinator
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployMenuState
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployPopup
 import com.kungsbackacarcommunity.app.crownhunt.PerkDeployStatus
+import com.kungsbackacarcommunity.app.crownhunt.PerkMapVisuals
 import com.kungsbackacarcommunity.app.crownhunt.PerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.SpikeStripOverlay
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
@@ -5370,20 +5371,97 @@ fun AuthenticatedApp(
                     }
                         .collectAsState(initial = PerkMapOverlayState.EMPTY)
 
+                // The own-dot shield / double-points effects hang on the member's
+                // OWN map position. While live-sharing that comes from the published
+                // live marker (perkMapOverlayState.ownLatitude); but a member can
+                // activate a Shield or Double Points WITHOUT sharing, in which case
+                // the live marker is null and the effect had nothing to hang on (the
+                // reported "shield / double-points show nothing"). So when an own-dot
+                // effect is active but no shared position exists, fall back to a cheap
+                // device fix (mirrors the crown-range poll) — exactly where the Mapbox
+                // puck sits. Traps are unaffected (they carry their own coordinates).
+                // The later of the two effect expiries (null when neither is set).
+                // These stay non-null AFTER expiry, so the poll loop below stops
+                // itself once the window has passed (rather than spinning forever).
+                val ownEffectExpiry =
+                    laterOf(
+                        perkMapOverlayState.shieldActiveUntilMillis,
+                        perkMapOverlayState.boostActiveUntilMillis,
+                    )
+                val needOwnFix = perkMapActive && ownEffectExpiry != null &&
+                    perkMapOverlayState.ownLatitude == null
+                var perkOwnDeviceFix by remember { mutableStateOf<LatLng?>(null) }
+                LaunchedEffect(needOwnFix, ownEffectExpiry) {
+                    if (!needOwnFix || ownEffectExpiry == null) {
+                        perkOwnDeviceFix = null
+                        return@LaunchedEffect
+                    }
+                    val appCtx = context.applicationContext
+                    // Poll only while the effect is still live (the same pure predicate
+                    // the overlay draws with, so an expired timestamp never keeps the
+                    // loop alive); a re-activation that extends the window restarts this
+                    // effect (keyed on the expiry).
+                    while (PerkMapVisuals.isEffectActive(ownEffectExpiry, System.currentTimeMillis())) {
+                        // lastKnown ONLY (cache-first, with its own single fresh
+                        // fallback when there is no cache): a decorative status aura
+                        // doesn't need a bleeding-edge fix, and lastKnown already falls
+                        // back to currentFix internally — chaining `currentFix ?:
+                        // lastKnown` would ask getCurrentLocation twice per tick.
+                        perkOwnDeviceFix = CurrentLocation.lastKnown(appCtx)
+                        delay(CROWN_RANGE_LOCATION_INTERVAL_MS)
+                    }
+                    // Window elapsed: drop the fix so a stale position isn't reused.
+                    perkOwnDeviceFix = null
+                }
+
+                // Whether a shield/boost effect is live RIGHT NOW — the MOUNT GATE for
+                // the own-dot overlay. A self-terminating 1s ticker (only while the
+                // window is open) flips this false exactly at expiry, so the overlay
+                // unmounts and its infinite transition + internal ticker stop; re-keys
+                // on the expiry so a new activation remounts it. Nothing wakes at all
+                // while no effect has been activated (the loop sets false and exits).
+                var perkEffectActive by remember { mutableStateOf(false) }
+                LaunchedEffect(perkMapActive, ownEffectExpiry) {
+                    if (!perkMapActive || ownEffectExpiry == null) {
+                        perkEffectActive = false
+                        return@LaunchedEffect
+                    }
+                    while (true) {
+                        val active =
+                            PerkMapVisuals.isEffectActive(
+                                ownEffectExpiry,
+                                System.currentTimeMillis(),
+                            )
+                        perkEffectActive = active
+                        if (!active) break
+                        delay(1_000L)
+                    }
+                }
+
+                // Gate each overlay at the CALL SITE so it isn't composed while idle:
+                // no rememberInfiniteTransition, no per-second ticker, zero wakes when
+                // there is nothing to draw. Mounts on activation, unmounts on expiry
+                // (own-dot) / when the trap list empties (spike strip).
                 val perkOverlaySlot: (@Composable () -> Unit)? =
                     if (perkMapActive) {
                         {
-                            SpikeStripOverlay(
-                                mapSurface = mapSurface,
-                                traps = perkMapOverlayState.ownTraps,
-                            )
-                            OwnDotPerkOverlay(
-                                mapSurface = mapSurface,
-                                ownLatitude = perkMapOverlayState.ownLatitude,
-                                ownLongitude = perkMapOverlayState.ownLongitude,
-                                shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
-                                boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
-                            )
+                            if (perkMapOverlayState.ownTraps.isNotEmpty()) {
+                                SpikeStripOverlay(
+                                    mapSurface = mapSurface,
+                                    traps = perkMapOverlayState.ownTraps,
+                                )
+                            }
+                            if (perkEffectActive) {
+                                OwnDotPerkOverlay(
+                                    mapSurface = mapSurface,
+                                    ownLatitude = perkMapOverlayState.ownLatitude
+                                        ?: perkOwnDeviceFix?.latitude,
+                                    ownLongitude = perkMapOverlayState.ownLongitude
+                                        ?: perkOwnDeviceFix?.longitude,
+                                    shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
+                                    boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
+                                )
+                            }
                         }
                     } else {
                         null
