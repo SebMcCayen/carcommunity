@@ -722,15 +722,29 @@ export type StationaryEvaluation = { ok: true } | { ok: false; result: Stationar
  *  1. both fixes are inside the collect radius (accuracy-buffered exactly like
  *     the hand-placed points, via `isWithinGeofence`);
  *  2. the fixes are {@link MIN_DWELL_SECONDS}..{@link MAX_DWELL_SECONDS} apart;
- *  3. both DEVICE-REPORTED speeds are at or below
- *     {@link MAX_COLLECT_SPEED_MPS};
- *  4. the speed DERIVED by the server from the two positions and the elapsed
- *     time is also at or below that ceiling.
+ *  3. the speed DERIVED from the two positions and the elapsed time is at or
+ *     below {@link MAX_COLLECT_SPEED_MPS} — the AUTHORITATIVE anti-driving gate;
+ *  4. NOT both device-reported speeds are above that ceiling — a corroborated
+ *     belt-and-braces net on top of (3).
  *
- * (4) is what makes (3) meaningful. `isSpeedSafe` treats a null speed as safe —
- * correct for a device that genuinely cannot report one — so a client could
- * otherwise omit the field entirely. The derived speed needs no cooperation
- * from the client beyond two coordinates it has already committed to.
+ * (3) is the gate that cannot be fooled: it needs no cooperation from the client
+ * beyond two coordinates it has already committed to, and a genuinely moving car
+ * covers real ground between two fixes {@link MIN_DWELL_SECONDS}+ apart, so its
+ * derived speed is high whatever it reports.
+ *
+ * (4) used to reject when EITHER reported speed exceeded the ceiling. That made
+ * the check trust a SINGLE instantaneous GPS sample — and a stationary phone's
+ * reported speed jitters, spiking above the ceiling on one fix while the device
+ * has not moved. That single-sample spike was rejecting genuinely-parked members
+ * with `must_be_stationary`, the exact "you need to be standing still" a stopped
+ * owner hit repeatedly. Jitter is uncorrelated per sample, so requiring BOTH
+ * fixes (recorded {@link MIN_DWELL_SECONDS}+ apart) to report motion before it
+ * rejects tolerates one spike while still catching sustained reported motion —
+ * and never relaxes (3), which remains an unconditional reject. The only claims
+ * that flip refuse→accept are those with one lone reported spike AND a
+ * derived speed under the ceiling: i.e. a device that did not actually move.
+ * `isSpeedSafe` still treats a null speed as safe (a device that cannot report
+ * one), so an absent field never rejects here — (3) covers it.
  *
  * Failing this is a PLAIN REFUSAL, not a fraud signal: an honest member
  * rolling slowly through a car park should be told "stop first", not silently
@@ -769,15 +783,22 @@ export function evaluateStationaryCollection(params: {
     return { ok: false, result: 'must_be_stationary' };
   }
 
-  if (
-    !isSpeedSafe(params.current.speedMetersPerSecond, maxSpeed) ||
-    !isSpeedSafe(params.previous.speedMetersPerSecond, maxSpeed)
-  ) {
+  // (3) The authoritative gate: the speed the server DERIVES from the two
+  // positions and the elapsed time. Robust to reported-speed jitter — it reads
+  // where the device actually was, not what its speedometer claimed.
+  const derivedSpeed = params.movedMeters / dwellSeconds;
+  if (!Number.isFinite(derivedSpeed) || derivedSpeed > maxSpeed) {
     return { ok: false, result: 'must_be_stationary' };
   }
 
-  const derivedSpeed = params.movedMeters / dwellSeconds;
-  if (!Number.isFinite(derivedSpeed) || derivedSpeed > maxSpeed) {
+  // (4) Corroborated belt-and-braces: reject on the reported instantaneous
+  // speeds only when BOTH fixes report motion, so a single stationary GPS spike
+  // (uncorrelated jitter) is tolerated while sustained reported motion across the
+  // dwell window is still caught. Never relaxes (3). See this function's KDoc.
+  if (
+    !isSpeedSafe(params.current.speedMetersPerSecond, maxSpeed) &&
+    !isSpeedSafe(params.previous.speedMetersPerSecond, maxSpeed)
+  ) {
     return { ok: false, result: 'must_be_stationary' };
   }
 

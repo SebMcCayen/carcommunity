@@ -135,8 +135,13 @@ object CrownCollectGate {
      *   shown is the real one.
      * @param distanceMeters server-shaped distance from the device to the crown,
      *   or null when there is no fix.
-     * @param speedMetersPerSecond the device's reported speed, or null when the
-     *   platform did not supply one.
+     * @param speedMetersPerSecond the MOVEMENT speed to judge stillness from.
+     *   Callers with a proof pair should pass [movementSpeedMps] of it, NOT one
+     *   fix's raw instantaneous `Location.speed`: a single stationary GPS sample
+     *   can spike above the ceiling and would wrongly read [CrownCollectState.Moving]
+     *   ("stop the car first") for a parked member. The window-derived value does
+     *   not, and matches the server's speed gate. Null when the platform supplied
+     *   no usable movement signal — treated as "no information", never as moving.
      * @param collectRadiusMeters the crown's own radius, defaulting to the
      *   mirrored server constant. Put through
      *   [CrownSpawnLimits.resolveCollectRadiusMeters], so a broken or absurd
@@ -240,6 +245,77 @@ object CrownCollectGate {
         if (!speedMetersPerSecond.isFinite()) return false
         if (speedMetersPerSecond < 0.0) return false
         return speedMetersPerSecond > CrownSpawnLimits.MAX_COLLECT_SPEED_MPS
+    }
+
+    /**
+     * The movement speed to hand [evaluate] as `speedMetersPerSecond` — derived
+     * from DISPLACEMENT over the two proof fixes rather than one jittery
+     * instantaneous reading, and shaped to match the SERVER's speed gate exactly.
+     *
+     * ## Why not the raw instantaneous reading
+     *
+     * A stationary phone's reported GPS speed jitters: in poor sky-view it can
+     * spike well above [CrownSpawnLimits.MAX_COLLECT_SPEED_MPS] on a single
+     * sample while the device has not moved a centimetre. Declaring
+     * [CrownCollectState.Moving] off one such sample is declaring noise — it is
+     * exactly why a genuinely parked member kept seeing "stop the car first" and
+     * had to tap for the better part of a minute until a good sample happened to
+     * land. Two fixes a few seconds apart do not lie the same way: real driving
+     * covers real ground between them, GPS jitter does not.
+     *
+     * ## What it returns, and why it agrees with the server
+     *
+     * `crownHunt.claimSpawn` refuses a claim on speed when EITHER the
+     * displacement-derived speed exceeds the ceiling OR BOTH fixes independently
+     * report motion (a single reported spike is tolerated server-side too). This
+     * returns the larger of:
+     *  - the DERIVED speed — server-shaped metres between the two fixes divided by
+     *    the seconds between them (the same quantity the server computes), and
+     *  - the CORROBORATED instantaneous speed — the smaller of the two reported
+     *    speeds, but only when BOTH are [isMoving]; otherwise it contributes 0, so
+     *    one spike can never raise the result.
+     *
+     * so [isMoving] over this value is true in precisely the cases the server
+     * would reject on speed, and false for a parked phone whatever a single sample
+     * spikes to. The client therefore never shows Moving where the server would
+     * accept, nor Ready where the server would refuse `must_be_stationary`.
+     *
+     * Returns null — "no information, defer" — when there is no usable pair yet
+     * (the member has only just arrived, or a fix is missing): the button is
+     * [CrownCollectState.Confirming] then anyway, and the server still re-derives
+     * everything from the pair actually submitted, so a moving driver with no
+     * stationary pair is never enabled.
+     *
+     * Pure: the displacement is the same haversine the rest of the feature uses,
+     * so this is unit-tested against jitter series rather than in a moving car.
+     */
+    fun movementSpeedMps(current: CrownFix?, previous: CrownFix?): Double? {
+        if (current == null || previous == null) return null
+        val elapsedMs = current.recordedAtMillis - previous.recordedAtMillis
+        if (elapsedMs <= 0L) return null
+        val elapsedSeconds = elapsedMs / 1000.0
+        val movedMeters =
+            CrownSpawnQuery.distanceMeters(
+                previous.latitude,
+                previous.longitude,
+                current.latitude,
+                current.longitude,
+            )
+        if (!movedMeters.isFinite()) return null
+        val derived = movedMeters / elapsedSeconds
+        // A single reported spike is jitter and must not count; only two fixes
+        // that BOTH report motion corroborate a sustained instantaneous reading,
+        // mirroring the server's both-fixes rule. minOf keeps it the LOWER of the
+        // two, so the corroborated value can only ever be as fast as the slower
+        // fix — it cannot be inflated by one high sample.
+        val corroborated =
+            if (isMoving(current.speedMetersPerSecond) && isMoving(previous.speedMetersPerSecond)) {
+                minOf(current.speedMetersPerSecond!!, previous.speedMetersPerSecond!!)
+            } else {
+                0.0
+            }
+        val speed = maxOf(derived, corroborated)
+        return if (speed.isFinite()) speed else null
     }
 
     /**
