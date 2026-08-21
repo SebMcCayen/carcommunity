@@ -239,19 +239,22 @@ object PerkDeploy {
      * bucket choice is unit-tested; the Composable maps each bucket to its
      * localized string ([PerkDeployMenu]'s `formatRemaining`).
      *
-     * Whole seconds are FLOORED, so the label counts down naturally and the bucket
-     * boundary is honest: a sub-60 s window always shows seconds ("59 s"), never
-     * "1 min 0 s" for 59.x s — the minutes bucket begins only at a genuine full
-     * minute. The floor is clamped to a minimum of 1 s, so a still-live effect
-     * never flashes "0 s" in its final sub-second; only a genuinely expired/`null`
-     * window collapses to [PerkRemaining.Expired], which the menu renders as no
-     * line at all.
+     * Whole seconds are rounded UP (matching the `CheckInDwell` countdown
+     * convention), so a live countdown never UNDERSTATES — 1,999 ms reads "2 s",
+     * not "1 s" — and a still-live sub-second window never flashes "0 s". Only a
+     * genuinely expired/`null` window collapses to [PerkRemaining.Expired], which
+     * the menu renders as no line at all. Rounding up does mean the final ~1 s of
+     * a window ceils into the next whole minute (e.g. 59.5 s → 60 s → the minutes
+     * bucket); that is correct — ~1 minute really is left — and the Composable
+     * renders a zero-seconds minute as a tidy "1 min" (no "1 min 0 s").
      */
     fun remaining(expiresAtMillis: Long?, nowMillis: Long): PerkRemaining {
         if (expiresAtMillis == null) return PerkRemaining.Expired
         val remainingMs = expiresAtMillis - nowMillis
         if (remainingMs <= 0L) return PerkRemaining.Expired
-        val totalSeconds = (remainingMs / 1000L).coerceAtLeast(1L)
+        // Ceiling division of a positive value → always >= 1, so a live window
+        // never shows "0 s" and never understates the time left.
+        val totalSeconds = (remainingMs + 999L) / 1000L
         val minutes = totalSeconds / 60L
         val seconds = totalSeconds % 60L
         return if (minutes >= 1L) {

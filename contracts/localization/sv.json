@@ -1316,6 +1316,7 @@
     "deployActiveTraps": "%1$d aktiv fälla",
     "deployActiveFor": "Aktiv – %1$s kvar",
     "deployRemainingMs": "%1$d min %2$d s",
+    "deployRemainingM": "%1$d min",
     "deployRemainingS": "%1$d s",
     "deploySuccessTrap": "%1$s placerad där du står.",
     "deploySuccessShield": "%1$s aktiverad.",

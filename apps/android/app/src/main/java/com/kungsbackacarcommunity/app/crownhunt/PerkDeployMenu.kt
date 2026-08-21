@@ -323,20 +323,25 @@ private fun deployFailureMessageRes(reason: PerkDeployFailureReason): Int =
     }
 
 /**
- * Localizes one [PerkRemaining] bucket into "Xm Ys" / "Y s". Purely
+ * Localizes one [PerkRemaining] bucket into "Xm Ys" / "Xm" / "Y s". Purely
  * presentational (the pure countdown maths is [PerkDeploy.remaining]); a screen
- * reader hears the same string. [PerkRemaining.Expired] never reaches here — the
+ * reader hears the same string. A whole-minute window (zero seconds) renders as a
+ * tidy "1 min", not "1 min 0 s". [PerkRemaining.Expired] never reaches here — the
  * caller omits the whole line for an expired window.
  */
 @Composable
 private fun formatRemaining(remaining: PerkRemaining): String =
     when (remaining) {
         is PerkRemaining.MinutesSeconds ->
-            stringResource(
-                R.string.crownHunt_deployRemainingMs,
-                remaining.minutes,
-                remaining.seconds,
-            )
+            if (remaining.seconds == 0L) {
+                stringResource(R.string.crownHunt_deployRemainingM, remaining.minutes)
+            } else {
+                stringResource(
+                    R.string.crownHunt_deployRemainingMs,
+                    remaining.minutes,
+                    remaining.seconds,
+                )
+            }
 
         is PerkRemaining.SecondsOnly ->
             stringResource(R.string.crownHunt_deployRemainingS, remaining.seconds)

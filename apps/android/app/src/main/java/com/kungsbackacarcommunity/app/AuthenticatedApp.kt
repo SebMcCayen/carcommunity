@@ -2122,6 +2122,17 @@ fun AuthenticatedApp(
                     perkDeployCoordinator?.reset()
                 }
             }
+            // Fresh-open guarantee: the gate-loss reset above is a NO-OP while a
+            // deploy is still in flight (PerkDeployCoordinator.reset() won't clear a
+            // Deploying state), so a deploy that RESOLVES after the gate dropped
+            // leaves a terminal Deployed/Failed status behind a hidden popup. Reset
+            // again whenever the menu (re)opens — by then any such deploy has settled
+            // to a terminal status, which reset() clears — so a re-opened menu can
+            // never show a stale banner from a gate-lost session. A genuinely live
+            // deploy at open time is still Deploying, which reset() leaves untouched.
+            LaunchedEffect(perkDeployOpen) {
+                if (perkDeployOpen) perkDeployCoordinator?.reset()
+            }
             // Subscribed ONLY while the menu is actually open (perkDeployOpen): the
             // combine holds four Firestore listeners + a ticker, so a closed menu
             // must hold none. Closing swaps back to a single Loading emission, so

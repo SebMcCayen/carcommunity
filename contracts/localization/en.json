@@ -1316,6 +1316,7 @@
     "deployActiveTraps": "%1$d active trap",
     "deployActiveFor": "Active – %1$s left",
     "deployRemainingMs": "%1$dm %2$ds",
+    "deployRemainingM": "%1$dm",
     "deployRemainingS": "%1$ds",
     "deploySuccessTrap": "%1$s dropped where you are.",
     "deploySuccessShield": "%1$s activated.",

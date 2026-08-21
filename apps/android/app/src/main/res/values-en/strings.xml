@@ -1223,6 +1223,7 @@
     <string name="crownHunt_deployActiveTraps">%1$d active trap</string>
     <string name="crownHunt_deployActiveFor">Active – %1$s left</string>
     <string name="crownHunt_deployRemainingMs">%1$dm %2$ds</string>
+    <string name="crownHunt_deployRemainingM">%1$dm</string>
     <string name="crownHunt_deployRemainingS">%1$ds</string>
     <string name="crownHunt_deploySuccessTrap">%1$s dropped where you are.</string>
     <string name="crownHunt_deploySuccessShield">%1$s activated.</string>
