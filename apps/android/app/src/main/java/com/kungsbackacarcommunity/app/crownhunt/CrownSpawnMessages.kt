@@ -80,10 +80,12 @@ object CrownSpawnMessages {
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloser
             CrownCollectState.Moving -> R.string.crownHunt_spawnStopFirst
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPosition
-            // Confirming is not a refusal: nothing has gone wrong and the member
-            // need only stay put. The BUTTON carries the "confirming you're
-            // stopped" line (see [collectActionLabelRes]), so there is no separate
+            // WaitingForSignal and Confirming are not refusals: nothing has gone
+            // wrong and the member need only stay put. The BUTTON carries their
+            // line ("waiting for a better GPS signal" / "confirming you're
+            // stopped") via [collectActionLabelRes], so there is no separate
             // headline to print above the distance — the same choice Ready makes.
+            CrownCollectState.WaitingForSignal -> null
             is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> R.string.crownHunt_spawnResultFeatureDisabled
         }
@@ -104,7 +106,9 @@ object CrownSpawnMessages {
             is CrownCollectState.TooFar -> R.string.crownHunt_spawnMoveCloserDetail
             CrownCollectState.Moving -> R.string.crownHunt_spawnStopFirstDetail
             CrownCollectState.NoPosition -> R.string.crownHunt_spawnNoPositionDetail
-            // The confirming line lives on the button, not in a detail paragraph.
+            // The waiting/confirming line lives on the button, not in a detail
+            // paragraph.
+            CrownCollectState.WaitingForSignal -> null
             is CrownCollectState.Confirming -> null
             CrownCollectState.FeatureOff -> null
         }
@@ -124,6 +128,8 @@ object CrownSpawnMessages {
     fun collectActionLabelRes(state: CrownCollectState, collecting: Boolean): Int =
         when {
             collecting -> R.string.crownHunt_spawnCollecting
+            state is CrownCollectState.WaitingForSignal ->
+                R.string.crownHunt_spawnWaitingForSignal
             state is CrownCollectState.Confirming -> R.string.crownHunt_spawnConfirming
             else -> R.string.crownHunt_spawnCollect
         }

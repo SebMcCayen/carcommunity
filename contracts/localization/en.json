@@ -1245,6 +1245,7 @@
     "spawnNoPositionDetail": "Stay put for a few seconds so we can confirm you are standing still.",
     "spawnConfirming": "Confirming you're stopped…",
     "spawnConfirmingSeconds": "Confirming you're stopped… (%1$d s)",
+    "spawnWaitingForSignal": "Waiting for a better GPS signal…",
     "spawnResultAwarded": "The crown is yours!",
     "spawnResultAwardedPoints": "+%1$d CP",
     "spawnResultAlreadyTaken": "Someone got there first — this crown has already been collected.",

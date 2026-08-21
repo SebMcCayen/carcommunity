@@ -1245,6 +1245,7 @@
     "spawnNoPositionDetail": "Stå stilla några sekunder så vi hinner se att du står still.",
     "spawnConfirming": "Bekräftar att du står stilla…",
     "spawnConfirmingSeconds": "Bekräftar att du står stilla… (%1$d s)",
+    "spawnWaitingForSignal": "Väntar på bättre GPS-signal…",
     "spawnResultAwarded": "Kronan är din!",
     "spawnResultAwardedPoints": "+%1$d KP",
     "spawnResultAlreadyTaken": "Någon hann före — den här kronan är redan hämtad.",

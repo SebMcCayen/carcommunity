@@ -274,6 +274,16 @@ class CrownSpawnMessagesTest {
     }
 
     /**
+     * WaitingForSignal is a wait, not a refusal, exactly like Confirming: no
+     * headline, no detail, the BUTTON carries "waiting for a better GPS signal".
+     */
+    @Test
+    fun theWaitingForSignalStateSaysNothingInTheRefusalCopyBecauseTheButtonCarriesIt() {
+        assertNull(CrownSpawnMessages.refusalTitleRes(CrownCollectState.WaitingForSignal))
+        assertNull(CrownSpawnMessages.refusalDetailRes(CrownCollectState.WaitingForSignal))
+    }
+
+    /**
      * The Collect button's own label: "Collecting…" while a call is in flight,
      * "Confirming you're stopped…" while the dwell/accuracy are not ready, and
      * plain "Collect" once it is live. In-flight wins over confirming — one press
@@ -302,6 +312,30 @@ class CrownSpawnMessagesTest {
         assertEquals(
             R.string.crownHunt_spawnCollecting,
             CrownSpawnMessages.collectActionLabelRes(CrownCollectState.Ready, collecting = true),
+        )
+    }
+
+    /**
+     * WaitingForSignal has its OWN button label — "waiting for a better GPS
+     * signal", distinct from the dwell "confirming you're stopped" — so a member
+     * held up by a fuzzy fix is told GPS, not stillness, is the hold-up. In-flight
+     * still wins: one press is one call.
+     */
+    @Test
+    fun theCollectButtonLabelDistinguishesWaitingForGpsFromConfirmingStillness() {
+        assertEquals(
+            R.string.crownHunt_spawnWaitingForSignal,
+            CrownSpawnMessages.collectActionLabelRes(
+                CrownCollectState.WaitingForSignal,
+                collecting = false,
+            ),
+        )
+        assertEquals(
+            R.string.crownHunt_spawnCollecting,
+            CrownSpawnMessages.collectActionLabelRes(
+                CrownCollectState.WaitingForSignal,
+                collecting = true,
+            ),
         )
     }
 
