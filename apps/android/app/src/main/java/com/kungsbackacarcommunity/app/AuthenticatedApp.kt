@@ -5518,61 +5518,54 @@ fun AuthenticatedApp(
                     perkOwnDeviceFix = null
                 }
 
-                // Whether a shield/boost effect is live RIGHT NOW — the MOUNT GATE for
-                // the own-dot overlay. A self-terminating 1s ticker (only while the
-                // window is open) flips this false exactly at expiry, so the overlay
-                // unmounts and its infinite transition + internal ticker stop; re-keys
-                // on the expiry so a new activation remounts it. Nothing wakes at all
-                // while no effect has been activated (the loop sets false and exits).
-                var perkEffectActive by remember { mutableStateOf(false) }
-                LaunchedEffect(perkMapActive, ownEffectExpiry) {
-                    if (!perkMapActive || ownEffectExpiry == null) {
-                        perkEffectActive = false
-                        return@LaunchedEffect
-                    }
-                    while (true) {
-                        val active =
-                            PerkMapVisuals.isEffectActive(
-                                ownEffectExpiry,
-                                System.currentTimeMillis(),
-                            )
-                        perkEffectActive = active
-                        if (!active) break
-                        delay(1_000L)
-                    }
-                }
-
-                // DISCREET active-perk tint for the right-side perk control: true
-                // while the member has ANY perk live right now (a shield, a boost,
-                // or a deployed own-trap that hasn't expired), reverting to the
-                // button's original appearance the moment the last one expires.
-                // Same self-terminating 1s ticker shape as perkEffectActive above,
-                // but keyed on the LATER of all three expiries — traps included, so
-                // an armed trap keeps the tint lit even with no shield/boost — and
-                // re-evaluated with the pure PerkMapVisuals.hasAnything predicate the
-                // overlay uses. Nothing wakes at all while no perk has been deployed
-                // (null latest expiry sets false and the loop never starts).
+                // Two per-second-derived booleans, both driven by ONE shared 1s
+                // ticker so there is exactly one wake per second while ANY perk is
+                // live and zero when none is (an armed trap alone still keeps the
+                // loop alive for the tint, without a second concurrent ticker):
+                //
+                //  - perkEffectActive — whether a shield/boost effect is live RIGHT
+                //    NOW; the MOUNT GATE for the own-dot overlay. Flipping it false
+                //    at the effect's expiry unmounts the overlay so its infinite
+                //    transition + internal ticker stop.
+                //  - hasActivePerk — whether ANY perk (shield / boost / own-trap) is
+                //    live; drives the DISCREET active tint on the right-side perk
+                //    control, reverting to the button's original appearance the
+                //    moment the last perk expires.
+                //
+                // The loop runs while the LATER of all three expiries is still in the
+                // future (traps included), re-evaluates each with the same pure
+                // predicates the overlay draws with, and self-terminates once nothing
+                // is live (hasAnything == false). Re-keys on that latest expiry so a
+                // new activation restarts it; nothing wakes while no perk exists.
                 val latestPerkExpiry =
                     laterOf(
                         ownEffectExpiry,
                         perkMapOverlayState.ownTraps.maxOfOrNull { it.expiresAtMillis },
                     )
+                var perkEffectActive by remember { mutableStateOf(false) }
                 var hasActivePerk by remember { mutableStateOf(false) }
                 LaunchedEffect(perkMapActive, latestPerkExpiry) {
                     if (!perkMapActive || latestPerkExpiry == null) {
+                        perkEffectActive = false
                         hasActivePerk = false
                         return@LaunchedEffect
                     }
                     while (true) {
-                        val active =
+                        val nowMillis = System.currentTimeMillis()
+                        perkEffectActive =
+                            PerkMapVisuals.isEffectActive(ownEffectExpiry, nowMillis)
+                        val anyActive =
                             PerkMapVisuals.hasAnything(
                                 perkMapOverlayState.ownTraps,
                                 perkMapOverlayState.shieldActiveUntilMillis,
                                 perkMapOverlayState.boostActiveUntilMillis,
-                                System.currentTimeMillis(),
+                                nowMillis,
                             )
-                        hasActivePerk = active
-                        if (!active) break
+                        hasActivePerk = anyActive
+                        // Stop only once NOTHING is live (a trap outliving the shield
+                        // keeps the single loop ticking for the tint); perkEffectActive
+                        // has already flipped false at its own earlier expiry above.
+                        if (!anyActive) break
                         delay(1_000L)
                     }
                 }
