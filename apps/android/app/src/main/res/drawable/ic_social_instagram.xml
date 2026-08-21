@@ -17,17 +17,22 @@
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
-    <!-- The frame, as a ring (outer rounded square minus inner rounded square). -->
     <path
         android:fillColor="@android:color/white"
         android:fillType="evenOdd"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.4"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M8,3H16A5,5 0 0 1 21,8V16A5,5 0 0 1 16,21H8A5,5 0 0 1 3,16V8A5,5 0 0 1 8,3ZM8.7,5.5H15.3A3.2,3.2 0 0 1 18.5,8.7V15.3A3.2,3.2 0 0 1 15.3,18.5H8.7A3.2,3.2 0 0 1 5.5,15.3V8.7A3.2,3.2 0 0 1 8.7,5.5Z" />
-    <!-- The lens, as a ring. -->
     <path
         android:fillColor="@android:color/white"
         android:fillType="evenOdd"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.4"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M7.8,12A4.2,4.2 0 1 0 16.2,12A4.2,4.2 0 1 0 7.8,12ZM9.5,12A2.5,2.5 0 1 0 14.5,12A2.5,2.5 0 1 0 9.5,12Z" />
-    <!-- The viewfinder dot — the detail that separates this from a plain lens. -->
     <path
         android:fillColor="@android:color/white"
         android:pathData="M15.15,7.8A1.05,1.05 0 1 0 17.25,7.8A1.05,1.05 0 1 0 15.15,7.8Z" />

@@ -19,5 +19,9 @@
     <path
         android:fillColor="@android:color/white"
         android:fillType="evenOdd"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.4"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M6.5,5H17.5A4.5,4.5 0 0 1 22,9.5V14.5A4.5,4.5 0 0 1 17.5,19H6.5A4.5,4.5 0 0 1 2,14.5V9.5A4.5,4.5 0 0 1 6.5,5ZM10,8.5L16.5,12L10,15.5Z" />
 </vector>

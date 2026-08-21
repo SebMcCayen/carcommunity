@@ -1,31 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Crown glyph: JEWELLED_BAND — the UNCOMMON tier.
-
-  The common crown's three points, plus a raised centre stone and two studs on
-  the band. The step up from COMMON is deliberately a step in ORNAMENT rather
-  than in size: two markers of different sizes read as "near and far" on a map,
-  which is the wrong message, so all four tiers keep the same footprint and
-  differ in what is on them.
-
-  Tinted at runtime (see CrownMarkerStyle.glyphColorArgb).
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="#FFFFFFFF">
-    <!-- Raised centre stone, sitting above the middle point. -->
+    android:viewportHeight="24">
     <path
         android:fillColor="@android:color/white"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.9"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M12,2.5L13.6,5L12,7.5L10.4,5L12,2.5Z" />
-    <!-- Three points on a solid band. -->
     <path
         android:fillColor="@android:color/white"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.9"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M3,9L6.5,13L12,7.6L17.5,13L21,9V16H3V9Z" />
-    <!-- Band with two studs picked out of it. -->
     <path
         android:fillColor="@android:color/white"
-        android:pathData="M3,17.5H21V20H3V17.5ZM8,17.5H10V20H8V17.5ZM14,17.5H16V20H14V17.5Z" />
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.9"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
+        android:pathData="M3,17.5H21V20H3V17.5Z" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M8,17.5H10V20H8V17.5ZM14,17.5H16V20H14V17.5Z" />
 </vector>

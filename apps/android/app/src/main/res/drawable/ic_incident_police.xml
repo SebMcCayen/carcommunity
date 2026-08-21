@@ -1,23 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Incident glyph: POLICE — a shield (speed check / checkpoint).
-
-  Deliberately a shield rather than a speed-camera or a gauge: this app takes an
-  explicit product position against gamifying or alerting on speed, and a
-  checkpoint marker must read as "police presence", not "slow down, camera".
-
-  Tinted at runtime (see IncidentMarkerStyle.glyphColorArgb).
--->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
-    android:viewportHeight="24"
-    android:tint="#FFFFFFFF">
+    android:viewportHeight="24">
     <path
         android:fillColor="@android:color/white"
+        android:fillType="evenOdd"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M12,1L3,5V11C3,16.6 6.8,21.7 12,23C17.2,21.7 21,16.6 21,11V5L12,1ZM12,3.2L19,6.3V11C19,15.5 16,19.8 12,21C8,19.8 5,15.5 5,11V6.3L12,3.2Z" />
     <path
         android:fillColor="@android:color/white"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="0.5"
+        android:strokeLineJoin="round"
+        android:strokeLineCap="round"
         android:pathData="M12,6.5L13.5,10H17L14.2,12.2L15.3,15.7L12,13.6L8.7,15.7L9.8,12.2L7,10H10.5Z" />
 </vector>
