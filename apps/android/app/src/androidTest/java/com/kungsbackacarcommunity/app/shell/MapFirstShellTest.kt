@@ -960,9 +960,11 @@ class MapFirstShellTest {
      * branch, so losing that gate has to CLEAR the flag — otherwise the peek
      * silently stays "open" and pops up again on returning to the map.
      *
-     * The peek fills the screen and, like every Material `Surface`, blocks touches
-     * from reaching the bottom nav bar behind it, so a user leaves the Map tab only
-     * after dismissing the peek with its "Home" button — the exit exercised here.
+     * The peek is hosted in the map-shell body ABOVE the bottom bar (like every
+     * other panel), so the shell's tabs stay usable beneath it: tapping one leaves
+     * chat, which drops the map-cover gate and — via the auto-close effect — clears
+     * the saveable open flag. Returning to Map must then NOT re-show the peek. That
+     * gate-clears-the-flag path is exactly what this exercises.
      */
     @Test
     fun chatPeek_doesNotReappearAfterLeavingAndReturningToMapTab() {
@@ -971,28 +973,18 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
 
-        // A tab tap while the peek is open is inert — the full-screen peek surface
-        // is in the way and swallows the touch. performClick() delegates to
-        // performTouchInput { click() }, so this is hit-tested against whatever is
-        // actually on top; if the peek did not block it, the shell would switch tabs
-        // and the peek would vanish.
+        // Leaving the Map tab closes the peek: the map-cover gate drops and the
+        // auto-close effect clears the rememberSaveable open flag.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
-
-        // Dismiss the peek the way a user must: its "Home" button.
-        composeTestRule.onNodeWithText(str(R.string.chatPeek_home)).performClick()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
-
-        // Now the tabs are reachable again: leaving the Map tab takes the map home
-        // away rather than floating it under another tab.
-        composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
 
         // Returning to the Map tab restores the map WITHOUT re-opening the peek —
-        // the user gets the map, not a chat peek they never re-opened.
+        // the regression: a saveable open flag that survived the gate would pop the
+        // peek back up here.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
     }
