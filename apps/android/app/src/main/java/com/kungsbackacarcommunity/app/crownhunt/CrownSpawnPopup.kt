@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,6 +61,9 @@ const val CROWN_SPAWN_NAVIGATE_TAG = "crown_spawn_navigate"
 
 /** Test tag on the proximity loading bar shown while still out of range. */
 const val CROWN_SPAWN_PROXIMITY_TAG = "crown_spawn_proximity"
+
+/** Test tag on the "go live for full points" tip row. */
+const val CROWN_LIVE_SHARE_TIP_TAG = "crown_live_share_tip"
 
 /**
  * The panel opened by TAPPING a Kronjakt crown on the map.
@@ -101,6 +105,7 @@ fun CrownSpawnPopup(
     onCollect: () -> Unit,
     onNavigate: () -> Unit,
     onDismiss: () -> Unit,
+    showLiveShareTip: Boolean = false,
 ) {
     Popup(
         alignment = Alignment.BottomCenter,
@@ -139,9 +144,45 @@ fun CrownSpawnPopup(
                         onCollect = onCollect,
                         onNavigate = onNavigate,
                     )
+                    // A nudge to go live for full Kronpoäng, shown only while the
+                    // crown is still collectable (never over the outcome) and only
+                    // when the caller confirms the rule is on AND the member is not
+                    // already live-sharing.
+                    if (showLiveShareTip) {
+                        CrownLiveShareTip()
+                    }
                 }
             }
         }
+    }
+}
+
+/**
+ * A subtle one-line info row nudging the member to share a live session for full
+ * Kronpoäng. Shared by both crown-tap popups ([CrownSpawnPopup] and
+ * [CrownPointPopup]). Rendered only when the caller has confirmed BOTH that the
+ * `crownHuntLiveShareScoring` rule is on AND that the member is not currently
+ * live-sharing — so it never describes an inactive rule and never appears to a
+ * member who is already earning full points.
+ */
+@Composable
+internal fun CrownLiveShareTip(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier.fillMaxWidth().testTag(CROWN_LIVE_SHARE_TIP_TAG),
+        horizontalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Info,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = stringResource(R.string.crownHunt_liveShareTip),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

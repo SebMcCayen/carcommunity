@@ -1254,6 +1254,9 @@
     <string name="crownHunt_instrPointsBody">Every crown you collect gives Crown Points (CP). Rarer crowns give more. Your CP add up to your place on the season leaderboard and can be spent in the shop where available.</string>
     <string name="crownHunt_instrRankTitle">Crown Hunter ranks</string>
     <string name="crownHunt_instrRankBody">The more crowns you collect in total, the higher the Crown Hunter rank you unlock: Bronze at 10 crowns, Silver at 50, Gold at 250 and finally Platinum at 1,000. The rank is tallied on the server from all the crowns you\'ve collected – it appears automatically as soon as you reach it.</string>
+    <string name="crownHunt_instrLiveTitle">Go live for full points</string>
+    <string name="crownHunt_instrLiveBody">Collecting a crown while sharing a live session earns full Crown Points. Without live sharing, points are halved.</string>
+    <string name="crownHunt_liveShareTip">Tip: share a live session while collecting to earn twice the Crown Points.</string>
     <string name="crownHunt_trapHitOverlay">You hit a Spike Strip! −%1$d KP</string>
     <string name="leaderboard_title">Leaderboard</string>
     <string name="leaderboard_scopeAllTime">All-time</string>

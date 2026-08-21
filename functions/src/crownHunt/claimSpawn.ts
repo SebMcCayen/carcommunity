@@ -90,6 +90,7 @@ import {
 } from './crown-spawn-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { resolveActiveBoostMultiplier } from './pvp-drain';
+import { resolveLiveShareMultiplier } from './live-share-multiplier';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -509,7 +510,17 @@ export const claimSpawn = onCall(CALLABLE_OPTS, async (request): Promise<ClaimSp
   // existing daily fold charges the FULL boosted amount to the 300/day cap —
   // the bonus half cannot break the economy.
   const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
-  const rewardPoints = (spawn!.rewardPoints as number) * boostMultiplier;
+  // Kronjakt LIVE-SHARE scoring: a crown collected while NOT live-sharing pays
+  // half. Best-effort + flag-gated + FAIL-OPEN (returns 1 when
+  // crownHuntLiveShareScoring is OFF, when an active session is present, or on
+  // any read error), so a sharer is never wrongly penalised and the feature is
+  // a no-op until the flag is turned on. Composes with the boost multiplier; the
+  // rounded amount keeps `source: 'crown_hunt'` so the daily fold charges what
+  // was actually awarded.
+  const liveShareMultiplier = await resolveLiveShareMultiplier(uid, now);
+  const rewardPoints = Math.round(
+    (spawn!.rewardPoints as number) * boostMultiplier * liveShareMultiplier,
+  );
   const dailyCounterRef = db
     .collection('crownSpawnDailyClaims')
     .doc(spawnDailyCounterDocId(uid, now));
