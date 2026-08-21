@@ -1185,6 +1185,24 @@ fun AuthenticatedApp(
                 if (!chatHubOpen) chatHubLandingLink = null
             }
 
+            // Address-search + directions overlay ("Where to?"). The Mapbox
+            // search/directions client is guarded: with a blank token (CI / no
+            // token) every call no-ops to empty/null and never hits the network
+            // (see HttpMapboxSearchClient). Origin comes from the fused-location
+            // provider, degrading to null (→ inline hint) without a fix/permission.
+            //
+            // Hoisted here (above the notification-tap handler) so a chat push can
+            // dismiss it: while it is open, mapCover is Transparent, which closes
+            // the chat-hub popup's gate — see the COMMUNITY_CHAT / CONVOY_CHAT
+            // branch below, which requests it be closed before opening the popup.
+            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
+            // One-shot dismiss request for the nav-search overlay, parked by a chat
+            // push tap (handled just below — far above the overlay's own teardown,
+            // whose state is out of scope here). The effect beside the overlay
+            // consumes it and runs the SAME close path as onClose, so an out-of-
+            // scope dismissal can't leave a stale route overlay or place preview.
+            var navSearchDismissRequest by remember { mutableStateOf(false) }
+
             // Set true immediately before opening ShellRoute.Convoys from the
             // chooser's "Convoy" option so the convoy route deep-links straight
             // into its create-convoy sub-screen. Reset to false when the Social
@@ -1226,24 +1244,12 @@ fun AuthenticatedApp(
             // shell's ordinary route + payload state — the same assignments the
             // in-app affordances make — rather than a second navigation mechanism.
             //
-            // Chat-hub destinations are forwarded whole to ChatHubRoute, which
-            // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
+            // Chat-hub destinations open the SAME transparent ChatHubPopup the
+            // map's chat bubble raises — never the full opaque ShellRoute.ChatHub
+            // — so a notification lands on exactly the surface the in-app chat
+            // icon does; the rest map to a ShellRoute. See the COMMUNITY_CHAT /
+            // CONVOY_CHAT branch below.
             //
-            // INVARIANT — pendingChatHubLink is never read stale, and the reason
-            // is structural rather than a clear-on-exit: the opener below is the
-            // ONLY route into ShellRoute.ChatHub in the shell, and it always
-            // writes a fresh link in the same frame. ChatHubRoute therefore
-            // cannot be entered carrying a previous tap's destination. The map
-            // bubble and the convoy bar's chat icon are not counter-examples —
-            // they open ChatHubPopup, whose landing link is the separate,
-            // cleared-on-close `chatHubLandingLink` above. Back-out is likewise safe:
-            // ChatHub is opened via openRootRoute (a fresh, parent-less stack),
-            // so a Back pop from it lands on the map, never back INTO ChatHub —
-            // the only entry stays this fresh-link opener.
-            //
-            // If you ever add a second way to reach ShellRoute.ChatHub, that
-            // invariant dies and this must become a consume-and-clear.
-            var pendingChatHubLink by remember { mutableStateOf<PushDeepLink?>(null) }
             // Event id from an event-reminder push tap, opened by EventsRoute on
             // entry and cleared the moment it consumes it (unlike ChatHub, the
             // Events route is reachable by normal navigation too, so a lingering
@@ -1278,8 +1284,29 @@ fun AuthenticatedApp(
                     PushTarget.COMMUNITY_CHAT,
                     PushTarget.CONVOY_CHAT,
                     -> {
-                        pendingChatHubLink = link
-                        openRootRoute(ShellRoute.ChatHub)
+                        // Open the SAME transparent chat-hub popup the map's chat
+                        // bubble raises (chatHubOpen + chatHubLandingLink), NOT the
+                        // full opaque ShellRoute.ChatHub — so the notification lands
+                        // on the exact surface the in-app chat icon reaches. Force
+                        // the map home first so the popup's map-cover gate
+                        // (ShellNavigation.chatHubAllowed) holds even on a cold start
+                        // or from another tab: clear any open route, select the Map
+                        // tab, AND ask the nav-search overlay to close — an open
+                        // search makes mapCover Transparent, which would otherwise
+                        // keep the gate shut and the auto-close effect would drop the
+                        // popup. Dismissing via a request (not a bare navSearchOpen
+                        // flip) runs the overlay's FULL teardown — the same path
+                        // onClose uses — so no stale route overlay or place preview
+                        // lingers. The popup opens the frame the overlay closes: the
+                        // gate only ever transitions shut→open here, so the auto-
+                        // close effect never fires against it. Then land on the
+                        // pushed channel via the landing link (Community, or a
+                        // convoy's channel — the same param the convoy bar uses).
+                        clearRoutes()
+                        selectedTab = ShellTab.Map
+                        navSearchDismissRequest = true
+                        chatHubLandingLink = link
+                        chatHubOpen = true
                     }
                     PushTarget.CONVOYS -> {
                         // BACKEND GAP: buildPushDeepLink in
@@ -2785,12 +2812,6 @@ fun AuthenticatedApp(
                 }
             }
 
-            // Address-search + directions overlay ("Where to?"). The Mapbox
-            // search/directions client is guarded: with a blank token (CI / no
-            // token) every call no-ops to empty/null and never hits the network
-            // (see HttpMapboxSearchClient). Origin comes from the fused-location
-            // provider, degrading to null (→ inline hint) without a fix/permission.
-            var navSearchOpen by rememberSaveable { mutableStateOf(false) }
             // Turn-by-turn navigation target. Non-null → the full-screen nav view
             // is shown (over the search overlay). The origin is left to the nav
             // view, which navigates from the live GPS fix.
@@ -4698,6 +4719,31 @@ fun AuthenticatedApp(
                 // of recents/saved places/long-press handling — the only
                 // difference is the extra action in the route preview.
                 var navSearchConvoyPick by rememberSaveable { mutableStateOf(false) }
+
+                // The nav-search overlay's teardown, shared by its own onClose, the
+                // convoy-pick close, and a chat-notification dismiss: wipe the drawn
+                // route AND every bit of per-open context, so the next search opens
+                // in the plain search-first state rather than re-previewing the last
+                // place or re-offering a convoy destination.
+                val closeNavSearch: () -> Unit = {
+                    mapSurface.setRouteOverlay(null)
+                    navSearchOpen = false
+                    navSearchTarget = null
+                    navSearchTargetName = null
+                    navSearchConvoyPick = false
+                    navSearchInitialEdit = null
+                }
+                // Honour a dismiss parked by a chat-notification tap (which runs far
+                // above this scope) with that SAME teardown, so an out-of-scope close
+                // behaves exactly like an in-overlay one. Guarded on navSearchOpen so
+                // a tap that arrives with no overlay showing is a clean no-op.
+                LaunchedEffect(navSearchDismissRequest) {
+                    if (navSearchDismissRequest) {
+                        if (navSearchOpen) closeNavSearch()
+                        navSearchDismissRequest = false
+                    }
+                }
+
                 // null (rather than a bar that draws nothing) is what makes "not in
                 // a convoy" compose literally nothing at all — no empty bar, no
                 // placeholder, and no space reserved in the top chrome column.
@@ -5695,20 +5741,12 @@ fun AuthenticatedApp(
                         mapSurface = mapSurface,
                         searchClient = searchClient,
                         originProvider = originProvider,
-                        onClose = {
-                            mapSurface.setRouteOverlay(null)
-                            navSearchOpen = false
-                            // Drop any long-press / place-tap target so re-opening
-                            // via the search bar starts in the normal search-first
-                            // state rather than re-previewing the last place.
-                            navSearchTarget = null
-                            navSearchTargetName = null
-                            // Backing out of the picker must not leave the next
-                            // plain search offering to set a convoy destination.
-                            navSearchConvoyPick = false
-                            // ...nor pre-frame the next save as a change-address.
-                            navSearchInitialEdit = null
-                        },
+                        // Wipe the route overlay and every bit of per-open context
+                        // (place-tap target, convoy-pick, change-address) so the next
+                        // open starts in the plain search-first state — see
+                        // closeNavSearch, shared with the convoy-pick close and the
+                        // chat-notification dismiss.
+                        onClose = closeNavSearch,
                         onStartNavigation = startNavigationTo,
                         // Only offered when this overlay was opened AS the convoy
                         // bar's place picker, and only enabled once
@@ -5727,12 +5765,9 @@ fun AuthenticatedApp(
                                             )
                                         }
                                     }
-                                    mapSurface.setRouteOverlay(null)
-                                    navSearchOpen = false
-                                    navSearchConvoyPick = false
-                                    navSearchTarget = null
-                                    navSearchTargetName = null
-                                    navSearchInitialEdit = null
+                                    // Same full teardown as onClose once the
+                                    // destination has been handed to the coordinator.
+                                    closeNavSearch()
                                 }
                             } else {
                                 null
@@ -5958,7 +5993,12 @@ fun AuthenticatedApp(
                             clearRoutes()
                             selectedTab = ShellTab.Map
                         },
-                        chatHubPushLink = pendingChatHubLink,
+                        // ShellRoute.ChatHub is no longer a push destination (chat
+                        // notifications open ChatHubPopup instead); this route now
+                        // renders only for migration-safe restore of older saved
+                        // state, which carries no push link — so land on the
+                        // Community default.
+                        chatHubPushLink = null,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
                         convoyInviteDeepLinkId = pendingConvoyInviteId,
