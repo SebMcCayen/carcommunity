@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.design
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -28,6 +29,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -45,6 +47,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.PI
+import kotlin.math.sin
 
 /** Test tag on the reaction overlay's animated badge. */
 const val REACTION_OVERLAY_TAG = "reaction_overlay"
@@ -85,6 +89,20 @@ object ReactionOverlayTiming {
     /** The small entry tilt (degrees) the badge settles from, for a playful pop. */
     const val ENTER_START_SPIN: Float = -14f
 
+    /**
+     * Peak tilt (degrees) of the OPT-IN wave rock — see [waveRotationDegrees]. The
+     * hand rocks to about ±18°, enough to read as a friendly "waving hello" without
+     * spinning.
+     */
+    const val WAVE_ROCK_DEGREES: Float = 18f
+
+    /**
+     * How many full side-to-side rocks the wave does across its hold. A "full" rock
+     * is one sine period (centre -> right -> centre -> left -> centre), so 3 cycles
+     * reads as three unhurried waves over the ~1.1s hold.
+     */
+    const val WAVE_ROCK_CYCLES: Int = 3
+
     /** Total visible duration for a pop that holds for [holdMs]. */
     fun totalMs(holdMs: Long = HOLD_MS): Long = ENTER_MS + holdMs.coerceAtLeast(0L) + EXIT_MS
 
@@ -123,6 +141,26 @@ object ReactionOverlayTiming {
                 (1f - intoExit.toFloat() / EXIT_MS).coerceIn(0f, 1f)
             }
         }
+    }
+
+    /**
+     * The OPT-IN wave rock angle (degrees) at [elapsedMs] for a pop holding [holdMs]
+     * — the side-to-side "waving hello" tilt applied ONLY to the wave glyph (see
+     * [ReactionOverlayEvent.waveWiggle]); every other reaction stays upright.
+     *
+     * The rock lives ENTIRELY within the HOLD phase: it is 0 during the enter (the
+     * scale/settle-spin owns that), rocks through the hold, and is back at 0 for the
+     * exit fade — so it sits cleanly on top of the shared envelope without fighting
+     * it. Within the hold it follows a sine, [WAVE_ROCK_CYCLES] full periods across
+     * the hold at [WAVE_ROCK_DEGREES] amplitude: a sine is naturally 0 at both ends
+     * of the hold and DECELERATES at each extreme, so it reads as a smooth wave, not
+     * a metronome. The pivot (bottom-centre "wrist") is applied in the composable.
+     */
+    fun waveRotationDegrees(elapsedMs: Long, holdMs: Long = HOLD_MS): Float {
+        val hold = holdMs.coerceAtLeast(0L)
+        if (hold == 0L || elapsedMs < ENTER_MS || elapsedMs >= ENTER_MS + hold) return 0f
+        val intoHold = (elapsedMs - ENTER_MS).toFloat() / hold // 0..1 across the hold
+        return WAVE_ROCK_DEGREES * sin(2.0 * PI * WAVE_ROCK_CYCLES * intoHold).toFloat()
     }
 }
 
@@ -171,6 +209,15 @@ data class ReactionOverlayEvent(
      * so the map underneath is untouched.
      */
     val dismissOnTap: Boolean = false,
+    /**
+     * When true the GLYPH (only) rocks side-to-side during the hold — the friendly
+     * "waving hello" gesture (see [ReactionOverlayTiming.waveRotationDegrees]). Set
+     * ONLY on the wave pop so its 👋 reads as a wave rather than a static "stop"
+     * palm. Defaults false so every OTHER shared user (convoy hello/goodbye/
+     * follow-me/police, the police-nearby alert, crown pops) keeps its static glyph.
+     * The rock is scoped to the icon; the caption never rotates.
+     */
+    val waveWiggle: Boolean = false,
 )
 
 /**
@@ -205,6 +252,11 @@ fun ReactionOverlay(
         val scale = remember(current.id) { Animatable(ReactionOverlayTiming.ENTER_START_SCALE) }
         val alpha = remember(current.id) { Animatable(0f) }
         val spin = remember(current.id) { Animatable(ReactionOverlayTiming.ENTER_START_SPIN) }
+        // A linear elapsed-ms CLOCK, only advanced for a wave pop (waveWiggle). The
+        // glyph's rock angle is a PURE function of this value via
+        // ReactionOverlayTiming.waveRotationDegrees, so it stays 0 (upright) for every
+        // non-wave pop where the clock never moves.
+        val waveClock = remember(current.id) { Animatable(0f) }
         val finished by rememberUpdatedState(onFinished)
 
         // A tap on the badge (when dismissOnTap) requests an EARLY end. It is only
@@ -247,6 +299,20 @@ fun ReactionOverlay(
                             stiffness = Spring.StiffnessLow,
                         ),
                 )
+            }
+            // WAVE ROCK (opt-in): advance the elapsed-ms clock LINEARLY across the
+            // whole pop so waveRotationDegrees drives the icon's side-to-side tilt.
+            // Runs as a fire-and-forget child job — the timed enter/hold/exit below is
+            // untouched. Non-wave pops skip this, so their clock stays 0 (upright).
+            if (current.waveWiggle) {
+                launch {
+                    val total = ReactionOverlayTiming.totalMs(current.holdMs)
+                    waveClock.snapTo(0f)
+                    waveClock.animateTo(
+                        targetValue = total.toFloat(),
+                        animationSpec = tween(total.toInt(), easing = LinearEasing),
+                    )
+                }
             }
             alpha.animateTo(1f, animationSpec = tween(ReactionOverlayTiming.ENTER_MS.toInt()))
             // Hold at rest for this pop's own holdMs. Only when the pop is
@@ -316,7 +382,22 @@ fun ReactionOverlay(
                 shape = CircleShape,
                 color = tint,
                 shadowElevation = 6.dp,
-                modifier = Modifier.size(96.dp),
+                modifier =
+                    Modifier
+                        .size(96.dp)
+                        // The wave rock is applied to the GLYPH badge ONLY (not the
+                        // Column, so the caption below never rotates). Pivot at the
+                        // bottom-centre "wrist" (0.5, 0.9) so it reads as a hand waving
+                        // hello, not spinning from its middle. For every non-wave pop
+                        // the clock stays 0 → 0°, so this is a no-op there.
+                        .graphicsLayer {
+                            rotationZ =
+                                ReactionOverlayTiming.waveRotationDegrees(
+                                    waveClock.value.toLong(),
+                                    current.holdMs,
+                                )
+                            transformOrigin = TransformOrigin(0.5f, 0.9f)
+                        },
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
