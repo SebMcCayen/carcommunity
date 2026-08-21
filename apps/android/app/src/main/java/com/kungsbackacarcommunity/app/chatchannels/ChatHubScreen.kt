@@ -90,8 +90,12 @@ const val CHAT_PEEK_TEST_TAG = "chat_peek"
 /** How many of the newest messages the read-only peek previews. */
 private const val PEEK_PREVIEW_MESSAGE_COUNT = 12
 
-/** Height of the peek's two bottom-bar buttons — ~44dp comfortable tap target. */
-private val PEEK_BUTTON_HEIGHT = 44.dp
+/**
+ * Height of the peek's two bottom-bar buttons. 48dp — the app's minimum interactive
+ * touch-target size (as e.g. ChatQuickEmojiRow uses) — since these are primary
+ * navigation actions.
+ */
+private val PEEK_BUTTON_HEIGHT = 48.dp
 
 /**
  * The full-screen, slightly-translucent "chat peek" landing page — the single
