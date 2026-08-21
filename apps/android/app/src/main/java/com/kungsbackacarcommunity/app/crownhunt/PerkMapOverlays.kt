@@ -115,8 +115,7 @@ fun SpikeStripOverlay(
     // Half the tap target, so the positioned clickable's footprint is CENTRED on the
     // projected coordinate (offset places by top-left). Computed once per density.
     val tapHalfPx = remember(density) { with(density) { (TRAP_TAP_TARGET / 2).toPx() } }
-    // Viewport size, so an off-screen trap's tap target is not laid out. Only read
-    // by the (opt-in) tap-target pass; the Canvas uses its own DrawScope `size`.
+    // Viewport size, so an off-screen trap's target is neither drawn nor laid out.
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
     Box(
@@ -126,26 +125,49 @@ fun SpikeStripOverlay(
                 .onSizeChanged { viewportSize = it }
                 .testTag(SPIKE_STRIP_OVERLAY_TAG),
     ) {
-        camera ?: return@Box
+        val snapshot = camera ?: return@Box
         val live = PerkMapVisuals.liveTraps(traps, now)
         if (live.isEmpty()) return@Box
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (trap in live) {
-                val point = mapSurface.screenPositionFor(trap.latitude, trap.longitude)
-                if (point == null || !point.trustworthy) continue
-                if (point.x < 0f || point.y < 0f || point.x > size.width || point.y > size.height) {
-                    continue
+        // Project the live traps ONCE, memoized on the settled camera, the live set
+        // and the viewport — NOT on the pulse. This composable recomposes every frame
+        // (it reads the animated pulse), so projecting inline would round-trip
+        // `pixelForCoordinate` per trap at ~60 Hz for positions that only move when
+        // the camera settles. Mirrors NearbyLiveOverlay: the pulse then only re-draws
+        // the glyphs, the projection is reused. `live` is value-equal frame to frame
+        // (data-class markers), so the 1 s now-tick does not re-project on its own —
+        // only a change in the live membership does.
+        val placements =
+            remember(snapshot, live, viewportSize) {
+                if (viewportSize.width <= 0 || viewportSize.height <= 0) {
+                    emptyList()
+                } else {
+                    val w = viewportSize.width.toFloat()
+                    val h = viewportSize.height.toFloat()
+                    buildList {
+                        for (trap in live) {
+                            val point =
+                                mapSurface.screenPositionFor(trap.latitude, trap.longitude) ?: continue
+                            if (!point.trustworthy) continue
+                            if (point.x < 0f || point.y < 0f || point.x > w || point.y > h) continue
+                            add(TrapPlacement(trap, point.x, point.y))
+                        }
+                    }
                 }
-                val centre = Offset(point.x, point.y)
+            }
+        if (placements.isEmpty()) return@Box
+
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            for (placement in placements) {
+                val centre = Offset(placement.x, placement.y)
                 drawSpikeStrip(centre, pulse, toothPath)
                 // The depleting lifetime bar, beneath the glyph. Numbers-free; the
                 // exact remaining time is in the tapped-trap popup. Allocation-free.
                 drawTrapLifeBar(
                     centre,
                     PerkMapVisuals.remainingLifeFraction(
-                        expiresAtMillis = trap.expiresAtMillis,
-                        deployedAtMillis = trap.deployedAtMillis,
+                        expiresAtMillis = placement.trap.expiresAtMillis,
+                        deployedAtMillis = placement.trap.deployedAtMillis,
                         nowMillis = now,
                     ),
                 )
@@ -157,25 +179,21 @@ fun SpikeStripOverlay(
         // so a tap anywhere else still reaches the map. Placer-only ⇒ owner-only, but
         // guard defensively: only the caller's own traps ever reach this layer.
         val onTap = onTrapTap
-        if (onTap != null && viewportSize.width > 0 && viewportSize.height > 0) {
-            val w = viewportSize.width.toFloat()
-            val h = viewportSize.height.toFloat()
+        if (onTap != null) {
             // One spoken label for every trap target — the marker is an empty Box, so
             // without this TalkBack would announce an unlabelled button. Mirrors the
             // nearby-live chip's contentDescription; read once outside the loop.
             val tapLabel = stringResource(R.string.crownHunt_perkTrapMapTapLabel)
-            for (trap in live) {
-                val point = mapSurface.screenPositionFor(trap.latitude, trap.longitude) ?: continue
-                if (!point.trustworthy) continue
-                if (point.x < 0f || point.y < 0f || point.x > w || point.y > h) continue
+            for (placement in placements) {
+                val trap = placement.trap
                 key(trap.trapId) {
                     Box(
                         modifier =
                             Modifier
                                 .offset {
                                     IntOffset(
-                                        (point.x - tapHalfPx).roundToInt(),
-                                        (point.y - tapHalfPx).roundToInt(),
+                                        (placement.x - tapHalfPx).roundToInt(),
+                                        (placement.y - tapHalfPx).roundToInt(),
                                     )
                                 }
                                 .size(TRAP_TAP_TARGET)
@@ -188,6 +206,9 @@ fun SpikeStripOverlay(
         }
     }
 }
+
+/** One live trap projected to the map view's pixel space (its glyph/tap centre). */
+private class TrapPlacement(val trap: OwnTrapMarker, val x: Float, val y: Float)
 
 /**
  * The own-dot SHIELD aura + DOUBLE-POINTS effect. Both hang on the member's OWN

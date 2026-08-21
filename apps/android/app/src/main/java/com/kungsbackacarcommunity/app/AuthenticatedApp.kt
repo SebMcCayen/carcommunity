@@ -5546,11 +5546,14 @@ fun AuthenticatedApp(
                 // The placer's OWN deployed trap they tapped on the map, latched so its
                 // detail popup stays open (with a live countdown) until dismissed. The
                 // marker is immutable (its expiry is fixed at deploy), so the latched
-                // copy needs no re-resolution. Cleared when the perk map stands down so
-                // the popup cannot resurrect on re-entry.
+                // copy needs no re-resolution. Cleared when the perk map stands down OR
+                // the map is covered by opaque chrome (a full-screen tab / nav route):
+                // [DeployedTrapPopup] draws in its OWN window, so without this it would
+                // float above unrelated content and be preserved for the return — it
+                // must close when navigating away, like any other map overlay.
                 var tappedTrap by remember { mutableStateOf<OwnTrapMarker?>(null) }
-                LaunchedEffect(perkMapActive) {
-                    if (!perkMapActive) tappedTrap = null
+                LaunchedEffect(perkMapActive, mapCover) {
+                    if (!perkMapActive || mapCover == MapCover.Opaque) tappedTrap = null
                 }
                 // Drop the popup if the tapped trap leaves the live set (triggered,
                 // expired-and-pruned, or removed) so it never describes a trap that is
