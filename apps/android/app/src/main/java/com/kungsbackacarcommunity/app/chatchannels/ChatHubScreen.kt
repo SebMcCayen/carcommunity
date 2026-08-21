@@ -154,8 +154,8 @@ fun ChatPeekPage(
     // Reuse the hub's live message listener, unchanged: the convoy's channel when a
     // convoy id is in hand, else the Community channel. Remembered on the inputs so
     // the listener is not re-subscribed on every recomposition. Null when the
-    // backing repository is absent (config-less build) — the preview then shows the
-    // empty state rather than spinning forever.
+    // backing repository is absent (config-less build) — see [unavailable], which
+    // renders the "unavailable" notice rather than a misleading empty channel.
     val messagesFlow =
         remember(convoyId, communityChatRepository, convoyChatRepository) {
             when {
@@ -163,16 +163,16 @@ fun ChatPeekPage(
                 else -> communityChatRepository?.observeMessages()
             }
         }
+    // Chat cannot load at all — no backing repository (config-less build). Distinct
+    // from a channel that loaded but is empty: the former shows the neutral
+    // "unavailable" notice (the same string the hub's tabs use), the latter the
+    // channel's own "no messages yet" copy.
+    val unavailable = messagesFlow == null
     val fallbackFlow = remember { emptyFlow<ChannelMessagesState>() }
     val messagesState by (messagesFlow ?: fallbackFlow).collectAsState(
-        // With no flow to collect there is nothing to load: show the (empty)
-        // channel immediately rather than a spinner that never resolves.
-        initial =
-            if (messagesFlow == null) {
-                ChannelMessagesState.Loaded(emptyList())
-            } else {
-                ChannelMessagesState.Loading
-            },
+        // With no flow to collect there is nothing to load; [unavailable] handles
+        // that case below, so the collected state is irrelevant then.
+        initial = ChannelMessagesState.Loading,
     )
 
     // Convoy title for the header, resolved once from `convoy-list` (the same
@@ -260,6 +260,22 @@ fun ChatPeekPage(
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 val loaded = messagesState as? ChannelMessagesState.Loaded
                 when {
+                    // No repository at all: chat is not available (config-less
+                    // build) — the same notice the hub's tabs show, never the
+                    // channel's "no messages yet" copy, which would wrongly imply
+                    // the channel is reachable and simply empty.
+                    unavailable ->
+                        Text(
+                            text = stringResource(R.string.chatHub_unavailable),
+                            modifier =
+                                Modifier
+                                    .align(Alignment.Center)
+                                    .padding(KccSpacing.s6),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+
                     loaded == null ->
                         CircularProgressIndicator(
                             modifier = Modifier.align(Alignment.Center),
