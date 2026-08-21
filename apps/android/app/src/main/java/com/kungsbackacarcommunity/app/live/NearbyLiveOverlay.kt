@@ -156,7 +156,14 @@ fun NearbyLiveOverlay(
                             marginPx = marginPx,
                             expectedScreenAngle = screenAngle,
                         )
-                    verdicts += verdict
+                    // RECORD the nearby-mapped verdict, not the raw one: this
+                    // overlay hides an off-screen sharer outright (no edge arrow),
+                    // so a fold/corner-clamp of a sharer the render already refuses
+                    // to draw is a correctly-hidden OFF_SCREEN sharer, not a chip
+                    // fault to escalate. See MapAwarenessDiagnostics.nearbyRecordVerdict
+                    // (why #912 kept auto-filing after the stuck-chip render bug was
+                    // fixed). The RENDER decision below still keys off the RAW verdict.
+                    verdicts += MapAwarenessDiagnostics.nearbyRecordVerdict(verdict)
                     // ON_SCREEN is exactly the draw case (round trip AND bearing
                     // agree, inside the margin-expanded viewport).
                     if (point != null && verdict == MapAwarenessDiagnostics.ChipProjectionVerdict.ON_SCREEN) {

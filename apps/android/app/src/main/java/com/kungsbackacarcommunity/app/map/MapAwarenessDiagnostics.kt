@@ -165,6 +165,46 @@ object MapAwarenessDiagnostics {
         }
 
     /**
+     * The verdict to RECORD for a nearby (on-screen-ONLY) sharer, given the raw
+     * [classifyChipProjection] result — collapsing a fold/corner-clamp to plain
+     * [ChipProjectionVerdict.OFF_SCREEN] so it is not counted as a chip FAULT.
+     *
+     * ## Why the nearby overlay needs this and the convoy overlay does not
+     * The two overlays do DIFFERENT things with an off-screen member. The convoy
+     * overlay draws a bearing-based EDGE ARROW, so a member behind the tilted
+     * camera is still surfaced and a genuinely misplaced projection matters. The
+     * nearby overlay draws a sharer ONLY while they are inside the viewport and
+     * shows nothing for one who is off-screen (see NearbyLiveOverlay) — a
+     * deliberate "don't pin arrows to every stranger" choice.
+     *
+     * On the default pitched (45°) map an off-screen sharer's coordinate has no
+     * honest screen pixel, so `pixelForCoordinate` FOLDS or CORNER-CLAMPS it back
+     * into view. The render decision already refuses to draw anything but
+     * [ChipProjectionVerdict.ON_SCREEN], so that sharer is correctly hidden — the
+     * SAME outcome as an honestly [ChipProjectionVerdict.OFF_SCREEN] one. Recording
+     * the fold as a FAULT ([isFault] is true for it) instead escalates a public
+     * "off-screen chip" issue for what is now normal, fully-handled behaviour:
+     * every time a user pans a nearby sharer off a 3D map. That is why
+     * `map.offscreenChipProjection` keeps auto-filing (issue #912) even though the
+     * chip is no longer drawn in the corner — the stuck-chip render bug this
+     * telemetry was built to catch was already fixed at the projection seam
+     * ([com.kungsbackacarcommunity.app.shell.MapScreenPoint.trustworthy]).
+     *
+     * Collapsing both folds to [ChipProjectionVerdict.OFF_SCREEN] keeps the ONE
+     * genuinely anomalous nearby case — a [ChipProjectionVerdict.HIDDEN_NONFINITE]
+     * projection, where the SDK could not place a sharer that DOES carry a valid
+     * coordinate — as the only nearby chip fault, so the escalation still fires for
+     * a real projection breakdown and stays quiet for the handled off-screen case.
+     */
+    fun nearbyRecordVerdict(verdict: ChipProjectionVerdict): ChipProjectionVerdict =
+        when (verdict) {
+            ChipProjectionVerdict.HIDDEN_FOLD,
+            ChipProjectionVerdict.HIDDEN_CORNER_CLAMP,
+            -> ChipProjectionVerdict.OFF_SCREEN
+            else -> verdict
+        }
+
+    /**
      * One settled convoy-fit frame: how the camera fit is doing at keeping the
      * group framed. Recorded only while the "keep everyone framed" mode is active.
      *
