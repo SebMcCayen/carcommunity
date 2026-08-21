@@ -5374,6 +5374,8 @@ fun AuthenticatedApp(
                                 icon = Icons.Filled.WavingHand,
                                 caption = caption,
                                 contentDescription = caption,
+                                // Rock the hand hello — opt-in, wave pop only.
+                                waveWiggle = true,
                             )
                     }
                 }
@@ -5393,6 +5395,8 @@ fun AuthenticatedApp(
                                 icon = Icons.Filled.WavingHand,
                                 caption = waveCaptionSelf,
                                 contentDescription = waveCaptionSelf,
+                                // Rock the hand hello — opt-in, wave pop only.
+                                waveWiggle = true,
                             )
                         scope.launch {
                             when (val result = repo.send(clientId)) {

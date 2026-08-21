@@ -140,4 +140,67 @@ class ReactionOverlayTimingTest {
             t += 37
         }
     }
+
+    // ---- Wave rock (opt-in "waving hello" tilt) -------------------------------
+
+    @Test
+    fun wave_rock_is_zero_outside_the_hold() {
+        val enter = ReactionOverlayTiming.ENTER_MS
+        val hold = ReactionOverlayTiming.HOLD_MS
+        // No tilt during the enter (the scale/settle-spin owns that phase).
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(-10), 0f)
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(0), 0f)
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(enter - 1), 0f)
+        // Zero at the very start of the hold...
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(enter), 0.001f)
+        // ...and back to zero once the hold ends (the exit fade + beyond).
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(enter + hold), 0f)
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(ReactionOverlayTiming.TOTAL_MS), 0f)
+    }
+
+    @Test
+    fun wave_rock_stays_within_amplitude_and_actually_swings_both_ways() {
+        val enter = ReactionOverlayTiming.ENTER_MS
+        val hold = ReactionOverlayTiming.HOLD_MS
+        val amp = ReactionOverlayTiming.WAVE_ROCK_DEGREES
+        var sawPositive = false
+        var sawNegative = false
+        var t = enter
+        while (t < enter + hold) {
+            val deg = ReactionOverlayTiming.waveRotationDegrees(t)
+            assertTrue("rock $deg exceeds ±$amp at $t", deg in -amp - 0.001f..amp + 0.001f)
+            if (deg > amp * 0.5f) sawPositive = true
+            if (deg < -amp * 0.5f) sawNegative = true
+            t += 5
+        }
+        // It rocks to BOTH sides (a wave, not a lean).
+        assertTrue("never rocked right", sawPositive)
+        assertTrue("never rocked left", sawNegative)
+    }
+
+    @Test
+    fun wave_rock_completes_the_configured_number_of_cycles() {
+        val enter = ReactionOverlayTiming.ENTER_MS
+        val hold = ReactionOverlayTiming.HOLD_MS
+        val cycles = ReactionOverlayTiming.WAVE_ROCK_CYCLES
+        // Count sign-crossings of the sine across the hold. N full periods have 2N
+        // zeros in the OPEN interval plus one at each endpoint; the hold's END zero
+        // lands exactly on the excluded endpoint (the rock returns to centre), so the
+        // interior sign-crossings number 2N - 1.
+        var crossings = 0
+        var prev = ReactionOverlayTiming.waveRotationDegrees(enter + 1)
+        var t = enter + 2
+        while (t < enter + hold) {
+            val cur = ReactionOverlayTiming.waveRotationDegrees(t)
+            if (prev <= 0f && cur > 0f || prev >= 0f && cur < 0f) crossings++
+            prev = cur
+            t += 1
+        }
+        assertEquals(2 * cycles - 1, crossings)
+    }
+
+    @Test
+    fun wave_rock_is_zero_for_a_zero_hold() {
+        assertEquals(0f, ReactionOverlayTiming.waveRotationDegrees(100, 0L), 0f)
+    }
 }
