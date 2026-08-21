@@ -2799,13 +2799,24 @@ fun AuthenticatedApp(
                         )
                     }
                 }
+            // The ONE fix the popup DISPLAYS and the gate JUDGES — distance, speed
+            // and accuracy all read off it, so the button never trusts a distance
+            // from one fix against the accuracy of another. It is the FRESHEST
+            // reading ([crownLatestFix]), which is what makes the state re-evaluate
+            // live as GPS sharpens, but only while there is a fresh proof current at
+            // all: [crownCurrentFix] is null once the position ages past the server's
+            // freshness window, and gating on that keeps a stale leftover latest from
+            // reading as a live position. The SUBMITTED proof pair stays
+            // [crownCurrentFix]/[crownPreviousFix] (both #911 in-range gated) — this
+            // only changes what is shown and judged, never what is claimed.
+            val crownGateFix = crownCurrentFix?.let { crownLatestFix ?: it }
             // Distance from the member to the open crown, or null with no fix. The
             // same haversine the rest of the app uses (via ViewportRadius), so a
             // distance shown here agrees with one computed anywhere else.
             val crownDistanceMeters =
-                remember(openCrown, crownCurrentFix) {
+                remember(openCrown, crownGateFix) {
                     val crown = openCrown
-                    val fix = crownCurrentFix
+                    val fix = crownGateFix
                     if (crown == null || fix == null) {
                         null
                     } else {
@@ -2821,8 +2832,7 @@ fun AuthenticatedApp(
                 remember(
                     crownSpawnEnabled,
                     crownDistanceMeters,
-                    crownCurrentFix,
-                    crownLatestFix,
+                    crownGateFix,
                     openCrown,
                     crownDwellReady,
                     crownDwellSecondsRemaining,
@@ -2830,20 +2840,17 @@ fun AuthenticatedApp(
                     CrownCollectGate.evaluate(
                         featureEnabled = crownSpawnEnabled,
                         distanceMeters = crownDistanceMeters,
-                        speedMetersPerSecond = crownCurrentFix?.speedMetersPerSecond,
+                        // Distance, speed and accuracy all come from the SAME
+                        // ([crownGateFix]) fix, so an improving signal flips
+                        // WaitingForSignal → Ready live without the gate ever mixing
+                        // a distance from one fix with the accuracy of another.
+                        speedMetersPerSecond = crownGateFix?.speedMetersPerSecond,
                         collectRadiusMeters =
                             openCrown?.collectRadiusMeters
                                 ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
                         dwellProofReady = crownDwellReady,
                         dwellSecondsRemaining = crownDwellSecondsRemaining,
-                        // The GPS-settled gate reads the FRESHEST fix's accuracy, so
-                        // an improving signal flips WaitingForSignal → Ready live
-                        // instead of staying pinned to the proof current until a
-                        // close/reopen. Falls back to the proof current's accuracy
-                        // for the first frame before any fix has landed.
-                        accuracyMeters =
-                            crownLatestFix?.accuracyMeters
-                                ?: crownCurrentFix?.accuracyMeters,
+                        accuracyMeters = crownGateFix?.accuracyMeters,
                     )
                 }
             // One key per opened crown, so a retry after a transport failure is the
