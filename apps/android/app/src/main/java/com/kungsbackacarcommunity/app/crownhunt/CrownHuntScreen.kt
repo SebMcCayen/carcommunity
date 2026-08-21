@@ -144,9 +144,11 @@ fun CrownHuntScreen(
 }
 
 /**
- * The read-only Kronjakt HOME: the member's badge standing, this season's stats +
- * leaderboard, and the crown legend. Extracted so it renders identically whether
- * or not the shop tab bar is present above it.
+ * The read-only Kronjakt HOME: the member's badge standing and this season's stats
+ * + leaderboard. Extracted so it renders identically whether or not the shop tab
+ * bar is present above it. The "how they work" crown legend is NOT here — it lives
+ * on the Instructions surface ([CrownHuntInstructionsScreen]), reached via the
+ * Instructions button, so this hub has a single place that explains crowns.
  */
 @Composable
 private fun ColumnScope.CrownHuntHubContent(
