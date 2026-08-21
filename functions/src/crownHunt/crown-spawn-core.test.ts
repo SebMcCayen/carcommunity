@@ -629,15 +629,26 @@ describe('stationary collection rule', () => {
     });
   });
 
-  it('rejects a REPORTED speed above the ceiling on either fix', () => {
-    expect(evaluate({ speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 0.5 }, {})).toEqual({
-      ok: false,
-      result: 'must_be_stationary',
-    });
-    expect(evaluate({}, { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 0.5 })).toEqual({
-      ok: false,
-      result: 'must_be_stationary',
-    });
+  it('tolerates a single reported-speed spike (GPS jitter) on an otherwise stationary pair', () => {
+    // A stationary phone's reported speed jitters and can spike above the ceiling
+    // on ONE fix while the device has not moved — the positions barely change, so
+    // the derived speed says stopped. One lone spike must not reject a genuinely
+    // parked member (the owner's "you need to be standing still" bug). It is
+    // tolerated on either fix, current or previous.
+    expect(evaluate({ speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 5 }, {})).toEqual({ ok: true });
+    expect(evaluate({}, { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 5 })).toEqual({ ok: true });
+  });
+
+  it('still rejects when BOTH fixes report motion (sustained, not a lone spike)', () => {
+    // Corroboration across two fixes MIN_DWELL_SECONDS apart is not jitter: the
+    // reported motion is sustained, so the belt-and-braces check still fires even
+    // though this pair's tiny displacement keeps the derived speed low.
+    expect(
+      evaluate(
+        { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 0.5 },
+        { speedMetersPerSecond: MAX_COLLECT_SPEED_MPS + 0.5 },
+      ),
+    ).toEqual({ ok: false, result: 'must_be_stationary' });
   });
 
   it('accepts a reported speed exactly at the ceiling', () => {

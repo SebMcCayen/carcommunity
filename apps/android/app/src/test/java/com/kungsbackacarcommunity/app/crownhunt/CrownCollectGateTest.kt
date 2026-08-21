@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.crownhunt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -656,6 +657,160 @@ class CrownCollectGateTest {
         val ready = stateFrom(fine)
         assertEquals(CrownCollectState.Ready, ready)
         assertTrue(CrownCollectGate.isCollectEnabled(ready))
+    }
+
+    // ---- Movement is judged from DISPLACEMENT, not one jittery sample -----
+
+    private val dwellMs = CrownSpawnLimits.MIN_DWELL_SECONDS * 1000
+
+    private fun fixAt(
+        lat: Double = 57.5,
+        lon: Double = 12.0,
+        atMillis: Long,
+        speed: Double? = null,
+    ): CrownFix = CrownFix(lat, lon, atMillis, speedMetersPerSecond = speed)
+
+    /**
+     * The owner bug, at the logic level: a genuinely PARKED member whose reported
+     * GPS speed spikes on a single sample must not read [CrownCollectState.Moving].
+     *
+     * Same coordinates 4 s apart — the device did not move a centimetre — but one
+     * fix's `Location.speed` jitter-spiked far above the ceiling. Judging movement
+     * off DISPLACEMENT (zero here) instead of that one sample keeps the member
+     * collectable, killing the "stop the car first" they saw standing still.
+     */
+    @Test
+    fun aStationaryPairWithAJitterSpikeIsNotMovingAndCollects() {
+        val previous = fixAt(atMillis = 0L, speed = 0.0)
+        val current = fixAt(atMillis = dwellMs, speed = ceiling + 6.0)
+
+        val speed = CrownCollectGate.movementSpeedMps(current, previous)
+        assertNotNull("a usable pair yields a movement speed", speed)
+        assertFalse(
+            "one reported spike over a fixed position is not moving",
+            CrownCollectGate.isMoving(speed),
+        )
+
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = speed,
+            )
+        assertEquals(CrownCollectState.Ready, state)
+        assertTrue(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * The spike may land on EITHER half of the pair — a jittery current OR a
+     * jittery previous — and neither, on its own, reads as moving over a position
+     * that did not change.
+     */
+    @Test
+    fun aSpikeOnEitherHalfOfAFixedPositionPairIsTolerated() {
+        val spikeCurrent =
+            CrownCollectGate.movementSpeedMps(
+                current = fixAt(atMillis = dwellMs, speed = ceiling + 9.0),
+                previous = fixAt(atMillis = 0L, speed = 0.0),
+            )
+        assertFalse("spike on current", CrownCollectGate.isMoving(spikeCurrent))
+
+        val spikePrevious =
+            CrownCollectGate.movementSpeedMps(
+                current = fixAt(atMillis = dwellMs, speed = 0.0),
+                previous = fixAt(atMillis = 0L, speed = ceiling + 9.0),
+            )
+        assertFalse("spike on previous", CrownCollectGate.isMoving(spikePrevious))
+    }
+
+    /**
+     * A whole JITTERY STATIONARY SERIES — a run of fixes at a fixed position, some
+     * carrying wild reported-speed spikes — never once resolves to Moving. This is
+     * the shape the owner sat through: sample after sample of noise while parked.
+     */
+    @Test
+    fun aJitteryStationarySeriesNeverReadsAsMoving() {
+        // Position pinned; only the reported speed jitters, sample to sample.
+        val speeds = listOf(0.0, ceiling + 4.0, 0.3, ceiling + 11.0, 0.0, ceiling + 2.0)
+        val previous = fixAt(atMillis = 0L, speed = speeds.first())
+        for ((i, s) in speeds.withIndex()) {
+            val current = fixAt(atMillis = dwellMs + i * 1000L, speed = s)
+            val speed = CrownCollectGate.movementSpeedMps(current, previous)
+            assertFalse(
+                "sample $i (speed=$s) over a fixed position must not read moving",
+                CrownCollectGate.isMoving(speed),
+            )
+        }
+    }
+
+    /**
+     * A GENUINELY MOVING series — the positions march steadily away — stays
+     * blocked. The displacement between the two proof fixes is real, so the
+     * derived speed is high whatever the reported speed says (even zero).
+     *
+     * This is the safety anchor: the fix must not let a moving car collect.
+     */
+    @Test
+    fun aGenuinelyMovingPairStaysBlockedEvenWhenReportedSpeedIsZero() {
+        // ~111 m of latitude over the 4 s dwell ≈ 27 m/s — unambiguously driving —
+        // yet the device dishonestly reports a stopped speed.
+        val previous = fixAt(lat = 57.5000, atMillis = 0L, speed = 0.0)
+        val current = fixAt(lat = 57.5010, atMillis = dwellMs, speed = 0.0)
+
+        val speed = CrownCollectGate.movementSpeedMps(current, previous)
+        assertNotNull(speed)
+        assertTrue("real displacement reads as moving", CrownCollectGate.isMoving(speed))
+
+        val state =
+            CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = 10.0,
+                speedMetersPerSecond = speed,
+            )
+        assertEquals(CrownCollectState.Moving, state)
+        assertFalse(CrownCollectGate.isCollectEnabled(state))
+    }
+
+    /**
+     * The corroborated belt-and-braces net, matching the server: two fixes that
+     * BOTH report motion are not a lone spike, so even over a fixed position the
+     * pair reads as moving — the same verdict `evaluateStationaryCollection`
+     * reaches when both device speeds are unsafe. Client and server agree.
+     */
+    @Test
+    fun bothFixesReportingMotionReadsAsMovingLikeTheServer() {
+        val speed =
+            CrownCollectGate.movementSpeedMps(
+                current = fixAt(atMillis = dwellMs, speed = ceiling + 1.0),
+                previous = fixAt(atMillis = 0L, speed = ceiling + 1.0),
+            )
+        assertTrue("both fixes reporting motion is corroborated, not jitter", CrownCollectGate.isMoving(speed))
+    }
+
+    /**
+     * No usable pair — a missing half, or a non-advancing/zero-length interval —
+     * defers with null rather than inventing a verdict, exactly as an unknown
+     * instantaneous speed does. The button is Confirming then, and the server
+     * still re-derives from whatever pair is actually submitted.
+     */
+    @Test
+    fun anIncompleteOrDegeneratePairDefersToNull() {
+        assertNull(CrownCollectGate.movementSpeedMps(null, fixAt(atMillis = 0L)))
+        assertNull(CrownCollectGate.movementSpeedMps(fixAt(atMillis = dwellMs), null))
+        // Same instant — no elapsed time to derive a speed from.
+        assertNull(
+            CrownCollectGate.movementSpeedMps(
+                current = fixAt(atMillis = 1_000L),
+                previous = fixAt(atMillis = 1_000L),
+            ),
+        )
+        // Reversed — a negative interval is malformed, not a very fast trip.
+        assertNull(
+            CrownCollectGate.movementSpeedMps(
+                current = fixAt(atMillis = 0L),
+                previous = fixAt(atMillis = dwellMs),
+            ),
+        )
     }
 
     // ---- The dwell proof --------------------------------------------------

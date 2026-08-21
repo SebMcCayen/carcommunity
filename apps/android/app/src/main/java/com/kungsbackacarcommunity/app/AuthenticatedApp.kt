@@ -2836,6 +2836,8 @@ fun AuthenticatedApp(
                     crownSpawnEnabled,
                     crownDistanceMeters,
                     crownGateFix,
+                    crownCurrentFix,
+                    crownPreviousFix,
                     openCrown,
                     crownDwellReady,
                     crownDwellSecondsRemaining,
@@ -2843,11 +2845,22 @@ fun AuthenticatedApp(
                     CrownCollectGate.evaluate(
                         featureEnabled = crownSpawnEnabled,
                         distanceMeters = crownDistanceMeters,
-                        // Distance, speed and accuracy all come from the SAME
-                        // ([crownGateFix]) fix, so an improving signal flips
+                        // Distance and accuracy come from the SAME ([crownGateFix])
+                        // freshest fix, so an improving signal flips
                         // WaitingForSignal → Ready live without the gate ever mixing
                         // a distance from one fix with the accuracy of another.
-                        speedMetersPerSecond = crownGateFix?.speedMetersPerSecond,
+                        //
+                        // MOVEMENT, though, is a two-fix question: a single fix's
+                        // instantaneous Location.speed jitters and can spike above
+                        // the ceiling while parked, which is the "stop the car
+                        // first" the owner saw standing still. So it is derived from
+                        // DISPLACEMENT over the submitted proof pair
+                        // ([crownCurrentFix]/[crownPreviousFix]) — the very fixes the
+                        // server judges — so the client's verdict matches the claim's
+                        // and one noisy sample can never falsely block a stationary
+                        // member.
+                        speedMetersPerSecond =
+                            CrownCollectGate.movementSpeedMps(crownCurrentFix, crownPreviousFix),
                         collectRadiusMeters =
                             openCrown?.collectRadiusMeters
                                 ?: CrownSpawnLimits.COLLECT_RADIUS_METERS,
