@@ -2109,6 +2109,19 @@ fun AuthenticatedApp(
                     delay(1_000L)
                 }
             }
+            // Gate-loss cleanup (mirrors the chatHubOpen gate effect below): the
+            // render condition hides the popup once perkDeployActive goes false —
+            // e.g. the live crownHuntPerks flag flips off — but WITHOUT running
+            // onDismiss, so the remembered perkDeployOpen would silently pop the menu
+            // straight back open (with a possibly-stale terminal status) the moment
+            // the flag returns. Clearing the open state + resetting the coordinator
+            // here makes losing the gate behave like a real dismiss.
+            LaunchedEffect(perkDeployActive) {
+                if (!perkDeployActive) {
+                    perkDeployOpen = false
+                    perkDeployCoordinator?.reset()
+                }
+            }
             // Subscribed ONLY while the menu is actually open (perkDeployOpen): the
             // combine holds four Firestore listeners + a ticker, so a closed menu
             // must hold none. Closing swaps back to a single Loading emission, so

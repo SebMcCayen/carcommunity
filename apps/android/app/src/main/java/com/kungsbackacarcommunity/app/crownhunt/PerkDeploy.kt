@@ -239,16 +239,19 @@ object PerkDeploy {
      * bucket choice is unit-tested; the Composable maps each bucket to its
      * localized string ([PerkDeployMenu]'s `formatRemaining`).
      *
-     * Seconds are rounded UP (mirroring the file's other countdown maths) so a
-     * still-live effect never flashes "0 s" in its final sub-second — only a
-     * genuinely expired/`null` window collapses to [PerkRemaining.Expired],
-     * which the menu renders as no line at all.
+     * Whole seconds are FLOORED, so the label counts down naturally and the bucket
+     * boundary is honest: a sub-60 s window always shows seconds ("59 s"), never
+     * "1 min 0 s" for 59.x s — the minutes bucket begins only at a genuine full
+     * minute. The floor is clamped to a minimum of 1 s, so a still-live effect
+     * never flashes "0 s" in its final sub-second; only a genuinely expired/`null`
+     * window collapses to [PerkRemaining.Expired], which the menu renders as no
+     * line at all.
      */
     fun remaining(expiresAtMillis: Long?, nowMillis: Long): PerkRemaining {
         if (expiresAtMillis == null) return PerkRemaining.Expired
         val remainingMs = expiresAtMillis - nowMillis
         if (remainingMs <= 0L) return PerkRemaining.Expired
-        val totalSeconds = (remainingMs + 999L) / 1000L
+        val totalSeconds = (remainingMs / 1000L).coerceAtLeast(1L)
         val minutes = totalSeconds / 60L
         val seconds = totalSeconds % 60L
         return if (minutes >= 1L) {

@@ -206,31 +206,42 @@ class PerkDeployTest {
     }
 
     @Test
-    fun `remaining above one minute reports minutes and seconds`() {
+    fun `remaining above one minute reports floored minutes and seconds`() {
         // 2 min 30 s left → "2 min 30 s".
         assertEquals(
             PerkRemaining.MinutesSeconds(2L, 30L),
             PerkDeploy.remaining(now + 150_000L, now),
         )
-        // Exactly one minute → 1 min 0 s (still the minutes bucket).
+        // Exactly one minute → 1 min 0 s (the minutes bucket begins here).
         assertEquals(
             PerkRemaining.MinutesSeconds(1L, 0L),
             PerkDeploy.remaining(now + 60_000L, now),
         )
-        // Just over a minute rounds the odd millis up into the seconds.
+        // Just over a minute floors the odd millis away → still 1 min 0 s.
         assertEquals(
-            PerkRemaining.MinutesSeconds(1L, 1L),
-            PerkDeploy.remaining(now + 60_001L, now),
+            PerkRemaining.MinutesSeconds(1L, 0L),
+            PerkDeploy.remaining(now + 60_999L, now),
+        )
+        // 1 min 30.9 s floors to 1 min 30 s.
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 30L),
+            PerkDeploy.remaining(now + 90_900L, now),
         )
     }
 
     @Test
-    fun `remaining under one minute reports whole seconds`() {
+    fun `remaining under one minute reports whole floored seconds`() {
         assertEquals(PerkRemaining.SecondsOnly(45L), PerkDeploy.remaining(now + 45_000L, now))
-        // Seconds round UP, so a live sub-second window never collapses to 0 s.
+        // The sub-minute boundary: 59.x s stays in the seconds bucket as "59 s",
+        // never "1 min 0 s" — the minutes bucket starts only at a full 60 s.
+        assertEquals(PerkRemaining.SecondsOnly(59L), PerkDeploy.remaining(now + 59_001L, now))
+        assertEquals(PerkRemaining.SecondsOnly(59L), PerkDeploy.remaining(now + 59_999L, now))
+        // Seconds are floored, but clamped to >= 1 so a live sub-second window
+        // never collapses to "0 s".
         assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1L, now))
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 999L, now))
         assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1_000L, now))
-        assertEquals(PerkRemaining.SecondsOnly(2L), PerkDeploy.remaining(now + 1_001L, now))
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1_999L, now))
     }
 
     @Test
