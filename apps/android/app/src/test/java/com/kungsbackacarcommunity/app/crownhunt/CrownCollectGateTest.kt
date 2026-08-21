@@ -602,6 +602,62 @@ class CrownCollectGateTest {
         assertTrue(CrownCollectGate.isCollectEnabled(ready))
     }
 
+    /**
+     * The gate must judge distance and accuracy off the SAME fix.
+     *
+     * The popup derives one `crownGateFix` and reads distance, speed AND accuracy
+     * off it, so the button can never trust a distance computed from one fix
+     * against the accuracy of another (which could enable Collect on a fuzzy
+     * position, or refuse a clean one). This mirrors that call site: distance is
+     * computed from each fix's OWN coordinates and handed to evaluate together with
+     * that same fix's accuracy, and an improving fix flips the state live.
+     */
+    @Test
+    fun distanceAndAccuracyAreJudgedFromTheSameFixSoAnImprovingFixFlipsLive() {
+        val crownLat = 57.5
+        val crownLon = 12.0
+        fun stateFrom(fix: CrownFix): CrownCollectState {
+            val distance =
+                CrownSpawnQuery.distanceMeters(
+                    fix.latitude,
+                    fix.longitude,
+                    crownLat,
+                    crownLon,
+                )
+            return CrownCollectGate.evaluate(
+                featureEnabled = true,
+                distanceMeters = distance,
+                speedMetersPerSecond = fix.speedMetersPerSecond,
+                dwellProofReady = true,
+                accuracyMeters = fix.accuracyMeters,
+            )
+        }
+
+        // Right on the crown, stopped, but a fuzzy fix.
+        val coarse =
+            CrownFix(
+                crownLat,
+                crownLon,
+                1_000_000L,
+                speedMetersPerSecond = 0.0,
+                accuracyMeters = radius + 25.0,
+            )
+        assertEquals(CrownCollectState.WaitingForSignal, stateFrom(coarse))
+
+        // The same position as a FINE fix — distance and accuracy both off it.
+        val fine =
+            CrownFix(
+                crownLat,
+                crownLon,
+                1_000_002L,
+                speedMetersPerSecond = 0.0,
+                accuracyMeters = 6.0,
+            )
+        val ready = stateFrom(fine)
+        assertEquals(CrownCollectState.Ready, ready)
+        assertTrue(CrownCollectGate.isCollectEnabled(ready))
+    }
+
     // ---- The dwell proof --------------------------------------------------
 
     @Test
