@@ -123,6 +123,58 @@ class MapAwarenessDiagnosticsTest {
         assertFalse(MapAwarenessDiagnostics.isCornerClamp(ProjectedPoint(500f, 1000f), width, height))
     }
 
+    // ---- nearby (on-screen-only) fault mapping -----------------------------
+
+    @Test
+    fun `a nearby fold or corner-clamp is recorded as off-screen, not a fault`() {
+        // The nearby overlay hides an off-screen sharer outright (no edge arrow),
+        // so a folded/clamped projection the render already refuses to draw is a
+        // correctly-hidden OFF_SCREEN sharer — normal behaviour on a pitched map,
+        // not a chip fault. Both folds collapse and neither escalates #912.
+        for (fold in listOf(ChipProjectionVerdict.HIDDEN_FOLD, ChipProjectionVerdict.HIDDEN_CORNER_CLAMP)) {
+            val recorded = MapAwarenessDiagnostics.nearbyRecordVerdict(fold)
+            assertEquals(ChipProjectionVerdict.OFF_SCREEN, recorded)
+            assertFalse(MapAwarenessDiagnostics.isFault(recorded))
+        }
+    }
+
+    @Test
+    fun `a nearby non-finite projection stays a fault`() {
+        // The one genuinely anomalous nearby case: the SDK could not place a sharer
+        // that DOES carry a valid coordinate. This must still escalate.
+        val recorded = MapAwarenessDiagnostics.nearbyRecordVerdict(ChipProjectionVerdict.HIDDEN_NONFINITE)
+        assertEquals(ChipProjectionVerdict.HIDDEN_NONFINITE, recorded)
+        assertTrue(MapAwarenessDiagnostics.isFault(recorded))
+    }
+
+    @Test
+    fun `nearby recording leaves the drawn and honestly off-screen verdicts unchanged`() {
+        assertEquals(
+            ChipProjectionVerdict.ON_SCREEN,
+            MapAwarenessDiagnostics.nearbyRecordVerdict(ChipProjectionVerdict.ON_SCREEN),
+        )
+        assertEquals(
+            ChipProjectionVerdict.OFF_SCREEN,
+            MapAwarenessDiagnostics.nearbyRecordVerdict(ChipProjectionVerdict.OFF_SCREEN),
+        )
+    }
+
+    @Test
+    fun `a burst of nearby folds never escalates the chip log`() {
+        // The regression guard for #912: a user panning nearby sharers off a 3D map
+        // produces a run of fold/clamp verdicts. Mapped for the nearby overlay,
+        // none of them is a fault, so the log never fires an escalation report.
+        val log = MapAwarenessDiagnostics.MapAwarenessLog(escalateAfter = 3)
+        var escalations = 0
+        repeat(50) {
+            val raw =
+                if (it % 2 == 0) ChipProjectionVerdict.HIDDEN_CORNER_CLAMP else ChipProjectionVerdict.HIDDEN_FOLD
+            if (log.recordChip(MapAwarenessDiagnostics.nearbyRecordVerdict(raw))) escalations++
+        }
+        assertEquals(0, escalations)
+        assertEquals(0, log.faultTotal())
+    }
+
     // ---- the chip escalation log -------------------------------------------
 
     @Test
