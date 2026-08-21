@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.AuthenticatedApp
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.chatchannels.CHAT_HUB_TEST_TAG
 import com.kungsbackacarcommunity.app.chatchannels.CHAT_PEEK_TEST_TAG
 import com.kungsbackacarcommunity.app.coachmark.CoachMarkStore
 import com.kungsbackacarcommunity.app.config.FeatureFlags
@@ -918,6 +919,22 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithText(str(R.string.chatPeek_home)).performClick()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
         composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+    }
+
+    /**
+     * The primary new path this PR introduces: "Go to chat" on the peek closes the
+     * peek and opens the FULL interactive chat (the opaque ShellRoute.ChatHub /
+     * ChatHubRoute), not the peek's preview.
+     */
+    @Test
+    fun chatPeek_goToChat_opensFullInteractiveChatHub() {
+        setShell()
+        composeTestRule.onNodeWithTag(MAP_HOME_CHAT_TAG).performClick()
+        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
+        // "Go to chat" closes the peek and opens the full ChatHub route.
+        composeTestRule.onNodeWithText(str(R.string.chatPeek_goToChat)).performClick()
+        composeTestRule.onNodeWithTag(CHAT_HUB_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
     }
 
     @Test
