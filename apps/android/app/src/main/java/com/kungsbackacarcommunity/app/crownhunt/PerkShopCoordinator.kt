@@ -14,9 +14,6 @@ enum class PerkBuyFailureReason {
     /** The member already holds the max of this perk (per-perk or total value). */
     HOLD_CAP,
 
-    /** The member bought too recently — the purchase cooldown is still active. */
-    COOLDOWN,
-
     /** The shop is off, the account cannot spend, or the perk is unknown. */
     UNAVAILABLE,
 
@@ -102,8 +99,6 @@ class PerkShopCoordinator(
                 state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.INSUFFICIENT_FUNDS)
             } catch (holdCap: PerkPurchaseHoldCapException) {
                 state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.HOLD_CAP)
-            } catch (cooldown: PerkPurchaseCooldownException) {
-                state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.COOLDOWN)
             } catch (unavailable: PerkPurchaseUnavailableException) {
                 state.value = PerkBuyStatus.Failed(perkId, PerkBuyFailureReason.UNAVAILABLE)
             } catch (failure: Exception) {

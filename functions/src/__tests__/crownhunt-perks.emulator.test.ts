@@ -36,13 +36,9 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import {
-  MAX_PERK_HOLD_PER_PERK,
-  PERK_CATALOG,
-  PERK_PURCHASE_COOLDOWN_SECONDS,
-} from '../crownHunt/perks-core';
+import { MAX_PERK_HOLD_PER_PERK, PERK_CATALOG } from '../crownHunt/perks-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -149,15 +145,6 @@ async function setInventory(uid: string, counts: Record<string, number>): Promis
   await adminDb.collection('perkInventory').doc(uid).set(counts, { merge: true });
 }
 
-/**
- * Clears the purchase-cooldown stamp so a test's back-to-back buys don't trip the
- * PERK_PURCHASE_COOLDOWN_SECONDS anti-burst window (the emulator runs buys ms
- * apart). The cooldown itself is covered end-to-end by its dedicated test below.
- */
-async function clearPurchaseCooldown(uid: string): Promise<void> {
-  await adminDb.collection('perkPurchaseCooldowns').doc(uid).delete();
-}
-
 interface BuyPerkResponse {
   perkId: string;
   qty: number;
@@ -231,13 +218,11 @@ describe('crownHunt.seedPerkCatalog', () => {
 });
 
 describe('crownHunt.buyPerk', () => {
-  // Existing cases fire several buys for `member` milliseconds apart; reset both
-  // per-member limit surfaces before each so only the dedicated limit tests
-  // exercise them: clear the anti-burst purchase cooldown, and clear the accrued
-  // inventory so an accumulating hold across cases never trips the per-perk /
-  // total-value ceilings under the wrong assertion.
+  // Existing cases fire several buys for `member` milliseconds apart; clear the
+  // accrued inventory before each so an accumulating hold across cases never
+  // trips the per-perk / total-value ceilings under the wrong assertion. There
+  // is no purchase cooldown, so back-to-back buys need no reset.
   beforeEach(async () => {
-    await clearPurchaseCooldown(member.uid);
     await adminDb.collection('perkInventory').doc(member.uid).delete();
   });
 
@@ -328,7 +313,7 @@ describe('crownHunt.buyPerk', () => {
   });
 });
 
-describe('crownHunt.buyPerk — economy limits (hold cap + purchase cooldown)', () => {
+describe('crownHunt.buyPerk — economy limits (per-perk hold cap, no cooldown)', () => {
   it('fails closed on the per-perk hold cap and grants nothing', async () => {
     const capped = await createProvisionedUser('perk-holdcap');
     await adminDb.collection('users').doc(capped.uid).set({ activeMember: true }, { merge: true });
@@ -341,64 +326,46 @@ describe('crownHunt.buyPerk — economy limits (hold cap + purchase cooldown)', 
       call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })),
     );
     expect(err.code).toBe('functions/failed-precondition');
+    // Refused for the COUNT cap, NOT a cooldown.
     expect(err.reason).toBe('hold_cap_reached');
     // No debit, no grant beyond the seeded cap.
     expect((await readInventory(capped.uid)).shield).toBe(MAX_PERK_HOLD_PER_PERK);
     expect(await readBalance(capped.uid)).toBe(5000);
   });
 
-  it('meters purchases: a second buy inside the cooldown window fails closed', async () => {
-    const buyer = await createProvisionedUser('perk-cooldown');
+  it('caps the per-perk COUNT at 3', () => {
+    expect(MAX_PERK_HOLD_PER_PERK).toBe(3);
+  });
+
+  it('allows rapid back-to-back buys with NO cooldown up to the per-perk cap', async () => {
+    const buyer = await createProvisionedUser('perk-backtoback');
     await adminDb.collection('users').doc(buyer.uid).set({ activeMember: true }, { merge: true });
     await setBalance(buyer.uid, 5000);
     await signInAs(buyer);
 
-    const first = (await call('crownHunt-buyPerk', buyInput({ perkId: 'shield' }))).data as
+    // Buy the same perk MAX_PERK_HOLD_PER_PERK times in immediate succession
+    // (distinct keys → genuine second/third buys, not idempotent replays). With
+    // the cooldown gone, every one succeeds back-to-back.
+    for (let i = 0; i < MAX_PERK_HOLD_PER_PERK; i += 1) {
+      const res = (await call('crownHunt-buyPerk', buyInput({ perkId: 'shield' }))).data as
+        BuyPerkResponse;
+      expect(res.alreadyPurchased).toBe(false);
+      expect(res.inventoryCount).toBe(i + 1);
+    }
+    expect((await readInventory(buyer.uid)).shield).toBe(MAX_PERK_HOLD_PER_PERK);
+
+    // A 4th of the SAME perk is refused — for the hold cap, not a cooldown.
+    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
+    expect(err.code).toBe('functions/failed-precondition');
+    expect(err.reason).toBe('hold_cap_reached');
+    expect((await readInventory(buyer.uid)).shield).toBe(MAX_PERK_HOLD_PER_PERK);
+
+    // A DIFFERENT, not-yet-capped perk bought immediately after still succeeds
+    // (no cooldown, and its own count is untouched by the capped perk).
+    const other = (await call('crownHunt-buyPerk', buyInput({ perkId: 'boost' }))).data as
       BuyPerkResponse;
-    expect(first.alreadyPurchased).toBe(false);
-    expect(PERK_PURCHASE_COOLDOWN_SECONDS).toBeGreaterThan(0);
-
-    // Immediately buy again (a DIFFERENT key, so not an idempotent replay).
-    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'boost' })));
-    expect(err.code).toBe('functions/failed-precondition');
-    expect(err.reason).toBe('purchase_cooldown');
-    // The second buy granted nothing.
-    expect((await readInventory(buyer.uid)).boost ?? 0).toBe(0);
-  });
-
-  it('fails CLOSED when the cooldown doc exists but its timestamp is corrupt', async () => {
-    const buyer = await createProvisionedUser('perk-cooldown-corrupt');
-    await adminDb.collection('users').doc(buyer.uid).set({ activeMember: true }, { merge: true });
-    await setBalance(buyer.uid, 5000);
-    // A cooldown doc that EXISTS but carries NO lastPurchaseAt — corrupt data must
-    // not silently disable the anti-burst control.
-    await adminDb
-      .collection('perkPurchaseCooldowns')
-      .doc(buyer.uid)
-      .set({ uid: buyer.uid });
-    await signInAs(buyer);
-
-    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
-    expect(err.code).toBe('functions/failed-precondition');
-    expect(err.reason).toBe('purchase_cooldown');
-    expect((await readInventory(buyer.uid)).shield ?? 0).toBe(0);
-  });
-
-  it('insufficient funds WINS over an active purchase cooldown (right reason)', async () => {
-    const broke = await createProvisionedUser('perk-broke-cooldown');
-    await adminDb.collection('users').doc(broke.uid).set({ activeMember: true }, { merge: true });
-    await setBalance(broke.uid, 0); // cannot afford anything
-    // …AND is inside an active cooldown.
-    await adminDb
-      .collection('perkPurchaseCooldowns')
-      .doc(broke.uid)
-      .set({ uid: broke.uid, lastPurchaseAt: Timestamp.now() });
-    await signInAs(broke);
-
-    const err = await callableError(call('crownHunt-buyPerk', buyInput({ perkId: 'shield' })));
-    // The blocking problem is the empty balance, so that reason must win.
-    expect(err.code).toBe('functions/failed-precondition');
-    expect(err.reason).toBe('insufficient_funds');
+    expect(other.alreadyPurchased).toBe(false);
+    expect(other.inventoryCount).toBe(1);
   });
 
   it('insufficient funds WINS over the hold cap (right reason)', async () => {
