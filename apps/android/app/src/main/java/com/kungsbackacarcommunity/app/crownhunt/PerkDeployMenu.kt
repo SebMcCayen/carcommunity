@@ -219,8 +219,13 @@ private fun PerkDeployRow(
 }
 
 /**
- * The active-state line under a perk: a countdown for a live shield/boost, a
- * "1 active trap" note for a placed trap, or nothing when the effect is idle.
+ * The active-state line under a perk: a live once-per-second countdown for a
+ * shield/boost that is still running ("Aktiv – 2 min 30 s kvar"), a "1 active
+ * trap" note for a placed trap, or nothing when the effect is idle/expired.
+ *
+ * Re-reads the pure [PerkDeploy.remaining] against the ticking [nowMillis] so the
+ * line drops away the instant the window elapses, even before the menu-state flow
+ * next recomputes `active` — no stale "0 s" is ever shown.
  */
 @Composable
 private fun ActiveStateLine(item: PerkDeployItem, nowMillis: Long) {
@@ -236,15 +241,17 @@ private fun ActiveStateLine(item: PerkDeployItem, nowMillis: Long) {
             )
 
         item.active && item.activeUntilMillis != null -> {
-            val minutes = PerkDeploy.remainingMinutes(item.activeUntilMillis, nowMillis)
-            Text(
-                text = stringResource(
-                    R.string.crownHunt_deployActiveFor,
-                    formatRemaining(minutes),
-                ),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            val remaining = PerkDeploy.remaining(item.activeUntilMillis, nowMillis)
+            if (remaining !is PerkRemaining.Expired) {
+                Text(
+                    text = stringResource(
+                        R.string.crownHunt_deployActiveFor,
+                        formatRemaining(remaining),
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
     }
 }
@@ -316,17 +323,28 @@ private fun deployFailureMessageRes(reason: PerkDeployFailureReason): Int =
     }
 
 /**
- * Coarse "Xh Ym" / "Ym" remaining, from whole minutes. Purely presentational
- * (the pure countdown maths is [PerkDeploy.remainingMinutes]); a screen reader
- * hears the same string.
+ * Localizes one [PerkRemaining] bucket into "Xm Ys" / "Xm" / "Y s". Purely
+ * presentational (the pure countdown maths is [PerkDeploy.remaining]); a screen
+ * reader hears the same string. A whole-minute window (zero seconds) renders as a
+ * tidy "1 min", not "1 min 0 s". [PerkRemaining.Expired] never reaches here — the
+ * caller omits the whole line for an expired window.
  */
 @Composable
-private fun formatRemaining(totalMinutes: Long): String {
-    val hours = totalMinutes / 60L
-    val minutes = totalMinutes % 60L
-    return if (hours > 0L) {
-        stringResource(R.string.crownHunt_deployRemainingHm, hours, minutes)
-    } else {
-        stringResource(R.string.crownHunt_deployRemainingM, minutes)
+private fun formatRemaining(remaining: PerkRemaining): String =
+    when (remaining) {
+        is PerkRemaining.MinutesSeconds ->
+            if (remaining.seconds == 0L) {
+                stringResource(R.string.crownHunt_deployRemainingM, remaining.minutes)
+            } else {
+                stringResource(
+                    R.string.crownHunt_deployRemainingMs,
+                    remaining.minutes,
+                    remaining.seconds,
+                )
+            }
+
+        is PerkRemaining.SecondsOnly ->
+            stringResource(R.string.crownHunt_deployRemainingS, remaining.seconds)
+
+        PerkRemaining.Expired -> ""
     }
-}

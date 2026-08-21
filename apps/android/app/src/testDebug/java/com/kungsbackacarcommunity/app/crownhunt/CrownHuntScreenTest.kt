@@ -88,11 +88,10 @@ class CrownHuntScreenTest {
         // Season leaderboard block + a top scorer's name.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_leaderboardTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithText("Alice").assertIsDisplayed()
-        // The crown legend (types + "does it disappear?" answer) is present. It now
-        // sits below the Instructions button + stats, so scroll it into view first.
-        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle))
-            .performScrollTo()
-            .assertIsDisplayed()
+        // The crown legend ("how they work") has MOVED off the hub into the
+        // Instructions surface, so it is NOT on the hub any more (its new location is
+        // asserted in instructionsButton_opensSurface_andBackArrowReturnsToHub).
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle)).assertDoesNotExist()
         // The crowns-list collect button is gone.
         composeTestRule.onNodeWithText(str(R.string.crownHunt_collectButton)).assertDoesNotExist()
     }
@@ -117,6 +116,11 @@ class CrownHuntScreenTest {
         // Tapping the Instructions button (by testTag) opens the rules surface.
         composeTestRule.onNodeWithTag(CrownHuntInstructionsButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.crownHunt_instrIntroTitle)).assertIsDisplayed()
+        // The crown legend ("how they work") now lives HERE, on the Instructions
+        // surface (moved off the hub) — scroll it into view to prove it is present.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_legendTitle))
+            .performScrollTo()
+            .assertIsDisplayed()
         // The surface shows the pinned Aero Back arrow; tapping it returns to the
         // hub (via the BackHandler), not out of the route.
         composeTestRule.onNodeWithTag(AeroBackButtonTag).assertIsDisplayed().performClick()

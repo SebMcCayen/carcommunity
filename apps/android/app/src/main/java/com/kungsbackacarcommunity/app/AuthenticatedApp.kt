@@ -2093,15 +2093,45 @@ fun AuthenticatedApp(
             val perkDeployActive =
                 crownHuntPerksEnabled && perkDeployRepository != null &&
                     perkDeployCoordinator != null && uid.isNotBlank()
-            // Coarse "now" for the countdown, live only while the menu is open so a
-            // closed menu holds no ticker. Drives both the display countdown and
-            // the active/activatable recompute in the menu-state flow.
+            // Per-second "now" for the active-perk countdown. Keyed/guarded on BOTH
+            // perkDeployActive (the live crownHuntPerks flag + repo/coordinator/uid
+            // availability, above) AND perkDeployOpen, so it runs only while the popup
+            // is actually SHOWN and holds no ticker once it is gone — including when
+            // the flag flips off underneath an open menu, which would otherwise leave
+            // a 1 s wake looping forever behind a hidden popup. Drives the
+            // "Aktiv – 2 min 30 s kvar" countdown next to each active perk; the
+            // menu-state flow keeps its own coarser tick for the active/activatable
+            // recompute, so this stays 1 s without Firestore churn.
             var perkDeployNow by remember { mutableLongStateOf(System.currentTimeMillis()) }
-            LaunchedEffect(perkDeployOpen) {
-                while (perkDeployOpen) {
+            LaunchedEffect(perkDeployActive, perkDeployOpen) {
+                while (perkDeployActive && perkDeployOpen) {
                     perkDeployNow = System.currentTimeMillis()
-                    delay(15_000L)
+                    delay(1_000L)
                 }
+            }
+            // Gate-loss cleanup (mirrors the chatHubOpen gate effect below): the
+            // render condition hides the popup once perkDeployActive goes false —
+            // e.g. the live crownHuntPerks flag flips off — but WITHOUT running
+            // onDismiss, so the remembered perkDeployOpen would silently pop the menu
+            // straight back open (with a possibly-stale terminal status) the moment
+            // the flag returns. Clearing the open state + resetting the coordinator
+            // here makes losing the gate behave like a real dismiss.
+            LaunchedEffect(perkDeployActive) {
+                if (!perkDeployActive) {
+                    perkDeployOpen = false
+                    perkDeployCoordinator?.reset()
+                }
+            }
+            // Fresh-open guarantee: the gate-loss reset above is a NO-OP while a
+            // deploy is still in flight (PerkDeployCoordinator.reset() won't clear a
+            // Deploying state), so a deploy that RESOLVES after the gate dropped
+            // leaves a terminal Deployed/Failed status behind a hidden popup. Reset
+            // again whenever the menu (re)opens — by then any such deploy has settled
+            // to a terminal status, which reset() clears — so a re-opened menu can
+            // never show a stale banner from a gate-lost session. A genuinely live
+            // deploy at open time is still Deploying, which reset() leaves untouched.
+            LaunchedEffect(perkDeployOpen) {
+                if (perkDeployOpen) perkDeployCoordinator?.reset()
             }
             // Subscribed ONLY while the menu is actually open (perkDeployOpen): the
             // combine holds four Firestore listeners + a ticker, so a closed menu

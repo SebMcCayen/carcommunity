@@ -1222,8 +1222,9 @@
     <string name="crownHunt_deployActivateButton">Aktivera</string>
     <string name="crownHunt_deployActiveTraps">%1$d aktiv fälla</string>
     <string name="crownHunt_deployActiveFor">Aktiv – %1$s kvar</string>
-    <string name="crownHunt_deployRemainingHm">%1$d h %2$d min</string>
+    <string name="crownHunt_deployRemainingMs">%1$d min %2$d s</string>
     <string name="crownHunt_deployRemainingM">%1$d min</string>
+    <string name="crownHunt_deployRemainingS">%1$d s</string>
     <string name="crownHunt_deploySuccessTrap">%1$s placerad där du står.</string>
     <string name="crownHunt_deploySuccessShield">%1$s aktiverad.</string>
     <string name="crownHunt_deploySuccessBoost">%1$s aktiverad.</string>

@@ -195,7 +195,7 @@ class PerkDeployTest {
         assertEquals(0, PerkDeploy.liveTrapCount(expiries, now + 30_000L))
     }
 
-    // ---- isActive / remainingMinutes ----------------------------------------
+    // ---- isActive / remaining ------------------------------------------------
 
     @Test
     fun `isActive is strictly future`() {
@@ -206,16 +206,53 @@ class PerkDeployTest {
     }
 
     @Test
-    fun `remainingMinutes rounds up so a live effect never shows zero`() {
-        assertEquals(0L, PerkDeploy.remainingMinutes(null, now))
-        assertEquals(0L, PerkDeploy.remainingMinutes(now, now))
-        assertEquals(0L, PerkDeploy.remainingMinutes(now - 1L, now))
-        // 1 second left rounds up to 1 minute, not 0.
-        assertEquals(1L, PerkDeploy.remainingMinutes(now + 1_000L, now))
-        assertEquals(1L, PerkDeploy.remainingMinutes(now + 60_000L, now))
-        assertEquals(2L, PerkDeploy.remainingMinutes(now + 60_001L, now))
-        // Exactly 3h.
-        assertEquals(180L, PerkDeploy.remainingMinutes(now + 3 * 60 * 60_000L, now))
+    fun `remaining above one minute reports ceiled minutes and seconds`() {
+        // 2 min 30 s left → "2 min 30 s".
+        assertEquals(
+            PerkRemaining.MinutesSeconds(2L, 30L),
+            PerkDeploy.remaining(now + 150_000L, now),
+        )
+        // Exactly one minute → 1 min 0 s (the minutes bucket begins here).
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 0L),
+            PerkDeploy.remaining(now + 60_000L, now),
+        )
+        // Just over a minute ceils the odd millis UP into the seconds → 1 min 1 s.
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 1L),
+            PerkDeploy.remaining(now + 60_001L, now),
+        )
+        // The last ~1 s of a sub-minute window ceils into a full minute (correct —
+        // ~1 minute really is left); the Composable renders this tidy "1 min".
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 0L),
+            PerkDeploy.remaining(now + 59_001L, now),
+        )
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 0L),
+            PerkDeploy.remaining(now + 60_000L - 1L, now),
+        )
+    }
+
+    @Test
+    fun `remaining under one minute reports whole ceiled seconds and never understates`() {
+        assertEquals(PerkRemaining.SecondsOnly(45L), PerkDeploy.remaining(now + 45_000L, now))
+        // Exactly 59 s stays in the seconds bucket; 59.001 s ceils to 60 → a full
+        // minute (asserted above), so 59_000 is the top of the seconds bucket.
+        assertEquals(PerkRemaining.SecondsOnly(59L), PerkDeploy.remaining(now + 59_000L, now))
+        // Ceiling means a live countdown never UNDERSTATES: 1,999 ms reads "2 s".
+        assertEquals(PerkRemaining.SecondsOnly(2L), PerkDeploy.remaining(now + 1_999L, now))
+        assertEquals(PerkRemaining.SecondsOnly(2L), PerkDeploy.remaining(now + 1_001L, now))
+        // And a live sub-second window never collapses to "0 s".
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1L, now))
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1_000L, now))
+    }
+
+    @Test
+    fun `remaining is Expired at or past the window and for a null expiry`() {
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(null, now))
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(now, now))
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(now - 1L, now))
     }
 
     // ---- Coordinator: a fake repo + a fake location source ------------------
