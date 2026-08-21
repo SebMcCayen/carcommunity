@@ -192,12 +192,6 @@ private fun ColumnScope.CrownHuntHubContent(
             SeasonLeaderboardCard(statsState.board)
         }
     }
-
-    // Educational legend: the crown types and their disappear rules, so
-    // testers stop asking "if I collect one, does it disappear afterwards?".
-    // Read-only copy; grounded in the two claim paths (submitClaim /
-    // claimSpawn) and the rarity table.
-    CrownLegendCard()
 }
 
 /** testTag on the "Instructions" button, for UI tests. */
@@ -235,6 +229,12 @@ private fun CrownHuntInstructionsScreen(
             title = stringResource(R.string.crownHunt_instrCollectTitle),
             body = stringResource(R.string.crownHunt_instrCollectBody),
         )
+        // The crown-families legend ("Crowns – how they work": placed vs automatic
+        // crowns and the disappear-after-collect rule). It used to sit inline on the
+        // Kronjakt hub; it now lives ONLY here so Instructions is the single place to
+        // read how crowns work. Placed above the rarity/shared/expire detail because
+        // it frames the two families those sections then expand on.
+        CrownLegendCard()
         InstructionRaritiesSection()
         InstructionSection(
             title = stringResource(R.string.crownHunt_instrSharedTitle),

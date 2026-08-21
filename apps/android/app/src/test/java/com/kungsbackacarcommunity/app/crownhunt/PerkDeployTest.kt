@@ -195,7 +195,7 @@ class PerkDeployTest {
         assertEquals(0, PerkDeploy.liveTrapCount(expiries, now + 30_000L))
     }
 
-    // ---- isActive / remainingMinutes ----------------------------------------
+    // ---- isActive / remaining ------------------------------------------------
 
     @Test
     fun `isActive is strictly future`() {
@@ -206,16 +206,38 @@ class PerkDeployTest {
     }
 
     @Test
-    fun `remainingMinutes rounds up so a live effect never shows zero`() {
-        assertEquals(0L, PerkDeploy.remainingMinutes(null, now))
-        assertEquals(0L, PerkDeploy.remainingMinutes(now, now))
-        assertEquals(0L, PerkDeploy.remainingMinutes(now - 1L, now))
-        // 1 second left rounds up to 1 minute, not 0.
-        assertEquals(1L, PerkDeploy.remainingMinutes(now + 1_000L, now))
-        assertEquals(1L, PerkDeploy.remainingMinutes(now + 60_000L, now))
-        assertEquals(2L, PerkDeploy.remainingMinutes(now + 60_001L, now))
-        // Exactly 3h.
-        assertEquals(180L, PerkDeploy.remainingMinutes(now + 3 * 60 * 60_000L, now))
+    fun `remaining above one minute reports minutes and seconds`() {
+        // 2 min 30 s left → "2 min 30 s".
+        assertEquals(
+            PerkRemaining.MinutesSeconds(2L, 30L),
+            PerkDeploy.remaining(now + 150_000L, now),
+        )
+        // Exactly one minute → 1 min 0 s (still the minutes bucket).
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 0L),
+            PerkDeploy.remaining(now + 60_000L, now),
+        )
+        // Just over a minute rounds the odd millis up into the seconds.
+        assertEquals(
+            PerkRemaining.MinutesSeconds(1L, 1L),
+            PerkDeploy.remaining(now + 60_001L, now),
+        )
+    }
+
+    @Test
+    fun `remaining under one minute reports whole seconds`() {
+        assertEquals(PerkRemaining.SecondsOnly(45L), PerkDeploy.remaining(now + 45_000L, now))
+        // Seconds round UP, so a live sub-second window never collapses to 0 s.
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1L, now))
+        assertEquals(PerkRemaining.SecondsOnly(1L), PerkDeploy.remaining(now + 1_000L, now))
+        assertEquals(PerkRemaining.SecondsOnly(2L), PerkDeploy.remaining(now + 1_001L, now))
+    }
+
+    @Test
+    fun `remaining is Expired at or past the window and for a null expiry`() {
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(null, now))
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(now, now))
+        assertEquals(PerkRemaining.Expired, PerkDeploy.remaining(now - 1L, now))
     }
 
     // ---- Coordinator: a fake repo + a fake location source ------------------

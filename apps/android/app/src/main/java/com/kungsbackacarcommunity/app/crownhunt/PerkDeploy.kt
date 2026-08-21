@@ -234,15 +234,44 @@ object PerkDeploy {
         expiresAtMillis != null && expiresAtMillis > nowMillis
 
     /**
-     * Whole-minutes-rounded-UP remaining time until [expiresAtMillis], for a
-     * coarse countdown ("2h 59m kvar"). Returns 0 when already expired/null.
-     * Rounding UP means a shield with 1 second left still reads "1m", never a
-     * live effect shown as "0m".
+     * The remaining time on an active shield/boost, bucketed for a live
+     * once-per-second countdown ("2 min 30 s kvar" / "45 s kvar"). Pure so the
+     * bucket choice is unit-tested; the Composable maps each bucket to its
+     * localized string ([PerkDeployMenu]'s `formatRemaining`).
+     *
+     * Seconds are rounded UP (mirroring the file's other countdown maths) so a
+     * still-live effect never flashes "0 s" in its final sub-second — only a
+     * genuinely expired/`null` window collapses to [PerkRemaining.Expired],
+     * which the menu renders as no line at all.
      */
-    fun remainingMinutes(expiresAtMillis: Long?, nowMillis: Long): Long {
-        if (expiresAtMillis == null) return 0L
+    fun remaining(expiresAtMillis: Long?, nowMillis: Long): PerkRemaining {
+        if (expiresAtMillis == null) return PerkRemaining.Expired
         val remainingMs = expiresAtMillis - nowMillis
-        if (remainingMs <= 0L) return 0L
-        return (remainingMs + 59_999L) / 60_000L
+        if (remainingMs <= 0L) return PerkRemaining.Expired
+        val totalSeconds = (remainingMs + 999L) / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        return if (minutes >= 1L) {
+            PerkRemaining.MinutesSeconds(minutes, seconds)
+        } else {
+            PerkRemaining.SecondsOnly(seconds)
+        }
     }
+}
+
+/**
+ * A bucketed remaining-time for the active-perk countdown in the deploy menu.
+ * Splitting the buckets here (rather than formatting a raw string) keeps the
+ * seconds/minutes maths pure + unit-testable while the Composable owns the
+ * localized wording.
+ */
+sealed interface PerkRemaining {
+    /** At least a whole minute left: shown as "Xm Ys" / "X min Y s". */
+    data class MinutesSeconds(val minutes: Long, val seconds: Long) : PerkRemaining
+
+    /** Under a minute (but still live): shown as "Ys" / "Y s". */
+    data class SecondsOnly(val seconds: Long) : PerkRemaining
+
+    /** Expired / no window: the menu draws no countdown line. */
+    data object Expired : PerkRemaining
 }
