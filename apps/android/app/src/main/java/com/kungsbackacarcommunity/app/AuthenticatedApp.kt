@@ -212,6 +212,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.crownhunt.CrownZoomThinning
+import com.kungsbackacarcommunity.app.crownhunt.DeployedTrapPopup
 import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.OwnDotPerkOverlay
 import com.kungsbackacarcommunity.app.crownhunt.OwnTrapMarker
@@ -5623,6 +5624,39 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // The placer's OWN deployed trap they tapped on the map, latched so its
+                // detail popup stays open (with a live countdown) until dismissed. The
+                // marker is immutable (its expiry is fixed at deploy), so the latched
+                // copy needs no re-resolution.
+                //
+                // SCOPED TO [uid]: Firebase can swap one signed-in user for another
+                // WITHOUT leaving the SignedIn branch, and the new account's own-trap
+                // listener is still loading at that instant — a uid-agnostic latch could
+                // briefly render the PREVIOUS account's private trap coordinates to the
+                // new user. Keying the remember on uid drops the latch the moment the
+                // account changes, and the explicit clear below closes any open popup
+                // before it can recompose with stale data.
+                var tappedTrap by remember(uid) { mutableStateOf<OwnTrapMarker?>(null) }
+                LaunchedEffect(uid) { tappedTrap = null }
+                // Cleared when the perk map stands down OR the map is covered by ANY
+                // chrome (a full-screen tab / nav route, or a translucent History /
+                // Social / Garage panel — every non-None cover composes MapHome with
+                // covered=true): [DeployedTrapPopup] draws in its OWN window, so without
+                // this it would float over that content and be preserved for the return.
+                // It must close when navigating away, like any other map transient UI.
+                LaunchedEffect(perkMapActive, mapCover) {
+                    if (!perkMapActive || mapCover != MapCover.None) tappedTrap = null
+                }
+                // Drop the popup if the tapped trap leaves the live set (triggered,
+                // expired-and-pruned, or removed) so it never describes a trap that is
+                // no longer on the map.
+                LaunchedEffect(perkMapOverlayState.ownTraps, tappedTrap) {
+                    val open = tappedTrap ?: return@LaunchedEffect
+                    if (perkMapOverlayState.ownTraps.none { it.trapId == open.trapId }) {
+                        tappedTrap = null
+                    }
+                }
+
                 // Gate each overlay at the CALL SITE so it isn't composed while idle:
                 // no rememberInfiniteTransition, no per-second ticker, zero wakes when
                 // there is nothing to draw. Mounts on activation, unmounts on expiry
@@ -5634,6 +5668,9 @@ fun AuthenticatedApp(
                                 SpikeStripOverlay(
                                     mapSurface = mapSurface,
                                     traps = perkMapOverlayState.ownTraps,
+                                    // Placer-only ⇒ owner-only: tapping opens the trap's
+                                    // detail popup (type, effect, live time remaining).
+                                    onTrapTap = { trap -> tappedTrap = trap },
                                 )
                             }
                             if (perkEffectActive) {
@@ -5645,6 +5682,15 @@ fun AuthenticatedApp(
                                         ?: perkOwnDeviceFix?.longitude,
                                     shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
                                     boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
+                                )
+                            }
+                            // The tapped-trap detail popup, inside the same perk-map
+                            // subtree so it unmounts with the layer. A Popup window, so
+                            // its on-screen position is independent of this slot.
+                            tappedTrap?.let { trap ->
+                                DeployedTrapPopup(
+                                    trap = trap,
+                                    onDismiss = { tappedTrap = null },
                                 )
                             }
                         }

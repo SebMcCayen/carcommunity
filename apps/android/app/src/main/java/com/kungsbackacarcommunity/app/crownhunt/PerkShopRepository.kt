@@ -34,12 +34,21 @@ data class PerkPurchaseResult(
  * this marker only ever renders the caller's own traps — the whole point of a
  * hidden trap. Carries the drop coordinate (never exposed to any other client)
  * and the expiry so a just-expired trap can be filtered against a moving now.
+ *
+ * [deployedAtMillis] is the trap's server `createdAt`, carried so the map's
+ * remaining-life bar can measure the TRUE full→empty span (`expiresAt −
+ * createdAt`) rather than assuming the TTL — it survives a server-side retune of
+ * the trap duration. Null while the `createdAt` server timestamp is still pending
+ * on a just-written doc (or absent on an older row), and the bar then falls back
+ * to the known trap TTL. Appended with a default so existing positional
+ * constructions stay valid.
  */
 data class OwnTrapMarker(
     val trapId: String,
     val latitude: Double,
     val longitude: Double,
     val expiresAtMillis: Long,
+    val deployedAtMillis: Long? = null,
 )
 
 /** Outcome of a successful `crownHunt-deployPerk` call. */
@@ -541,17 +550,23 @@ private fun DocumentSnapshot.toOwnTrapMarker(): OwnTrapMarker? {
     val latitude = (get(TRAP_LAT_FIELD) as? Number)?.toDouble() ?: return null
     val longitude = (get(TRAP_LNG_FIELD) as? Number)?.toDouble() ?: return null
     val expiresAtMillis = getTimestamp(EXPIRES_AT_FIELD)?.toDate()?.time ?: return null
+    // Optional: the server `createdAt` may momentarily read null on a just-written
+    // doc (a pending FieldValue.serverTimestamp) — the life bar then falls back to
+    // the known TTL, so a null here is not a reason to drop the marker.
+    val deployedAtMillis = getTimestamp(CREATED_AT_FIELD)?.toDate()?.time
     return OwnTrapMarker(
         trapId = id,
         latitude = latitude,
         longitude = longitude,
         expiresAtMillis = expiresAtMillis,
+        deployedAtMillis = deployedAtMillis,
     )
 }
 
 private const val TRAP_LAT_FIELD = "lat"
 private const val TRAP_LNG_FIELD = "lng"
 private const val EXPIRES_AT_FIELD = "expiresAt"
+private const val CREATED_AT_FIELD = "createdAt"
 
 /** Parses the `config/perkCatalog` mirror's `perks` array into display entries. */
 private fun DocumentSnapshot.toCatalogEntries(): List<PerkCatalogEntry> {

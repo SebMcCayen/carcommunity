@@ -7,30 +7,50 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.shell.MapProjection
 import kotlinx.coroutines.delay
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** Test tag on the placer-only spike-strip marker layer. */
 const val SPIKE_STRIP_OVERLAY_TAG = "perk_spike_strip_overlay"
+
+/** Test-tag PREFIX on a single trap's tap target (suffixed with the trap id). */
+const val SPIKE_STRIP_TAP_TAG = "perk_spike_strip_tap_"
 
 /** Test tag on the own-dot perk effects (shield / double-points) layer. */
 const val OWN_DOT_PERK_OVERLAY_TAG = "perk_own_dot_overlay"
@@ -46,15 +66,25 @@ const val OWN_DOT_PERK_OVERLAY_TAG = "perk_own_dot_overlay"
  *
  * A car/game-inspired glyph: a purple bear-trap — two opposing jaws of
  * inward-pointing teeth around a spring plate — with a slow purple pulse and a
- * faint "only you can see this" halo. Expired traps are filtered against a moving
- * now ([nowProvider]) so a trap that runs out while the map is open drops off
- * without a Firestore re-emit.
+ * faint "only you can see this" halo. Under each glyph a SMALL purple bar depletes
+ * full→empty as the trap nears expiry ([PerkMapVisuals.remainingLifeFraction]) —
+ * numbers-free at map scale. Expired traps are filtered against a moving now
+ * ([nowProvider]) so a trap that runs out while the map is open drops off without a
+ * Firestore re-emit.
+ *
+ * When [onTrapTap] is supplied each drawn glyph gets a small, LOCALIZED tap target
+ * (a positioned clickable, exactly the nearby-live-chip pattern — NOT a full-screen
+ * gesture, so map pan/tap elsewhere is untouched) that reports the tapped trap so
+ * the host can open its detail popup. The layer is placer-only by construction, so
+ * a tap is inherently owner-only; the caller passes null to keep the markers purely
+ * decorative.
  */
 @Composable
 fun SpikeStripOverlay(
     mapSurface: MapProjection,
     traps: List<OwnTrapMarker>,
     modifier: Modifier = Modifier,
+    onTrapTap: ((OwnTrapMarker) -> Unit)? = null,
     nowProvider: () -> Long = { System.currentTimeMillis() },
 ) {
     val camera by mapSurface.cameraSnapshot.collectAsState()
@@ -75,29 +105,137 @@ fun SpikeStripOverlay(
             delay(1_000L)
         }
     }
-    val pulse = rememberPerkPulse()
-    // One reusable Path for the bear-trap teeth, so the continuously-animated
-    // Canvas re-fills it (reset per tooth) instead of allocating a fresh Path each
-    // frame — the tooth geometry is static, only the purple pulse animates.
-    val toothPath = remember { Path() }
+    // Viewport size, so an off-screen trap's target is neither drawn nor laid out.
+    var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
-    Box(modifier = modifier.fillMaxSize().testTag(SPIKE_STRIP_OVERLAY_TAG)) {
-        camera ?: return@Box
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .onSizeChanged { viewportSize = it }
+                .testTag(SPIKE_STRIP_OVERLAY_TAG),
+    ) {
+        val snapshot = camera ?: return@Box
         val live = PerkMapVisuals.liveTraps(traps, now)
+        // Bail BEFORE composing the animated child: with no live trap there is nothing
+        // to draw, so no pulse transition should even EXIST to recompose at frame rate.
+        // The raw `traps` snapshot can still carry expired rows (the query has a fixed
+        // lower bound), so this filtered check — not `traps` — is what gates the
+        // animation, keeping the layer idle-cheap per #957.
         if (live.isEmpty()) return@Box
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (trap in live) {
-                val point = mapSurface.screenPositionFor(trap.latitude, trap.longitude)
-                if (point == null || !point.trustworthy) continue
-                if (point.x < 0f || point.y < 0f || point.x > size.width || point.y > size.height) {
-                    continue
+        // Project the live traps ONCE, memoized on the settled camera, the live set and
+        // the viewport. This is a plain remember (NOT an animated transition), and this
+        // parent does not read the pulse, so it recomposes only on the 1 s now-tick /
+        // camera settle — never at frame rate. `live` is value-equal frame to frame
+        // (data-class markers), so the now-tick alone never re-projects.
+        val placements =
+            remember(snapshot, live, viewportSize) {
+                if (viewportSize.width <= 0 || viewportSize.height <= 0) {
+                    emptyList()
+                } else {
+                    val w = viewportSize.width.toFloat()
+                    val h = viewportSize.height.toFloat()
+                    buildList {
+                        for (trap in live) {
+                            val point =
+                                mapSurface.screenPositionFor(trap.latitude, trap.longitude) ?: continue
+                            if (!point.trustworthy) continue
+                            if (point.x < 0f || point.y < 0f || point.x > w || point.y > h) continue
+                            add(TrapPlacement(trap, point.x, point.y))
+                        }
+                    }
                 }
-                drawSpikeStrip(Offset(point.x, point.y), pulse, toothPath)
+            }
+        // All live traps off-viewport → still nothing to draw, so still no animated
+        // child: the pulse never runs with nothing on screen.
+        if (placements.isEmpty()) return@Box
+
+        ActiveTrapLayer(placements = placements, now = now, onTrapTap = onTrapTap)
+    }
+}
+
+/**
+ * The ANIMATED half of the spike-strip layer, composed ONLY when there is at least
+ * one live, on-screen own trap to draw (the projection is already done — [placements]).
+ * Isolating the `rememberInfiniteTransition` pulse HERE rather than in
+ * [SpikeStripOverlay] is what keeps the layer idle-cheap: with no live traps the
+ * parent early-returns before composing this, so no transition exists and nothing
+ * recomposes at frame rate — the #957 discipline. The pulse only re-draws the glyphs;
+ * it never re-projects (that stayed in the parent's plain remember).
+ */
+@Composable
+private fun ActiveTrapLayer(
+    placements: List<TrapPlacement>,
+    now: Long,
+    onTrapTap: ((OwnTrapMarker) -> Unit)?,
+) {
+    val pulse = rememberPerkPulse()
+    // One reusable Path for the bear-trap teeth, so the continuously-animated Canvas
+    // re-fills it (reset per tooth) instead of allocating a fresh Path each frame —
+    // the tooth geometry is static, only the purple pulse animates.
+    val toothPath = remember { Path() }
+    val density = LocalDensity.current
+    // Half the tap target, so the positioned clickable's footprint is CENTRED on the
+    // projected coordinate (offset places by top-left). Computed once per density.
+    val tapHalfPx = remember(density) { with(density) { (TRAP_TAP_TARGET / 2).toPx() } }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        for (placement in placements) {
+            val centre = Offset(placement.x, placement.y)
+            drawSpikeStrip(centre, pulse, toothPath)
+            // The depleting lifetime bar, beneath the glyph. Numbers-free; the exact
+            // remaining time is in the tapped-trap popup. Allocation-free.
+            drawTrapLifeBar(
+                centre,
+                PerkMapVisuals.remainingLifeFraction(
+                    expiresAtMillis = placement.trap.expiresAtMillis,
+                    deployedAtMillis = placement.trap.deployedAtMillis,
+                    nowMillis = now,
+                ),
+            )
+        }
+    }
+
+    // Localized, per-trap tap targets ON TOP of the Canvas (only when the host wants
+    // taps). A positioned clickable per trap — not a full-screen gesture — so a tap
+    // anywhere else still reaches the map. Placer-only ⇒ owner-only, but guard
+    // defensively: only the caller's own traps ever reach this layer.
+    val onTap = onTrapTap
+    if (onTap != null) {
+        // One spoken label for every trap target — the marker is an empty Box, so
+        // without this TalkBack would announce an unlabelled button. Mirrors the
+        // nearby-live chip's contentDescription; read once outside the loop.
+        val tapLabel = stringResource(R.string.crownHunt_perkTrapMapTapLabel)
+        for (placement in placements) {
+            val trap = placement.trap
+            key(trap.trapId) {
+                Box(
+                    modifier =
+                        Modifier
+                            .offset {
+                                IntOffset(
+                                    (placement.x - tapHalfPx).roundToInt(),
+                                    (placement.y - tapHalfPx).roundToInt(),
+                                )
+                            }
+                            .size(TRAP_TAP_TARGET)
+                            .testTag(SPIKE_STRIP_TAP_TAG + trap.trapId)
+                            // clickable BEFORE semantics so the content description and
+                            // the click action merge onto the SAME actionable node
+                            // (matching NearbyLiveOverlay). The reverse order can strand
+                            // the label on an outer, non-actionable node — TalkBack then
+                            // announces an unlabelled button.
+                            .clickable(role = Role.Button) { onTap(trap) }
+                            .semantics { contentDescription = tapLabel },
+                )
             }
         }
     }
 }
+
+/** One live trap projected to the map view's pixel space (its glyph/tap centre). */
+private class TrapPlacement(val trap: OwnTrapMarker, val x: Float, val y: Float)
 
 /**
  * The own-dot SHIELD aura + DOUBLE-POINTS effect. Both hang on the member's OWN
@@ -203,6 +341,13 @@ private val BOOST_COLOR = Color(0xFF2F8BFF)
 
 /** Spike-strip / bear-trap purple. */
 private val TRAP_PURPLE = Color(0xFF9B5CFF)
+
+/**
+ * The tap-target footprint reserved around each trap glyph — a comfortable touch
+ * size a bit larger than the drawn glyph, matching the platform minimum, so the
+ * placer can reliably open the trap's detail popup.
+ */
+private val TRAP_TAP_TARGET = 48.dp
 
 /** A slow 0..1 shimmer shared by the spike (bear-trap) markers. */
 @Composable
@@ -388,6 +533,41 @@ private fun DrawScope.drawSpikeStrip(centre: Offset, pulse: Float, toothPath: Pa
 
     // The pressure plate at the centre.
     drawCircle(color = TRAP_PURPLE.copy(alpha = alpha), radius = 3.5.dp.toPx(), center = centre)
+}
+
+/**
+ * The small horizontal lifetime bar BENEATH a trap glyph: a faint purple track with
+ * a solid purple fill whose WIDTH is [fraction] (0..1) of the full bar, so it
+ * depletes right→empty as the trap approaches expiry. Numbers-free by design — the
+ * exact "N min N s kvar" lives in the tapped-trap detail popup. Allocation-free
+ * (two rounded rects, no Path), so it costs nothing in the per-frame animated draw.
+ */
+private fun DrawScope.drawTrapLifeBar(centre: Offset, fraction: Float) {
+    val f = fraction.coerceIn(0f, 1f)
+    val barWidth = 30.dp.toPx()
+    val barHeight = 4.dp.toPx()
+    // Sit clear of the glyph's spring nubs / halo, directly under the marker.
+    val top = centre.y + 24.dp.toPx()
+    val left = centre.x - barWidth / 2f
+    val corner = CornerRadius(barHeight / 2f, barHeight / 2f)
+
+    // Faint full-width track so the "how much is gone" is legible even near empty.
+    drawRoundRect(
+        color = TRAP_PURPLE.copy(alpha = 0.22f),
+        topLeft = Offset(left, top),
+        size = Size(barWidth, barHeight),
+        cornerRadius = corner,
+    )
+    // The remaining-life fill. Hidden at exactly empty so a 0-width rounded rect's
+    // caps don't leave a stray purple dot.
+    if (f > 0f) {
+        drawRoundRect(
+            color = TRAP_PURPLE.copy(alpha = 0.92f),
+            topLeft = Offset(left, top),
+            size = Size(barWidth * f, barHeight),
+            cornerRadius = corner,
+        )
+    }
 }
 
 private fun dir(angleRad: Double): Offset =
