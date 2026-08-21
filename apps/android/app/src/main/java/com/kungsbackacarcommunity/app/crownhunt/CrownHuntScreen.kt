@@ -59,6 +59,10 @@ import com.kungsbackacarcommunity.app.shell.LocalAeroBackAvailable
  *   when off (the shipped default) the shop tab is NOT rendered at all — the page
  *   is byte-identical to the pre-shop hub. Only when an operator switches the flag
  *   on does the "Butik" tab appear, so the whole shop ships dark.
+ * @param liveShareScoringEnabled the `crownHuntLiveShareScoring` flag. DEFAULT
+ *   FALSE: when off the Instructions surface omits the live-share scoring section
+ *   entirely, so the copy never describes a rule that is not in force. When on it
+ *   adds the "go live for full points" section (backend halves off-live claims).
  * @param shopState the buy surface's combined catalog + inventory + balance state
  *   ([PerkShop.toUiState]). Ignored while [perksEnabled] is false.
  * @param buyStatus the in-flight/terminal state of the current buy, driving the
@@ -73,6 +77,7 @@ fun CrownHuntScreen(
     modifier: Modifier = Modifier,
     kronjagare: KronjagareStanding? = null,
     perksEnabled: Boolean = false,
+    liveShareScoringEnabled: Boolean = false,
     shopState: PerkShopUiState = PerkShopUiState.Loading,
     buyStatus: PerkBuyStatus = PerkBuyStatus.Idle,
     onBuyPerk: (PerkShopItem) -> Unit = {},
@@ -93,7 +98,10 @@ fun CrownHuntScreen(
         // arrow's tap fires the back dispatcher, caught by the BackHandler above,
         // returning to the hub.
         CompositionLocalProvider(LocalAeroBackAvailable provides true) {
-            CrownHuntInstructionsScreen(modifier = modifier)
+            CrownHuntInstructionsScreen(
+                modifier = modifier,
+                liveShareScoringEnabled = liveShareScoringEnabled,
+            )
         }
         return
     }
@@ -214,7 +222,10 @@ const val CrownHuntInstructionsButtonTag = "crownHuntInstructionsButton"
  * hub rather than pop the whole route.
  */
 @Composable
-private fun CrownHuntInstructionsScreen(modifier: Modifier = Modifier) {
+private fun CrownHuntInstructionsScreen(
+    modifier: Modifier = Modifier,
+    liveShareScoringEnabled: Boolean = false,
+) {
     AeroPage(title = stringResource(R.string.crownHunt_instrTitle), modifier = modifier) {
         InstructionSection(
             title = stringResource(R.string.crownHunt_instrIntroTitle),
@@ -241,6 +252,14 @@ private fun CrownHuntInstructionsScreen(modifier: Modifier = Modifier) {
             title = stringResource(R.string.crownHunt_instrPointsTitle),
             body = stringResource(R.string.crownHunt_instrPointsBody),
         )
+        // Only rendered while the backend rule is live, so the copy never
+        // describes a scoring rule that is switched off.
+        if (liveShareScoringEnabled) {
+            InstructionSection(
+                title = stringResource(R.string.crownHunt_instrLiveTitle),
+                body = stringResource(R.string.crownHunt_instrLiveBody),
+            )
+        }
         InstructionSection(
             title = stringResource(R.string.crownHunt_instrRankTitle),
             body = stringResource(R.string.crownHunt_instrRankBody),

@@ -34,6 +34,16 @@ import { z } from 'zod';
  * It stays off until the shop is deliberately turned on; while off, buyPerk
  * rejects and members spend nothing.
  *
+ * `crownHuntLiveShareScoring` is default OFF: it switches on the live-share
+ * SCORING rule — a crown collected while the member is NOT sharing a live
+ * session pays only half its Kronpoäng, while a crown collected during an
+ * active live session pays full. It is fail-open: the halving applies ONLY when
+ * the backend can CONFIRM the member is not live-sharing (an active session, or
+ * any read error, awards full), so a sharer is never wrongly penalised. Gates
+ * BOTH the backend multiplier AND the Android UI copy (the instructions line
+ * and the popup tip), so the UI never describes a rule that is not in force.
+ * While off the multiplier is always 1 and the app shows nothing about it.
+ *
  * `reportTicketsBrowser` is default OFF: it switches on the in-app "open
  * tickets" browser on the Report-a-problem page — reading the `openTickets`
  * Firestore mirror of public GitHub issues and letting a member +1 or comment
@@ -62,6 +72,7 @@ export const FEATURE_FLAG_DEFAULTS = {
   digitalBillboards: true,
   partnerInsightsPassBy: false,
   crownHuntPerks: false,
+  crownHuntLiveShareScoring: false,
   reportTicketsBrowser: false,
   chatReplies: false,
 } as const;

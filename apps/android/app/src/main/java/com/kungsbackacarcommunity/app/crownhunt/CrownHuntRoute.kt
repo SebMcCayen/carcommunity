@@ -28,6 +28,9 @@ import kotlinx.coroutines.launch
  * @param perksEnabled the `crownHuntPerks` flag (contract default FALSE). While
  *   false the shop tab is never rendered and none of the shop flows are
  *   subscribed — the page is the pre-shop hub, so the whole shop ships dark.
+ * @param liveShareScoringEnabled the `crownHuntLiveShareScoring` flag (contract
+ *   default FALSE). Passed through to the Instructions surface so its live-share
+ *   scoring section is shown only while the backend rule is in force.
  * @param perkShopRepository catalog/inventory/buy source. Null in a config-less
  *   build → the shop tab (if the flag is on) shows its loading state.
  * @param pointsRepository the member's KP balance source (the same owner-scoped
@@ -41,6 +44,7 @@ fun CrownHuntRoute(
     badgesRepository: BadgesRepository? = null,
     uid: String? = null,
     perksEnabled: Boolean = false,
+    liveShareScoringEnabled: Boolean = false,
     perkShopRepository: PerkShopRepository? = null,
     pointsRepository: PointsRepository? = null,
 ) {
@@ -108,6 +112,7 @@ fun CrownHuntRoute(
         onBack = onBack,
         kronjagare = kronjagare,
         perksEnabled = perksEnabled,
+        liveShareScoringEnabled = liveShareScoringEnabled,
         shopState = shopState,
         buyStatus = buyStatus,
         onBuyPerk = { item ->

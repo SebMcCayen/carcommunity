@@ -82,6 +82,7 @@ fun CrownPointPopup(
     onCollect: () -> Unit,
     onNavigate: () -> Unit,
     onDismiss: () -> Unit,
+    showLiveShareTip: Boolean = false,
 ) {
     Popup(
         alignment = Alignment.BottomCenter,
@@ -118,6 +119,12 @@ fun CrownPointPopup(
                         onCollect = onCollect,
                         onNavigate = onNavigate,
                     )
+                    // Same live-share nudge as the auto-spawn popup: only while the
+                    // point is still collectable and only when the caller confirms
+                    // the rule is on AND the member is not currently live-sharing.
+                    if (showLiveShareTip) {
+                        CrownLiveShareTip()
+                    }
                 }
             }
         }

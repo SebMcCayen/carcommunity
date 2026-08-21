@@ -1,5 +1,5 @@
 {
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Canonical feature flag registry: key, default value, operator-facing label, what the flag controls (and what turning it off stops), and how sensitive flipping it is. THIS FILE is the single source of truth. Every surface must carry exactly these keys — no more, no fewer: functions/src/shared/featureFlags-core.ts (mirrored, sync-tested), apps/android/.../config/FeatureFlags.kt (mirrored, sync-tested), and the admin portal's feature-flags page, which reads this file directly so it can never fall behind. Keys are camelCase. Defaults are the fallback when the backend document (or an individual field) is absent, and the initial static backend response. Flag values are backend-managed (admin.setFeatureFlag); clients never persist flag changes locally as authoritative. `sensitivity` drives the admin UI's warning treatment: \"safety\" = flipping it changes what members are invited to physically drive to and stop at, \"privacy\" = it governs data collected about members, \"standard\" = ordinary product surface.",
   "flags": [
     {
@@ -85,6 +85,13 @@
       "label": "Kronjakt shop (perks)",
       "sensitivity": "standard",
       "description": "Kronjakt SHOP — the first member-facing Kronpoäng SINK. On lets members spend Kronpoäng to buy perks (crownHunt.buyPerk), which are granted to a backend-only inventory. Default OFF: the shop stays dark until it is deliberately turned on, and while off buyPerk rejects so no Kronpoäng is spent. Buying is all this flag governs today; deploying and activating perks (traps, shields, the boost multiplier) arrive in later releases behind their own gating."
+    },
+    {
+      "key": "crownHuntLiveShareScoring",
+      "default": false,
+      "label": "Kronjakt live-share scoring",
+      "sensitivity": "standard",
+      "description": "Kronjakt live-share SCORING rule. On, a crown collected while the member is NOT sharing a live session pays only half its Kronpoäng (NON_LIVE_SHARE_MULTIPLIER = 0.5), while a crown collected during an active live session pays full — so live sharing while collecting doubles the points. Fail-open: the halving applies only when the backend can CONFIRM the member is not live-sharing (an active session, or any read error while checking, awards full), so a sharer is never wrongly penalised. Composes multiplicatively with the PvP boost multiplier and applies to BOTH crown award paths (auto-spawn claimSpawn and hand-placed submitClaim). Gates BOTH the backend multiplier AND the Android UI (the instructions line and the crown-tap popup tip), so the UI never describes a rule that is off. Default OFF: while off the multiplier is always 1 and the app shows nothing about it."
     },
     {
       "key": "reportTicketsBrowser",

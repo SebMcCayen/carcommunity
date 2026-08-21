@@ -2060,6 +2060,12 @@ fun AuthenticatedApp(
             // no control is added to the stack, no deploy flow subscribes, and the
             // popup is never hosted (the page is exactly the pre-perks map).
             val crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS)
+            // The `crownHuntLiveShareScoring` flag. Drives ONLY UI copy about the
+            // rule (the backend owns the actual scoring): the crown-tap tip below
+            // and the Kronjakt instructions section. Read here so both surfaces
+            // share one value.
+            val crownHuntLiveShareScoringEnabled =
+                flags.isEnabled(FeatureFlag.CROWN_HUNT_LIVE_SHARE_SCORING)
             // Reused catalog/inventory/deploy source (guarded → null in a
             // config-less/CI build, which simply omits the whole surface).
             val perkDeployRepository: PerkShopRepository? =
@@ -5933,7 +5939,11 @@ fun AuthenticatedApp(
                         onNavigateToPoint = moveMapToPoint,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
-                        crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS),
+                        // Reuse the flag values already read once for this
+                        // composition (see the crownHunt* vals above) so every
+                        // Kronjakt surface threads the same snapshot.
+                        crownHuntPerksEnabled = crownHuntPerksEnabled,
+                        crownHuntLiveShareScoringEnabled = crownHuntLiveShareScoringEnabled,
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
@@ -6637,6 +6647,12 @@ fun AuthenticatedApp(
                                         state = crownCollectState,
                                         status = crownClaimStatus,
                                         distanceMeters = crownDistanceMeters,
+                                        // Nudge to go live for full KP — only when the
+                                        // rule is on AND the member is not already
+                                        // sharing (so the tip never shows to someone
+                                        // already earning full points).
+                                        showLiveShareTip =
+                                            crownHuntLiveShareScoringEnabled && !isSharing,
                                         onCollect = {
                                             crownSpawnController?.let { controller ->
                                                 scope.launch {
@@ -6703,6 +6719,10 @@ fun AuthenticatedApp(
                                     CrownPointPopup(
                                         point = pointForPopup,
                                         status = crownPointClaimStatus,
+                                        // Same live-share nudge as the auto-spawn
+                                        // popup: rule on AND not currently sharing.
+                                        showLiveShareTip =
+                                            crownHuntLiveShareScoringEnabled && !isSharing,
                                         // In range iff the range poll placed this
                                         // point in the in-range set (false with no
                                         // fix yet — the button waits, with a hint,
@@ -8200,6 +8220,10 @@ private fun RouteHost(
     // site where the flag set is in scope. Gates the Kronjakt shop tab: while
     // false the CrownHunt hub renders exactly as before and the shop ships dark.
     crownHuntPerksEnabled: Boolean,
+    // The `crownHuntLiveShareScoring` flag (contract default FALSE), resolved at
+    // the call site. Forwarded to the CrownHunt hub so its Instructions surface
+    // describes the live-share scoring rule only while the backend rule is on.
+    crownHuntLiveShareScoringEnabled: Boolean,
     leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
@@ -8704,6 +8728,7 @@ private fun RouteHost(
                 badgesRepository = badgesRepository,
                 uid = uid,
                 perksEnabled = crownHuntPerksEnabled,
+                liveShareScoringEnabled = crownHuntLiveShareScoringEnabled,
                 perkShopRepository = perkShopRepository,
                 // KP balance: the same owner-scoped pointsLedger/{uid} listener
                 // the Points wallet uses — no new query shape.

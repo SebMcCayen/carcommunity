@@ -53,6 +53,22 @@ enum class FeatureFlag(val key: String, val default: Boolean) {
     CROWN_HUNT_PERKS("crownHuntPerks", false),
 
     /**
+     * The Kronjakt live-share SCORING rule. Default OFF. On, a crown collected
+     * while the member is NOT sharing a live session pays only half its
+     * Kronpoäng, while a crown collected during an active live session pays full
+     * (so sharing while collecting doubles the points). The backend owns the
+     * multiplier and is fail-open (a sharer is never wrongly penalised).
+     *
+     * Consumed by the Android UI, which reads this flag ONLY to describe the
+     * rule: the Kronjakt instructions gain a "go live for full points" section,
+     * and the crown-tap popups show a tip when the flag is on AND the member is
+     * not currently live-sharing. Gated so the UI never describes a rule that is
+     * off — while OFF the app shows nothing about it. Operable end-to-end
+     * (contract, backend, this client, admin console).
+     */
+    CROWN_HUNT_LIVE_SHARE_SCORING("crownHuntLiveShareScoring", false),
+
+    /**
      * The in-app "Open tickets" browser on the Report-a-problem page: reading
      * the backend `openTickets` mirror of open public GitHub issues and letting
      * a member +1 or comment on one (once each). Default OFF: while off the

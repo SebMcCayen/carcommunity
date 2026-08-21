@@ -60,6 +60,7 @@ import {
 } from './crownhunt-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { resolveActiveBoostMultiplier } from './pvp-drain';
+import { resolveLiveShareMultiplier } from './live-share-multiplier';
 
 /**
  * Thrown inside the award transaction's read guard when a deterministic
@@ -511,7 +512,17 @@ export const submitClaim = onCall(
     // award keeps `source: 'crown_hunt'`, so the daily fold charges the full
     // boosted amount to the 300/day cap.
     const boostMultiplier = await resolveActiveBoostMultiplier(uid, now);
-    const rewardPoints = (point!.rewardPoints as number) * boostMultiplier;
+    // Kronjakt LIVE-SHARE scoring: a hand-placed crown collected while NOT
+    // live-sharing pays half. Best-effort + flag-gated + FAIL-OPEN (returns 1
+    // when crownHuntLiveShareScoring is OFF, when an active session is present,
+    // or on any read error), so a sharer is never wrongly penalised and the
+    // feature is a no-op until the flag is on. Composes with the boost
+    // multiplier; the rounded amount keeps `source: 'crown_hunt'` so the daily
+    // fold charges what was actually awarded.
+    const liveShareMultiplier = await resolveLiveShareMultiplier(uid, now);
+    const rewardPoints = Math.round(
+      (point!.rewardPoints as number) * boostMultiplier * liveShareMultiplier,
+    );
     const repeatRule = point!.repeatRule as CrownHuntRepeatRule;
     // Distinct-collector cap is read AUTHORITATIVELY from the in-transaction
     // point snapshot in the read guard below (not from the non-transactional
