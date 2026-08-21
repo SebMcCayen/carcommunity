@@ -105,16 +105,6 @@ fun SpikeStripOverlay(
             delay(1_000L)
         }
     }
-    val pulse = rememberPerkPulse()
-    // One reusable Path for the bear-trap teeth, so the continuously-animated
-    // Canvas re-fills it (reset per tooth) instead of allocating a fresh Path each
-    // frame — the tooth geometry is static, only the purple pulse animates.
-    val toothPath = remember { Path() }
-
-    val density = LocalDensity.current
-    // Half the tap target, so the positioned clickable's footprint is CENTRED on the
-    // projected coordinate (offset places by top-left). Computed once per density.
-    val tapHalfPx = remember(density) { with(density) { (TRAP_TAP_TARGET / 2).toPx() } }
     // Viewport size, so an off-screen trap's target is neither drawn nor laid out.
     var viewportSize by remember { mutableStateOf(IntSize.Zero) }
 
@@ -127,16 +117,18 @@ fun SpikeStripOverlay(
     ) {
         val snapshot = camera ?: return@Box
         val live = PerkMapVisuals.liveTraps(traps, now)
+        // Bail BEFORE composing the animated child: with no live trap there is nothing
+        // to draw, so no pulse transition should even EXIST to recompose at frame rate.
+        // The raw `traps` snapshot can still carry expired rows (the query has a fixed
+        // lower bound), so this filtered check — not `traps` — is what gates the
+        // animation, keeping the layer idle-cheap per #957.
         if (live.isEmpty()) return@Box
 
-        // Project the live traps ONCE, memoized on the settled camera, the live set
-        // and the viewport — NOT on the pulse. This composable recomposes every frame
-        // (it reads the animated pulse), so projecting inline would round-trip
-        // `pixelForCoordinate` per trap at ~60 Hz for positions that only move when
-        // the camera settles. Mirrors NearbyLiveOverlay: the pulse then only re-draws
-        // the glyphs, the projection is reused. `live` is value-equal frame to frame
-        // (data-class markers), so the 1 s now-tick does not re-project on its own —
-        // only a change in the live membership does.
+        // Project the live traps ONCE, memoized on the settled camera, the live set and
+        // the viewport. This is a plain remember (NOT an animated transition), and this
+        // parent does not read the pulse, so it recomposes only on the 1 s now-tick /
+        // camera settle — never at frame rate. `live` is value-equal frame to frame
+        // (data-class markers), so the now-tick alone never re-projects.
         val placements =
             remember(snapshot, live, viewportSize) {
                 if (viewportSize.width <= 0 || viewportSize.height <= 0) {
@@ -155,53 +147,83 @@ fun SpikeStripOverlay(
                     }
                 }
             }
+        // All live traps off-viewport → still nothing to draw, so still no animated
+        // child: the pulse never runs with nothing on screen.
         if (placements.isEmpty()) return@Box
 
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            for (placement in placements) {
-                val centre = Offset(placement.x, placement.y)
-                drawSpikeStrip(centre, pulse, toothPath)
-                // The depleting lifetime bar, beneath the glyph. Numbers-free; the
-                // exact remaining time is in the tapped-trap popup. Allocation-free.
-                drawTrapLifeBar(
-                    centre,
-                    PerkMapVisuals.remainingLifeFraction(
-                        expiresAtMillis = placement.trap.expiresAtMillis,
-                        deployedAtMillis = placement.trap.deployedAtMillis,
-                        nowMillis = now,
-                    ),
-                )
-            }
-        }
+        ActiveTrapLayer(placements = placements, now = now, onTrapTap = onTrapTap)
+    }
+}
 
-        // Localized, per-trap tap targets ON TOP of the Canvas (only when the host
-        // wants taps). A positioned clickable per trap — not a full-screen gesture —
-        // so a tap anywhere else still reaches the map. Placer-only ⇒ owner-only, but
-        // guard defensively: only the caller's own traps ever reach this layer.
-        val onTap = onTrapTap
-        if (onTap != null) {
-            // One spoken label for every trap target — the marker is an empty Box, so
-            // without this TalkBack would announce an unlabelled button. Mirrors the
-            // nearby-live chip's contentDescription; read once outside the loop.
-            val tapLabel = stringResource(R.string.crownHunt_perkTrapMapTapLabel)
-            for (placement in placements) {
-                val trap = placement.trap
-                key(trap.trapId) {
-                    Box(
-                        modifier =
-                            Modifier
-                                .offset {
-                                    IntOffset(
-                                        (placement.x - tapHalfPx).roundToInt(),
-                                        (placement.y - tapHalfPx).roundToInt(),
-                                    )
-                                }
-                                .size(TRAP_TAP_TARGET)
-                                .testTag(SPIKE_STRIP_TAP_TAG + trap.trapId)
-                                .semantics { contentDescription = tapLabel }
-                                .clickable(role = Role.Button) { onTap(trap) },
-                    )
-                }
+/**
+ * The ANIMATED half of the spike-strip layer, composed ONLY when there is at least
+ * one live, on-screen own trap to draw (the projection is already done — [placements]).
+ * Isolating the `rememberInfiniteTransition` pulse HERE rather than in
+ * [SpikeStripOverlay] is what keeps the layer idle-cheap: with no live traps the
+ * parent early-returns before composing this, so no transition exists and nothing
+ * recomposes at frame rate — the #957 discipline. The pulse only re-draws the glyphs;
+ * it never re-projects (that stayed in the parent's plain remember).
+ */
+@Composable
+private fun ActiveTrapLayer(
+    placements: List<TrapPlacement>,
+    now: Long,
+    onTrapTap: ((OwnTrapMarker) -> Unit)?,
+) {
+    val pulse = rememberPerkPulse()
+    // One reusable Path for the bear-trap teeth, so the continuously-animated Canvas
+    // re-fills it (reset per tooth) instead of allocating a fresh Path each frame —
+    // the tooth geometry is static, only the purple pulse animates.
+    val toothPath = remember { Path() }
+    val density = LocalDensity.current
+    // Half the tap target, so the positioned clickable's footprint is CENTRED on the
+    // projected coordinate (offset places by top-left). Computed once per density.
+    val tapHalfPx = remember(density) { with(density) { (TRAP_TAP_TARGET / 2).toPx() } }
+
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        for (placement in placements) {
+            val centre = Offset(placement.x, placement.y)
+            drawSpikeStrip(centre, pulse, toothPath)
+            // The depleting lifetime bar, beneath the glyph. Numbers-free; the exact
+            // remaining time is in the tapped-trap popup. Allocation-free.
+            drawTrapLifeBar(
+                centre,
+                PerkMapVisuals.remainingLifeFraction(
+                    expiresAtMillis = placement.trap.expiresAtMillis,
+                    deployedAtMillis = placement.trap.deployedAtMillis,
+                    nowMillis = now,
+                ),
+            )
+        }
+    }
+
+    // Localized, per-trap tap targets ON TOP of the Canvas (only when the host wants
+    // taps). A positioned clickable per trap — not a full-screen gesture — so a tap
+    // anywhere else still reaches the map. Placer-only ⇒ owner-only, but guard
+    // defensively: only the caller's own traps ever reach this layer.
+    val onTap = onTrapTap
+    if (onTap != null) {
+        // One spoken label for every trap target — the marker is an empty Box, so
+        // without this TalkBack would announce an unlabelled button. Mirrors the
+        // nearby-live chip's contentDescription; read once outside the loop.
+        val tapLabel = stringResource(R.string.crownHunt_perkTrapMapTapLabel)
+        for (placement in placements) {
+            val trap = placement.trap
+            key(trap.trapId) {
+                Box(
+                    modifier =
+                        Modifier
+                            .offset {
+                                IntOffset(
+                                    (placement.x - tapHalfPx).roundToInt(),
+                                    (placement.y - tapHalfPx).roundToInt(),
+                                )
+                            }
+                            .size(TRAP_TAP_TARGET)
+                            .testTag(SPIKE_STRIP_TAP_TAG + trap.trapId)
+                            .semantics { contentDescription = tapLabel }
+                            .clickable(role = Role.Button) { onTap(trap) },
+                )
             }
         }
     }
