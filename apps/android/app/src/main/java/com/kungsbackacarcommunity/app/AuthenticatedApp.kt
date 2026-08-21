@@ -1226,24 +1226,12 @@ fun AuthenticatedApp(
             // shell's ordinary route + payload state — the same assignments the
             // in-app affordances make — rather than a second navigation mechanism.
             //
-            // Chat-hub destinations are forwarded whole to ChatHubRoute, which
-            // owns the tab/channel sub-navigation; the rest map to a ShellRoute.
+            // Chat-hub destinations open the SAME transparent ChatHubPopup the
+            // map's chat bubble raises — never the full opaque ShellRoute.ChatHub
+            // — so a notification lands on exactly the surface the in-app chat
+            // icon does; the rest map to a ShellRoute. See the COMMUNITY_CHAT /
+            // CONVOY_CHAT branch below.
             //
-            // INVARIANT — pendingChatHubLink is never read stale, and the reason
-            // is structural rather than a clear-on-exit: the opener below is the
-            // ONLY route into ShellRoute.ChatHub in the shell, and it always
-            // writes a fresh link in the same frame. ChatHubRoute therefore
-            // cannot be entered carrying a previous tap's destination. The map
-            // bubble and the convoy bar's chat icon are not counter-examples —
-            // they open ChatHubPopup, whose landing link is the separate,
-            // cleared-on-close `chatHubLandingLink` above. Back-out is likewise safe:
-            // ChatHub is opened via openRootRoute (a fresh, parent-less stack),
-            // so a Back pop from it lands on the map, never back INTO ChatHub —
-            // the only entry stays this fresh-link opener.
-            //
-            // If you ever add a second way to reach ShellRoute.ChatHub, that
-            // invariant dies and this must become a consume-and-clear.
-            var pendingChatHubLink by remember { mutableStateOf<PushDeepLink?>(null) }
             // Event id from an event-reminder push tap, opened by EventsRoute on
             // entry and cleared the moment it consumes it (unlike ChatHub, the
             // Events route is reachable by normal navigation too, so a lingering
@@ -1278,8 +1266,19 @@ fun AuthenticatedApp(
                     PushTarget.COMMUNITY_CHAT,
                     PushTarget.CONVOY_CHAT,
                     -> {
-                        pendingChatHubLink = link
-                        openRootRoute(ShellRoute.ChatHub)
+                        // Open the SAME transparent chat-hub popup the map's chat
+                        // bubble raises (chatHubOpen + chatHubLandingLink), NOT the
+                        // full opaque ShellRoute.ChatHub — so the notification lands
+                        // on the exact surface the in-app chat icon reaches. Force
+                        // the map home first (clear any open route, select the Map
+                        // tab) so the popup's map-cover gate holds even on a cold
+                        // start or from another tab, then land it on the pushed
+                        // channel via the landing link (Community, or a convoy's
+                        // channel — the same param the convoy bar's chat icon uses).
+                        clearRoutes()
+                        selectedTab = ShellTab.Map
+                        chatHubLandingLink = link
+                        chatHubOpen = true
                     }
                     PushTarget.CONVOYS -> {
                         // BACKEND GAP: buildPushDeepLink in
@@ -5958,7 +5957,12 @@ fun AuthenticatedApp(
                             clearRoutes()
                             selectedTab = ShellTab.Map
                         },
-                        chatHubPushLink = pendingChatHubLink,
+                        // ShellRoute.ChatHub is no longer a push destination (chat
+                        // notifications open ChatHubPopup instead); this route now
+                        // renders only for migration-safe restore of older saved
+                        // state, which carries no push link — so land on the
+                        // Community default.
+                        chatHubPushLink = null,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
                         convoyInviteDeepLinkId = pendingConvoyInviteId,
