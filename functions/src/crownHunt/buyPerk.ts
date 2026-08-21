@@ -181,7 +181,7 @@ export const buyPerk = onCall(CALLABLE_OPTS, async (request): Promise<BuyPerkRes
         if (evaluateHoldCap(inventory, perk.perkId, qty, perk.costKp) !== null) {
           throw new HttpsError(
             'failed-precondition',
-            'Du har nått gränsen för hur många perks du kan lagra. Använd några först.',
+            'Du kan ha max 3 av varje perk just nu. Använd några först.',
             { reason: PERK_PURCHASE_REASON_HOLD_CAP },
           );
         }
