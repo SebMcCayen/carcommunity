@@ -109,7 +109,9 @@ private val PEEK_BUTTON_HEIGHT = 44.dp
  * WHICH channel it previews is decided purely from [pushDeepLink], the same landing
  * link the popup consumed:
  * - `CONVOY_CHAT` with an id (a convoy notification, or the convoy-bar chat icon) →
- *   that convoy's channel, its title resolved from `convoy-list`;
+ *   that convoy's channel (a neutral "Convoy" header — resolving the real title
+ *   would cost a `convoy-list` callable on every open, so the authoritative title
+ *   is left to the full chat behind "Go to chat");
  * - anything else, including a null link (the plain chat icon) and `COMMUNITY_CHAT`
  *   → the Community channel.
  *
@@ -175,25 +177,18 @@ fun ChatPeekPage(
         initial = ChannelMessagesState.Loading,
     )
 
-    // Convoy title for the header, resolved once from `convoy-list` (the same
-    // callable the Convoys tab uses). Until it resolves — or if it fails, or the
-    // convoy is not in the list — the neutral "Convoy" fallback stands, so the
-    // header is never blank. Community needs no lookup: its name is a constant.
-    val convoyFallbackTitle = stringResource(R.string.chatHub_convoyUntitled)
-    var resolvedConvoyTitle by remember(convoyId) { mutableStateOf<String?>(null) }
-    LaunchedEffect(convoyId, convoyChatRepository) {
-        if (convoyId != null && convoyChatRepository != null) {
-            val listed = convoyChatRepository.listConvoys()
-            if (listed is ConvoyListState.Loaded) {
-                resolvedConvoyTitle =
-                    listed.convoys.firstOrNull { it.convoyId == convoyId }?.title
-            }
-        }
-    }
-
+    // Header label. The convoy peek deliberately uses the NEUTRAL "Convoy" label
+    // rather than resolving the convoy's real title: the only client source for it
+    // is the `convoy-list` Functions CALLABLE, and firing a backend round-trip just
+    // to render a header on a lightweight preview — one that is often opened
+    // straight from a notification — is the wrong cost. The deep link carries only
+    // the convoy id (no title), and the repository exposes no cheap title listener,
+    // so there is nothing cheaper to read here. The AUTHORITATIVE title is shown by
+    // the full chat behind "Go to chat" (ConvoyChannelRoute resolves it from its own
+    // listener). Community needs no lookup: its name is a constant.
     val channelName =
         if (isConvoy) {
-            resolvedConvoyTitle ?: convoyFallbackTitle
+            stringResource(R.string.chatHub_convoyUntitled)
         } else {
             stringResource(R.string.chatHub_tabCommunity)
         }
