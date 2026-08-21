@@ -28,6 +28,15 @@
 export interface ScheduledJob {
   /** Deployed function id (group-action), for display. */
   id: string;
+  /**
+   * Source of truth: `<path>:<export>` relative to functions/src, where
+   * `<export>` is the `export const <name> = onSchedule(...)` symbol. This is the
+   * key the drift guard (inventory.test.ts) matches against a fresh grep of
+   * functions/src — a new `onSchedule` export FAILS CI until it appears here.
+   * Unlike `id` (a deployed group-action label that can be renamed in index.ts),
+   * this pins the entry to a real source export, so it cannot silently rot.
+   */
+  source: string;
   /** Human label. */
   label: string;
   /** The cron/interval string as written in source. */
@@ -54,13 +63,23 @@ export interface ScheduledJob {
  * schedule changes. Per-run write/read/delete counts are labelled estimates
  * except Trafikverket, which is near-measured (see assumptions.ts).
  *
+ * DRIFT-PROOFED (2026-08-20): every entry carries a `source`
+ * (`<path>:<export>`) that inventory.test.ts cross-checks against a fresh grep
+ * of every `onSchedule` export in functions/src. Adding a scheduled function
+ * without an entry here FAILS CI — closing the vector by which an `onSchedule`
+ * function used to silently fall off the Finance board (its invocation +
+ * Firestore cost becoming invisible), exactly as CALLABLE_COST_CLASS is guarded
+ * for callables. `id` is the deployed group-action label (as re-exported in
+ * index.ts) for display; `source` is the stable key.
+ *
  * runsPerDay reference by interval: every 5 min → 288, every 10 min → 144,
- * every 15 min → 96, every 30 min → 48, hourly → 24, every 3 hours → 8, every
- * 6 hours → 4, daily → 1, monthly → ~0.033.
+ * every 15 min → 96, every 20 min → 72, every 30 min → 48, hourly → 24, every 3
+ * hours → 8, every 6 hours → 4, daily → 1, weekly → ~0.143, monthly → ~0.033.
  */
 export const SCHEDULED_JOBS: ScheduledJob[] = [
   {
     id: 'incidents-syncTrafikverket',
+    source: 'incidents/trafikverket.ts:syncTrafikverket',
     label: 'Trafikverket import',
     schedule: '*/30 * * * *',
     runsPerDay: 48,
@@ -77,6 +96,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   },
   {
     id: 'metrics-captureDaily',
+    source: 'metrics/scheduled.ts:captureDaily',
     label: 'Growth metrics snapshot (#652)',
     schedule: '30 2 * * *',
     runsPerDay: 1,
@@ -88,7 +108,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: '~40 count()/sum() aggregations + 1 snapshot write per day.',
   },
   {
-    id: 'incidents-expireStale',
+    id: 'incidents-cleanupExpired',
+    source: 'incidents/scheduled.ts:cleanupExpired',
     label: 'Incident TTL cleanup',
     schedule: '*/15 * * * *',
     runsPerDay: 96,
@@ -100,7 +121,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Sweeps expired crowd-sourced incidents; small delete volume.',
   },
   {
-    id: 'events-eventReminders',
+    id: 'events-remindUpcoming',
+    source: 'events/eventReminders.ts:remindUpcoming',
     label: 'Event reminders',
     schedule: '*/15 * * * *',
     runsPerDay: 96,
@@ -112,7 +134,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Queues reminder notifications for upcoming events.',
   },
   {
-    id: 'events-lifecycleSweep',
+    id: 'events-autoClose',
+    source: 'events/scheduled.ts:autoClose',
     label: 'Event lifecycle sweep',
     schedule: '0 * * * *',
     runsPerDay: 24,
@@ -125,6 +148,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   },
   {
     id: 'events-syncHomepage',
+    source: 'events/publicSite.ts:syncHomepage',
     label: 'Homepage events sync',
     schedule: '40 4 * * *',
     runsPerDay: 1,
@@ -136,7 +160,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Daily regeneration of the public homepage event feed (GitHub commit only when changed; no Firestore writes).',
   },
   {
-    id: 'billboards-visibilitySweep',
+    id: 'billboards-sweepVisibility',
+    source: 'billboards/scheduled.ts:sweepVisibility',
     label: 'Billboard visibility sweep',
     schedule: '*/10 * * * *',
     runsPerDay: 144,
@@ -148,7 +173,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Activates/deactivates billboards on their schedule.',
   },
   {
-    id: 'live-sweepExpired',
+    id: 'live-cleanupExpired',
+    source: 'live/scheduled.ts:cleanupExpired',
     label: 'Live-session sweep',
     schedule: '*/5 * * * *',
     runsPerDay: 288,
@@ -160,7 +186,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Clears expired live-location discovery docs every 5 min.',
   },
   {
-    id: 'crownHunt-spawn',
+    id: 'crownHunt-spawnCrowns',
+    source: 'crownHunt/spawnScheduled.ts:spawnCrowns',
     label: 'Kronjakt crown spawn',
     schedule: '*/10 * * * *',
     runsPerDay: 144,
@@ -172,7 +199,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Spawns crowns into approved cells.',
   },
   {
-    id: 'crownHunt-sweep',
+    id: 'crownHunt-sweepSpawns',
+    source: 'crownHunt/spawnScheduled.ts:sweepSpawns',
     label: 'Kronjakt crown sweep',
     schedule: '*/15 * * * *',
     runsPerDay: 96,
@@ -184,7 +212,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Expires uncollected crowns.',
   },
   {
-    id: 'subscription-expirySweep',
+    id: 'subscription-expireLapsed',
+    source: 'subscription/scheduled.ts:expireLapsed',
     label: 'Subscription expiry sweep (#633)',
     schedule: 'every 3 hours',
     runsPerDay: 8,
@@ -196,7 +225,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Downgrades lapsed entitlements.',
   },
   {
-    id: 'badges-progressSweep',
+    id: 'badges-evaluateBacklog',
+    source: 'badges/scheduled.ts:evaluateBacklog',
     label: 'Badge progress sweep',
     schedule: 'every 6 hours',
     runsPerDay: 4,
@@ -208,31 +238,42 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Recomputes time-based badge progress.',
   },
   {
-    id: 'notifications-batchSend',
-    label: 'Notification batch',
+    id: 'notifications-cleanupExpired',
+    source: 'notifications/scheduled.ts:cleanupExpired',
+    label: 'Notification retention sweep',
     schedule: '0 5 * * *',
     runsPerDay: 1,
-    writesPerRun: 5,
+    // Deletes read items past 7 days + unread past 30 days (collectionGroup
+    // 'items'); no writes. Delete volume is small at this scale.
+    writesPerRun: 0,
     readsPerRun: 20,
-    deletesPerRun: 0,
+    deletesPerRun: 20,
     avgSeconds: 15,
     memoryGiB: 0.25,
-    note: 'Daily digest/batch notification pass.',
+    note: 'Daily retention sweep — deletes read items >7d and unread >30d.',
   },
   {
-    id: 'account-lastLoginSweep',
-    label: 'Account activity sweep',
+    // RELABELLED 2026-08-20: was `account-lastLoginSweep`, but its 30 3 * * *
+    // cadence is the daily deletion-request purge (account/scheduled.ts), NOT a
+    // login sweep. Corrected to the real deployed id + source.
+    id: 'account-purgeDeleted',
+    source: 'account/scheduled.ts:purgeDeleted',
+    label: 'Account deletion purge',
     schedule: '30 3 * * *',
     runsPerDay: 1,
+    // Reads due deletion requests (usually 0–few); for each, purgeUserData
+    // hard-deletes all of that member's docs (delete-dominated) + marks the
+    // request processed. Rare, but the deletes spike on a due day.
     writesPerRun: 2,
     readsPerRun: 20,
-    deletesPerRun: 0,
-    avgSeconds: 15,
-    memoryGiB: 0.25,
-    note: 'Flags inactivity from lastLoginAt.',
+    deletesPerRun: 20,
+    avgSeconds: 20,
+    memoryGiB: 0.5,
+    note: 'GDPR erasure — purges soft-deleted accounts once their grace period is due.',
   },
   {
-    id: 'account-inactivityCleanup',
+    id: 'account-cleanupInactive',
+    source: 'account/inactivityCleanup.ts:cleanupInactive',
     label: 'Inactive-account cleanup',
     schedule: '15 4 * * *',
     runsPerDay: 1,
@@ -240,11 +281,12 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     readsPerRun: 20,
     deletesPerRun: 2,
     avgSeconds: 20,
-    memoryGiB: 0.25,
+    memoryGiB: 0.5,
     note: 'Warns/removes long-inactive accounts.',
   },
   {
-    id: 'partnerInsights-aggregate',
+    id: 'partnerInsights-aggregateDaily',
+    source: 'partnerInsights/scheduled.ts:aggregateDaily',
     label: 'Partner insights aggregate',
     schedule: '0 3 * * *',
     runsPerDay: 1,
@@ -256,19 +298,26 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Builds daily partner interaction aggregates.',
   },
   {
-    id: 'partnerInsights-rollup',
-    label: 'Partner insights rollup',
+    // RELABELLED 2026-08-20: was `partnerInsights-rollup`, but its 0 4 * * *
+    // cadence is the retention cleanup (partnerInsights/scheduled.ts:cleanupExpired),
+    // NOT a period rollup. Corrected to the real deployed id + source.
+    id: 'partnerInsights-cleanupExpired',
+    source: 'partnerInsights/scheduled.ts:cleanupExpired',
+    label: 'Partner insights cleanup',
     schedule: '0 4 * * *',
     runsPerDay: 1,
-    writesPerRun: 5,
+    // Deletes partner-interaction aggregates past their retention window; a
+    // bounded read to find them, delete-dominated, no writes.
+    writesPerRun: 0,
     readsPerRun: 30,
-    deletesPerRun: 0,
+    deletesPerRun: 20,
     avgSeconds: 15,
     memoryGiB: 0.25,
-    note: 'Rolls daily aggregates into periods.',
+    note: 'Deletes expired partner-interaction aggregates past retention.',
   },
   {
     id: 'partnerInsights-aggregateDriveHeat',
+    source: 'partnerInsights/driveHeatAggregation.ts:aggregateDriveHeat_scheduled',
     label: 'Partner drive heatmap',
     schedule: '30 4 * * *',
     runsPerDay: 1,
@@ -283,7 +332,8 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Anonymised H3 drive-density aggregate over consented drives.',
   },
   {
-    id: 'chatchannels-communityDigest',
+    id: 'communityChat-digest',
+    source: 'chatchannels/communityDigest.ts:digest',
     label: 'Community digest',
     schedule: '0 18 * * *',
     runsPerDay: 1,
@@ -295,8 +345,9 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     note: 'Evening community chat digest.',
   },
   {
-    id: 'diagnostics-monthlyReport',
-    label: 'Diagnostics monthly report',
+    id: 'diagnostics-cleanupExpired',
+    source: 'diagnostics/scheduled.ts:cleanupExpired',
+    label: 'Diagnostics retention sweep',
     schedule: '0 6 1 * *',
     runsPerDay: 1 / 30.4375,
     writesPerRun: 1,
@@ -304,7 +355,116 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     deletesPerRun: 0,
     avgSeconds: 20,
     memoryGiB: 0.25,
-    note: 'Once a month — negligible.',
+    note: 'Monthly diagnostics retention sweep — negligible.',
+  },
+
+  // ---------------------------------------------------------------------------
+  // ADDED 2026-08-20 — the six scheduled functions the cost-coverage audit
+  // found deployed in source but missing from the board (invisible cost). Each
+  // is verified `onSchedule` on current main; cadence copied from source, per-run
+  // work estimated from reading the handler. Several call the GitHub REST API or
+  // Overpass/OSM — those dependencies are surfaced as $0/quota lines in model.ts.
+  // ---------------------------------------------------------------------------
+  {
+    id: 'feedback-syncOpenTickets',
+    source: 'feedback/syncOpenTickets.ts:syncOpenTickets',
+    label: 'Open-ticket mirror sync',
+    schedule: 'every 5 minutes',
+    runsPerDay: 288,
+    // Flag-gated OFF by default (reportTicketsBrowser) — a complete no-op until
+    // enabled. When ON: lists OPEN `android-issue` GitHub issues (external — see
+    // the GitHub REST API $0/quota line), upserts one mirror doc per open ticket
+    // (small set), reads the mirror to reconcile, deletes any now-closed ticket.
+    writesPerRun: 3,
+    readsPerRun: 10,
+    deletesPerRun: 1,
+    avgSeconds: 5,
+    memoryGiB: 0.25,
+    note: 'Mirrors OPEN android-issue GitHub tickets into Firestore for the in-app browser (flag-gated). GitHub list call each run.',
+  },
+  {
+    id: 'leaderboard-generateLeaderboards',
+    source: 'leaderboard/generator.ts:generateLeaderboards',
+    label: 'Social leaderboard precompute',
+    schedule: '0 * * * *',
+    runsPerDay: 24,
+    // Bounded paged scan (LEADERBOARD_SCAN_PAGE_SIZE = 500) of member point
+    // buckets for BOTH the all-time and current-month boards, plus opt-out reads.
+    // This is the heaviest committed READ line and it grows ~linearly with the
+    // member count (paged 500 at a time) — the committed-read line to watch as
+    // the community scales. Writes: the all-time + current-month board docs; the
+    // public web JSON is committed to GitHub (external quota line), not Firestore.
+    writesPerRun: 3,
+    readsPerRun: 500,
+    deletesPerRun: 0,
+    avgSeconds: 20,
+    memoryGiB: 0.5,
+    note: 'Hourly precompute of the social leaderboards; bounded per-member scan (grows with membership). Publishes public JSON via GitHub.',
+  },
+  {
+    id: 'crownHunt-detectClaimLag',
+    source: 'crownHunt/claimLagDetector.ts:detectClaimLag',
+    label: 'Crown claim-lag detector',
+    schedule: '*/20 * * * *',
+    runsPerDay: 72,
+    // Scans a bounded ~40-min claim window (cap MAX_CLAIMS_SCANNED = 5000;
+    // typically far fewer), dedups by fingerprint, files up to MAX_ISSUES_PER_RUN
+    // (10) GitHub issues + writes an issue-link doc per filed issue. GitHub calls
+    // only when lag is detected (rate-limited via issueBudget-core.ts).
+    writesPerRun: 2,
+    readsPerRun: 100,
+    deletesPerRun: 0,
+    avgSeconds: 8,
+    memoryGiB: 0.25,
+    note: 'Detects lagging crown claims in a bounded window; files GitHub issues (budgeted) when found.',
+  },
+  {
+    id: 'points-detectDailyCapReached',
+    source: 'points/dailyCapDetector.ts:detectDailyCapReached',
+    label: 'Daily points-cap detector',
+    schedule: '0 * * * *',
+    runsPerDay: 24,
+    // Scans the current day's dailyTotals (cap MAX_DAILY_TOTALS_SCANNED = 20000;
+    // typically far fewer), files a GitHub issue for a member hitting the cap.
+    writesPerRun: 1,
+    readsPerRun: 80,
+    deletesPerRun: 0,
+    avgSeconds: 8,
+    memoryGiB: 0.25,
+    note: 'Hourly detector for members hitting the daily points cap; files GitHub issues (budgeted).',
+  },
+  {
+    id: 'crownHunt-rolloverSeason',
+    source: 'crownHunt/seasonRollover.ts:rolloverSeason',
+    label: 'Crown season rollover',
+    schedule: '15 0 * * *',
+    runsPerDay: 1,
+    // Ensures the current season is active, reads active seasons, and finalizes
+    // any past season — reading up to SEASON_STANDINGS_LIMIT (100) standings and
+    // writing the frozen results. Real work only on the first run of a new month.
+    writesPerRun: 5,
+    readsPerRun: 120,
+    deletesPerRun: 0,
+    avgSeconds: 20,
+    memoryGiB: 0.5,
+    note: 'Daily just after midnight; finalizes last season + opens the new one on a month boundary.',
+  },
+  {
+    id: 'crownHunt-refreshAreaPois',
+    source: 'crownHunt/poiIngestion.ts:refreshAreaPois',
+    label: 'Crown safe-stop POI refresh',
+    schedule: '0 3 * * 1',
+    runsPerDay: 1 / 7,
+    // Weekly (Mondays 03:00). Reads confirmed safe spawn areas (~tens), queries
+    // the Overpass/OSM API per area (external — see the Overpass $0/quota line),
+    // and rewrites POI docs per area (bounded MAX_POIS_PER_AREA = 5000; realistic
+    // volume tens–hundreds), replacing the previous set (deletes + writes).
+    writesPerRun: 200,
+    readsPerRun: 20,
+    deletesPerRun: 50,
+    avgSeconds: 60,
+    memoryGiB: 0.25,
+    note: 'Weekly OSM safe-stop POI ingestion per spawn area (Overpass API); rewrites the POI set.',
   },
 ];
 
