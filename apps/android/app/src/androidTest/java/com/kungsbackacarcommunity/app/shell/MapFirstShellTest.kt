@@ -974,18 +974,18 @@ class MapFirstShellTest {
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertIsDisplayed()
 
         // Leaving the Map tab closes the peek: the map-cover gate drops and the
-        // auto-close effect clears the rememberSaveable open flag.
+        // auto-close effect clears the rememberSaveable open flag. (The shell's
+        // single map surface stays composed across tabs, so this asserts on the
+        // PEEK, not the map.)
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabHistory)).performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertDoesNotExist()
 
-        // Returning to the Map tab restores the map WITHOUT re-opening the peek —
-        // the regression: a saveable open flag that survived the gate would pop the
-        // peek back up here.
+        // Returning to the Map tab must NOT re-open the peek — the regression: a
+        // saveable open flag that survived the gate would pop the peek back up here.
         composeTestRule.onNodeWithContentDescription(str(R.string.shell_tabMap)).performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertExists()
+        composeTestRule.onNodeWithTag(MAP_HOME_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(CHAT_PEEK_TEST_TAG).assertDoesNotExist()
     }
 
