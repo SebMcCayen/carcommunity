@@ -1258,6 +1258,11 @@
     <string name="crownHunt_instrLiveBody">Collecting a crown while sharing a live session earns full Crown Points. Without live sharing, you earn fewer points.</string>
     <string name="crownHunt_liveShareTip">Tip: share a live session while collecting to earn full Crown Points.</string>
     <string name="crownHunt_trapHitOverlay">You hit a Spike Strip! −%1$d KP</string>
+    <string name="crownHunt_perkTrapEffect">Drains Crown Points from rivals who drive into it.</string>
+    <string name="crownHunt_perkDetailRemainingHms">%1$dh %2$dm left</string>
+    <string name="crownHunt_perkDetailRemainingMs">%1$dm %2$ds left</string>
+    <string name="crownHunt_perkDetailRemainingS">%1$ds left</string>
+    <string name="crownHunt_perkDetailExpired">Trap has expired</string>
     <string name="leaderboard_title">Leaderboard</string>
     <string name="leaderboard_scopeAllTime">All-time</string>
     <string name="leaderboard_scopeThisMonth">This month</string>

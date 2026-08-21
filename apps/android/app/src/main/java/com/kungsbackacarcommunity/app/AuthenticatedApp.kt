@@ -212,6 +212,7 @@ import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnLimits
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnPopup
 import com.kungsbackacarcommunity.app.crownhunt.CrownSpawnQuery
 import com.kungsbackacarcommunity.app.crownhunt.CrownZoomThinning
+import com.kungsbackacarcommunity.app.crownhunt.DeployedTrapPopup
 import com.kungsbackacarcommunity.app.crownhunt.LocalCrownHuntParticipationController
 import com.kungsbackacarcommunity.app.crownhunt.OwnDotPerkOverlay
 import com.kungsbackacarcommunity.app.crownhunt.OwnTrapMarker
@@ -5542,6 +5543,25 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // The placer's OWN deployed trap they tapped on the map, latched so its
+                // detail popup stays open (with a live countdown) until dismissed. The
+                // marker is immutable (its expiry is fixed at deploy), so the latched
+                // copy needs no re-resolution. Cleared when the perk map stands down so
+                // the popup cannot resurrect on re-entry.
+                var tappedTrap by remember { mutableStateOf<OwnTrapMarker?>(null) }
+                LaunchedEffect(perkMapActive) {
+                    if (!perkMapActive) tappedTrap = null
+                }
+                // Drop the popup if the tapped trap leaves the live set (triggered,
+                // expired-and-pruned, or removed) so it never describes a trap that is
+                // no longer on the map.
+                LaunchedEffect(perkMapOverlayState.ownTraps, tappedTrap) {
+                    val open = tappedTrap ?: return@LaunchedEffect
+                    if (perkMapOverlayState.ownTraps.none { it.trapId == open.trapId }) {
+                        tappedTrap = null
+                    }
+                }
+
                 // Gate each overlay at the CALL SITE so it isn't composed while idle:
                 // no rememberInfiniteTransition, no per-second ticker, zero wakes when
                 // there is nothing to draw. Mounts on activation, unmounts on expiry
@@ -5553,6 +5573,9 @@ fun AuthenticatedApp(
                                 SpikeStripOverlay(
                                     mapSurface = mapSurface,
                                     traps = perkMapOverlayState.ownTraps,
+                                    // Placer-only ⇒ owner-only: tapping opens the trap's
+                                    // detail popup (type, effect, live time remaining).
+                                    onTrapTap = { trap -> tappedTrap = trap },
                                 )
                             }
                             if (perkEffectActive) {
@@ -5564,6 +5587,15 @@ fun AuthenticatedApp(
                                         ?: perkOwnDeviceFix?.longitude,
                                     shieldActiveUntilMillis = perkMapOverlayState.shieldActiveUntilMillis,
                                     boostActiveUntilMillis = perkMapOverlayState.boostActiveUntilMillis,
+                                )
+                            }
+                            // The tapped-trap detail popup, inside the same perk-map
+                            // subtree so it unmounts with the layer. A Popup window, so
+                            // its on-screen position is independent of this slot.
+                            tappedTrap?.let { trap ->
+                                DeployedTrapPopup(
+                                    trap = trap,
+                                    onDismiss = { tappedTrap = null },
                                 )
                             }
                         }
