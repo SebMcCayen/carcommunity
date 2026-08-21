@@ -308,6 +308,99 @@ class ConvoyFocusTest {
         )
     }
 
+    // ---- a member joining/leaving bypasses the time throttle (#913) ---------
+
+    // Far enough outside the me/other box that including it materially changes
+    // the framed bounds (so the spatial gate fires).
+    private val joiner = ConvoyLatLng(57.6000, 12.3000)
+
+    @Test
+    fun `a member joining within the interval refits immediately, not on the next tick`() {
+        // The #913 bug: a fresh member joined OUTSIDE the frame only 200 ms after
+        // the last fit. The time throttle would suppress the re-fit and — if the
+        // convoy is parked, so no later tick arrives — strand them off-screen. A
+        // member-set change must reframe now.
+        assertTrue(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = listOf(me, other, joiner),
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a member leaving within the interval refits immediately`() {
+        // Symmetric: the set shrinking is also a discrete roster event, so tighten
+        // the frame at once rather than after the throttle.
+        assertTrue(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other, joiner),
+                next = listOf(me, other),
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a member joining INSIDE the existing box still does not move the camera`() {
+        // The set changed, but the joiner is already within the framed bounds, so
+        // the spatial gate (checked first) yields no fit: no pointless ease.
+        val insider = ConvoyLatLng(other.latitude - 0.001, other.longitude - 0.001)
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = listOf(me, other, insider),
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
+    }
+
+    @Test
+    fun `a same-size move within the interval is still throttled`() {
+        // The bypass is scoped to a set change: existing members merely spreading
+        // (same count) must still be throttled, or the seasick churn #770's throttle
+        // exists to stop would come back.
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = listOf(me, other),
+                next = spreadOut,
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
+    }
+
+    @Test
+    fun `memberSetChanged tracks the fitted point count for a real previous fit`() {
+        assertTrue(ConvoyFocusPlanner.memberSetChanged(listOf(me), listOf(me, other)))
+        assertTrue(ConvoyFocusPlanner.memberSetChanged(listOf(me, other), listOf(me)))
+        // Same count (a move, or a same-size swap) does not read as a set change.
+        assertFalse(ConvoyFocusPlanner.memberSetChanged(listOf(me, other), spreadOut))
+    }
+
+    @Test
+    fun `a null previous fit is not a set change, so a roster flicker cannot bypass the throttle`() {
+        // The surface resets appliedConvoyFit to null on a transient "nothing to
+        // frame" tick while KEEPING its throttle clock. That null must fall through
+        // to the time gate, not force an immediate refit — otherwise a flickering
+        // roster reintroduces the back-to-back refits #770 exists to stop.
+        assertFalse(ConvoyFocusPlanner.memberSetChanged(null, listOf(me, other)))
+        // And through shouldRefitNow: null applied fit, clock kept, only 200 ms on —
+        // the material change is throttled out rather than bypassed.
+        assertFalse(
+            ConvoyFocusPlanner.shouldRefitNow(
+                previous = null,
+                next = listOf(me, other),
+                lastFitAtMillis = 1_000L,
+                nowMillis = 1_200L,
+            ),
+        )
+    }
+
     // ---- zoom clamp (never building level, never a whole-country view) ------
 
     @Test
