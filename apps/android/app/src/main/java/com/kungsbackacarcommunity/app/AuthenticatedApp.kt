@@ -1196,6 +1196,17 @@ fun AuthenticatedApp(
             // "Go to chat" opens the route, so it is in place before ChatHubRoute
             // consumes it once.
             var chatHubRouteLink by remember { mutableStateOf<PushDeepLink?>(null) }
+            // One-shot consumption: ChatHubRoute applies the landing tab/channel once
+            // on entry (its own LaunchedEffect keyed on the link). Clear the link the
+            // moment the ChatHub route is no longer the open route, so returning to it
+            // via the back-stack — e.g. after opening a member profile from inside the
+            // hub and popping back — does NOT re-apply the landing and yank the member
+            // off whatever channel they had navigated to. On the "Go to chat" open the
+            // route becomes ChatHub in the same frame the link is set, so this never
+            // clears it before that first consumption.
+            LaunchedEffect(route) {
+                if (route != ShellRoute.ChatHub) chatHubRouteLink = null
+            }
 
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no

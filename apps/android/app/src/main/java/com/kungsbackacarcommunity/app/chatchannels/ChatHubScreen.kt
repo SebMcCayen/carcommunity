@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,7 @@ import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.paneTitle
@@ -123,9 +125,10 @@ private val PEEK_BUTTON_HEIGHT = 44.dp
  *
  * Must be composed inside the host window's full-screen [Box], last among its
  * siblings so it draws above the map and shell chrome. The translucent [Surface]
- * fills the screen and (like every Material `Surface`) blocks touches from reaching
- * the map / bottom bar behind it, so dismissal is only ever via its own two buttons
- * or Back — never a stray tap.
+ * fills the screen and swallows stray taps (a root `detectTapGestures {}` that the
+ * buttons/list, hit-tested first, take precedence over), so a tap on empty space
+ * cannot leak through to the map or the shell's bottom bar behind it — dismissal is
+ * only ever via its own two buttons or Back.
  */
 @Composable
 fun ChatPeekPage(
@@ -210,7 +213,15 @@ fun ChatPeekPage(
             modifier
                 .fillMaxSize()
                 .testTag(CHAT_PEEK_TEST_TAG)
-                .semantics { paneTitle = channelName },
+                .semantics { paneTitle = channelName }
+                // Full-screen touch modality: consume any tap that isn't caught by
+                // an interactive child (the two buttons, the message list), so a tap
+                // on empty peek space never falls through to the shell's bottom bar
+                // or the map. Deeper nodes are hit-tested first, so buttons and list
+                // still work; a plain tap (no drag) is all this consumes, so the list
+                // still scrolls. Mirrors the touch modality the old popup got from
+                // its shell-panel dismiss layer.
+                .pointerInput(Unit) { detectTapGestures {} },
         // Shared Aero translucency: the peek reads through to the live map a little,
         // exactly like the hub card and the map-overlay popups (see KccAlpha), so it
         // reads as one floating layer rather than a hard opaque page.
