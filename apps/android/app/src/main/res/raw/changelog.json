@@ -2,6 +2,25 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 41,
+      "versionName": "0.8.30",
+      "releaseDate": "2026-08-21",
+      "highlights": [
+        "Ny, tydligare ikonuppsättning i hela appen",
+        "Renare karta i Kronjakten när du zoomar ut",
+        "Chatten öppnas nu i en ny helskärmsvy"
+      ],
+      "changes": [
+        "Nya ikoner: omdesignade ikoner i hela appen (kronor, kartmarkörer och aviseringsikonen) för ett mer enhetligt utseende",
+        "Kronjakten: när du zoomar ut visas bara de mest värdefulla kronorna så kartan hålls ren, och kronor ritas nu under rutten så navigeringen aldrig döljs",
+        "Chatt: chatten öppnas i en tydlig helskärmsvy med knapparna Hem och Gå till chatten – både från chattikonen och från en avisering",
+        "Konvoj: kartan ramar in alla deltagare korrekt när någon ansluter till konvojen",
+        "Live-läge: färre felaktiga \"utanför skärmen\"-pilar för närliggande förare",
+        "Incidenter: snabbare återkoppling när du verifierar en incident",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 40,
       "versionName": "0.8.29",
       "releaseDate": "2026-08-20",
