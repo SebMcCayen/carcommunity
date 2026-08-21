@@ -169,7 +169,11 @@ fun DeployedTrapPopup(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
 
-                // Live remaining time — WITH numbers here (unlike the map bar).
+                // Live remaining time — WITH numbers here (unlike the map bar). Uses an
+                // accessible THEME colour (not the decorative #9B5CFF purple, which only
+                // clears ~3.7:1 on the translucent light surface — below WCAG AA 4.5:1
+                // for this text size): the purple identity stays on the trap ICON, the
+                // readable countdown meets contrast in both light and dark themes.
                 Text(
                     text = remainingClockText(clock),
                     modifier = Modifier.testTag(DEPLOYED_TRAP_REMAINING_TAG),
@@ -178,7 +182,7 @@ fun DeployedTrapPopup(
                         if (clock.isExpired) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
-                            TRAP_PURPLE
+                            MaterialTheme.colorScheme.primary
                         },
                 )
             }
