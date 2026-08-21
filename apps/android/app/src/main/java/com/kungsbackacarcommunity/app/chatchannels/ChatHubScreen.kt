@@ -7,8 +7,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
@@ -18,9 +22,13 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Badge
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -28,12 +36,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.ui.Alignment
@@ -43,11 +54,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.blocking.BlockingRepository
+import com.kungsbackacarcommunity.app.design.KccAlpha
 import com.kungsbackacarcommunity.app.design.KccSpacing
 import com.kungsbackacarcommunity.app.design.KccTypeScale
 import com.kungsbackacarcommunity.app.dm.ChatRoute
@@ -67,6 +81,265 @@ import com.kungsbackacarcommunity.app.shell.TranslucentShellPanel
 
 /** Test tag on the chat-hub root, so UI tests can assert it renders. */
 const val CHAT_HUB_TEST_TAG = "chat_hub"
+
+/** Test tag on the chat-peek landing page root, so UI tests can assert it renders. */
+const val CHAT_PEEK_TEST_TAG = "chat_peek"
+
+/** How many of the newest messages the read-only peek previews. */
+private const val PEEK_PREVIEW_MESSAGE_COUNT = 12
+
+/** Height of the peek's two bottom-bar buttons — ~44dp comfortable tap target. */
+private val PEEK_BUTTON_HEIGHT = 44.dp
+
+/**
+ * The full-screen, slightly-translucent "chat peek" landing page — the single
+ * surface both the map's chat ICON and a Community/Convoy chat NOTIFICATION now
+ * open, replacing the swipe-away [ChatHubPopup] testers disliked.
+ *
+ * It is a READ-ORIENTED PREVIEW, not the chat itself: it shows the newest messages
+ * of the context it was opened for and offers an explicit two-button bottom bar in
+ * place of the popup's swipe-to-dismiss gesture:
+ * - "Home" ([onHome]) dismisses back to the map (also the system-Back action);
+ * - "Go to chat" ([onGoToChat]) opens the full interactive chat for this context —
+ *   the specific channel from a notification, or the hub/Community default from the
+ *   icon — where the member reads and types normally.
+ *
+ * WHICH channel it previews is decided purely from [pushDeepLink], the same landing
+ * link the popup consumed:
+ * - `CONVOY_CHAT` with an id (a convoy notification, or the convoy-bar chat icon) →
+ *   that convoy's channel, its title resolved from `convoy-list`;
+ * - anything else, including a null link (the plain chat icon) and `COMMUNITY_CHAT`
+ *   → the Community channel.
+ *
+ * DMs never route here — they still open their full 1:1 thread directly.
+ *
+ * The preview reuses the SAME live Firestore read model the hub uses
+ * ([CommunityChatRepository.observeMessages] / [ConvoyChatRepository.observeMessages]);
+ * it invents no backend and deliberately does NOT mark the channel read — a glance
+ * is not "opened". Marking-read happens once the member commits via "Go to chat"
+ * and lands in the real channel route. Interactive affordances (composer, mentions,
+ * reply, profile taps, location links, moderation) are all left to that full chat;
+ * the peek is text only.
+ *
+ * Must be composed inside the host window's full-screen [Box], last among its
+ * siblings so it draws above the map and shell chrome. The translucent [Surface]
+ * fills the screen and (like every Material `Surface`) blocks touches from reaching
+ * the map / bottom bar behind it, so dismissal is only ever via its own two buttons
+ * or Back — never a stray tap.
+ */
+@Composable
+fun ChatPeekPage(
+    communityChatRepository: CommunityChatRepository?,
+    convoyChatRepository: ConvoyChatRepository?,
+    // The landing link naming WHERE the peek opened; see the KDoc. Null (the plain
+    // chat icon) previews Community.
+    pushDeepLink: PushDeepLink?,
+    onHome: () -> Unit,
+    onGoToChat: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Convoy peek iff the link names a convoy channel AND carries its id; every
+    // other case (null link, COMMUNITY_CHAT, a convoy link with no id) previews the
+    // Community channel — the hub's own default landing.
+    val convoyId =
+        pushDeepLink
+            ?.takeIf { it.target == PushTarget.CONVOY_CHAT }
+            ?.entityId
+            ?.takeIf { it.isNotBlank() }
+    val isConvoy = convoyId != null
+
+    // Reuse the hub's live message listener, unchanged: the convoy's channel when a
+    // convoy id is in hand, else the Community channel. Remembered on the inputs so
+    // the listener is not re-subscribed on every recomposition. Null when the
+    // backing repository is absent (config-less build) — the preview then shows the
+    // empty state rather than spinning forever.
+    val messagesFlow =
+        remember(convoyId, communityChatRepository, convoyChatRepository) {
+            when {
+                convoyId != null -> convoyChatRepository?.observeMessages(convoyId)
+                else -> communityChatRepository?.observeMessages()
+            }
+        }
+    val fallbackFlow = remember { emptyFlow<ChannelMessagesState>() }
+    val messagesState by (messagesFlow ?: fallbackFlow).collectAsState(
+        // With no flow to collect there is nothing to load: show the (empty)
+        // channel immediately rather than a spinner that never resolves.
+        initial =
+            if (messagesFlow == null) {
+                ChannelMessagesState.Loaded(emptyList())
+            } else {
+                ChannelMessagesState.Loading
+            },
+    )
+
+    // Convoy title for the header, resolved once from `convoy-list` (the same
+    // callable the Convoys tab uses). Until it resolves — or if it fails, or the
+    // convoy is not in the list — the neutral "Convoy" fallback stands, so the
+    // header is never blank. Community needs no lookup: its name is a constant.
+    val convoyFallbackTitle = stringResource(R.string.chatHub_convoyUntitled)
+    var resolvedConvoyTitle by remember(convoyId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(convoyId, convoyChatRepository) {
+        if (convoyId != null && convoyChatRepository != null) {
+            val listed = convoyChatRepository.listConvoys()
+            if (listed is ConvoyListState.Loaded) {
+                resolvedConvoyTitle =
+                    listed.convoys.firstOrNull { it.convoyId == convoyId }?.title
+            }
+        }
+    }
+
+    val channelName =
+        if (isConvoy) {
+            resolvedConvoyTitle ?: convoyFallbackTitle
+        } else {
+            stringResource(R.string.chatHub_tabCommunity)
+        }
+    val emptyText =
+        if (isConvoy) {
+            stringResource(R.string.channel_emptyConvoy)
+        } else {
+            stringResource(R.string.channel_emptyCommunity)
+        }
+
+    // Back returns to the map, exactly like the "Home" button — the peek is a
+    // landing surface, not a stop on the route back-stack.
+    BackHandler(enabled = true) { onHome() }
+
+    Surface(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .testTag(CHAT_PEEK_TEST_TAG)
+                .semantics { paneTitle = channelName },
+        // Shared Aero translucency: the peek reads through to the live map a little,
+        // exactly like the hub card and the map-overlay popups (see KccAlpha), so it
+        // reads as one floating layer rather than a hard opaque page.
+        color = MaterialTheme.colorScheme.surface.copy(alpha = KccAlpha.aeroSurface),
+    ) {
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding(),
+        ) {
+            // Header: the channel name + a quiet "Preview" label making the
+            // read-only intent explicit.
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = KccSpacing.s4, vertical = KccSpacing.s3),
+            ) {
+                Text(
+                    text = channelName,
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = stringResource(R.string.chatPeek_previewLabel),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            HorizontalDivider()
+
+            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                val loaded = messagesState as? ChannelMessagesState.Loaded
+                when {
+                    loaded == null ->
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                        )
+
+                    loaded.messages.isEmpty() ->
+                        Text(
+                            text = emptyText,
+                            modifier =
+                                Modifier
+                                    .align(Alignment.Center)
+                                    .padding(KccSpacing.s6),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+
+                    else -> {
+                        // The newest window, oldest-first like the hub renders it;
+                        // the tail is the "latest messages" the peek is about.
+                        val preview =
+                            loaded.messages.takeLast(PEEK_PREVIEW_MESSAGE_COUNT)
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding =
+                                androidx.compose.foundation.layout.PaddingValues(
+                                    horizontal = KccSpacing.s4,
+                                    vertical = KccSpacing.s2,
+                                ),
+                            verticalArrangement = Arrangement.spacedBy(KccSpacing.s2),
+                        ) {
+                            items(preview, key = { it.id }) { message ->
+                                ChatPeekMessageRow(message)
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider()
+            // The two-button bottom bar that replaces the swipe-away gesture.
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(KccSpacing.s4),
+                horizontalArrangement = Arrangement.spacedBy(KccSpacing.s3),
+            ) {
+                OutlinedButton(
+                    onClick = onHome,
+                    modifier = Modifier.weight(1f).height(PEEK_BUTTON_HEIGHT),
+                ) {
+                    Text(stringResource(R.string.chatPeek_home))
+                }
+                // "Go to chat" is the primary/accent action — a filled button.
+                Button(
+                    onClick = onGoToChat,
+                    modifier = Modifier.weight(1f).height(PEEK_BUTTON_HEIGHT),
+                ) {
+                    Text(stringResource(R.string.chatPeek_goToChat))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One read-only message line in the peek preview: the sender's name above their
+ * text. Deliberately plain — no avatar, mentions, reply quote, delivery status or
+ * tap targets — those all belong to the full channel behind "Go to chat".
+ */
+@Composable
+private fun ChatPeekMessageRow(message: ChannelMessage) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = message.senderDisplayName ?: stringResource(R.string.channel_unknownSender),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = message.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 4,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
 
 /**
  * The four sections of the chat hub, in the order they appear in the tab row AND
@@ -199,6 +472,14 @@ fun ChatHubRoute(
 }
 
 /**
+ * RETIRED from the production map shell. The map's chat icon and Community/Convoy
+ * chat notifications now open the full-screen [ChatPeekPage] instead of this
+ * swipe-away popup (testers disliked landing on a swipe-dismiss tab); "Go to chat"
+ * on the peek opens the full interactive chat via `ShellRoute.ChatHub`
+ * ([ChatHubRoute]). This composable is kept because it still shares [ChatHubContent]
+ * with the route form and is exercised directly by unit tests; nothing in
+ * `AuthenticatedApp` renders it any more.
+ *
  * The chat hub rendered as a TRANSLUCENT overlay *over* the map, via the shared
  * [TranslucentShellPanel] — the very same bottom-sheet-style panel the History,
  * Social and Garage tabs use. So the hub is dismissed the same three ways they

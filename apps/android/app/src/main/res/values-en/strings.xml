@@ -1529,6 +1529,9 @@
     <string name="chatHub_convoyCreated">Created %1$s</string>
     <string name="chatHub_convoyMemberOverflow">+%1$d</string>
     <string name="chatHub_convoyDatePattern">d MMM</string>
+    <string name="chatPeek_previewLabel">Preview</string>
+    <string name="chatPeek_home">Home</string>
+    <string name="chatPeek_goToChat">Go to chat</string>
     <string name="chatTime_today">Today</string>
     <string name="chatTime_yesterday">Yesterday</string>
     <string name="chatTime_daySeparatorFormat">EEEE, d MMMM</string>

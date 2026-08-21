@@ -224,8 +224,8 @@ import com.kungsbackacarcommunity.app.crownhunt.PerkShopRepository
 import com.kungsbackacarcommunity.app.crownhunt.SpikeStripOverlay
 import com.kungsbackacarcommunity.app.crownhunt.crownGlyphRes
 import com.kungsbackacarcommunity.app.crownhunt.crownPointGlyphRes
-import com.kungsbackacarcommunity.app.chatchannels.ChatHubPopup
 import com.kungsbackacarcommunity.app.chatchannels.ChatHubRoute
+import com.kungsbackacarcommunity.app.chatchannels.ChatPeekPage
 import com.kungsbackacarcommunity.app.chatchannels.CommunityChatRepository
 import com.kungsbackacarcommunity.app.chatchannels.ConvoyChatRepository
 import com.kungsbackacarcommunity.app.dm.ChatRoute
@@ -1185,6 +1185,18 @@ fun AuthenticatedApp(
                 if (!chatHubOpen) chatHubLandingLink = null
             }
 
+            // The landing link carried into the FULL interactive chat
+            // (ShellRoute.ChatHub / ChatHubRoute) when the member taps "Go to chat"
+            // on the peek — the specific convoy channel from a convoy peek, or null
+            // (Community default) from the icon / community peek. Deliberately NOT
+            // rememberSaveable, mirroring `chatHubLandingLink`: it is a one-shot
+            // intent for THIS open, and a process-death restore of the ChatHub route
+            // should land on the Community default (which is never wrong), not
+            // silently re-open a convoy the member did not ask for. Set the frame
+            // "Go to chat" opens the route, so it is in place before ChatHubRoute
+            // consumes it once.
+            var chatHubRouteLink by remember { mutableStateOf<PushDeepLink?>(null) }
+
             // Address-search + directions overlay ("Where to?"). The Mapbox
             // search/directions client is guarded: with a blank token (CI / no
             // token) every call no-ops to empty/null and never hits the network
@@ -1244,10 +1256,10 @@ fun AuthenticatedApp(
             // shell's ordinary route + payload state — the same assignments the
             // in-app affordances make — rather than a second navigation mechanism.
             //
-            // Chat-hub destinations open the SAME transparent ChatHubPopup the
-            // map's chat bubble raises — never the full opaque ShellRoute.ChatHub
-            // — so a notification lands on exactly the surface the in-app chat
-            // icon does; the rest map to a ShellRoute. See the COMMUNITY_CHAT /
+            // Chat-hub destinations open the SAME full-screen ChatPeekPage the
+            // map's chat icon raises — never the full opaque ShellRoute.ChatHub
+            // directly — so a notification lands on exactly the surface the in-app
+            // chat icon does; the rest map to a ShellRoute. See the COMMUNITY_CHAT /
             // CONVOY_CHAT branch below.
             //
             // Event id from an event-reminder push tap, opened by EventsRoute on
@@ -1284,22 +1296,22 @@ fun AuthenticatedApp(
                     PushTarget.COMMUNITY_CHAT,
                     PushTarget.CONVOY_CHAT,
                     -> {
-                        // Open the SAME transparent chat-hub popup the map's chat
-                        // bubble raises (chatHubOpen + chatHubLandingLink), NOT the
+                        // Open the SAME full-screen ChatPeekPage the map's chat
+                        // icon raises (chatHubOpen + chatHubLandingLink), NOT the
                         // full opaque ShellRoute.ChatHub — so the notification lands
                         // on the exact surface the in-app chat icon reaches. Force
-                        // the map home first so the popup's map-cover gate
+                        // the map home first so the peek's map-cover gate
                         // (ShellNavigation.chatHubAllowed) holds even on a cold start
                         // or from another tab: clear any open route, select the Map
                         // tab, AND ask the nav-search overlay to close — an open
                         // search makes mapCover Transparent, which would otherwise
                         // keep the gate shut and the auto-close effect would drop the
-                        // popup. Dismissing via a request (not a bare navSearchOpen
+                        // peek. Dismissing via a request (not a bare navSearchOpen
                         // flip) runs the overlay's FULL teardown — the same path
                         // onClose uses — so no stale route overlay or place preview
-                        // lingers. The popup opens the frame the overlay closes: the
+                        // lingers. The peek opens the frame the overlay closes: the
                         // gate only ever transitions shut→open here, so the auto-
-                        // close effect never fires against it. Then land on the
+                        // close effect never fires against it. Then preview the
                         // pushed channel via the landing link (Community, or a
                         // convoy's channel — the same param the convoy bar uses).
                         clearRoutes()
@@ -5112,12 +5124,13 @@ fun AuthenticatedApp(
                                 // Opens the friend picker and grows THIS convoy via
                                 // `convoy-invite`.
                                 onInvite = openConvoyInvite,
-                                // The convoy's CHAT: opens the same chat hub the
-                                // map's chat bubble opens — no second chat
+                                // The convoy's CHAT: opens the same ChatPeekPage the
+                                // map's chat icon opens — no second chat
                                 // presentation — but landed on this convoy's
-                                // channel via the hub's existing deep-link
-                                // parameter. Opening it is what marks the channel
-                                // read (ConvoyChannelRoute), so the badge clears
+                                // channel via the same deep-link parameter. The
+                                // peek is a preview; committing via "Go to chat"
+                                // opens the convoy channel (ConvoyChannelRoute),
+                                // which is what marks it read — so the badge clears
                                 // through the ordinary path rather than a second
                                 // one that could disagree with it. Null in a
                                 // config-less build, which omits the control.
@@ -5710,7 +5723,7 @@ fun AuthenticatedApp(
                         is3d = mapIs3d,
                         on3dEnabledChange = { mapSurface.set3dEnabled(it) },
                         // The map home's chat bubble + unread DOT, opening the
-                        // same hub popup.
+                        // full-screen ChatPeekPage (landing on Community; null link).
                         hasUnreadChat = anyChatUnread,
                         onOpenChat = { chatHubOpen = true },
                         // The map home's saved-places control, on the same shared
@@ -6003,12 +6016,15 @@ fun AuthenticatedApp(
                             clearRoutes()
                             selectedTab = ShellTab.Map
                         },
-                        // ShellRoute.ChatHub is no longer a push destination (chat
-                        // notifications open ChatHubPopup instead); this route now
-                        // renders only for migration-safe restore of older saved
-                        // state, which carries no push link — so land on the
-                        // Community default.
-                        chatHubPushLink = null,
+                        // ShellRoute.ChatHub is the FULL interactive chat that the
+                        // peek's "Go to chat" opens (chat notifications + the chat
+                        // icon land on ChatPeekPage first, never here directly). It
+                        // lands on the channel named by [chatHubRouteLink], set the
+                        // frame "Go to chat" opens the route: a convoy channel from a
+                        // convoy peek, or null (Community) from the icon / community
+                        // peek. Null on a migration-safe restore of older saved state
+                        // (the link is not saved), which correctly lands on Community.
+                        chatHubPushLink = chatHubRouteLink,
                         eventDeepLinkId = pendingEventDeepLinkId,
                         onEventDeepLinkConsumed = { pendingEventDeepLinkId = null },
                         convoyInviteDeepLinkId = pendingConvoyInviteId,
@@ -6247,11 +6263,11 @@ fun AuthenticatedApp(
                                     // message, a DM, or a notification. Cleared as
                                     // each source is read.
                                     hasUnreadChat = anyChatUnread,
-                                    // The chat bubble opens the chat hub
-                                    // (Community / Convoys / Friends +
-                                    // Notifications) as a TRANSPARENT popup over
-                                    // the map (map stays visible behind), not a
-                                    // full opaque route — see ChatHubPopup below.
+                                    // The chat bubble opens the full-screen
+                                    // ChatPeekPage — a read-only preview of the
+                                    // Community channel with a two-button bottom bar
+                                    // ("Home" / "Go to chat") — over the map, not a
+                                    // full opaque route. See ChatPeekPage below.
                                     onOpenChat = { chatHubOpen = true },
                                     // Crowd-sourced incidents layer: draw the
                                     // fetched markers for everyone, and show the
@@ -7788,19 +7804,21 @@ fun AuthenticatedApp(
                     isRecordingDrive = recordingState is RecordingState.Recording,
                 )
 
-                // Chat hub as a TRANSPARENT popup over the map (Issue 4): a focusable
-                // Popup with no dimming scrim and a translucent surface, so the live
-                // map stays visible behind it — matching the map-layers and
-                // live-share popups.
+                // Chat PEEK as a full-screen, slightly-translucent landing page over
+                // the map: the read-only preview + two-button bottom bar both the
+                // chat icon and Community/Convoy chat notifications open, replacing
+                // the swipe-away popup. Its translucent surface still reads through
+                // to the live map a little, matching the map-layers / live-share
+                // Aero surfaces.
                 //
-                // The gate: the popup floats over A MAP, so it may only show while
+                // The gate: the peek floats over A MAP, so it may only show while
                 // a map is the page in front — never over a full route, a non-map
                 // tab, or the nav-search overlay.
                 //
                 // Turn-by-turn USED to be excluded here as well, and that exclusion
                 // is now lifted: the navigation screen carries the map home's chat
                 // control (the two right-side stacks are the same set of buttons,
-                // by request), and a chat bubble that cannot open the hub is not
+                // by request), and a chat bubble that cannot open the peek is not
                 // the same button. Navigation is a full-screen map of its own, so
                 // the popup has exactly what it needs — a live map to float over.
                 //
@@ -7816,75 +7834,45 @@ fun AuthenticatedApp(
                     )
 
                 // Auto-close. `chatHubOpen` is rememberSaveable so a genuinely open
-                // (and still valid) hub survives process death — but the popup only
+                // (and still valid) peek survives process death — but it only
                 // RENDERS while the gate holds. Without this effect, losing the gate
-                // would hide the popup while leaving the flag set, and the hub would
-                // pop open again by itself the next time the user came back to the
-                // map. Keyed on the same derived gate, so no gate can be lost without
+                // would hide the peek while leaving the flag set, and it would pop
+                // open again by itself the next time the user came back to the map.
+                // Keyed on the same derived gate, so no gate can be lost without
                 // clearing the flag.
                 LaunchedEffect(chatHubGateOpen) {
                     if (!chatHubGateOpen) chatHubOpen = false
                 }
 
-                val chatHubVisible = chatHubOpen && chatHubGateOpen
-                if (chatHubVisible) {
-                    ChatHubPopup(
-                        uid = uid,
+                val chatPeekVisible = chatHubOpen && chatHubGateOpen
+                if (chatPeekVisible) {
+                    // The full-screen "chat peek" landing page — the single surface
+                    // both the chat icon and Community/Convoy chat notifications open
+                    // (see the icon handlers and the COMMUNITY_CHAT / CONVOY_CHAT push
+                    // branch, which set `chatHubLandingLink` + `chatHubOpen`). It is a
+                    // READ-ONLY preview of the linked channel, with an explicit
+                    // two-button bottom bar in place of the old swipe-away popup.
+                    ChatPeekPage(
                         communityChatRepository = communityChatRepository,
                         convoyChatRepository = convoyChatRepository,
-                        friendsRepository = friendsRepository,
-                        dmRepository = dmRepository,
-                        notificationsRepository = notificationsRepository,
-                        notificationsCoordinator = notificationsCoordinator,
-                        communityUnread = communityChatUnread,
-                        convoysUnread = anyConvoyChatUnread,
-                        friendsUnread = dmUnread,
-                        notificationsUnread = notificationsUnread,
-                        onClose = { chatHubOpen = false },
-                        // Tapping a shared location link in a message closes the
-                        // hub and shows that point on the map IN-APP (the same
-                        // move-to-point flow the map's own gestures use) — never an
-                        // external maps app.
-                        onShowLocationOnMap = { lat, lng ->
-                            chatHubOpen = false
-                            moveMapToPoint(lat, lng, sharedLocationName)
-                        },
-                        // Null for a plain chat-bubble tap (lands on Community);
-                        // set by the convoy bar's chat icon so the hub opens on
-                        // that convoy's channel. Cleared on close by the effect
-                        // beside `chatHubOpen`.
+                        // Null (plain chat icon / COMMUNITY_CHAT) previews Community;
+                        // a CONVOY_CHAT link (convoy notification or the convoy bar's
+                        // chat icon) previews that convoy's channel. Cleared on close
+                        // by the effect beside `chatHubOpen`.
                         pushDeepLink = chatHubLandingLink,
-                        convoyLink = convoyNotificationLink,
-                        onOpenEvent = openEventFromNotification,
-                        // Tapping a sender in a channel / the DM title opens their
-                        // read-only profile — a shell ROUTE, which the hub popup's
-                        // gate (route == null) does not survive. Close the hub
-                        // explicitly rather than leaning on the auto-close effect,
-                        // so the flag is cleared in the same frame as the
-                        // navigation and never lingers set behind the route.
-                        // Guarded: no profile repository (config-less build) leaves
-                        // the affordances inert instead of closing the hub for a
-                        // route that could only spin.
-                        onViewProfile =
-                            if (memberProfileRepository != null) {
-                                { targetUid ->
-                                    if (targetUid.isNotBlank()) {
-                                        chatHubOpen = false
-                                        openMemberProfile(targetUid)
-                                    }
-                                }
-                            } else {
-                                null
-                            },
-                        // Backs the block action on the long-press message sheet.
-                        // Unlike onViewProfile this must NOT close the hub: the
-                        // sheet and its confirm dialog compose inside it, and
-                        // blocking from chat should leave the user where they were.
-                        blockingRepository = blockingRepository,
-                        // Gates the inline reply-to-message entry point across the
-                        // channels + DMs. Default OFF, so replies stay dark until
-                        // the flag is switched on.
-                        chatRepliesEnabled = flags.isEnabled(FeatureFlag.CHAT_REPLIES),
+                        // "Home" (and system Back) dismisses to the map.
+                        onHome = { chatHubOpen = false },
+                        // "Go to chat" opens the FULL interactive chat for this
+                        // context: carry the peek's landing link into the ChatHub
+                        // route, close the peek, and open the route as a fresh
+                        // top-level stack (Back returns to the map). Reading
+                        // `chatHubLandingLink` before flipping `chatHubOpen` captures
+                        // it before the close effect clears it.
+                        onGoToChat = {
+                            chatHubRouteLink = chatHubLandingLink
+                            chatHubOpen = false
+                            openRootRoute(ShellRoute.ChatHub)
+                        },
                     )
                 }
 

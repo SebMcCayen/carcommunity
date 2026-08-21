@@ -1645,6 +1645,11 @@
     "convoyMemberOverflow": "+%1$d",
     "convoyDatePattern": "d MMM"
   },
+  "chatPeek": {
+    "previewLabel": "Förhandsvisning",
+    "home": "Hem",
+    "goToChat": "Gå till chatten"
+  },
   "chatTime": {
     "today": "Idag",
     "yesterday": "Igår",
