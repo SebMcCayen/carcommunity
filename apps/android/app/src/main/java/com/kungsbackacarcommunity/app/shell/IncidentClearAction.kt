@@ -2,9 +2,7 @@ package com.kungsbackacarcommunity.app.shell
 
 import android.content.Context
 import com.kungsbackacarcommunity.app.crownhunt.CrownLocation
-import com.kungsbackacarcommunity.app.incidents.ClearOutcome
 import com.kungsbackacarcommunity.app.incidents.IncidentClearFix
-import com.kungsbackacarcommunity.app.incidents.IncidentReportController
 import java.time.Instant
 
 /**
@@ -40,46 +38,4 @@ suspend fun currentIncidentClearFix(context: Context): IncidentClearFix? {
         // gains nothing by lying.
         isMock = fix.isMock == true,
     )
-}
-
-/**
- * The details sheet's "Nej, den är borta" action: votes that an incident is GONE
- * and reports the outcome so the caller can raise the right snackbar.
- *
- * Lives outside the composable for the same reason [runIncidentConfirmation] and
- * [runIncidentRemoval] do — the SHEET LIFETIME rule, which is easy to get wrong
- * and impossible to assert from inside `AuthenticatedApp`:
- *
- *  - **Voted** (including an idempotent repeat, and including the case where the
- *    vote only FADED the incident rather than removing it) → the tap is consumed
- *    and the sheet closes. The action is terminal for this member: they have said
- *    their piece, and re-opening later shows the updated tallies. Leaving a
- *    now-inert button live would only invite a second tap that does nothing.
- *
- *  - **Rejected or failed** → the tap is left alone, so the sheet stays open.
- *    That is exactly when the user needs it: a rejection carries an actionable
- *    reason ("drive closer"), and leaving the sheet up is what lets them act on
- *    it and retry. Closing on a rejection would hide both the reason and the
- *    incident it was about.
- *
- *  - **NoLocation** → also leaves the sheet open. Nothing was sent, and the user
- *    may be about to turn location on.
- *
- * The voted case consumes the tap ONLY IF the pending tap is still the incident
- * that was voted on. `incidentTap` is a single slot, not a queue, so an
- * unconditional consume could clear a DIFFERENT incident the user tapped while
- * this call was in flight — closing a sheet nobody asked to close. Same guard as
- * [runIncidentConfirmation].
- */
-suspend fun runIncidentClearVote(
-    controller: IncidentReportController,
-    mapSurface: MapSurface,
-    incidentId: String,
-    fixProvider: suspend () -> IncidentClearFix?,
-): ClearOutcome {
-    val outcome = controller.reportCleared(incidentId, fixProvider)
-    if (outcome is ClearOutcome.Success && mapSurface.incidentTap.value == incidentId) {
-        mapSurface.consumeIncidentTap()
-    }
-    return outcome
 }

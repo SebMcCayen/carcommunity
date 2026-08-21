@@ -201,38 +201,48 @@ class IncidentReportController(
      * new confirmation count on [nearbyIncidents], so an open sheet/marker updates
      * without a refetch.
      *
-     * The local count is patched only AFTER the backend accepts: a rejected
-     * confirmation (the reporter cannot confirm their own report; an expired or
-     * imported incident cannot be confirmed) leaves the count untouched.
-     * Cancellation propagates; any other failure returns [ConfirmOutcome.Failed].
+     * OPTIMISTIC, so the tap feels instant: the shared count is bumped the moment
+     * this is called — before the callable round-trip — and only THEN reconciled to
+     * the authoritative numbers from the response (the reconcile also carries the
+     * clear-vote switch that un-fades a re-corroborated marker, and settles an
+     * idempotent repeat that did not actually move the count back to the real
+     * value). A rejected confirmation (the reporter cannot confirm their own report;
+     * an expired or imported incident cannot be confirmed) ROLLS THE OPTIMISTIC BUMP
+     * BACK, so a call the server refused never leaves a phantom confirmation on the
+     * map. Cancellation propagates (after rolling back); any other failure returns
+     * [ConfirmOutcome.Failed].
      */
     suspend fun confirm(incidentId: String): ConfirmOutcome {
+        // Snapshot the marker as it was, so a rejection/failure can restore exactly
+        // it rather than a wholesale list revert that would clobber a concurrent poll.
+        val before = nearbyFlow.value.firstOrNull { it.id == incidentId }
+        // Optimistic: move the tally now, ahead of the round-trip.
+        patchNearby(incidentId) { incident ->
+            incident.copy(confirmationCount = incident.confirmationCount + 1)
+        }
         return try {
             val result = repository.confirm(incidentId)
-            nearbyFlow.value =
-                nearbyFlow.value.map { incident ->
-                    if (incident.id == incidentId) {
-                        // The clear-vote fields move too: a confirmation can SWITCH
-                        // the caller's earlier "it's gone" vote, which un-fades the
-                        // marker. Patching only the confirmation count would leave a
-                        // re-corroborated hazard drawn as questioned until the next
-                        // poll — the wrong way round to be stale.
-                        incident.copy(
-                            confirmationCount = result.confirmationCount,
-                            clearedCount = result.clearedCount,
-                            reportedCleared = result.reportedCleared,
-                        )
-                    } else {
-                        incident
-                    }
-                }
+            // Reconcile to the AUTHORITATIVE counts, overwriting the optimistic
+            // guess. The clear-vote fields move too: a confirmation can SWITCH the
+            // caller's earlier "it's gone" vote, which un-fades the marker. Patching
+            // only the confirmation count would leave a re-corroborated hazard drawn
+            // as questioned until the next poll — the wrong way round to be stale.
+            patchNearby(incidentId) { incident ->
+                incident.copy(
+                    confirmationCount = result.confirmationCount,
+                    clearedCount = result.clearedCount,
+                    reportedCleared = result.reportedCleared,
+                )
+            }
             ConfirmOutcome.Success(
                 confirmationCount = result.confirmationCount,
                 alreadyConfirmed = result.alreadyConfirmed,
             )
         } catch (cancellation: CancellationException) {
+            restoreNearby(before)
             throw cancellation
         } catch (error: Throwable) {
+            restoreNearby(before)
             ConfirmOutcome.Failed(error)
         }
     }
@@ -247,29 +257,54 @@ class IncidentReportController(
      * [ClearOutcome.NoLocation] and NOTHING is sent — there is no useful request
      * to make without one.
      *
-     * The local list is patched only AFTER the backend accepts, and follows the
-     * outcome exactly:
+     * OPTIMISTIC, so the tap feels instant: the marker is faded and its clear tally
+     * bumped the MOMENT the vote is cast — BEFORE we even wait on [fixProvider] (a
+     * fresh high-accuracy fix that can take a second or two) let alone the round-trip
+     * — so the reaction is felt now instead of after GPS plus the callable. The
+     * optimistic change is a FADE ONLY, never a removal: a single vote weakens a
+     * marker below threshold, it does not delete it (the backend owns that decision),
+     * and drawing it as gone would be a lie the reconcile might have to take back.
+     *
+     * The list is then reconciled to the outcome exactly:
      *  - `removed` ⇒ the marker is dropped, because it is off everyone's map;
      *  - otherwise the counts and the fade flag are taken FROM THE RESPONSE, not
-     *    inferred. The threshold and tie-breaking rules live on the backend, and
-     *    a second copy of them here would be one more place for them to drift —
-     *    with "live hazard drawn as stale" as the failure mode.
+     *    inferred, overwriting the optimistic guess. The threshold and tie-breaking
+     *    rules live on the backend, and a second copy of them here would be one more
+     *    place for them to drift — with "live hazard drawn as stale" as the failure
+     *    mode.
      *
-     * A rejection leaves the list untouched, so a vote that did not count never
-     * dims a marker that is still live for everyone else.
+     * No fix, a rejection, or a failure ROLLS THE OPTIMISTIC FADE BACK, so a vote
+     * that did not count never dims a marker that is still live for everyone else.
      */
     suspend fun reportCleared(
         incidentId: String,
         fixProvider: suspend () -> IncidentClearFix?,
     ): ClearOutcome {
+        // Snapshot the marker as it was, so any bail-out restores exactly it rather
+        // than a wholesale list revert that would clobber a concurrent poll.
+        val before = nearbyFlow.value.firstOrNull { it.id == incidentId }
+        // Optimistic fade FIRST — ahead of both the GPS fix and the round-trip.
+        patchNearby(incidentId) { incident ->
+            incident.copy(
+                clearedCount = incident.clearedCount + 1,
+                reportedCleared = true,
+            )
+        }
+
         val fix =
             try {
                 fixProvider()
             } catch (cancellation: CancellationException) {
+                restoreNearby(before)
                 throw cancellation
             } catch (_: Throwable) {
                 null
-            } ?: return ClearOutcome.NoLocation
+            }
+        if (fix == null) {
+            // Nothing is sent without a position, so the optimistic fade is undone.
+            restoreNearby(before)
+            return ClearOutcome.NoLocation
+        }
 
         return try {
             val result = repository.reportCleared(incidentId, fix)
@@ -297,10 +332,13 @@ class IncidentReportController(
                 alreadyVoted = result.alreadyVoted,
             )
         } catch (cancellation: CancellationException) {
+            restoreNearby(before)
             throw cancellation
         } catch (rejected: IncidentClearRejectedException) {
+            restoreNearby(before)
             ClearOutcome.Rejected(rejected.rejection)
         } catch (error: Throwable) {
+            restoreNearby(before)
             ClearOutcome.Failed(error)
         }
     }
@@ -312,6 +350,31 @@ class IncidentReportController(
     private fun add(incident: Incident) {
         nearbyFlow.value =
             nearbyFlow.value.filterNot { it.id == incident.id } + incident
+    }
+
+    /**
+     * Applies [transform] to the single incident [incidentId] in place on the
+     * shared layer, keyed by id and leaving every other marker untouched. A no-op
+     * when the id is not present. Used for the optimistic patch AND the reconcile
+     * on [confirm]/[reportCleared], so both are safe against a concurrent poll that
+     * has replaced the list around them.
+     */
+    private fun patchNearby(incidentId: String, transform: (Incident) -> Incident) {
+        nearbyFlow.value =
+            nearbyFlow.value.map { if (it.id == incidentId) transform(it) else it }
+    }
+
+    /**
+     * Rolls an optimistic patch back by restoring [before] — the incident as it was
+     * before the patch — in place, keyed by id. A null [before] (the incident was
+     * not on the layer to begin with) is a no-op, and an incident a concurrent poll
+     * has since dropped is deliberately NOT re-added: restoring a marker the live
+     * layer already removed would be exactly the stale write this guards against.
+     */
+    private fun restoreNearby(before: Incident?) {
+        if (before == null) return
+        nearbyFlow.value =
+            nearbyFlow.value.map { if (it.id == before.id) before else it }
     }
 
     /**

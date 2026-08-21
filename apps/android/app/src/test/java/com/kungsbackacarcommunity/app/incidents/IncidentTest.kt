@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.incidents
 
 import com.kungsbackacarcommunity.app.navigation.LatLng
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
@@ -950,6 +951,55 @@ class IncidentReportControllerTest {
         val thrown = catchCancellation { controller.confirm("x") }
         assertTrue("cancellation must propagate, not become Failed", thrown is CancellationException)
     }
+
+    @Test
+    fun `confirm bumps the marker OPTIMISTICALLY before the backend answers, then reconciles`() =
+        runTest {
+            // The whole point of the optimistic path: the tally moves the instant
+            // the vote is cast, not after the round-trip — and then settles to the
+            // AUTHORITATIVE count from the response (which may differ, because other
+            // members confirmed too), never staying on the local guess.
+            val gate = CompletableDeferred<Unit>()
+            val seeded =
+                listOf(Incident("theirs", IncidentType.HAZARD, 12.0, 57.5, confirmationCount = 4))
+            val repository =
+                object : IncidentRepository {
+                    override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                        error("unused")
+
+                    override suspend fun listNearby(center: LatLng, radiusMeters: Double) = seeded
+
+                    override suspend fun remove(incidentId: String) = Unit
+
+                    override suspend fun confirm(incidentId: String): IncidentConfirmResult {
+                        gate.await()
+                        return IncidentConfirmResult(9, false)
+                    }
+
+                    override suspend fun reportCleared(incidentId: String, fix: IncidentClearFix) =
+                        IncidentClearResult(0, 0, false, removed = false, alreadyVoted = false)
+                }
+            val controller = IncidentReportController(repository) { here }
+            controller.refresh(here)
+
+            val call = launch { controller.confirm("theirs") }
+            runCurrent()
+
+            // Optimistic: +1 on the local count while the callable is parked on the gate.
+            assertEquals(
+                5,
+                controller.nearbyIncidents.value.first { it.id == "theirs" }.confirmationCount,
+            )
+
+            gate.complete(Unit)
+            call.join()
+
+            // Reconciled to the authoritative count, overwriting the optimistic guess.
+            assertEquals(
+                9,
+                controller.nearbyIncidents.value.first { it.id == "theirs" }.confirmationCount,
+            )
+        }
 }
 
 /**
@@ -1212,5 +1262,74 @@ class IncidentClearVoteTest {
         assertEquals(1, marker.confirmationCount)
         assertEquals(0, marker.clearedCount)
         assertFalse(marker.reportedCleared)
+    }
+
+    @Test
+    fun `a vote fades the marker OPTIMISTICALLY before the fix and round-trip, then reconciles`() =
+        runTest {
+            // The reason the tap feels instant: the fade + tally land the moment the
+            // vote is cast — ahead of BOTH the GPS fix and the callable — and then
+            // settle to the authoritative tally from the response.
+            val gate = CompletableDeferred<Unit>()
+            val seeded = listOf(incidentAt("gone-maybe"))
+            val repository =
+                object : IncidentRepository {
+                    override suspend fun report(type: IncidentType, location: LatLng, note: String?) =
+                        error("unused")
+
+                    override suspend fun listNearby(center: LatLng, radiusMeters: Double) = seeded
+
+                    override suspend fun remove(incidentId: String) = Unit
+
+                    override suspend fun confirm(incidentId: String) = IncidentConfirmResult(0, false)
+
+                    override suspend fun reportCleared(
+                        incidentId: String,
+                        fix: IncidentClearFix,
+                    ): IncidentClearResult {
+                        gate.await()
+                        return IncidentClearResult(
+                            clearedCount = 3,
+                            confirmationCount = 0,
+                            reportedCleared = true,
+                            removed = false,
+                            alreadyVoted = false,
+                        )
+                    }
+                }
+            val controller = controllerSeededWith(repository, seeded)
+
+            val call = launch { controller.reportCleared("gone-maybe") { fix } }
+            runCurrent()
+
+            // Optimistic: faded and tallied while the callable is parked on the gate.
+            val mid = controller.nearbyIncidents.value.single()
+            assertTrue("marker should be faded optimistically", mid.reportedCleared)
+            assertEquals(1, mid.clearedCount)
+
+            gate.complete(Unit)
+            call.join()
+
+            // Reconciled to the authoritative tally from the response.
+            val done = controller.nearbyIncidents.value.single()
+            assertTrue(done.reportedCleared)
+            assertEquals(3, done.clearedCount)
+        }
+
+    @Test
+    fun `no fix rolls the optimistic fade back off the marker`() = runTest {
+        // The fade is applied before the fix is even requested, so a vote that
+        // cannot get a position must leave the marker exactly as it was — not dimmed
+        // for a vote that was never sent.
+        val seeded = listOf(incidentAt("i1"))
+        val repository = FakeIncidentRepository(nearby = seeded)
+        val controller = controllerSeededWith(repository, seeded)
+
+        val outcome = controller.reportCleared("i1") { null }
+
+        assertSame(ClearOutcome.NoLocation, outcome)
+        val marker = controller.nearbyIncidents.value.single()
+        assertEquals("optimistic tally must be rolled back", 0, marker.clearedCount)
+        assertFalse("optimistic fade must be rolled back", marker.reportedCleared)
     }
 }
