@@ -93,6 +93,7 @@ fun TurnByTurnNavScreen(
     // perk-deploy control + its host callback). Unused: this stub owns no map.
     @Suppress("UNUSED_PARAMETER") crownHuntPerksEnabled: Boolean = false,
     @Suppress("UNUSED_PARAMETER") onOpenPerks: () -> Unit = {},
+    @Suppress("UNUSED_PARAMETER") perkActive: Boolean = false,
     @Suppress("UNUSED_PARAMETER") liveSessionBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") convoyBar: (@Composable () -> Unit)? = null,
     @Suppress("UNUSED_PARAMETER") liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,

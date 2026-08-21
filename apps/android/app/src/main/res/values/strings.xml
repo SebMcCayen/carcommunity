@@ -1649,6 +1649,7 @@
     <string name="shell_locationSharedFriendFallback">din vän</string>
     <string name="shell_locationShareFailed">Det gick inte att dela platsen. Försök igen.</string>
     <string name="shell_perksButton">Använd perk</string>
+    <string name="shell_perksButtonActive">Använd perk · aktiva perkar</string>
     <string name="addressSearch_searchPlaceholder">Sök adress eller plats</string>
     <string name="addressSearch_back">Tillbaka</string>
     <string name="addressSearch_clearQuery">Rensa sökning</string>

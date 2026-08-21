@@ -386,6 +386,11 @@ fun TurnByTurnNavScreen(
     // simply omit the control.
     crownHuntPerksEnabled: Boolean = false,
     onOpenPerks: () -> Unit = {},
+    // Whether the member has at least one perk live right now (shield / boost /
+    // own-trap). Tints the perk control discreetly while driving, matching the map
+    // home; reverts when the last perk expires. Defaulted so perk-less callers
+    // render it untinted.
+    perkActive: Boolean = false,
     liveSessionBar: (@Composable () -> Unit)? = null,
     convoyBar: (@Composable () -> Unit)? = null,
     liveMembersOverlay: (@Composable (MapProjection) -> Unit)? = null,
@@ -996,7 +1001,7 @@ fun TurnByTurnNavScreen(
                                 // (usable while driving). Present only while the
                                 // crownHuntPerks flag is on.
                                 MapCircleControlKind.Perks ->
-                                    PerkDeployCircleControl(onClick = onOpenPerks)
+                                    PerkDeployCircleControl(onClick = onOpenPerks, active = perkActive)
                             }
                         }
                 }

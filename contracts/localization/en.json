@@ -1769,7 +1769,8 @@
     "locationShared": "Location shared with %1$s",
     "locationSharedFriendFallback": "your friend",
     "locationShareFailed": "Couldn't share the location. Try again.",
-    "perksButton": "Use a perk"
+    "perksButton": "Use a perk",
+    "perksButtonActive": "Use a perk · active perks"
   },
   "addressSearch": {
     "searchPlaceholder": "Search address or place",

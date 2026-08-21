@@ -5542,6 +5542,41 @@ fun AuthenticatedApp(
                     }
                 }
 
+                // DISCREET active-perk tint for the right-side perk control: true
+                // while the member has ANY perk live right now (a shield, a boost,
+                // or a deployed own-trap that hasn't expired), reverting to the
+                // button's original appearance the moment the last one expires.
+                // Same self-terminating 1s ticker shape as perkEffectActive above,
+                // but keyed on the LATER of all three expiries — traps included, so
+                // an armed trap keeps the tint lit even with no shield/boost — and
+                // re-evaluated with the pure PerkMapVisuals.hasAnything predicate the
+                // overlay uses. Nothing wakes at all while no perk has been deployed
+                // (null latest expiry sets false and the loop never starts).
+                val latestPerkExpiry =
+                    laterOf(
+                        ownEffectExpiry,
+                        perkMapOverlayState.ownTraps.maxOfOrNull { it.expiresAtMillis },
+                    )
+                var hasActivePerk by remember { mutableStateOf(false) }
+                LaunchedEffect(perkMapActive, latestPerkExpiry) {
+                    if (!perkMapActive || latestPerkExpiry == null) {
+                        hasActivePerk = false
+                        return@LaunchedEffect
+                    }
+                    while (true) {
+                        val active =
+                            PerkMapVisuals.hasAnything(
+                                perkMapOverlayState.ownTraps,
+                                perkMapOverlayState.shieldActiveUntilMillis,
+                                perkMapOverlayState.boostActiveUntilMillis,
+                                System.currentTimeMillis(),
+                            )
+                        hasActivePerk = active
+                        if (!active) break
+                        delay(1_000L)
+                    }
+                }
+
                 // Gate each overlay at the CALL SITE so it isn't composed while idle:
                 // no rememberInfiniteTransition, no per-second ticker, zero wakes when
                 // there is nothing to draw. Mounts on activation, unmounts on expiry
@@ -5773,6 +5808,7 @@ fun AuthenticatedApp(
                         // (usable while driving). Gated on the crownHuntPerks flag.
                         crownHuntPerksEnabled = crownHuntPerksEnabled,
                         onOpenPerks = { perkDeployOpen = true },
+                        perkActive = hasActivePerk,
                         // The ongoing live-session pill (elapsed + distance +
                         // speed). Starting turn-by-turn navigation used to hide it
                         // along with the whole map-home chrome; a session that is
@@ -6353,6 +6389,7 @@ fun AuthenticatedApp(
                                     // change to the map.
                                     crownHuntPerksEnabled = crownHuntPerksEnabled,
                                     onOpenPerks = { perkDeployOpen = true },
+                                    perkActive = hasActivePerk,
                                     // Live-session pill in the top search strip
                                     // (between the search icon and the avatar) while
                                     // a session runs: elapsed time + distance driven.

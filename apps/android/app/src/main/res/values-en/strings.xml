@@ -1649,6 +1649,7 @@
     <string name="shell_locationSharedFriendFallback">your friend</string>
     <string name="shell_locationShareFailed">Couldn\'t share the location. Try again.</string>
     <string name="shell_perksButton">Use a perk</string>
+    <string name="shell_perksButtonActive">Use a perk · active perks</string>
     <string name="addressSearch_searchPlaceholder">Search address or place</string>
     <string name="addressSearch_back">Back</string>
     <string name="addressSearch_clearQuery">Clear search</string>
