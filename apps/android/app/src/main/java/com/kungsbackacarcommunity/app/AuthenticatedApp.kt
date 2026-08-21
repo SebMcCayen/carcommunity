@@ -5546,14 +5546,25 @@ fun AuthenticatedApp(
                 // The placer's OWN deployed trap they tapped on the map, latched so its
                 // detail popup stays open (with a live countdown) until dismissed. The
                 // marker is immutable (its expiry is fixed at deploy), so the latched
-                // copy needs no re-resolution. Cleared when the perk map stands down OR
-                // the map is covered by opaque chrome (a full-screen tab / nav route):
-                // [DeployedTrapPopup] draws in its OWN window, so without this it would
-                // float above unrelated content and be preserved for the return — it
-                // must close when navigating away, like any other map overlay.
-                var tappedTrap by remember { mutableStateOf<OwnTrapMarker?>(null) }
+                // copy needs no re-resolution.
+                //
+                // SCOPED TO [uid]: Firebase can swap one signed-in user for another
+                // WITHOUT leaving the SignedIn branch, and the new account's own-trap
+                // listener is still loading at that instant — a uid-agnostic latch could
+                // briefly render the PREVIOUS account's private trap coordinates to the
+                // new user. Keying the remember on uid drops the latch the moment the
+                // account changes, and the explicit clear below closes any open popup
+                // before it can recompose with stale data.
+                var tappedTrap by remember(uid) { mutableStateOf<OwnTrapMarker?>(null) }
+                LaunchedEffect(uid) { tappedTrap = null }
+                // Cleared when the perk map stands down OR the map is covered by ANY
+                // chrome (a full-screen tab / nav route, or a translucent History /
+                // Social / Garage panel — every non-None cover composes MapHome with
+                // covered=true): [DeployedTrapPopup] draws in its OWN window, so without
+                // this it would float over that content and be preserved for the return.
+                // It must close when navigating away, like any other map transient UI.
                 LaunchedEffect(perkMapActive, mapCover) {
-                    if (!perkMapActive || mapCover == MapCover.Opaque) tappedTrap = null
+                    if (!perkMapActive || mapCover != MapCover.None) tappedTrap = null
                 }
                 // Drop the popup if the tapped trap leaves the live set (triggered,
                 // expired-and-pruned, or removed) so it never describes a trap that is
