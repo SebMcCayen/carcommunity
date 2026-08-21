@@ -6,13 +6,17 @@
  *  - `crownHunt.claimSpawn` (auto-spawned crowns), and
  *  - `crownHunt.submitClaim` (hand-placed admin points),
  * in each of three states:
- *  (a) flag ON + an ACTIVE live session in RTDB  → full Kronpoäng (multiplier 1);
- *  (b) flag ON + NO live session                 → half Kronpoäng (× 0.5, rounded);
- *  (c) flag OFF                                   → full Kronpoäng (rule dark).
+ *  (a) flag ON + an ACTIVE live session  → full Kronpoäng (multiplier 1);
+ *  (b) flag ON + NO active session       → half Kronpoäng (× 0.5, rounded);
+ *  (c) flag OFF                          → full Kronpoäng (rule dark).
  *
  * The live-sharing signal is the RTDB session node the live domain writes
- * (liveLocation/{uid}/session); these tests seed it directly, exactly the shape
- * resolveLiveShareMultiplier reads.
+ * (liveLocation/{uid}/session). These tests drive it through the REAL
+ * `live.startSession` / `live.stopSession` callables rather than seeding RTDB
+ * directly, so the session lands in exactly the database namespace the
+ * functions runtime — and therefore `resolveLiveShareMultiplier` — reads. A
+ * stopped session is a well-formed but inactive node, so it still exercises the
+ * "confirmed not sharing → halve" branch.
  *
  * The shared emulator Firestore is why the base flags are set in beforeAll and
  * crownHuntLiveShareScoring is reset to its contract default (false) in afterAll
@@ -43,7 +47,6 @@ import {
 } from 'firebase/functions';
 import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getDatabase as getAdminDatabase } from 'firebase-admin/database';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -53,16 +56,9 @@ const REGION = 'europe-west1';
 
 const adminApp =
   getAdminApps()[0] ??
-  initializeAdminApp(
-    {
-      projectId: PROJECT_ID,
-      databaseURL: `http://${EMULATOR_HOST}:9000?ns=${PROJECT_ID}-default-rtdb`,
-    },
-    'liveshare-scoring-emulator-tests',
-  );
+  initializeAdminApp({ projectId: PROJECT_ID }, 'liveshare-scoring-emulator-tests');
 const adminAuth = getAdminAuth(adminApp);
 const adminDb = getAdminFirestore(adminApp);
-const adminRtdb = getAdminDatabase(adminApp);
 
 let app: FirebaseApp;
 let auth: Auth;
@@ -122,17 +118,24 @@ async function ageAccount(uid: string): Promise<void> {
     );
 }
 
-/** Seed / clear the RTDB live-session node the multiplier reads. */
-async function setLiveSession(uid: string, active: boolean): Promise<void> {
-  const ref = adminRtdb.ref(`liveLocation/${uid}/session`);
-  if (active) {
-    await ref.set({
-      status: 'active',
-      expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
-    });
-  } else {
-    await ref.remove();
-  }
+/**
+ * Signs in `user` and starts a real live session — the functions runtime writes
+ * an ACTIVE node at liveLocation/{uid}/session, exactly what the multiplier
+ * reads. Leaves `user` as the signed-in client so a following claim runs as them.
+ */
+async function startLive(user: TestUser): Promise<void> {
+  await signInAs(user);
+  await call('live-startSession', { duration: '1h' });
+}
+
+/**
+ * Signs in `user` and stops any live session — the node becomes status
+ * 'stopped' (well-formed but inactive), so the collector is CONFIRMED not
+ * sharing. Also leaves `user` signed in.
+ */
+async function stopLive(user: TestUser): Promise<void> {
+  await signInAs(user);
+  await call('live-stopSession', {});
 }
 
 // A quiet coordinate distinct from the other crown suites' fixtures.
@@ -140,14 +143,14 @@ const LAT = 24.751;
 const LNG = 24.751;
 
 let idCounter = 0;
-function uid(prefix = 'id'): string {
+function unique(prefix = 'id'): string {
   idCounter += 1;
   return `${prefix}-${Date.now()}-${idCounter}`;
 }
 
 /** Places one live SHARED auto-spawn crown worth `rewardPoints` at LAT/LNG. */
 async function placeSpawn(rewardPoints: number): Promise<string> {
-  const spawnId = uid('lss-spawn');
+  const spawnId = unique('lss-spawn');
   await adminDb
     .collection('crownSpawns')
     .doc(spawnId)
@@ -185,7 +188,7 @@ function spawnClaimInput(spawnId: string): Record<string, unknown> {
       speedMetersPerSecond: 0,
       recordedAt: earlierIso,
     },
-    idempotencyKey: uid('lss-spawn-key'),
+    idempotencyKey: unique('lss-spawn-key'),
   };
 }
 
@@ -221,7 +224,7 @@ function pointClaimInput(pointId: string): Record<string, unknown> {
     accuracyMeters: 10,
     speedMetersPerSecond: 0,
     recordedAt: new Date().toISOString(),
-    idempotencyKey: uid('lss-point-key'),
+    idempotencyKey: unique('lss-point-key'),
   };
 }
 
@@ -244,7 +247,8 @@ beforeAll(async () => {
   hunter = await createProvisionedUser('lss-hunter');
   await ageAccount(hunter.uid);
 
-  // Base flags; crownHuntLiveShareScoring is toggled per-test below.
+  // Base flags; crownHuntLiveShareScoring is toggled per-test below. liveLocation
+  // must be on for the live.startSession path the active-session tests use.
   await setFlags({
     crownHunt: true,
     crownHuntSpawn: true,
@@ -253,18 +257,18 @@ beforeAll(async () => {
 }, 120_000);
 
 afterAll(async () => {
-  // Restore the flag's contract default so it cannot leak ON into other suites.
+  // Restore the flag's contract default so it cannot leak ON into other suites,
+  // and leave the hunter not sharing.
+  await stopLive(hunter);
   await setFlags({ crownHuntLiveShareScoring: false });
-  await adminRtdb.ref(`liveLocation/${hunter.uid}/session`).remove();
   await deleteApp(app);
 });
 
 describe('crownHunt.claimSpawn — live-share scoring', () => {
   it('awards FULL Kronpoäng while an active live session is shared', async () => {
     await setFlags({ crownHuntLiveShareScoring: true });
-    await setLiveSession(hunter.uid, true);
+    await startLive(hunter); // signs in hunter AND starts an active session
     const spawnId = await placeSpawn(10);
-    await signInAs(hunter);
 
     const res = (await call('crownHunt-claimSpawn', spawnClaimInput(spawnId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');
@@ -273,9 +277,8 @@ describe('crownHunt.claimSpawn — live-share scoring', () => {
 
   it('HALVES Kronpoäng when the collector is not live-sharing', async () => {
     await setFlags({ crownHuntLiveShareScoring: true });
-    await setLiveSession(hunter.uid, false);
+    await stopLive(hunter); // signs in hunter AND stops the session
     const spawnId = await placeSpawn(10);
-    await signInAs(hunter);
 
     const res = (await call('crownHunt-claimSpawn', spawnClaimInput(spawnId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');
@@ -285,9 +288,8 @@ describe('crownHunt.claimSpawn — live-share scoring', () => {
 
   it('awards FULL Kronpoäng when the flag is OFF (rule dark)', async () => {
     await setFlags({ crownHuntLiveShareScoring: false });
-    await setLiveSession(hunter.uid, false);
+    await stopLive(hunter);
     const spawnId = await placeSpawn(10);
-    await signInAs(hunter);
 
     const res = (await call('crownHunt-claimSpawn', spawnClaimInput(spawnId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');
@@ -299,8 +301,7 @@ describe('crownHunt.submitClaim — live-share scoring', () => {
   it('awards FULL Kronpoäng while an active live session is shared', async () => {
     await setFlags({ crownHuntLiveShareScoring: true });
     const pointId = await createActivePoint(25);
-    await setLiveSession(hunter.uid, true);
-    await signInAs(hunter);
+    await startLive(hunter); // signs in hunter AND starts an active session
 
     const res = (await call('crownHunt-submitClaim', pointClaimInput(pointId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');
@@ -310,8 +311,7 @@ describe('crownHunt.submitClaim — live-share scoring', () => {
   it('HALVES Kronpoäng when the collector is not live-sharing', async () => {
     await setFlags({ crownHuntLiveShareScoring: true });
     const pointId = await createActivePoint(25);
-    await setLiveSession(hunter.uid, false);
-    await signInAs(hunter);
+    await stopLive(hunter); // signs in hunter AND stops the session
 
     const res = (await call('crownHunt-submitClaim', pointClaimInput(pointId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');
@@ -322,8 +322,7 @@ describe('crownHunt.submitClaim — live-share scoring', () => {
   it('awards FULL Kronpoäng when the flag is OFF (rule dark)', async () => {
     await setFlags({ crownHuntLiveShareScoring: false });
     const pointId = await createActivePoint(25);
-    await setLiveSession(hunter.uid, false);
-    await signInAs(hunter);
+    await stopLive(hunter);
 
     const res = (await call('crownHunt-submitClaim', pointClaimInput(pointId))).data as ClaimResponse;
     expect(res.result).toBe('awarded');

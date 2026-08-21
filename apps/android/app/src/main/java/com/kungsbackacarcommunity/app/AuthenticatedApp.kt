@@ -5904,9 +5904,11 @@ fun AuthenticatedApp(
                         onNavigateToPoint = moveMapToPoint,
                         crownHuntRepository = crownHuntRepository,
                         crownHuntCoordinator = crownHuntCoordinator,
-                        crownHuntPerksEnabled = flags.isEnabled(FeatureFlag.CROWN_HUNT_PERKS),
-                        crownHuntLiveShareScoringEnabled =
-                            flags.isEnabled(FeatureFlag.CROWN_HUNT_LIVE_SHARE_SCORING),
+                        // Reuse the flag values already read once for this
+                        // composition (see the crownHunt* vals above) so every
+                        // Kronjakt surface threads the same snapshot.
+                        crownHuntPerksEnabled = crownHuntPerksEnabled,
+                        crownHuntLiveShareScoringEnabled = crownHuntLiveShareScoringEnabled,
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,

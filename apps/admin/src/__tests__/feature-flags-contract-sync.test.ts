@@ -149,6 +149,7 @@ describe('feature flags — defaults are not drifting', () => {
       digitalBillboards: true,
       partnerInsightsPassBy: false,
       crownHuntPerks: false,
+      crownHuntLiveShareScoring: false,
       reportTicketsBrowser: false,
       chatReplies: false,
     });

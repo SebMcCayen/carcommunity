@@ -34,6 +34,27 @@ export const CROWN_HUNT_LIVE_SHARE_SCORING_FLAG_KEY = 'crownHuntLiveShareScoring
 export const NON_LIVE_SHARE_MULTIPLIER = 0.5;
 
 /**
+ * A live-session node whose shape `isSessionActive` can actually judge: a plain
+ * object with a string `status` and a parseable `expiresAt`. Distinguishes a
+ * genuine (if stopped/expired) session from a MALFORMED node so fail-open can
+ * treat "can't tell" (garbage) differently from "confirmed inactive" (a real
+ * stopped/expired session).
+ */
+type JudgeableSession = NonNullable<Parameters<typeof isSessionActive>[0]>;
+
+function isWellFormedSession(value: unknown): value is JudgeableSession {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as { status?: unknown; expiresAt?: unknown };
+  // `status` is only ever COMPARED to 'active' by isSessionActive, so any string
+  // is a judgeable shape here — an unknown status simply reads as inactive.
+  return (
+    typeof v.status === 'string' &&
+    typeof v.expiresAt === 'string' &&
+    Number.isFinite(Date.parse(v.expiresAt))
+  );
+}
+
+/**
  * The live-share award multiplier for `uid` at `now` — 1 while the member is
  * sharing an active live session (or when the rule is off / unreadable), else
  * {@link NON_LIVE_SHARE_MULTIPLIER}. Best-effort and fail-open: the halving is
@@ -52,13 +73,19 @@ export async function resolveLiveShareMultiplier(uid: string, now: Date): Promis
     // The live-sharing signal is the RTDB session node the live domain writes
     // (liveLocation/{uid}/session), read exactly like readLatestTrustedPosition.
     const snap = await adminRtdb.ref(`liveLocation/${uid}/session`).get();
-    const session = snap.val() as { status?: unknown; expiresAt?: unknown } | null;
-    return isSessionActive(
-      session as Parameters<typeof isSessionActive>[0],
-      now,
-    )
-      ? 1
-      : NON_LIVE_SHARE_MULTIPLIER;
+    const session = snap.val() as unknown;
+    // An ABSENT node is a POSITIVE confirmation that no session exists → halve.
+    if (session === null || session === undefined) {
+      return NON_LIVE_SHARE_MULTIPLIER;
+    }
+    // A MALFORMED node (present but not a judgeable session shape) is AMBIGUOUS:
+    // we cannot confirm the member is not sharing, so fail open to full rather
+    // than penalise on a corrupt/partial write.
+    if (!isWellFormedSession(session)) {
+      return 1;
+    }
+    // A well-formed node: active → full, stopped/expired → confirmed not sharing.
+    return isSessionActive(session, now) ? 1 : NON_LIVE_SHARE_MULTIPLIER;
   } catch (error) {
     // No PII: the uid is deliberately NOT logged (hard no-identifiers-in-logs
     // rule); "live-share read failed" plus the error is enough to diagnose, and
