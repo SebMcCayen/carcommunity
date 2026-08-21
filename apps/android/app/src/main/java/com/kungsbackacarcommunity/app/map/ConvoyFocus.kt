@@ -281,6 +281,20 @@ object ConvoyFocusPlanner {
      * immediately, not up to [MIN_REFIT_INTERVAL_MS] later. The distance gate
      * still applies (it returns true for a null previous), so an empty roster
      * still yields no fit.
+     *
+     * ## The member-set change bypasses the time throttle (#913)
+     * The [MIN_REFIT_INTERVAL_MS] throttle exists to stop a MOVING group from
+     * re-easing the camera every position tick — a jitter guard. It must NOT delay
+     * showing a member who just JOINED (or re-fitting after one left): that is a
+     * discrete roster event, not per-tick churn. Without the bypass, a member
+     * joining OUTSIDE the current frame within [MIN_REFIT_INTERVAL_MS] of the last
+     * fit had their re-fit suppressed, so they sat off-screen — and if the convoy
+     * was PARKED (no further position ticks to carry the suppressed change forward,
+     * see the "picked up by the next tick" note on [MapboxMapSurface]) they stayed
+     * off-screen indefinitely. That is issue #913 (`map.convoyFitOffscreen`,
+     * "a fit left a fresh member out of frame"). So a member-set change ([memberSetChanged])
+     * re-fits immediately, still gated by [shouldRefit] first — a member who joined
+     * INSIDE the existing box is already framed and needs no camera move.
      */
     fun shouldRefitNow(
         previous: List<ConvoyLatLng>?,
@@ -290,8 +304,25 @@ object ConvoyFocusPlanner {
     ): Boolean {
         if (!shouldRefit(previous, next)) return false
         if (lastFitAtMillis == null) return true
+        if (memberSetChanged(previous, next)) return true
         return nowMillis - lastFitAtMillis >= MIN_REFIT_INTERVAL_MS
     }
+
+    /**
+     * Whether the fitted SET of people changed — someone joined or left — as
+     * opposed to the existing members merely moving.
+     *
+     * Detected by the COUNT of fitted points (the viewer's own position plus each
+     * fresh member): a join adds one, a leave removes one. Count is used rather
+     * than point identity because the fit pipeline is coordinate-only
+     * ([ConvoyLatLng] carries no uid) and the reported failure is a member JOINING
+     * — always a count change. A same-count SWAP (one leaves as another joins in
+     * the same tick) is the one case count misses; it is far rarer, and the
+     * spatial [shouldRefit] gate plus the next position tick still catch it within
+     * the throttle window. A null previous (no fit applied yet) counts as changed.
+     */
+    fun memberSetChanged(previous: List<ConvoyLatLng>?, next: List<ConvoyLatLng>): Boolean =
+        previous == null || previous.size != next.size
 
     /**
      * The zoom a convoy fit should actually apply, clamped to a sane band.
