@@ -2,6 +2,18 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 45,
+      "versionName": "0.8.34",
+      "releaseDate": "2026-08-22",
+      "highlights": [
+        "Kronjakten: din \"insamlad\"-markering på delade kronor stannar kvar"
+      ],
+      "changes": [
+        "Kronjakten: markeringen \"insamlad av dig\" på en delad krona du redan samlat stannar nu kvar i stället för att försvinna",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 44,
       "versionName": "0.8.33",
       "releaseDate": "2026-08-22",
