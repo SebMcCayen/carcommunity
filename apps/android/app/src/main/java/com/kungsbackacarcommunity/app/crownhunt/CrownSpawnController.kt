@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
@@ -87,6 +88,7 @@ class CrownSpawnController(
     private val repository: CrownSpawnRepository,
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val collectedStore: CollectedCrownStore = NoOpCollectedCrownStore,
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) {
     private val nearbyFlow = MutableStateFlow<List<CrownSpawn>>(emptyList())
 
@@ -148,20 +150,44 @@ class CrownSpawnController(
      * entry never lingers.
      *
      * Idempotent for an unchanged uid (a recomposition re-invoking this is a
-     * no-op). On an ACCOUNT SWITCH the previous user's in-memory set is dropped
-     * before the new user's is loaded, so account A's collected marks are never
-     * shown to account B — a fresh uid with no stored blob simply starts empty.
+     * no-op).
      *
-     * The disk read is done on [Dispatchers.IO]; the in-memory swap and the flow
-     * republish happen back on the caller's thread, matching the rest of the
+     * ## Account switch is CLEARED BEFORE the load, never after (privacy)
+     *
+     * On an account switch the previous user's in-memory set is dropped — and
+     * [collectedSpawnIds] republished empty — IMMEDIATELY, before the (possibly
+     * slow, cold) disk read is even kicked off. Clearing only after the load
+     * returned would leave account A's marks painted on account B's map for the
+     * whole width of the read. [boundUid] is moved to the new uid at the same
+     * instant so any crown collected DURING the load window is attributed to — and
+     * persisted for — the new user.
+     *
+     * When the loaded snapshot arrives it is MERGED into the (now uid-B) set
+     * rather than overwriting it, so a mark collected during the load window is
+     * not dropped; a `putIfAbsent` keeps the in-flight entry over the stored one
+     * for the same crown. A guard drops the snapshot entirely if another
+     * [bindUser] superseded this one while its load was in flight (a rapid
+     * A→B→C switch), so a stale load can never land on the wrong account.
+     *
+     * The disk read is done on [ioDispatcher]; the in-memory mutations and the
+     * flow republish happen back on the caller's thread, matching the rest of the
      * controller's single-threaded state handling.
      */
     suspend fun bindUser(uid: String) {
         if (uid == boundUid) return
-        val loaded = withContext(Dispatchers.IO) { collectedStore.load(uid) }
+        // Clear FIRST, before the async load: an account switch must not leave the
+        // previous user's marks visible for the width of the (cold) prefs read.
         boundUid = uid
         collectedSpawnExpiries.clear()
-        collectedSpawnExpiries.putAll(loaded)
+        pruneCollected()
+        val loaded = withContext(ioDispatcher) { collectedStore.load(uid) }
+        // A later bindUser may have superseded this one during the load — if so,
+        // its clear already owns the set and this stale snapshot must be dropped.
+        if (uid != boundUid) return
+        // MERGE, not overwrite: a crown collected during the load window is already
+        // in the set for this uid and must survive; putIfAbsent adds only the
+        // stored ids this uid did not just collect.
+        for ((id, expiry) in loaded) collectedSpawnExpiries.putIfAbsent(id, expiry)
         // Prune expired entries loaded from disk, republish [collectedSpawnIds],
         // and write the self-cleaned set back so the stored blob shrinks too.
         pruneCollected()

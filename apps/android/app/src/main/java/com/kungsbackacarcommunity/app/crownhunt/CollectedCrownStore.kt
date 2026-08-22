@@ -20,21 +20,26 @@ import org.json.JSONObject
  * the mark reappear immediately on reopen, no tap needed (owner bug: "collected
  * mark disappears after closing/reopening the app").
  *
+ * ## Where this sits in the two-layer persistence model
+ *
+ * This device-local [PrefsCollectedCrownStore] is the OFFLINE CACHE half. It
+ * makes the marks show INSTANTLY on a cold start, before any network round-trip,
+ * so a shared crown you already collected is never briefly drawn as collectable.
+ * It is NOT the source of truth: the SERVER is —
+ * [CrownSpawnRepository.observeCollected] streams this member's own
+ * `crownSpawnCollectors` records, and [CrownSpawnController] union-merges them
+ * into the same set and writes each snapshot back through to THIS cache. That
+ * server layer is what makes the marks correct after a REINSTALL or on a NEW
+ * DEVICE, where this cache starts empty; the cache is what makes them instant.
+ *
  * ## UID-scoped, on purpose (privacy)
  *
  * The set is keyed by uid — account A's collected marks must never show for
  * account B on a shared device. A fresh uid (no stored blob) starts empty. This
  * mirrors [com.kungsbackacarcommunity.app.coachmark.CoachMarkStore]'s per-user
- * keying.
- *
- * The [PrefsCollectedCrownStore] backing is device-local SharedPreferences — the
- * same lightweight persistence the sibling stores use — and NOT synced to
- * Firestore: "which live shared crowns has this member already picked up on this
- * device" is cheap-to-relearn visual state (one tap), not account state worth a
- * backend/rules change. A reinstall or a new device therefore starts empty and
- * re-learns on first tap, exactly as today; the fully-authoritative alternative
- * (a server-derived collected-by-me per visible spawn) is noted as a possible
- * follow-up on the PR.
+ * keying. The backing is SharedPreferences — the same lightweight persistence the
+ * sibling stores use — because a cache that the server reconciles does not need
+ * the durability guarantees of account state.
  */
 interface CollectedCrownStore {
     /**

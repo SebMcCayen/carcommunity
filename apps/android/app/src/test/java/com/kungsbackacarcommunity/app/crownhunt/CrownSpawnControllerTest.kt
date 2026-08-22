@@ -5,7 +5,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -912,4 +914,74 @@ class CrownSpawnControllerTest {
             store.byUid["u1"],
         )
     }
+
+    /**
+     * Privacy + no-drop, proven with a paused load dispatcher that holds the
+     * switch's prefs read open so we can observe the window:
+     *
+     *  - account A's marks are cleared the INSTANT we switch to B, BEFORE B's load
+     *    runs — never visible on B's map for the width of the (cold) read; and
+     *  - a crown collected DURING that load window is MERGED, not overwritten, so
+     *    B's in-flight pickup is still there once the load completes.
+     */
+    @Test
+    fun `bindUser clears the prior account before load and keeps a mark collected during it`() =
+        runTest {
+            // A has a stored mark; B has nothing stored yet (a fresh account).
+            val store = FakeCollectedStore(initial = mapOf("A" to mapOf("aCrown" to null)))
+            // The load runs on a PAUSED dispatcher so we can act inside the window.
+            val controller =
+                CrownSpawnController(
+                    FakeRepo(
+                        spawns = listOf(spawn("bWindow")),
+                        claimResult =
+                            CrownSpawnClaimOutcome(
+                                CrownSpawnClaimResult.ALREADY_COLLECTED,
+                                null,
+                                null,
+                                CrownRarity.COMMON,
+                            ),
+                    ),
+                    nowMillis = { 1_000L },
+                    collectedStore = store,
+                    ioDispatcher = StandardTestDispatcher(testScheduler),
+                )
+
+            // Account A is bound with its mark.
+            controller.bindUser("A")
+            advanceUntilIdle()
+            assertEquals(setOf("aCrown"), controller.collectedSpawnIds.value)
+
+            // Switch to B: bindUser reaches the load and suspends (dispatcher paused).
+            val job = launch { controller.bindUser("B") }
+            runCurrent()
+            assertTrue(
+                "account A's marks must be cleared the instant we switch, before B's load lands",
+                controller.collectedSpawnIds.value.isEmpty(),
+            )
+
+            // A crown collected DURING the load window (B is already the bound uid).
+            controller.refreshOnce(true, centre, 1_000.0, force = true)
+            controller.collect(
+                spawn = spawn("bWindow"),
+                current = CrownFix(57.5, 12.0, 1_000_000L),
+                previous = CrownFix(57.5, 12.0, 990_000L),
+                idempotencyKey = "k",
+            )
+            assertTrue(controller.collectedSpawnIds.value.contains("bWindow"))
+
+            // The load completes and MERGES — the in-flight mark is not dropped, and
+            // account A's mark never reappears for B.
+            advanceUntilIdle()
+            job.join()
+            assertEquals(
+                "B's mark collected during the load survives the merge",
+                setOf("bWindow"),
+                controller.collectedSpawnIds.value,
+            )
+            assertFalse(
+                "account A's mark must never appear for account B",
+                controller.collectedSpawnIds.value.contains("aCrown"),
+            )
+        }
 }
