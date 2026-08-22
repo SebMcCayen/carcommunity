@@ -10,7 +10,10 @@ import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 import java.time.Instant
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 /**
  * [CrownSpawnRepository] backed by a bounded Firestore query on `crownSpawns`
@@ -112,13 +115,51 @@ class FirebaseCrownSpawnRepository private constructor(
             ?: throw IllegalStateException("claimSpawn returned an unrecognized result")
     }
 
+    /**
+     * The SERVER-AUTHORITATIVE collected-set: a live listener on the member's OWN
+     * `crownSpawnCollectors` records (`userId == uid`), emitting the current
+     * (spawn id -> crown expiry millis) map on every snapshot.
+     *
+     * The query is filtered to `userId == uid`, which is exactly what the
+     * owner-only read rule requires (an unfiltered list would be DENIED), and
+     * needs only the automatic single-field index on `userId`. Expired records are
+     * NOT filtered here — the collection self-reaps via its `expireAt` TTL policy
+     * and the controller prunes by expiry anyway, so a userId-only query avoids a
+     * composite index. A `null` value means the document omitted `expireAt`.
+     *
+     * On a listener error the snapshot is simply skipped (never emits an empty map
+     * on a transient permission/transport blip), so the local cache stays the
+     * fallback rather than being wrongly cleared.
+     */
+    override fun observeCollected(uid: String): Flow<Map<String, Long?>> =
+        callbackFlow {
+            val registration =
+                firestore
+                    .collection(COLLECTORS)
+                    .whereEqualTo(FIELD_USER_ID, uid)
+                    .addSnapshotListener { snapshot, error ->
+                        if (error != null || snapshot == null) return@addSnapshotListener
+                        val collected = LinkedHashMap<String, Long?>(snapshot.size())
+                        for (doc in snapshot.documents) {
+                            val spawnId = doc.getString(FIELD_SPAWN_ID) ?: continue
+                            collected[spawnId] = doc.getTimestamp(FIELD_EXPIRE_AT)?.toDate()?.time
+                        }
+                        trySend(collected)
+                    }
+            awaitClose { registration.remove() }
+        }
+
     companion object {
         private const val REGION = "europe-west1"
         private const val SPAWNS = "crownSpawns"
+        private const val COLLECTORS = "crownSpawnCollectors"
         private const val CLAIM_SPAWN = "crownHunt-claimSpawn"
         private const val FIELD_CELL_KEY = "cellKey"
         private const val FIELD_STATUS = "status"
         private const val FIELD_EXPIRES_AT = "expiresAt"
+        private const val FIELD_USER_ID = "userId"
+        private const val FIELD_SPAWN_ID = "spawnId"
+        private const val FIELD_EXPIRE_AT = "expireAt"
         private const val STATUS_LIVE = "live"
 
         fun createIfAvailable(context: Context): CrownSpawnRepository? {

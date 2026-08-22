@@ -2,11 +2,13 @@ package com.kungsbackacarcommunity.app.crownhunt
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ReceiveChannel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** Where the map camera is, for a crown refresh. */
@@ -84,6 +86,7 @@ sealed interface CrownClaimStatus {
 class CrownSpawnController(
     private val repository: CrownSpawnRepository,
     private val nowMillis: () -> Long = System::currentTimeMillis,
+    private val collectedStore: CollectedCrownStore = NoOpCollectedCrownStore,
 ) {
     private val nearbyFlow = MutableStateFlow<List<CrownSpawn>>(emptyList())
 
@@ -106,8 +109,22 @@ class CrownSpawnController(
      * stay collectable-looking for everyone else. Keyed to the expiry so it
      * self-prunes rather than growing for the life of the session — once a crown's
      * TTL passes the backend stops returning it AND its entry here is dropped.
+     *
+     * Durable across app restarts: it is loaded from [collectedStore] for the
+     * bound uid in [bindUser] and written through on every change, so reopening
+     * the app after a long time away shows the already-collected crowns marked
+     * immediately rather than looking collectable until a refused re-tap re-learns
+     * them (owner bug).
      */
     private val collectedSpawnExpiries = mutableMapOf<String, Long?>()
+
+    /**
+     * The uid whose collected-set is currently loaded, so a write-through targets
+     * the right per-user blob and an account switch reloads rather than leaking
+     * account A's marks onto account B. Null until [bindUser] runs; while null the
+     * in-memory path still works but nothing is persisted.
+     */
+    private var boundUid: String? = null
 
     private val collectedIdsFlow = MutableStateFlow<Set<String>>(emptySet())
 
@@ -124,6 +141,79 @@ class CrownSpawnController(
 
     /** The cells the last successful refresh covered, so a settle can be skipped. */
     private var lastCellKeys: List<String>? = null
+
+    /**
+     * Binds the controller to the currently authenticated [uid] and loads that
+     * user's persisted collected-set, pruning anything already expired so a stale
+     * entry never lingers.
+     *
+     * Idempotent for an unchanged uid (a recomposition re-invoking this is a
+     * no-op). On an ACCOUNT SWITCH the previous user's in-memory set is dropped
+     * before the new user's is loaded, so account A's collected marks are never
+     * shown to account B — a fresh uid with no stored blob simply starts empty.
+     *
+     * The disk read is done on [Dispatchers.IO]; the in-memory swap and the flow
+     * republish happen back on the caller's thread, matching the rest of the
+     * controller's single-threaded state handling.
+     */
+    suspend fun bindUser(uid: String) {
+        if (uid == boundUid) return
+        val loaded = withContext(Dispatchers.IO) { collectedStore.load(uid) }
+        boundUid = uid
+        collectedSpawnExpiries.clear()
+        collectedSpawnExpiries.putAll(loaded)
+        // Prune expired entries loaded from disk, republish [collectedSpawnIds],
+        // and write the self-cleaned set back so the stored blob shrinks too.
+        pruneCollected()
+        persist()
+    }
+
+    /**
+     * Binds [uid] and keeps the "collected by you" set reconciled with the SERVER
+     * for as long as the caller's coroutine lives. Two complementary layers:
+     *
+     *  1. **Local cache first** ([bindUser]) — the marks show INSTANTLY on a cold
+     *     start, before any network round-trip, so a shared crown you already
+     *     collected is never briefly shown as collectable.
+     *  2. **Server-authoritative next** — this then observes THIS user's own
+     *     `crownSpawnCollectors` records and merges them in, so the set is correct
+     *     even after a REINSTALL or on a NEW DEVICE where the on-device cache
+     *     starts empty. Each server snapshot is written back through to the cache,
+     *     so the next cold start is already correct.
+     *
+     * The collect never returns; it is cancelled when the caller (a keyed
+     * `LaunchedEffect`) leaves the composition or the uid changes.
+     */
+    suspend fun syncCollectedForUser(uid: String) {
+        bindUser(uid)
+        repository.observeCollected(uid).collect { serverEntries ->
+            // Ignore a late snapshot that belongs to a since-replaced account.
+            if (uid == boundUid) mergeServerCollected(serverEntries)
+        }
+    }
+
+    /**
+     * Reconciles a server snapshot into the collected-set. UNION, not replace: a
+     * crown can never be UN-collected, so any id the server reports is added (this
+     * is the reinstall / new-device recovery), and the server's expiry is taken as
+     * authoritative. A stale local id the server no longer reports is left for the
+     * ordinary expiry-prune to drop — and while it lingers it paints nothing,
+     * because a marker is only ever drawn on a crown still present in
+     * [nearbySpawns] (an expired crown is gone from that list). Union also means a
+     * just-collected optimistic mark is never briefly dropped before the listener
+     * catches up. Writes through to the cache so the next cold start is correct.
+     */
+    private fun mergeServerCollected(serverEntries: Map<String, Long?>) {
+        var changed = false
+        for ((id, expiry) in serverEntries) {
+            if (!collectedSpawnExpiries.containsKey(id) || collectedSpawnExpiries[id] != expiry) {
+                collectedSpawnExpiries[id] = expiry
+                changed = true
+            }
+        }
+        pruneCollected()
+        if (changed) persist()
+    }
 
     /**
      * One refresh pass. Returns true when a query was actually issued.
@@ -350,6 +440,10 @@ class CrownSpawnController(
     private fun markCollected(spawn: CrownSpawn) {
         collectedSpawnExpiries[spawn.id] = spawn.expiresAtMillis
         pruneCollected()
+        // Write through so the mark survives an app restart — this is the collect
+        // path (both first-collect AWARDED-shared and the ALREADY_COLLECTED
+        // re-tap) that the owner bug is about.
+        persist()
     }
 
     /**
@@ -367,12 +461,30 @@ class CrownSpawnController(
      * shared crowns a member collects before the app is next killed.
      */
     private fun pruneCollected() {
+        var removedAny = false
         if (collectedSpawnExpiries.isNotEmpty()) {
             val now = nowMillis()
-            collectedSpawnExpiries.entries.removeAll { (_, expiry) -> expiry != null && expiry <= now }
+            removedAny =
+                collectedSpawnExpiries.entries.removeAll { (_, expiry) -> expiry != null && expiry <= now }
         }
         val ids = collectedSpawnExpiries.keys.toSet()
         if (ids != collectedIdsFlow.value) collectedIdsFlow.value = ids
+        // Persist the self-cleaned set so an expired entry stops occupying the
+        // stored blob too. Only when something was actually pruned — this runs on
+        // every poll, and rewriting an unchanged blob 60 s apart would be wasteful.
+        if (removedAny) persist()
+    }
+
+    /**
+     * Writes the current collected-set through to durable storage for the bound
+     * uid. A no-op until [bindUser] has run (nothing to key the write to yet), so
+     * the in-memory path always works even without a store. Cheap: the whole
+     * (small, bounded) set is re-serialized and the SharedPreferences flush is
+     * async, so this stays off the critical path.
+     */
+    private fun persist() {
+        val uid = boundUid ?: return
+        collectedStore.save(uid, collectedSpawnExpiries.toMap())
     }
 
     /**
@@ -412,7 +524,10 @@ class CrownSpawnController(
          */
         fun createIfAvailable(context: Context): CrownSpawnController? {
             val repository = FirebaseCrownSpawnRepository.createIfAvailable(context) ?: return null
-            return CrownSpawnController(repository)
+            return CrownSpawnController(
+                repository = repository,
+                collectedStore = PrefsCollectedCrownStore(context),
+            )
         }
     }
 }

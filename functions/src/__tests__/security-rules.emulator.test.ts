@@ -741,6 +741,91 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Firestore: crownSpawnCollectors – OWNER-ONLY read of one's own pickups
+//
+// The "collected by you" marker's server-authoritative source of truth. A member
+// may read ONLY their own pickup records (resource.data.userId == uid), via the
+// exact client query in FirebaseCrownSpawnRepository.observeCollected
+// (where userId == uid). This lets the mark survive a reinstall / new device
+// without exposing WHO ELSE collected a crown, and no client may write a pickup
+// record (a forged/cleared record would let a shared crown be collected twice).
+// ---------------------------------------------------------------------------
+
+describe('Firestore – crownSpawnCollectors owner-only read', () => {
+  const OWNER = 'csc-owner';
+  const OTHER = 'csc-other';
+  const OWNER_DOC = 'csc-owner__spawnA';
+  const OTHER_DOC = 'csc-other__spawnB';
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      const firestore = ctx.firestore();
+      const expireAt = Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000);
+      await setDoc(doc(firestore, 'crownSpawnCollectors', OWNER_DOC), {
+        spawnId: 'spawnA',
+        userId: OWNER,
+        rarity: 'common',
+        expireAt,
+      });
+      await setDoc(doc(firestore, 'crownSpawnCollectors', OTHER_DOC), {
+        spawnId: 'spawnB',
+        userId: OTHER,
+        rarity: 'common',
+        expireAt,
+      });
+    });
+  });
+
+  it('a member reads their OWN pickups via the userId-scoped client query', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER, { activeMember: true }).firestore();
+    // The exact production query (userId == me). It returns only my own records.
+    await assertSucceeds(
+      getDocs(query(collection(ownerFs, 'crownSpawnCollectors'), where('userId', '==', OWNER))),
+    );
+    // A direct get on one's own record is allowed too.
+    await assertSucceeds(getDoc(doc(ownerFs, 'crownSpawnCollectors', OWNER_DOC)));
+  });
+
+  it('a member cannot read ANOTHER user pickups, nor scrape the collection', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER, { activeMember: true }).firestore();
+    // Someone else's record by id — invisible (would reveal who collected a crown).
+    await assertFails(getDoc(doc(ownerFs, 'crownSpawnCollectors', OTHER_DOC)));
+    // A query scoped to another user is denied.
+    await assertFails(
+      getDocs(query(collection(ownerFs, 'crownSpawnCollectors'), where('userId', '==', OTHER))),
+    );
+    // An UNFILTERED list is denied — the collection cannot be scraped.
+    await assertFails(getDocs(collection(ownerFs, 'crownSpawnCollectors')));
+  });
+
+  it('an unauthenticated client cannot read pickups at all', async () => {
+    const anonFs = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(anonFs, 'crownSpawnCollectors', OWNER_DOC)));
+    await assertFails(
+      getDocs(query(collection(anonFs, 'crownSpawnCollectors'), where('userId', '==', OWNER))),
+    );
+  });
+
+  it('no client may write a pickup record — not even its owner or an admin', async () => {
+    const ownerFs = testEnv.authenticatedContext(OWNER, { activeMember: true }).firestore();
+    await assertFails(
+      setDoc(doc(ownerFs, 'crownSpawnCollectors', 'csc-owner__forged'), {
+        spawnId: 'spawnZ',
+        userId: OWNER,
+      }),
+    );
+    await assertFails(deleteDoc(doc(ownerFs, 'crownSpawnCollectors', OWNER_DOC)));
+    const adminFs = testEnv.authenticatedContext('csc-admin', { admin: true }).firestore();
+    await assertFails(
+      setDoc(doc(adminFs, 'crownSpawnCollectors', 'csc-admin__forged'), {
+        spawnId: 'spawnZ',
+        userId: 'csc-admin',
+      }),
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Firestore: Kronjakt stats + leaderboard + seasons (read aggregates)
 // ---------------------------------------------------------------------------
 

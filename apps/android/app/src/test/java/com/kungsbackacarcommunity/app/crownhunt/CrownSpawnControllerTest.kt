@@ -1,6 +1,9 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
@@ -27,6 +30,7 @@ class CrownSpawnControllerTest {
         var failWith: Throwable? = null,
         var claimResult: CrownSpawnClaimOutcome? = null,
         var claimFailure: Throwable? = null,
+        var collectedFlow: Flow<Map<String, Long?>> = emptyFlow(),
     ) : CrownSpawnRepository {
         var listCalls = 0
         var lastKeys: List<String>? = null
@@ -51,6 +55,31 @@ class CrownSpawnControllerTest {
             claimFailure?.let { throw it }
             return claimResult
                 ?: CrownSpawnClaimOutcome(CrownSpawnClaimResult.AWARDED, 10, 110, CrownRarity.COMMON)
+        }
+
+        override fun observeCollected(uid: String): Flow<Map<String, Long?>> = collectedFlow
+    }
+
+    /**
+     * In-memory [CollectedCrownStore] standing in for SharedPreferences: keeps a
+     * per-uid snapshot so "survives an app restart" is modelled as a fresh
+     * controller reading the same store, and "uid-scoped" as two distinct keys.
+     */
+    private class FakeCollectedStore(
+        initial: Map<String, Map<String, Long?>> = emptyMap(),
+    ) : CollectedCrownStore {
+        val byUid = HashMap<String, Map<String, Long?>>(initial)
+        var loads = 0
+        var saves = 0
+
+        override fun load(uid: String): Map<String, Long?> {
+            loads += 1
+            return byUid[uid] ?: emptyMap()
+        }
+
+        override fun save(uid: String, entries: Map<String, Long?>) {
+            saves += 1
+            byUid[uid] = entries.toMap()
         }
     }
 
@@ -724,5 +753,163 @@ class CrownSpawnControllerTest {
             idempotencyKey = "k1",
         )
         assertEquals(CrownClaimStatus.Failed, controller.claimStatus.value)
+    }
+
+    // ---- Durable, uid-scoped collected-set (owner bug: mark vanishes on restart) --
+
+    /**
+     * The reported bug: after collecting a shared crown, closing the app, and
+     * reopening, the "collected by you" mark was GONE until a refused re-tap
+     * re-learned it. The mark must survive a process restart — modelled here as a
+     * FRESH controller reading the SAME store, with NO tap.
+     */
+    @Test
+    fun `a collected mark is persisted and reappears in a new controller without a re-tap`() =
+        runTest {
+            val store = FakeCollectedStore()
+            val shared = spawn("shared") // expiresAtMillis = null → never pruned
+
+            // Session 1: collect the shared crown, which persists the mark.
+            val repo1 =
+                FakeRepo(
+                    spawns = listOf(shared),
+                    claimResult =
+                        CrownSpawnClaimOutcome(
+                            CrownSpawnClaimResult.ALREADY_COLLECTED,
+                            null,
+                            null,
+                            CrownRarity.COMMON,
+                        ),
+                    collectedFlow = emptyFlow(),
+                )
+            val controller1 = CrownSpawnController(repo1, collectedStore = store)
+            controller1.bindUser("u1")
+            controller1.refreshOnce(true, centre, 1_000.0, force = true)
+            val now = 1_000_000L
+            controller1.collect(
+                spawn = shared,
+                current = CrownFix(57.5, 12.0, now),
+                previous = CrownFix(57.5, 12.0, now - 10_000),
+                idempotencyKey = "k1",
+            )
+            assertEquals(setOf("shared"), controller1.collectedSpawnIds.value)
+
+            // Session 2: a brand-new controller (fresh process) with the SAME store.
+            // Before any refresh or tap, the mark must already be there.
+            val controller2 = CrownSpawnController(FakeRepo(), collectedStore = store)
+            controller2.bindUser("u1")
+            assertEquals(
+                "the collected mark must survive a restart with no re-tap",
+                setOf("shared"),
+                controller2.collectedSpawnIds.value,
+            )
+        }
+
+    /**
+     * The persisted set is UID-scoped: account B on the same device must never see
+     * account A's collected marks, and switching back to A restores A's.
+     */
+    @Test
+    fun `the persisted collected-set is uid-scoped`() = runTest {
+        val store = FakeCollectedStore()
+        val shared = spawn("shared")
+        val repo =
+            FakeRepo(
+                spawns = listOf(shared),
+                claimResult =
+                    CrownSpawnClaimOutcome(
+                        CrownSpawnClaimResult.ALREADY_COLLECTED,
+                        null,
+                        null,
+                        CrownRarity.COMMON,
+                    ),
+            )
+        val controller = CrownSpawnController(repo, collectedStore = store)
+
+        controller.bindUser("A")
+        controller.refreshOnce(true, centre, 1_000.0, force = true)
+        val now = 1_000_000L
+        controller.collect(
+            spawn = shared,
+            current = CrownFix(57.5, 12.0, now),
+            previous = CrownFix(57.5, 12.0, now - 10_000),
+            idempotencyKey = "k1",
+        )
+        assertEquals(setOf("shared"), controller.collectedSpawnIds.value)
+
+        // Switch to B: a fresh account starts empty, never inheriting A's marks.
+        controller.bindUser("B")
+        assertTrue(
+            "account B must not see account A's collected marks",
+            controller.collectedSpawnIds.value.isEmpty(),
+        )
+
+        // Back to A: A's marks are restored from durable storage.
+        controller.bindUser("A")
+        assertEquals(setOf("shared"), controller.collectedSpawnIds.value)
+    }
+
+    /**
+     * On load, an entry whose crown has already expired is pruned — the same
+     * self-clean the in-memory path does — so a stale mark never lingers and the
+     * stored blob shrinks too.
+     */
+    @Test
+    fun `bindUser prunes an already-expired entry loaded from disk`() = runTest {
+        val clock = 5_000_000L
+        val store =
+            FakeCollectedStore(
+                initial =
+                    mapOf(
+                        "u1" to
+                            mapOf(
+                                "expired" to 1_000_000L, // < clock → pruned
+                                "live" to 9_000_000L, // > clock → kept
+                            ),
+                    ),
+            )
+        val controller = CrownSpawnController(FakeRepo(), nowMillis = { clock }, collectedStore = store)
+
+        controller.bindUser("u1")
+
+        assertEquals(
+            "an expired entry must be pruned on load",
+            setOf("live"),
+            controller.collectedSpawnIds.value,
+        )
+        assertEquals(
+            "the self-cleaned set must be written back to storage",
+            mapOf<String, Long?>("live" to 9_000_000L),
+            store.byUid["u1"],
+        )
+    }
+
+    /**
+     * Server-authoritative recovery: after a reinstall / on a new device the local
+     * cache starts empty, but the `crownSpawnCollectors` listener supplies the
+     * truth — the mark appears with no tap, and is written through so the next cold
+     * start is already correct.
+     */
+    @Test
+    fun `the server-authoritative set recovers a mark the empty cache lacks`() = runTest {
+        val clock = 1_000L
+        val store = FakeCollectedStore() // fresh install: nothing cached
+        // A single-shot flow standing in for the (in prod, infinite) listener: it
+        // emits one snapshot and completes, so awaiting the sync returns.
+        val repo = FakeRepo(collectedFlow = flowOf(mapOf("srv" to 9_000_000L)))
+        val controller = CrownSpawnController(repo, nowMillis = { clock }, collectedStore = store)
+
+        controller.syncCollectedForUser("u1")
+
+        assertEquals(
+            "the server truth must mark a crown the empty cache never knew about",
+            setOf("srv"),
+            controller.collectedSpawnIds.value,
+        )
+        assertEquals(
+            "and it must be written through to the cache for the next cold start",
+            mapOf<String, Long?>("srv" to 9_000_000L),
+            store.byUid["u1"],
+        )
     }
 }
