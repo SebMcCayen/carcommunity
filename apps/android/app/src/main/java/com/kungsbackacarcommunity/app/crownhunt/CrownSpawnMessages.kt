@@ -65,7 +65,12 @@ object CrownSpawnMessages {
 
     /**
      * The headline for a state in which the button is NOT live, or null for
-     * [CrownCollectState.Ready] — which has no explaining to do.
+     * [CrownCollectState.Ready] — which has no explaining to do — AND for the
+     * in-range wait states ([CrownCollectState.Moving], now folded into the
+     * confirming presentation, plus [CrownCollectState.Confirming] and
+     * [CrownCollectState.WaitingForSignal]), where the headline is intentionally
+     * suppressed because the BUTTON carries the "confirming you're stopped…" /
+     * "waiting for a better GPS signal…" line instead.
      *
      * `TooFar` keeps its own "move closer" sentence: it is a genuinely different
      * instruction from the stop/still family, and telling a member to stop when
