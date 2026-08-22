@@ -51,6 +51,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -375,7 +376,7 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   //
   // CONCURRENCY CAP: each notice is a create-if-absent TRANSACTION (two reads +
   // a write), and a wave can fan out to MAX_RECIPIENTS (200). Firing all of them
-  // at once on the 30s request path risks a timeout / RESOURCE_EXHAUSTED that,
+  // at once on the request path risks a timeout / RESOURCE_EXHAUSTED that,
   // despite the best-effort intent, would surface as a failed wave. So the writes
   // run in bounded chunks — at most NOTIF_WRITE_CONCURRENCY transactions in
   // flight — each chunk awaited before the next. Still best-effort + post-commit.
@@ -385,8 +386,9 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   const waverName = senderDisplayName ?? 'En medlem';
   const notifRecipients = recipients.filter((recipientUid) => recipientUid !== actor.uid);
   const NOTIF_WRITE_CONCURRENCY = 20;
+  let notifFailed = 0;
   for (let i = 0; i < notifRecipients.length; i += NOTIF_WRITE_CONCURRENCY) {
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       notifRecipients.slice(i, i + NOTIF_WRITE_CONCURRENCY).map((recipientUid) =>
         writeInAppNotification(
           recipientUid,
@@ -400,6 +402,17 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
         ),
       ),
     );
+    notifFailed += results.filter((r) => r.status === 'rejected').length;
+  }
+  // Best-effort must not be SILENT: a swallowed per-recipient failure hides real
+  // prod delivery problems. Log a PII-FREE aggregate (counts only, never uids)
+  // and only when something actually failed, mirroring the event-reminder
+  // fan-out. Still never throws — the wave already succeeded.
+  if (notifFailed > 0) {
+    logger.warn('wave notifications: some recipients failed to receive an in-app notice', {
+      failed: notifFailed,
+      total: notifRecipients.length,
+    });
   }
 
   // COMPLETION MARKER + WAVES-SENT STAT, in ONE transaction so the counter is
