@@ -296,11 +296,38 @@ describe('live-sendWave persistent notification', () => {
     expect(notice.previewText).toContain(`NotifSender-${SFX}`);
     expect(notice.relatedEntityId).toBe(sender.uid);
     expect(notice.read).toBe(false);
-    // Idempotent id derived from the shared waveId (a resumed delivery won't dup).
-    expect(notices[0]!.id).toBe(`wave_${res.waveId}`);
+    // Deterministic per-pair-per-window id (wave_<sender>_<recipient>_<bucket>),
+    // so a resumed delivery / a re-wave in the same window won't duplicate.
+    expect(notices[0]!.id).toMatch(new RegExp(`^wave_${sender.uid}_${recipient.uid}_\\d+$`));
 
     // No self-wave notice: the sender never notifies themselves.
     expect((await waveNotifications(sender.uid)).length).toBe(0);
+  });
+
+  it('creates at most one notice per sender→recipient pair within the rate-limit window', async () => {
+    const sender = await createProvisionedUser('wave-notif-win-s', `NotifWinS-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-win-r', `NotifWinR-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    await signInAs(sender);
+    await call('live-sendWave', {});
+    const first = await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    expect(first.length).toBe(1);
+
+    // Age the 45s SEND cooldown (distinct from the notification window) so a
+    // SECOND, DIFFERENT wave is allowed. It lands in the same window bucket, so
+    // its per-pair id collides with the first and the create-if-absent write is a
+    // no-op — the recipient still has exactly one wave notice.
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({ lastSentAt: new Date(Date.now() - 60_000) }, { merge: true });
+    await call('live-sendWave', {});
+    expect((await waveNotifications(recipient.uid)).length).toBe(1);
   });
 
   it('does not duplicate the recipient notice when the same wave is replayed (idempotent)', async () => {

@@ -80,6 +80,7 @@ import {
   waveCooldownExpiry,
   waveCooldownRemainingMs,
   waveExpiry,
+  waveNotificationId,
 } from './wave-core';
 
 const CALLABLE_OPTS = {
@@ -131,8 +132,11 @@ export interface SendWaveResponse {
  */
 type CooldownGate =
   | { kind: 'replay'; waveId: string; recipientCount: number }
-  | { kind: 'send'; waveId: string }
-  | { kind: 'resume'; waveId: string };
+  // `stampedAtMs` is the wave's authoritative send instant (the cooldown stamp):
+  // `nowMs` for a fresh send, the ORIGINAL crashed attempt's stamp for a resume.
+  // Stable across retries, so the per-pair-per-window notification id reproduces.
+  | { kind: 'send'; waveId: string; stampedAtMs: number }
+  | { kind: 'resume'; waveId: string; stampedAtMs: number };
 
 export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveResponse> => {
   const actor = await requireActiveActor(request);
@@ -213,7 +217,9 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     // the crashed attempt, so proceed to (idempotent) delivery WITHOUT stamping
     // again — the wave is neither dropped nor double-charged.
     if (isInFlight(data)) {
-      return { kind: 'resume', waveId: clientId as string };
+      const resumeStamp =
+        data?.lastSentAt instanceof Timestamp ? data.lastSentAt.toMillis() : nowMs;
+      return { kind: 'resume', waveId: clientId as string, stampedAtMs: resumeStamp };
     }
 
     const lastSentAt = data?.lastSentAt as Timestamp | undefined;
@@ -247,13 +253,13 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
       },
       { merge: true },
     );
-    return { kind: 'send', waveId: newWaveId };
+    return { kind: 'send', waveId: newWaveId, stampedAtMs: nowMs };
   });
 
   if (gate.kind === 'replay') {
     return { waveId: gate.waveId, recipientCount: gate.recipientCount };
   }
-  const { waveId } = gate;
+  const { waveId, stampedAtMs } = gate;
 
   // RECIPIENTS: the same cell-bounded query live.listNearby uses. Radius is the
   // FIXED wave reach (clamped), never client-supplied.
@@ -344,6 +350,13 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // swallows a per-recipient write error, and the wave's delivery + cooldown are
   // already committed — a notification write must not surface as a failed wave.
   //
+  // RATE-LIMITED to at most one notice per sender→recipient PAIR per
+  // WAVE_NOTIF_WINDOW_MS: the id buckets the wave's authoritative stamp time
+  // (waveNotificationId), and writeInAppNotification is create-if-absent on that
+  // id, so a second wave from the same sender to the same recipient inside the
+  // window is a no-op. Using the STAMP time (not the resume attempt's clock) is
+  // what keeps a retried/resumed send in the same bucket = same id = no duplicate.
+  //
   // The self-wave guard is belt-and-braces: `recipients` already excludes the
   // sender (the geo scan skips `rid === actor.uid`), but the explicit
   // senderUid !== recipientUid check keeps the invariant local and obvious.
@@ -360,7 +373,7 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
             previewText: `${waverName} vinkade till dig.`,
             relatedEntityId: actor.uid,
           },
-          `wave_${waveId}`,
+          waveNotificationId(actor.uid, recipientUid, stampedAtMs),
         ),
       ),
   );
