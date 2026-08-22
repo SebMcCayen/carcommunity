@@ -140,7 +140,10 @@ const coordinateAt = (lat: number, lng: number) => ({
 });
 
 /** Start a session and publish one position, writing the discovery doc. */
-async function shareAt(user: TestUser, point: { latitude: number; longitude: number }): Promise<void> {
+async function shareAt(
+  user: TestUser,
+  point: { latitude: number; longitude: number },
+): Promise<void> {
   await signInAs(user);
   await call('live-startSession', { duration: '1h' });
   await call('live-updatePosition', { coordinate: coordinateAt(point.latitude, point.longitude) });
@@ -152,6 +155,17 @@ async function shareAt(user: TestUser, point: { latitude: number; longitude: num
 
 async function inboxDocs(recipientUid: string) {
   return (await adminDb.collection('liveWaves').doc(recipientUid).collection('waves').get()).docs;
+}
+
+/** Persistent `wave`-category notifications on this user's Notifications page. */
+async function waveNotifications(uid: string) {
+  const snap = await adminDb
+    .collection('notifications')
+    .doc(uid)
+    .collection('items')
+    .where('category', '==', 'wave')
+    .get();
+  return snap.docs;
 }
 
 /** The lifetime waves-sent counter on badgeProgress/{uid} (0 when absent). */
@@ -202,7 +216,9 @@ describe('live-sendWave gating', () => {
     );
     // The rejected (not-sharing) attempt must NOT stamp the cooldown, so it can
     // never rate-limit the caller's next legitimate wave.
-    expect((await adminDb.collection('liveWaveCooldowns').doc(lurker.uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveWaveCooldowns').doc(lurker.uid).get()).exists).toBe(
+      false,
+    );
   });
 
   it('rejects a client-supplied position (strict schema)', async () => {
@@ -247,8 +263,63 @@ describe('live-sendWave delivery', () => {
     await shareAt(sender, HERE);
 
     await signInAs(sender);
-    const res = (await call('live-sendWave', {})).data as { waveId: string; recipientCount: number };
+    const res = (await call('live-sendWave', {})).data as {
+      waveId: string;
+      recipientCount: number;
+    };
     expect((await inboxDocs(distant.uid)).some((d) => d.id === res.waveId)).toBe(false);
+  });
+});
+
+describe('live-sendWave persistent notification', () => {
+  it('creates a "waved at you" notice for the recipient, carrying the waver name, and none for the sender', async () => {
+    const sender = await createProvisionedUser('wave-notif-s', `NotifSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-r', `NotifRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    await signInAs(sender);
+    const res = (await call('live-sendWave', {})).data as {
+      waveId: string;
+      recipientCount: number;
+    };
+    expect(res.recipientCount).toBeGreaterThanOrEqual(1);
+
+    // The recipient gets exactly one persistent wave notification naming the waver.
+    const notices = await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    expect(notices.length).toBe(1);
+    const notice = notices[0]!.data();
+    expect(notice.category).toBe('wave');
+    expect(notice.previewText).toContain(`NotifSender-${SFX}`);
+    expect(notice.relatedEntityId).toBe(sender.uid);
+    expect(notice.read).toBe(false);
+    // Idempotent id derived from the shared waveId (a resumed delivery won't dup).
+    expect(notices[0]!.id).toBe(`wave_${res.waveId}`);
+
+    // No self-wave notice: the sender never notifies themselves.
+    expect((await waveNotifications(sender.uid)).length).toBe(0);
+  });
+
+  it('does not duplicate the recipient notice when the same wave is replayed (idempotent)', async () => {
+    const sender = await createProvisionedUser('wave-notif-idem-s', `NotifIdemS-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-idem-r', `NotifIdemR-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    await signInAs(sender);
+    const clientId = `notif-idem-${SFX}-1`;
+    await call('live-sendWave', { clientId });
+    await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    // A replay of the same clientId must not add a second notice.
+    await call('live-sendWave', { clientId });
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect((await waveNotifications(recipient.uid)).length).toBe(1);
   });
 });
 
@@ -306,12 +377,15 @@ describe('live-sendWave idempotency', () => {
     // cooldown doc carrying lastWaveId + lastSentAt but NO lastRecipientCount.
     const clientId = `resume-${SFX}-1`;
     const stampedAt = new Date();
-    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
-      uid: sender.uid,
-      lastWaveId: clientId,
-      lastSentAt: stampedAt,
-      expireAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({
+        uid: sender.uid,
+        lastWaveId: clientId,
+        lastSentAt: stampedAt,
+        expireAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
 
     await signInAs(sender);
     const res = (await call('live-sendWave', { clientId })).data as {
@@ -430,12 +504,15 @@ describe('live-sendWave waves-sent stat (Vinkare badge + waves leaderboard)', ()
     // (lastWaveId + lastSentAt, but NO lastRecipientCount) — so nothing was
     // credited yet. The resume delivers AND credits exactly once.
     const clientId = `resume-stat-${SFX}-1`;
-    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
-      uid: sender.uid,
-      lastWaveId: clientId,
-      lastSentAt: new Date(),
-      expireAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({
+        uid: sender.uid,
+        lastWaveId: clientId,
+        lastSentAt: new Date(),
+        expireAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
 
     await signInAs(sender);
     await call('live-sendWave', { clientId });
@@ -469,7 +546,8 @@ describe('liveWaves Firestore rules', () => {
     // A stranger (the sender) cannot read the recipient's inbox.
     await signInAs(sender);
     expect(
-      (await callableError(getDocs(collection(firestore, 'liveWaves', recipient.uid, 'waves')))).code,
+      (await callableError(getDocs(collection(firestore, 'liveWaves', recipient.uid, 'waves'))))
+        .code,
     ).toContain('permission-denied');
 
     // The cooldown doc is backend-only — a client read is denied.

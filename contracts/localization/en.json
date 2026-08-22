@@ -1509,6 +1509,7 @@
     "categoryConvoyChat": "Convoy chat",
     "categoryFriendRequest": "Friend requests",
     "categoryConvoyInvite": "Convoy invites",
+    "categoryWave": "Waves",
     "settingsTitle": "Notification settings",
     "settingsPushTitle": "Push notifications",
     "settingsPushGrantedBody": "Push notifications are enabled. You can change your preferences below.",

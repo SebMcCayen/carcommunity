@@ -99,7 +99,7 @@ describe('notifications-core delivery eligibility', () => {
 });
 
 describe('notifications-core social categories', () => {
-  it('exposes the six chat/social categories as active', () => {
+  it('exposes the chat/social categories as active', () => {
     expect(SOCIAL_NOTIFICATION_CATEGORIES).toEqual([
       'direct_message',
       'community_chat',
@@ -109,6 +109,9 @@ describe('notifications-core social categories', () => {
       // Convoy membership/lifecycle notices (someone left, leadership moved,
       // the convoy ended) — social, and independently silenceable from invites.
       'convoy_update',
+      // A nearby live sharer waved at you outside a convoy (live.sendWave) —
+      // social, opt-out-able like the rest.
+      'wave',
     ]);
     for (const category of SOCIAL_NOTIFICATION_CATEGORIES) {
       expect(NOTIFICATION_CATEGORIES).toContain(category);
@@ -131,9 +134,9 @@ describe('notifications-core social categories', () => {
       // Opting out of one social category leaves the others delivering.
       const others = SOCIAL_NOTIFICATION_CATEGORIES.filter((c) => c !== category);
       for (const other of others) {
-        expect(decideInAppDelivery(other, activeUser, { [category]: { inApp: false } }).deliver).toBe(
-          true,
-        );
+        expect(
+          decideInAppDelivery(other, activeUser, { [category]: { inApp: false } }).deliver,
+        ).toBe(true);
       }
       // Default (no entry) is enabled.
       expect(decideInAppDelivery(category, activeUser, undefined).deliver).toBe(true);

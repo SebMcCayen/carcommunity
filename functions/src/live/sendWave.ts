@@ -33,8 +33,11 @@
  *     `liveWaves/{uid}/waves/{waveId}` inbox — the SAME per-user-inbox shape as
  *     notifications/{uid}/items (owner-only read, backend-only write). Each
  *     recipient's client holds a Firestore listener on its own inbox and pops the
- *     wave via the shared ReactionOverlay. No notification fan-out, no long-term
- *     storage: a wave is a live nudge, and a short `expireAt` TTL sweeps it.
+ *     wave via the shared ReactionOverlay. The transient wave doc is short-lived
+ *     (a live nudge a short `expireAt` TTL sweeps), but each recipient ALSO gets
+ *     one PERSISTENT "{name} waved at you" item on their Notifications page,
+ *     written best-effort under the social `wave` category (see the tail of the
+ *     callable). Convoy reactions/waves are a separate surface and never notify.
  *
  * Invariants:
  *  - Backend is the sole writer of `liveWaves/**` and `liveWaveCooldowns/**`
@@ -58,6 +61,7 @@ import {
   isWithinRadius,
 } from '../incidents/incidents-core';
 import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
+import { writeInAppNotification } from '../notifications/deliver';
 import { LIVE_SESSION_ACTIVE_STATUS } from './nearby-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { badgeProgressRef } from '../badges/tierAwards';
@@ -148,9 +152,7 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // replays — a stamped-but-undelivered (in-flight) doc must NOT be mistaken for a
   // finished one, or a crash between stamp and delivery would silently drop the
   // wave on retry.
-  const completedReplay = (
-    data: Record<string, unknown> | undefined,
-  ): SendWaveResponse | null => {
+  const completedReplay = (data: Record<string, unknown> | undefined): SendWaveResponse | null => {
     if (clientId === undefined || data?.lastWaveId !== clientId) return null;
     if (typeof data?.lastRecipientCount !== 'number') return null;
     return { waveId: clientId, recipientCount: data.lastRecipientCount };
@@ -343,7 +345,11 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     const data = (await tx.get(cooldownDocRef)).data();
     const alreadyCounted =
       data?.lastWaveId === waveId && typeof data?.lastRecipientCount === 'number';
-    tx.set(cooldownDocRef, { lastWaveId: waveId, lastRecipientCount: recipients.length }, { merge: true });
+    tx.set(
+      cooldownDocRef,
+      { lastWaveId: waveId, lastRecipientCount: recipients.length },
+      { merge: true },
+    );
     if (alreadyCounted) {
       return;
     }
@@ -368,6 +374,41 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
       { merge: true },
     );
   });
+
+  // PERSISTENT NOTIFICATION (best-effort, non-blocking): a wave is a transient
+  // pop, but the recipient should also find "{name} waved at you" on their
+  // Notifications page after the animation is gone. This is the ONLY wave surface
+  // that notifies — convoy reactions/waves are a different path and stay ephemeral.
+  //
+  // Written under the social `wave` category (opt-out-able, never essential) via
+  // the shared writeInAppNotification helper, which owns eligibility (deleted /
+  // suspended / per-category opt-out). Idempotent on a deterministic id derived
+  // from the shared waveId, so a resumed (crash-then-retry) delivery re-fans-out
+  // without duplicating notices. NEVER fails the wave: the wave's own delivery,
+  // cooldown and stats are already committed, and a notification write error must
+  // not surface as a failed wave to the sender.
+  //
+  // The self-wave guard is belt-and-braces: `recipients` already excludes the
+  // sender (the geo scan skips `rid === actor.uid`), but the explicit
+  // senderUid !== recipientUid check keeps the invariant local and obvious.
+  const waverName = senderDisplayName ?? 'En medlem';
+  await Promise.allSettled(
+    recipients
+      .filter((recipientUid) => recipientUid !== actor.uid)
+      .map((recipientUid) =>
+        writeInAppNotification(
+          recipientUid,
+          {
+            category: 'wave',
+            title: 'Ny vinkning',
+            previewText: `${waverName} vinkade till dig.`,
+            actionType: 'open_profile',
+            relatedEntityId: actor.uid,
+          },
+          `wave_${waveId}`,
+        ),
+      ),
+  ).catch(() => undefined);
 
   return { waveId, recipientCount: recipients.length };
 });

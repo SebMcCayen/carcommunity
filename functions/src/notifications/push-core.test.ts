@@ -36,9 +36,7 @@ describe('decidePushDelivery — inherits the in-app decision', () => {
       {},
       Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c, { inApp: false }])),
       Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c, { push: false }])),
-      Object.fromEntries(
-        NOTIFICATION_CATEGORIES.map((c) => [c, { inApp: false, push: true }]),
-      ),
+      Object.fromEntries(NOTIFICATION_CATEGORIES.map((c) => [c, { inApp: false, push: true }])),
     ];
     for (const state of [active, suspended, deleted]) {
       for (const preferences of preferenceSets) {
@@ -62,9 +60,10 @@ describe('decidePushDelivery — inherits the in-app decision', () => {
       deliver: false,
       reason: 'suspended',
     });
-    expect(
-      decidePushDelivery('convoy_chat', active, { convoy_chat: { inApp: false } }),
-    ).toEqual({ deliver: false, reason: 'opted_out' });
+    expect(decidePushDelivery('convoy_chat', active, { convoy_chat: { inApp: false } })).toEqual({
+      deliver: false,
+      reason: 'opted_out',
+    });
   });
 
   it('honours a push-only opt-out while in-app still delivers', () => {
@@ -140,6 +139,9 @@ const DELIBERATE_NULL_CATEGORIES = [
   'account_warning',
   'account_suspension',
   'system_notice',
+  // wave: relatedEntityId is the waver's uid, but the notifications inbox has no
+  // profile deep-link target, so nothing navigable comes back.
+  'wave',
 ] as const satisfies readonly NotificationCategory[];
 
 describe('buildPushDeepLink', () => {
@@ -234,7 +236,11 @@ describe('buildPushDeepLink', () => {
     // direct_message is in neither list: it does not pass relatedEntityId
     // through, it PARSES the pairId (covered by its own tests above). If a new
     // category is added without being classified here, this fails.
-    const classified = [...PASS_THROUGH_CATEGORIES, ...DELIBERATE_NULL_CATEGORIES, 'direct_message'];
+    const classified = [
+      ...PASS_THROUGH_CATEGORIES,
+      ...DELIBERATE_NULL_CATEGORIES,
+      'direct_message',
+    ];
     expect([...classified].sort()).toEqual([...NOTIFICATION_CATEGORIES].sort());
   });
 
@@ -307,10 +313,7 @@ describe('buildPushPayload', () => {
 
 describe('token registry + send batching', () => {
   it('stores the raw token — a hash-only row cannot be sent to', () => {
-    const doc = buildPushTokenDocument(
-      { token: 'raw-fcm-token', platform: 'android' },
-      () => 'TS',
-    );
+    const doc = buildPushTokenDocument({ token: 'raw-fcm-token', platform: 'android' }, () => 'TS');
     expect(doc.token).toBe('raw-fcm-token');
     expect(doc.platform).toBe('android');
   });
@@ -366,11 +369,7 @@ describe('selectEvictableTokenIds — the per-user registration cap', () => {
   });
 
   it('evicts least-recently-seen first, not insertion order', () => {
-    const existing = [
-      candidate('newest', 900),
-      candidate('oldest', 100),
-      candidate('middle', 500),
-    ];
+    const existing = [candidate('newest', 900), candidate('oldest', 100), candidate('middle', 500)];
     expect(selectEvictableTokenIds(existing, 2)).toEqual(['oldest', 'middle']);
   });
 

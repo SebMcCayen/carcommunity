@@ -40,6 +40,13 @@ enum class NotificationCategory(val wire: String) {
      * driving in just ended".
      */
     CONVOY_UPDATE("convoy_update"),
+
+    /**
+     * A nearby live sharer waved at you OUTSIDE a convoy (backend live.sendWave).
+     * Social, opt-out-able. The transient wave already popped on the map; this is
+     * the durable "{name} waved at you" record on the Notifications page.
+     */
+    WAVE("wave"),
     ;
 
     companion object {
