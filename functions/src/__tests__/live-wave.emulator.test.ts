@@ -51,6 +51,20 @@ import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
 import { memberMonthlyStatsDocId } from '../leaderboard/leaderboard-core';
+import { WAVE_NOTIF_WINDOW_MS } from '../live/wave-core';
+
+/**
+ * Keep two waves seconds apart from straddling a rate-limit bucket boundary
+ * (which would create two notices and flake the test). If we are within a
+ * generous margin of the next bucket edge, wait until just past it so both sends
+ * land early in a fresh bucket with a full window of headroom.
+ */
+async function avoidWaveBucketEdge(marginMs = 30_000): Promise<void> {
+  const msToEdge = WAVE_NOTIF_WINDOW_MS - (Date.now() % WAVE_NOTIF_WINDOW_MS);
+  if (msToEdge < marginMs) {
+    await new Promise((resolve) => setTimeout(resolve, msToEdge + 500));
+  }
+}
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -309,6 +323,10 @@ describe('live-sendWave persistent notification', () => {
     const recipient = await createProvisionedUser('wave-notif-win-r', `NotifWinR-${SFX}`);
     await shareAt(recipient, HERE);
     await shareAt(sender, HERE);
+
+    // Deterministic-by-construction: keep both sends inside ONE bucket so the
+    // collapse is guaranteed rather than clock-dependent.
+    await avoidWaveBucketEdge();
 
     await signInAs(sender);
     await call('live-sendWave', {});

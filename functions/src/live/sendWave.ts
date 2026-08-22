@@ -87,7 +87,13 @@ const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
-  timeoutSeconds: 30,
+  // 60s (not the 30s default): after the fan-out delivery the callable also runs
+  // the persistent-notification writes on-path (concurrency-capped, one create-
+  // if-absent transaction per recipient, up to MAX_RECIPIENTS). The headroom
+  // keeps a large-audience wave from brushing the timeout. If wave volume grows,
+  // the durable fix is to move that fan-out fully off the request path (a
+  // liveWaves Firestore trigger or a task queue) rather than raising this further.
+  timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
 
@@ -341,14 +347,20 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // the durable notices must be written (or re-written) on every path that could
   // still retry — i.e. BEFORE the marker — or a crash between the marker and the
   // notices would drop them forever on the replay. The writes are idempotent on
-  // the deterministic per-pair-per-window id below (waveNotificationId), so a
-  // resumed (crash-then-retry) delivery re-attempts them without duplicating.
+  // the deterministic per-pair-per-window id `waveNotificationId(actor.uid,
+  // recipientUid, stampedAtMs)`, so a resumed (crash-then-retry) delivery
+  // re-attempts them without duplicating.
   //
   // Written under the social `wave` category (opt-out-able, never essential) via
   // the shared writeInAppNotification helper, which owns eligibility (deleted /
-  // suspended / per-category opt-out). NEVER fails the wave: Promise.allSettled
-  // swallows a per-recipient write error, and the wave's delivery + cooldown are
-  // already committed — a notification write must not surface as a failed wave.
+  // suspended / per-category opt-out). BEST-EFFORT: Promise.allSettled swallows a
+  // per-recipient write error, and the wave's delivery + cooldown are already
+  // committed before this runs, so a per-write failure never fails the wave. It
+  // is NOT unfailable in the absolute sense — the writes are on the callable's
+  // path, so a pathological large fan-out could still hit the (raised, 60s)
+  // request timeout; the concurrency cap below keeps that far from reach, and the
+  // durable fix if wave volume grows is to move the fan-out off the request path
+  // (a liveWaves Firestore trigger or a task queue).
   //
   // RATE-LIMITED to at most one notice per sender→recipient PAIR per
   // WAVE_NOTIF_WINDOW_MS: the id buckets the wave's authoritative stamp time
