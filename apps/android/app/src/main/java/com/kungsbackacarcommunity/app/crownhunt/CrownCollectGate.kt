@@ -20,7 +20,15 @@ package com.kungsbackacarcommunity.app.crownhunt
  * makes moving quickly worth anything. [Moving] carries no number at all, on
  * purpose: telling a driver "you are doing 9 km/h, get under 7.2" is an
  * invitation to watch the number and shave it, which is precisely the behaviour
- * the rule exists to prevent. The message is a flat "stop the car first".
+ * the rule exists to prevent. Nor is [Moving] even given its own "stop the car
+ * first" headline any more: in range it is indistinguishable to the member from
+ * [Confirming] — both are the same "stand still a moment" wait, one where the
+ * derived speed is still settling and one where the two-fix proof has not aged in
+ * — so the popup folds it into the SAME indeterminate "confirming you're
+ * stopped…" line (no number, no separate stop-first message) rather than flashing
+ * a blunt instruction that flips to a countdown on the next approach. The choice
+ * of copy lives entirely in `CrownSpawnMessages`; this type still decides only
+ * WHICH state applies, and still shows no speed.
  *
  * Nor does it nag. This is a pure function over the state the map already has;
  * nothing here schedules an alert, a sound, a vibration or a flash. A driver who
