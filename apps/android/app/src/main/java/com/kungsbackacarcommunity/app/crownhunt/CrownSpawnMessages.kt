@@ -82,7 +82,7 @@ object CrownSpawnMessages {
      * settling to a stop, the other where the stationary proof has not aged in yet
      * — and a member could hit either on different approaches to the SAME crown
      * purely by GPS timing. Showing "stop the car first" on one and a calm
-     * "confirming you're stopped" countdown on the other read as two different
+     * "confirming you're stopped" countdown on the other reads as two different
      * crowns behaving differently. So in range, `Moving` carries no headline and
      * folds into the confirming presentation: the BUTTON says "confirming you're
      * stopped…" (indeterminate, no number) via [collectActionLabelRes], exactly as
