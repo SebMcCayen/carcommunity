@@ -51,6 +51,20 @@ import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seasonIdForInstant } from '../crownHunt/crown-hunt-stats-core';
 import { memberMonthlyStatsDocId } from '../leaderboard/leaderboard-core';
+import { WAVE_NOTIF_WINDOW_MS } from '../live/wave-core';
+
+/**
+ * Keep two waves seconds apart from straddling a rate-limit bucket boundary
+ * (which would create two notices and flake the test). If we are within a
+ * generous margin of the next bucket edge, wait until just past it so both sends
+ * land early in a fresh bucket with a full window of headroom.
+ */
+async function avoidWaveBucketEdge(marginMs = 30_000): Promise<void> {
+  const msToEdge = WAVE_NOTIF_WINDOW_MS - (Date.now() % WAVE_NOTIF_WINDOW_MS);
+  if (msToEdge < marginMs) {
+    await new Promise((resolve) => setTimeout(resolve, msToEdge + 500));
+  }
+}
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -140,7 +154,10 @@ const coordinateAt = (lat: number, lng: number) => ({
 });
 
 /** Start a session and publish one position, writing the discovery doc. */
-async function shareAt(user: TestUser, point: { latitude: number; longitude: number }): Promise<void> {
+async function shareAt(
+  user: TestUser,
+  point: { latitude: number; longitude: number },
+): Promise<void> {
   await signInAs(user);
   await call('live-startSession', { duration: '1h' });
   await call('live-updatePosition', { coordinate: coordinateAt(point.latitude, point.longitude) });
@@ -152,6 +169,17 @@ async function shareAt(user: TestUser, point: { latitude: number; longitude: num
 
 async function inboxDocs(recipientUid: string) {
   return (await adminDb.collection('liveWaves').doc(recipientUid).collection('waves').get()).docs;
+}
+
+/** Persistent `wave`-category notifications on this user's Notifications page. */
+async function waveNotifications(uid: string) {
+  const snap = await adminDb
+    .collection('notifications')
+    .doc(uid)
+    .collection('items')
+    .where('category', '==', 'wave')
+    .get();
+  return snap.docs;
 }
 
 /** The lifetime waves-sent counter on badgeProgress/{uid} (0 when absent). */
@@ -202,7 +230,9 @@ describe('live-sendWave gating', () => {
     );
     // The rejected (not-sharing) attempt must NOT stamp the cooldown, so it can
     // never rate-limit the caller's next legitimate wave.
-    expect((await adminDb.collection('liveWaveCooldowns').doc(lurker.uid).get()).exists).toBe(false);
+    expect((await adminDb.collection('liveWaveCooldowns').doc(lurker.uid).get()).exists).toBe(
+      false,
+    );
   });
 
   it('rejects a client-supplied position (strict schema)', async () => {
@@ -247,8 +277,95 @@ describe('live-sendWave delivery', () => {
     await shareAt(sender, HERE);
 
     await signInAs(sender);
-    const res = (await call('live-sendWave', {})).data as { waveId: string; recipientCount: number };
+    const res = (await call('live-sendWave', {})).data as {
+      waveId: string;
+      recipientCount: number;
+    };
     expect((await inboxDocs(distant.uid)).some((d) => d.id === res.waveId)).toBe(false);
+  });
+});
+
+describe('live-sendWave persistent notification', () => {
+  it('creates a "waved at you" notice for the recipient, carrying the waver name, and none for the sender', async () => {
+    const sender = await createProvisionedUser('wave-notif-s', `NotifSender-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-r', `NotifRecv-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    await signInAs(sender);
+    const res = (await call('live-sendWave', {})).data as {
+      waveId: string;
+      recipientCount: number;
+    };
+    expect(res.recipientCount).toBeGreaterThanOrEqual(1);
+
+    // The recipient gets exactly one persistent wave notification naming the waver.
+    const notices = await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    expect(notices.length).toBe(1);
+    const notice = notices[0]!.data();
+    expect(notice.category).toBe('wave');
+    expect(notice.previewText).toContain(`NotifSender-${SFX}`);
+    expect(notice.relatedEntityId).toBe(sender.uid);
+    expect(notice.read).toBe(false);
+    // Deterministic per-pair-per-window id (wave_<sender>_<recipient>_<bucket>),
+    // so a resumed delivery / a re-wave in the same window won't duplicate.
+    expect(notices[0]!.id).toMatch(new RegExp(`^wave_${sender.uid}_${recipient.uid}_\\d+$`));
+
+    // No self-wave notice: the sender never notifies themselves.
+    expect((await waveNotifications(sender.uid)).length).toBe(0);
+  });
+
+  it('creates at most one notice per sender→recipient pair within the rate-limit window', async () => {
+    const sender = await createProvisionedUser('wave-notif-win-s', `NotifWinS-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-win-r', `NotifWinR-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    // Deterministic-by-construction: keep both sends inside ONE bucket so the
+    // collapse is guaranteed rather than clock-dependent.
+    await avoidWaveBucketEdge();
+
+    await signInAs(sender);
+    await call('live-sendWave', {});
+    const first = await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    expect(first.length).toBe(1);
+
+    // Age the 45s SEND cooldown (distinct from the notification window) so a
+    // SECOND, DIFFERENT wave is allowed. It lands in the same window bucket, so
+    // its per-pair id collides with the first and the create-if-absent write is a
+    // no-op — the recipient still has exactly one wave notice.
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({ lastSentAt: new Date(Date.now() - 60_000) }, { merge: true });
+    await call('live-sendWave', {});
+    expect((await waveNotifications(recipient.uid)).length).toBe(1);
+  });
+
+  it('does not duplicate the recipient notice when the same wave is replayed (idempotent)', async () => {
+    const sender = await createProvisionedUser('wave-notif-idem-s', `NotifIdemS-${SFX}`);
+    const recipient = await createProvisionedUser('wave-notif-idem-r', `NotifIdemR-${SFX}`);
+    await shareAt(recipient, HERE);
+    await shareAt(sender, HERE);
+
+    await signInAs(sender);
+    const clientId = `notif-idem-${SFX}-1`;
+    await call('live-sendWave', { clientId });
+    await pollUntil(async () => {
+      const docs = await waveNotifications(recipient.uid);
+      return docs.length >= 1 ? docs : undefined;
+    });
+    // A replay of the same clientId must not add a second notice. The callable
+    // awaits the (idempotent) notification writes before returning, so once the
+    // replay resolves there is nothing left in flight to wait on.
+    await call('live-sendWave', { clientId });
+    expect((await waveNotifications(recipient.uid)).length).toBe(1);
   });
 });
 
@@ -306,12 +423,15 @@ describe('live-sendWave idempotency', () => {
     // cooldown doc carrying lastWaveId + lastSentAt but NO lastRecipientCount.
     const clientId = `resume-${SFX}-1`;
     const stampedAt = new Date();
-    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
-      uid: sender.uid,
-      lastWaveId: clientId,
-      lastSentAt: stampedAt,
-      expireAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({
+        uid: sender.uid,
+        lastWaveId: clientId,
+        lastSentAt: stampedAt,
+        expireAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
 
     await signInAs(sender);
     const res = (await call('live-sendWave', { clientId })).data as {
@@ -430,12 +550,15 @@ describe('live-sendWave waves-sent stat (Vinkare badge + waves leaderboard)', ()
     // (lastWaveId + lastSentAt, but NO lastRecipientCount) — so nothing was
     // credited yet. The resume delivers AND credits exactly once.
     const clientId = `resume-stat-${SFX}-1`;
-    await adminDb.collection('liveWaveCooldowns').doc(sender.uid).set({
-      uid: sender.uid,
-      lastWaveId: clientId,
-      lastSentAt: new Date(),
-      expireAt: new Date(Date.now() + 60 * 60 * 1000),
-    });
+    await adminDb
+      .collection('liveWaveCooldowns')
+      .doc(sender.uid)
+      .set({
+        uid: sender.uid,
+        lastWaveId: clientId,
+        lastSentAt: new Date(),
+        expireAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
 
     await signInAs(sender);
     await call('live-sendWave', { clientId });
@@ -469,7 +592,8 @@ describe('liveWaves Firestore rules', () => {
     // A stranger (the sender) cannot read the recipient's inbox.
     await signInAs(sender);
     expect(
-      (await callableError(getDocs(collection(firestore, 'liveWaves', recipient.uid, 'waves')))).code,
+      (await callableError(getDocs(collection(firestore, 'liveWaves', recipient.uid, 'waves'))))
+        .code,
     ).toContain('permission-denied');
 
     // The cooldown doc is backend-only — a client read is denied.

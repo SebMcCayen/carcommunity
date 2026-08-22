@@ -33,8 +33,12 @@
  *     `liveWaves/{uid}/waves/{waveId}` inbox — the SAME per-user-inbox shape as
  *     notifications/{uid}/items (owner-only read, backend-only write). Each
  *     recipient's client holds a Firestore listener on its own inbox and pops the
- *     wave via the shared ReactionOverlay. No notification fan-out, no long-term
- *     storage: a wave is a live nudge, and a short `expireAt` TTL sweeps it.
+ *     wave via the shared ReactionOverlay. The transient wave doc is short-lived
+ *     (a live nudge a short `expireAt` TTL sweeps), but each recipient ALSO gets
+ *     one PERSISTENT "{name} waved at you" item on their Notifications page,
+ *     written best-effort under the social `wave` category (idempotently, before
+ *     the completion marker so a retry never drops it). Convoy reactions/waves are
+ *     a separate surface and never notify.
  *
  * Invariants:
  *  - Backend is the sole writer of `liveWaves/**` and `liveWaveCooldowns/**`
@@ -47,6 +51,7 @@
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
 import { FieldPath, FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { db } from '../firebase';
 import { requireActiveActor } from '../shared/memberActor';
@@ -58,6 +63,7 @@ import {
   isWithinRadius,
 } from '../incidents/incidents-core';
 import { isBlockedAgainstAnyPeer, resolvePeerBlockPairs } from '../convoy/convoy-core';
+import { writeInAppNotification } from '../notifications/deliver';
 import { LIVE_SESSION_ACTIVE_STATUS } from './nearby-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 import { badgeProgressRef } from '../badges/tierAwards';
@@ -75,13 +81,20 @@ import {
   waveCooldownExpiry,
   waveCooldownRemainingMs,
   waveExpiry,
+  waveNotificationId,
 } from './wave-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
   maxInstances: MAX_INSTANCES_MEMBER,
   memory: '256MiB' as const,
-  timeoutSeconds: 30,
+  // 60s (not the 30s default): after the fan-out delivery the callable also runs
+  // the persistent-notification writes on-path (concurrency-capped, one create-
+  // if-absent transaction per recipient, up to MAX_RECIPIENTS). The headroom
+  // keeps a large-audience wave from brushing the timeout. If wave volume grows,
+  // the durable fix is to move that fan-out fully off the request path (a
+  // liveWaves Firestore trigger or a task queue) rather than raising this further.
+  timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
 };
 
@@ -126,8 +139,11 @@ export interface SendWaveResponse {
  */
 type CooldownGate =
   | { kind: 'replay'; waveId: string; recipientCount: number }
-  | { kind: 'send'; waveId: string }
-  | { kind: 'resume'; waveId: string };
+  // `stampedAtMs` is the wave's authoritative send instant (the cooldown stamp):
+  // `nowMs` for a fresh send, the ORIGINAL crashed attempt's stamp for a resume.
+  // Stable across retries, so the per-pair-per-window notification id reproduces.
+  | { kind: 'send'; waveId: string; stampedAtMs: number }
+  | { kind: 'resume'; waveId: string; stampedAtMs: number };
 
 export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveResponse> => {
   const actor = await requireActiveActor(request);
@@ -148,9 +164,7 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
   // replays — a stamped-but-undelivered (in-flight) doc must NOT be mistaken for a
   // finished one, or a crash between stamp and delivery would silently drop the
   // wave on retry.
-  const completedReplay = (
-    data: Record<string, unknown> | undefined,
-  ): SendWaveResponse | null => {
+  const completedReplay = (data: Record<string, unknown> | undefined): SendWaveResponse | null => {
     if (clientId === undefined || data?.lastWaveId !== clientId) return null;
     if (typeof data?.lastRecipientCount !== 'number') return null;
     return { waveId: clientId, recipientCount: data.lastRecipientCount };
@@ -210,7 +224,9 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     // the crashed attempt, so proceed to (idempotent) delivery WITHOUT stamping
     // again — the wave is neither dropped nor double-charged.
     if (isInFlight(data)) {
-      return { kind: 'resume', waveId: clientId as string };
+      const resumeStamp =
+        data?.lastSentAt instanceof Timestamp ? data.lastSentAt.toMillis() : nowMs;
+      return { kind: 'resume', waveId: clientId as string, stampedAtMs: resumeStamp };
     }
 
     const lastSentAt = data?.lastSentAt as Timestamp | undefined;
@@ -244,13 +260,13 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
       },
       { merge: true },
     );
-    return { kind: 'send', waveId: newWaveId };
+    return { kind: 'send', waveId: newWaveId, stampedAtMs: nowMs };
   });
 
   if (gate.kind === 'replay') {
     return { waveId: gate.waveId, recipientCount: gate.recipientCount };
   }
-  const { waveId } = gate;
+  const { waveId, stampedAtMs } = gate;
 
   // RECIPIENTS: the same cell-bounded query live.listNearby uses. Radius is the
   // FIXED wave reach (clamped), never client-supplied.
@@ -321,6 +337,84 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     await batch.commit();
   }
 
+  // PERSISTENT NOTIFICATION (best-effort, non-blocking): a wave is a transient
+  // pop, but the recipient should also find "{name} waved at you" on their
+  // Notifications page after the animation is gone. This is the ONLY wave surface
+  // that notifies — convoy reactions/waves are a different path and stay ephemeral.
+  //
+  // ORDERED BEFORE the completion-marker transaction ON PURPOSE: recording
+  // `lastRecipientCount` is what turns this send COMPLETED, and a completed retry
+  // short-circuits at the replay fast path and never reaches this code again. So
+  // the durable notices must be written (or re-written) on every path that could
+  // still retry — i.e. BEFORE the marker — or a crash between the marker and the
+  // notices would drop them forever on the replay. The writes are idempotent on
+  // the deterministic per-pair-per-window id `waveNotificationId(actor.uid,
+  // recipientUid, stampedAtMs)`, so a resumed (crash-then-retry) delivery
+  // re-attempts them without duplicating.
+  //
+  // Written under the social `wave` category (opt-out-able, never essential) via
+  // the shared writeInAppNotification helper, which owns eligibility (deleted /
+  // suspended / per-category opt-out). BEST-EFFORT: Promise.allSettled swallows a
+  // per-recipient write error, and the wave's delivery + cooldown are already
+  // committed before this runs, so a per-write failure never fails the wave. It
+  // is NOT unfailable in the absolute sense — the writes are on the callable's
+  // path, so a pathological large fan-out could still hit the (raised, 60s)
+  // request timeout; the concurrency cap below keeps that far from reach, and the
+  // durable fix if wave volume grows is to move the fan-out off the request path
+  // (a liveWaves Firestore trigger or a task queue).
+  //
+  // RATE-LIMITED to at most one notice per sender→recipient PAIR per
+  // WAVE_NOTIF_WINDOW_MS: the id buckets the wave's authoritative stamp time
+  // (waveNotificationId), and writeInAppNotification is create-if-absent on that
+  // id, so a second wave from the same sender to the same recipient inside the
+  // window is a no-op. Using the STAMP time (not the resume attempt's clock) is
+  // what keeps a retried/resumed send in the same bucket = same id = no duplicate.
+  //
+  // The self-wave guard is belt-and-braces: `recipients` already excludes the
+  // sender (the geo scan skips `rid === actor.uid`), but the explicit
+  // senderUid !== recipientUid check keeps the invariant local and obvious.
+  //
+  // CONCURRENCY CAP: each notice is a create-if-absent TRANSACTION (two reads +
+  // a write), and a wave can fan out to MAX_RECIPIENTS (200). Firing all of them
+  // at once on the request path risks a timeout / RESOURCE_EXHAUSTED that,
+  // despite the best-effort intent, would surface as a failed wave. So the writes
+  // run in bounded chunks — at most NOTIF_WRITE_CONCURRENCY transactions in
+  // flight — each chunk awaited before the next. Still best-effort + post-commit.
+  // If wave volume grows, a fully-async path (a liveWaves Firestore trigger or a
+  // task queue) would move this off the request entirely; the bounded batch is
+  // the fix for now.
+  const waverName = senderDisplayName ?? 'En medlem';
+  const notifRecipients = recipients.filter((recipientUid) => recipientUid !== actor.uid);
+  const NOTIF_WRITE_CONCURRENCY = 20;
+  let notifFailed = 0;
+  for (let i = 0; i < notifRecipients.length; i += NOTIF_WRITE_CONCURRENCY) {
+    const results = await Promise.allSettled(
+      notifRecipients.slice(i, i + NOTIF_WRITE_CONCURRENCY).map((recipientUid) =>
+        writeInAppNotification(
+          recipientUid,
+          {
+            category: 'wave',
+            title: 'Ny vinkning',
+            previewText: `${waverName} vinkade till dig.`,
+            relatedEntityId: actor.uid,
+          },
+          waveNotificationId(actor.uid, recipientUid, stampedAtMs),
+        ),
+      ),
+    );
+    notifFailed += results.filter((r) => r.status === 'rejected').length;
+  }
+  // Best-effort must not be SILENT: a swallowed per-recipient failure hides real
+  // prod delivery problems. Log a PII-FREE aggregate (counts only, never uids)
+  // and only when something actually failed, mirroring the event-reminder
+  // fan-out. Still never throws — the wave already succeeded.
+  if (notifFailed > 0) {
+    logger.warn('wave notifications: some recipients failed to receive an in-app notice', {
+      failed: notifFailed,
+      total: notifRecipients.length,
+    });
+  }
+
   // COMPLETION MARKER + WAVES-SENT STAT, in ONE transaction so the counter is
   // credited EXACTLY ONCE per completed send. Recording `lastRecipientCount` is
   // what turns a stamped in-flight send into a COMPLETED one — a retry before
@@ -343,7 +437,11 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     const data = (await tx.get(cooldownDocRef)).data();
     const alreadyCounted =
       data?.lastWaveId === waveId && typeof data?.lastRecipientCount === 'number';
-    tx.set(cooldownDocRef, { lastWaveId: waveId, lastRecipientCount: recipients.length }, { merge: true });
+    tx.set(
+      cooldownDocRef,
+      { lastWaveId: waveId, lastRecipientCount: recipients.length },
+      { merge: true },
+    );
     if (alreadyCounted) {
       return;
     }

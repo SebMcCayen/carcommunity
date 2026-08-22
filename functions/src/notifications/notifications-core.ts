@@ -82,6 +82,11 @@ import { isRestricted, type UserAccessState } from '../shared/access';
  *                      of an unread run only)
  *  - friend_request  — friends/manageFriends.ts (new request → invitee;
  *                      accept → requester; a decline is silent)
+ *  - wave            — live/sendWave.ts (a NON-convoy wave to a nearby live
+ *                      sharer: each recipient of the proximity broadcast gets a
+ *                      "{name} waved at you" notice; the waver's own delivery is
+ *                      excluded, so there is never a self-wave notice). Convoy
+ *                      reactions/waves are a different surface and do NOT notify.
  *  - convoy_chat     — chatchannels/convoyChat.ts (post; fan-out to the other
  *                      accepted members, collapsed per time window)
  *  - community_chat  — chatchannels/communityChat.ts (post; @MENTIONS ONLY —
@@ -107,6 +112,7 @@ export const NOTIFICATION_CATEGORIES = [
   'friend_request',
   'convoy_invite',
   'convoy_update',
+  'wave',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
@@ -121,6 +127,7 @@ export const SOCIAL_NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
   'friend_request',
   'convoy_invite',
   'convoy_update',
+  'wave',
 ] as const;
 
 /**
@@ -213,9 +220,7 @@ const firestoreIdSchema = z
   .regex(/^[A-Za-z0-9._-]+$/)
   .refine((id) => id !== '.' && id !== '..');
 
-const markNotificationReadInputSchema = z
-  .object({ notificationId: firestoreIdSchema })
-  .strict();
+const markNotificationReadInputSchema = z.object({ notificationId: firestoreIdSchema }).strict();
 
 const registerPushTokenInputSchema = z
   .object({
@@ -283,8 +288,7 @@ export function isEssentialCategory(category: NotificationCategory): boolean {
 }
 
 export type DeliveryDecision =
-  | { deliver: true }
-  | { deliver: false; reason: 'deleted' | 'suspended' | 'opted_out' };
+  { deliver: true } | { deliver: false; reason: 'deleted' | 'suspended' | 'opted_out' };
 
 /**
  * Whether an in-app notification may be written for this recipient.
@@ -478,6 +482,12 @@ export function buildPushDeepLink(
       return { target: 'convoys', entityId: entityIdOrNull(relatedEntityId) };
     case 'friend_request':
       return { target: 'friends', entityId: entityIdOrNull(relatedEntityId) };
+    case 'wave':
+      // A nearby live sharer waved at you (live.sendWave). relatedEntityId is the
+      // waver's uid, but the notifications inbox has no profile deep-link target,
+      // so a tap lands on the list rather than handing an arbitrary uid to a
+      // navigator with no matching destination.
+      return { target: 'notifications', entityId: null };
     case 'event_created':
     case 'event_reminder':
     case 'event_updated':

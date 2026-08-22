@@ -56,6 +56,7 @@ object NotificationCategories {
             "friend_request",
             "convoy_invite",
             "convoy_update",
+            "wave",
             "account_warning",
             "account_suspension",
         )
@@ -73,6 +74,7 @@ object NotificationCategories {
             "friend_request",
             "convoy_invite",
             "convoy_update",
+            "wave",
         )
 
     /** Essential account notices — cannot be disabled in-app or push. */

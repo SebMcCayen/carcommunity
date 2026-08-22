@@ -106,6 +106,45 @@ export function waveExpiry(now: Date): Timestamp {
   return Timestamp.fromMillis(now.getTime() + WAVE_RETENTION_MINUTES * MINUTE_MS);
 }
 
+// ---------------------------------------------------------------------------
+// Persistent-notification rate-limit window (de-noising)
+// ---------------------------------------------------------------------------
+
+/**
+ * The rate-limit window for the PERSISTENT "{name} waved at you" notification on
+ * the recipient's Notifications page (distinct from [WAVE_COOLDOWN_MS], the
+ * sender's send throttle). At most ONE such notice is created per
+ * sender→recipient PAIR per window: the notification's deterministic id buckets
+ * the current time by this window (`wave_<sender>_<recipient>_<bucket>`), and
+ * writeInAppNotification is create-if-absent on that id, so a second wave from
+ * the same sender to the same recipient inside the window is a no-op.
+ *
+ * TUNABLE. A FIXED (aligned) bucket, not a rolling window — simple and cheap for
+ * de-noising; two waves either side of a bucket boundary can still yield two
+ * notices, which is acceptable. Buckets by the wave's authoritative stamp time so
+ * a retried/resumed send reproduces the same id (retry-idempotent).
+ */
+export const WAVE_NOTIF_WINDOW_MS = 60 * MINUTE_MS;
+
+/** The current rate-limit bucket for [WAVE_NOTIF_WINDOW_MS] at `stampMs`. */
+export function waveNotifBucket(stampMs: number): number {
+  return Math.floor(stampMs / WAVE_NOTIF_WINDOW_MS);
+}
+
+/**
+ * Deterministic per-pair-per-window id for the persistent wave notification.
+ * A second wave from the same sender to the same recipient inside the same
+ * bucket collapses to this same id (create-if-absent = no-op), and a retry of
+ * one logical wave lands in the same bucket (same stamp) = same id.
+ */
+export function waveNotificationId(
+  senderUid: string,
+  recipientUid: string,
+  stampMs: number,
+): string {
+  return `wave_${senderUid}_${recipientUid}_${waveNotifBucket(stampMs)}`;
+}
+
 /**
  * The cooldown document's `expireAt`. Must comfortably outlive the cooldown
  * window so a doc is never swept while it is still throttling; an hour past the
@@ -190,4 +229,5 @@ export function parseSendWaveInput(data: unknown): ParseResult<SendWaveInput> {
 
 /** User-facing messages (clients branch on the HttpsError code, never text). */
 export const WAVE_RATE_LIMITED_MESSAGE = 'Slow down — you just waved.';
-export const WAVE_NOT_SHARING_MESSAGE = 'Start sharing your live location to wave at people nearby.';
+export const WAVE_NOT_SHARING_MESSAGE =
+  'Start sharing your live location to wave at people nearby.';

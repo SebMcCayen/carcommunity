@@ -1406,6 +1406,7 @@
     <string name="notifications_categoryConvoyChat">Konvojchatt</string>
     <string name="notifications_categoryFriendRequest">Vänförfrågningar</string>
     <string name="notifications_categoryConvoyInvite">Konvoj-inbjudningar</string>
+    <string name="notifications_categoryWave">Vinkningar</string>
     <string name="notifications_settingsTitle">Notisinställningar</string>
     <string name="notifications_settingsPushTitle">Push-notiser</string>
     <string name="notifications_settingsPushGrantedBody">Push-notiser är aktiverade. Du kan ändra dina val nedan.</string>

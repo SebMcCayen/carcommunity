@@ -22,4 +22,5 @@ fun NotificationCategory.labelRes(): Int =
         NotificationCategory.FRIEND_REQUEST -> R.string.notifications_categoryFriendRequest
         NotificationCategory.CONVOY_INVITE -> R.string.notifications_categoryConvoyInvite
         NotificationCategory.CONVOY_UPDATE -> R.string.notifications_categoryConvoyUpdate
+        NotificationCategory.WAVE -> R.string.notifications_categoryWave
     }

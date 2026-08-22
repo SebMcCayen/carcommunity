@@ -1406,6 +1406,7 @@
     <string name="notifications_categoryConvoyChat">Convoy chat</string>
     <string name="notifications_categoryFriendRequest">Friend requests</string>
     <string name="notifications_categoryConvoyInvite">Convoy invites</string>
+    <string name="notifications_categoryWave">Waves</string>
     <string name="notifications_settingsTitle">Notification settings</string>
     <string name="notifications_settingsPushTitle">Push notifications</string>
     <string name="notifications_settingsPushGrantedBody">Push notifications are enabled. You can change your preferences below.</string>

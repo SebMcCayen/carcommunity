@@ -13,6 +13,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   SEND_WAVE_EXPECTED,
   WAVE_COOLDOWN_MS,
+  WAVE_NOTIF_WINDOW_MS,
   WAVE_RADIUS_METERS,
   WAVE_RETENTION_MINUTES,
   buildWaveDocument,
@@ -21,7 +22,33 @@ import {
   waveCooldownExpiry,
   waveCooldownRemainingMs,
   waveExpiry,
+  waveNotifBucket,
+  waveNotificationId,
 } from './wave-core';
+
+describe('wave notification rate-limit bucketing', () => {
+  it('keeps two instants inside the same window in one bucket, and separates later ones', () => {
+    const base = 1_000 * WAVE_NOTIF_WINDOW_MS; // aligned to a bucket boundary
+    expect(waveNotifBucket(base)).toBe(1_000);
+    // Anywhere within the window shares the bucket.
+    expect(waveNotifBucket(base + WAVE_NOTIF_WINDOW_MS - 1)).toBe(1_000);
+    // The next window is the next bucket.
+    expect(waveNotifBucket(base + WAVE_NOTIF_WINDOW_MS)).toBe(1_001);
+  });
+
+  it('collapses a same-pair, same-window id and separates pairs / windows', () => {
+    const base = 5_000 * WAVE_NOTIF_WINDOW_MS;
+    const a = waveNotificationId('sender1', 'recip1', base);
+    // Same pair, same window → identical id (create-if-absent no-op = one notice).
+    expect(waveNotificationId('sender1', 'recip1', base + 10)).toBe(a);
+    // Different recipient, different sender, and a later window each differ.
+    expect(waveNotificationId('sender1', 'recip2', base)).not.toBe(a);
+    expect(waveNotificationId('sender2', 'recip1', base)).not.toBe(a);
+    expect(waveNotificationId('sender1', 'recip1', base + WAVE_NOTIF_WINDOW_MS)).not.toBe(a);
+    // Well-formed Firestore id segment.
+    expect(a).toMatch(/^wave_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+_\d+$/);
+  });
+});
 
 describe('wave cooldown window', () => {
   it('is a single per-user window in the 30–60s band the owner asked for', () => {
