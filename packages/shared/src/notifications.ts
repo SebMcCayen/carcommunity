@@ -61,6 +61,7 @@ export const NOTIFICATION_CATEGORIES = [
   'friend_request',
   'convoy_invite',
   'convoy_update',
+  'wave',
 ] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
 
@@ -178,4 +179,3 @@ export interface AdminSendNotificationResponse {
     createdAt: string;
   };
 }
-
