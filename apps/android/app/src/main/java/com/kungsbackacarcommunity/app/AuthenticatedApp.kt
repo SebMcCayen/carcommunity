@@ -2315,6 +2315,17 @@ fun AuthenticatedApp(
                         ?: MutableStateFlow(emptySet<String>())
                 }
             val crownCollectedIds by crownCollectedIdsFlow.collectAsState()
+            // Reconcile the "collected by you" set for the current user: the local
+            // cache loads THIS uid's durable marks so they show INSTANTLY on cold
+            // start (before any network round-trip), then the SERVER-authoritative
+            // crownSpawnCollectors listener merges in — correct even after a
+            // reinstall / on a new device. Re-binds on an account switch so account
+            // A's marks never leak to account B. Keyed on (controller, uid) so both
+            // first composition and a uid change re-run it; the server observe
+            // suspends here until the effect is cancelled.
+            LaunchedEffect(crownSpawnController, uid) {
+                crownSpawnController?.syncCollectedForUser(uid)
+            }
             val crownRequeryTicks =
                 remember(mapSurface) { Channel<Unit>(Channel.CONFLATED) }
             LaunchedEffect(selectedTab, crownSpawnController, crownSpawnEnabled, mapSurface) {

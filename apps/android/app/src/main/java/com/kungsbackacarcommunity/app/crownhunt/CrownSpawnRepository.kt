@@ -1,5 +1,8 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
+
 /**
  * The auto-spawn half of Kronjakt's data access. Firebase-free so the layer's
  * logic — the query plan, the poll cadence, the flag gate — is unit-testable
@@ -46,6 +49,23 @@ interface CrownSpawnRepository {
         previous: CrownFix,
         idempotencyKey: String,
     ): CrownSpawnClaimOutcome
+
+    /**
+     * The SERVER-AUTHORITATIVE "collected by you" set: a live stream of the
+     * (spawn id -> crown expiry millis) records THIS [uid] has already collected,
+     * read straight from `crownSpawnCollectors where userId == uid`.
+     *
+     * This is the source of truth the local cache reconciles against — it is
+     * correct even after a reinstall or on a new device, where the on-device
+     * cache starts empty. The rule restricts the collection to the owner's own
+     * records, so a member only ever sees their OWN pickups. A `null` expiry means
+     * the collector document omitted one.
+     *
+     * Default is an empty stream so a Firebase-free build (and the unit-test fake)
+     * simply contributes no server truth and the layer falls back to the local
+     * cache alone.
+     */
+    fun observeCollected(uid: String): Flow<Map<String, Long?>> = emptyFlow()
 
     companion object {
         /**

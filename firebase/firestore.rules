@@ -1406,15 +1406,27 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // crownSpawnCollectors – per-(crown, user) pickup records for SHARED crowns
-    // Backend-only. A deterministic document (ID = SHA-256 of the crown id and
-    // the uid) that crownHunt.claimSpawn creates INSIDE the award transaction so
-    // a SHARED crown can be collected exactly once by each distinct member while
-    // it stays on the map to its TTL. Never client-readable or client-writable:
-    // a member must not be able to inspect who has collected a crown, nor forge
-    // or clear their own pickup record to collect a shared crown twice.
+    // A deterministic document (ID = SHA-256 of the crown id and the uid) that
+    // crownHunt.claimSpawn creates INSIDE the award transaction so a SHARED crown
+    // can be collected exactly once by each distinct member while it stays on the
+    // map to its TTL. Each doc carries a queryable `userId` and the `spawnId`.
+    //
+    // READ is OWNER-ONLY: a member may read ONLY their OWN pickup records
+    // (resource.data.userId == request.auth.uid), which is the server-
+    // authoritative source of truth for the "collected by you" marker — it lets
+    // the app show the mark on already-collected shared crowns immediately, even
+    // after a reinstall / on a new device, without a refused re-tap re-learning
+    // it. It does NOT let a member inspect WHO ELSE collected a crown: the
+    // owner predicate makes every other member's record invisible, and a LIST is
+    // only permitted for a query already filtered to `userId == auth.uid` (an
+    // unfiltered list is DENIED, not silently narrowed). WRITE stays fully denied
+    // both ways: a member must not forge or clear a pickup record to collect a
+    // shared crown twice — the collector doc is written only by the Admin SDK
+    // inside the award transaction.
     // -------------------------------------------------------------------------
     match /crownSpawnCollectors/{collectorId} {
-      allow read, write: if false;
+      allow read: if isActiveMember() && resource.data.userId == request.auth.uid;
+      // No client writes — the pickup record is a reward-integrity artefact.
     }
 
     // -------------------------------------------------------------------------
