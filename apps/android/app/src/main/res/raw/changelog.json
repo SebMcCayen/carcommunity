@@ -2,6 +2,20 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 44,
+      "versionName": "0.8.33",
+      "releaseDate": "2026-08-22",
+      "highlights": [
+        "Avisering när någon vinkar till dig",
+        "Tydligare väntetid när du samlar en krona"
+      ],
+      "changes": [
+        "Vinkningar: du får nu en avisering i notisfliken när någon vinkar till dig (utanför en konvoj)",
+        "Kronjakten: samma tydliga \"bekräftar att du står stilla\"-väntan på alla kronor i stället för att ibland visa \"stanna bilen först\" – så det är alltid tydligt hur länge du ska stå still",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 43,
       "versionName": "0.8.32",
       "releaseDate": "2026-08-21",
