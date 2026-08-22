@@ -36,8 +36,9 @@
  *     wave via the shared ReactionOverlay. The transient wave doc is short-lived
  *     (a live nudge a short `expireAt` TTL sweeps), but each recipient ALSO gets
  *     one PERSISTENT "{name} waved at you" item on their Notifications page,
- *     written best-effort under the social `wave` category (see the tail of the
- *     callable). Convoy reactions/waves are a separate surface and never notify.
+ *     written best-effort under the social `wave` category (idempotently, before
+ *     the completion marker so a retry never drops it). Convoy reactions/waves are
+ *     a separate surface and never notify.
  *
  * Invariants:
  *  - Backend is the sole writer of `liveWaves/**` and `liveWaveCooldowns/**`
@@ -323,6 +324,47 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
     await batch.commit();
   }
 
+  // PERSISTENT NOTIFICATION (best-effort, non-blocking): a wave is a transient
+  // pop, but the recipient should also find "{name} waved at you" on their
+  // Notifications page after the animation is gone. This is the ONLY wave surface
+  // that notifies — convoy reactions/waves are a different path and stay ephemeral.
+  //
+  // ORDERED BEFORE the completion-marker transaction ON PURPOSE: recording
+  // `lastRecipientCount` is what turns this send COMPLETED, and a completed retry
+  // short-circuits at the replay fast path and never reaches this code again. So
+  // the durable notices must be written (or re-written) on every path that could
+  // still retry — i.e. BEFORE the marker — or a crash between the marker and the
+  // notices would drop them forever on the replay. The writes are idempotent on a
+  // deterministic id derived from the shared waveId, so a resumed (crash-then-
+  // retry) delivery re-attempts them without duplicating.
+  //
+  // Written under the social `wave` category (opt-out-able, never essential) via
+  // the shared writeInAppNotification helper, which owns eligibility (deleted /
+  // suspended / per-category opt-out). NEVER fails the wave: Promise.allSettled
+  // swallows a per-recipient write error, and the wave's delivery + cooldown are
+  // already committed — a notification write must not surface as a failed wave.
+  //
+  // The self-wave guard is belt-and-braces: `recipients` already excludes the
+  // sender (the geo scan skips `rid === actor.uid`), but the explicit
+  // senderUid !== recipientUid check keeps the invariant local and obvious.
+  const waverName = senderDisplayName ?? 'En medlem';
+  await Promise.allSettled(
+    recipients
+      .filter((recipientUid) => recipientUid !== actor.uid)
+      .map((recipientUid) =>
+        writeInAppNotification(
+          recipientUid,
+          {
+            category: 'wave',
+            title: 'Ny vinkning',
+            previewText: `${waverName} vinkade till dig.`,
+            relatedEntityId: actor.uid,
+          },
+          `wave_${waveId}`,
+        ),
+      ),
+  );
+
   // COMPLETION MARKER + WAVES-SENT STAT, in ONE transaction so the counter is
   // credited EXACTLY ONCE per completed send. Recording `lastRecipientCount` is
   // what turns a stamped in-flight send into a COMPLETED one — a retry before
@@ -374,41 +416,6 @@ export const sendWave = onCall(CALLABLE_OPTS, async (request): Promise<SendWaveR
       { merge: true },
     );
   });
-
-  // PERSISTENT NOTIFICATION (best-effort, non-blocking): a wave is a transient
-  // pop, but the recipient should also find "{name} waved at you" on their
-  // Notifications page after the animation is gone. This is the ONLY wave surface
-  // that notifies — convoy reactions/waves are a different path and stay ephemeral.
-  //
-  // Written under the social `wave` category (opt-out-able, never essential) via
-  // the shared writeInAppNotification helper, which owns eligibility (deleted /
-  // suspended / per-category opt-out). Idempotent on a deterministic id derived
-  // from the shared waveId, so a resumed (crash-then-retry) delivery re-fans-out
-  // without duplicating notices. NEVER fails the wave: the wave's own delivery,
-  // cooldown and stats are already committed, and a notification write error must
-  // not surface as a failed wave to the sender.
-  //
-  // The self-wave guard is belt-and-braces: `recipients` already excludes the
-  // sender (the geo scan skips `rid === actor.uid`), but the explicit
-  // senderUid !== recipientUid check keeps the invariant local and obvious.
-  const waverName = senderDisplayName ?? 'En medlem';
-  await Promise.allSettled(
-    recipients
-      .filter((recipientUid) => recipientUid !== actor.uid)
-      .map((recipientUid) =>
-        writeInAppNotification(
-          recipientUid,
-          {
-            category: 'wave',
-            title: 'Ny vinkning',
-            previewText: `${waverName} vinkade till dig.`,
-            actionType: 'open_profile',
-            relatedEntityId: actor.uid,
-          },
-          `wave_${waveId}`,
-        ),
-      ),
-  ).catch(() => undefined);
 
   return { waveId, recipientCount: recipients.length };
 });

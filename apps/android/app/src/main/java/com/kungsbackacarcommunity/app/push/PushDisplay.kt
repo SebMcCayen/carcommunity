@@ -98,6 +98,9 @@ object PushDisplay {
             // member-to-member activity, so it belongs on the social channel with
             // the rest of it rather than reading as a system announcement.
             NotificationCategory.CONVOY_UPDATE,
+            // A nearby live sharer waved at you (live.sendWave): member-to-member
+            // activity, so it rides the social channel with the rest.
+            NotificationCategory.WAVE,
             -> PushChannel.SOCIAL
 
             NotificationCategory.SUBSCRIPTION_STATUS,

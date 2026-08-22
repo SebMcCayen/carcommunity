@@ -316,9 +316,10 @@ describe('live-sendWave persistent notification', () => {
       const docs = await waveNotifications(recipient.uid);
       return docs.length >= 1 ? docs : undefined;
     });
-    // A replay of the same clientId must not add a second notice.
+    // A replay of the same clientId must not add a second notice. The callable
+    // awaits the (idempotent) notification writes before returning, so once the
+    // replay resolves there is nothing left in flight to wait on.
     await call('live-sendWave', { clientId });
-    await new Promise((resolve) => setTimeout(resolve, 500));
     expect((await waveNotifications(recipient.uid)).length).toBe(1);
   });
 });
