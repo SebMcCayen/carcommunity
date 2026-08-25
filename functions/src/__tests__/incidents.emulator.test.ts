@@ -1431,8 +1431,9 @@ describe('incidents Trafikverket importer', () => {
     expect((await retained.get()).exists).toBe(true);
   });
 
-  it('uses sync metadata to suppress stale migrated imports in listNearby', async () => {
+  it('suppresses stale non-current migrated imports while preserving the legacy bridge', async () => {
     const id = 'DEV-freshness';
+    const legacyId = 'tv_DEV-freshness-legacy';
     const now = new Date();
     await runTrafikverketSync(now, 'fake-key', async () => ({
       RESPONSE: {
@@ -1454,6 +1455,18 @@ describe('incidents Trafikverket importer', () => {
         ],
       },
     }));
+    await adminDb.collection('incidents').doc(legacyId).set({
+      type: 'roadwork',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_67',
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromMillis(Date.now() + 60 * 60 * 1000),
+    });
     const reader = await createProvisionedUser('inc-tv-fresh-reader');
     await signInAs(reader);
     const nearby = async () =>
@@ -1467,7 +1480,12 @@ describe('incidents Trafikverket importer', () => {
     expect(
       (await nearby()).incidents.some((incident) => incident.id === importedIncidentDocId(id)),
     ).toBe(true);
+    expect((await nearby()).incidents.some((incident) => incident.id === legacyId)).toBe(true);
 
+    await adminDb
+      .collection('incidents')
+      .doc(importedIncidentDocId(id))
+      .update({ importFingerprintVersion: TRAFIKVERKET_FINGERPRINT_VERSION + 1 });
     await adminDb
       .collection(TRAFIKVERKET_SYNC_METADATA_COLLECTION)
       .doc(TRAFIKVERKET_SYNC_METADATA_DOC)
@@ -1475,6 +1493,7 @@ describe('incidents Trafikverket importer', () => {
     expect(
       (await nearby()).incidents.some((incident) => incident.id === importedIncidentDocId(id)),
     ).toBe(false);
+    expect((await nearby()).incidents.some((incident) => incident.id === legacyId)).toBe(true);
   });
 
   it('imports >500 classified incidents without tripping the 500-write WriteBatch limit', async () => {

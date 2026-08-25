@@ -41,7 +41,6 @@ import {
 } from './incidents-core';
 import { MAX_INSTANCES_HOT } from '../shared/instanceLimits';
 import {
-  TRAFIKVERKET_FINGERPRINT_VERSION,
   TRAFIKVERKET_SYNC_METADATA_COLLECTION,
   TRAFIKVERKET_SYNC_METADATA_DOC,
 } from './trafikverket-core';
@@ -130,7 +129,7 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
       if (data.status !== INCIDENT_ACTIVE_STATUS) continue;
       if (
         data.source === 'trafikverket' &&
-        data.importFingerprintVersion === TRAFIKVERKET_FINGERPRINT_VERSION &&
+        Object.prototype.hasOwnProperty.call(data, 'importFingerprintVersion') &&
         !trafikverketImportFresh
       ) {
         continue;
