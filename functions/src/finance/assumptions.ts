@@ -23,19 +23,43 @@
  */
 
 // ---------------------------------------------------------------------------
-// Trafikverket import — the dominant committed line.
+// Trafikverket import — committed comparison reads + fingerprinted mutations.
 // ---------------------------------------------------------------------------
 
 /**
- * Situations written per import run. The importer upserts one Firestore
- * document per active national road Situation each run.
+ * Parsed/renderable deviations mirrored per import run. A Situation may carry
+ * more than one Deviation, so this is intentionally not called "situations".
  *
  * MEASURED 2026-08-01: ~2,775 active Situations nationally (see
  * incidents/trafikverket-core.ts). The query cap is 3,000
  * (TRAFIKVERKET_QUERY_LIMIT) — the modelled ceiling. We cost the measured
- * figure as the expected line and expose the cap so the worst case is visible.
+ * Earlier production telemetry observed about 4,600 imported deviation docs;
+ * that is the comparison-read estimate. The Situation cap remains visible.
  */
-export const TRAFIKVERKET_SITUATIONS_PER_RUN = 2_775;
+export const TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN = 4_600;
+
+/**
+ * Conservative estimated share that is new or content-changed in a 30-minute
+ * window. The importer now skips unchanged fingerprints, so costing every
+ * active deviation as a write would recreate the old amplification bug in the
+ * finance model. Tune this from the new sync counters after closed testing.
+ */
+export const TRAFIKVERKET_CHANGED_OR_NEW_FRACTION_PER_RUN = 0.05;
+
+/** One freshness metadata write plus estimated new/changed incident writes. */
+export const TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN =
+  1 +
+  Math.ceil(
+    TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN * TRAFIKVERKET_CHANGED_OR_NEW_FRACTION_PER_RUN,
+  );
+
+/**
+ * Estimated vanished imports per complete run. Deletes are reconciliation, not
+ * TTL refresh; 2% is deliberately cautious until the new counters are measured.
+ */
+export const TRAFIKVERKET_ESTIMATED_DELETES_PER_RUN = Math.ceil(
+  TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN * 0.02,
+);
 
 /** Hard ceiling: the query limit the importer will never exceed in one run. */
 export const TRAFIKVERKET_SITUATIONS_CAP = 3_000;

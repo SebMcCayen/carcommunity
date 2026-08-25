@@ -114,7 +114,7 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
 
     // Imported (Trafikverket) incidents are importer-owned: runTrafikverketSync
     // rewrites each `tv_` doc with a full `batch.set` (no merge) every 30
-    // minutes, which would silently wipe a confirmationCount and re-stamp the
+    // minutes, which owns the document and would silently wipe a confirmationCount
     // expiry we just extended. Upstream is also the authority on whether the
     // situation is still live — that is exactly what the 30-minute re-sync
     // means — so a member confirmation would add nothing and fight the

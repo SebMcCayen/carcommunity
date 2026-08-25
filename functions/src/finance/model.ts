@@ -47,15 +47,22 @@ import {
   RTDB_STORAGE_BYTES,
   SECRET_MANAGER_ACTIVE_VERSIONS,
   STORAGE_BYTES_PER_MEMBER,
+  TRAFIKVERKET_ESTIMATED_DELETES_PER_RUN,
+  TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
+  TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN,
   TRAFIKVERKET_SITUATIONS_CAP,
-  TRAFIKVERKET_SITUATIONS_PER_RUN,
 } from './assumptions';
 import {
   annualAmountInSourceCurrency,
   monthlyAmountInSourceCurrency,
   type RecurringCostEntry,
 } from './recurringCosts-core';
-import { CALLABLE_COST_CLASS, SCHEDULED_JOBS, uncostedCallables, type ScheduledJob } from './inventory';
+import {
+  CALLABLE_COST_CLASS,
+  SCHEDULED_JOBS,
+  uncostedCallables,
+  type ScheduledJob,
+} from './inventory';
 
 // --- Compute-time assumptions kept local (clearly labelled, not buried) ------
 
@@ -216,8 +223,10 @@ export interface FinanceEstimate {
     committedJobs: CommittedJobLine[];
     /** Trafikverket's modelled write cost, SEK/month (its share of the billable writes). */
     trafikverketWritesSekPerMonth: number;
-    /** Situations written per run (assumption) and the hard cap. */
-    trafikverketSituationsPerRun: number;
+    /** Estimated changed/new incident writes per run (including metadata). */
+    trafikverketEstimatedWritesPerRun: number;
+    /** Parsed imported deviations scanned per run; these are mostly reads now. */
+    trafikverketImportedDeviationsPerRun: number;
     trafikverketSituationsCap: number;
     committedSekPerMonth: number;
     variableSekPerMonth: number;
@@ -280,11 +289,23 @@ function usdToSek(usd: number): number {
   return usd * USD_TO_SEK;
 }
 
-/** Trafikverket writes per run (the injected assumption); other jobs use their own. */
+/** Trafikverket work per run (injected assumptions); other jobs use inventory values. */
 function writesPerRun(job: ScheduledJob): number {
   return job.id === 'incidents-syncTrafikverket'
-    ? TRAFIKVERKET_SITUATIONS_PER_RUN
+    ? TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN
     : job.writesPerRun;
+}
+
+function readsPerRun(job: ScheduledJob): number {
+  return job.id === 'incidents-syncTrafikverket'
+    ? TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN
+    : job.readsPerRun;
+}
+
+function deletesPerRun(job: ScheduledJob): number {
+  return job.id === 'incidents-syncTrafikverket'
+    ? TRAFIKVERKET_ESTIMATED_DELETES_PER_RUN
+    : job.deletesPerRun;
 }
 
 // --- The estimator -----------------------------------------------------------
@@ -301,11 +322,17 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + writesPerRun(j) * j.runsPerDay,
     0,
   );
-  const committedReadsPerDay = SCHEDULED_JOBS.reduce((sum, j) => sum + j.readsPerRun * j.runsPerDay, 0);
-  const committedDeletesPerDay = SCHEDULED_JOBS.reduce(
-    (sum, j) => sum + j.deletesPerRun * j.runsPerDay,
+  const committedReadsPerDay = SCHEDULED_JOBS.reduce(
+    (sum, j) => sum + readsPerRun(j) * j.runsPerDay,
     0,
   );
+  const committedDeletesPerDay = SCHEDULED_JOBS.reduce(
+    (sum, j) => sum + deletesPerRun(j) * j.runsPerDay,
+    0,
+  );
+  const trafikverketJob = SCHEDULED_JOBS.find((job) => job.id === 'incidents-syncTrafikverket');
+  const trafikverketRunsPerDay = trafikverketJob?.runsPerDay ?? 0;
+  const trafikverketWritesPerDay = TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN * trafikverketRunsPerDay;
 
   const variableWritesPerDay = members * PER_MEMBER_PER_DAY.firestoreWrites;
   const variableReadsPerDay = members * PER_MEMBER_PER_DAY.firestoreReads;
@@ -322,11 +349,11 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     FIRESTORE.free.writesPerDay,
     FIRESTORE.writeUsd,
     committedWritesPerDay >= variableWritesPerDay,
-    `Trafikverket writes ${Math.round(committedWritesPerDay).toLocaleString('en')} /day of the ${Math.round(grossWritesPerDay).toLocaleString('en')} /day gross. Free tier is 20k writes/day, shared.`,
+    `Fingerprinting reduces Trafikverket to an estimated ${Math.round(trafikverketWritesPerDay).toLocaleString('en')} writes/day of the ${Math.round(grossWritesPerDay).toLocaleString('en')} gross. Free tier is 20k writes/day, shared.`,
   );
   const readsLine = firestoreDailyLine(
     'Cloud Firestore',
-    'Document reads (members + aggregations)',
+    'Document reads (Trafikverket comparison + members + aggregations)',
     grossReadsPerDay,
     FIRESTORE.free.readsPerDay,
     FIRESTORE.readUsd,
@@ -362,7 +389,8 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH,
     0,
   );
-  const memberInvocationsPerMonth = members * PER_MEMBER_PER_DAY.functionInvocations * DAYS_PER_MONTH;
+  const memberInvocationsPerMonth =
+    members * PER_MEMBER_PER_DAY.functionInvocations * DAYS_PER_MONTH;
   const invocationsPerMonth = scheduledInvocationsPerMonth + memberInvocationsPerMonth;
   const invocationsLine = monthlyLine(
     'Cloud Functions',
@@ -380,7 +408,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     0,
   );
   const memberGbSeconds =
-    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * (PER_MEMBER_MEMORY_GIB);
+    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * PER_MEMBER_MEMORY_GIB;
   const gbSecondsPerMonth = scheduledGbSeconds + memberGbSeconds;
   const gbSecondsLine = monthlyLine(
     'Cloud Functions',
@@ -397,7 +425,8 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     (sum, j) => sum + j.runsPerDay * DAYS_PER_MONTH * j.avgSeconds * FUNCTION_VCPU,
     0,
   );
-  const memberCpuSeconds = memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * FUNCTION_VCPU;
+  const memberCpuSeconds =
+    memberInvocationsPerMonth * MEMBER_INVOCATION_AVG_SECONDS * FUNCTION_VCPU;
   const cpuSecondsPerMonth = scheduledCpuSeconds + memberCpuSeconds;
   const cpuSecondsLine = monthlyLine(
     'Cloud Functions',
@@ -559,7 +588,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
   // since the daily free tier is shared across all writes).
   const trafikverketWritesSek =
     grossWritesPerDay > 0
-      ? writesLine.sekPerMonth * (committedWritesPerDay / grossWritesPerDay)
+      ? writesLine.sekPerMonth * (trafikverketWritesPerDay / grossWritesPerDay)
       : 0;
 
   // ---- Committed job breakdown (Trafikverket obvious) ----------------------
@@ -569,8 +598,8 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
     schedule: j.schedule,
     runsPerDay: j.runsPerDay,
     writesPerMonth: writesPerRun(j) * j.runsPerDay * DAYS_PER_MONTH,
-    readsPerMonth: j.readsPerRun * j.runsPerDay * DAYS_PER_MONTH,
-    deletesPerMonth: j.deletesPerRun * j.runsPerDay * DAYS_PER_MONTH,
+    readsPerMonth: readsPerRun(j) * j.runsPerDay * DAYS_PER_MONTH,
+    deletesPerMonth: deletesPerRun(j) * j.runsPerDay * DAYS_PER_MONTH,
     note: j.note,
   })).sort((a, b) => b.writesPerMonth - a.writesPerMonth);
 
@@ -603,10 +632,7 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
         .filter((m) => m >= 0)
         .sort((a, b) => a - b)
         .map((m) => {
-          const point = estimateFinance(
-            { ...input, memberCount: m, now },
-            false,
-          );
+          const point = estimateFinance({ ...input, memberCount: m, now }, false);
           return {
             members: m,
             googleCloudSekPerMonth: point.googleCloud.totalSekPerMonth,
@@ -629,7 +655,8 @@ export function estimateFinance(input: EstimateInput, includeProjection = true):
       services,
       committedJobs,
       trafikverketWritesSekPerMonth: trafikverketWritesSek,
-      trafikverketSituationsPerRun: TRAFIKVERKET_SITUATIONS_PER_RUN,
+      trafikverketEstimatedWritesPerRun: TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
+      trafikverketImportedDeviationsPerRun: TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN,
       trafikverketSituationsCap: TRAFIKVERKET_SITUATIONS_CAP,
       committedSekPerMonth: committedSek,
       variableSekPerMonth: variableSek,
@@ -834,8 +861,7 @@ function monthlyLine(
  * the board uses (usdToSek), so SEK and USD entries fold into one honest total.
  */
 function resolveRecurringCost(entry: RecurringCostEntry): RecurringCostLine {
-  const toSek = (amount: number): number =>
-    entry.currency === 'USD' ? usdToSek(amount) : amount;
+  const toSek = (amount: number): number => (entry.currency === 'USD' ? usdToSek(amount) : amount);
   return {
     id: entry.id,
     label: entry.label,
@@ -858,7 +884,11 @@ export function resolveMemberCount(
   latestSnapshotDate: string | null,
 ): { count: number; source: MemberCountSource; asOf: string | null } {
   if (latestTotalUsers !== null && Number.isFinite(latestTotalUsers) && latestTotalUsers >= 0) {
-    return { count: Math.floor(latestTotalUsers), source: 'metrics-snapshot', asOf: latestSnapshotDate };
+    return {
+      count: Math.floor(latestTotalUsers),
+      source: 'metrics-snapshot',
+      asOf: latestSnapshotDate,
+    };
   }
   return { count: FALLBACK_MEMBER_COUNT, source: 'fallback', asOf: null };
 }

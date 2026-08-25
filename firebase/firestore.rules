@@ -10,6 +10,17 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Imported Trafikverket docs use a stable far-future expiresAt to avoid a
+    // write every 30 minutes. This one backend-owned document is therefore the
+    // freshness authority. get()/exists() are cached for a multi-document read.
+    function trafikverketImportIsFresh() {
+      return exists(/databases/$(database)/documents/incidentSyncMetadata/trafikverket)
+        && get(/databases/$(database)/documents/incidentSyncMetadata/trafikverket)
+          .data.freshUntil is timestamp
+        && get(/databases/$(database)/documents/incidentSyncMetadata/trafikverket)
+          .data.freshUntil > request.time;
+    }
+
     function isOwner(uid) {
       return isAuthenticated() && request.auth.uid == uid;
     }
@@ -1046,7 +1057,13 @@ service cloud.firestore {
     match /incidents/{incidentId} {
       allow read: if isAuthenticated()
         && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time;
+        && resource.data.expiresAt > request.time
+        && (resource.data.source != 'trafikverket'
+          // Rollout bridge: old rolling-TTL imports have no fingerprint. They
+          // remain readable until their own expiry or first successful sync;
+          // migrated docs always require authoritative metadata freshness.
+          || !('importFingerprintVersion' in resource.data)
+          || trafikverketImportIsFresh());
       // No client writes — incidents.report / incidents.remove /
       // incidents.confirm / incidents.reportCleared (callables).
       //
@@ -1064,6 +1081,12 @@ service cloud.firestore {
       // client needs comes back from the callables themselves and from
       // listNearby (confirmationCount / clearedCount / reportedCleared on each
       // incident).
+    }
+
+    // Backend-only freshness/counter document. Clients must not be able to
+    // forge a successful import or inspect operational sync diagnostics.
+    match /incidentSyncMetadata/{sourceId} {
+      allow read, write: if false;
     }
 
     // -------------------------------------------------------------------------

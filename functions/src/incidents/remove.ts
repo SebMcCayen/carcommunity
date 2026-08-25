@@ -49,7 +49,7 @@ export const remove = onCall(CALLABLE_OPTS, async (request): Promise<RemoveRespo
     const data = snap.data()!;
     // Only user-sourced reports are hand-removable — imported (Trafikverket)
     // incidents are managed by the sync/sweep. Deleting one here would just make
-    // it reappear on the next deterministic upsert, so reject it for EVERYONE,
+    // it reappear from the authoritative feed, so reject it for EVERYONE,
     // admins included.
     if (data.source !== 'user') {
       throw new HttpsError(

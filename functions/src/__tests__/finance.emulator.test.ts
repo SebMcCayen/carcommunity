@@ -123,31 +123,34 @@ beforeAll(async () => {
 
   adminUser = await createProvisionedUser(`${S}-admin`);
   await adminAuth.setCustomUserClaims(adminUser.uid, { admin: true });
-  await adminDb.collection('users').doc(adminUser.uid).set(
-    { role: 'admin', displayName: `Finance Admin ${S}` },
-    { merge: true },
-  );
+  await adminDb
+    .collection('users')
+    .doc(adminUser.uid)
+    .set({ role: 'admin', displayName: `Finance Admin ${S}` }, { merge: true });
   memberUser = await createProvisionedUser(`${S}-member`);
-  await adminDb.collection('users').doc(memberUser.uid).set(
-    { displayName: `Finance Member ${S}` },
-    { merge: true },
-  );
+  await adminDb
+    .collection('users')
+    .doc(memberUser.uid)
+    .set({ displayName: `Finance Member ${S}` }, { merge: true });
 
   // Seed a metrics snapshot so the variable half reads a live member count.
-  await adminDb.collection('metrics').doc(SNAPSHOT_DATE).set({
-    date: SNAPSHOT_DATE,
-    capturedAtMs: Date.parse('2026-07-30T02:30:00Z'),
-    totalUsers: SNAPSHOT_MEMBER_COUNT,
-    convoysCreated: 0,
-    totalDistanceMeters: 0,
-    eventsHeld: 0,
-    drivesSaved: 0,
-    crownsCollected: 0,
-    friendConnections: 0,
-    activeConvoys: 0,
-    vehicleProfiles: 0,
-    brandDistribution: {},
-  });
+  await adminDb
+    .collection('metrics')
+    .doc(SNAPSHOT_DATE)
+    .set({
+      date: SNAPSHOT_DATE,
+      capturedAtMs: Date.parse('2026-07-30T02:30:00Z'),
+      totalUsers: SNAPSHOT_MEMBER_COUNT,
+      convoysCreated: 0,
+      totalDistanceMeters: 0,
+      eventsHeld: 0,
+      drivesSaved: 0,
+      crownsCollected: 0,
+      friendConnections: 0,
+      activeConvoys: 0,
+      vehicleProfiles: 0,
+      brandDistribution: {},
+    });
 }, 120_000);
 
 afterAll(async () => {
@@ -168,7 +171,12 @@ interface RecurringCostLineResult {
 
 interface EstimateResult {
   member: { count: number; source: string; asOf: string | null };
-  googleCloud: { totalSekPerMonth: number; trafikverketWritesSekPerMonth: number };
+  googleCloud: {
+    totalSekPerMonth: number;
+    trafikverketWritesSekPerMonth: number;
+    trafikverketEstimatedWritesPerRun: number;
+    trafikverketImportedDeviationsPerRun: number;
+  };
   mapbox: { sekPerMonth: number };
   recurringCosts: {
     items: RecurringCostLineResult[];
@@ -182,7 +190,9 @@ interface EstimateResult {
 describe('finance-estimate', () => {
   it('rejects a non-admin caller', async () => {
     await signInAs(memberUser);
-    expect(await callableErrorCode(call('finance-estimate', {}))).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('finance-estimate', {}))).toBe(
+      'functions/permission-denied',
+    );
   });
 
   it('returns an estimate that used the live member count from the latest snapshot', async () => {
@@ -193,8 +203,12 @@ describe('finance-estimate', () => {
     expect(result.member.source).toBe('metrics-snapshot');
     expect(result.member.asOf).toBe(SNAPSHOT_DATE);
 
-    // Trafikverket committed writes are the dominant Google Cloud line.
-    expect(result.googleCloud.trafikverketWritesSekPerMonth).toBeGreaterThan(0);
+    // Fingerprinting makes writes a small subset of compared deviations. At
+    // low scale the shared free tier may make their attributed SEK exactly 0.
+    expect(result.googleCloud.trafikverketWritesSekPerMonth).toBeGreaterThanOrEqual(0);
+    expect(result.googleCloud.trafikverketEstimatedWritesPerRun).toBeLessThan(
+      result.googleCloud.trafikverketImportedDeviationsPerRun,
+    );
     expect(result.fx.usdToSek).toBeGreaterThan(0);
 
     // Grand total is the three separable sections summed.
@@ -228,7 +242,10 @@ interface AddResult {
   period: string;
 }
 
-async function latestAuditFor(action: string, targetId: string): Promise<Record<string, unknown> | undefined> {
+async function latestAuditFor(
+  action: string,
+  targetId: string,
+): Promise<Record<string, unknown> | undefined> {
   const snap = await adminDb
     .collection('adminAuditEvents')
     .where('action', '==', action)
@@ -243,7 +260,11 @@ describe('finance recurring-costs CRUD', () => {
 
   afterAll(async () => {
     for (const id of created) {
-      await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(id).delete().catch(() => undefined);
+      await adminDb
+        .collection(RECURRING_COSTS_COLLECTION)
+        .doc(id)
+        .delete()
+        .catch(() => undefined);
     }
   });
 
@@ -298,11 +319,23 @@ describe('finance recurring-costs CRUD', () => {
     expect(await callableErrorCode(call('finance-addRecurringCost', bad))).toBe(
       'functions/invalid-argument',
     );
-    const badAmount = { label: 'Z', description: 'y', amount: -1, currency: 'SEK', period: 'monthly' };
+    const badAmount = {
+      label: 'Z',
+      description: 'y',
+      amount: -1,
+      currency: 'SEK',
+      period: 'monthly',
+    };
     expect(await callableErrorCode(call('finance-addRecurringCost', badAmount))).toBe(
       'functions/invalid-argument',
     );
-    const badCurrency = { label: 'Z', description: 'y', amount: 1, currency: 'EUR', period: 'monthly' };
+    const badCurrency = {
+      label: 'Z',
+      description: 'y',
+      amount: 1,
+      currency: 'EUR',
+      period: 'monthly',
+    };
     expect(await callableErrorCode(call('finance-addRecurringCost', badCurrency))).toBe(
       'functions/invalid-argument',
     );
@@ -328,7 +361,9 @@ describe('finance recurring-costs CRUD', () => {
     expect(line!.annualSek).toBeCloseTo(1200, 4);
     expect(est.recurringCosts.totalSekPerMonth).toBeGreaterThan(0);
     expect(est.grandTotalSekPerMonth).toBeCloseTo(
-      est.googleCloud.totalSekPerMonth + est.mapbox.sekPerMonth + est.recurringCosts.totalSekPerMonth,
+      est.googleCloud.totalSekPerMonth +
+        est.mapbox.sekPerMonth +
+        est.recurringCosts.totalSekPerMonth,
       4,
     );
   });
@@ -424,25 +459,31 @@ describe('finance recurring-costs CRUD', () => {
     // rules-denied): amount above the sane cap. It must be SKIPPED, never
     // inflating the total.
     const overMaxId = `rc-overmax-${S}`;
-    await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(overMaxId).set({
-      label: `OverMax ${S}`,
-      description: 'too big',
-      amount: 999_999_999,
-      currency: 'SEK',
-      period: 'monthly',
-    });
+    await adminDb
+      .collection(RECURRING_COSTS_COLLECTION)
+      .doc(overMaxId)
+      .set({
+        label: `OverMax ${S}`,
+        description: 'too big',
+        amount: 999_999_999,
+        currency: 'SEK',
+        period: 'monthly',
+      });
     created.push(overMaxId);
 
     // A row with an over-long label — must be CLAMPED (truncated), not dropped.
     const longLabelId = `rc-longlabel-${S}`;
     const longLabel = `L${S}`.padEnd(300, 'x');
-    await adminDb.collection(RECURRING_COSTS_COLLECTION).doc(longLabelId).set({
-      label: longLabel,
-      description: 'd'.repeat(1000),
-      amount: 10,
-      currency: 'SEK',
-      period: 'monthly',
-    });
+    await adminDb
+      .collection(RECURRING_COSTS_COLLECTION)
+      .doc(longLabelId)
+      .set({
+        label: longLabel,
+        description: 'd'.repeat(1000),
+        amount: 10,
+        currency: 'SEK',
+        period: 'monthly',
+      });
     created.push(longLabelId);
 
     const est = (await call('finance-estimate', {})).data as EstimateResult;
@@ -471,8 +512,8 @@ describe('finance recurring-costs CRUD', () => {
     expect(doc.exists).toBe(false);
     expect(await latestAuditFor('finance.deleteRecurringCost', added.id)).toBeDefined();
 
-    expect(await callableErrorCode(call('finance-deleteRecurringCost', { id: 'does-not-exist' }))).toBe(
-      'functions/not-found',
-    );
+    expect(
+      await callableErrorCode(call('finance-deleteRecurringCost', { id: 'does-not-exist' })),
+    ).toBe('functions/not-found');
   });
 });

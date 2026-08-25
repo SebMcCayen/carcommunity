@@ -8,18 +8,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import {
-  DAYS_PER_MONTH,
-  FIRESTORE,
-  MAPBOX,
-  SCHEDULER,
-  USD_TO_SEK,
-} from './pricing';
+import { DAYS_PER_MONTH, FIRESTORE, MAPBOX, SCHEDULER, USD_TO_SEK } from './pricing';
 import {
   FALLBACK_MEMBER_COUNT,
   NAV_TRIPS_PER_NAVIGATING_MEMBER_PER_MONTH,
   NAV_USING_FRACTION,
-  TRAFIKVERKET_SITUATIONS_PER_RUN,
+  TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
+  TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN,
 } from './assumptions';
 import { SCHEDULED_JOBS, unknownCallables, uncostedCallables } from './inventory';
 import { estimateFinance, resolveMemberCount, type ServiceLine } from './model';
@@ -37,7 +32,7 @@ const baseInput = {
 };
 
 describe('estimateFinance — Firestore writes / free tier / Trafikverket', () => {
-  it('subtracts the DAILY free tier and bills the remainder (Trafikverket dominates)', () => {
+  it('models fingerprinted writes instead of charging every imported deviation as a write', () => {
     // Isolate committed writes: member count 0.
     const est = estimateFinance({ ...baseInput, memberCount: 0 });
     const writes = line(est.googleCloud.services, 'Cloud Firestore', 'Document writes');
@@ -47,7 +42,9 @@ describe('estimateFinance — Firestore writes / free tier / Trafikverket', () =
     // brittle magic literal.
     const committedWritesPerDay = SCHEDULED_JOBS.reduce((sum, j) => {
       const perRun =
-        j.id === 'incidents-syncTrafikverket' ? TRAFIKVERKET_SITUATIONS_PER_RUN : j.writesPerRun;
+        j.id === 'incidents-syncTrafikverket'
+          ? TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN
+          : j.writesPerRun;
       return sum + perRun * j.runsPerDay;
     }, 0);
     const expectedBillablePerMonth =
@@ -58,25 +55,35 @@ describe('estimateFinance — Firestore writes / free tier / Trafikverket', () =
     expect(writes.freeTier).toBeCloseTo(FIRESTORE.free.writesPerDay * DAYS_PER_MONTH, 3);
     expect(writes.billable).toBeCloseTo(expectedBillablePerMonth, 3);
     expect(writes.sekPerMonth).toBeCloseTo(expectedSek, 6);
-    expect(writes.free).toBe(false);
+    expect(writes.free).toBe(expectedBillablePerMonth === 0);
 
-    // Trafikverket is the overwhelming majority of the write cost.
-    const trafikPerDay = TRAFIKVERKET_SITUATIONS_PER_RUN * 48;
-    expect(trafikPerDay / committedWritesPerDay).toBeGreaterThan(0.98);
-    expect(est.googleCloud.trafikverketWritesSekPerMonth).toBeGreaterThan(0.98 * writes.sekPerMonth);
-    expect(est.googleCloud.trafikverketSituationsPerRun).toBe(TRAFIKVERKET_SITUATIONS_PER_RUN);
+    expect(est.googleCloud.trafikverketEstimatedWritesPerRun).toBe(
+      TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN,
+    );
+    expect(est.googleCloud.trafikverketImportedDeviationsPerRun).toBe(
+      TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN,
+    );
+    expect(TRAFIKVERKET_ESTIMATED_WRITES_PER_RUN).toBeLessThan(
+      TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN / 10,
+    );
+
+    const importer = est.googleCloud.committedJobs.find(
+      (job) => job.id === 'incidents-syncTrafikverket',
+    );
+    expect(importer?.readsPerMonth).toBeGreaterThan(importer?.writesPerMonth ?? 0);
   });
 
-  it('keeps reads under the free tier at small scale (0 SEK) but bills them at large scale', () => {
+  it('accounts for importer comparison reads and scales member reads on top', () => {
     const small = estimateFinance({ ...baseInput, memberCount: 0 });
     const reads = line(small.googleCloud.services, 'Cloud Firestore', 'Document reads');
-    expect(reads.free).toBe(true);
-    expect(reads.sekPerMonth).toBe(0);
+    expect(reads.gross).toBeGreaterThan(
+      TRAFIKVERKET_IMPORTED_DEVIATIONS_PER_RUN * 48 * DAYS_PER_MONTH,
+    );
 
     const large = estimateFinance({ ...baseInput, memberCount: 5000 });
     const readsLarge = line(large.googleCloud.services, 'Cloud Firestore', 'Document reads');
-    expect(readsLarge.free).toBe(false);
-    expect(readsLarge.sekPerMonth).toBeGreaterThan(0);
+    expect(readsLarge.gross).toBeGreaterThan(reads.gross);
+    expect(readsLarge.sekPerMonth).toBeGreaterThan(reads.sekPerMonth);
   });
 });
 
@@ -217,7 +224,14 @@ describe('estimateFinance — recurring costs (operator-entered actuals)', () =>
       ...baseInput,
       memberCount: 16,
       recurringCosts: [
-        { id: 'a', label: 'Domän', description: 'carcommunity.se', amount: 120, currency: 'SEK', period: 'monthly' },
+        {
+          id: 'a',
+          label: 'Domän',
+          description: 'carcommunity.se',
+          amount: 120,
+          currency: 'SEK',
+          period: 'monthly',
+        },
       ],
     });
     const line = est.recurringCosts.items[0]!;
@@ -232,7 +246,14 @@ describe('estimateFinance — recurring costs (operator-entered actuals)', () =>
       ...baseInput,
       memberCount: 16,
       recurringCosts: [
-        { id: 'b', label: 'Domän (år)', description: 'annual domain', amount: 1200, currency: 'SEK', period: 'yearly' },
+        {
+          id: 'b',
+          label: 'Domän (år)',
+          description: 'annual domain',
+          amount: 1200,
+          currency: 'SEK',
+          period: 'yearly',
+        },
       ],
     });
     const line = est.recurringCosts.items[0]!;
@@ -246,7 +267,14 @@ describe('estimateFinance — recurring costs (operator-entered actuals)', () =>
       ...baseInput,
       memberCount: 16,
       recurringCosts: [
-        { id: 'c', label: 'Claude', description: 'Max plan', amount: 200, currency: 'USD', period: 'monthly' },
+        {
+          id: 'c',
+          label: 'Claude',
+          description: 'Max plan',
+          amount: 200,
+          currency: 'USD',
+          period: 'monthly',
+        },
       ],
     });
     const line = est.recurringCosts.items[0]!;
@@ -260,7 +288,14 @@ describe('estimateFinance — recurring costs (operator-entered actuals)', () =>
       ...baseInput,
       memberCount: 16,
       recurringCosts: [
-        { id: 'd', label: 'Annual tool', description: 'billed yearly in USD', amount: 1200, currency: 'USD', period: 'yearly' },
+        {
+          id: 'd',
+          label: 'Annual tool',
+          description: 'billed yearly in USD',
+          amount: 1200,
+          currency: 'USD',
+          period: 'yearly',
+        },
       ],
     });
     const line = est.recurringCosts.items[0]!;
@@ -270,9 +305,30 @@ describe('estimateFinance — recurring costs (operator-entered actuals)', () =>
 
   it('sums multiple mixed-currency, mixed-period entries into the subtotal and grand total', () => {
     const recurringCosts = [
-      { id: 'e1', label: 'A', description: '', amount: 100, currency: 'SEK' as const, period: 'monthly' as const },
-      { id: 'e2', label: 'B', description: '', amount: 1200, currency: 'SEK' as const, period: 'yearly' as const },
-      { id: 'e3', label: 'C', description: '', amount: 200, currency: 'USD' as const, period: 'monthly' as const },
+      {
+        id: 'e1',
+        label: 'A',
+        description: '',
+        amount: 100,
+        currency: 'SEK' as const,
+        period: 'monthly' as const,
+      },
+      {
+        id: 'e2',
+        label: 'B',
+        description: '',
+        amount: 1200,
+        currency: 'SEK' as const,
+        period: 'yearly' as const,
+      },
+      {
+        id: 'e3',
+        label: 'C',
+        description: '',
+        amount: 200,
+        currency: 'USD' as const,
+        period: 'monthly' as const,
+      },
     ];
     const est = estimateFinance({ ...baseInput, memberCount: 250, recurringCosts });
     const expectedSubtotal = 100 + 1200 / 12 + 200 * USD_TO_SEK;

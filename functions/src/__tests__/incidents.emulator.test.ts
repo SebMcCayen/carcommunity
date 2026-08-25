@@ -44,7 +44,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runIncidentsCleanup } from '../incidents/scheduled';
 import { runTrafikverketSync } from '../incidents/trafikverket';
 import type { TrafikverketResponse } from '../incidents/trafikverket-core';
-import { importedIncidentDocId } from '../incidents/trafikverket-core';
+import {
+  IMPORT_PERSISTENT_EXPIRES_AT_MS,
+  TRAFIKVERKET_FINGERPRINT_VERSION,
+  TRAFIKVERKET_QUERY_LIMIT,
+  TRAFIKVERKET_SYNC_METADATA_COLLECTION,
+  TRAFIKVERKET_SYNC_METADATA_DOC,
+  importedIncidentDocId,
+} from '../incidents/trafikverket-core';
 import {
   INCIDENT_CLEAR_RATE_LIMIT_MAX,
   INCIDENT_LIST_RATE_LIMIT_COLLECTION,
@@ -1010,9 +1017,50 @@ describe('incidents cleanup sweep', () => {
 });
 
 describe('incidents Trafikverket importer', () => {
+  beforeAll(async () => {
+    const imported = await adminDb
+      .collection('incidents')
+      .where('source', '==', 'trafikverket')
+      .get();
+    await Promise.all(imported.docs.map((doc) => adminDb.recursiveDelete(doc.ref)));
+    await adminDb.collection('incidentSyncMetadata').doc('trafikverket').delete();
+  });
+
   it('skips when no API key is configured', async () => {
     const result = await runTrafikverketSync(new Date(), undefined);
-    expect(result).toEqual({ skipped: true, upserted: 0 });
+    expect(result).toMatchObject({
+      skipped: true,
+      situationsReceived: 0,
+      deviationsParsed: 0,
+      created: 0,
+      changed: 0,
+      unchangedSkipped: 0,
+      missingDeleted: 0,
+      upserted: 0,
+    });
+  });
+
+  it('does not advance freshness when the upstream fetch fails or returns an invalid feed', async () => {
+    const metadataRef = adminDb.collection('incidentSyncMetadata').doc('trafikverket');
+    await metadataRef.set({
+      marker: 'before-failure',
+      freshUntil: Timestamp.fromMillis(1),
+    });
+    const before = await metadataRef.get();
+
+    await expect(
+      runTrafikverketSync(new Date(), 'fake-key', async () => {
+        throw new Error('upstream unavailable');
+      }),
+    ).rejects.toThrow('upstream unavailable');
+    expect((await metadataRef.get()).updateTime!.toMillis()).toBe(before.updateTime!.toMillis());
+
+    await expect(
+      runTrafikverketSync(new Date(), 'fake-key', async () => ({ RESPONSE: { RESULT: [] } })),
+    ).rejects.toThrow('not safe to import');
+    const after = await metadataRef.get();
+    expect(after.updateTime!.toMillis()).toBe(before.updateTime!.toMillis());
+    expect(after.data()?.marker).toBe('before-failure');
   });
 
   it('imports mocked situations to deterministic tv_ docs (idempotent)', async () => {
@@ -1040,7 +1088,17 @@ describe('incidents Trafikverket importer', () => {
     const fetcher = async () => mock;
 
     const first = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
-    expect(first).toEqual({ skipped: false, upserted: 1 });
+    expect(first).toMatchObject({
+      skipped: false,
+      situationsReceived: 1,
+      deviationsParsed: 1,
+      created: 1,
+      changed: 0,
+      unchangedSkipped: 0,
+      missingDeleted: 0,
+      upserted: 1,
+      reconciliationSkipped: null,
+    });
 
     const docId = importedIncidentDocId('DEV-emu-1');
     const stored = await adminDb.collection('incidents').doc(docId).get();
@@ -1051,9 +1109,28 @@ describe('incidents Trafikverket importer', () => {
     // No upstream time in this payload → postedAt is OMITTED (client hides age).
     expect(stored.data()?.postedAt).toBeUndefined();
 
-    // Re-run overwrites the same doc (no duplicate).
+    const firstUpdateTime = stored.updateTime!.toMillis();
+    // Re-run performs ZERO incident writes: the metadata freshness advances,
+    // but the imported document's updateTime stays byte-for-byte unchanged.
     const second = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
-    expect(second.upserted).toBe(1);
+    expect(second).toMatchObject({
+      created: 0,
+      changed: 0,
+      unchangedSkipped: 1,
+      upserted: 0,
+    });
+    expect((await adminDb.collection('incidents').doc(docId).get()).updateTime!.toMillis()).toBe(
+      firstUpdateTime,
+    );
+
+    const metadata = await adminDb
+      .collection(TRAFIKVERKET_SYNC_METADATA_COLLECTION)
+      .doc(TRAFIKVERKET_SYNC_METADATA_DOC)
+      .get();
+    expect(metadata.exists).toBe(true);
+    expect(metadata.data()?.fingerprintVersion).toBe(TRAFIKVERKET_FINGERPRINT_VERSION);
+    expect(metadata.data()?.responseComplete).toBe(true);
+    expect(metadata.data()?.freshUntil).toBeInstanceOf(Timestamp);
   });
 
   it('stores the upstream original post time as postedAt (not the sync time)', async () => {
@@ -1084,7 +1161,7 @@ describe('incidents Trafikverket importer', () => {
     // stored the sync instant instead would fail the assertion below.
     const syncNow = new Date('2026-07-31T20:00:00Z');
     const result = await runTrafikverketSync(syncNow, 'fake-key', async () => mock);
-    expect(result).toEqual({ skipped: false, upserted: 1 });
+    expect(result).toMatchObject({ skipped: false, upserted: 1, created: 1 });
 
     const stored = await adminDb
       .collection('incidents')
@@ -1093,8 +1170,10 @@ describe('incidents Trafikverket importer', () => {
     const postedAt = stored.data()?.postedAt as Timestamp | undefined;
     expect(postedAt).toBeInstanceOf(Timestamp);
     expect(postedAt?.toMillis()).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
-    // createdAt stays the sync instant (load-bearing for the TTL / lifetime cap).
-    expect((stored.data()?.createdAt as Timestamp).toMillis()).toBe(syncNow.getTime());
+    // New imports use the stable upstream post time as createdAt when available.
+    expect((stored.data()?.createdAt as Timestamp).toMillis()).toBe(
+      Date.UTC(2026, 6, 30, 12, 23, 0),
+    );
   });
 
   it('does NOT crash and omits postedAt when the upstream time is missing/unparseable', async () => {
@@ -1121,13 +1200,281 @@ describe('incidents Trafikverket importer', () => {
       },
     };
     const result = await runTrafikverketSync(new Date(), 'fake-key', async () => mock);
-    expect(result).toEqual({ skipped: false, upserted: 1 });
+    expect(result).toMatchObject({ skipped: false, upserted: 1, created: 1 });
     const stored = await adminDb
       .collection('incidents')
       .doc(importedIncidentDocId('DEV-notime-1'))
       .get();
     expect(stored.exists).toBe(true);
     expect(stored.data()?.postedAt).toBeUndefined();
+  });
+
+  it('rewrites a changed stable field exactly once', async () => {
+    const response = (message: string): TrafikverketResponse => ({
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-change',
+                Deviation: [
+                  {
+                    Id: 'DEV-change-1',
+                    MessageType: 'Vägarbete',
+                    Message: message,
+                    Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    await runTrafikverketSync(new Date(), 'fake-key', async () => response('Första texten'));
+    const changed = await runTrafikverketSync(new Date(), 'fake-key', async () =>
+      response('Uppdaterad text'),
+    );
+    expect(changed).toMatchObject({
+      created: 0,
+      changed: 1,
+      unchangedSkipped: 0,
+      upserted: 1,
+    });
+    expect(
+      (
+        await adminDb.collection('incidents').doc(importedIncidentDocId('DEV-change-1')).get()
+      ).data()?.note,
+    ).toBe('Uppdaterad text');
+  });
+
+  it('recursively deletes imported incidents missing from a complete response', async () => {
+    const deviation = (id: string) => ({
+      Id: id,
+      MessageType: 'Vägarbete',
+      Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+    });
+    const response = (ids: string[]): TrafikverketResponse => ({
+      RESPONSE: {
+        RESULT: [{ Situation: [{ Id: 'SIT-reconcile', Deviation: ids.map(deviation) }] }],
+      },
+    });
+    await runTrafikverketSync(new Date(), 'fake-key', async () =>
+      response(['DEV-reconcile-keep', 'DEV-reconcile-gone']),
+    );
+    const gone = adminDb.collection('incidents').doc(importedIncidentDocId('DEV-reconcile-gone'));
+    const descendant = gone.collection('unexpectedLedger').doc('child');
+    await descendant.set({ exists: true });
+
+    const result = await runTrafikverketSync(new Date(), 'fake-key', async () =>
+      response(['DEV-reconcile-keep']),
+    );
+    expect(result).toMatchObject({
+      created: 0,
+      changed: 0,
+      unchangedSkipped: 1,
+      missingDeleted: 1,
+      reconciliationSkipped: null,
+    });
+    expect((await gone.get()).exists).toBe(false);
+    expect((await descendant.get()).exists).toBe(false);
+  });
+
+  it('migrates a legacy rolling-TTL doc once without changing its createdAt', async () => {
+    const id = 'DEV-legacy-migrate';
+    const ref = adminDb.collection('incidents').doc(importedIncidentDocId(id));
+    const originalCreatedAt = Timestamp.fromDate(new Date('2026-01-02T03:04:05Z'));
+    await ref.set({
+      type: 'roadwork',
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_67',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      createdAt: originalCreatedAt,
+      expiresAt: Timestamp.fromMillis(Date.now() + 6 * 60 * 60 * 1000),
+    });
+    const mock: TrafikverketResponse = {
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-legacy',
+                Deviation: [
+                  {
+                    Id: id,
+                    MessageType: 'Vägarbete',
+                    Geometry: { WGS84: `POINT (${KBA.longitude} ${KBA.latitude})` },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    const migrated = await runTrafikverketSync(new Date(), 'fake-key', async () => mock);
+    expect(migrated).toMatchObject({ changed: 1, legacyMigrated: 1, upserted: 1 });
+    const stored = await ref.get();
+    expect((stored.data()?.createdAt as Timestamp).toMillis()).toBe(originalCreatedAt.toMillis());
+    expect((stored.data()?.expiresAt as Timestamp).toMillis()).toBe(
+      IMPORT_PERSISTENT_EXPIRES_AT_MS,
+    );
+    expect(stored.data()?.importFingerprintVersion).toBe(TRAFIKVERKET_FINGERPRINT_VERSION);
+
+    const updateTime = stored.updateTime!.toMillis();
+    const rerun = await runTrafikverketSync(new Date(), 'fake-key', async () => mock);
+    expect(rerun).toMatchObject({ changed: 0, legacyMigrated: 0, unchangedSkipped: 1 });
+    expect((await ref.get()).updateTime!.toMillis()).toBe(updateTime);
+  });
+
+  it('withholds deletion on an implausible below-limit drop but still imports incoming changes', async () => {
+    const batch = adminDb.batch();
+    for (let i = 0; i < 100; i += 1) {
+      batch.set(adminDb.collection('incidents').doc(importedIncidentDocId(`DEV-drop-${i}`)), {
+        type: 'roadwork',
+        status: 'active',
+        source: 'trafikverket',
+        reporterUid: null,
+        sourceId: `DEV-drop-${i}`,
+        note: 'gammal text',
+        latitude: KBA.latitude,
+        longitude: KBA.longitude,
+        geoCell: '319_67',
+        createdAt: Timestamp.now(),
+        expiresAt: Timestamp.fromMillis(IMPORT_PERSISTENT_EXPIRES_AT_MS),
+        importFingerprintVersion: TRAFIKVERKET_FINGERPRINT_VERSION,
+        importFingerprint: 'old-fingerprint',
+      });
+    }
+    await batch.commit();
+
+    const incomingIds = Array.from({ length: 10 }, (_, i) => `DEV-drop-${i}`);
+    const result = await runTrafikverketSync(new Date(), 'fake-key', async () => ({
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-drop',
+                Deviation: incomingIds.map((id) => ({
+                  Id: id,
+                  MessageType: 'Vägarbete',
+                  Message: 'ny text',
+                  Geometry: { WGS84: `POINT (${KBA.longitude} ${KBA.latitude})` },
+                })),
+              },
+            ],
+          },
+        ],
+      },
+    }));
+    expect(result).toMatchObject({
+      situationsReceived: 1,
+      deviationsParsed: 10,
+      changed: 10,
+      missingDeleted: 0,
+      reconciliationSkipped: 'implausible-upstream-drop',
+    });
+    expect(
+      (await adminDb.collection('incidents').doc(importedIncidentDocId('DEV-drop-0')).get()).data()
+        ?.note,
+    ).toBe('ny text');
+    expect(
+      (await adminDb.collection('incidents').doc(importedIncidentDocId('DEV-drop-99')).get())
+        .exists,
+    ).toBe(true);
+  });
+
+  it('never deletes on a response capped at TRAFIKVERKET_QUERY_LIMIT', async () => {
+    const retained = adminDb.collection('incidents').doc('tv_reconcile-retained-on-cap');
+    await retained.set({
+      type: 'roadwork',
+      status: 'active',
+      source: 'trafikverket',
+      reporterUid: null,
+      note: null,
+      latitude: KBA.latitude,
+      longitude: KBA.longitude,
+      geoCell: '319_67',
+      createdAt: Timestamp.now(),
+      expiresAt: Timestamp.fromMillis(IMPORT_PERSISTENT_EXPIRES_AT_MS),
+      importFingerprintVersion: TRAFIKVERKET_FINGERPRINT_VERSION,
+      importFingerprint: 'old',
+      sourceId: 'reconcile-retained-on-cap',
+    });
+    const situations = Array.from({ length: TRAFIKVERKET_QUERY_LIMIT }, (_, i) => ({
+      Id: `SIT-cap-${i}`,
+      Deviation: [
+        {
+          Id: `DEV-cap-${i}`,
+          MessageType: 'Vägarbete',
+          // Only one is renderable; all ids still prove upstream presence.
+          Geometry: i === 0 ? { WGS84: 'POINT (12.0757 57.4874)' } : undefined,
+        },
+      ],
+    }));
+    const result = await runTrafikverketSync(new Date(), 'fake-key', async () => ({
+      RESPONSE: { RESULT: [{ Situation: situations }] },
+    }));
+    expect(result).toMatchObject({
+      situationsReceived: TRAFIKVERKET_QUERY_LIMIT,
+      deviationsParsed: 1,
+      missingDeleted: 0,
+      reconciliationSkipped: 'query-limit-reached',
+    });
+    expect((await retained.get()).exists).toBe(true);
+  });
+
+  it('uses sync metadata to suppress stale migrated imports in listNearby', async () => {
+    const id = 'DEV-freshness';
+    const now = new Date();
+    await runTrafikverketSync(now, 'fake-key', async () => ({
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-freshness',
+                Deviation: [
+                  {
+                    Id: id,
+                    MessageType: 'Vägarbete',
+                    Geometry: { WGS84: `POINT (${KBA.longitude} ${KBA.latitude})` },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    }));
+    const reader = await createProvisionedUser('inc-tv-fresh-reader');
+    await signInAs(reader);
+    const nearby = async () =>
+      (
+        await call('incidents-listNearby', {
+          latitude: KBA.latitude,
+          longitude: KBA.longitude,
+          radiusMeters: 5000,
+        })
+      ).data as { incidents: Array<{ id: string }> };
+    expect(
+      (await nearby()).incidents.some((incident) => incident.id === importedIncidentDocId(id)),
+    ).toBe(true);
+
+    await adminDb
+      .collection(TRAFIKVERKET_SYNC_METADATA_COLLECTION)
+      .doc(TRAFIKVERKET_SYNC_METADATA_DOC)
+      .set({ freshUntil: Timestamp.fromMillis(Date.now() - 1) }, { merge: true });
+    expect(
+      (await nearby()).incidents.some((incident) => incident.id === importedIncidentDocId(id)),
+    ).toBe(false);
   });
 
   it('imports >500 classified incidents without tripping the 500-write WriteBatch limit', async () => {
@@ -1151,7 +1498,14 @@ describe('incidents Trafikverket importer', () => {
     const fetcher = async () => mock;
 
     const result = await runTrafikverketSync(new Date(), 'fake-key', fetcher);
-    expect(result).toEqual({ skipped: false, upserted: COUNT });
+    expect(result).toMatchObject({
+      skipped: false,
+      situationsReceived: 1,
+      deviationsParsed: COUNT,
+      created: COUNT,
+      changed: 0,
+      upserted: COUNT,
+    });
 
     // Spot-check that docs across every batch boundary actually persisted.
     for (const i of [0, 399, 400, 799, 800, COUNT - 1]) {
@@ -1404,9 +1758,9 @@ describe('incidents.reportCleared', () => {
 
     const incidentRef = adminDb.collection('incidents').doc(incidentId);
     expect((await incidentRef.get()).data()?.confirmationCount).toBe(0);
-    expect(
-      (await incidentRef.collection('confirmations').doc(switcher.uid).get()).exists,
-    ).toBe(false);
+    expect((await incidentRef.collection('confirmations').doc(switcher.uid).get()).exists).toBe(
+      false,
+    );
     expect((await incidentRef.collection('clearVotes').doc(switcher.uid).get()).exists).toBe(true);
   });
 
@@ -1583,9 +1937,9 @@ describe('incidents.reportCleared', () => {
     await makeMember(suspended);
     await adminDb.collection('users').doc(suspended.uid).set({ suspended: true }, { merge: true });
     await signInAs(suspended);
-    expect(
-      await callableErrorCode(call('incidents-reportCleared', clearVoteAt(incidentId))),
-    ).toBe('functions/permission-denied');
+    expect(await callableErrorCode(call('incidents-reportCleared', clearVoteAt(incidentId)))).toBe(
+      'functions/permission-denied',
+    );
   });
 
   it('rate-limits a member hammering clear votes', async () => {
