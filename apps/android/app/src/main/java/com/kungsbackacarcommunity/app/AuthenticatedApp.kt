@@ -3522,10 +3522,14 @@ fun AuthenticatedApp(
             // [LocationAccess] is a three-state value (GRANTED / PERMISSION_DENIED /
             // SERVICES_OFF) and BOTH the runtime permission and the device's
             // location master switch can toggle repeatedly mid-drive (e.g. the user
-            // turns location services off then back on in Settings) — every such
-            // recovery edge should re-attempt the attach. The retry inside start()
-            // is a no-op once a source is attached, so re-running on the (rare)
-            // permission/services toggles adds no churn.
+            // turns location services off then back on in Settings), so we re-run
+            // on every such edge to give start() a fresh chance to attach.
+            // start() itself only attaches when it has NO source yet
+            // (locationController == null); once a source is attached it early-outs,
+            // so it does NOT tear down and re-attach an already-live stream on later
+            // toggles — those re-runs are harmless no-ops. The net effect: whichever
+            // transition first makes GPS available performs the (possibly late)
+            // initial attach; subsequent toggles cost nothing.
             LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched, locationAccess) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
