@@ -1,7 +1,6 @@
 package com.kungsbackacarcommunity.app.drives
 
 import androidx.activity.ComponentActivity
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -14,6 +13,7 @@ import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
 import com.kungsbackacarcommunity.app.testutil.RetryRunner
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
@@ -101,7 +101,7 @@ class DrivesRouteBackTest {
         (0 until count).map { i ->
             SavedDrive(
                 rideId = "ride-$i",
-                title = "Drive %02d".format(i),
+                title = String.format(Locale.ROOT, "Drive %02d", i),
                 distanceMeters = 1000.0,
                 durationSeconds = 600,
                 averageSpeedMetersPerSecond = 5.0,
