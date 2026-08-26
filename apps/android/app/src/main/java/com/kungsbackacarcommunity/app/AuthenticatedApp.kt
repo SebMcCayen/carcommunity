@@ -2707,19 +2707,48 @@ fun AuthenticatedApp(
                     val fix = CrownLocation.currentFix(appContext)
                     if (fix != null) {
                         crownFixTracker.record(fix)
-                        CrownProofSelection.selectFixes(
-                            crownFixTracker,
-                            System.currentTimeMillis(),
-                            openCrownSlot.value,
-                        ).let { (cur, prev) ->
-                            crownCurrentFix = cur
-                            crownPreviousFix = prev
-                        }
-                        // The newest reading, whether or not selection adopted it as
-                        // the proof current — this is what the WaitingForSignal gate
-                        // watches, so an improving accuracy flips the state live.
-                        crownLatestFix = crownFixTracker.latest
                     }
+                    // Re-select the dwell pair on EVERY tick — the popup's own
+                    // now-tick — not only when THIS poll produced a fresh fix (#993).
+                    //
+                    // A fresh fix is still the only thing that can CREATE a new pair
+                    // (a dwell gap is measured between two fixed fix timestamps), so
+                    // recording stays gated on `fix != null` above. But selection must
+                    // NOT be: the seed at popup-open often runs before the tapped crown
+                    // has latched (openCrownSlot fills from a sibling effect a frame
+                    // later) or before the pre-warm pair is confirmed for THIS crown,
+                    // so it yields a null partner and the button shows "confirming".
+                    // If re-selection then only ran on a fresh fix, a popup whose
+                    // high-accuracy poll stalls or returns null (cold GPS right after
+                    // the balanced pre-warm, or a stationary phone the fused provider
+                    // withholds a new fix from) would stay frozen on that stale seed —
+                    // even though the shared, session-scoped tracker ALREADY holds a
+                    // usable in-range pair the pre-warm aged in. Closing and re-tapping
+                    // re-ran exactly this selection against that same tracker with the
+                    // crown now latched and went live, which is the reported
+                    // "close + reopen makes Collect active" workaround.
+                    //
+                    // Re-running selection each tick against the current tracker and
+                    // the now-latched crown flips crownDwellReady → true the instant a
+                    // usable stationary in-range pair exists, with no close/reopen —
+                    // mirroring how #972 re-evaluates the distance/accuracy gate live,
+                    // now applied to the dwell pair. It only ever gets STRICTER over
+                    // time (proofPair freshness-gates the current against `now`), never
+                    // weaker, so the #911 both-halves-in-range, #976 displacement-motion
+                    // and #972 GPS-coarse safety all stay intact; the server stays
+                    // authoritative.
+                    CrownProofSelection.selectFixes(
+                        crownFixTracker,
+                        System.currentTimeMillis(),
+                        openCrownSlot.value,
+                    ).let { (cur, prev) ->
+                        crownCurrentFix = cur
+                        crownPreviousFix = prev
+                    }
+                    // The newest reading, whether or not selection adopted it as the
+                    // proof current — this is what the WaitingForSignal gate watches,
+                    // so an improving accuracy flips the state live.
+                    crownLatestFix = crownFixTracker.latest
                     delay(CROWN_FIX_INTERVAL_MS)
                 }
             }
@@ -3513,7 +3542,13 @@ fun AuthenticatedApp(
             // a transient MISSING read to a real status=stopped object without
             // isSharing/observed/convoy changing, and the stop decision reads that
             // presence — so the effect must re-run when it flips.
-            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched) {
+            // Keyed on [locationAccess] as well so that GRANTING the fine-location
+            // permission AFTER a session has already started re-runs this effect:
+            // SingleSessionRecording.start then RE-CONSULTS the GPS-source factory
+            // and attaches the stream mid-session, so the live speed + distance
+            // recover without a process restart (#994). The value flips at most
+            // once (DENIED → GRANTED), so this adds no per-frame churn.
+            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched, locationAccess) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
