@@ -72,7 +72,7 @@ object SingleSessionRecording {
      */
     val stopReason: StateFlow<SavePromptReason> = stopReasonState.asStateFlow()
 
-    private var locationController: DriveLocationController? = null
+    private var locationController: DriveLocationSource? = null
 
     /**
      * The uid whose session this recording belongs to; see [clearIfNotOwnedBy].
@@ -155,9 +155,35 @@ object SingleSessionRecording {
         // recurrence of the "drive vanished on restart" report is diagnosable
         // (#849 follow-up). Defaults to the no-op sink.
         log: DriveRecordingLog = NoopDriveRecordingLog,
-        controllerFactory: () -> DriveLocationController?,
+        controllerFactory: () -> DriveLocationSource?,
     ) {
-        if (activeState.value != null) return
+        val existing = activeState.value
+        if (existing != null) {
+            // A recording is already in flight (an effect re-run after a config
+            // change, or on a dependency the effect keys on — e.g. the location
+            // permission — changing). Do NOT restart it; but if the GPS source
+            // never attached at the original start, RETRY attaching it now so the
+            // live speed + distance recover WITHIN the session (#994).
+            //
+            // The GPS source is null exactly when [controllerFactory] returned null
+            // at start — the production factory (DriveLocationController.createIfPermitted)
+            // returns null while ACCESS_FINE_LOCATION is not yet granted (or Play
+            // services aren't ready). Before this retry the source was wired ONCE and
+            // never again, so a permission granted just after the session began left
+            // the readouts dead ("-" speed, "0 m" distance) for the whole session and
+            // only a process restart re-ran start() from scratch and fixed it. The
+            // caller re-runs this whenever location access changes, so re-consulting
+            // the factory here attaches the stream the moment the grant lands.
+            //
+            // Gated on the coordinator still RECORDING so a stream is never re-opened
+            // once the session has stopped and is awaiting its save/discard prompt.
+            if (locationController == null &&
+                existing.state.value is RecordingState.Recording
+            ) {
+                attachLocationController(existing, controllerFactory)
+            }
+            return
+        }
         // REUSE this uid's existing upload scope across sessions so every upload
         // the user starts in one sign-in shares ONE cancellation handle: a later
         // sign-out / account switch then cancels them ALL together (a prior
@@ -193,20 +219,44 @@ object SingleSessionRecording {
         // them for the breadcrumb restore can never observe an empty pre-start list.
         coordinator.start()
         activeState.value = coordinator
-        // A new session must never open on the PREVIOUS session's speed, so the
-        // readout starts blank and the first fix fills it.
+        attachLocationController(coordinator, controllerFactory)
+    }
+
+    /**
+     * Wires the GPS source into [coordinator]: consults [controllerFactory] for a
+     * source (null when the fine-location permission is not yet granted / Play
+     * services aren't ready) and, if one is returned AND it actually starts
+     * streaming, streams every fix into the recorder ([DriveRecordingCoordinator.addFix])
+     * and publishes its speed to the live bar's readout ([CurrentSpeed]).
+     *
+     * A no-op source result leaves [locationController] null so a later [start]
+     * re-run RETRIES the attach — the recovery path for a permission granted after
+     * the session began (#994). Idempotent per attached source: called both on a
+     * fresh start and on the retry, it only ever holds one running stream.
+     */
+    private fun attachLocationController(
+        coordinator: DriveRecordingCoordinator,
+        controllerFactory: () -> DriveLocationSource?,
+    ) {
+        // A new session (or a recovery re-attach) must never open on the PREVIOUS
+        // session's speed, so the readout starts blank and the first fix fills it.
         CurrentSpeed.clear()
-        val controller = controllerFactory()
-        locationController = controller
-        controller?.start { latitude, longitude, timestampMs, speedMps ->
-            coordinator.addFix(latitude, longitude, timestampMs)
-            // Speed goes to the live-session bar's readout ONLY. It is passed to
-            // the holder rather than the recorder deliberately: nothing about a
-            // saved drive derives from it, and the drive payload carries no speed.
-            // Stamped with the DEVICE clock, not the fix's own GPS `timestampMs`,
-            // because the reader ages it against System.currentTimeMillis.
-            CurrentSpeed.onFix(speedMps, System.currentTimeMillis())
-        }
+        val controller = controllerFactory() ?: return
+        // Only KEEP the source if it actually started streaming: start() returns
+        // false when the runtime permission is (still) absent. Leaving
+        // locationController null in that case lets the next retry try again rather
+        // than pinning a source that delivers nothing for the whole session.
+        val started =
+            controller.start { latitude, longitude, timestampMs, speedMps ->
+                coordinator.addFix(latitude, longitude, timestampMs)
+                // Speed goes to the live-session bar's readout ONLY. It is passed to
+                // the holder rather than the recorder deliberately: nothing about a
+                // saved drive derives from it, and the drive payload carries no speed.
+                // Stamped with the DEVICE clock, not the fix's own GPS `timestampMs`,
+                // because the reader ages it against System.currentTimeMillis.
+                CurrentSpeed.onFix(speedMps, System.currentTimeMillis())
+            }
+        locationController = if (started) controller else null
     }
 
     /**
