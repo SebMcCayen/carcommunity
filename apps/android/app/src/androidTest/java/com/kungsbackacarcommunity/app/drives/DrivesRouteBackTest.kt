@@ -130,32 +130,39 @@ class DrivesRouteBackTest {
             }
         }
 
-        val lastTitle = "Drive 49"
+        // The default History order is newest-first (DriveSort.NEWEST ->
+        // SavedDrives.sortedForList): the drive with the LARGEST startedAtMillis
+        // renders at the TOP, the oldest at the bottom. Our fixture stamps
+        // startedAtMillis = base + i, so "Drive 49" is newest (top of the list)
+        // and "Drive 00" is oldest (bottom, off-screen at the top of the scroll).
+        // We assert against these two ENDPOINTS — the newest is always at the very
+        // top and the oldest always decomposes once we scroll far to the bottom —
+        // so both directions are viewport-independent and deterministic (no
+        // reliance on which mid-list rows the emulator's viewport height composes).
+        val topTitle = "Drive 49" // newest -> initially visible at the top
+        val bottomTitle = "Drive 00" // oldest -> off-screen until we scroll down
 
-        // We start at the top: the FIRST drive is visible. (We assert on the top
-        // item, index 0, rather than "the last item is absent" — whether the very
-        // last row is composed depends on the emulator's viewport height and the
-        // LazyColumn's prefetch buffer, so a "last row absent at the top" check is
-        // viewport-dependent and flaky. The index-0 item is always at the top and
-        // always decomposes once scrolled far away, so both directions below are
-        // viewport-independent and deterministic.)
-        composeTestRule.onNodeWithText("Drive 00").assertIsDisplayed()
+        // We start at the top: the newest drive is visible, the oldest is not.
+        composeTestRule.onNodeWithText(topTitle).assertIsDisplayed()
+        composeTestRule.onNodeWithText(bottomTitle).assertDoesNotExist()
+
+        // Scroll the oldest drive (bottom of the list) into view.
         composeTestRule
             .onNodeWithTag(DRIVE_HISTORY_LIST_TAG)
-            .performScrollToNode(hasText(lastTitle))
-        composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
-        // The top drive is now scrolled far away (decomposed) — proves we moved.
-        composeTestRule.onNodeWithText("Drive 00").assertDoesNotExist()
+            .performScrollToNode(hasText(bottomTitle))
+        composeTestRule.onNodeWithText(bottomTitle).assertIsDisplayed()
+        // The newest drive has now scrolled off the top (decomposed) — proves we moved.
+        composeTestRule.onNodeWithText(topTitle).assertDoesNotExist()
 
-        // Open its detail, then return via the pinned Back arrow.
-        composeTestRule.onNodeWithText(lastTitle).performClick()
+        // Open the oldest drive's detail, then return via the pinned Back arrow.
+        composeTestRule.onNodeWithText(bottomTitle).performClick()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_detailTitle)).assertIsDisplayed()
         composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
 
-        // Back at the list AT THE SAME SCROLL POSITION: the last drive is still
-        // shown and the top drive is still off-screen (a top-reset would flip both).
-        composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
-        composeTestRule.onNodeWithText("Drive 00").assertDoesNotExist()
+        // Back at the list AT THE SAME SCROLL POSITION: the oldest drive is still
+        // shown and the newest is still off the top (a top-reset would flip both).
+        composeTestRule.onNodeWithText(bottomTitle).assertIsDisplayed()
+        composeTestRule.onNodeWithText(topTitle).assertDoesNotExist()
     }
 
     @Test
