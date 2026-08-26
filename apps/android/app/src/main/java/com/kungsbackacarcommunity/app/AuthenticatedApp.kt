@@ -3542,13 +3542,7 @@ fun AuthenticatedApp(
             // a transient MISSING read to a real status=stopped object without
             // isSharing/observed/convoy changing, and the stop decision reads that
             // presence — so the effect must re-run when it flips.
-            // Keyed on [locationAccess] as well so that GRANTING the fine-location
-            // permission AFTER a session has already started re-runs this effect:
-            // SingleSessionRecording.start then RE-CONSULTS the GPS-source factory
-            // and attaches the stream mid-session, so the live speed + distance
-            // recover without a process restart (#994). The value flips at most
-            // once (DENIED → GRANTED), so this adds no per-frame churn.
-            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched, locationAccess) {
+            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.
