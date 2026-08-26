@@ -36,24 +36,31 @@ function HonestyBanner() {
   );
 }
 
-function SortHeader({
+export function SortHeader({
   label,
   numeric,
   active,
+  direction,
   onClick,
 }: {
   label: string;
   numeric?: boolean;
   active: boolean;
+  direction: 'ascending' | 'descending';
   onClick: () => void;
 }) {
   return (
-    <th
-      className={numeric ? styles.numeric : undefined}
-      onClick={onClick}
-      aria-sort={active ? 'descending' : 'none'}
-    >
-      {label} {active ? '▾' : ''}
+    <th className={numeric ? styles.numeric : undefined} aria-sort={active ? direction : 'none'}>
+      <button
+        type="button"
+        className={styles.sortButton}
+        onClick={onClick}
+        aria-label={`Sort by ${label}`}
+      >
+        <span aria-hidden="true">
+          {label} {active ? (direction === 'ascending' ? '▴' : '▾') : ''}
+        </span>
+      </button>
     </th>
   );
 }
@@ -78,6 +85,7 @@ function ServiceTable({ services }: { services: ServiceLine[] }) {
             <SortHeader
               label="Service / driver"
               active={sortKey === 'service'}
+              direction="ascending"
               onClick={() => setSortKey('service')}
             />
             <th>Type</th>
@@ -85,6 +93,7 @@ function ServiceTable({ services }: { services: ServiceLine[] }) {
               label="Gross / month"
               numeric
               active={sortKey === 'gross'}
+              direction="descending"
               onClick={() => setSortKey('gross')}
             />
             <th className={styles.numeric}>Free tier</th>
@@ -92,12 +101,14 @@ function ServiceTable({ services }: { services: ServiceLine[] }) {
               label="Billable"
               numeric
               active={sortKey === 'billable'}
+              direction="descending"
               onClick={() => setSortKey('billable')}
             />
             <SortHeader
               label="SEK / month"
               numeric
               active={sortKey === 'sekPerMonth'}
+              direction="descending"
               onClick={() => setSortKey('sekPerMonth')}
             />
           </tr>

@@ -42,7 +42,7 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, Timestamp } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runIncidentsCleanup } from '../incidents/scheduled';
-import { runTrafikverketSync } from '../incidents/trafikverket';
+import { readExistingImportedDocs, runTrafikverketSync } from '../incidents/trafikverket';
 import type { TrafikverketResponse } from '../incidents/trafikverket-core';
 import {
   IMPORT_PERSISTENT_EXPIRES_AT_MS,
@@ -1038,6 +1038,72 @@ describe('incidents Trafikverket importer', () => {
       missingDeleted: 0,
       upserted: 0,
     });
+  });
+
+  it('paginates the tv_ ID range, enforces the scan cap, and filters colliding sources', async () => {
+    const incidents = adminDb.collection('incidents');
+    const refs = [
+      incidents.doc('tv_A-prefix-scan'),
+      incidents.doc('tv_B-prefix-collision'),
+      incidents.doc('tv_C-prefix-scan'),
+      incidents.doc('tv`outside-prefix'),
+    ];
+    await Promise.all([
+      refs[0]!.set({ source: 'trafikverket' }),
+      refs[1]!.set({ source: 'user' }),
+      refs[2]!.set({ source: 'trafikverket' }),
+      refs[3]!.set({ source: 'trafikverket' }),
+    ]);
+
+    try {
+      const capped = await readExistingImportedDocs({ maxDocs: 2, pageSize: 1 });
+      expect([...capped.docs.keys()]).toEqual(['tv_A-prefix-scan']);
+      expect(capped.overflow).toBe(true);
+
+      const complete = await readExistingImportedDocs({ maxDocs: 4, pageSize: 1 });
+      expect([...complete.docs.keys()]).toEqual(['tv_A-prefix-scan', 'tv_C-prefix-scan']);
+      expect(complete.docs.has('tv_B-prefix-collision')).toBe(false);
+      expect(complete.docs.has('tv`outside-prefix')).toBe(false);
+      expect(complete.overflow).toBe(false);
+    } finally {
+      await Promise.all(refs.map((ref) => adminDb.recursiveDelete(ref)));
+    }
+  });
+
+  it('does not reconcile-delete a tv_-prefixed document owned by another source', async () => {
+    const collision = adminDb.collection('incidents').doc('tv_collision-owned-by-user');
+    const imported = adminDb
+      .collection('incidents')
+      .doc(importedIncidentDocId('DEV-prefix-collision-live'));
+    await collision.set({ source: 'user', marker: 'keep-me' });
+    const mock: TrafikverketResponse = {
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'SIT-prefix-collision',
+                Deviation: [
+                  {
+                    Id: 'DEV-prefix-collision-live',
+                    MessageType: 'Vägarbete',
+                    Geometry: { WGS84: 'POINT (12.0757 57.4874)' },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    try {
+      const result = await runTrafikverketSync(new Date(), 'fake-key', async () => mock);
+      expect(result.reconciliationSkipped).toBeNull();
+      expect((await collision.get()).data()).toEqual({ source: 'user', marker: 'keep-me' });
+    } finally {
+      await Promise.all([adminDb.recursiveDelete(collision), adminDb.recursiveDelete(imported)]);
+    }
   });
 
   it('does not advance freshness when the upstream fetch fails or returns an invalid feed', async () => {

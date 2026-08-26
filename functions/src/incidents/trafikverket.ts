@@ -147,35 +147,58 @@ export function importedIncidentFingerprint(item: ImportedIncident): string {
   return createHash('sha256').update(JSON.stringify(canonical)).digest('base64url');
 }
 
-interface ExistingImportedDocs {
+export interface ExistingImportedDocs {
   docs: Map<string, FirebaseFirestore.QueryDocumentSnapshot>;
   overflow: boolean;
 }
 
-async function readExistingImportedDocs(): Promise<ExistingImportedDocs> {
+export interface ExistingImportedDocsReadOptions {
+  maxDocs?: number;
+  pageSize?: number;
+}
+
+const TRAFIKVERKET_DOC_ID_PREFIX = 'tv_';
+// "`" immediately follows "_" in Unicode, so this exclusive bound admits
+// every document ID beginning with `tv_` and no IDs outside that prefix.
+const TRAFIKVERKET_DOC_ID_PREFIX_END = 'tv`';
+
+export async function readExistingImportedDocs(
+  options: ExistingImportedDocsReadOptions = {},
+): Promise<ExistingImportedDocs> {
+  const maxDocs = options.maxDocs ?? MAX_EXISTING_IMPORTED_DOCS;
+  const configuredPageSize = options.pageSize ?? READ_PAGE_SIZE;
   const docs = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
   let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  let scanned = 0;
 
-  while (docs.size < MAX_EXISTING_IMPORTED_DOCS) {
-    const pageSize = Math.min(READ_PAGE_SIZE, MAX_EXISTING_IMPORTED_DOCS - docs.size);
+  while (scanned < maxDocs) {
+    const pageSize = Math.min(configuredPageSize, maxDocs - scanned);
     let query = db
       .collection('incidents')
-      .where('source', '==', 'trafikverket')
       .orderBy(FieldPath.documentId())
+      .endBefore(TRAFIKVERKET_DOC_ID_PREFIX_END)
       .limit(pageSize);
-    if (cursor) query = query.startAfter(cursor);
+    query = cursor ? query.startAfter(cursor) : query.startAt(TRAFIKVERKET_DOC_ID_PREFIX);
     const page = await query.get();
-    for (const doc of page.docs) docs.set(doc.id, doc);
+    for (const doc of page.docs) {
+      scanned += 1;
+      // The deterministic prefix is the index-free ownership boundary, while
+      // the stored source check prevents a colliding non-importer document
+      // from entering fingerprint comparison or reconciliation/deletion.
+      if (doc.data().source === 'trafikverket') docs.set(doc.id, doc);
+    }
     if (page.size < pageSize) return { docs, overflow: false };
     cursor = page.docs.at(-1);
   }
 
   let overflowQuery = db
     .collection('incidents')
-    .where('source', '==', 'trafikverket')
     .orderBy(FieldPath.documentId())
+    .endBefore(TRAFIKVERKET_DOC_ID_PREFIX_END)
     .limit(1);
-  if (cursor) overflowQuery = overflowQuery.startAfter(cursor);
+  overflowQuery = cursor
+    ? overflowQuery.startAfter(cursor)
+    : overflowQuery.startAt(TRAFIKVERKET_DOC_ID_PREFIX);
   return { docs, overflow: !(await overflowQuery.get()).empty };
 }
 

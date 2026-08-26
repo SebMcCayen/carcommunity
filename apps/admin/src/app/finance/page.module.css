@@ -155,6 +155,15 @@
 .table th {
   font-weight: var(--fw-semibold);
   color: var(--text-secondary);
+}
+
+.sortButton {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
   user-select: none;
 }
