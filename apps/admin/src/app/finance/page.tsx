@@ -36,20 +36,31 @@ function HonestyBanner() {
   );
 }
 
-function SortHeader({
+export function SortHeader({
   label,
   numeric,
   active,
+  direction,
   onClick,
 }: {
   label: string;
   numeric?: boolean;
   active: boolean;
+  direction: 'ascending' | 'descending';
   onClick: () => void;
 }) {
   return (
-    <th className={numeric ? styles.numeric : undefined} onClick={onClick} aria-sort={active ? 'descending' : 'none'}>
-      {label} {active ? '▾' : ''}
+    <th className={numeric ? styles.numeric : undefined} aria-sort={active ? direction : 'none'}>
+      <button
+        type="button"
+        className={styles.sortButton}
+        onClick={onClick}
+        aria-label={`Sort by ${label}`}
+      >
+        <span aria-hidden="true">
+          {label} {active ? (direction === 'ascending' ? '▴' : '▾') : ''}
+        </span>
+      </button>
     </th>
   );
 }
@@ -71,19 +82,45 @@ function ServiceTable({ services }: { services: ServiceLine[] }) {
       <table className={styles.table}>
         <thead>
           <tr>
-            <SortHeader label="Service / driver" active={sortKey === 'service'} onClick={() => setSortKey('service')} />
+            <SortHeader
+              label="Service / driver"
+              active={sortKey === 'service'}
+              direction="ascending"
+              onClick={() => setSortKey('service')}
+            />
             <th>Type</th>
-            <SortHeader label="Gross / month" numeric active={sortKey === 'gross'} onClick={() => setSortKey('gross')} />
+            <SortHeader
+              label="Gross / month"
+              numeric
+              active={sortKey === 'gross'}
+              direction="descending"
+              onClick={() => setSortKey('gross')}
+            />
             <th className={styles.numeric}>Free tier</th>
-            <SortHeader label="Billable" numeric active={sortKey === 'billable'} onClick={() => setSortKey('billable')} />
-            <SortHeader label="SEK / month" numeric active={sortKey === 'sekPerMonth'} onClick={() => setSortKey('sekPerMonth')} />
+            <SortHeader
+              label="Billable"
+              numeric
+              active={sortKey === 'billable'}
+              direction="descending"
+              onClick={() => setSortKey('billable')}
+            />
+            <SortHeader
+              label="SEK / month"
+              numeric
+              active={sortKey === 'sekPerMonth'}
+              direction="descending"
+              onClick={() => setSortKey('sekPerMonth')}
+            />
           </tr>
         </thead>
         <tbody>
           {sorted.map((l) => {
             const isTrafikverket = l.driver.includes('Trafikverket');
             return (
-              <tr key={`${l.service}-${l.driver}`} className={isTrafikverket ? styles.rowDominant : undefined}>
+              <tr
+                key={`${l.service}-${l.driver}`}
+                className={isTrafikverket ? styles.rowDominant : undefined}
+              >
                 <td>
                   <div>{l.service}</div>
                   <div className={styles.rowDriver} title={l.note}>
@@ -127,7 +164,10 @@ function CommittedTable({ est }: { est: FinanceEstimate }) {
         </thead>
         <tbody>
           {est.googleCloud.committedJobs.map((j) => (
-            <tr key={j.id} className={j.id === 'incidents-syncTrafikverket' ? styles.rowDominant : undefined}>
+            <tr
+              key={j.id}
+              className={j.id === 'incidents-syncTrafikverket' ? styles.rowDominant : undefined}
+            >
               <td>
                 <div>{j.label}</div>
                 <div className={styles.rowDriver} title={j.note}>
@@ -135,7 +175,9 @@ function CommittedTable({ est }: { est: FinanceEstimate }) {
                 </div>
               </td>
               <td>{j.schedule}</td>
-              <td className={styles.numeric}>{j.runsPerDay < 1 ? j.runsPerDay.toFixed(2) : formatCount(j.runsPerDay)}</td>
+              <td className={styles.numeric}>
+                {j.runsPerDay < 1 ? j.runsPerDay.toFixed(2) : formatCount(j.runsPerDay)}
+              </td>
               <td className={styles.numeric}>{formatCount(j.writesPerMonth)}</td>
               <td className={styles.numeric}>{formatCount(j.readsPerMonth)}</td>
             </tr>
@@ -211,7 +253,8 @@ export default function FinancePage() {
         <div>
           <h1 className={styles.title}>Finance &amp; Cost Model</h1>
           <p className={styles.subtitle}>
-            An estimate of monthly spend in SEK, computed from the code and a maintained price table.
+            An estimate of monthly spend in SEK, computed from the code and a maintained price
+            table.
           </p>
         </div>
         {est && (
@@ -240,10 +283,10 @@ export default function FinancePage() {
 
       {est && est.member.source === 'fallback' && (
         <p className={styles.fallbackNote} role="status">
-          No <code>metrics/&#123;date&#125;</code> snapshot exists yet, so the variable half is scaled
-          by a labelled default of {formatCount(est.member.count)} members — not a live figure. Once
-          the daily metrics job (Growth &amp; Metrics) writes its first snapshot, this board reads the
-          real member count automatically.
+          No <code>metrics/&#123;date&#125;</code> snapshot exists yet, so the variable half is
+          scaled by a labelled default of {formatCount(est.member.count)} members — not a live
+          figure. Once the daily metrics job (Growth &amp; Metrics) writes its first snapshot, this
+          board reads the real member count automatically.
         </p>
       )}
 
@@ -289,8 +332,8 @@ export default function FinancePage() {
             <h2 className={styles.sectionTitle}>Google Cloud — service breakdown</h2>
             <p className={styles.sectionNote}>
               Per service: gross usage → minus the free tier → billable → SEK. Sortable. Only usage
-              above the free tier costs money, so several services read “Free” today. The dominant
-              line is <strong>Trafikverket writes</strong> (highlighted). Estimated total{' '}
+              above the free tier costs money, so several services read “Free” today. Trafikverket
+              now trades repeated writes for cheaper comparison reads. Estimated total{' '}
               {formatSek(est.googleCloud.totalSekPerMonth)}/month.
             </p>
             <ServiceTable services={est.googleCloud.services} />
@@ -301,10 +344,14 @@ export default function FinancePage() {
             <h2 className={styles.sectionTitle}>Committed (scheduled) jobs</h2>
             <p className={styles.sectionNote}>
               These run on a fixed cadence regardless of member count — cost = cadence × work. The
-              Trafikverket import (highlighted) writes ~{formatCount(est.googleCloud.trafikverketSituationsPerRun)}{' '}
-              incidents every 30 minutes (cap {formatCount(est.googleCloud.trafikverketSituationsCap)}), which is{' '}
-              <strong>~{formatSek(est.googleCloud.trafikverketWritesSekPerMonth)}/month</strong> of Firestore
-              writes and dwarfs every other committed line.
+              The Trafikverket import compares ~
+              {formatCount(est.googleCloud.trafikverketImportedDeviationsPerRun)} deviations every
+              30 minutes and estimates ~
+              {formatCount(est.googleCloud.trafikverketEstimatedWritesPerRun)} new/changed +
+              metadata writes (Situation query cap{' '}
+              {formatCount(est.googleCloud.trafikverketSituationsCap)}). Estimated write share:{' '}
+              <strong>~{formatSek(est.googleCloud.trafikverketWritesSekPerMonth)}/month</strong>.
+              Tune these assumptions from the importer counters after closed testing.
             </p>
             <CommittedTable est={est} />
           </section>
@@ -328,12 +375,13 @@ export default function FinancePage() {
             <h2 className={styles.sectionTitle}>Mapbox — separate vendor</h2>
             <p className={styles.sectionNote}>
               The member app is a <strong>mobile app</strong> (Maps SDK + Navigation SDK for
-              Android), so Mapbox bills by <strong>Monthly Active Users (MAU)</strong> and navigation
-              trips — <em>not</em> per web map load. The basemap is free up to 25,000 MAU, so it costs
-              nothing at this scale; <strong>Navigation is the real, growing cost driver</strong>. Nav
-              usage assumes {Math.round(est.mapbox.assumptions.navUsingFraction * 100)}% of members
-              navigate, {est.mapbox.assumptions.navTripsPerNavigatingMemberPerMonth} trips each per
-              month. Billed by Mapbox on its own dashboard — never part of the Google Cloud total.
+              Android), so Mapbox bills by <strong>Monthly Active Users (MAU)</strong> and
+              navigation trips — <em>not</em> per web map load. The basemap is free up to 25,000
+              MAU, so it costs nothing at this scale;{' '}
+              <strong>Navigation is the real, growing cost driver</strong>. Nav usage assumes{' '}
+              {Math.round(est.mapbox.assumptions.navUsingFraction * 100)}% of members navigate,{' '}
+              {est.mapbox.assumptions.navTripsPerNavigatingMemberPerMonth} trips each per month.
+              Billed by Mapbox on its own dashboard — never part of the Google Cloud total.
             </p>
             <div className={styles.vendorCard}>
               <div className={styles.vendorHead}>

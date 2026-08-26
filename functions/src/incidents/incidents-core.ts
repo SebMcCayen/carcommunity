@@ -120,8 +120,9 @@ export const INCIDENT_TTL_MS: Record<IncidentType, number> = {
 };
 
 /**
- * TTL applied to importer (Trafikverket) roadwork/incidents. Refreshed on each
- * sync, so a situation that vanishes upstream ages out within one window.
+ * Freshness window for the Trafikverket metadata authority. Legacy imported
+ * docs also carry this as their rolling expiry until the fingerprint migration;
+ * migrated docs use a stable compatibility expiry and consult metadata instead.
  */
 export const IMPORT_TTL_MS = 6 * 60 * 60 * 1000; // 6h
 
@@ -784,10 +785,9 @@ export interface IncidentView {
    * When the incident was originally POSTED, as an ISO-8601 instant, or null.
    *
    * For a member report `createdAt` already IS the post time, so this is null
-   * and the client uses `createdAt`. For a Trafikverket import `createdAt` is our
-   * SYNC time (when the importer wrote the doc), which is NOT when Trafikverket
-   * posted — so the importer stores the upstream original time here and the
-   * client shows THIS as "x min ago". Null on a Trafikverket row means upstream
+   * and the client uses `createdAt`. For a Trafikverket import the importer
+   * stores the upstream original time here and the client shows THIS as "x min
+   * ago". Null on a Trafikverket row means upstream
    * sent no usable time, and the client hides the age line rather than showing
    * the misleading sync time.
    */

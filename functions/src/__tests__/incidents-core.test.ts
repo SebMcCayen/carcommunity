@@ -65,6 +65,7 @@ import {
   buildTrafikverketRequestBody,
   classifyIncidentType,
   importedIncidentDocId,
+  inspectTrafikverketResponse,
   parseTrafikverketResponse,
   parseTrafikverketTime,
   parseWgs84Point,
@@ -240,7 +241,9 @@ describe('trafikverket-core', () => {
       Date.UTC(2026, 0, 15, 7, 0, 0),
     );
     expect(parseTrafikverketTime('2026-07-30T12:23:00Z')).toBe(Date.UTC(2026, 6, 30, 12, 23, 0));
-    expect(parseTrafikverketTime('2026-07-30T12:23:00+0200')).toBe(Date.UTC(2026, 6, 30, 10, 23, 0));
+    expect(parseTrafikverketTime('2026-07-30T12:23:00+0200')).toBe(
+      Date.UTC(2026, 6, 30, 10, 23, 0),
+    );
   });
 
   it('rejects a zone-less or unparseable time (so the client hides the age)', () => {
@@ -448,6 +451,62 @@ describe('trafikverket-core', () => {
     expect(importedIncidentDocId('D1')).toBe('tv_D1');
     // Same input → same id (idempotent upsert).
     expect(importedIncidentDocId('X')).toBe(importedIncidentDocId('X'));
+  });
+
+  it('marks only structurally complete, below-limit responses safe to reconcile', () => {
+    const complete = inspectTrafikverketResponse({
+      RESPONSE: {
+        RESULT: [
+          {
+            Situation: [
+              {
+                Id: 'S1',
+                Deviation: [
+                  { Id: 'D1' },
+                  // A temporarily unrenderable deviation still counts as
+                  // PRESENT for reconciliation via the Situation fallback id.
+                  {},
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(complete.structurallyValid).toBe(true);
+    expect(complete.situationsReceived).toBe(1);
+    expect(complete.deviationsReceived).toBe(2);
+    expect(complete.upstreamIncidentDocIds).toEqual(new Set(['tv_D1', 'tv_S1']));
+    expect(complete.reconciliationSkipReason).toBeNull();
+
+    const capped = inspectTrafikverketResponse(
+      {
+        RESPONSE: {
+          RESULT: [
+            {
+              Situation: [
+                { Id: 'S1', Deviation: [{ Id: 'D1' }] },
+                { Id: 'S2', Deviation: [{ Id: 'D2' }] },
+              ],
+            },
+          ],
+        },
+      },
+      2,
+    );
+    expect(capped.reconciliationSkipReason).toBe('query-limit-reached');
+
+    expect(inspectTrafikverketResponse({ RESPONSE: { RESULT: [] } }).reconciliationSkipReason).toBe(
+      'invalid-response-shape',
+    );
+    expect(
+      inspectTrafikverketResponse({ RESPONSE: { RESULT: [{ Situation: [] }] } })
+        .reconciliationSkipReason,
+    ).toBe('empty-response');
+    expect(
+      inspectTrafikverketResponse({ RESPONSE: { RESULT: [{ Situation: [{ Id: 'S1' }] }] } })
+        .reconciliationSkipReason,
+    ).toBe('invalid-response-shape');
   });
 });
 
@@ -924,7 +983,13 @@ describe('clear-vote geofence — you must be near the incident', () => {
     // ALWAYS rejected and one 300 m out is ALWAYS accepted.
     for (const accuracy of [null, 0, 10, 50, 100, 500, 5_000, MAX_REPORTED_ACCURACY_METERS]) {
       expect(
-        withinClearFence(lat, lng, northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS - 1), lng, accuracy),
+        withinClearFence(
+          lat,
+          lng,
+          northOf(INCIDENT_CLEAR_GEOFENCE_RADIUS_METERS - 1),
+          lng,
+          accuracy,
+        ),
       ).toBe(true);
       expect(
         withinClearFence(

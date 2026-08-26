@@ -103,7 +103,8 @@ export interface FinanceEstimate {
     services: ServiceLine[];
     committedJobs: CommittedJobLine[];
     trafikverketWritesSekPerMonth: number;
-    trafikverketSituationsPerRun: number;
+    trafikverketEstimatedWritesPerRun: number;
+    trafikverketImportedDeviationsPerRun: number;
     trafikverketSituationsCap: number;
     committedSekPerMonth: number;
     variableSekPerMonth: number;

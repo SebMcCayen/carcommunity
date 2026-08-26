@@ -29,13 +29,44 @@ export const TRAFIKVERKET_ENDPOINT = 'https://api.trafikinfo.trafikverket.se/v2/
  * imported. 3000 clears that headroom (upstream count sits well under it), so
  * accidents and other short-lived incidents are no longer truncated out.
  *
- * Deliberate cost tradeoff, accepted: a full national fetch raises Firestore
- * write volume to ~206k writes/day (~70–120 SEK/month). The 30-minute schedule
- * is unchanged. The upsert path already chunks commits at ≤400 writes/batch
- * (see runTrafikverketSync), so the higher volume stays under the 500-write
- * WriteBatch limit.
+ * The 30-minute national fetch is retained, but the importer now compares a
+ * versioned content fingerprint and writes only new/changed deviations plus one
+ * freshness metadata document. Mutation batches stay at ≤400 operations (see
+ * runTrafikverketSync), below Firestore's 500-write WriteBatch limit.
  */
 export const TRAFIKVERKET_QUERY_LIMIT = 3000;
+
+/** Backend-only sync metadata location shared by the importer/read paths. */
+export const TRAFIKVERKET_SYNC_METADATA_COLLECTION = 'incidentSyncMetadata';
+export const TRAFIKVERKET_SYNC_METADATA_DOC = 'trafikverket';
+
+/** Bump whenever the canonical importer-owned content shape changes. */
+export const TRAFIKVERKET_FINGERPRINT_VERSION = 1;
+
+/** Stable compatibility expiry; metadata, not this timestamp, owns freshness. */
+export const IMPORT_PERSISTENT_EXPIRES_AT_MS = Date.UTC(2100, 0, 1);
+
+/**
+ * Why reconciliation was deliberately withheld for a response. A capped or
+ * malformed national response must never be interpreted as "everything not in
+ * this payload vanished" — that would turn an upstream/API problem into a
+ * mass-delete.
+ */
+export type TrafikverketReconciliationSkipReason =
+  | 'invalid-response-shape'
+  | 'empty-response'
+  | 'query-limit-reached'
+  | 'implausible-upstream-drop'
+  | 'existing-scan-limit-reached';
+
+export interface TrafikverketResponseInspection {
+  structurallyValid: boolean;
+  situationsReceived: number;
+  deviationsReceived: number;
+  /** All upstream ids present, including deviations that cannot be rendered. */
+  upstreamIncidentDocIds: Set<string>;
+  reconciliationSkipReason: TrafikverketReconciliationSkipReason | null;
+}
 
 /**
  * Builds the XML request body. Queries active road `Situation`s and includes
@@ -118,12 +149,100 @@ export interface TrafikverketResponse {
   RESPONSE?: { RESULT?: Array<{ Situation?: TrafikverketSituation[] }> };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Inspects the raw response before parsing it into map markers.
+ *
+ * Reconciliation uses the RAW upstream ids, not only successfully parsed
+ * markers. If one deviation temporarily carries bad geometry, its previous
+ * marker is retained rather than mistaken for a vanished incident. A response
+ * is deletion-safe only when every expected container is present, the national
+ * result is non-empty, and the Situation count is below the query limit.
+ */
+export function inspectTrafikverketResponse(
+  response: unknown,
+  queryLimit: number = TRAFIKVERKET_QUERY_LIMIT,
+): TrafikverketResponseInspection {
+  let structurallyValid = true;
+  let situationsReceived = 0;
+  let deviationsReceived = 0;
+  const upstreamIncidentDocIds = new Set<string>();
+
+  if (
+    !isRecord(response) ||
+    !isRecord(response.RESPONSE) ||
+    !Array.isArray(response.RESPONSE.RESULT)
+  ) {
+    structurallyValid = false;
+  } else if (response.RESPONSE.RESULT.length === 0) {
+    structurallyValid = false;
+  } else {
+    for (const result of response.RESPONSE.RESULT) {
+      if (!isRecord(result) || !Array.isArray(result.Situation)) {
+        structurallyValid = false;
+        continue;
+      }
+      situationsReceived += result.Situation.length;
+      for (const rawSituation of result.Situation) {
+        if (!isRecord(rawSituation) || !Array.isArray(rawSituation.Deviation)) {
+          structurallyValid = false;
+          continue;
+        }
+        const situationId =
+          typeof rawSituation.Id === 'string' && rawSituation.Id.length > 0
+            ? rawSituation.Id
+            : undefined;
+        for (const rawDeviation of rawSituation.Deviation) {
+          deviationsReceived += 1;
+          if (!isRecord(rawDeviation)) {
+            structurallyValid = false;
+            continue;
+          }
+          const sourceId =
+            typeof rawDeviation.Id === 'string' && rawDeviation.Id.length > 0
+              ? rawDeviation.Id
+              : situationId;
+          if (sourceId) upstreamIncidentDocIds.add(importedIncidentDocId(sourceId));
+        }
+      }
+    }
+  }
+
+  let reconciliationSkipReason: TrafikverketReconciliationSkipReason | null = null;
+  if (!structurallyValid) {
+    reconciliationSkipReason = 'invalid-response-shape';
+  } else if (
+    situationsReceived === 0 ||
+    deviationsReceived === 0 ||
+    upstreamIncidentDocIds.size === 0
+  ) {
+    // A genuinely empty national active feed is implausible. Fail closed and
+    // retain the last known data instead of deleting thousands of documents.
+    reconciliationSkipReason = 'empty-response';
+  } else if (situationsReceived >= queryLimit) {
+    reconciliationSkipReason = 'query-limit-reached';
+  }
+
+  return {
+    structurallyValid,
+    situationsReceived,
+    deviationsReceived,
+    upstreamIncidentDocIds,
+    reconciliationSkipReason,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Parsing
 // ---------------------------------------------------------------------------
 
 /** Parses a WGS84 `POINT (lng lat)` string into a coordinate, or null. */
-export function parseWgs84Point(value: string | undefined): { longitude: number; latitude: number } | null {
+export function parseWgs84Point(
+  value: string | undefined,
+): { longitude: number; latitude: number } | null {
   if (!value) return null;
   const match = /POINT\s*\(\s*(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s*\)/i.exec(value);
   if (!match) return null;
@@ -255,7 +374,12 @@ function classifyMessageType(messageType: string): IncidentType | null {
   if (t.includes('färj') || t.includes('farj')) return null; // ferry — out of scope
   if (t.includes('olycka')) return 'accident';
   if (t.includes('vägarbete') || t.includes('vagarbete')) return 'roadwork';
-  if (t.includes('avstäng') || t.includes('avstang') || t.includes('stängd') || t.includes('stangd')) {
+  if (
+    t.includes('avstäng') ||
+    t.includes('avstang') ||
+    t.includes('stängd') ||
+    t.includes('stangd')
+  ) {
     return 'road_closed';
   }
   return 'hazard';

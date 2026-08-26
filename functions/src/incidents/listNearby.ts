@@ -40,6 +40,10 @@ import {
   type IncidentView,
 } from './incidents-core';
 import { MAX_INSTANCES_HOT } from '../shared/instanceLimits';
+import {
+  TRAFIKVERKET_SYNC_METADATA_COLLECTION,
+  TRAFIKVERKET_SYNC_METADATA_DOC,
+} from './trafikverket-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -79,6 +83,19 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
   const radius = clampRadiusMeters(parsed.input.radiusMeters);
   const now = Timestamp.now();
 
+  // Imported docs have a stable far-future expiresAt so unchanged upstream
+  // content needs no write. This ONE small metadata document is therefore the
+  // freshness authority. Legacy rolling-TTL docs stay readable until their
+  // first importer migration (or their existing expiry), preventing a rollout
+  // gap if rules/functions deploy before the next scheduled sync succeeds.
+  const importMetadata = await db
+    .collection(TRAFIKVERKET_SYNC_METADATA_COLLECTION)
+    .doc(TRAFIKVERKET_SYNC_METADATA_DOC)
+    .get();
+  const importFreshUntil = importMetadata.get('freshUntil');
+  const trafikverketImportFresh =
+    importFreshUntil instanceof Timestamp && importFreshUntil.toMillis() > now.toMillis();
+
   const cells = geoCellsForRadius(latitude, longitude, radius);
   const cellChunks = chunk(cells, FIRESTORE_IN_CHUNK);
 
@@ -110,6 +127,13 @@ export const listNearby = onCall(CALLABLE_OPTS, async (request): Promise<ListNea
       if (seen.has(doc.id)) continue;
       const data = doc.data();
       if (data.status !== INCIDENT_ACTIVE_STATUS) continue;
+      if (
+        data.source === 'trafikverket' &&
+        Object.prototype.hasOwnProperty.call(data, 'importFingerprintVersion') &&
+        !trafikverketImportFresh
+      ) {
+        continue;
+      }
       // Mirror the Firestore read rule (`expiresAt > request.time`), which
       // denies a missing/non-Timestamp expiresAt. The Admin SDK bypasses
       // rules, so enforce the same intent here: only a valid, still-future

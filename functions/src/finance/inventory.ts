@@ -83,16 +83,15 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
     label: 'Trafikverket import',
     schedule: '*/30 * * * *',
     runsPerDay: 48,
-    // Upserts one doc per active Situation. writesPerRun is filled from the
-    // assumption (TRAFIKVERKET_SITUATIONS_PER_RUN) by the model, not hardcoded
-    // here — see buildScheduledWrites(). Kept 0 here so the number lives in one
-    // place; the model injects it.
+    // Reads the existing imported set, writes only new/changed fingerprints +
+    // one freshness metadata doc, and deletes vanished imports after a guarded
+    // complete response. The model injects all three measured/tunable values.
     writesPerRun: 0,
     readsPerRun: 0,
     deletesPerRun: 0,
     avgSeconds: 30,
     memoryGiB: 0.25,
-    note: 'THE dominant committed line — one Firestore write per active national road Situation, every 30 min. Write count injected from TRAFIKVERKET_SITUATIONS_PER_RUN.',
+    note: 'Fingerprint sync: scans ~4.6k imported deviations, skips unchanged incident writes, writes one freshness doc, and safely reconciles vanished imports. Tune from created/changed/unchangedSkipped/missingDeleted telemetry.',
   },
   {
     id: 'metrics-captureDaily',

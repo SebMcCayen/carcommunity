@@ -969,6 +969,8 @@ describe('Firestore rules – incidents', () => {
   const ACTIVE = 'rc-in-active';
   const EXPIRED = 'rc-in-expired';
   const REMOVED = 'rc-in-removed';
+  const MIGRATED_IMPORT = 'tv_rc-in-migrated';
+  const LEGACY_IMPORT = 'tv_rc-in-legacy';
 
   beforeAll(async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
@@ -994,6 +996,24 @@ describe('Firestore rules – incidents', () => {
         type: 'roadwork',
         status: 'removed',
         reportedBy: REPORTER,
+        source: 'trafikverket',
+        expiresAt: inOneHour(),
+      });
+      await setDoc(doc(db, 'incidentSyncMetadata', 'trafikverket'), {
+        source: 'trafikverket',
+        freshUntil: inOneHour(),
+      });
+      await setDoc(doc(db, 'incidents', MIGRATED_IMPORT), {
+        type: 'roadwork',
+        status: 'active',
+        source: 'trafikverket',
+        expiresAt: Timestamp.fromMillis(Date.UTC(2100, 0, 1)),
+        importFingerprintVersion: 1,
+      });
+      // Rollout bridge: no fingerprint means an old rolling-TTL import.
+      await setDoc(doc(db, 'incidents', LEGACY_IMPORT), {
+        type: 'roadwork',
+        status: 'active',
         source: 'trafikverket',
         expiresAt: inOneHour(),
       });
@@ -1041,6 +1061,38 @@ describe('Firestore rules – incidents', () => {
   it('a non-active incident is hidden', async () => {
     const db = testEnv.authenticatedContext(OTHER).firestore();
     await assertFails(getDoc(doc(db, 'incidents', REMOVED)));
+  });
+
+  it('requires fresh metadata for migrated imports while preserving the legacy rollout bridge', async () => {
+    const reader = testEnv.authenticatedContext(OTHER).firestore();
+    await assertSucceeds(getDoc(doc(reader, 'incidents', MIGRATED_IMPORT)));
+
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'incidentSyncMetadata', 'trafikverket'), {
+        source: 'trafikverket',
+        freshUntil: anHourAgo(),
+      });
+    });
+    await assertFails(getDoc(doc(reader, 'incidents', MIGRATED_IMPORT)));
+    await assertSucceeds(getDoc(doc(reader, 'incidents', LEGACY_IMPORT)));
+    // Crowd-sourced liveness remains independent of importer freshness.
+    await assertSucceeds(getDoc(doc(reader, 'incidents', ACTIVE)));
+
+    // Restore freshness so this fixture cannot perturb later assertions.
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'incidentSyncMetadata', 'trafikverket'), {
+        source: 'trafikverket',
+        freshUntil: inOneHour(),
+      });
+    });
+  });
+
+  it('keeps Trafikverket sync metadata backend-only', async () => {
+    const db = testEnv.authenticatedContext(OTHER, { activeMember: true }).firestore();
+    await assertFails(getDoc(doc(db, 'incidentSyncMetadata', 'trafikverket')));
+    await assertFails(
+      setDoc(doc(db, 'incidentSyncMetadata', 'trafikverket'), { freshUntil: inOneHour() }),
+    );
   });
 
   it('an unfiltered list of incidents is denied (the rule is not a filter)', async () => {

@@ -113,12 +113,12 @@ export const confirm = onCall(CALLABLE_OPTS, async (request): Promise<ConfirmRes
     const data = snap.data()!;
 
     // Imported (Trafikverket) incidents are importer-owned: runTrafikverketSync
-    // rewrites each `tv_` doc with a full `batch.set` (no merge) every 30
-    // minutes, which would silently wipe a confirmationCount and re-stamp the
-    // expiry we just extended. Upstream is also the authority on whether the
-    // situation is still live — that is exactly what the 30-minute re-sync
-    // means — so a member confirmation would add nothing and fight the
-    // importer. Rejected for everyone, mirroring incidents.remove.
+    // fully overwrites a `tv_` doc when it is created, migrated, or changed;
+    // fingerprint-matched unchanged syncs skip the write. A later importer write
+    // would still silently wipe a confirmationCount or expiry we extended here.
+    // Upstream is also the authority on whether the situation is still live, so
+    // a member confirmation would add nothing and fight the importer. Rejected
+    // for everyone, mirroring incidents.remove.
     if (data.source !== 'user') {
       throw new HttpsError(
         'failed-precondition',
