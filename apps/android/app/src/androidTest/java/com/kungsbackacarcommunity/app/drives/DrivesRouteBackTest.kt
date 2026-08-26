@@ -1,11 +1,14 @@
 package com.kungsbackacarcommunity.app.drives
 
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
@@ -91,6 +94,62 @@ class DrivesRouteBackTest {
         composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_statsTitle)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_screenTitle)).assertIsDisplayed()
+    }
+
+    /** A long history so the last drive starts well below the fold. */
+    private fun manyDrives(count: Int): List<SavedDrive> =
+        (0 until count).map { i ->
+            SavedDrive(
+                rideId = "ride-$i",
+                title = "Drive %02d".format(i),
+                distanceMeters = 1000.0,
+                durationSeconds = 600,
+                averageSpeedMetersPerSecond = 5.0,
+                startedAtMillis = 1_000_000L + i,
+                endedAtMillis = 1_600_000L + i,
+                createdAtMillis = 1_000_000L + i,
+            )
+        }
+
+    /**
+     * #996: scrolling the History list, opening a drive's detail, and pressing the
+     * in-app Back arrow must return to the SAME scroll position, not the top. The
+     * detail level swaps [DrivesListScreen] out of the composition, so the list's
+     * scroll state must be owned by [DrivesRoute] (above the swap) to survive.
+     */
+    @Test
+    fun scrollPositionIsRetainedAcrossDetailRoundTrip() {
+        composeTestRule.setContent {
+            KccTheme {
+                DrivesRoute(
+                    repository = FakeDrivesRepository(manyDrives(30)),
+                    uid = "uid-1",
+                    errorReporter = null,
+                    routeRepository = null,
+                )
+            }
+        }
+
+        val lastTitle = "Drive 29"
+
+        // At the top the last drive is off-screen; scroll it into view.
+        composeTestRule.onNodeWithText(lastTitle).assertDoesNotExist()
+        composeTestRule
+            .onNodeWithTag(DRIVE_HISTORY_LIST_TAG)
+            .performScrollToNode(hasText(lastTitle))
+        composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
+        // The top drive is now scrolled away — proves we actually moved.
+        composeTestRule.onNodeWithText("Drive 00").assertDoesNotExist()
+
+        // Open its detail, then return via the pinned Back arrow.
+        composeTestRule.onNodeWithText(lastTitle).performClick()
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_detailTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
+
+        // Back at the list AT THE SAME SCROLL POSITION: the last drive is still
+        // shown and the top drive is still off-screen (a top-reset would flip both).
+        composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
+        composeTestRule.onNodeWithText("Drive 00").assertDoesNotExist()
     }
 
     @Test
