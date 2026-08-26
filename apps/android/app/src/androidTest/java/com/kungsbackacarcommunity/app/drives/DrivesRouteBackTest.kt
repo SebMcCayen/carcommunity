@@ -122,7 +122,7 @@ class DrivesRouteBackTest {
         composeTestRule.setContent {
             KccTheme {
                 DrivesRoute(
-                    repository = FakeDrivesRepository(manyDrives(30)),
+                    repository = FakeDrivesRepository(manyDrives(50)),
                     uid = "uid-1",
                     errorReporter = null,
                     routeRepository = null,
@@ -130,15 +130,21 @@ class DrivesRouteBackTest {
             }
         }
 
-        val lastTitle = "Drive 29"
+        val lastTitle = "Drive 49"
 
-        // At the top the last drive is off-screen; scroll it into view.
-        composeTestRule.onNodeWithText(lastTitle).assertDoesNotExist()
+        // We start at the top: the FIRST drive is visible. (We assert on the top
+        // item, index 0, rather than "the last item is absent" — whether the very
+        // last row is composed depends on the emulator's viewport height and the
+        // LazyColumn's prefetch buffer, so a "last row absent at the top" check is
+        // viewport-dependent and flaky. The index-0 item is always at the top and
+        // always decomposes once scrolled far away, so both directions below are
+        // viewport-independent and deterministic.)
+        composeTestRule.onNodeWithText("Drive 00").assertIsDisplayed()
         composeTestRule
             .onNodeWithTag(DRIVE_HISTORY_LIST_TAG)
             .performScrollToNode(hasText(lastTitle))
         composeTestRule.onNodeWithText(lastTitle).assertIsDisplayed()
-        // The top drive is now scrolled away — proves we actually moved.
+        // The top drive is now scrolled far away (decomposed) — proves we moved.
         composeTestRule.onNodeWithText("Drive 00").assertDoesNotExist()
 
         // Open its detail, then return via the pinned Back arrow.
