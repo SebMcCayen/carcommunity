@@ -19,7 +19,12 @@ vi.mock('../firebase', () => ({
   adminRtdb: {},
 }));
 
-import { FETCH_TIMEOUT_MS, httpFetcher } from './trafikverket';
+import {
+  FETCH_TIMEOUT_MS,
+  httpFetcher,
+  isTransientFetchError,
+  runTrafikverketSync,
+} from './trafikverket';
 
 const okHeaders = { 'content-type': 'application/json' };
 
@@ -150,5 +155,73 @@ describe('httpFetcher (Trafikverket live fetcher)', () => {
     expect(requestedTimeouts).toContain(FETCH_TIMEOUT_MS);
     expect(err).toBeInstanceOf(Error);
     expect((err as DOMException).name).toBe('TimeoutError');
+  });
+});
+
+describe('isTransientFetchError (fetch-failure classification)', () => {
+  it('classifies a timeout / abort by name', () => {
+    expect(isTransientFetchError(new DOMException('timed out', 'TimeoutError'))).toBe(true);
+    expect(isTransientFetchError(new DOMException('aborted', 'AbortError'))).toBe(true);
+  });
+
+  it('classifies a network failure by direct code', () => {
+    expect(isTransientFetchError(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))).toBe(true);
+    expect(isTransientFetchError(Object.assign(new Error('dns'), { code: 'EAI_AGAIN' }))).toBe(true);
+  });
+
+  it('classifies an undici socket failure nested on cause.code', () => {
+    const err = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    expect(isTransientFetchError(err)).toBe(true);
+  });
+
+  it('falls back to the generic undici "fetch failed" TypeError', () => {
+    expect(isTransientFetchError(new TypeError('fetch failed'))).toBe(true);
+  });
+
+  it('does NOT classify a bad-data / programmer error as transient', () => {
+    expect(isTransientFetchError(new Error('Trafikverket API responded 400: bad field'))).toBe(false);
+    expect(isTransientFetchError(new SyntaxError('Unexpected token in JSON'))).toBe(false);
+    expect(isTransientFetchError('nope')).toBe(false);
+    expect(isTransientFetchError(null)).toBe(false);
+  });
+});
+
+describe('runTrafikverketSync — transient upstream fetch handling (issue #1002)', () => {
+  it('does NOT throw when the fetcher times out; returns a skipped result', async () => {
+    // The exact DOMException a tripped AbortSignal.timeout raises. Previously
+    // this escaped runTrafikverketSync → the wrapped handler → crashed the
+    // scheduled job and filed a server-error report. It must now be swallowed
+    // into a no-op skip so the next scheduled run simply retries.
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const fetcher = vi.fn().mockRejectedValue(timeout);
+
+    const result = await runTrafikverketSync(new Date(), 'secret-key', fetcher);
+
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(result.skipped).toBe(true);
+    expect(result.upserted).toBe(0);
+    expect(result.created).toBe(0);
+    expect(result.missingDeleted).toBe(0);
+  });
+
+  it('does NOT throw on a transient network error surfaced via cause.code', async () => {
+    const netErr = Object.assign(new TypeError('fetch failed'), {
+      cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }),
+    });
+    const result = await runTrafikverketSync(
+      new Date(),
+      'secret-key',
+      vi.fn().mockRejectedValue(netErr),
+    );
+    expect(result.skipped).toBe(true);
+  });
+
+  it('rethrows a genuinely unexpected (non-transient) fetch error unchanged', async () => {
+    const boom = new Error('unexpected programmer error');
+    await expect(
+      runTrafikverketSync(new Date(), 'secret-key', vi.fn().mockRejectedValue(boom)),
+    ).rejects.toThrow('unexpected programmer error');
   });
 });

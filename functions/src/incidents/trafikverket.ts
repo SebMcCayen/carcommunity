@@ -234,6 +234,72 @@ export function isImplausibleUpstreamDrop(
   );
 }
 
+/**
+ * Fetch-layer failure names that are TRANSIENT: a slow upstream tripping our
+ * own {@link FETCH_TIMEOUT_MS} bound raises a `TimeoutError`, and an aborted
+ * request an `AbortError`. Neither is a bug in our code or a poison payload —
+ * the correct response is to skip this cycle and let the next scheduled run
+ * (every 30 min) retry, NOT to crash the job and file a server-error report.
+ */
+const TRANSIENT_FETCH_ERROR_NAMES = new Set(['TimeoutError', 'AbortError']);
+
+/**
+ * Low-level network failure codes (Node/undici). undici surfaces a socket-level
+ * failure as a `TypeError('fetch failed')` with the real reason nested on
+ * `cause.code`, so we inspect both the error and its cause.
+ */
+const TRANSIENT_NETWORK_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EPIPE',
+  'ENETUNREACH',
+  'EHOSTUNREACH',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+  'UND_ERR_SOCKET',
+]);
+
+function errorName(error: unknown): string | undefined {
+  if (error && typeof error === 'object' && 'name' in error) {
+    return String((error as { name: unknown }).name);
+  }
+  return undefined;
+}
+
+/** Extracts a network error code from the error itself or its (undici) cause. */
+function errorCode(error: unknown): string | undefined {
+  if (error && typeof error === 'object') {
+    const direct = (error as { code?: unknown }).code;
+    if (typeof direct === 'string') return direct;
+    const cause = (error as { cause?: unknown }).cause;
+    if (cause && typeof cause === 'object') {
+      const causeCode = (cause as { code?: unknown }).code;
+      if (typeof causeCode === 'string') return causeCode;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether a fetch rejection is a transient upstream/network hiccup (timeout,
+ * abort, or a low-level socket failure) as opposed to a genuine programming
+ * error or a bad-data condition. Exported for unit testing.
+ */
+export function isTransientFetchError(error: unknown): boolean {
+  const name = errorName(error);
+  if (name && TRANSIENT_FETCH_ERROR_NAMES.has(name)) return true;
+  const code = errorCode(error);
+  if (code && TRANSIENT_NETWORK_CODES.has(code)) return true;
+  // Fallback: undici's generic socket-failure wrapper we could not classify by
+  // an explicit code above.
+  if (error instanceof TypeError && /fetch failed/i.test(error.message)) return true;
+  return false;
+}
+
 function zeroResult(skipped: boolean): TrafikverketSyncResult {
   return {
     skipped,
@@ -260,7 +326,29 @@ export async function runTrafikverketSync(
     return zeroResult(true);
   }
 
-  const response = await fetcher(apiKey);
+  let response: TrafikverketResponse;
+  try {
+    response = await fetcher(apiKey);
+  } catch (error) {
+    if (isTransientFetchError(error)) {
+      // A slow upstream tripping our own FETCH_TIMEOUT_MS bound (or a transient
+      // network failure) is a routine hiccup, not a fault in this job. Skip the
+      // cycle and let the next scheduled run retry: throwing here would escape
+      // the wrapped handler, crash the scheduled job and file a noisy
+      // server-error report for something that self-heals in 30 minutes. No
+      // incident/metadata writes happen, so the previous freshness window stays
+      // the authority. Only the error's name/code and the bound are logged —
+      // never coordinates, ids, paths or the request body (which holds the key).
+      logger.warn('Trafikverket sync skipped — transient upstream fetch failure', {
+        errorName: errorName(error),
+        errorCode: errorCode(error),
+        timeoutMs: FETCH_TIMEOUT_MS,
+      });
+      return zeroResult(true);
+    }
+    // Genuinely unexpected errors keep the original crash-and-report semantics.
+    throw error;
+  }
   const inspection = inspectTrafikverketResponse(response);
   if (!inspection.structurallyValid || inspection.reconciliationSkipReason === 'empty-response') {
     logger.error('Trafikverket sync rejected an invalid/incomplete response', {
