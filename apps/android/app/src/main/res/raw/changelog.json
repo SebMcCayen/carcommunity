@@ -2,6 +2,22 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 47,
+      "versionName": "0.8.36",
+      "releaseDate": "2026-08-27",
+      "highlights": [
+        "Stabilare kartladdning – färre frysningar",
+        "Kronjakten: högre daglig poänggräns"
+      ],
+      "changes": [
+        "Stabilitet: åtgärdade en frysning som kunde uppstå när kartan laddades",
+        "Kronjakten: den dagliga gränsen för Kronpoäng har höjts",
+        "Perks: din aktiva boost finns kvar även efter att du startar om appen",
+        "Butiken: perks visar nu hur länge de varar",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 46,
       "versionName": "0.8.35",
       "releaseDate": "2026-08-22",
