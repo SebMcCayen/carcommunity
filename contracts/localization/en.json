@@ -1293,6 +1293,8 @@
     "shopBuyButton": "Buy",
     "shopBuying": "Buying…",
     "shopOwnedLabel": "You own: %1$d",
+    "shopDurationLabelOne": "Lasts %1$d hour",
+    "shopDurationLabelOther": "Lasts %1$d hours",
     "shopBoughtMessage": "Bought! %1$s is now in your inventory.",
     "shopAlreadyBoughtMessage": "That purchase was already recorded — no extra points were charged.",
     "shopErrorInsufficient": "You don't have enough Crown Points for this perk.",
