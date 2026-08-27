@@ -72,11 +72,18 @@ internal object MapboxNativeWarmup {
                 // library via the same loader that used to run on the main thread.
                 MapboxSDKCommonInitializer().create(appContext)
                 MapboxMapsInitializer().create(appContext)
-            } catch (t: Throwable) {
+            } catch (e: Exception) {
                 // Preload is a pure optimization: if it fails, the Maps SDK still
                 // loads the library lazily the first time a MapView is built. Do
                 // not crash the app for a warm-up miss.
-                Log.w(TAG, "Mapbox native warm-up failed; falling back to lazy load", t)
+                Log.w(TAG, "Mapbox native warm-up failed; falling back to lazy load", e)
+            } catch (e: LinkageError) {
+                // A native-load failure surfaces as UnsatisfiedLinkError (a
+                // LinkageError, NOT an Exception) — still just a warm-up miss the
+                // lazy load will retry, so swallow it too. Deliberately does NOT
+                // catch other Errors (OutOfMemoryError, etc.): those are fatal VM
+                // conditions that must not be suppressed on this thread.
+                Log.w(TAG, "Mapbox native warm-up failed to link; falling back to lazy load", e)
             }
         }, "mapbox-native-warmup").apply {
             priority = Thread.MIN_PRIORITY
