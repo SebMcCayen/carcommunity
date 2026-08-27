@@ -106,4 +106,40 @@ class CrownProofSelectionTest {
         assertNotNull("current fix still drives the distance line", current)
         assertNull("the out-of-range earlier fix must not be a partner", previous)
     }
+
+    @Test
+    fun `re-selecting live surfaces the pair the moment dwell accrues - no reset`() {
+        // #993: the popup stays open, the member is in range and standing still, and
+        // the dwell pair must go usable WITHOUT a close/reopen. Feeding an
+        // accumulating series of in-range fixes and re-running selectFixes on each
+        // tick (as the open-popup loop now does) must flip from "confirming" (null
+        // partner) to a usable pair the instant a partner has aged MIN_DWELL in —
+        // against the SAME tracker instance, never a fresh one.
+        val tracker = CrownFixTracker()
+
+        // t=0: first in-range fix. No partner has aged in yet → confirming.
+        tracker.record(eastFix(0, metresEast = 10.0))
+        CrownProofSelection.selectFixes(tracker, base + 0, crown).let { (cur, prev) ->
+            assertNotNull("current fix drives the distance line immediately", cur)
+            assertNull("no partner has aged in at t=0", prev)
+        }
+
+        // t=2 (< MIN_DWELL of 4s): still no usable partner.
+        tracker.record(eastFix(2, metresEast = 8.0))
+        CrownProofSelection.selectFixes(tracker, base + 2_000, crown).let { (_, prev) ->
+            assertNull("2s < MIN_DWELL, still confirming", prev)
+        }
+
+        // t=4 (== MIN_DWELL): the t=0 fix is now a valid partner. Re-selecting on
+        // this tick — no reset, same tracker — must surface a usable pair.
+        tracker.record(eastFix(4, metresEast = 6.0))
+        CrownProofSelection.selectFixes(tracker, base + 4_000, crown).let { (cur, prev) ->
+            assertNotNull("current fix", cur)
+            assertNotNull("a partner has aged MIN_DWELL in — pair goes live", prev)
+            assertTrue(
+                "the live-selected pair is a usable dwell proof",
+                CrownCollectGate.isDwellProofUsable(prev!!, cur!!),
+            )
+        }
+    }
 }
