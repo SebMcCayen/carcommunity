@@ -193,7 +193,7 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * reversed award consumed either. This counter records what was paid out
  * during the day; it is not a live mirror of the balance.
  *
- * CALIBRATION (raised 300 → 1500 → 2000, issue: "legit grinders hit the daily cap").
+ * CALIBRATION (raised 300 → 1500 → 2000 → 3000, issue: "legit grinders hit the daily cap").
  * The original 300 was calibrated for a 10-crown day: 10 hand-placed claims
  * (MAX_DAILY_SUCCESSFUL_CLAIMS) × ~24.5 KP expected value ≈ 245 KP, so an
  * honest maximum landed just under 300. That calibration PRE-DATES the
@@ -212,8 +212,10 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * that boosted-maximum ceiling (rounded up from ~1470), but in practice legit
  * high-volume players were STILL hitting 1500: a lucky rarity streak, the handful
  * of non-crown economy awards on top of a full boosted crown day, and the spawn
- * lane running hot all push a genuine grind past the ~1470 average. So the cap is
- * now 2000 — a clear headroom margin above the boosted crown maximum plus the
+ * lane running hot all push a genuine grind past the ~1470 average. 2000 was the
+ * next step up, but issue #1003 showed honest players continuing to hit even that
+ * ceiling on their best days, so the cap is now 3000 — a wider headroom margin
+ * above the boosted crown maximum plus the
  * non-crown awards — so the daily points cap no longer bites honest
  * play: the crown-count caps (MAX_DAILY_SUCCESSFUL_CLAIMS / MAX_DAILY_SPAWN_CLAIMS)
  * remain the true anti-farm bound on crowns, and the per-rule limits bound the
@@ -222,7 +224,7 @@ export function economyRule(key: EconomyRuleKey): EconomyRule {
  * because this cap is spent, points-detectDailyCapReached auto-files one GitHub
  * issue per day so the ceiling can be observed and retuned (see dailyCapDetector.ts).
  */
-export const DAILY_POINTS_CAP = 2000;
+export const DAILY_POINTS_CAP = 3000;
 
 /**
  * Ceiling on DRIVING-derived points (rules with `driving: true`) in one
@@ -609,7 +611,7 @@ const CAP_REASON_TEXT: Readonly<Record<Exclude<EconomyCapClip, 'none'>, string>>
 /**
  * The ledger entry description. When a cap clipped the award, the ORIGINAL
  * amount, the paid amount and the reason are all in the text — the member
- * opens their points history and reads "15 p -> 10 p (daglig gräns 2000 p
+ * opens their points history and reads "15 p -> 10 p (daglig gräns 3000 p
  * nådd)" instead of silently wondering where five points went.
  */
 export function buildAwardDescription(
