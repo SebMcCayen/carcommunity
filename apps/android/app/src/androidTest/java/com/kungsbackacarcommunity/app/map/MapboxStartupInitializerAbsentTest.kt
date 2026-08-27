@@ -5,6 +5,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -61,6 +62,32 @@ class MapboxStartupInitializerAbsentTest {
                 metaData.containsKey(MAPBOX_MAPS_INITIALIZER),
             )
         }
+    }
+
+    /**
+     * The other half of the fix: with the startup initializers removed, the Maps
+     * SDK must still initialize when the SAME work is run from [MapboxNativeWarmup]
+     * instead. This exercises the real warm-up code path on-device — loading both
+     * native libraries via the same loader the removed initializers used — and
+     * asserts it succeeds. It directly answers the "does disabling the startup
+     * initializers break SDK init?" risk at runtime (and re-runs in CI), rather
+     * than relying on manifest inspection alone.
+     */
+    @Test
+    fun mapboxNativeLibrariesInitializeViaWarmUpWithStartupInitializersDisabled() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+        assertTrue(
+            "Maps SDK native init must succeed via the off-main warm-up path when the " +
+                "androidx.startup initializers are removed (ANR #1000).",
+            MapboxNativeWarmup.loadNativeLibrariesBlocking(context),
+        )
+        // Idempotent: running it again (as the lazy-load fallback or Application's
+        // own warm-up would) is a no-op that still reports success.
+        assertTrue(
+            "Maps SDK native init must be idempotent under repeated warm-up.",
+            MapboxNativeWarmup.loadNativeLibrariesBlocking(context),
+        )
     }
 
     private companion object {

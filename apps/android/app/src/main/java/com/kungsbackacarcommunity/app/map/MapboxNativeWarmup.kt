@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.map
 
 import android.content.Context
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.mapbox.common.MapboxSDKCommonInitializer
 import com.mapbox.maps.loader.MapboxMapsInitializer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -66,28 +67,49 @@ internal object MapboxNativeWarmup {
         if (!started.compareAndSet(false, true)) return
         val appContext = context.applicationContext
         Thread({
-            try {
-                // Order mirrors androidx.startup's dependency graph: common first
-                // (maps depends on it), then maps. Each create() loads its native
-                // library via the same loader that used to run on the main thread.
-                MapboxSDKCommonInitializer().create(appContext)
-                MapboxMapsInitializer().create(appContext)
-            } catch (e: Exception) {
-                // Preload is a pure optimization: if it fails, the Maps SDK still
-                // loads the library lazily the first time a MapView is built. Do
-                // not crash the app for a warm-up miss.
-                Log.w(TAG, "Mapbox native warm-up failed; falling back to lazy load", e)
-            } catch (e: LinkageError) {
-                // A native-load failure surfaces as UnsatisfiedLinkError (a
-                // LinkageError, NOT an Exception) — still just a warm-up miss the
-                // lazy load will retry, so swallow it too. Deliberately does NOT
-                // catch other Errors (OutOfMemoryError, etc.): those are fatal VM
-                // conditions that must not be suppressed on this thread.
-                Log.w(TAG, "Mapbox native warm-up failed to link; falling back to lazy load", e)
-            }
+            loadNativeLibrariesBlocking(appContext)
         }, "mapbox-native-warmup").apply {
             priority = Thread.MIN_PRIORITY
             isDaemon = true
         }.start()
     }
+
+    /**
+     * Synchronously runs the two Mapbox initializers — the identical work the
+     * removed `androidx.startup` initializers did, in the same order (common
+     * first, then maps) — loading the native libraries via the same loader. This
+     * is what [warmUp] runs on its background thread.
+     *
+     * Returns `true` when both initializers completed, `false` when a warm-up miss
+     * was swallowed (the SDK's own lazy load remains the fallback, so a `false`
+     * here is not fatal). Never throws for an expected warm-up failure; fatal VM
+     * errors (e.g. `OutOfMemoryError`) are deliberately NOT caught.
+     *
+     * Exposed for the instrumented regression test, which runs it on-device to
+     * prove the Maps SDK still initializes with the startup initializers removed
+     * (i.e. that disabling them did not break SDK init). It is idempotent —
+     * `BaseMapboxInitializer` guards each initializer under a global lock — so the
+     * test can call it even after [warmUp]/the lazy path has already run.
+     */
+    @VisibleForTesting
+    internal fun loadNativeLibrariesBlocking(context: Context): Boolean =
+        try {
+            MapboxSDKCommonInitializer().create(context)
+            MapboxMapsInitializer().create(context)
+            true
+        } catch (e: Exception) {
+            // Preload is a pure optimization: if it fails, the Maps SDK still
+            // loads the library lazily the first time a MapView is built. Do not
+            // crash the app for a warm-up miss.
+            Log.w(TAG, "Mapbox native warm-up failed; falling back to lazy load", e)
+            false
+        } catch (e: LinkageError) {
+            // A native-load failure surfaces as UnsatisfiedLinkError (a
+            // LinkageError, NOT an Exception) — still just a warm-up miss the lazy
+            // load will retry, so swallow it too. Deliberately does NOT catch other
+            // Errors (OutOfMemoryError, etc.): those are fatal VM conditions that
+            // must not be suppressed on this thread.
+            Log.w(TAG, "Mapbox native warm-up failed to link; falling back to lazy load", e)
+            false
+        }
 }
