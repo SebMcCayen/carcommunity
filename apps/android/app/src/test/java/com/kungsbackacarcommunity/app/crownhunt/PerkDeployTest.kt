@@ -137,6 +137,28 @@ class PerkDeployTest {
     }
 
     @Test
+    fun `a boost restored from the server survives a cold start (issue 1001)`() {
+        // Regression for #1001: after an app restart the coordinator's in-memory
+        // deploy-session boost window is GONE (it is a per-process cache). The
+        // menu must still show the boost as active, sourced from the owner-readable
+        // `perkBoost.expiresAt` server record. Here `boostUntil` stands in for that
+        // restored server timestamp with NO session window — the exact input the
+        // rehydrated `observeBoostActiveUntil` flow now feeds in on a fresh launch.
+        val serverBoostUntil = now + 40 * 60 * 1000L
+        val b =
+            menu(
+                    inventory = mapOf("boost" to 0L),
+                    boostUntil = serverBoostUntil,
+                )
+                .item("boost")
+        assertTrue("a restored boost must read as live after restart", b.active)
+        assertEquals(serverBoostUntil, b.activeUntilMillis)
+        // Owning none plus an active effect is NOT an empty menu, so the active
+        // boost is actually presented rather than hidden behind the buy-first copy.
+        assertFalse(menu(inventory = mapOf("boost" to 0L), boostUntil = serverBoostUntil).isEmpty)
+    }
+
+    @Test
     fun `shield and boost windows do not bleed into each other`() {
         val until = now + 60 * 60 * 1000L
         val loaded = menu(inventory = mapOf("shield" to 1L, "boost" to 1L), boostUntil = until)
@@ -273,6 +295,8 @@ class PerkDeployTest {
             throw UnsupportedOperationException()
 
         override fun observeShieldActiveUntil(uid: String) = throw UnsupportedOperationException()
+
+        override fun observeBoostActiveUntil(uid: String) = throw UnsupportedOperationException()
 
         override fun observeActiveTrapExpiries(uid: String) = throw UnsupportedOperationException()
 

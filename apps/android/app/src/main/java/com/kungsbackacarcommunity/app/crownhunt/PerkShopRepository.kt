@@ -150,10 +150,22 @@ interface PerkShopRepository {
      * no shield is live. Sourced from the owner-readable
      * `perkShieldPublic/{uid}.shieldedUntil` — the private `perkShield` doc is
      * backend-only. Emits null on absence/transient error so the menu still
-     * renders. (There is deliberately NO boost equivalent: `perkBoost` has no
-     * public mirror, so a live boost is known only from a deploy result.)
+     * renders.
      */
     fun observeShieldActiveUntil(uid: String): Flow<Long?>
+
+    /**
+     * The member's own currently-ACTIVE boost expiry (epoch-ms), or null when no
+     * boost is live. Sourced from the OWNER-readable `perkBoost/{uid}.expiresAt`
+     * (firestore.rules scopes the `get` to the holder — no public mirror, since
+     * a rival never needs it). This is what lets a live boost SURVIVE an app
+     * restart: the deploy-session window held by [PerkDeployCoordinator] is lost
+     * when the process dies, but the server record still marks the boost active
+     * until its expiry, and the crown-award path keeps applying the 2× multiplier
+     * off that same timestamp. Emits null on absence/transient error so the menu
+     * still renders.
+     */
+    fun observeBoostActiveUntil(uid: String): Flow<Long?>
 
     /**
      * The EXPIRY timestamps (epoch-ms) of the member's currently-armed traps
@@ -290,6 +302,32 @@ class FirebasePerkShopRepository private constructor(
         awaitClose { registration.remove() }
     }
 
+    override fun observeBoostActiveUntil(uid: String): Flow<Long?> = callbackFlow {
+        // Owner-scoped single-doc listener on the private `perkBoost/{uid}` record
+        // (firestore.rules: `get` if owner). Mirrors observeShieldActiveUntil but
+        // reads the boost's `expiresAt` — the boost has no public mirror, so this
+        // owner read is the ONLY client source of a live-boost window, and the one
+        // that lets the boost survive a cold start (the deploy-session window is
+        // lost with the process). Same first-load fallback discipline as shield:
+        // emit the null fallback at most once before any successful load, and keep
+        // the last value on an error after a success.
+        var loadedOnce = false
+        var emittedFallback = false
+        val registration =
+            firestore.collection(BOOST_PRIVATE).document(uid).addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    if (!loadedOnce && !emittedFallback) {
+                        emittedFallback = true
+                        trySend(null)
+                    }
+                    return@addSnapshotListener
+                }
+                loadedOnce = true
+                trySend((snapshot?.getTimestamp(EXPIRES_AT))?.toDate()?.time)
+            }
+        awaitClose { registration.remove() }
+    }
+
     override fun observeActiveTrapExpiries(uid: String): Flow<List<Long>> = callbackFlow {
         // The query's `expiresAt > now` bound is captured once when the listener
         // attaches, so it is set GENEROUSLY into the past (a safety margin) rather
@@ -404,6 +442,7 @@ class FirebasePerkShopRepository private constructor(
         private const val DEPLOY_PERK = "crownHunt-deployPerk"
         private const val SHIELD_PUBLIC = "perkShieldPublic"
         private const val SHIELDED_UNTIL = "shieldedUntil"
+        private const val BOOST_PRIVATE = "perkBoost"
         private const val ACTIVE_PERKS = "activePerks"
         private const val PLACED_BY_UID = "placedByUid"
         private const val STATUS = "status"

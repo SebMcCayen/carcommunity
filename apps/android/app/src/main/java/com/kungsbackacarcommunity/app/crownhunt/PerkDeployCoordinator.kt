@@ -81,8 +81,11 @@ sealed interface PerkDeployStatus {
  *
  * The coordinator remembers the last SHIELD/BOOST expiry it deployed
  * ([shieldActiveUntilMillis]/[boostActiveUntilMillis]) so the menu can show a
- * live countdown and disable a re-raise even for BOOST, whose active state has
- * no client-readable Firestore mirror.
+ * live countdown and disable a re-raise instantly — before the server record's
+ * listener echoes the deploy back. This session window is a per-process cache
+ * only: it is LOST on a cold start, so the authoritative post-restart source is
+ * the owner-readable server record (`perkShieldPublic.shieldedUntil` /
+ * `perkBoost.expiresAt`), which the caller merges with these via `laterOf`.
  */
 class PerkDeployCoordinator(
     private val repository: PerkShopRepository,
@@ -92,9 +95,12 @@ class PerkDeployCoordinator(
     private val state = MutableStateFlow<PerkDeployStatus>(PerkDeployStatus.Idle)
     val status: StateFlow<PerkDeployStatus> = state.asStateFlow()
 
-    // Last-known active windows for the effects deployed THIS session. Boost has
-    // no public Firestore doc, so this is the only source of its countdown; the
-    // shield also has a public doc, and the menu takes whichever is later.
+    // Last-known active windows for the effects deployed THIS session — a
+    // per-process cache for instant countdown/disable before the server record's
+    // listener echoes the deploy back. Both effects also have an owner-readable
+    // server record (`perkShieldPublic` / `perkBoost`), and the menu takes
+    // whichever of session vs server is later — so a boost survives a restart via
+    // the server record even though this cache is gone.
     private val shieldUntil = MutableStateFlow<Long?>(null)
     private val boostUntil = MutableStateFlow<Long?>(null)
 
