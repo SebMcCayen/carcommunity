@@ -27,7 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -763,15 +762,18 @@ private fun PerkCard(
             )
             // How long the perk's effect lasts once deployed (trap 6h / shield 3h
             // / boost 1h). The blurbs only say "under en period", so spell out the
-            // concrete duration here.
+            // concrete duration here. Singular/plural are two separate localization
+            // keys selected in code — the strings.xml files are generated from the
+            // localization contracts and the generator emits <string>, not <plurals>.
             val durationHours = perkDurationHours(item.entry.kind)
+            val durationRes =
+                if (durationHours == 1) {
+                    R.string.crownHunt_shopDurationLabelOne
+                } else {
+                    R.string.crownHunt_shopDurationLabelOther
+                }
             Text(
-                text =
-                    pluralStringResource(
-                        R.plurals.crownHunt_shopDurationLabel,
-                        durationHours,
-                        durationHours,
-                    ),
+                text = stringResource(durationRes, durationHours),
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.primary,
             )

@@ -1293,6 +1293,8 @@
     "shopBuyButton": "Köp",
     "shopBuying": "Köper…",
     "shopOwnedLabel": "Du äger: %1$d",
+    "shopDurationLabelOne": "Varar i %1$d timme",
+    "shopDurationLabelOther": "Varar i %1$d timmar",
     "shopBoughtMessage": "Köpt! %1$s ligger nu i ditt förråd.",
     "shopAlreadyBoughtMessage": "Köpet var redan registrerat – inga extra poäng drogs.",
     "shopErrorInsufficient": "Du har inte tillräckligt med Kronpoäng för den här perken.",

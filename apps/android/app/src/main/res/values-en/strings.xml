@@ -1200,10 +1200,8 @@
     <string name="crownHunt_shopBuyButton">Buy</string>
     <string name="crownHunt_shopBuying">Buying…</string>
     <string name="crownHunt_shopOwnedLabel">You own: %1$d</string>
-    <plurals name="crownHunt_shopDurationLabel">
-        <item quantity="one">Lasts %1$d hour</item>
-        <item quantity="other">Lasts %1$d hours</item>
-    </plurals>
+    <string name="crownHunt_shopDurationLabelOne">Lasts %1$d hour</string>
+    <string name="crownHunt_shopDurationLabelOther">Lasts %1$d hours</string>
     <string name="crownHunt_shopBoughtMessage">Bought! %1$s is now in your inventory.</string>
     <string name="crownHunt_shopAlreadyBoughtMessage">That purchase was already recorded — no extra points were charged.</string>
     <string name="crownHunt_shopErrorInsufficient">You don\'t have enough Crown Points for this perk.</string>

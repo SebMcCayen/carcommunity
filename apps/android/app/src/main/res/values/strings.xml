@@ -1200,10 +1200,8 @@
     <string name="crownHunt_shopBuyButton">Köp</string>
     <string name="crownHunt_shopBuying">Köper…</string>
     <string name="crownHunt_shopOwnedLabel">Du äger: %1$d</string>
-    <plurals name="crownHunt_shopDurationLabel">
-        <item quantity="one">Varar i %1$d timme</item>
-        <item quantity="other">Varar i %1$d timmar</item>
-    </plurals>
+    <string name="crownHunt_shopDurationLabelOne">Varar i %1$d timme</string>
+    <string name="crownHunt_shopDurationLabelOther">Varar i %1$d timmar</string>
     <string name="crownHunt_shopBoughtMessage">Köpt! %1$s ligger nu i ditt förråd.</string>
     <string name="crownHunt_shopAlreadyBoughtMessage">Köpet var redan registrerat – inga extra poäng drogs.</string>
     <string name="crownHunt_shopErrorInsufficient">Du har inte tillräckligt med Kronpoäng för den här perken.</string>
