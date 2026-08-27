@@ -265,7 +265,8 @@ const TRANSIENT_NETWORK_CODES = new Set([
 
 function errorName(error: unknown): string | undefined {
   if (error && typeof error === 'object' && 'name' in error) {
-    return String((error as { name: unknown }).name);
+    const name = (error as { name: unknown }).name;
+    if (typeof name === 'string') return name;
   }
   return undefined;
 }
