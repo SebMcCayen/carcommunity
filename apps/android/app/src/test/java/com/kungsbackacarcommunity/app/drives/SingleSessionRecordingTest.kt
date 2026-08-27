@@ -442,15 +442,12 @@ class SingleSessionRecordingTest {
     }
 
     @Test
-    fun `the controller factory is re-evaluated on each new session, never cached`() {
+    fun `a new session re-evaluates the GPS-source factory`() {
         // Permission can be granted between sessions, so the factory must be
-        // consulted again at every start rather than reusing an earlier result.
+        // consulted again at every fresh start rather than reusing an earlier result.
         var factoryCalls = 0
         val factory = { factoryCalls++; null }
 
-        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
-        assertEquals(1, factoryCalls)
-        // A re-run within the SAME session must not re-consult it.
         SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(1, factoryCalls)
 
@@ -460,6 +457,128 @@ class SingleSessionRecordingTest {
         // A NEW session re-evaluates: a permission granted meanwhile now counts.
         SingleSessionRecording.start(UID, repository, controllerFactory = factory)
         assertEquals(2, factoryCalls)
+    }
+
+    @Test
+    fun `an unattached GPS source is retried on a same-session re-run`() {
+        // The #994 recovery: when the factory returns null at start (the
+        // fine-location permission was not yet granted), no source attaches — and a
+        // same-session re-run of the effect must RE-CONSULT it so the stream can be
+        // wired the moment the permission lands, rather than staying dead ("-"
+        // speed, "0 m" distance) until the process is restarted.
+        var factoryCalls = 0
+        val factory = { factoryCalls++; null }
+
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(1, factoryCalls)
+        assertTrue(SingleSessionRecording.active.value?.state?.value is RecordingState.Recording)
+
+        // Effect re-run while still unattached (still Recording): retry the attach.
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(2, factoryCalls)
+    }
+
+    @Test
+    fun `once the GPS source attaches its fixes flow and it is not re-consulted`() {
+        val source = FakeDriveLocationSource()
+        var factoryCalls = 0
+        val factory: () -> DriveLocationSource? = { factoryCalls++; source }
+
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(1, factoryCalls)
+        assertEquals("the attached source is started once", 1, source.startCount)
+
+        // The attached source's fixes reach the recorder — the live distance path.
+        source.onFix?.invoke(57.0, 12.0, 1_000L, 10.0)
+        source.onFix?.invoke(57.001, 12.0, 2_000L, 12.0)
+        assertEquals(2, SingleSessionRecording.active.value?.recordedPoints()?.size)
+
+        // A same-session re-run must NOT re-consult the factory or re-start the
+        // source once one is attached: exactly one fused stream stays open.
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(1, factoryCalls)
+        assertEquals(1, source.startCount)
+    }
+
+    @Test
+    fun `permission granted mid-session attaches the GPS source and revives the metrics`() {
+        // End-to-end #994: a session that STARTED without the permission has dead
+        // metrics; granting it mid-drive re-runs the effect, which re-consults the
+        // factory (now yielding a source) and the fixes accumulate distance — all
+        // WITHIN the session, no process restart.
+        val source = FakeDriveLocationSource()
+        var granted = false
+        val factory: () -> DriveLocationSource? = { if (granted) source else null }
+
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        val coordinator = SingleSessionRecording.active.value
+        assertNotNull(coordinator)
+        assertEquals("no source attaches while unpermitted", 0, source.startCount)
+
+        // The user grants ACCESS_FINE_LOCATION mid-drive; the UI re-runs the effect.
+        granted = true
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+
+        assertEquals("the source attaches on the retry", 1, source.startCount)
+        // ~111 m apart, spaced 10 s so the implied speed stays under the backend
+        // GPS-jump ceiling (MAX_PLAUSIBLE_SPEED_MPS) and the segment counts.
+        source.onFix?.invoke(57.0, 12.0, 1_000L, 8.0)
+        source.onFix?.invoke(57.001, 12.0, 11_000L, 9.0)
+        assertEquals(2, coordinator?.recordedPoints()?.size)
+        val distance = (coordinator?.state?.value as? RecordingState.Recording)?.distanceMeters ?: 0.0
+        assertTrue("distance must accumulate once fixes flow", distance > 0.0)
+    }
+
+    @Test
+    fun `a source that fails to start is not pinned and is retried`() {
+        // start() returns false when the runtime permission is still absent at the
+        // request. Such a source must NOT be pinned (which would leave the session
+        // permanently unattached); the next re-run retries.
+        val failing = FakeDriveLocationSource(startResult = false)
+        val working = FakeDriveLocationSource(startResult = true)
+        var call = 0
+        val factory: () -> DriveLocationSource? = {
+            call++
+            if (call == 1) failing else working
+        }
+
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(1, failing.startCount)
+
+        // Still unattached (the first source returned false) → retry attaches the
+        // working one.
+        SingleSessionRecording.start(UID, repository, controllerFactory = factory)
+        assertEquals(1, working.startCount)
+        working.onFix?.invoke(57.0, 12.0, 1_000L, 5.0)
+        working.onFix?.invoke(57.001, 12.0, 2_000L, 6.0)
+        assertEquals(2, SingleSessionRecording.active.value?.recordedPoints()?.size)
+    }
+
+    /**
+     * A fake [DriveLocationSource] standing in for the real
+     * [DriveLocationController] (which wraps Play services and cannot be built
+     * off-device). Captures the fix callback so a test can push fixes through the
+     * exact path the holder wires, and counts start/stop for the attach contract.
+     */
+    private class FakeDriveLocationSource(
+        private val startResult: Boolean = true,
+    ) : DriveLocationSource {
+        var onFix: ((Double, Double, Long, Double?) -> Unit)? = null
+        var startCount = 0
+        var stopCount = 0
+
+        override fun start(
+            onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+        ): Boolean {
+            startCount++
+            if (startResult) this.onFix = onFix
+            return startResult
+        }
+
+        override fun stop() {
+            stopCount++
+            onFix = null
+        }
     }
 }
 

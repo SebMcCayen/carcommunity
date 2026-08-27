@@ -3542,7 +3542,24 @@ fun AuthenticatedApp(
             // a transient MISSING read to a real status=stopped object without
             // isSharing/observed/convoy changing, and the stop decision reads that
             // presence — so the effect must re-run when it flips.
-            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched) {
+            // Keyed on [locationAccess] as well so that a change in location
+            // availability AFTER a session has started re-runs this effect:
+            // SingleSessionRecording.start then RE-CONSULTS the GPS-source factory
+            // and attaches the stream mid-session, so the live speed + distance
+            // recover without a process restart (#994). This deliberately triggers
+            // on ANY transition of [locationAccess], not just the first one:
+            // [LocationAccess] is a three-state value (GRANTED / PERMISSION_DENIED /
+            // SERVICES_OFF) and BOTH the runtime permission and the device's
+            // location master switch can toggle repeatedly mid-drive (e.g. the user
+            // turns location services off then back on in Settings), so we re-run
+            // on every such edge to give start() a fresh chance to attach.
+            // start() itself only attaches when it has NO source yet
+            // (locationController == null); once a source is attached it early-outs,
+            // so it does NOT tear down and re-attach an already-live stream on later
+            // toggles — those re-runs are harmless no-ops. The net effect: whichever
+            // transition first makes GPS available performs the (possibly late)
+            // initial attach; subsequent toggles cost nothing.
+            LaunchedEffect(isSharing, liveSessionObserved, liveSession != null, convoyActiveLatched, locationAccess) {
                 if (isSharing) {
                     // canRecordDrive already covers the null repository; the
                     // explicit check is what smart-casts it for the start call.

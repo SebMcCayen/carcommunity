@@ -14,6 +14,29 @@ import com.google.android.gms.location.Priority
 import com.kungsbackacarcommunity.app.location.BackgroundLocation
 
 /**
+ * The GPS source contract the drive recorders drive: begin streaming fixes to a
+ * callback ([start], returning whether updates were actually requested) and stop
+ * ([stop]). [DriveLocationController] is the sole production implementation — it
+ * wraps a [FusedLocationProviderClient] and therefore cannot be built off-device
+ * — so this interface exists purely as the seam a unit test can substitute a fake
+ * fix stream for (see SingleSessionRecordingTest), which the concrete controller
+ * could never allow.
+ */
+interface DriveLocationSource {
+    /**
+     * Starts fix updates, invoking [onFix] per sample; returns whether updates
+     * were actually requested (false when the runtime location permission is
+     * absent, so the caller can drive its permission UI / retry).
+     */
+    fun start(
+        onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
+    ): Boolean
+
+    /** Stops updates. Safe to call repeatedly. */
+    fun stop()
+}
+
+/**
  * In-screen (foreground) GPS source for drive recording (Phase 12 slice 12,
  * write side). Wraps a [FusedLocationProviderClient] and streams fixes to a
  * callback while the record screen is active. Reuses the fused-location
@@ -45,7 +68,7 @@ import com.kungsbackacarcommunity.app.location.BackgroundLocation
  */
 class DriveLocationController private constructor(
     private val fusedClient: FusedLocationProviderClient,
-) {
+) : DriveLocationSource {
     private var callback: LocationCallback? = null
 
     /**
@@ -64,7 +87,7 @@ class DriveLocationController private constructor(
      * never recorded into the drive (see [DriveRecorder], which stores positions
      * and timestamps and nothing else).
      */
-    fun start(
+    override fun start(
         onFix: (latitude: Double, longitude: Double, timestampMs: Long, speedMps: Double?) -> Unit,
     ): Boolean {
         if (callback != null) return true
@@ -97,7 +120,7 @@ class DriveLocationController private constructor(
     }
 
     /** Stops updates. Safe to call repeatedly. */
-    fun stop() {
+    override fun stop() {
         callback?.let { fusedClient.removeLocationUpdates(it) }
         callback = null
     }
