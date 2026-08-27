@@ -2,15 +2,18 @@ package com.kungsbackacarcommunity.app.drives
 
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.platform.app.InstrumentationRegistry
 import com.kungsbackacarcommunity.app.R
 import com.kungsbackacarcommunity.app.design.KccTheme
 import com.kungsbackacarcommunity.app.shell.AeroBackButtonTag
 import com.kungsbackacarcommunity.app.testutil.RetryRunner
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Rule
@@ -91,6 +94,75 @@ class DrivesRouteBackTest {
         composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_statsTitle)).assertDoesNotExist()
         composeTestRule.onNodeWithText(str(R.string.savedDrives_screenTitle)).assertIsDisplayed()
+    }
+
+    /** A long history so the last drive starts well below the fold. */
+    private fun manyDrives(count: Int): List<SavedDrive> =
+        (0 until count).map { i ->
+            SavedDrive(
+                rideId = "ride-$i",
+                title = String.format(Locale.ROOT, "Drive %02d", i),
+                distanceMeters = 1000.0,
+                durationSeconds = 600,
+                averageSpeedMetersPerSecond = 5.0,
+                startedAtMillis = 1_000_000L + i,
+                endedAtMillis = 1_600_000L + i,
+                createdAtMillis = 1_000_000L + i,
+            )
+        }
+
+    /**
+     * #996: scrolling the History list, opening a drive's detail, and pressing the
+     * in-app Back arrow must return to the SAME scroll position, not the top. The
+     * detail level swaps [DrivesListScreen] out of the composition, so the list's
+     * scroll state must be owned by [DrivesRoute] (above the swap) to survive.
+     */
+    @Test
+    fun scrollPositionIsRetainedAcrossDetailRoundTrip() {
+        composeTestRule.setContent {
+            KccTheme {
+                DrivesRoute(
+                    repository = FakeDrivesRepository(manyDrives(50)),
+                    uid = "uid-1",
+                    errorReporter = null,
+                    routeRepository = null,
+                )
+            }
+        }
+
+        // The default History order is newest-first (DriveSort.NEWEST ->
+        // SavedDrives.sortedForList): the drive with the LARGEST startedAtMillis
+        // renders at the TOP, the oldest at the bottom. Our fixture stamps
+        // startedAtMillis = base + i, so "Drive 49" is newest (top of the list)
+        // and "Drive 00" is oldest (bottom, off-screen at the top of the scroll).
+        // We assert against these two ENDPOINTS — the newest is always at the very
+        // top and the oldest always decomposes once we scroll far to the bottom —
+        // so both directions are viewport-independent and deterministic (no
+        // reliance on which mid-list rows the emulator's viewport height composes).
+        val topTitle = "Drive 49" // newest -> initially visible at the top
+        val bottomTitle = "Drive 00" // oldest -> off-screen until we scroll down
+
+        // We start at the top: the newest drive is visible, the oldest is not.
+        composeTestRule.onNodeWithText(topTitle).assertIsDisplayed()
+        composeTestRule.onNodeWithText(bottomTitle).assertDoesNotExist()
+
+        // Scroll the oldest drive (bottom of the list) into view.
+        composeTestRule
+            .onNodeWithTag(DRIVE_HISTORY_LIST_TAG)
+            .performScrollToNode(hasText(bottomTitle))
+        composeTestRule.onNodeWithText(bottomTitle).assertIsDisplayed()
+        // The newest drive has now scrolled off the top (decomposed) — proves we moved.
+        composeTestRule.onNodeWithText(topTitle).assertDoesNotExist()
+
+        // Open the oldest drive's detail, then return via the pinned Back arrow.
+        composeTestRule.onNodeWithText(bottomTitle).performClick()
+        composeTestRule.onNodeWithText(str(R.string.savedDrives_detailTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(AeroBackButtonTag).performClick()
+
+        // Back at the list AT THE SAME SCROLL POSITION: the oldest drive is still
+        // shown and the newest is still off the top (a top-reset would flip both).
+        composeTestRule.onNodeWithText(bottomTitle).assertIsDisplayed()
+        composeTestRule.onNodeWithText(topTitle).assertDoesNotExist()
     }
 
     @Test

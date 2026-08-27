@@ -26,7 +26,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -98,6 +100,14 @@ internal const val DRIVE_FILTER_TOGGLE_TAG = "drives_filter_toggle"
 internal const val DRIVE_STATS_ENTRY_TAG = "drives_stats_entry"
 
 /**
+ * Test tag on the History list's scrolling [LazyColumn]. Lets the instrumented
+ * scroll-restoration test (#996) drive the list to a lower item and assert the
+ * position survives the drive-detail round-trip. `internal` for the same reason as
+ * [DRIVE_FILTER_TOGGLE_TAG].
+ */
+internal const val DRIVE_HISTORY_LIST_TAG = "drives_history_list"
+
+/**
  * Expand/collapse duration for the History filter section, matching the shell's
  * search-bar transition so the two read as the same app.
  */
@@ -120,6 +130,12 @@ fun DrivesListScreen(
     // when at least one drive is loaded — a zero-drive member sees the empty card
     // instead, so the stats entry never leads to a page of zeroes.
     onShowStats: (() -> Unit)? = null,
+    // Scroll state for the history LazyColumn. Hoisted so it can be OWNED by
+    // DrivesRoute and survive the detail/stats drill-in round-trip (#996): those
+    // levels swap this whole screen out of the composition, so a state created
+    // here would be disposed and Back would reset to the top. Defaulted for
+    // standalone callers/tests that don't need cross-level retention.
+    listState: LazyListState = rememberLazyListState(),
 ) {
     // Search/filter/sort state for the History list. Survives config changes
     // (rememberSaveable): the query is a String and the three enums are
@@ -173,7 +189,8 @@ fun DrivesListScreen(
     // (mirrors NotificationsScreen for durable lists).
     AeroLazyPage(modifier = modifier) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().testTag(DRIVE_HISTORY_LIST_TAG),
             contentPadding = aeroLazyContentPadding(),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

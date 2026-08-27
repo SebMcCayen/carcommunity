@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.drives
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -88,6 +89,16 @@ fun DrivesRoute(
     // the detail view), folded over the already-loaded drive list — no refetch.
     var showStats by remember { mutableStateOf(false) }
 
+    // Scroll position of the History list, hoisted here so it OUTLIVES the drill-in
+    // levels. Detail and Statistics are rendered by swapping which composable the
+    // `when (level)` below emits (not a nav route), so DrivesListScreen leaves the
+    // composition entirely while a drill-in is open — a list state owned inside it
+    // would be disposed, and Back would land at the top of the list (#996). Owned
+    // at this route scope it survives the round-trip, and rememberLazyListState is
+    // itself rememberSaveable-backed (LazyListState.Saver), so it also restores
+    // across a configuration change.
+    val historyListState = rememberLazyListState()
+
     val loaded = state as? DrivesState.Loaded
 
     LaunchedEffect(deleteStatus) {
@@ -169,6 +180,7 @@ fun DrivesRoute(
                 deleteStatus = deleteStatus,
                 onRetry = { reloadKey++ },
                 onShowStats = { showStats = true },
+                listState = historyListState,
             )
     }
 }
