@@ -1524,11 +1524,18 @@ service cloud.firestore {
 
     // -------------------------------------------------------------------------
     // perkBoost – the holder's private boost record { uid, expiresAt }
-    // Backend-only. The crown-award path reads it server-side to double a
-    // claim; a client has no need to read it and must not be able to forge it.
+    // The crown-award path reads it SERVER-side to double a claim (the multiplier
+    // is server-authoritative and never trusts the client). The OWNER may READ
+    // their own record so the app can rehydrate the live-boost countdown after a
+    // cold start (the boost has no public mirror, unlike perkShieldPublic, and
+    // the in-memory deploy-session window is lost on a process restart). The read
+    // is scoped to the holder alone — a rival can never read it — and writes stay
+    // backend-only, so the boost still cannot be forged. `get`, not `read`, so
+    // granting the owner-read cannot also authorise a collection-wide query.
     // -------------------------------------------------------------------------
     match /perkBoost/{userId} {
-      allow read, write: if false;
+      allow get: if isOwner(userId);
+      // No client writes.
     }
 
     // -------------------------------------------------------------------------

@@ -591,6 +591,16 @@ private fun combinePerkDeployMenu(
                 delay(15_000L)
             }
         }
+    // The two owner-readable server windows (shield public doc + private boost
+    // record), folded to one flow so the outer combine stays within its 5-arg
+    // arity. Reading the boost here is what lets a live boost SURVIVE an app
+    // restart: the coordinator's session window is lost with the process, but
+    // `perkBoost/{uid}.expiresAt` still marks it active until it expires.
+    val serverWindows =
+        combine(
+            repository.observeShieldActiveUntil(uid),
+            repository.observeBoostActiveUntil(uid),
+        ) { shieldPublic, boostServer -> shieldPublic to boostServer }
     // The session windows + the tick, folded to one flow so the outer combine
     // stays within its 5-arg arity.
     val sessionAndTick =
@@ -602,17 +612,20 @@ private fun combinePerkDeployMenu(
     return combine(
         repository.observeCatalog(),
         repository.observeInventory(uid),
-        repository.observeShieldActiveUntil(uid),
+        serverWindows,
         repository.observeActiveTrapExpiries(uid),
         sessionAndTick,
-    ) { catalog, inventory, shieldPublicUntil, trapExpiries, session ->
+    ) { catalog, inventory, server, trapExpiries, session ->
+        val (shieldPublicUntil, boostServerUntil) = server
         val (shieldSessionUntil, boostSessionUntil, now) = session
         PerkDeploy.toMenuState(
             catalog = catalog,
             inventory = inventory,
             // The later of the public-doc expiry and this session's last deploy.
             shieldActiveUntilMillis = laterOf(shieldPublicUntil, shieldSessionUntil),
-            boostActiveUntilMillis = boostSessionUntil,
+            // The later of the server record (survives a restart) and this
+            // session's last deploy (instant feedback before the listener echoes).
+            boostActiveUntilMillis = laterOf(boostServerUntil, boostSessionUntil),
             // Count only traps still live at the ticking `now`, so one expiring
             // while the menu is open drops the count (re-enabling the button).
             activeTrapCount = PerkDeploy.liveTrapCount(trapExpiries, now),
@@ -672,15 +685,18 @@ private fun combinePerkMapOverlay(
     return combine(
         repository.observeOwnActiveTraps(uid),
         repository.observeShieldActiveUntil(uid),
+        repository.observeBoostActiveUntil(uid),
         ownPositionFlow,
         session,
-    ) { traps, shieldPublicUntil, ownPosition, (shieldSessionUntil, boostSessionUntil) ->
+    ) { traps, shieldPublicUntil, boostServerUntil, ownPosition, (shieldSessionUntil, boostSessionUntil) ->
         PerkMapOverlayState(
             ownTraps = traps,
             ownLatitude = ownPosition?.latitude,
             ownLongitude = ownPosition?.longitude,
             shieldActiveUntilMillis = laterOf(shieldPublicUntil, shieldSessionUntil),
-            boostActiveUntilMillis = boostSessionUntil,
+            // Later of the server record (survives a restart) and the session
+            // window, so the own-dot boost effect draws again after a cold start.
+            boostActiveUntilMillis = laterOf(boostServerUntil, boostSessionUntil),
         )
     }
 }

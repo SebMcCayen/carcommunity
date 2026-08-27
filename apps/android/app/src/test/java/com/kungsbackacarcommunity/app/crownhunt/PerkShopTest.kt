@@ -139,6 +139,8 @@ class PerkShopTest {
 
         override fun observeShieldActiveUntil(uid: String) = throw UnsupportedOperationException()
 
+        override fun observeBoostActiveUntil(uid: String) = throw UnsupportedOperationException()
+
         override fun observeActiveTrapExpiries(uid: String) = throw UnsupportedOperationException()
 
         override fun observeOwnActiveTraps(uid: String) = throw UnsupportedOperationException()

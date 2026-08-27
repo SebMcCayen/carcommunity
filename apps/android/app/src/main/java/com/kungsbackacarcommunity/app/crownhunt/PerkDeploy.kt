@@ -24,10 +24,11 @@ package com.kungsbackacarcommunity.app.crownhunt
  *  - SHIELD: `perkShield/{uid}` is backend-only, but the PUBLIC
  *    `perkShieldPublic/{uid}` = { shieldedUntil } is owner-readable, so the
  *    shield countdown comes from that timestamp.
- *  - BOOST: `perkBoost/{uid}` is backend-only with NO public mirror, so there
- *    is no Firestore read for a live boost. Its active window is known only
- *    from the deploy RESULT for the current session (held by the coordinator),
- *    which the menu folds in as [boostActiveUntilMillis].
+ *  - BOOST: `perkBoost/{uid}` has NO public mirror, but the OWNER may read their
+ *    own private record (firestore.rules `get` if owner), so the boost countdown
+ *    comes from that server `expiresAt` — which lets a live boost survive an app
+ *    restart. The menu takes whichever of that server window / the current
+ *    session's last deploy is later, folded in as [boostActiveUntilMillis].
  */
 
 /**
@@ -120,8 +121,9 @@ object PerkDeploy {
      * @param shieldActiveUntilMillis epoch-ms `perkShieldPublic.shieldedUntil`,
      *   or null when there is no live shield. May also carry the last local
      *   deploy result so the countdown is instant.
-     * @param boostActiveUntilMillis epoch-ms of the current session's boost
-     *   window (from the deploy result — there is no Firestore read), or null.
+     * @param boostActiveUntilMillis epoch-ms of the live boost window — the later
+     *   of the owner-readable `perkBoost.expiresAt` (which survives a restart) and
+     *   the current session's deploy result, or null when no boost is live.
      * @param activeTrapCount the member's currently-armed trap count (from the
      *   owner-readable `activePerks` query), clamped to >= 0.
      */
