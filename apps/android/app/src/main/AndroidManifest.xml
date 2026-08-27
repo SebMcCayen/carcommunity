@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
 
@@ -134,6 +135,31 @@
                 <data android:scheme="google.navigation" />
             </intent-filter>
         </activity>
+
+        <!-- ANR #1000: remove Mapbox's two androidx.startup initializers so the
+             Maps SDK does NOT load its native libraries (`mapbox-common`,
+             `mapbox-maps`) on the MAIN thread during process creation. Both
+             initializers' create() call System.loadLibrary EAGERLY, and
+             androidx.startup's InitializationProvider.onCreate runs on the main
+             thread before Application.onCreate — a cold dlopen of those large
+             libraries there blocks long enough to ANR on slow devices
+             (Crashlytics top frame: MapboxLibraryLoader.load). The identical
+             initialization is instead run OFF the main thread from
+             KccApplication#onCreate via MapboxNativeWarmup, so the first MapView
+             pays no cold-load cost. tools:node="merge" keeps every OTHER
+             library's androidx.startup entry (e.g. WorkManager, Emoji2). -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="com.mapbox.common.MapboxSDKCommonInitializer"
+                tools:node="remove" />
+            <meta-data
+                android:name="com.mapbox.maps.loader.MapboxMapsInitializer"
+                tools:node="remove" />
+        </provider>
 
         <!-- Foreground service that streams GPS to live.updatePosition while a
              live-location session is active (Phase 12 slice 6). -->
