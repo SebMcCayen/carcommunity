@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -760,6 +761,20 @@ private fun PerkCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // How long the perk's effect lasts once deployed (trap 6h / shield 3h
+            // / boost 1h). The blurbs only say "under en period", so spell out the
+            // concrete duration here.
+            val durationHours = perkDurationHours(item.entry.kind)
+            Text(
+                text =
+                    pluralStringResource(
+                        R.plurals.crownHunt_shopDurationLabel,
+                        durationHours,
+                        durationHours,
+                    ),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -846,6 +861,22 @@ private fun perkKindLabelRes(kind: PerkKind): Int =
         PerkKind.TRAP -> R.string.crownHunt_perkKindTrap
         PerkKind.SHIELD -> R.string.crownHunt_perkKindShield
         PerkKind.BOOST -> R.string.crownHunt_perkKindBoost
+    }
+
+/**
+ * Display-only effect duration per perk kind, in whole hours, for the shop's
+ * "how long it lasts" label. MIRRORS the authoritative server constants in
+ * `functions/src/crownHunt/perks-core.ts` (SPIKE_STRIP/trap = 6h, SHIELD = 3h,
+ * BOOST = 1h), which are deliberately NOT sent to the client in the perk-catalog
+ * display mirror. The server stays the source of truth for enforcement
+ * (`expiresAt` is computed server-side); this value is purely the label, so keep
+ * it in sync if the server durations ever change.
+ */
+private fun perkDurationHours(kind: PerkKind): Int =
+    when (kind) {
+        PerkKind.TRAP -> 6
+        PerkKind.SHIELD -> 3
+        PerkKind.BOOST -> 1
     }
 
 /** Resource id for a buy-failure reason's message (localized sv/en). */
