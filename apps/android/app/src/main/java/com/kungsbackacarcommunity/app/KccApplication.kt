@@ -12,6 +12,7 @@ import com.kungsbackacarcommunity.app.appcheck.AppCheckDebugSecret
 import com.kungsbackacarcommunity.app.diagnostics.CrashReporter
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseCrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.FirebaseDiagnosticsReporter
+import com.kungsbackacarcommunity.app.map.MapboxNativeWarmup
 import com.kungsbackacarcommunity.app.media.KccImageLoader
 import com.kungsbackacarcommunity.app.push.PushChannels
 
@@ -63,6 +64,14 @@ class KccApplication : Application(), ImageLoaderFactory {
         // unconditionally so they exist before the first FCM delivery
         // (Phase 12 slice 21, push portion).
         PushChannels.ensureCreated(this)
+
+        // Preload the Mapbox native libraries OFF the main thread (ANR #1000).
+        // The manifest removes the SDK's two androidx.startup initializers, which
+        // otherwise load `mapbox-common` + `mapbox-maps` on the MAIN thread during
+        // process creation and ANR on slow devices. This does the same load on a
+        // background thread so the first MapView pays no cold-load cost. Idempotent
+        // and best-effort; see MapboxNativeWarmup.
+        MapboxNativeWarmup.warmUp(this)
 
         // The only persistent status notification is now the live-location
         // foreground service's own ongoing notification (LocationSharingService),
