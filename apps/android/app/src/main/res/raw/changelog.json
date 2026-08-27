@@ -2,6 +2,21 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 46,
+      "versionName": "0.8.35",
+      "releaseDate": "2026-08-22",
+      "highlights": [
+        "Live-läge: rätt körstatistik under en live-körning",
+        "Kronjakten: väntetiden fungerar nu korrekt även i live-läge"
+      ],
+      "changes": [
+        "Live-läge: körstatistiken under en live-körning visas nu korrekt",
+        "Kronjakten: väntan \"bekräftar att du står stilla\" fungerar nu som den ska även när du delar en live-session",
+        "Körningar: listan behåller din position när du bläddrar tillbaka",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 45,
       "versionName": "0.8.34",
       "releaseDate": "2026-08-22",
