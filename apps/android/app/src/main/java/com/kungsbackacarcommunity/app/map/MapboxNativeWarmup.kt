@@ -28,7 +28,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * JNI registration) block the main thread long enough to trip an ANR — the exact
  * `com.mapbox.common.loader.MapboxLibraryLoader.load` frame Crashlytics reported.
  *
- * The manifest ([AndroidManifest.xml]) removes those two `<meta-data>` entries
+ * The manifest (`AndroidManifest.xml`) removes those two `<meta-data>` entries
  * with `tools:node="remove"`, so `androidx.startup` no longer loads the native
  * libraries on the main thread at startup. This helper then performs the exact
  * same initialization on a background thread instead. By the time composition
