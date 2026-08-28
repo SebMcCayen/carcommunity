@@ -1315,6 +1315,7 @@
     "deployEmpty": "Du har inga perks. Köp i butiken först.",
     "deployOwnedLabel": "Du äger: %1$d",
     "deployActivateButton": "Aktivera",
+    "deployOpenShop": "Behöver du fler perks? Öppna butiken",
     "deployActiveTraps": "%1$d aktiv fälla",
     "deployActiveFor": "Aktiv – %1$s kvar",
     "deployRemainingMs": "%1$d min %2$d s",

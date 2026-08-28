@@ -2086,6 +2086,11 @@ fun AuthenticatedApp(
             val perkDeployRepository: PerkShopRepository? =
                 remember(context) { FirebasePerkShopRepository.createIfAvailable(context) }
             var perkDeployOpen by remember { mutableStateOf(false) }
+            // One-shot request from the perk-deploy popup's "open the shop" link
+            // (issue #1009): set true the instant the link is tapped, carried into
+            // the Kronjakt route so it opens on the Shop tab, then consumed (reset
+            // to false) by CrownHuntRoute so a later plain open lands on Home.
+            var crownHuntOpenShop by remember { mutableStateOf(false) }
             // A trap is dropped at the caller's CURRENT GPS: a FRESH fix (the same
             // source the crown-range layer uses), falling back to the last known
             // fix, and null when neither is available (→ NO_LOCATION, resolved in
@@ -6201,6 +6206,8 @@ fun AuthenticatedApp(
                         // Kronjakt surface threads the same snapshot.
                         crownHuntPerksEnabled = crownHuntPerksEnabled,
                         crownHuntLiveShareScoringEnabled = crownHuntLiveShareScoringEnabled,
+                        crownHuntOpenShop = crownHuntOpenShop,
+                        onCrownHuntShopConsumed = { crownHuntOpenShop = false },
                         leaderboardRepository = leaderboardRepository,
                         partnersRepository = partnersRepository,
                         offerCodeCoordinator = offerCodeCoordinator,
@@ -8207,6 +8214,14 @@ fun AuthenticatedApp(
                             // menu starts fresh (mirrors the shop coordinator).
                             perkDeployCoordinator.reset()
                         },
+                        // "Open the shop" link: the popup calls onDismiss() first
+                        // (closing the menu), then this — request the Shop tab and
+                        // open the Kronjakt route as a fresh root, so Back returns
+                        // to the map. crownHuntOpenShop is consumed by CrownHuntRoute.
+                        onOpenShop = {
+                            crownHuntOpenShop = true
+                            openRootRoute(ShellRoute.CrownHunt)
+                        },
                     )
                 }
 
@@ -8518,6 +8533,11 @@ private fun RouteHost(
     // the call site. Forwarded to the CrownHunt hub so its Instructions surface
     // describes the live-share scoring rule only while the backend rule is on.
     crownHuntLiveShareScoringEnabled: Boolean,
+    // One-shot "open on the Shop tab" request from the perk-deploy popup's shop
+    // link (issue #1009). Forwarded to the CrownHunt hub; [onCrownHuntShopConsumed]
+    // clears it once consumed so a later plain open lands on Home.
+    crownHuntOpenShop: Boolean,
+    onCrownHuntShopConsumed: () -> Unit,
     leaderboardRepository: LeaderboardRepository?,
     partnersRepository: PartnersRepository?,
     offerCodeCoordinator: OfferCodeCoordinator?,
@@ -9027,6 +9047,10 @@ private fun RouteHost(
                 // KP balance: the same owner-scoped pointsLedger/{uid} listener
                 // the Points wallet uses — no new query shape.
                 pointsRepository = pointsRepository,
+                // Open on the Shop tab when the perk-deploy popup's shop link was
+                // tapped; consumed once so a later plain open lands on Home.
+                openShop = crownHuntOpenShop,
+                onShopOpened = onCrownHuntShopConsumed,
             )
         }
 

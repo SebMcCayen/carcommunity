@@ -128,6 +128,45 @@ class CrownHuntScreenTest {
     }
 
     @Test
+    fun perksEnabled_openShop_seedsShopTab() {
+        // With the perks flag on AND openShop requested (the perk-deploy popup's
+        // "open the shop" link, issue #1009), the hub opens on the Shop tab: the
+        // shop content renders and the Home stats block is NOT composed.
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
+                    onBack = {},
+                    perksEnabled = true,
+                    openShop = true,
+                )
+            }
+        }
+        // Shop tab content (default Loading shopState) is shown …
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertIsDisplayed()
+        // … and the Home tab's stats block is not composed.
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertDoesNotExist()
+    }
+
+    @Test
+    fun perksEnabled_default_opensOnHomeTab() {
+        // Control: same flags but openShop = false (the default) opens on Home.
+        composeTestRule.setContent {
+            KccTheme {
+                CrownHuntScreen(
+                    statsState = CrownStatsUiState.Loaded(personal = personal(), board = board()),
+                    passesMemberGate = true,
+                    onBack = {},
+                    perksEnabled = true,
+                )
+            }
+        }
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_myStatsTitle)).assertIsDisplayed()
+        composeTestRule.onNodeWithText(str(R.string.crownHunt_shopLoading)).assertDoesNotExist()
+    }
+
+    @Test
     fun loaded_withNoPersonalStats_showsInvitationNotZeros() {
         composeTestRule.setContent {
             KccTheme {

@@ -1315,6 +1315,7 @@
     "deployEmpty": "You have no perks. Buy some in the shop first.",
     "deployOwnedLabel": "You own: %1$d",
     "deployActivateButton": "Activate",
+    "deployOpenShop": "Need more perks? Open the shop",
     "deployActiveTraps": "%1$d active trap",
     "deployActiveFor": "Active – %1$s left",
     "deployRemainingMs": "%1$dm %2$ds",

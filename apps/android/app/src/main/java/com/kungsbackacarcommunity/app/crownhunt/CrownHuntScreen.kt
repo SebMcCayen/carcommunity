@@ -81,6 +81,10 @@ fun CrownHuntScreen(
     shopState: PerkShopUiState = PerkShopUiState.Loading,
     buyStatus: PerkBuyStatus = PerkBuyStatus.Idle,
     onBuyPerk: (PerkShopItem) -> Unit = {},
+    // When true (and the shop is enabled) the hub OPENS on the Shop tab instead of
+    // Home — used by the perk-deploy popup's "open the shop" link (issue #1009).
+    // Seeds the initial tab only; manual tab switches still persist afterwards.
+    openShop: Boolean = false,
 ) {
     // The Instructions surface is a self-contained sub-view of this same route: a
     // full-screen page rendered in place of the hub, dismissed by the shared Aero
@@ -123,7 +127,10 @@ fun CrownHuntScreen(
         }
 
         // Flag ON: a two-tab hub — the read-only stats home, and the shop.
-        var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+        // Seed from [openShop] so an "open the shop" jump lands on the Shop tab;
+        // rememberSaveable keeps the initial value only, so a later manual tab
+        // switch (or config change) still sticks and the tab is never force-held.
+        var selectedTab by rememberSaveable { mutableIntStateOf(if (openShop) 1 else 0) }
         TabRow(selectedTabIndex = selectedTab) {
             Tab(
                 selected = selectedTab == 0,
