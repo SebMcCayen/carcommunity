@@ -871,6 +871,9 @@ service cloud.firestore {
     // -------------------------------------------------------------------------
     match /convoys/{convoyId}/followMe/{followMeId} {
       allow read: if isAuthenticated()
+        // Single fixed doc by design — scope the rule to it so adding any other
+        // doc under followMe/ later can never accidentally inherit this exposure.
+        && followMeId == 'current'
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))
@@ -881,11 +884,15 @@ service cloud.firestore {
       // — and the request may not change it. The convoy get() re-checks live
       // membership so a leader who has since left cannot keep writing.
       allow update: if isAuthenticated()
+        && followMeId == 'current'
         && resource.data.leaderUid == request.auth.uid
         && request.resource.data.leaderUid == resource.data.leaderUid
         && request.resource.data.keys().hasOnly(['leaderUid', 'polyline', 'updatedAt'])
         && request.resource.data.polyline is string
-        && request.resource.data.polyline.size() < 200000
+        && request.resource.data.polyline.size() <= 200000
+        // updatedAt MUST be the server clock — otherwise the leader could stamp a
+        // future time and keep the freshness gate green (the trail "live") forever.
+        && request.resource.data.updatedAt == request.time
         && request.auth.uid in
           get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
         && get(/databases/$(database)/documents/convoys/$(convoyId))

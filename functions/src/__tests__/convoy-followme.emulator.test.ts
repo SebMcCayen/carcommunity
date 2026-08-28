@@ -43,6 +43,7 @@ import {
   doc,
   getDoc,
   getFirestore,
+  serverTimestamp,
   setDoc,
   updateDoc,
   type Firestore,
@@ -257,7 +258,7 @@ describe('convoy-setFollowMe exclusivity / takeover / toggle', () => {
     // Leader writes a polyline so we can prove takeover resets it.
     await updateDoc(doc(firestore, 'convoys', convoyId, 'followMe', 'current'), {
       polyline: 'SEED',
-      updatedAt: new Date(),
+      updatedAt: serverTimestamp(),
     });
 
     await signInAs(friend);
@@ -325,12 +326,21 @@ describe('followMe Firestore rules', () => {
     );
     expect(nonLeaderErr.code).toContain('permission-denied');
 
-    // The current leader (owner) MAY update the polyline directly.
+    // The current leader (owner) MAY update the polyline directly — with a SERVER
+    // timestamp for updatedAt.
     await signInAs(owner);
-    await updateDoc(ref(), { polyline: 'ABCD', updatedAt: new Date() });
+    await updateDoc(ref(), { polyline: 'ABCD', updatedAt: serverTimestamp() });
     const after = await readFollowMe(convoyId);
     expect(after?.polyline).toBe('ABCD');
     expect(after?.leaderUid).toBe(owner.uid);
+
+    // …but the leader may NOT stamp a client-chosen updatedAt (which could set a
+    // future time and keep the freshness gate green forever) — updatedAt must be
+    // the server clock.
+    const clientClockErr = await callableError(
+      updateDoc(ref(), { polyline: 'EFGH', updatedAt: new Date(Date.now() + 86_400_000) }),
+    );
+    expect(clientClockErr.code).toContain('permission-denied');
   });
 
   it('a client cannot CREATE a trail naming itself leader, nor change leaderUid', async () => {

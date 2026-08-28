@@ -5051,14 +5051,22 @@ fun AuthenticatedApp(
                 // Am I the trail leader? Drives the FollowMe button's ACTIVE state.
                 val followMeSelfLeading = FollowMeTrail.isSelfLeading(followMeState?.leaderUid, uid)
 
-                // Member-side draw: decode + push the shared trail to the map ONLY
-                // when it should draw — a leader that is set, not me, still a
-                // member, and fresh (freshness taken from the leader's live marker
-                // OR the trail's own last write, whichever is newer, so a parked
-                // leader who has stopped extending the trail is not wrongly hidden).
-                // A crashed/vanished leader goes stale and the line comes down with
-                // no inactivity timer, and null clears it.
-                LaunchedEffect(mapSurface, followMeState, convoyMemberPositions, activeConvoy?.memberUids, uid) {
+                // Decode the shared polyline ONLY when it actually changes. The
+                // draw effect below re-runs on every convoyMemberPositions tick (to
+                // re-evaluate leader freshness), so decoding inline there would
+                // re-parse the same ~15 km polyline on each live-marker update;
+                // memoizing on the polyline string avoids that repeated work.
+                val decodedFollowMeTrail =
+                    remember(followMeState?.polyline) { FollowMeTrail.decode(followMeState?.polyline) }
+
+                // Member-side draw: push the shared trail to the map ONLY when it
+                // should draw — a leader that is set, not me, still a member, and
+                // fresh (freshness taken from the leader's live marker OR the
+                // trail's own last write, whichever is newer, so a parked leader who
+                // has stopped extending the trail is not wrongly hidden). A crashed/
+                // vanished leader goes stale and the line comes down with no
+                // inactivity timer, and null clears it.
+                LaunchedEffect(mapSurface, followMeState, decodedFollowMeTrail, convoyMemberPositions, activeConvoy?.memberUids, uid) {
                     val state = followMeState
                     val leaderUid = state?.leaderUid
                     val leaderPos = convoyMemberPositions.firstOrNull { it.uid == leaderUid }
@@ -5074,9 +5082,7 @@ fun AuthenticatedApp(
                             lastFreshMs = leaderFreshMs,
                             nowMs = System.currentTimeMillis(),
                         )
-                    mapSurface.setFollowMeTrail(
-                        if (draw) FollowMeTrail.decode(state?.polyline) else null,
-                    )
+                    mapSurface.setFollowMeTrail(if (draw) decodedFollowMeTrail else null)
                 }
 
                 // Leader-side publisher: while I lead, feed my own live positions
