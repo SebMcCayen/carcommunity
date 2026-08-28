@@ -756,7 +756,7 @@ private fun PerkCard(
                 )
             }
             Text(
-                text = item.entry.blurb,
+                text = perkBlurb(item.entry.perkId, item.entry.blurb),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
