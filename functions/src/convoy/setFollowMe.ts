@@ -105,8 +105,10 @@ export const setFollowMe = onCall(
           tx.delete(ref);
           return { leading: false, leaderUid: null };
         case 'noop':
-          // The caller asked to turn off a trail they don't own — leave whatever
-          // is there untouched and report the real current leader.
+          // Either the caller asked to turn off a trail they don't own, OR the
+          // current leader re-activated (idempotent — must not reset their own
+          // polyline). Leave whatever is there untouched and report the real
+          // current leader.
           return { leading: currentLeaderUid === actor.uid, leaderUid: currentLeaderUid };
       }
     });

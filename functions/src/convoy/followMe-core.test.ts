@@ -39,8 +39,12 @@ describe('decideSetFollowMe — exclusivity / takeover / toggle', () => {
     expect(decideSetFollowMe('bob', 'alice', true)).toEqual({ kind: 'set', leaderUid: 'alice' });
   });
 
-  it('re-activation by the current leader just re-sets themselves (idempotent set)', () => {
-    expect(decideSetFollowMe('alice', 'alice', true)).toEqual({ kind: 'set', leaderUid: 'alice' });
+  it('re-activation by the current leader is a NO-OP (idempotent — must not reset their polyline)', () => {
+    expect(decideSetFollowMe('alice', 'alice', true)).toEqual({ kind: 'noop' });
+  });
+
+  it('activation with NO current leader sets the caller as leader', () => {
+    expect(decideSetFollowMe(null, 'alice', true)).toEqual({ kind: 'set', leaderUid: 'alice' });
   });
 
   it('the current leader can toggle their own trail OFF', () => {

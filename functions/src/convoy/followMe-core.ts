@@ -102,8 +102,11 @@ export const FOLLOW_ME_MAX_POLYLINE_CHARS = 200_000;
  *  - `set`  : write leaderUid = caller and reset the polyline (activation OR a
  *             takeover from another leader — same operation, last writer wins).
  *  - `clear`: delete the trail (toggle-off BY the current leader).
- *  - `noop` : caller asked to turn OFF a trail they do not own — do nothing, so
- *             one member can never clear another member's trail. Idempotent.
+ *  - `noop` : do nothing and leave the trail exactly as it is. Two cases:
+ *             (a) the caller asked to turn OFF a trail they do not own — so one
+ *             member can never clear another member's trail; and (b) the CURRENT
+ *             leader re-activated (double-tap / retry / state lag) — idempotent, so
+ *             re-activation never resets their own polyline.
  */
 export type FollowMeAction =
   | { kind: 'set'; leaderUid: string }
@@ -116,8 +119,16 @@ export function decideSetFollowMe(
   active: boolean,
 ): FollowMeAction {
   if (active) {
-    // Activation OR takeover: the caller becomes the leader whoever held it
-    // before. Exclusivity is structural — there is one doc and one leaderUid.
+    // Already the leader? Re-activation must be IDEMPOTENT — a double-tap, a
+    // callable retry, or a client calling active=true while already leading due
+    // to state lag must NOT reset the polyline (the 'set' path overwrites it with
+    // an empty trail). Leave the trail intact.
+    if (currentLeaderUid && currentLeaderUid === callerUid) {
+      return { kind: 'noop' };
+    }
+    // Activation (no current leader) OR takeover from ANOTHER member: the caller
+    // becomes the leader with a fresh (reset) trail. Exclusivity is structural —
+    // there is one doc and one leaderUid.
     return { kind: 'set', leaderUid: callerUid };
   }
   // Toggle-off only succeeds for the member who actually owns the trail.
