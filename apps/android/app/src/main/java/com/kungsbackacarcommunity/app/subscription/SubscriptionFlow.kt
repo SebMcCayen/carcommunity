@@ -7,7 +7,15 @@ package com.kungsbackacarcommunity.app.subscription
  * coordinator drives.
  */
 
-/** The Play Console product id for the monthly membership subscription. */
+/** Immutable Play product ids for the future tiered monthly plans. */
+const val PLUS_MONTHLY_PRODUCT_ID: String = "plus_monthly"
+const val SUPPORTER_MONTHLY_PRODUCT_ID: String = "supporter_monthly"
+
+/**
+ * Legacy product id retained to preserve the current, inactive purchase flow.
+ * Do not point billing at a new product until the tier-aware purchase UI and
+ * backend provider verification are intentionally implemented together.
+ */
 const val SUBSCRIPTION_PRODUCT: String = "member_monthly"
 
 /** The platform tag sent to the `subscription-verify` callable from Android. */

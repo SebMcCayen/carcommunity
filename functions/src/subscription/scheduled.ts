@@ -96,6 +96,7 @@ import { adminAuth, db } from '../firebase';
 import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { writeInAppNotification } from '../notifications/deliver';
 import { applyEntitlement } from './entitlement';
+import type { SubscriptionTier } from './subscription-core';
 import {
   EXPIRY_SWEEP_STATUSES,
   MAX_EXPIRIES_PER_RUN,
@@ -184,20 +185,28 @@ async function recordRevocation(
  * auth/user-not-found, and it would consume a slot in every future run.
  *
  * Closed with a MERGING set — there is no claim to clear and no user
- * document to write, and merging preserves platform/purchaseTokenHash/
- * expiresAt as the historical record. No notification (there is no one to
+ * document to write. The derived tier and startsAt are materialized while
+ * merging preserves platform/purchaseTokenHash/expiresAt as the historical
+ * record. No notification (there is no one to
  * notify) and no lifecycle stamp (that document HAS been purged, and
  * writing one would resurrect it for an erased account) — which is why
  * the orphan test happens before recordRevocation, not in place of it.
  */
-async function expireOrphanedRecord(uid: string): Promise<void> {
-  await db
-    .collection('subscriptions')
-    .doc(uid)
-    .set(
-      { status: 'expired', entitlement: 'none', updatedAt: FieldValue.serverTimestamp() },
-      { merge: true },
-    );
+async function expireOrphanedRecord(
+  uid: string,
+  tier: SubscriptionTier,
+  startsAt: Date | null,
+): Promise<void> {
+  await db.collection('subscriptions').doc(uid).set(
+    {
+      status: 'expired',
+      entitlement: 'none',
+      tier,
+      startsAt,
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 /**
@@ -271,7 +280,12 @@ export async function runSubscriptionExpirySweep(
     const uid = docSnap.id;
     const data = docSnap.data();
     const decision = decideSubscriptionExpiry(
-      { ...data, expiresAt: toDate(data.expiresAt) },
+      {
+        ...data,
+        tier: data.tier,
+        startsAt: toDate(data.startsAt),
+        expiresAt: toDate(data.expiresAt),
+      },
       cutoff,
     );
     if (!decision.expire) {
@@ -325,7 +339,9 @@ export async function runSubscriptionExpirySweep(
         platform: decision.platform,
         status: 'expired',
         entitlement: 'none',
+        tier: decision.tier,
         purchaseTokenHash: decision.purchaseTokenHash,
+        startsAt: decision.startsAt,
         expiresAt: decision.expiresAt,
       });
       expiredUids.push(uid);
@@ -355,7 +371,7 @@ export async function runSubscriptionExpirySweep(
         // covers the narrow race where the account is deleted between
         // that test and applyEntitlement's own getUser.
         try {
-          await expireOrphanedRecord(uid);
+          await expireOrphanedRecord(uid, decision.tier, decision.startsAt);
         } catch (closeError) {
           // The close WRITE failed, so the record is still granting and
           // still matches the query. Count it as failed rather than

@@ -71,15 +71,34 @@ Detta dokument är den låsta produktsanningen för `carcommunity` och ska anvä
 
 ## Subscription model
 
-- Endast en subscription i MVP: **KCC Medlem Månad**.
-- Ingen årsplan i MVP.
-- Intern entitlement-benämning ska vara generisk, t.ex. `member_monthly`.
+- De varumärkesneutrala nivåerna är **Community**, **Plus** och **Supporter**.
+- Community är gratis. Plus kostar **39 SEK/månad** och Supporter **119 SEK/månad**.
+- Beloppen 39/119 SEK är godkända svenska listpriser för planering och adminrapportering;
+  checkout ska alltid visa butikens lokaliserade pris.
+- Endast månadsplaner stöds. Ingen årsplan eller introduktionsrabatt ingår.
+- De permanenta produkt-id:na är `plus_monthly` och `supporter_monthly`; de får inte bytas eller
+  härledas från visningsnamn.
+- Kanonisk tier-typ är `community | plus | supporter`.
+- Legacy-entitlement `none | member_monthly` behålls för kompatibilitet:
+  `none` mappas till Community och `member_monthly` mappas uttryckligen till Plus.
+- `subscriptions/{uid}.tier` införs rullande och är därför valfritt under migreringen. Ett explicit
+  Supporter-värde bevaras som livscykeldata efter avslut, men `entitlement: none` ger alltid
+  Community-åtkomst. Både aktiv Plus och aktiv Supporter projiceras till legacy-fältet och claimen
+  `activeMember: true`.
+- Community / Plus / Supporter får ha högst 2 / 5 / 10 fordon i garaget.
+- Körhistorik är de 5 senaste för Community, rullande 90 dagar för Plus och obegränsad för
+  Supporter.
+- Plus ger exakt liveposition för andra användare, fullständiga eventdetaljer och
+  partnererbjudanden. Supporter ska vara en verifierbar superset av samtliga Plus-förmågor.
+- Supporter-badge visas som standard men är frivillig och kan alltid döljas av användaren.
+- Detta beslut etablerar kontrakt och migreringsgrund. Det aktiverar inte paywalls,
+  `MemberGating`, butiksköp eller någon provider-adapter.
 - User-subscription hanteras via Apple/Google billing.
 - Businessbetalningar sker via separat fakturering, inte via in-app purchase.
 
 ## Roles and permissions
 
-- Ingen supporter-roll i MVP.
+- Supporter är en subscription tier, inte en behörighetsroll. Ingen separat supporter-roll skapas.
 - Admin behöver inte subscription.
 - Backend avgör åtkomst med hårda access checks.
 

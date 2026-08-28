@@ -13,6 +13,13 @@ class SubscriptionFlowTest {
     }
 
     @Test
+    fun `tier product ids are immutable monthly ids without changing legacy runtime`() {
+        assertEquals("plus_monthly", PLUS_MONTHLY_PRODUCT_ID)
+        assertEquals("supporter_monthly", SUPPORTER_MONTHLY_PRODUCT_ID)
+        assertEquals("member_monthly", SUBSCRIPTION_PRODUCT)
+    }
+
+    @Test
     fun `buildVerifyPayload sends google platform and the token`() {
         val payload = buildVerifyPayload("tok-123")
         assertEquals("google", payload["platform"])

@@ -421,6 +421,7 @@ describe('runSubscriptionExpirySweep — idempotency', () => {
     const sub = (await adminDb.collection('subscriptions').doc(uid).get()).data()!;
     expect(sub.status).toBe('expired');
     expect(sub.entitlement).toBe('none');
+    expect(sub.tier).toBe('plus');
     // Merged, so the history survives.
     expect((sub.expiresAt as Timestamp).toMillis()).toBe(LAPSED.getTime());
     // No lifecycle document resurrected for an erased account.

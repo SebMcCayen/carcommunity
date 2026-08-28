@@ -27,9 +27,18 @@ import { requireAdminActor } from '../admin/actorContext';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import { applyEntitlement } from './entitlement';
 import {
+  SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_TIERS,
   hashPurchaseToken,
+  isPaidSubscriptionTier,
+  isSubscriptionActiveStatus,
   parseGrantEntitlementInput,
   parseVerifySubscriptionInput,
+  resolveSubscriptionTier,
+  subscriptionTierForLegacyEntitlement,
+  type SubscriptionEntitlement,
+  type SubscriptionStatus,
+  type SubscriptionTier,
 } from './subscription-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
 
@@ -95,6 +104,33 @@ export const verify = onCall(
 export interface GrantEntitlementResponse {
   targetUid: string;
   entitlement: string;
+  tier: SubscriptionTier;
+}
+
+function storedDate(value: unknown): Date | null {
+  if (value == null) return null;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof (value as { toDate?: unknown }).toDate === 'function') {
+    const date = (value as { toDate: () => Date }).toDate();
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  return null;
+}
+
+function storedEntitlement(value: unknown): SubscriptionEntitlement {
+  return value === 'member_monthly' ? 'member_monthly' : 'none';
+}
+
+function storedStatus(value: unknown): SubscriptionStatus {
+  return (SUBSCRIPTION_STATUSES as readonly unknown[]).includes(value)
+    ? (value as SubscriptionStatus)
+    : 'inactive';
+}
+
+function storedTier(value: unknown): SubscriptionTier | undefined {
+  return (SUBSCRIPTION_TIERS as readonly unknown[]).includes(value)
+    ? (value as SubscriptionTier)
+    : undefined;
 }
 
 export const grantEntitlement = onCall(
@@ -106,37 +142,63 @@ export const grantEntitlement = onCall(
     if (!parsed.ok) {
       throw new HttpsError('invalid-argument', parsed.message);
     }
-    const { targetUid, entitlement, reason, expiresAt } = parsed.input;
+    const { targetUid, entitlement, tier, reason, expiresAt } = parsed.input;
 
-    const targetSnap = await db.collection('users').doc(targetUid).get();
+    const [targetSnap, currentSubscriptionSnap] = await Promise.all([
+      db.collection('users').doc(targetUid).get(),
+      db.collection('subscriptions').doc(targetUid).get(),
+    ]);
     if (!targetSnap.exists) {
       throw new HttpsError('not-found', 'Target user not found.');
     }
 
     const granting = entitlement === 'member_monthly';
-    await applyEntitlement({
-      userId: targetUid,
-      platform: 'manual',
-      status: granting ? 'active' : 'revoked',
-      entitlement,
-      purchaseTokenHash: null,
-      expiresAt: expiresAt ? new Date(expiresAt) : null,
+    const current = currentSubscriptionSnap.data();
+    const currentEntitlement = storedEntitlement(current?.entitlement);
+    const currentStatus = storedStatus(current?.status);
+    const explicitStoredTier = storedTier(current?.tier);
+    const currentStoredTier =
+      explicitStoredTier ?? subscriptionTierForLegacyEntitlement(currentEntitlement);
+    const currentEffectiveTier = resolveSubscriptionTier({
+      entitlement: currentEntitlement,
+      tier: explicitStoredTier,
     });
+    const currentIsPaid =
+      currentEntitlement === 'member_monthly' &&
+      isPaidSubscriptionTier(currentEffectiveTier) &&
+      isSubscriptionActiveStatus(currentStatus);
+    const nextTier = granting
+      ? (tier ?? (currentIsPaid ? currentStoredTier : 'plus'))
+      : currentStoredTier;
+    const previousStartsAt = storedDate(current?.startsAt);
+    const startsAt = granting ? (currentIsPaid ? previousStartsAt : new Date()) : previousStartsAt;
 
-    await db.collection('adminAuditEvents').add(
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'subscription.grantEntitlement',
-          targetType: 'user',
-          targetId: targetUid,
-          reason,
-          details: { entitlement, platform: 'manual' },
-        },
-        () => FieldValue.serverTimestamp(),
-      ),
+    await applyEntitlement(
+      {
+        userId: targetUid,
+        platform: 'manual',
+        status: granting ? 'active' : 'revoked',
+        entitlement,
+        tier: nextTier,
+        purchaseTokenHash: null,
+        startsAt,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+      },
+      {
+        auditEvent: buildAdminAuditEvent(
+          {
+            adminId: actor.uid,
+            action: 'subscription.grantEntitlement',
+            targetType: 'user',
+            targetId: targetUid,
+            reason,
+            details: { entitlement, tier: nextTier, platform: 'manual' },
+          },
+          () => FieldValue.serverTimestamp(),
+        ),
+      },
     );
 
-    return { targetUid, entitlement };
+    return { targetUid, entitlement, tier: nextTier };
   },
 );
