@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.convoy
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -76,6 +77,14 @@ fun convoyReactionButtonTag(kind: ConvoyReactionKind): String = "convoy_reaction
  *   broadcast (`Sent`), to drop the persistent police pin. Null in a config-less
  *   build (or when no police layer is available), which simply keeps the old
  *   broadcast-only behavior.
+ * @param followMeLeading whether the local user currently owns the shared
+ *   follow-me leader TRAIL — drives the FollowMe button's ACTIVE/toggled state.
+ * @param onFollowMeToggle invoked with the DESIRED new active state when the
+ *   FollowMe button is tapped (true = start/take over the trail, false = turn my
+ *   own trail off). Null keeps the pure broadcast behaviour (no persistent trail).
+ *   When non-null, tapping FollowMe toggles the trail AND — only when ACTIVATING —
+ *   still fires the transient "Follow me" animation; turning the trail off fires
+ *   no animation.
  */
 @Composable
 fun ConvoyReactionsHost(
@@ -83,6 +92,8 @@ fun ConvoyReactionsHost(
     repository: ConvoyReactionRepository,
     modifier: Modifier = Modifier,
     onPoliceReaction: (suspend () -> Unit)? = null,
+    followMeLeading: Boolean = false,
+    onFollowMeToggle: (suspend (Boolean) -> Unit)? = null,
 ) {
     val scope = rememberCoroutineScope()
     var cooldown by remember(convoyId) { mutableStateOf(ConvoyReactionCooldownState()) }
@@ -127,8 +138,35 @@ fun ConvoyReactionsHost(
         ConvoyReactionButtons(
             cooldown = cooldown,
             nowMs = nowMs,
+            followMeLeading = followMeLeading,
             onReact = { kind ->
                 val now = System.currentTimeMillis()
+                // FOLLOW-ME is a TOGGLE of the persistent leader trail when a
+                // handler is wired: tapping flips the trail on/off regardless of
+                // the reaction cooldown, and fires the transient animation only
+                // when ACTIVATING (turning the trail OFF announces nothing).
+                if (kind == ConvoyReactionKind.FollowMe && onFollowMeToggle != null) {
+                    val activate = !followMeLeading
+                    scope.launch { onFollowMeToggle(activate) }
+                    if (activate && cooldown.isReady(kind, now)) {
+                        cooldown = cooldown.recordSent(kind, now)
+                        val clientId = UUID.randomUUID().toString().replace("-", "").take(32)
+                        scope.launch {
+                            when (val result = repository.send(convoyId, kind, clientId)) {
+                                is ConvoyReactionSendResult.RateLimited ->
+                                    cooldown =
+                                        cooldown.applyServerCooldown(
+                                            kind,
+                                            result.retryAfterMs,
+                                            System.currentTimeMillis(),
+                                        )
+                                ConvoyReactionSendResult.Failed -> cooldown = cooldown.clear(kind)
+                                ConvoyReactionSendResult.Sent -> Unit
+                            }
+                        }
+                    }
+                    return@ConvoyReactionButtons
+                }
                 if (!cooldown.isReady(kind, now)) return@ConvoyReactionButtons
                 // Optimistically start the local window so a double-tap is stopped
                 // before the round-trip; the server still enforces the real limit.
@@ -176,6 +214,7 @@ fun ConvoyReactionButtons(
     nowMs: Long,
     onReact: (ConvoyReactionKind) -> Unit,
     modifier: Modifier = Modifier,
+    followMeLeading: Boolean = false,
 ) {
     Row(
         modifier = modifier.testTag(CONVOY_REACTIONS_TAG),
@@ -183,9 +222,14 @@ fun ConvoyReactionButtons(
         verticalAlignment = Alignment.Top,
     ) {
         for (kind in ConvoyReactionKind.entries) {
+            // The FollowMe button shows its ACTIVE/toggled state while the local
+            // user owns the shared leader trail — and stays tappable (to turn off),
+            // so it is never disabled by its own cooldown while active.
+            val active = kind == ConvoyReactionKind.FollowMe && followMeLeading
             ReactionButton(
                 kind = kind,
-                remainingMs = cooldown.remainingMs(kind, nowMs),
+                remainingMs = if (active) 0L else cooldown.remainingMs(kind, nowMs),
+                active = active,
                 onClick = { onReact(kind) },
             )
         }
@@ -197,9 +241,16 @@ private fun ReactionButton(
     kind: ConvoyReactionKind,
     remainingMs: Long,
     onClick: () -> Unit,
+    active: Boolean = false,
 ) {
     val ready = remainingMs <= 0L
-    val label = reactionButtonLabel(kind)
+    // Active (leading the trail) overrides the label with "Following" and marks the
+    // disc with a ring, so a leader can see their trail is on at a glance.
+    val label =
+        if (active) stringResource(R.string.convoyFollowTrail_activeLabel)
+        else reactionButtonLabel(kind)
+    val discDescription =
+        if (active) stringResource(R.string.convoyFollowTrail_activeContentDescription) else label
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(KccSpacing.s1),
@@ -210,6 +261,12 @@ private fun ReactionButton(
             shape = CircleShape,
             color = if (ready) reactionColor(kind) else MaterialTheme.colorScheme.surfaceVariant,
             shadowElevation = if (ready) 6.dp else 0.dp,
+            border =
+                if (active) {
+                    BorderStroke(3.dp, MaterialTheme.colorScheme.onSurface)
+                } else {
+                    null
+                },
             modifier =
                 Modifier
                     .size(60.dp)
@@ -218,7 +275,7 @@ private fun ReactionButton(
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     imageVector = reactionIcon(kind),
-                    contentDescription = label,
+                    contentDescription = discDescription,
                     tint =
                         if (ready) Color.White
                         else MaterialTheme.colorScheme.onSurfaceVariant,

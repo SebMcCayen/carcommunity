@@ -209,6 +209,7 @@ import {
   start as startConvoy,
 } from './convoy/manageConvoy';
 import { sendReaction as sendConvoyReaction } from './convoy/reactions';
+import { setFollowMe as setConvoyFollowMe } from './convoy/setFollowMe';
 import {
   list as communityChatList,
   markRead as communityChatMarkRead,
@@ -1224,7 +1225,7 @@ export const dm = {
  * Convoy domain (grouped export → deployed as `convoy-create`,
  * `convoy-respond`, `convoy-start`, `convoy-end`, `convoy-list`,
  * `convoy-leave`, `convoy-invite`, `convoy-setDestination`,
- * `convoy-clearDestination`, `convoy-sendReaction`).
+ * `convoy-clearDestination`, `convoy-sendReaction`, `convoy-setFollowMe`).
  *
  * The convoy FOUNDATION (contracts/functions/functions.json:
  * convoy.create/respond/start/end/list/leave/invite/setDestination/
@@ -1271,6 +1272,23 @@ export const dm = {
  * transaction as the reaction; hello/follow-me get shorter windows. No
  * notification fan-out and no long-term storage (a short expireAt TTL sweeps
  * both docs). See functions/src/convoy/reactions.ts + reaction-core.ts.
+ *
+ * FOLLOW-ME LEADER TRAIL (`convoy-setFollowMe`): a persistent, SHARED, toggleable
+ * line of where the current leader has recently driven, drawn on every member's
+ * map so a separated member can rejoin. Distinct from the transient follow-me
+ * REACTION above: pressing Follow-me fires the ~30s animation AND toggles this
+ * durable trail. State lives on the per-convoy subdoc
+ * `convoys/{convoyId}/followMe/current` {leaderUid, polyline (~15 km rolling,
+ * base64 CCRB), updatedAt}. The callable owns ONLY the leaderUid pointer under a
+ * transaction: active=true SETS leaderUid=caller and resets the polyline (a
+ * TAKEOVER — only ONE leader trail per convoy, newest presser wins), active=false
+ * CLEARS it but only when the caller is the current leader (else no-op, so no
+ * member can wipe another's trail). The trail POINTS are written DIRECTLY by the
+ * leader's client on a ~3-5s throttle (Firestore-rules-gated to the current
+ * leader), so the high-frequency updates never invoke a function. Cleanup: leave
+ * (when the leaver led it) and end (always) delete the subdoc; members also stop
+ * drawing a trail whose leader went stale or left memberUids. See
+ * functions/src/convoy/setFollowMe.ts + followMe-core.ts.
  */
 export const convoy = {
   create: createConvoy,
@@ -1283,6 +1301,7 @@ export const convoy = {
   setDestination: setConvoyDestination,
   clearDestination: clearConvoyDestination,
   sendReaction: sendConvoyReaction,
+  setFollowMe: setConvoyFollowMe,
 };
 
 /**

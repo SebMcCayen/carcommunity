@@ -843,6 +843,57 @@ service cloud.firestore {
       // No client writes: convoy.sendReaction callable only.
     }
 
+    // -------------------------------------------------------------------------
+    // convoys/{convoyId}/followMe/current – the SHARED "Follow me" LEADER TRAIL
+    // (convoy.setFollowMe + direct leader trail writes). ONE doc per convoy
+    // ('current') holding { leaderUid, polyline (base64 CCRB, ~15 km rolling),
+    // updatedAt }: a line of where the current leader has recently driven, drawn
+    // on every member's map so a separated member can rejoin.
+    //
+    // READ: any ACCEPTED member of the parent convoy — the identical gate as the
+    // convoy chat/reactions subcollections (a get() of the convoy doc must show
+    // the caller in memberUids AND accepted). A still-invited/declined member or
+    // an outsider cannot read it, so the trail never leaks.
+    //
+    // WRITE is the SECURITY-SENSITIVE part and is deliberately narrow:
+    //  - CREATE and DELETE are callable-only (convoy.setFollowMe under the Admin
+    //    SDK, which bypasses these rules): a client can never mint a trail naming
+    //    itself leader, nor delete one. Takeover + toggle-off go through the
+    //    transaction, which is what enforces "exactly one leader".
+    //  - UPDATE (the ~3-5s trail-point writes) is allowed ONLY to the member who
+    //    is ALREADY the leaderUid on the stored doc AND is still an accepted
+    //    member of the convoy, and ONLY if the update does NOT change leaderUid
+    //    and touches just polyline + updatedAt. So a non-leader (or a member who
+    //    has left) can never write the trail, and the leader can never promote
+    //    themselves or anyone else by writing — leadership is set exclusively by
+    //    the callable. The polyline is length-capped to keep an abusive client
+    //    from bloating the doc.
+    // -------------------------------------------------------------------------
+    match /convoys/{convoyId}/followMe/{followMeId} {
+      allow read: if isAuthenticated()
+        && request.auth.uid in
+          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
+        && get(/databases/$(database)/documents/convoys/$(convoyId))
+          .data.members[request.auth.uid].inviteStatus == 'accepted';
+
+      // Trail-point updates by the CURRENT leader only. resource.data.leaderUid is
+      // the value ALREADY stored (set by the callable), so only that member passes
+      // — and the request may not change it. The convoy get() re-checks live
+      // membership so a leader who has since left cannot keep writing.
+      allow update: if isAuthenticated()
+        && resource.data.leaderUid == request.auth.uid
+        && request.resource.data.leaderUid == resource.data.leaderUid
+        && request.resource.data.keys().hasOnly(['leaderUid', 'polyline', 'updatedAt'])
+        && request.resource.data.polyline is string
+        && request.resource.data.polyline.size() < 200000
+        && request.auth.uid in
+          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
+        && get(/databases/$(database)/documents/convoys/$(convoyId))
+          .data.members[request.auth.uid].inviteStatus == 'accepted';
+
+      // create + delete: convoy.setFollowMe callable only (takeover/toggle-off).
+    }
+
     // (events rules live in the Phase 9b block above — teaser/detail split.)
 
     // -------------------------------------------------------------------------

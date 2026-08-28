@@ -173,6 +173,10 @@ class MapboxMapSurface : MapSurface {
     override val incidentMarkers: StateFlow<List<MapIncidentMarker>> =
         incidentMarkersFlow.asStateFlow()
 
+    // The SHARED convoy follow-me leader trail to draw (null/empty = none). Its
+    // own source/layer, distinct colour from the private breadcrumb tail.
+    private val followMeTrailFlow = MutableStateFlow<List<MapPoint>?>(null)
+
     private val crownMarkersFlow = MutableStateFlow<List<MapCrownMarker>>(emptyList())
     override val crownMarkers: StateFlow<List<MapCrownMarker>> = crownMarkersFlow.asStateFlow()
 
@@ -667,6 +671,45 @@ class MapboxMapSurface : MapSurface {
         // The Content update lambda observes this flow and (re)draws the line +
         // destination marker, so publishing the value is enough.
         routeOverlayFlow.value = overlay
+    }
+
+    override fun setFollowMeTrail(points: List<MapPoint>?) {
+        // The Content update lambda observes this flow and (re)draws the shared
+        // leader-trail line, so publishing the value is enough — mirrors
+        // setRouteOverlay.
+        followMeTrailFlow.value = points
+    }
+
+    // The follow-me trail last drawn, for change detection (avoid re-drawing the
+    // same polyline on every unrelated recomposition).
+    private var lastFollowMeTrail: List<MapPoint>? = null
+
+    /** Redraw the shared follow-me line only when the points actually changed. */
+    private fun applyFollowMeTrailIfChanged(points: List<MapPoint>?) {
+        if (points == lastFollowMeTrail) return
+        lastFollowMeTrail = points
+        redrawFollowMeTrail(points)
+    }
+
+    /**
+     * Draw (or clear) the shared follow-me leader trail on its own source/layer.
+     * A DISTINCT colour + ids from the private breadcrumb so a member can tell the
+     * leader's shared line apart from their own tail. On-device only (GL render).
+     */
+    private fun redrawFollowMeTrail(points: List<MapPoint>?) {
+        val style = mapViewRef?.mapboxMap?.style ?: return
+        val source = style.getSourceAs<GeoJsonSource>(FOLLOW_ME_TRAIL_SOURCE_ID) ?: return
+        if (points == null || points.size < 2) {
+            runCatching { source.featureCollection(FeatureCollection.fromFeatures(emptyList())) }
+            runCatching { setFollowMeTrailVisible(style, false) }
+            return
+        }
+        runCatching {
+            source.geometry(
+                LineString.fromLngLats(points.map { Point.fromLngLat(it.longitude, it.latitude) }),
+            )
+        }
+        runCatching { setFollowMeTrailVisible(style, true) }
     }
 
     override fun seedBreadcrumb(points: List<MapPoint>) {
@@ -1474,6 +1517,7 @@ class MapboxMapSurface : MapSurface {
         val mapMode by mapModeFlow.collectAsState()
         val overlay by routeOverlayFlow.collectAsState()
         val incidents by incidentMarkersFlow.collectAsState()
+        val followMeTrail by followMeTrailFlow.collectAsState()
         val crowns by crownMarkersFlow.collectAsState()
         val crownManagerReady by crownManagerReadyFlow.collectAsState()
         val crownRedrawTick by crownRedrawTickFlow.collectAsState()
@@ -2074,6 +2118,17 @@ class MapboxMapSurface : MapSurface {
                                 clearBreadcrumbRender()
                             }
                         }
+                        // Shared convoy follow-me leader trail: its own GeoJSON
+                        // source + line layer (distinct colour from the private
+                        // breadcrumb), created once the style is ready. Idempotent.
+                        // Force a redraw against the fresh style by clearing the
+                        // change-detection cache so a retained trail is not lost on
+                        // a MapView recreate (tab round-trip).
+                        runCatching {
+                            addFollowMeTrailLayer(style)
+                            lastFollowMeTrail = null
+                            applyFollowMeTrailIfChanged(followMeTrailFlow.value)
+                        }
                         // Device-location puck (blue dot). Shows only when the
                         // location permission is granted; otherwise it stays
                         // hidden without error.
@@ -2140,6 +2195,10 @@ class MapboxMapSurface : MapSurface {
                 // or re-fit the camera. A no-op until the managers exist (style
                 // loaded).
                 runCatching { applyRouteOverlayIfChanged(mapView, overlay) }
+                // (Re)draw the SHARED convoy follow-me leader trail only when the
+                // line actually changes; a no-op until the source exists (style
+                // loaded), and null takes the line down.
+                runCatching { applyFollowMeTrailIfChanged(followMeTrail) }
                 // (Re)draw the incident markers only when the set actually
                 // changes; a no-op until the manager exists (style loaded).
                 runCatching { applyIncidentMarkersIfChanged(incidents) }
@@ -3318,6 +3377,90 @@ class MapboxMapSurface : MapSurface {
         /** Show/hide the breadcrumb layer; a no-op until it is added. */
         fun setBreadcrumbVisible(style: Style, visible: Boolean) {
             val layer = style.getLayerAs<LineLayer>(BREADCRUMB_LAYER_ID) ?: return
+            layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
+        }
+
+        // ---- Shared convoy follow-me leader trail -----------------------
+        // Its OWN ids and colour so it never shares a source/layer with — and is
+        // never mistaken for — the private breadcrumb tail. The tail is the brand
+        // yellow (crownGold); the leader trail is a distinct vivid violet that
+        // reads on both day and night basemaps and sits well clear of the traffic
+        // greens/reds and the route-line blue.
+        const val FOLLOW_ME_TRAIL_SOURCE_ID = "kcc-followme-trail-source"
+        const val FOLLOW_ME_TRAIL_LAYER_ID = "kcc-followme-trail-layer"
+        const val FOLLOW_ME_TRAIL_LINE_WIDTH = 6.0
+
+        // 0xFF7C4DFF — a vivid violet (Material "deep purple A200"), distinct from
+        // every other line on the map.
+        private const val FOLLOW_ME_TRAIL_R = 124.0
+        private const val FOLLOW_ME_TRAIL_G = 77.0
+        private const val FOLLOW_ME_TRAIL_B = 255.0
+        private const val FOLLOW_ME_TRAIL_HEAD_ALPHA = 0.9
+
+        /**
+         * The leader-trail fade: transparent at the OLDEST end (line-progress 0) to
+         * [FOLLOW_ME_TRAIL_HEAD_ALPHA] at the newest — the head is the leader's
+         * current position, so it reads brightest.
+         */
+        fun followMeTrailGradientExpression(): Expression =
+            Expression.interpolate {
+                linear()
+                lineProgress()
+                stop(0.0) { rgba(FOLLOW_ME_TRAIL_R, FOLLOW_ME_TRAIL_G, FOLLOW_ME_TRAIL_B, 0.0) }
+                stop(1.0) {
+                    rgba(
+                        FOLLOW_ME_TRAIL_R,
+                        FOLLOW_ME_TRAIL_G,
+                        FOLLOW_ME_TRAIL_B,
+                        FOLLOW_ME_TRAIL_HEAD_ALPHA,
+                    )
+                }
+            }
+
+        /**
+         * Adds the follow-me trail GeoJSON source (line metrics ON for the gradient)
+         * + a hidden round-capped line layer, in the "middle" slot like the
+         * breadcrumb. Idempotent on the source and the layer independently (same
+         * reasoning as [addBreadcrumbLayer]); the solid colour is the fallback if
+         * the gradient is rejected on the pinned SDK.
+         */
+        fun addFollowMeTrailLayer(style: Style) {
+            if (!style.styleSourceExists(FOLLOW_ME_TRAIL_SOURCE_ID)) {
+                style.addSource(
+                    geoJsonSource(FOLLOW_ME_TRAIL_SOURCE_ID) {
+                        lineMetrics(true)
+                        featureCollection(FeatureCollection.fromFeatures(emptyList()))
+                    },
+                )
+            }
+            if (!style.styleLayerExists(FOLLOW_ME_TRAIL_LAYER_ID)) {
+                style.addLayer(
+                    lineLayer(FOLLOW_ME_TRAIL_LAYER_ID, FOLLOW_ME_TRAIL_SOURCE_ID) {
+                        slot("middle")
+                        lineCap(LineCap.ROUND)
+                        lineJoin(LineJoin.ROUND)
+                        lineWidth(FOLLOW_ME_TRAIL_LINE_WIDTH)
+                        lineColor(
+                            Expression.rgba(
+                                FOLLOW_ME_TRAIL_R,
+                                FOLLOW_ME_TRAIL_G,
+                                FOLLOW_ME_TRAIL_B,
+                                FOLLOW_ME_TRAIL_HEAD_ALPHA,
+                            ),
+                        )
+                        visibility(Visibility.NONE)
+                    },
+                )
+            }
+            runCatching {
+                style.getLayerAs<LineLayer>(FOLLOW_ME_TRAIL_LAYER_ID)
+                    ?.lineGradient(followMeTrailGradientExpression())
+            }
+        }
+
+        /** Show/hide the follow-me trail layer; a no-op until it is added. */
+        fun setFollowMeTrailVisible(style: Style, visible: Boolean) {
+            val layer = style.getLayerAs<LineLayer>(FOLLOW_ME_TRAIL_LAYER_ID) ?: return
             layer.visibility(if (visible) Visibility.VISIBLE else Visibility.NONE)
         }
     }

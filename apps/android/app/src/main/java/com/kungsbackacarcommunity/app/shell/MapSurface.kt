@@ -843,6 +843,22 @@ interface MapSurface : MapProjection {
     fun seedBreadcrumb(points: List<MapPoint>)
 
     /**
+     * Draw (or clear, with null / empty) the SHARED convoy "Follow me" LEADER
+     * TRAIL — the line of where the current trail leader has recently driven,
+     * received from Firestore and drawn on this member's map so a separated member
+     * can rejoin. [points] run oldest→newest (the head is the leader's latest
+     * position).
+     *
+     * A DISTINCT line from the private self-breadcrumb ([seedBreadcrumb] /
+     * `redrawBreadcrumb`): different source/layer ids and a different colour, so a
+     * member can tell the leader's shared trail apart from their own tail. The
+     * host decides visibility (leader freshness + still-a-member — see
+     * `FollowMeTrail.shouldDraw`) and pushes null to take the line down. A no-op
+     * beyond storing the value on the stub.
+     */
+    fun setFollowMeTrail(points: List<MapPoint>?)
+
+    /**
      * Replace the set of incident markers drawn on the map. The host fetches
      * these near the viewport via `incidents.listNearby` and pushes them here so
      * every user sees them. A no-op beyond storing the value on the stub.
@@ -1225,6 +1241,15 @@ class StubMapSurface(
         // can be asserted off-device. Mirror the real surface's empty-list no-op.
         if (points.isEmpty()) return
         seededBreadcrumbFlow.value = points
+    }
+
+    private val followMeTrailFlow = MutableStateFlow<List<MapPoint>?>(null)
+
+    /** Last value passed to [setFollowMeTrail] — observable so tests can assert the wiring. */
+    val followMeTrail: StateFlow<List<MapPoint>?> = followMeTrailFlow.asStateFlow()
+
+    override fun setFollowMeTrail(points: List<MapPoint>?) {
+        followMeTrailFlow.value = points
     }
 
     override fun setIncidentMarkers(markers: List<MapIncidentMarker>) {

@@ -174,6 +174,10 @@ import com.kungsbackacarcommunity.app.convoy.ConvoyRoute
 import com.kungsbackacarcommunity.app.convoy.ConvoyMapAwarenessOverlay
 import com.kungsbackacarcommunity.app.convoy.ConvoyReactionsHost
 import com.kungsbackacarcommunity.app.convoy.FirebaseConvoyReactionRepository
+import com.kungsbackacarcommunity.app.convoy.FirebaseConvoyFollowMeRepository
+import com.kungsbackacarcommunity.app.convoy.FollowMeState
+import com.kungsbackacarcommunity.app.convoy.FollowMeTrail
+import com.kungsbackacarcommunity.app.convoy.FollowMeTrailPublisher
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatus
 import com.kungsbackacarcommunity.app.convoy.ConvoyStatusBar
 import com.kungsbackacarcommunity.app.convoy.InviteConvoyState
@@ -4487,6 +4491,15 @@ fun AuthenticatedApp(
                     remember(convoyReactionsContext) {
                         FirebaseConvoyReactionRepository.createIfAvailable(convoyReactionsContext)
                     }
+                // Shared "Follow me" LEADER TRAIL repository (distinct from the
+                // transient reaction above): toggles leadership via the
+                // convoy-setFollowMe callable, writes the leader's rolling ~15 km
+                // trail directly, and observes the shared followMe doc. Null in a
+                // config-less / CI build → no follow-me trail wired.
+                val convoyFollowMeRepository =
+                    remember(convoyReactionsContext) {
+                        FirebaseConvoyFollowMeRepository.createIfAvailable(convoyReactionsContext)
+                    }
                 val convoyBarCoordinator =
                     remember(convoyRepository, convoyDestinationRepository, convoyLiveProfiles) {
                         convoyRepository?.let {
@@ -5015,6 +5028,84 @@ fun AuthenticatedApp(
                     }
                 val ownLiveMarker by ownLiveMarkerFlow.collectAsState(initial = null)
 
+                // ---- Convoy "Follow me" LEADER TRAIL --------------------------
+                //
+                // The shared, persistent line of where the current leader has
+                // recently driven, drawn on every member's map so a separated
+                // member can rejoin. State is the followMe doc (leaderUid +
+                // base64 ~15 km polyline + updatedAt); the callable owns the
+                // leaderUid pointer (takeover/toggle), the leader writes the trail
+                // points directly on a throttle, everyone else just draws it.
+                val followMeStateFlow: Flow<FollowMeState?> =
+                    remember(convoyFollowMeRepository, activeConvoy?.convoyId) {
+                        val repo = convoyFollowMeRepository
+                        val convoyId = activeConvoy?.convoyId
+                        if (repo != null && convoyId != null) {
+                            repo.observeFollowMe(convoyId)
+                        } else {
+                            flowOf(null)
+                        }
+                    }
+                val followMeState by followMeStateFlow.collectAsState(initial = null)
+
+                // Am I the trail leader? Drives the FollowMe button's ACTIVE state.
+                val followMeSelfLeading = FollowMeTrail.isSelfLeading(followMeState?.leaderUid, uid)
+
+                // Member-side draw: decode + push the shared trail to the map ONLY
+                // when it should draw — a leader that is set, not me, still a
+                // member, and fresh (freshness taken from the leader's live marker
+                // OR the trail's own last write, whichever is newer, so a parked
+                // leader who has stopped extending the trail is not wrongly hidden).
+                // A crashed/vanished leader goes stale and the line comes down with
+                // no inactivity timer, and null clears it.
+                LaunchedEffect(mapSurface, followMeState, convoyMemberPositions, activeConvoy?.memberUids, uid) {
+                    val state = followMeState
+                    val leaderUid = state?.leaderUid
+                    val leaderPos = convoyMemberPositions.firstOrNull { it.uid == leaderUid }
+                    val leaderFreshMs =
+                        listOfNotNull(leaderPos?.updatedAtMillis, state?.updatedAtMillis).maxOrNull()
+                    val leaderIsMember =
+                        leaderUid != null && activeConvoy?.memberUids?.contains(leaderUid) == true
+                    val draw =
+                        FollowMeTrail.shouldDraw(
+                            leaderUid = leaderUid,
+                            selfUid = uid,
+                            leaderIsMember = leaderIsMember,
+                            lastFreshMs = leaderFreshMs,
+                            nowMs = System.currentTimeMillis(),
+                        )
+                    mapSurface.setFollowMeTrail(
+                        if (draw) FollowMeTrail.decode(state?.polyline) else null,
+                    )
+                }
+
+                // Leader-side publisher: while I lead, feed my own live positions
+                // into a ~15 km rolling buffer and flush the encoded polyline to
+                // the followMe doc on a ~4 s throttle. Reset when I stop leading so
+                // a later activation starts from an empty trail.
+                val followMePublisher = remember(uid) { FollowMeTrailPublisher() }
+                LaunchedEffect(followMeSelfLeading) {
+                    if (!followMeSelfLeading) followMePublisher.reset()
+                }
+                LaunchedEffect(
+                    ownLiveMarker,
+                    followMeSelfLeading,
+                    convoyFollowMeRepository,
+                    activeConvoy?.convoyId,
+                ) {
+                    val repo = convoyFollowMeRepository
+                    val convoyId = activeConvoy?.convoyId
+                    val marker = ownLiveMarker
+                    if (followMeSelfLeading && repo != null && convoyId != null && marker != null) {
+                        val polyline =
+                            followMePublisher.onFix(
+                                MapPoint(longitude = marker.longitude, latitude = marker.latitude),
+                                System.currentTimeMillis(),
+                            )
+                        if (polyline != null) repo.writeTrail(convoyId, polyline)
+                    }
+                }
+
                 // Push the framing decision at the map surface, which applies it
                 // inside its EXISTING follow path (see MapSurface.setConvoyFit).
                 // Null means "follow me" — and that is also what the planner
@@ -5410,6 +5501,18 @@ fun AuthenticatedApp(
                                 onPoliceReaction =
                                     policeController?.let { police ->
                                         { police.report(PoliceRepository.SOURCE_CONVOY) }
+                                    },
+                                // FollowMe now ALSO toggles the persistent shared
+                                // leader trail: active state when I lead, and a tap
+                                // flips it (server-side takeover/toggle). Null repo
+                                // → the button keeps its pure broadcast behaviour.
+                                followMeLeading = followMeSelfLeading,
+                                onFollowMeToggle =
+                                    convoyFollowMeRepository?.let { repo ->
+                                        { active: Boolean ->
+                                            repo.setFollowMe(convoyBarConvoyId, active)
+                                            Unit
+                                        }
                                     },
                             )
                         }
