@@ -15,8 +15,9 @@ admin web + backend only, with iOS parked on the Future Ideas board. The amendme
 keeping the language-neutral `contracts/` layer iOS-ready so parity could be restored without
 rework.
 
-That MVP has since shipped: the Android app is in Google Play closed testing (vc47 / 0.8.36),
-the backend exposes 141 documented callables in `contracts/functions/functions.json`, and the
+That MVP has since shipped. As of this ADR's date: the Android app is in Google Play closed
+testing (vc47 / 0.8.36), the backend exposes 141 documented callables in
+`contracts/functions/functions.json`, and the
 contracts layer carries schemas, localization (sv/en), design tokens, and feature flags that no
 platform-specific code depends on. The precondition for restoring iOS — a stable, contract-driven
 backend — is now met.

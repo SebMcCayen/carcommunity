@@ -155,4 +155,7 @@ apps/android/local.properties
 apps/android/local.properties.*
 apps/android/app/google-services.json
 apps/android/.kotlin/
+
+# iOS (apps/ios) — Firebase config is injected, never committed (ADR-002)
+apps/ios/**/GoogleService-Info.plist
 .claude/worktrees/
