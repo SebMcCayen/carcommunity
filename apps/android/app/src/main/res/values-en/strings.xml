@@ -1211,6 +1211,9 @@
     <string name="crownHunt_perkNameSpikeStrip">Spike strip</string>
     <string name="crownHunt_perkNameShield">Shield</string>
     <string name="crownHunt_perkNameBoost">Double points</string>
+    <string name="crownHunt_perkBlurbSpikeStrip">Place a trap that drains Crown Points from rivals who drive into it.</string>
+    <string name="crownHunt_perkBlurbShield">Protect yourself from traps for a while.</string>
+    <string name="crownHunt_perkBlurbBoost">Double the Crown Points on your catches for a while.</string>
     <string name="crownHunt_perkKindTrap">Trap</string>
     <string name="crownHunt_perkKindShield">Shield</string>
     <string name="crownHunt_perkKindBoost">Boost</string>
