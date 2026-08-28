@@ -66,6 +66,16 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
+    // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
+    // convoy doc ONCE (via a `let`) and checks both memberUids and the accepted
+    // inviteStatus off the same snapshot — a single get() rather than two, which
+    // matters on the frequently-read/updated follow-me trail subdoc.
+    function isAcceptedConvoyMember(convoyId, uid) {
+      let convoy = get(/databases/$(database)/documents/convoys/$(convoyId)).data;
+      return uid in convoy.memberUids
+        && convoy.members[uid].inviteStatus == 'accepted';
+    }
+
     // ---- users/{uid} owner-write validation (Phase 9a) ----------------------
     // Owner writes are whitelist-based: only the keys listed in
     // validUserProfileCreate/Update may be set or changed. All protected
@@ -874,10 +884,7 @@ service cloud.firestore {
         // Single fixed doc by design — scope the rule to it so adding any other
         // doc under followMe/ later can never accidentally inherit this exposure.
         && followMeId == 'current'
-        && request.auth.uid in
-          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
-        && get(/databases/$(database)/documents/convoys/$(convoyId))
-          .data.members[request.auth.uid].inviteStatus == 'accepted';
+        && isAcceptedConvoyMember(convoyId, request.auth.uid);
 
       // Trail-point updates by the CURRENT leader only. resource.data.leaderUid is
       // the value ALREADY stored (set by the callable), so only that member passes
@@ -893,10 +900,9 @@ service cloud.firestore {
         // updatedAt MUST be the server clock — otherwise the leader could stamp a
         // future time and keep the freshness gate green (the trail "live") forever.
         && request.resource.data.updatedAt == request.time
-        && request.auth.uid in
-          get(/databases/$(database)/documents/convoys/$(convoyId)).data.memberUids
-        && get(/databases/$(database)/documents/convoys/$(convoyId))
-          .data.members[request.auth.uid].inviteStatus == 'accepted';
+        // Re-checks live membership (single get) so a leader who has since left
+        // cannot keep writing.
+        && isAcceptedConvoyMember(convoyId, request.auth.uid);
 
       // create + delete: convoy.setFollowMe callable only (takeover/toggle-off).
     }

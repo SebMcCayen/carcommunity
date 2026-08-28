@@ -343,10 +343,18 @@ async function clearFollowMeTrail(
       await ref.delete();
       return;
     }
-    const snap = await ref.get();
-    if (snap.exists && snap.data()?.leaderUid === opts.departingUid) {
-      await ref.delete();
-    }
+    // Atomic read-then-delete: a non-force clear (a member leaving) must only
+    // remove the trail if it is STILL led by the departing member at commit time.
+    // A plain get()-then-delete() races a concurrent takeover — another member
+    // could become leader between the snapshot and the delete, and we'd wipe the
+    // NEW leader's fresh trail. The transaction re-checks leaderUid at commit, so
+    // a takeover in the gap leaves the new leader's trail intact.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data()?.leaderUid === opts.departingUid) {
+        tx.delete(ref);
+      }
+    });
   } catch (error) {
     logger.warn('convoy follow-me trail cleanup failed', { convoyId, error: String(error) });
     await reportServerError({ source: 'convoy.followMeCleanup', error, context: { convoyId } });
