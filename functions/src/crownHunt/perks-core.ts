@@ -77,6 +77,14 @@ export const PERK_PURCHASE_REASON_PRECONDITION_OTHER = 'precondition_other';
  */
 export const PERK_DEPLOY_REASON_ACTIVATION_LIMIT = 'activation_limit';
 
+/**
+ * `details.reason` discriminator deployPerk attaches when a trap is refused for
+ * being too close to an active/imminent event — the anti-griefing rule that
+ * stops a member spiking a gathering spot. Mirrored client-side so the app can
+ * show the specific "too close to an event" message (see PerkDeployMenu.kt).
+ */
+export const PERK_DEPLOY_REASON_EVENT_TOO_CLOSE = 'event_too_close';
+
 // ---------------------------------------------------------------------------
 // The catalog
 // ---------------------------------------------------------------------------
@@ -385,6 +393,22 @@ export const MAX_ACTIVE_TRAPS_PER_USER = 1;
 export const MAX_TRAP_DEPLOYS_PER_DAY = 3;
 /** Minimum spacing between a member's own armed traps, in metres. */
 export const TRAP_SELF_SPACING_METERS = 300;
+
+// --- Event exclusion (anti-griefing) -------------------------------------
+// A trap must never be placed on top of a car meet: otherwise everyone
+// attending an event could spike the gathering spot. A deploy is refused when
+// it lands within EVENT_TRAP_EXCLUSION_RADIUS_METERS of a published/completed
+// event that is currently within its blocking window. The window opens 8 h
+// BEFORE the event starts — a trap lives 6 h, so a trap armed inside the
+// pre-window would still be armed when people gather — and closes 3 h after
+// the event's effective end (endsAt, or startsAt when no end is set).
+
+/** A trap must be at least this far from an active event, in metres. */
+export const EVENT_TRAP_EXCLUSION_RADIUS_METERS = 300;
+/** Traps are blocked from this long BEFORE an event's start (covers the 6 h trap life). */
+export const EVENT_TRAP_BLOCK_BEFORE_START_MS = 8 * 60 * 60 * 1000;
+/** Traps stay blocked for this long AFTER an event's effective end. */
+export const EVENT_TRAP_BLOCK_AFTER_END_MS = 3 * 60 * 60 * 1000;
 /** A single trap may drain at most this many DISTINCT victims before it stops. */
 export const MAX_VICTIMS_PER_TRAP = 10;
 /** A placer may EARN at most this much KP from traps per UTC day. */

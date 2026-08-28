@@ -337,6 +337,7 @@ private fun deployFailureMessageRes(reason: PerkDeployFailureReason): Int =
     when (reason) {
         PerkDeployFailureReason.NO_LOCATION -> R.string.crownHunt_deployErrorNoLocation
         PerkDeployFailureReason.ACTIVATION_LIMIT -> R.string.crownHunt_deployErrorActivationLimit
+        PerkDeployFailureReason.EVENT_TOO_CLOSE -> R.string.crownHunt_deployErrorEventTooClose
         PerkDeployFailureReason.UNAVAILABLE -> R.string.crownHunt_deployErrorUnavailable
         PerkDeployFailureReason.UNKNOWN -> R.string.crownHunt_deployErrorUnknown
     }

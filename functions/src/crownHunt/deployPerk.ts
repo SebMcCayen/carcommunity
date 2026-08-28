@@ -43,9 +43,12 @@ import { isValidCoordinate, haversineDistanceMeters } from './crown-hunt-geo';
 import { crownCellKey, utcDayKey } from './crown-spawn-core';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
+  EVENT_TRAP_BLOCK_AFTER_END_MS,
+  EVENT_TRAP_BLOCK_BEFORE_START_MS,
   MAX_ACTIVE_TRAPS_PER_USER,
   MAX_TRAP_DEPLOYS_PER_DAY,
   PERK_DEPLOY_REASON_ACTIVATION_LIMIT,
+  PERK_DEPLOY_REASON_EVENT_TOO_CLOSE,
   TRAP_DURATION_HOURS,
   TRAP_RADIUS_METERS,
   TRAP_SELF_SPACING_METERS,
@@ -64,6 +67,8 @@ import {
   type PerkDefinition,
   type PerkKind,
 } from './perks-core';
+import { isTrapBlockedByEvents, type TrapExclusionEvent } from './event-exclusion-core';
+import { MAX_EVENT_DURATION_MS } from '../events/events-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -239,6 +244,166 @@ function evaluateTrapCaps(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Event exclusion (anti-griefing): a trap may not be dropped on a car meet.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far into the PAST the candidate query reaches (on `startsAt`) for events.
+ * Must cover the LONGEST an event can still be blocking: an event may run up to
+ * {@link MAX_EVENT_DURATION_MS} and blocks until {@link EVENT_TRAP_BLOCK_AFTER_END_MS}
+ * after it ends, so an event that started `MAX_EVENT_DURATION_MS + EVENT_TRAP_BLOCK_AFTER_END_MS`
+ * ago can STILL be inside its blocking window right now. Reaching back exactly
+ * that far guarantees the candidate query never misses a currently-blocking
+ * event; the exact window (see {@link isTrapBlockedByEvents}) is applied
+ * afterwards by the pure filter, so over-fetching only costs a few reads, never
+ * a wrong (illegally-allowed) decision.
+ */
+const CANDIDATE_PAST_MS = MAX_EVENT_DURATION_MS + EVENT_TRAP_BLOCK_AFTER_END_MS;
+
+/** Page size for the candidate-event scan — bounds the per-page reads. */
+const EVENT_CANDIDATE_PAGE_SIZE = 50;
+
+/**
+ * Defensive ceiling on how many pages the candidate scan will walk before it
+ * gives up. The time window already bounds the real candidate count to a handful
+ * of concurrent car meets, so this is only ever reached by a pathological /
+ * runaway events collection. If it IS reached the rule cannot be proven, so the
+ * scan FAILS CLOSED (rejects the deploy) rather than allow a potentially illegal
+ * trap — the enforcement must never fail open.
+ */
+const MAX_EVENT_CANDIDATE_PAGES = 20;
+
+const toNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const toMillis = (value: unknown): number | null =>
+  value instanceof Timestamp ? value.toMillis() : null;
+
+/**
+ * Throws a reason-coded `failed-precondition` when a trap at (latitude,
+ * longitude) placed `now` would sit within EVENT_TRAP_EXCLUSION_RADIUS_METERS
+ * of an active/imminent event (the anti-griefing rule; window + distance maths
+ * in event-exclusion-core.ts).
+ *
+ * PRE-TRANSACTION by design (accepted tradeoff): events change on a human,
+ * admin-paced cadence — created, published, edited, cancelled by hand — orders
+ * of magnitude slower than trap deploys, and their coordinates are fixed once
+ * set. So this runs OUTSIDE the deploy transaction to keep that transaction
+ * small: it walks the events collection page by page and reads each candidate's
+ * member-gated `details/private` subdoc (mirroring events/checkIn.ts), a broad
+ * cross-collection scan that does NOT belong in the hot deploy transaction —
+ * pulling it in would add every scanned event to the tx read-set and make deploys
+ * contend on/retry against unrelated event writes for no real gain.
+ *
+ * The residual race is narrow and self-healing: an event would have to flip INTO
+ * its blocking window (publish, or a start/end/coordinate edit) in the millisecond
+ * gap between this check and the trap write. The worst case is a single trap that
+ * slips through near a just-blocking event; it expires in TRAP_DURATION_HOURS and
+ * every subsequent deploy there is blocked. Closing that window is not worth
+ * taxing every trap deploy with event-collection transaction contention. (A trap
+ * placed BEFORE an event is published is out of scope by definition — the rule is
+ * "don't place near an ALREADY-active/imminent event".)
+ */
+function throwEventTooClose(): never {
+  throw new HttpsError(
+    'failed-precondition',
+    'Du kan inte placera en fälla så nära ett event.',
+    { reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE },
+  );
+}
+
+/**
+ * Resolve one candidate event's PRECISE coordinates. On this branch latitude/
+ * longitude live on the member-gated `details/private` subdoc; a concurrent
+ * change mirrors them onto the teaser. Reading the teaser first and falling back
+ * to the detail doc matches events/checkIn.ts and is correct under either layout
+ * (the Admin SDK bypasses rules). Candidates with no valid coords resolve to
+ * null (skipped, not blocking).
+ */
+async function resolveCandidateEvent(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+): Promise<TrapExclusionEvent | null> {
+  const event = doc.data();
+  const startsAtMs = toMillis(event.startsAt);
+  if (startsAtMs === null) {
+    return null;
+  }
+  let eventLat = toNumber(event.latitude);
+  let eventLng = toNumber(event.longitude);
+  if (eventLat === null || eventLng === null) {
+    const detail = (await doc.ref.collection('details').doc('private').get()).data();
+    eventLat = eventLat ?? toNumber(detail?.latitude);
+    eventLng = eventLng ?? toNumber(detail?.longitude);
+  }
+  if (eventLat === null || eventLng === null || !isValidCoordinate(eventLat, eventLng)) {
+    return null;
+  }
+  return {
+    startsAtMs,
+    endsAtMs: toMillis(event.endsAt),
+    latitude: eventLat,
+    longitude: eventLng,
+  };
+}
+
+async function assertTrapNotNearEvent(
+  latitude: number,
+  longitude: number,
+  now: Date,
+): Promise<void> {
+  const nowMs = now.getTime();
+  // Candidate events: published or completed, starting within a window that
+  // brackets both a just-ended event (up to CANDIDATE_PAST_MS ago) and one that
+  // has not yet started (up to the pre-block horizon). Ordered by startsAt so we
+  // can PAGE deterministically. Needs the existing composite index
+  // events(status ASC, startsAt ASC).
+  const windowedOrdered = db
+    .collection('events')
+    .where('status', 'in', ['published', 'completed'])
+    .where('startsAt', '>=', Timestamp.fromMillis(nowMs - CANDIDATE_PAST_MS))
+    .where('startsAt', '<=', Timestamp.fromMillis(nowMs + EVENT_TRAP_BLOCK_BEFORE_START_MS))
+    .orderBy('startsAt', 'asc');
+
+  // Walk EVERY candidate in the window — page by page, stopping early on the
+  // first blocking event — so the rule can never fail open by ignoring events
+  // beyond a single capped page. In practice the window holds a handful of
+  // events (one page); pagination only matters for a pathological collection,
+  // which the MAX_EVENT_CANDIDATE_PAGES ceiling then fails CLOSED on.
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (let page = 0; page < MAX_EVENT_CANDIDATE_PAGES; page++) {
+    let pageQuery = windowedOrdered.limit(EVENT_CANDIDATE_PAGE_SIZE);
+    if (cursor) {
+      pageQuery = pageQuery.startAfter(cursor);
+    }
+    const snap = await pageQuery.get();
+    if (snap.empty) {
+      return; // exhausted with no blocking event
+    }
+
+    const resolved = await Promise.all(snap.docs.map(resolveCandidateEvent));
+    const candidates = resolved.filter((e): e is TrapExclusionEvent => e !== null);
+    if (isTrapBlockedByEvents(candidates, latitude, longitude, nowMs)) {
+      throwEventTooClose();
+    }
+
+    if (snap.size < EVENT_CANDIDATE_PAGE_SIZE) {
+      return; // last (partial) page — window fully scanned, nothing blocks
+    }
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+
+  // Reached the defensive page ceiling without exhausting the window — absurd for
+  // a real events collection. We cannot prove the trap is clear of every event,
+  // so FAIL CLOSED rather than allow a potentially illegal deploy (no PII: counts
+  // only).
+  logger.warn('crownHunt.deployPerk event-exclusion pagination ceiling hit; failing closed', {
+    pages: MAX_EVENT_CANDIDATE_PAGES,
+    pageSize: EVENT_CANDIDATE_PAGE_SIZE,
+  });
+  throwEventTooClose();
+}
+
 async function deployTrap(args: {
   uid: string;
   perk: PerkDefinition;
@@ -317,6 +482,11 @@ async function deployTrap(args: {
   if (capRejection) {
     throw capRejection;
   }
+
+  // Anti-griefing: a trap may not be placed on top of an active/imminent event.
+  // Pre-transaction (events change slowly); throws a reason-coded
+  // failed-precondition on violation.
+  await assertTrapNotNearEvent(latitude, longitude, now);
 
   const shieldRef = db.collection('perkShield').doc(uid);
   const boostRef = db.collection('perkBoost').doc(uid);
