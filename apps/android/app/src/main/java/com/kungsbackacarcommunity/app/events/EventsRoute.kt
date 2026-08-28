@@ -34,6 +34,7 @@ import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRepository
 import com.kungsbackacarcommunity.app.groupdrive.GroupDriveRoute
 import com.kungsbackacarcommunity.app.navigation.CurrentLocation
 import com.kungsbackacarcommunity.app.navigation.LatLng
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -109,6 +110,10 @@ fun EventsRoute(
     var showChat by rememberSaveable { mutableStateOf(false) }
     var showGroupDrive by rememberSaveable { mutableStateOf(false) }
     var showCreate by rememberSaveable { mutableStateOf(false) }
+    // Creator edit form (the shared CreateEventScreen in edit mode) for the
+    // selected event. A detail-level state, declared here alongside showCreate so
+    // the top-level BackHandler can dismiss it too.
+    var showEdit by rememberSaveable { mutableStateOf(false) }
     // Upcoming vs past. Saveable so a rotation does not silently drop the user
     // back onto the upcoming tab while they are reading the archive.
     var listTab by rememberSaveable { mutableStateOf(EventsListTab.UPCOMING) }
@@ -136,15 +141,22 @@ fun EventsRoute(
     // Owns the create-event write status; built here (a thin wrapper over the
     // repository) so AuthenticatedApp does not have to thread another coordinator.
     val createCoordinator = remember(repository) { CreateEventCoordinator(repository) }
+    // Owns the creator edit-event write status; a thin wrapper over the repository,
+    // built alongside createCoordinator.
+    val editCoordinator = remember(repository) { EditEventCoordinator(repository) }
 
-    // System/gesture Back unwinds one internal level (chat/group-drive -> detail,
-    // detail -> list); at the list root it is disabled so the shell's BackHandler
-    // returns to Home. Mirrors the in-screen Back buttons' reset behaviour.
+    // System/gesture Back unwinds one internal level (edit/chat/group-drive ->
+    // detail, detail -> list); at the list root it is disabled so the shell's
+    // BackHandler returns to Home. Mirrors the in-screen Back buttons' reset.
     BackHandler(enabled = selected != null || showCreate) {
         when {
             showCreate -> {
                 showCreate = false
                 createCoordinator.reset()
+            }
+            showEdit -> {
+                showEdit = false
+                editCoordinator.reset()
             }
             showChat -> showChat = false
             showGroupDrive -> showGroupDrive = false
@@ -173,8 +185,26 @@ fun EventsRoute(
                 }
             }
 
+            // Resolve the create failure copy here so the shared form stays
+            // agnostic to which coordinator drives it. A rate limit is not a fault
+            // the member can retry away, so it names the real cap.
+            val createErrorMessage =
+                when (val current = createStatus) {
+                    is CreateEventStatusUi.Failed ->
+                        when (current.reason) {
+                            CreateEventFailure.RATE_LIMITED ->
+                                stringResource(
+                                    R.string.events_createRateLimited,
+                                    Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY,
+                                )
+                            CreateEventFailure.UNKNOWN -> stringResource(R.string.events_createError)
+                        }
+                    else -> null
+                }
+
             CreateEventScreen(
-                status = createStatus,
+                saving = createStatus == CreateEventStatusUi.Saving,
+                errorMessage = createErrorMessage,
                 onSubmit = { input -> scope.launch { createCoordinator.submit(input) } },
                 onCancel = {
                     showCreate = false
@@ -305,9 +335,68 @@ fun EventsRoute(
         (rsvpCoordinator?.status ?: flowOf(RsvpStatusUi.Idle))
             .collectAsState(initial = RsvpStatusUi.Idle)
 
+    // The shared, non-blocking feedback channel — reused by the RSVP-failed line,
+    // the creator edit-success snackbar, and the remove success/failure snackbars.
+    val snackbarHostState = LocalSnackbarHostState.current
+
+    // Creator edit form — the shared CreateEventScreen in edit mode, pre-filled
+    // from the event teaser (title, start, map pin) and its member-gated detail
+    // (description, precise address). On success the snackbar confirms and the
+    // detail listener refreshes the changed event in place; permission-denied /
+    // immutable / generic failures surface inline via the resolved errorMessage.
+    if (showEdit && event != null) {
+        val currentEvent = event
+        val editStatus by editCoordinator.status.collectAsState(initial = EditEventStatusUi.Idle)
+        val editedMessage = stringResource(R.string.events_editSuccess)
+        LaunchedEffect(editStatus, snackbarHostState, editedMessage) {
+            if (editStatus is EditEventStatusUi.Success) {
+                snackbarHostState?.showSnackbar(editedMessage)
+                showEdit = false
+                editCoordinator.reset()
+            }
+        }
+        val editErrorMessage =
+            when (val current = editStatus) {
+                is EditEventStatusUi.Failed ->
+                    when (current.reason) {
+                        ManageEventFailure.PERMISSION_DENIED ->
+                            stringResource(R.string.events_editErrorPermission)
+                        ManageEventFailure.IMMUTABLE ->
+                            stringResource(R.string.events_editErrorImmutable)
+                        ManageEventFailure.UNKNOWN -> stringResource(R.string.events_editError)
+                    }
+                else -> null
+            }
+        val prefill =
+            remember(currentEvent, detail) {
+                CreateEventInput(
+                    title = currentEvent.title,
+                    // Every manageable (draft/published) event has a start; the
+                    // fallback only guards a malformed teaser, and the user re-picks
+                    // a real time before submit (validation requires it).
+                    startsAtMillis = currentEvent.startsAtMillis ?: System.currentTimeMillis(),
+                    description = detail?.description,
+                    address = detail?.address,
+                    latitude = currentEvent.latitude,
+                    longitude = currentEvent.longitude,
+                )
+            }
+        CreateEventScreen(
+            saving = editStatus == EditEventStatusUi.Saving,
+            errorMessage = editErrorMessage,
+            initialInput = prefill,
+            isEdit = true,
+            onSubmit = { input -> scope.launch { editCoordinator.submit(currentEvent.id, input) } },
+            onCancel = {
+                showEdit = false
+                editCoordinator.reset()
+            },
+        )
+        return
+    }
+
     // Transient failure surfacing: a failed RSVP write raises a shell snackbar
     // (the shared, non-blocking feedback channel) instead of a persistent line.
-    val snackbarHostState = LocalSnackbarHostState.current
     val rsvpFailedMessage = stringResource(R.string.events_rsvpSubmitError)
     LaunchedEffect(rsvpStatus, snackbarHostState, rsvpFailedMessage) {
         if (rsvpStatus == RsvpStatusUi.Failed) {
@@ -509,6 +598,48 @@ fun EventsRoute(
             }
     }
 
+    // --- Creator actions (edit / remove) ---
+    // The signed-in user manages this event only when they CREATED it and it is
+    // still editable (draft/published) — the same gate the backend enforces, so a
+    // cancelled/completed event or someone else's event never sees the actions.
+    val isCreator =
+        event != null && !event.createdByUserId.isNullOrBlank() && event.createdByUserId == uid
+    val canManage = event != null && Events.canManageOwnEvent(isCreator, event.status)
+    val onEdit: (() -> Unit)? = if (canManage) { { showEdit = true } } else null
+
+    val removeSuccessMsg = stringResource(R.string.events_removeSuccess)
+    val removeErrorMsg = stringResource(R.string.events_removeError)
+    val removeErrorPermissionMsg = stringResource(R.string.events_removeErrorPermission)
+    val removeErrorImmutableMsg = stringResource(R.string.events_removeErrorImmutable)
+    // Removal = events.cancel (never a hard delete): sets cancelledAt, the event
+    // drops out of the published list, so on success we return to the list. The
+    // audit reason is a fixed backend-only string (not user-facing copy).
+    val onRemove: (() -> Unit)? =
+        if (canManage) {
+            {
+                scope.launch {
+                    try {
+                        repository.cancelEvent(selected, EVENT_CREATOR_REMOVE_REASON)
+                        snackbarHostState?.showSnackbar(removeSuccessMsg)
+                        selectedEventId = null
+                        rsvpCoordinator?.reset()
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
+                    } catch (failure: Exception) {
+                        val message =
+                            when ((failure as? CancelEventException)?.reason) {
+                                ManageEventFailure.PERMISSION_DENIED -> removeErrorPermissionMsg
+                                ManageEventFailure.IMMUTABLE -> removeErrorImmutableMsg
+                                else -> removeErrorMsg
+                            }
+                        snackbarHostState?.showSnackbar(message)
+                    }
+                }
+            }
+        } else {
+            null
+        }
+
     EventDetailScreen(
         event = event,
         detail = detail,
@@ -541,8 +672,19 @@ fun EventsRoute(
         // Defer the attendee-roster read until the viewer taps "Check who answered".
         onRevealAttendees = { attendeesRevealed = true },
         hasMapToken = hasMapToken,
+        canManage = canManage,
+        onEdit = onEdit,
+        onRemove = onRemove,
     )
 }
+
+/**
+ * Backend-only audit reason stamped on a creator's own removal via events.cancel.
+ * Not user-facing copy (it never renders in the app), so it is a code constant
+ * rather than a localized string — the cancelEventRequest schema requires a
+ * non-empty reason for the audit log.
+ */
+private const val EVENT_CREATOR_REMOVE_REASON = "Removed by event creator"
 
 /**
  * The uids [viewerUid] has blocked, read from their own owner-scoped block

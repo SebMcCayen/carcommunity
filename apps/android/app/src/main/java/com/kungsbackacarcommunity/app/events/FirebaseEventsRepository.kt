@@ -256,6 +256,47 @@ class FirebaseEventsRepository private constructor(
                 }
         }
 
+    override suspend fun updateEvent(eventId: String, input: CreateEventInput) =
+        suspendCancellableCoroutine { continuation ->
+            functions
+                .getHttpsCallable(UPDATE)
+                .call(Events.updatePayload(eventId, input))
+                .addOnCompleteListener { task ->
+                    if (!continuation.isActive) return@addOnCompleteListener
+                    if (task.isSuccessful) {
+                        continuation.resume(Unit)
+                    } else {
+                        // permission-denied (not the creator) / failed-precondition
+                        // (already cancelled/completed) map to domain reasons so the
+                        // form can say something true; everything else is UNKNOWN.
+                        val cause = task.exception
+                        val code = (cause as? FirebaseFunctionsException)?.code?.name
+                        continuation.resumeWithException(
+                            UpdateEventException(Events.manageFailureFromCode(code), cause),
+                        )
+                    }
+                }
+        }
+
+    override suspend fun cancelEvent(eventId: String, reason: String) =
+        suspendCancellableCoroutine { continuation ->
+            functions
+                .getHttpsCallable(CANCEL)
+                .call(mapOf("eventId" to eventId, "reason" to reason))
+                .addOnCompleteListener { task ->
+                    if (!continuation.isActive) return@addOnCompleteListener
+                    if (task.isSuccessful) {
+                        continuation.resume(Unit)
+                    } else {
+                        val cause = task.exception
+                        val code = (cause as? FirebaseFunctionsException)?.code?.name
+                        continuation.resumeWithException(
+                            CancelEventException(Events.manageFailureFromCode(code), cause),
+                        )
+                    }
+                }
+        }
+
     override suspend fun loadAttendees(eventId: String): EventAttendeesResult {
         // Roster read via the `events-listAttendees` callable: the raw RSVP doc
         // is owner-or-admin readable and carries only { status, updatedAt }, so
@@ -301,6 +342,8 @@ class FirebaseEventsRepository private constructor(
         private const val EVENT_ATTENDANCE = "eventAttendance"
         private const val REGION = "europe-west1"
         private const val CREATE = "events-create"
+        private const val UPDATE = "events-update"
+        private const val CANCEL = "events-cancel"
         private const val LIST_ATTENDEES = "events-listAttendees"
         private const val CHECK_IN = "events-checkIn"
 

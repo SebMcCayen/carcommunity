@@ -166,6 +166,43 @@ class CreateEventException(
     cause: Throwable? = null,
 ) : Exception("events-create failed: $reason", cause)
 
+/**
+ * Why an `events-update` (creator edit) or `events-cancel` (creator remove) call
+ * failed, in domain terms — so the coordinator/route stay Firebase-free and can
+ * say something true to the creator. Shared by both callables because they share
+ * the two meaningful denials.
+ */
+enum class ManageEventFailure {
+    /**
+     * The caller is not the event's creator (nor an admin) — the callable answers
+     * `permission-denied`. Not a "try again": editing/removing someone else's
+     * event is simply not theirs to do.
+     */
+    PERMISSION_DENIED,
+
+    /**
+     * The event is no longer editable/removable — it is already cancelled or
+     * completed, so the backend answers `failed-precondition` (mirrors the
+     * server-side immutability the creator gate also enforces client-side).
+     */
+    IMMUTABLE,
+
+    /** Anything else (offline, invalid, backend fault, missing event) — generic. */
+    UNKNOWN,
+}
+
+/** An events-update failure carrying the domain [reason]. */
+class UpdateEventException(
+    val reason: ManageEventFailure,
+    cause: Throwable? = null,
+) : Exception("events-update failed: $reason", cause)
+
+/** An events-cancel failure carrying the domain [reason]. */
+class CancelEventException(
+    val reason: ManageEventFailure,
+    cause: Throwable? = null,
+) : Exception("events-cancel failed: $reason", cause)
+
 object Events {
     /**
      * Max events one member may create per rolling 24h — mirrors
@@ -210,6 +247,67 @@ object Events {
         } else {
             CreateEventFailure.UNKNOWN
         }
+    }
+
+    /**
+     * Maps an `events-update` / `events-cancel` callable error code onto a
+     * [ManageEventFailure]. Accepts both the Firebase Android SDK's enum name
+     * (`PERMISSION_DENIED`) and the wire/`HttpsError` spelling
+     * (`permission-denied`) so the mapping is pinned by unit tests without a
+     * Firebase dependency. Case-insensitive; an unknown/absent code is
+     * [ManageEventFailure.UNKNOWN].
+     */
+    fun manageFailureFromCode(code: String?): ManageEventFailure {
+        val normalized = code?.trim()?.lowercase()?.replace('_', '-') ?: return ManageEventFailure.UNKNOWN
+        return when (normalized) {
+            "permission-denied" -> ManageEventFailure.PERMISSION_DENIED
+            "failed-precondition" -> ManageEventFailure.IMMUTABLE
+            else -> ManageEventFailure.UNKNOWN
+        }
+    }
+
+    /**
+     * Whether the signed-in user may EDIT or REMOVE this event from the detail
+     * screen: they are its creator AND it is still in an editable lifecycle state
+     * (draft or published). Cancelled/completed events are immutable — mirrors the
+     * backend, which rejects an update/cancel on them with `failed-precondition` —
+     * so the actions are hidden rather than offered and then failing. An event
+     * whose `createdByUserId` is absent (older event / fixture) is never
+     * manageable, because there is nothing to match the viewer against.
+     */
+    fun canManageOwnEvent(isCreator: Boolean, status: EventStatus): Boolean =
+        isCreator && (status == EventStatus.DRAFT || status == EventStatus.PUBLISHED)
+
+    /**
+     * Builds the `events-update` callable payload for a creator edit from a
+     * validated [input]. Carries ONLY the fields the app's shared event form
+     * manages (title, start, description, address, map pin), so the update is a
+     * genuine PARTIAL one: fields the form never surfaces — endsAt, summary,
+     * approximateArea, locationName, isOfficial — are omitted and therefore left
+     * untouched server-side, and `publicSiteEnabled` is deliberately never sent
+     * (the update schema forbids it; the public-site flag is toggled only via
+     * events.setPublicSite).
+     *
+     * Unlike [createPayload], the form-managed OPTIONAL text/coordinate fields are
+     * sent even when blank/absent (as JSON null) because the creator can
+     * deliberately CLEAR them — a removed description, address or map pin must
+     * actually clear server-side, not silently persist. The coordinate pair stays
+     * both-or-neither ([isValidCoordinatePair], gated before submit).
+     */
+    fun updatePayload(eventId: String, input: CreateEventInput): Map<String, Any?> {
+        val lat = input.latitude
+        val lng = input.longitude
+        return mapOf(
+            "eventId" to eventId,
+            "title" to input.title.trim(),
+            "startsAt" to toIsoUtc(input.startsAtMillis),
+            "description" to input.description?.trim()?.takeIf { it.isNotEmpty() },
+            "address" to input.address?.trim()?.takeIf { it.isNotEmpty() },
+            // Both set (a positioned pin) or both null (pin cleared) — never a
+            // half-set pair (isValidForCreate has gated this before submit).
+            "latitude" to if (lat != null && lng != null) lat else null,
+            "longitude" to if (lat != null && lng != null) lng else null,
+        )
     }
 
     /**
