@@ -1,0 +1,41 @@
+{
+  "sourceLanguage" : "sv",
+  "strings" : {
+    "shell.tabMap" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "sv" : { "stringUnit" : { "state" : "translated", "value" : "Karta" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Map" } }
+      }
+    },
+    "shell.tabHistory" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "sv" : { "stringUnit" : { "state" : "translated", "value" : "Historik" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "History" } }
+      }
+    },
+    "shell.tabCreate" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "sv" : { "stringUnit" : { "state" : "translated", "value" : "Skapa" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create" } }
+      }
+    },
+    "shell.tabSocial" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "sv" : { "stringUnit" : { "state" : "translated", "value" : "Socialt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Social" } }
+      }
+    },
+    "shell.tabGarage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "sv" : { "stringUnit" : { "state" : "translated", "value" : "Garage" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Garage" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

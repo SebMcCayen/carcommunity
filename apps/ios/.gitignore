@@ -1,0 +1,9 @@
+# Firebase config is injected, never committed (parity with Android's
+# gitignored google-services.json). See README.md.
+GoogleService-Info.plist
+
+# Xcode user state and build products
+xcuserdata/
+DerivedData/
+build/
+*.xcresult
