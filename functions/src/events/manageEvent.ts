@@ -1,13 +1,18 @@
 /**
- * events.create (member or admin) / events.update (admin only)
+ * events.create (member or admin) / events.update (creator or admin)
  * (contracts/functions/functions.json).
  *
  * Deployed via the `events` export group as `events-create` and
  * `events-update`.
  *
- * events.update requires an active admin via requireAdminActor: the
- * server-managed `admin` custom claim plus a non-suspended, non-deleted
- * Firestore `users/{uid}` state with role admin or owner.
+ * events.update is creator-OR-admin (requireMemberOrAdminActor + the stored
+ * createdByUserId, via guardManageEventActor): the member who created an event
+ * may edit their own, an admin/owner may edit any. A non-creator member is
+ * permission-denied; suspended/deleted/non-member callers are rejected before
+ * ownership is considered. A member editing their own event writes NO
+ * adminAuditEvents record — that log stays a record of ADMIN actions, the edit
+ * is attributed on the event doc via createdByUserId (mirrors events.create /
+ * events.complete). An admin edit still writes the audited event.update record.
  *
  * events.create also accepts an active MEMBER (requireMemberOrAdminActor —
  * suspended/deleted/non-member callers are rejected). Creator role decides the
@@ -32,7 +37,6 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { FieldValue } from 'firebase-admin/firestore';
 import { db } from '../firebase';
-import { requireAdminActor } from '../admin/actorContext';
 import { requireMemberOrAdminActor } from '../shared/memberActor';
 import { buildAdminAuditEvent } from '../admin/claims-core';
 import {
@@ -41,6 +45,7 @@ import {
   buildEventUpdates,
   guardCoordinatePair,
   guardEventTimes,
+  guardManageEventActor,
   guardPublishable,
   guardUpdatableStatus,
   initialEventStatus,
@@ -184,7 +189,11 @@ export const create = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
 });
 
 export const update = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResponse> => {
-  const actor = await requireAdminActor(request);
+  // Creator-or-admin: an active member may edit an event THEY created, an admin
+  // may edit any (guardManageEventActor, checked against the stored
+  // createdByUserId inside the transaction). requireMemberOrAdminActor rejects
+  // suspended/deleted/non-member callers before ownership is even considered.
+  const actor = await requireMemberOrAdminActor(request);
 
   const parsed = parseUpdateEventInput(request.data);
   if (!parsed.ok) {
@@ -203,7 +212,18 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
       status: EventStatus;
       startsAt: FirebaseFirestore.Timestamp;
       endsAt: FirebaseFirestore.Timestamp | null;
+      createdByUserId?: string | null;
     };
+
+    // Ownership BEFORE the status/field guards: a non-creator member must be
+    // told "not yours" rather than leaking whether the event is editable.
+    const actorGuard = guardManageEventActor(
+      { uid: actor.uid, isAdmin: actor.isAdmin },
+      { createdByUserId: event.createdByUserId },
+    );
+    if (!actorGuard.ok) {
+      throw new HttpsError(actorGuard.code, actorGuard.message);
+    }
 
     const statusGuard = guardUpdatableStatus(event.status);
     if (!statusGuard.ok) {
@@ -250,20 +270,27 @@ export const update = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     if (Object.keys(privateDoc).length > 0) {
       tx.set(privateRef, privateDoc, { merge: true });
     }
-    tx.set(
-      db.collection('adminAuditEvents').doc(),
-      buildAdminAuditEvent(
-        {
-          adminId: actor.uid,
-          action: 'event.update',
-          targetType: 'event',
-          targetId: input.eventId,
-          reason: 'Event updated.',
-          details: { changedFields },
-        },
-        serverTimestamp,
-      ),
-    );
+    // adminAuditEvents stays a log of ADMIN actions only — a member editing
+    // their OWN event writes no audit record and never puts their uid into an
+    // `adminId` field (same rule events.create follows for member-created
+    // events; the edit is already attributed on the event doc via
+    // createdByUserId).
+    if (actor.isAdmin) {
+      tx.set(
+        db.collection('adminAuditEvents').doc(),
+        buildAdminAuditEvent(
+          {
+            adminId: actor.uid,
+            action: 'event.update',
+            targetType: 'event',
+            targetId: input.eventId,
+            reason: 'Event updated.',
+            details: { changedFields },
+          },
+          serverTimestamp,
+        ),
+      );
+    }
 
     return event.status;
   });

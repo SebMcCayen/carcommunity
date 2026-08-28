@@ -354,10 +354,51 @@ export function guardCompletable(status: EventStatus): GuardResult {
 }
 
 /**
+ * The shared creator-or-admin decision, pure and total: an admin/owner may act
+ * on any event; a non-admin may act only on THEIR OWN event, identified by
+ * `createdByUserId` on the teaser doc — written by events.create and never
+ * client-writable (rules deny all client writes to events/{eventId}), so it is
+ * a trustworthy owner record. An absent/blank creator matches NOBODY (a
+ * legacy/unattributed event never becomes actionable by every member), only an
+ * admin.
+ *
+ * Backs every creator-or-admin event action (update / cancel / complete). The
+ * guards below wrap it with an action-appropriate denial message.
+ */
+export function isEventCreatorOrAdmin(
+  actor: { uid: string; isAdmin: boolean },
+  event: { createdByUserId?: string | null },
+): boolean {
+  if (actor.isAdmin) {
+    return true;
+  }
+  return Boolean(event.createdByUserId) && event.createdByUserId === actor.uid;
+}
+
+/**
+ * Who may EDIT (events.update) or CANCEL (events.cancel) an event: an
+ * admin/owner, or the member who created it (isEventCreatorOrAdmin). Any other
+ * member is permission-denied. Same ownership rule and trust source as
+ * guardCompleteActor — an event's own organiser manages its lifecycle, admins
+ * moderate anyone's.
+ */
+export function guardManageEventActor(
+  actor: { uid: string; isAdmin: boolean },
+  event: { createdByUserId?: string | null },
+): GuardResult {
+  if (isEventCreatorOrAdmin(actor, event)) {
+    return { ok: true };
+  }
+  return {
+    ok: false,
+    code: 'permission-denied',
+    message: 'Only the event creator or an admin can modify this event.',
+  };
+}
+
+/**
  * Who may mark an event completed ("ended"): an admin/owner, or the member who
- * created it. A member may only end THEIR OWN event — `createdByUserId` on the
- * teaser doc is written by events.create and never client-writable (rules deny
- * all client writes to events/{eventId}), so it is a trustworthy owner record.
+ * created it (isEventCreatorOrAdmin). A member may only end THEIR OWN event.
  *
  * Deliberately NOT allowed: any other member, however active. Ending an event
  * closes its chat and its member-gated detail (both rules-gated on
@@ -368,10 +409,7 @@ export function guardCompleteActor(
   actor: { uid: string; isAdmin: boolean },
   event: { createdByUserId?: string | null },
 ): GuardResult {
-  if (actor.isAdmin) {
-    return { ok: true };
-  }
-  if (event.createdByUserId && event.createdByUserId === actor.uid) {
+  if (isEventCreatorOrAdmin(actor, event)) {
     return { ok: true };
   }
   return {

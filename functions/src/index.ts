@@ -36,6 +36,7 @@ import { listChatReports, resolveChatReport } from './events/moderateReports';
 import { listAttendees } from './events/listAttendees';
 import { onRsvpWrite } from './events/onRsvpWrite';
 import { onEventPublished } from './events/onEventPublished';
+import { onEventCancelled } from './events/onEventCancelled';
 import { checkIn } from './events/checkIn';
 import { setPublicSite, onPublicSiteWrite, syncHomepage } from './events/publicSite';
 import { deleteDrive } from './drives/deleteDrive';
@@ -356,6 +357,10 @@ export const events = {
   // OR admin publish), fans ONE `event_created` in-app notice (push follows) out
   // to every active member bar the creator, deep-linking to the event on tap.
   onEventPublished,
+  // Firestore trigger: on the CANCELLED transition of an event, fans ONE
+  // `event_cancelled` in-app notice (push follows) out to every going-RSVP
+  // attendee bar the creator, deep-linking to the event on tap. Edits are silent.
+  onEventCancelled,
   // Scheduled lifecycle: hourly sweep completing events past their end.
   autoClose,
   // Scheduled RSVP reminder: every 15 min, one `event_reminder` in-app

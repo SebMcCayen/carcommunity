@@ -17,8 +17,10 @@ import {
   guardCompleteActor,
   guardCoordinatePair,
   guardEventTimes,
+  guardManageEventActor,
   guardPublishable,
   guardUpdatableStatus,
+  isEventCreatorOrAdmin,
   initialEventStatus,
   isAutoCloseDue,
   isMemberEventRateLimited,
@@ -549,6 +551,77 @@ describe('events-core member-created events', () => {
       now.getTime() - MEMBER_EVENT_RATE_LIMIT_WINDOW_MS,
     );
     expect(MEMBER_EVENT_RATE_LIMIT_WINDOW_MS).toBe(24 * 60 * 60 * 1000);
+  });
+});
+
+describe('isEventCreatorOrAdmin', () => {
+  const creatorUid = 'creator-uid';
+
+  it('is true for the event creator', () => {
+    expect(
+      isEventCreatorOrAdmin({ uid: creatorUid, isAdmin: false }, { createdByUserId: creatorUid }),
+    ).toBe(true);
+  });
+
+  it('is true for an admin regardless of ownership', () => {
+    expect(
+      isEventCreatorOrAdmin({ uid: 'admin-uid', isAdmin: true }, { createdByUserId: creatorUid }),
+    ).toBe(true);
+    expect(isEventCreatorOrAdmin({ uid: 'admin-uid', isAdmin: true }, { createdByUserId: null })).toBe(
+      true,
+    );
+  });
+
+  it('is false for a non-admin who did not create the event', () => {
+    expect(
+      isEventCreatorOrAdmin({ uid: 'stranger', isAdmin: false }, { createdByUserId: creatorUid }),
+    ).toBe(false);
+  });
+
+  it('matches NOBODY (bar an admin) when the event has no recorded creator', () => {
+    // An absent/blank createdByUserId must match nobody rather than everybody —
+    // a legacy/unattributed event never becomes actionable by every member.
+    for (const createdByUserId of [null, undefined, '']) {
+      expect(isEventCreatorOrAdmin({ uid: 'someone', isAdmin: false }, { createdByUserId })).toBe(
+        false,
+      );
+    }
+  });
+});
+
+describe('guardManageEventActor (update / cancel)', () => {
+  const creatorUid = 'creator-uid';
+
+  it('lets the creator manage their own event', () => {
+    expect(
+      guardManageEventActor({ uid: creatorUid, isAdmin: false }, { createdByUserId: creatorUid }),
+    ).toEqual({ ok: true });
+  });
+
+  it('lets an admin manage anyone else’s event', () => {
+    expect(
+      guardManageEventActor({ uid: 'admin-uid', isAdmin: true }, { createdByUserId: creatorUid }),
+    ).toEqual({ ok: true });
+  });
+
+  it('refuses a member who did not create the event, with permission-denied', () => {
+    const result = guardManageEventActor(
+      { uid: 'stranger-uid', isAdmin: false },
+      { createdByUserId: creatorUid },
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.code).toBe('permission-denied');
+  });
+
+  it('refuses a non-admin when the event has no recorded creator', () => {
+    for (const createdByUserId of [null, undefined, '']) {
+      expect(
+        guardManageEventActor({ uid: 'someone', isAdmin: false }, { createdByUserId }).ok,
+      ).toBe(false);
+    }
+    expect(
+      guardManageEventActor({ uid: 'admin', isAdmin: true }, { createdByUserId: null }),
+    ).toEqual({ ok: true });
   });
 });
 
