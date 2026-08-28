@@ -19,6 +19,7 @@ The native iOS client (Swift / SwiftUI), in scope per
 | `project.yml` | XcodeGen spec — the source of truth for `KCC.xcodeproj`. After editing, run `xcodegen generate` from this directory and commit both. |
 | `KCC/` | App sources. `Shell/ShellNav.swift` is the pure navigation state machine ported from Android's `ShellNav.kt`; the two must stay in sync. |
 | `KCCTests/` | Unit tests (XCTest). `ShellNavTests.swift` mirrors Android's `ShellNavTest.kt`. |
+| `scripts/` | Contract codegen (siblings of `apps/android/scripts`): `generate-strings.mjs` → `KCC/Resources/Localizable.xcstrings`, `generate-tokens.mjs` → `KCC/Design/Tokens.swift`. Both outputs are committed and drift-checked by `validate-ios.yml`. |
 
 ## Firebase configuration (config-less builds)
 
@@ -48,12 +49,12 @@ xcodebuild -project KCC.xcodeproj -scheme KCC \
 
 ## Localization
 
-Swedish is the source language, English is required alongside it. Keys use the
-same semantic names as `contracts/localization` (e.g. `shell.tabMap`). The
-`Localizable.xcstrings` catalog is hand-seeded for now; contract codegen (a
-sibling of `apps/android/scripts/generate-strings.mjs`) replaces it in a
-follow-up, after which the catalog becomes generated-and-drift-checked. Do not
-hard-code user-facing text in views.
+Swedish is the source language, English is required alongside it. Keys are the
+same semantic names as `contracts/localization` (e.g. `shell.tabMap`).
+`Localizable.xcstrings` is **generated** — edit the contracts, then run
+`node apps/ios/scripts/generate-strings.mjs` from the repo root (CI fails on
+drift). Do not edit the catalog by hand, and do not hard-code user-facing text
+in views.
 
 ## Parity
 

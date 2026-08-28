@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		08ED336A66B293E73A27E257 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD356449B915D60437161C4F /* Tokens.swift */; };
 		697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */; };
 		6D653074C83AD139C001A226 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00786BDC5D7D80DF3558096D /* ShellView.swift */; };
 		71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */; };
@@ -34,6 +35,7 @@
 		8B4A1900424F0BA9CB9105FA /* KCC.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KCC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AB4411241111CAD26506FD14 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNav.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -71,6 +73,7 @@
 			children = (
 				690A7983868C88E10091C89A /* Info.plist */,
 				07E79EF0F21135E662C9816C /* App */,
+				6CA551C0241BD4456236BBBD /* Design */,
 				EF108D173C02293016E81C0D /* Firebase */,
 				3C9357116487CACE984AFAEC /* Resources */,
 				99C0A5D5154EEC666ADC0211 /* Shell */,
@@ -94,6 +97,14 @@
 				F609A800CAF387D91FC4893D /* KCCTests */,
 				4CDCB20F1F46BDF788444D9D /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		6CA551C0241BD4456236BBBD /* Design */ = {
+			isa = PBXGroup;
+			children = (
+				DD356449B915D60437161C4F /* Tokens.swift */,
+			);
+			path = Design;
 			sourceTree = "<group>";
 		};
 		99C0A5D5154EEC666ADC0211 /* Shell */ = {
@@ -242,6 +253,7 @@
 				7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */,
 				697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */,
 				6D653074C83AD139C001A226 /* ShellView.swift in Sources */,
+				08ED336A66B293E73A27E257 /* Tokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
