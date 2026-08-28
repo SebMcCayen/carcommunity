@@ -1331,6 +1331,7 @@
     "deployErrorNoLocation": "Your location is needed to place a trap. Try again.",
     "deployErrorUnavailable": "Couldn't activate the perk right now.",
     "deployErrorActivationLimit": "You already have too many active perks. Wait for one to run out.",
+    "deployErrorEventTooClose": "You can't place a trap this close to an event.",
     "deployErrorUnknown": "Something went wrong. Try again.",
     "instrButton": "Instructions",
     "instrTitle": "How Crown Hunt works",

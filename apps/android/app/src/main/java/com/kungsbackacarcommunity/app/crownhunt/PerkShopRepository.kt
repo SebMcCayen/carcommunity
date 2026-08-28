@@ -123,6 +123,15 @@ class PerkDeployActivationLimitException(cause: Throwable? = null) :
     Exception("deployPerk rejected: activation limit.", cause)
 
 /**
+ * Thrown when a trap deploy was refused because it was within 300 m of an
+ * active/imminent event (the anti-griefing rule) — server
+ * `details.reason == "event_too_close"`. Distinct from the collapsed
+ * [PerkDeployUnavailableException] family so the UI can name the reason.
+ */
+class PerkDeployEventTooCloseException(cause: Throwable? = null) :
+    Exception("deployPerk rejected: too close to an event.", cause)
+
+/**
  * Reads the Kronjakt shop's DISPLAY catalog + the member's owned inventory and
  * runs the buy. Firebase-free interface so the coordinator/UI are testable with
  * a fake.
@@ -484,6 +493,9 @@ internal const val PERK_REASON_HOLD_CAP = "hold_cap_reached"
 /** Mirrors `PERK_DEPLOY_REASON_ACTIVATION_LIMIT` in functions `crownHunt/perks-core.ts`. */
 internal const val PERK_DEPLOY_REASON_ACTIVATION_LIMIT = "activation_limit"
 
+/** Mirrors `PERK_DEPLOY_REASON_EVENT_TOO_CLOSE` in functions `crownHunt/perks-core.ts`. */
+internal const val PERK_DEPLOY_REASON_EVENT_TOO_CLOSE = "event_too_close"
+
 /**
  * Maps a callable failure to the two typed rejection families. The overdraft
  * guard and the shop-unavailable guards both surface as `FAILED_PRECONDITION`,
@@ -533,8 +545,9 @@ internal fun perkPurchaseFailedPreconditionException(
  *    valid current position; the only invalid-argument the deploy path throws
  *    for a well-formed request from this client).
  *  - `failed-precondition` with `details.reason == "activation_limit"` →
- *    [PerkDeployActivationLimitException] (too many effects live at once — the
- *    one deploy rejection that carries a structured reason).
+ *    [PerkDeployActivationLimitException] (too many effects live at once).
+ *  - `failed-precondition` with `details.reason == "event_too_close"` →
+ *    [PerkDeployEventTooCloseException] (a trap within 300 m of an active event).
  *  - any other `failed-precondition` (no reason) → [PerkDeployUnavailableException]
  *    (flag off, unknown perk, no inventory, trap cap / spacing / daily limit).
  * Anything else (network, internal) propagates unchanged and surfaces as UNKNOWN.
@@ -544,10 +557,10 @@ private fun FirebaseFunctionsException.toPerkDeployException(): Throwable =
         FirebaseFunctionsException.Code.INVALID_ARGUMENT ->
             PerkDeployMissingLocationException(this)
         FirebaseFunctionsException.Code.FAILED_PRECONDITION ->
-            if (perkPurchaseReasonOf(details) == PERK_DEPLOY_REASON_ACTIVATION_LIMIT) {
-                PerkDeployActivationLimitException(this)
-            } else {
-                PerkDeployUnavailableException(this)
+            when (perkPurchaseReasonOf(details)) {
+                PERK_DEPLOY_REASON_ACTIVATION_LIMIT -> PerkDeployActivationLimitException(this)
+                PERK_DEPLOY_REASON_EVENT_TOO_CLOSE -> PerkDeployEventTooCloseException(this)
+                else -> PerkDeployUnavailableException(this)
             }
         else -> this
     }

@@ -34,6 +34,14 @@ enum class PerkDeployFailureReason {
      */
     ACTIVATION_LIMIT,
 
+    /**
+     * A trap was placed within 300 m of an active/imminent event — the
+     * server-side anti-griefing rule (`crownHunt/deployPerk.ts`,
+     * `details.reason == "event_too_close"`). Its own message so the user is
+     * told to move away from the meet.
+     */
+    EVENT_TOO_CLOSE,
+
     /** Anything else (network, unexpected server error). */
     UNKNOWN,
 }
@@ -162,6 +170,9 @@ class PerkDeployCoordinator(
             } catch (activationLimit: PerkDeployActivationLimitException) {
                 state.value =
                     PerkDeployStatus.Failed(perkId, PerkDeployFailureReason.ACTIVATION_LIMIT)
+            } catch (eventTooClose: PerkDeployEventTooCloseException) {
+                state.value =
+                    PerkDeployStatus.Failed(perkId, PerkDeployFailureReason.EVENT_TOO_CLOSE)
             } catch (unavailable: PerkDeployUnavailableException) {
                 state.value = PerkDeployStatus.Failed(perkId, PerkDeployFailureReason.UNAVAILABLE)
             } catch (missingLocation: PerkDeployMissingLocationException) {

@@ -1238,6 +1238,7 @@
     <string name="crownHunt_deployErrorNoLocation">Your location is needed to place a trap. Try again.</string>
     <string name="crownHunt_deployErrorUnavailable">Couldn\'t activate the perk right now.</string>
     <string name="crownHunt_deployErrorActivationLimit">You already have too many active perks. Wait for one to run out.</string>
+    <string name="crownHunt_deployErrorEventTooClose">You can\'t place a trap this close to an event.</string>
     <string name="crownHunt_deployErrorUnknown">Something went wrong. Try again.</string>
     <string name="crownHunt_instrButton">Instructions</string>
     <string name="crownHunt_instrTitle">How Crown Hunt works</string>

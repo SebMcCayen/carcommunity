@@ -128,6 +128,35 @@ async function setInventory(uid: string, inv: Record<string, number>): Promise<v
   await adminDb.collection('perkInventory').doc(uid).set(inv, { merge: true });
 }
 
+/**
+ * Seeds an event with its precise coordinates on the member-gated
+ * `details/private` subdoc (the branch layout deployTrap resolves through), and
+ * returns its id. `startsAtMs`/`endsAtMs` default to a currently-active window.
+ */
+async function seedEvent(args: {
+  latitude: number;
+  longitude: number;
+  status?: string;
+  startsAtMs?: number;
+  endsAtMs?: number | null;
+}): Promise<string> {
+  const now = Date.now();
+  const startsAtMs = args.startsAtMs ?? now;
+  const endsAtMs = args.endsAtMs === undefined ? now + 2 * 60 * 60 * 1000 : args.endsAtMs;
+  const ref = adminDb.collection('events').doc();
+  await ref.set({
+    status: args.status ?? 'published',
+    startsAt: Timestamp.fromMillis(startsAtMs),
+    ...(endsAtMs === null ? {} : { endsAt: Timestamp.fromMillis(endsAtMs) }),
+    createdAt: Timestamp.fromMillis(now),
+  });
+  await ref.collection('details').doc('private').set({
+    latitude: args.latitude,
+    longitude: args.longitude,
+  });
+  return ref.id;
+}
+
 async function setBalance(uid: string, balance: number): Promise<void> {
   await adminDb.collection('pointsLedger').doc(uid).set({ balance }, { merge: true });
 }
@@ -456,6 +485,75 @@ describe('crownHunt.deployPerk — trap', () => {
       return exp instanceof Timestamp && exp.toMillis() > Date.now();
     }).length;
     expect(liveCount).toBe(1);
+  });
+});
+
+describe('crownHunt.deployPerk — trap event exclusion (anti-griefing)', () => {
+  it('refuses a trap within 300 m of an active event, with the event_too_close reason', async () => {
+    const member = await createProvisionedUser('pvp-trap-event-near');
+    await setInventory(member.uid, { spike_strip: 2 });
+    const spot = uniqueSpot();
+    await seedEvent({ latitude: spot.latitude, longitude: spot.longitude }); // active now
+    await signInAs(member);
+
+    // Same coordinate as the event → inside the exclusion radius → rejected.
+    const { code, reason } = await callableCodeAndReason(
+      call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() }),
+    );
+    expect(code).toBe('functions/failed-precondition');
+    expect(reason).toBe('event_too_close');
+  });
+
+  it('allows a trap far from the active event', async () => {
+    const member = await createProvisionedUser('pvp-trap-event-far');
+    await setInventory(member.uid, { spike_strip: 1 });
+    const eventSpot = uniqueSpot();
+    await seedEvent({ latitude: eventSpot.latitude, longitude: eventSpot.longitude });
+    await signInAs(member);
+
+    // A DIFFERENT unique spot is >50 km away — well outside the 300 m radius.
+    const trapSpot = uniqueSpot();
+    const res = (
+      await call('crownHunt-deployPerk', {
+        perkId: 'spike_strip',
+        ...trapSpot,
+        idempotencyKey: key(),
+      })
+    ).data as DeployResponse;
+    expect(res.kind).toBe('trap');
+    expect(res.alreadyDeployed).toBe(false);
+  });
+
+  it('allows a trap next to a DRAFT event (only published/completed count)', async () => {
+    const member = await createProvisionedUser('pvp-trap-event-draft');
+    await setInventory(member.uid, { spike_strip: 1 });
+    const spot = uniqueSpot();
+    await seedEvent({ latitude: spot.latitude, longitude: spot.longitude, status: 'draft' });
+    await signInAs(member);
+
+    const res = (
+      await call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() })
+    ).data as DeployResponse;
+    expect(res.kind).toBe('trap');
+  });
+
+  it('allows a trap next to a long-past event (outside the +3 h window)', async () => {
+    const member = await createProvisionedUser('pvp-trap-event-past');
+    await setInventory(member.uid, { spike_strip: 1 });
+    const spot = uniqueSpot();
+    const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
+    await seedEvent({
+      latitude: spot.latitude,
+      longitude: spot.longitude,
+      startsAtMs: dayAgo,
+      endsAtMs: dayAgo + 2 * 60 * 60 * 1000,
+    });
+    await signInAs(member);
+
+    const res = (
+      await call('crownHunt-deployPerk', { perkId: 'spike_strip', ...spot, idempotencyKey: key() })
+    ).data as DeployResponse;
+    expect(res.kind).toBe('trap');
   });
 });
 

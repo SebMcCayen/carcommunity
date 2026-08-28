@@ -1331,6 +1331,7 @@
     "deployErrorNoLocation": "Din position behövs för att placera en fälla. Försök igen.",
     "deployErrorUnavailable": "Det gick inte att aktivera perken just nu.",
     "deployErrorActivationLimit": "Du har redan för många aktiva perks. Vänta tills en går ut.",
+    "deployErrorEventTooClose": "Du kan inte placera en fälla så nära ett event.",
     "deployErrorUnknown": "Något gick fel. Försök igen.",
     "instrButton": "Instruktioner",
     "instrTitle": "Så funkar Kronjakten",

@@ -43,9 +43,11 @@ import { isValidCoordinate, haversineDistanceMeters } from './crown-hunt-geo';
 import { crownCellKey, utcDayKey } from './crown-spawn-core';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
+  EVENT_TRAP_BLOCK_BEFORE_START_MS,
   MAX_ACTIVE_TRAPS_PER_USER,
   MAX_TRAP_DEPLOYS_PER_DAY,
   PERK_DEPLOY_REASON_ACTIVATION_LIMIT,
+  PERK_DEPLOY_REASON_EVENT_TOO_CLOSE,
   TRAP_DURATION_HOURS,
   TRAP_RADIUS_METERS,
   TRAP_SELF_SPACING_METERS,
@@ -64,6 +66,7 @@ import {
   type PerkDefinition,
   type PerkKind,
 } from './perks-core';
+import { isTrapBlockedByEvents, type TrapExclusionEvent } from './event-exclusion-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -239,6 +242,105 @@ function evaluateTrapCaps(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Event exclusion (anti-griefing): a trap may not be dropped on a car meet.
+// ---------------------------------------------------------------------------
+
+/**
+ * How far into the PAST the candidate query reaches for events. Generous (48 h)
+ * so a long or just-ended event is still fetched as a candidate; the exact
+ * blocking window (see {@link isTrapBlockedByEvents}) is applied afterwards by
+ * the pure filter, so over-fetching here only costs a few reads, never a wrong
+ * decision.
+ */
+const CANDIDATE_PAST_MS = 48 * 60 * 60 * 1000;
+
+/** Max candidate events resolved per deploy — bounds the per-candidate reads. */
+const MAX_CANDIDATE_EVENTS = 50;
+
+const toNumber = (value: unknown): number | null =>
+  typeof value === 'number' && Number.isFinite(value) ? value : null;
+
+const toMillis = (value: unknown): number | null =>
+  value instanceof Timestamp ? value.toMillis() : null;
+
+/**
+ * Throws a reason-coded `failed-precondition` when a trap at (latitude,
+ * longitude) placed `now` would sit within EVENT_TRAP_EXCLUSION_RADIUS_METERS
+ * of an active/imminent event (the anti-griefing rule; window + distance maths
+ * in event-exclusion-core.ts).
+ *
+ * PRE-TRANSACTION by design: events change slowly, so this runs OUTSIDE the
+ * deploy transaction (like the self-spacing pre-check) to keep the transaction
+ * small. The candidate set is bounded by a status + `startsAt`-window query;
+ * precise coordinates then come from each candidate's member-gated
+ * `details/private` subdoc (mirroring events/checkIn.ts), so this costs one
+ * extra read per candidate — hence the tight time window on the query.
+ */
+async function assertTrapNotNearEvent(
+  latitude: number,
+  longitude: number,
+  now: Date,
+): Promise<void> {
+  const nowMs = now.getTime();
+  // Candidate events: published or completed, starting within a window that
+  // brackets both a just-ended event (up to CANDIDATE_PAST_MS ago) and one that
+  // has not yet started (up to the pre-block horizon). Needs the existing
+  // composite index events(status ASC, startsAt ASC).
+  const candidatesSnap = await db
+    .collection('events')
+    .where('status', 'in', ['published', 'completed'])
+    .where('startsAt', '>=', Timestamp.fromMillis(nowMs - CANDIDATE_PAST_MS))
+    .where('startsAt', '<=', Timestamp.fromMillis(nowMs + EVENT_TRAP_BLOCK_BEFORE_START_MS))
+    .limit(MAX_CANDIDATE_EVENTS)
+    .get();
+
+  if (candidatesSnap.empty) {
+    return;
+  }
+
+  // Resolve each candidate's PRECISE coordinates. On this branch latitude/
+  // longitude live on the member-gated `details/private` subdoc; a concurrent
+  // change mirrors them onto the teaser. Reading the teaser first and falling
+  // back to the detail doc matches events/checkIn.ts and is correct under
+  // either layout (the Admin SDK bypasses rules). Candidates with no valid
+  // coords are skipped, not blocking.
+  const resolved = await Promise.all(
+    candidatesSnap.docs.map(async (doc): Promise<TrapExclusionEvent | null> => {
+      const event = doc.data();
+      const startsAtMs = toMillis(event.startsAt);
+      if (startsAtMs === null) {
+        return null;
+      }
+      let eventLat = toNumber(event.latitude);
+      let eventLng = toNumber(event.longitude);
+      if (eventLat === null || eventLng === null) {
+        const detail = (await doc.ref.collection('details').doc('private').get()).data();
+        eventLat = eventLat ?? toNumber(detail?.latitude);
+        eventLng = eventLng ?? toNumber(detail?.longitude);
+      }
+      if (eventLat === null || eventLng === null || !isValidCoordinate(eventLat, eventLng)) {
+        return null;
+      }
+      return {
+        startsAtMs,
+        endsAtMs: toMillis(event.endsAt),
+        latitude: eventLat,
+        longitude: eventLng,
+      };
+    }),
+  );
+
+  const candidates = resolved.filter((e): e is TrapExclusionEvent => e !== null);
+  if (isTrapBlockedByEvents(candidates, latitude, longitude, nowMs)) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Du kan inte placera en fälla så nära ett event.',
+      { reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE },
+    );
+  }
+}
+
 async function deployTrap(args: {
   uid: string;
   perk: PerkDefinition;
@@ -317,6 +419,11 @@ async function deployTrap(args: {
   if (capRejection) {
     throw capRejection;
   }
+
+  // Anti-griefing: a trap may not be placed on top of an active/imminent event.
+  // Pre-transaction (events change slowly); throws a reason-coded
+  // failed-precondition on violation.
+  await assertTrapNotNearEvent(latitude, longitude, now);
 
   const shieldRef = db.collection('perkShield').doc(uid);
   const boostRef = db.collection('perkBoost').doc(uid);

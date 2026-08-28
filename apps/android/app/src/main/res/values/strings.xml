@@ -1238,6 +1238,7 @@
     <string name="crownHunt_deployErrorNoLocation">Din position behövs för att placera en fälla. Försök igen.</string>
     <string name="crownHunt_deployErrorUnavailable">Det gick inte att aktivera perken just nu.</string>
     <string name="crownHunt_deployErrorActivationLimit">Du har redan för många aktiva perks. Vänta tills en går ut.</string>
+    <string name="crownHunt_deployErrorEventTooClose">Du kan inte placera en fälla så nära ett event.</string>
     <string name="crownHunt_deployErrorUnknown">Något gick fel. Försök igen.</string>
     <string name="crownHunt_instrButton">Instruktioner</string>
     <string name="crownHunt_instrTitle">Så funkar Kronjakten</string>
