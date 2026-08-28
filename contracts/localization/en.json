@@ -791,6 +791,10 @@
       "caption": "Follow me!"
     }
   },
+  "convoyFollowTrail": {
+    "activeLabel": "Following",
+    "activeContentDescription": "Follow-me trail is on. Tap to turn your trail off."
+  },
   "wave": {
     "caption": "%1$s waved",
     "captionAnonymous": "Someone waved",

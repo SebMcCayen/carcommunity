@@ -109,6 +109,7 @@ import {
   type SkippedInvitee,
 } from './convoy-core';
 import { MAX_INSTANCES_MEMBER } from '../shared/instanceLimits';
+import { FOLLOW_ME_DOC_ID } from './followMe-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -309,6 +310,55 @@ async function notifyConvoyMembers(
       }).catch(() => undefined),
     ),
   );
+}
+
+/**
+ * Best-effort teardown of the shared "Follow me" leader trail
+ * (`convoys/{convoyId}/followMe/current`) when a convoy event should end it.
+ *
+ * Called after the mutation transaction has committed, so — like the auto-session
+ * and notification fan-outs — it never fails the leave/end that triggered it. Two
+ * modes:
+ *  - `force` (the convoy ENDED): delete the trail outright, whoever leads it.
+ *  - departing-member: delete ONLY when the departing member IS the current trail
+ *    leader. A different member leaving must leave the trail alone.
+ *
+ * This is the SERVER half of the cleanup. The member-side render gate
+ * (shouldDrawFollowMeTrail) is the other half: a trail whose leader has left
+ * memberUids or gone stale stops drawing even if this best-effort delete failed,
+ * so a vanished leader never leaves a ghost line — this delete just reclaims the
+ * document and makes the takeover-slot free immediately.
+ */
+async function clearFollowMeTrail(
+  convoyId: string,
+  opts: { force: true } | { force?: false; departingUid: string },
+): Promise<void> {
+  const ref = db
+    .collection('convoys')
+    .doc(convoyId)
+    .collection('followMe')
+    .doc(FOLLOW_ME_DOC_ID);
+  try {
+    if (opts.force) {
+      await ref.delete();
+      return;
+    }
+    // Atomic read-then-delete: a non-force clear (a member leaving) must only
+    // remove the trail if it is STILL led by the departing member at commit time.
+    // A plain get()-then-delete() races a concurrent takeover — another member
+    // could become leader between the snapshot and the delete, and we'd wipe the
+    // NEW leader's fresh trail. The transaction re-checks leaderUid at commit, so
+    // a takeover in the gap leaves the new leader's trail intact.
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data()?.leaderUid === opts.departingUid) {
+        tx.delete(ref);
+      }
+    });
+  } catch (error) {
+    logger.warn('convoy follow-me trail cleanup failed', { convoyId, error: String(error) });
+    await reportServerError({ source: 'convoy.followMeCleanup', error, context: { convoyId } });
+  }
 }
 
 /** Display name for notification copy when the roster has none. */
@@ -818,6 +868,9 @@ export const end = onCall(CALLABLE_OPTS, async (request): Promise<{ convoy: Conv
       'Konvojen har avslutats',
       `${enderName ?? UNKNOWN_MEMBER_NAME} har avslutat konvojen.`,
     ),
+    // The convoy is over — tear down any active follow-me leader trail so a
+    // stale line does not survive the drive it belonged to.
+    clearFollowMeTrail(parsed.input.convoyId, { force: true }),
   ]);
 
   return { convoy: toConvoySummary(parsed.input.convoyId, endedData, actor.uid, toIso) };
@@ -1055,6 +1108,17 @@ export const leave = onCall(CALLABLE_OPTS, async (request): Promise<LeaveConvoyR
       ? [actor.uid, ...settled.remainingAcceptedUids]
       : [actor.uid];
   await forEachAutoSession(stopFor, (uid) => stopConvoyAutoSession(uid, convoyId));
+
+  // Follow-me trail cleanup. If the convoy ENDED, tear the trail down outright;
+  // otherwise clear it only when the LEAVER was the trail leader (a different
+  // member leaving must not disturb an active leader's line). Best-effort — the
+  // member-side freshness/membership gate is the backstop if this delete fails.
+  await clearFollowMeTrail(
+    convoyId,
+    settled.outcome === 'left_and_ended'
+      ? { force: true }
+      : { departingUid: actor.uid },
+  );
 
   // Tell the people still in it (or, when it ended, the people it ended for).
   // Nothing is written to the leaver: they just performed the action.

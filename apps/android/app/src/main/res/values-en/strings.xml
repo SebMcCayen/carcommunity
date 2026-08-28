@@ -727,6 +727,8 @@
     <string name="convoyReaction_hello_caption">Hi!</string>
     <string name="convoyReaction_followMe_label">Follow me</string>
     <string name="convoyReaction_followMe_caption">Follow me!</string>
+    <string name="convoyFollowTrail_activeLabel">Following</string>
+    <string name="convoyFollowTrail_activeContentDescription">Follow-me trail is on. Tap to turn your trail off.</string>
     <string name="wave_caption">%1$s waved</string>
     <string name="wave_captionAnonymous">Someone waved</string>
     <string name="wave_captionSelf">You waved</string>

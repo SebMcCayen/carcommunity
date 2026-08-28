@@ -791,6 +791,10 @@
       "caption": "Följ mig!"
     }
   },
+  "convoyFollowTrail": {
+    "activeLabel": "Följer",
+    "activeContentDescription": "Följ mig-spår är på. Tryck för att stänga av ditt spår."
+  },
   "wave": {
     "caption": "%1$s vinkade",
     "captionAnonymous": "Någon vinkade",

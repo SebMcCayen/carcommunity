@@ -66,6 +66,27 @@ service cloud.firestore {
       return isAuthenticated() && isNotSuspended();
     }
 
+    // True when [uid] is an ACCEPTED member of convoy [convoyId]. Fetches the
+    // convoy doc ONCE (via a `let`) and checks both memberUids and the accepted
+    // inviteStatus off the same snapshot — a single get() rather than two, which
+    // matters on the frequently-read/updated follow-me trail subdoc.
+    //
+    // Known cost tradeoff (accepted for now): this get() runs on every followMe
+    // read-rule eval, so a busy convoy (leader writing ~every 4s, N members each
+    // listening) pays ~1 extra convoy read per delivered update on top of the
+    // followMe read itself. Negligible at this app's convoy scale. If Firestore
+    // spend ever shows it, denormalise an immutable acceptedMemberUids snapshot
+    // onto followMe/current (written ONLY by the callables that already mutate
+    // convoy membership) and check membership off that — but only then: the
+    // snapshot must be kept in lockstep with membership or a departed member
+    // keeps read access / a new one is locked out, a consistency risk not worth
+    // taking speculatively.
+    function isAcceptedConvoyMember(convoyId, uid) {
+      let convoy = get(/databases/$(database)/documents/convoys/$(convoyId)).data;
+      return uid in convoy.memberUids
+        && convoy.members[uid].inviteStatus == 'accepted';
+    }
+
     // ---- users/{uid} owner-write validation (Phase 9a) ----------------------
     // Owner writes are whitelist-based: only the keys listed in
     // validUserProfileCreate/Update may be set or changed. All protected
@@ -841,6 +862,65 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/convoys/$(convoyId))
           .data.members[request.auth.uid].inviteStatus == 'accepted';
       // No client writes: convoy.sendReaction callable only.
+    }
+
+    // -------------------------------------------------------------------------
+    // convoys/{convoyId}/followMe/current – the SHARED "Follow me" LEADER TRAIL
+    // (convoy.setFollowMe + direct leader trail writes). ONE doc per convoy
+    // ('current') holding { leaderUid, polyline (base64 CCRB, ~15 km rolling),
+    // updatedAt }: a line of where the current leader has recently driven, drawn
+    // on every member's map so a separated member can rejoin.
+    //
+    // READ: any ACCEPTED member of the parent convoy — the identical gate as the
+    // convoy chat/reactions subcollections (a get() of the convoy doc must show
+    // the caller in memberUids AND accepted). A still-invited/declined member or
+    // an outsider cannot read it, so the trail never leaks.
+    //
+    // WRITE is the SECURITY-SENSITIVE part and is deliberately narrow:
+    //  - CREATE and DELETE are callable-only (convoy.setFollowMe under the Admin
+    //    SDK, which bypasses these rules): a client can never mint a trail naming
+    //    itself leader, nor delete one. Takeover + toggle-off go through the
+    //    transaction, which is what enforces "exactly one leader".
+    //  - UPDATE (the ~3-5s trail-point writes) is allowed ONLY to the member who
+    //    is ALREADY the leaderUid on the stored doc AND is still an accepted
+    //    member of the convoy, and ONLY if the update does NOT change leaderUid
+    //    and touches just polyline + updatedAt. So a non-leader (or a member who
+    //    has left) can never write the trail, and the leader can never promote
+    //    themselves or anyone else by writing — leadership is set exclusively by
+    //    the callable. The polyline is length-capped to keep an abusive client
+    //    from bloating the doc.
+    // -------------------------------------------------------------------------
+    match /convoys/{convoyId}/followMe/{followMeId} {
+      allow read: if isActiveMember()
+        // isActiveMember() (not just isAuthenticated) so a SUSPENDED member — who
+        // may still be listed in memberUids — loses trail access immediately, the
+        // same suspension override the convoy doc read enforces.
+        // Single fixed doc by design — scope the rule to it so adding any other
+        // doc under followMe/ later can never accidentally inherit this exposure.
+        && followMeId == 'current'
+        && isAcceptedConvoyMember(convoyId, request.auth.uid);
+
+      // Trail-point updates by the CURRENT leader only. resource.data.leaderUid is
+      // the value ALREADY stored (set by the callable), so only that member passes
+      // — and the request may not change it. The convoy get() re-checks live
+      // membership so a leader who has since left cannot keep writing.
+      allow update: if isActiveMember()
+        // isActiveMember() so a suspended leader is blocked from further trail
+        // writes the moment they are suspended (parity with the read rule).
+        && followMeId == 'current'
+        && resource.data.leaderUid == request.auth.uid
+        && request.resource.data.leaderUid == resource.data.leaderUid
+        && request.resource.data.keys().hasOnly(['leaderUid', 'polyline', 'updatedAt'])
+        && request.resource.data.polyline is string
+        && request.resource.data.polyline.size() <= 200000
+        // updatedAt MUST be the server clock — otherwise the leader could stamp a
+        // future time and keep the freshness gate green (the trail "live") forever.
+        && request.resource.data.updatedAt == request.time
+        // Re-checks live membership (single get) so a leader who has since left
+        // cannot keep writing.
+        && isAcceptedConvoyMember(convoyId, request.auth.uid);
+
+      // create + delete: convoy.setFollowMe callable only (takeover/toggle-off).
     }
 
     // (events rules live in the Phase 9b block above — teaser/detail split.)

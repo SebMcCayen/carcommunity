@@ -727,6 +727,8 @@
     <string name="convoyReaction_hello_caption">Hej!</string>
     <string name="convoyReaction_followMe_label">Följ mig</string>
     <string name="convoyReaction_followMe_caption">Följ mig!</string>
+    <string name="convoyFollowTrail_activeLabel">Följer</string>
+    <string name="convoyFollowTrail_activeContentDescription">Följ mig-spår är på. Tryck för att stänga av ditt spår.</string>
     <string name="wave_caption">%1$s vinkade</string>
     <string name="wave_captionAnonymous">Någon vinkade</string>
     <string name="wave_captionSelf">Du vinkade</string>
