@@ -60,10 +60,14 @@ targets:
       - name: Embed GoogleService-Info.plist when present
         script: |
           SRC="${SRCROOT}/KCC/GoogleService-Info.plist"
+          DST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
           if [ -f "$SRC" ]; then
-            cp "$SRC" "${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+            cp "$SRC" "$DST"
             echo "GoogleService-Info.plist embedded"
           else
+            # Also remove any copy left in the product by an earlier build, so
+            # deleting the local plist really returns to a config-less build.
+            rm -f "$DST"
             echo "GoogleService-Info.plist absent — building without Firebase config"
           fi
         basedOnDependencyAnalysis: false

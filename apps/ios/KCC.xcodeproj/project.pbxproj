@@ -229,7 +229,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "SRC=\"${SRCROOT}/KCC/GoogleService-Info.plist\"\nif [ -f \"$SRC\" ]; then\n  cp \"$SRC\" \"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\n  echo \"GoogleService-Info.plist embedded\"\nelse\n  echo \"GoogleService-Info.plist absent — building without Firebase config\"\nfi\n";
+			shellScript = "SRC=\"${SRCROOT}/KCC/GoogleService-Info.plist\"\nDST=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist\"\nif [ -f \"$SRC\" ]; then\n  cp \"$SRC\" \"$DST\"\n  echo \"GoogleService-Info.plist embedded\"\nelse\n  # Also remove any copy left in the product by an earlier build, so\n  # deleting the local plist really returns to a config-less build.\n  rm -f \"$DST\"\n  echo \"GoogleService-Info.plist absent — building without Firebase config\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
