@@ -311,11 +311,13 @@ async function assertTrapNotNearEvent(
   }
 
   // The cap is a safety bound on per-deploy reads, set far above any realistic
-  // count of concurrent car meets. If it is ever actually hit, some in-window
-  // events went unchecked — surface it (no PII: a count only) rather than
-  // silently under-enforcing, so the cap can be raised.
-  if (candidatesSnap.size >= MAX_CANDIDATE_EVENTS) {
-    logger.warn('crownHunt.deployPerk event-exclusion candidate cap hit', {
+  // count of concurrent car meets. A full page (size === cap; `.limit` means it
+  // can never exceed) means the query MAY have been truncated — there could be
+  // further in-window events that went unchecked (or there may be exactly this
+  // many and nothing beyond). Either way it is worth surfacing (no PII: a count
+  // only) as a signal to raise the cap, rather than risk silently under-enforcing.
+  if (candidatesSnap.size === MAX_CANDIDATE_EVENTS) {
+    logger.warn('crownHunt.deployPerk event-exclusion candidate cap reached (results may be truncated)', {
       cap: MAX_CANDIDATE_EVENTS,
     });
   }
