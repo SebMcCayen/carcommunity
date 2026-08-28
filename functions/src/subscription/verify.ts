@@ -103,7 +103,7 @@ export const verify = onCall(
 
 export interface GrantEntitlementResponse {
   targetUid: string;
-  entitlement: string;
+  entitlement: SubscriptionEntitlement;
   tier: SubscriptionTier;
 }
 
