@@ -537,10 +537,11 @@ internal fun perkPurchaseFailedPreconditionException(
 
 /**
  * Maps a `deployPerk` callable failure to its typed rejection family. The deploy
- * callable reason-codes EXACTLY ONE rejection — the concurrent-activation limit —
- * via a structured `details.reason`; every OTHER `failed-precondition` carries no
- * reason and is distinguished only by its HttpsError CODE (never by substring-
- * matching a localizable message):
+ * callable reason-codes a fixed SET of rejections via a structured
+ * `details.reason` — currently the concurrent-activation limit (`activation_limit`)
+ * and the event-proximity block (`event_too_close`); every OTHER
+ * `failed-precondition` carries no reason and is distinguished only by its
+ * HttpsError CODE (never by substring-matching a localizable message):
  *  - `invalid-argument` → [PerkDeployMissingLocationException] (a trap with no
  *    valid current position; the only invalid-argument the deploy path throws
  *    for a well-formed request from this client).

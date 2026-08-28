@@ -43,6 +43,7 @@ import { isValidCoordinate, haversineDistanceMeters } from './crown-hunt-geo';
 import { crownCellKey, utcDayKey } from './crown-spawn-core';
 import {
   CROWN_HUNT_PERKS_FLAG_KEY,
+  EVENT_TRAP_BLOCK_AFTER_END_MS,
   EVENT_TRAP_BLOCK_BEFORE_START_MS,
   MAX_ACTIVE_TRAPS_PER_USER,
   MAX_TRAP_DEPLOYS_PER_DAY,
@@ -67,6 +68,7 @@ import {
   type PerkKind,
 } from './perks-core';
 import { isTrapBlockedByEvents, type TrapExclusionEvent } from './event-exclusion-core';
+import { MAX_EVENT_DURATION_MS } from '../events/events-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -247,13 +249,17 @@ function evaluateTrapCaps(
 // ---------------------------------------------------------------------------
 
 /**
- * How far into the PAST the candidate query reaches for events. Generous (48 h)
- * so a long or just-ended event is still fetched as a candidate; the exact
- * blocking window (see {@link isTrapBlockedByEvents}) is applied afterwards by
- * the pure filter, so over-fetching here only costs a few reads, never a wrong
- * decision.
+ * How far into the PAST the candidate query reaches (on `startsAt`) for events.
+ * Must cover the LONGEST an event can still be blocking: an event may run up to
+ * {@link MAX_EVENT_DURATION_MS} and blocks until {@link EVENT_TRAP_BLOCK_AFTER_END_MS}
+ * after it ends, so an event that started `MAX_EVENT_DURATION_MS + EVENT_TRAP_BLOCK_AFTER_END_MS`
+ * ago can STILL be inside its blocking window right now. Reaching back exactly
+ * that far guarantees the candidate query never misses a currently-blocking
+ * event; the exact window (see {@link isTrapBlockedByEvents}) is applied
+ * afterwards by the pure filter, so over-fetching only costs a few reads, never
+ * a wrong (illegally-allowed) decision.
  */
-const CANDIDATE_PAST_MS = 48 * 60 * 60 * 1000;
+const CANDIDATE_PAST_MS = MAX_EVENT_DURATION_MS + EVENT_TRAP_BLOCK_AFTER_END_MS;
 
 /** Max candidate events resolved per deploy — bounds the per-candidate reads. */
 const MAX_CANDIDATE_EVENTS = 50;
@@ -292,11 +298,26 @@ async function assertTrapNotNearEvent(
     .where('status', 'in', ['published', 'completed'])
     .where('startsAt', '>=', Timestamp.fromMillis(nowMs - CANDIDATE_PAST_MS))
     .where('startsAt', '<=', Timestamp.fromMillis(nowMs + EVENT_TRAP_BLOCK_BEFORE_START_MS))
+    // Explicit deterministic order so the `.limit` cap never drops an arbitrary
+    // (document-id ordered) subset — otherwise, with more than MAX_CANDIDATE_EVENTS
+    // matches, a relevant event could be omitted and a trap wrongly allowed. The
+    // existing composite index events(status ASC, startsAt ASC) covers this.
+    .orderBy('startsAt', 'asc')
     .limit(MAX_CANDIDATE_EVENTS)
     .get();
 
   if (candidatesSnap.empty) {
     return;
+  }
+
+  // The cap is a safety bound on per-deploy reads, set far above any realistic
+  // count of concurrent car meets. If it is ever actually hit, some in-window
+  // events went unchecked — surface it (no PII: a count only) rather than
+  // silently under-enforcing, so the cap can be raised.
+  if (candidatesSnap.size >= MAX_CANDIDATE_EVENTS) {
+    logger.warn('crownHunt.deployPerk event-exclusion candidate cap hit', {
+      cap: MAX_CANDIDATE_EVENTS,
+    });
   }
 
   // Resolve each candidate's PRECISE coordinates. On this branch latitude/
