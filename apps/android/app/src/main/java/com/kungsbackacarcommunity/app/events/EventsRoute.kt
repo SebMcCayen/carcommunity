@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -46,6 +47,20 @@ private sealed interface EventLoad {
     data object Loading : EventLoad
 
     data class Loaded(val event: EventSummary?) : EventLoad
+}
+
+/**
+ * Loading vs SETTLED (null = no detail doc / denied) for a single event's
+ * member-gated detail. The distinction matters for the creator edit form: it
+ * pre-fills description + precise address from the detail, so it must not open
+ * (and thus must never submit a partial update built from blank, un-loaded
+ * fields) until the detail read has actually settled — `null` alone can't tell
+ * "not loaded yet" from "no detail". Mirrors [EventLoad].
+ */
+private sealed interface DetailLoad {
+    data object Loading : DetailLoad
+
+    data class Loaded(val detail: EventDetail?) : DetailLoad
 }
 
 /**
@@ -326,11 +341,24 @@ fun EventsRoute(
         return
     }
 
-    val detail by
+    val detailLoad by
         remember(selected, passesMemberGate) {
-            if (passesMemberGate) repository.observeEventDetail(selected) else flowOf(null)
+            if (passesMemberGate) {
+                repository
+                    .observeEventDetail(selected)
+                    .map<EventDetail?, DetailLoad> { DetailLoad.Loaded(it) }
+            } else {
+                // A non-member can't read the detail — treat it as immediately
+                // settled-empty so the rest of the screen (which gates on the
+                // event status anyway) never waits on a read that won't come.
+                flowOf(DetailLoad.Loaded(null))
+            }
         }
-            .collectAsState(initial = null)
+            .collectAsState(initial = DetailLoad.Loading)
+    val detail = (detailLoad as? DetailLoad.Loaded)?.detail
+    // True once the detail read has emitted at least once (loaded or empty), so
+    // the creator edit form only ever pre-fills from a settled read.
+    val detailSettled = detailLoad is DetailLoad.Loaded
     val rsvpStatus by
         (rsvpCoordinator?.status ?: flowOf(RsvpStatusUi.Idle))
             .collectAsState(initial = RsvpStatusUi.Idle)
@@ -344,7 +372,7 @@ fun EventsRoute(
     // (description, precise address). On success the snackbar confirms and the
     // detail listener refreshes the changed event in place; permission-denied /
     // immutable / generic failures surface inline via the resolved errorMessage.
-    if (showEdit && event != null) {
+    if (showEdit && event != null && detailSettled) {
         val currentEvent = event
         val editStatus by editCoordinator.status.collectAsState(initial = EditEventStatusUi.Idle)
         val editedMessage = stringResource(R.string.events_editSuccess)
@@ -381,17 +409,22 @@ fun EventsRoute(
                     longitude = currentEvent.longitude,
                 )
             }
-        CreateEventScreen(
-            saving = editStatus == EditEventStatusUi.Saving,
-            errorMessage = editErrorMessage,
-            initialInput = prefill,
-            isEdit = true,
-            onSubmit = { input -> scope.launch { editCoordinator.submit(currentEvent.id, input) } },
-            onCancel = {
-                showEdit = false
-                editCoordinator.reset()
-            },
-        )
+        // Keyed on the event id so the form's rememberSaveable field state is torn
+        // down and re-seeded from the new prefill when the selected event changes
+        // in place, rather than carrying one event's edits onto another.
+        key(selected) {
+            CreateEventScreen(
+                saving = editStatus == EditEventStatusUi.Saving,
+                errorMessage = editErrorMessage,
+                initialInput = prefill,
+                isEdit = true,
+                onSubmit = { input -> scope.launch { editCoordinator.submit(currentEvent.id, input) } },
+                onCancel = {
+                    showEdit = false
+                    editCoordinator.reset()
+                },
+            )
+        }
         return
     }
 
@@ -605,7 +638,11 @@ fun EventsRoute(
     val isCreator =
         event != null && !event.createdByUserId.isNullOrBlank() && event.createdByUserId == uid
     val canManage = event != null && Events.canManageOwnEvent(isCreator, event.status)
-    val onEdit: (() -> Unit)? = if (canManage) { { showEdit = true } } else null
+    // Edit is offered only once the member-gated detail has SETTLED, so the
+    // pre-filled edit form can never be opened — and thus never submit a partial
+    // update — from blank, un-loaded description/address fields (which would clear
+    // them server-side). Remove needs no detail, so it stays on [canManage].
+    val onEdit: (() -> Unit)? = if (canManage && detailSettled) { { showEdit = true } } else null
 
     val removeSuccessMsg = stringResource(R.string.events_removeSuccess)
     val removeErrorMsg = stringResource(R.string.events_removeError)

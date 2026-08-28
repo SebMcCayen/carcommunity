@@ -426,12 +426,12 @@
     <string name="events_editErrorPermission">Du kan bara redigera träffar du själv har skapat.</string>
     <string name="events_editErrorImmutable">Den här träffen kan inte längre ändras.</string>
     <string name="events_removeButton">Ta bort</string>
-    <string name="events_removeTitle">Ta bort event</string>
-    <string name="events_removeConfirmMessage">Ta bort eventet? Alla som anmält att de kommer meddelas.</string>
+    <string name="events_removeTitle">Ta bort träff</string>
+    <string name="events_removeConfirmMessage">Ta bort träffen? Alla som anmält att de kommer meddelas.</string>
     <string name="events_removeConfirmConfirm">Ta bort</string>
     <string name="events_removeConfirmCancel">Avbryt</string>
-    <string name="events_removeSuccess">Eventet har tagits bort.</string>
-    <string name="events_removeError">Det gick inte att ta bort eventet. Försök igen.</string>
+    <string name="events_removeSuccess">Träffen har tagits bort.</string>
+    <string name="events_removeError">Det gick inte att ta bort träffen. Försök igen.</string>
     <string name="events_removeErrorPermission">Du kan bara ta bort träffar du själv har skapat.</string>
     <string name="events_removeErrorImmutable">Den här träffen kan inte längre tas bort.</string>
     <string name="chat_title">Chat</string>
