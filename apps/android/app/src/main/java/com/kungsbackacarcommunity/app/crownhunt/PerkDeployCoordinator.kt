@@ -28,8 +28,9 @@ enum class PerkDeployFailureReason {
     /**
      * Too many perk effects are already live — the server-side concurrent
      * activation limit (`MAX_CONCURRENT_ACTIVE_PERKS` in functions
-     * `crownHunt/perks-core.ts`, enforced in the deploy transaction) was hit. The
-     * one deploy rejection that carries a structured `details.reason`, so it gets
+     * `crownHunt/perks-core.ts`, enforced in the deploy transaction) was hit.
+     * Carries a structured `details.reason` (`activation_limit`) — one of the
+     * reason-coded deploy rejections (see also [EVENT_TOO_CLOSE]) — so it gets
      * its own message.
      */
     ACTIVATION_LIMIT,
