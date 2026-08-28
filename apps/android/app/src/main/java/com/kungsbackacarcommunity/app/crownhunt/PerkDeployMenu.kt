@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,9 @@ import com.kungsbackacarcommunity.app.design.KccSpacing
 
 /** Test tags for the deploy menu (used by instrumented UI tests). */
 const val PERK_DEPLOY_POPUP_TAG = "perk_deploy_popup"
+
+/** Test tag for the "open the shop" link at the foot of the deploy menu. */
+const val PERK_DEPLOY_OPEN_SHOP_TAG = "perk_deploy_open_shop"
 
 /** Per-perk activate button, suffixed with the perkId. */
 fun perkDeployActivateTag(perkId: String): String = "perk_deploy_activate_$perkId"
@@ -71,6 +75,7 @@ fun PerkDeployPopup(
     nowMillis: Long,
     onDeploy: (PerkDeployItem) -> Unit,
     onDismiss: () -> Unit,
+    onOpenShop: () -> Unit,
 ) {
     Popup(
         alignment = Alignment.BottomCenter,
@@ -140,6 +145,20 @@ fun PerkDeployPopup(
                         }
                 }
                 DeployStatusBanner(status = status, menuState = menuState)
+                // A clear jump to the Crown Hunt Shop so a member reviewing their
+                // perks can buy more without hunting for the shop tab. Closes the
+                // popup first, then asks the host to open the shop (issue #1009).
+                TextButton(
+                    onClick = {
+                        onDismiss()
+                        onOpenShop()
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag(PERK_DEPLOY_OPEN_SHOP_TAG),
+                ) {
+                    Text(stringResource(R.string.crownHunt_deployOpenShop))
+                }
             }
         }
     }

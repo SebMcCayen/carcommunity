@@ -1225,6 +1225,7 @@
     <string name="crownHunt_deployEmpty">You have no perks. Buy some in the shop first.</string>
     <string name="crownHunt_deployOwnedLabel">You own: %1$d</string>
     <string name="crownHunt_deployActivateButton">Activate</string>
+    <string name="crownHunt_deployOpenShop">Need more perks? Open the shop</string>
     <string name="crownHunt_deployActiveTraps">%1$d active trap</string>
     <string name="crownHunt_deployActiveFor">Active – %1$s left</string>
     <string name="crownHunt_deployRemainingMs">%1$dm %2$ds</string>

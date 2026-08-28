@@ -1,6 +1,7 @@
 package com.kungsbackacarcommunity.app.crownhunt
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -47,7 +48,18 @@ fun CrownHuntRoute(
     liveShareScoringEnabled: Boolean = false,
     perkShopRepository: PerkShopRepository? = null,
     pointsRepository: PointsRepository? = null,
+    // When true the hub opens on the Shop tab (from the perk-deploy popup's "open
+    // the shop" link, issue #1009). Consumed once via [onShopOpened] so a later
+    // open of the same route lands on Home again.
+    openShop: Boolean = false,
+    onShopOpened: () -> Unit = {},
 ) {
+    // Fire-and-forget consume: clear the host's one-shot request the moment this
+    // route mounts with the shop requested, so it seeds the initial tab only and a
+    // subsequent open of Kronjakt starts on Home rather than re-landing on Shop.
+    LaunchedEffect(openShop) {
+        if (openShop) onShopOpened()
+    }
     val statsState by
         remember(statsRepository, uid, passesMemberGate) {
             if (statsRepository != null && uid != null && passesMemberGate) {
@@ -115,6 +127,7 @@ fun CrownHuntRoute(
         liveShareScoringEnabled = liveShareScoringEnabled,
         shopState = shopState,
         buyStatus = buyStatus,
+        openShop = openShop,
         onBuyPerk = { item ->
             coordinator?.let { active ->
                 scope.launch { active.buy(item.entry.perkId, item.affordable) }
