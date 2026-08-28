@@ -291,8 +291,8 @@
     {
       "name": "events.update",
       "domain": "events",
-      "description": "Partially updates a draft or published event across both event documents; cancelled/completed events are immutable. Writes an adminAuditEvents record with changedFields. Deployed via grouped export as events-update (functions/src/events/manageEvent.ts).",
-      "access": "admin",
+      "description": "Partially updates a draft or published event across both event documents; cancelled/completed events are immutable. Callable by an admin/owner OR by the member who created the event (createdByUserId, via guardManageEventActor); any other member is permission-denied, and suspended/deleted/non-member callers are rejected before ownership is considered. An admin edit writes an adminAuditEvents record with changedFields; a member editing their OWN event writes NO audit record — that log stays a record of admin actions, the edit is attributed on the event doc via createdByUserId (same rule events.create / events.complete follow). Edits are SILENT — no attendee notification (only events.cancel notifies). Deployed via grouped export as events-update (functions/src/events/manageEvent.ts).",
+      "access": "member",
       "appCheck": true,
       "status": "implemented",
       "source": "docs/migration/backend-domain-mapping.md (Event and RSVP data)"
@@ -309,8 +309,8 @@
     {
       "name": "events.cancel",
       "domain": "events",
-      "description": "Cancels a draft or published event with a required reason; sets cancelledAt, never hard-deletes. Deployed via grouped export as events-cancel (functions/src/events/eventLifecycle.ts).",
-      "access": "admin",
+      "description": "Cancels a draft or published event with a required reason; sets cancelledAt, never hard-deletes (a soft cancel — status becomes 'cancelled'). Callable by an admin/owner OR by the member who created the event (createdByUserId, via guardManageEventActor); any other member is permission-denied, and suspended/deleted/non-member callers are rejected before ownership is considered. An admin cancel writes an adminAuditEvents record; a member cancelling their OWN event writes NO audit record — that log stays a record of admin actions (same rule events.complete follows). Deployed via grouped export as events-cancel (functions/src/events/eventLifecycle.ts). TRIGGER SIBLING - events-onEventCancelled (onDocumentWritten on events/{eventId}; functions/src/events/onEventCancelled.ts): the attendee cancellation notice. It fires ONLY on the write that moves an event's status INTO 'cancelled' (isEventCancelledTransition: afterStatus=='cancelled' AND beforeStatus!='cancelled'); 'cancelled' is terminal so the transition happens at most once, and every other write - an edit, an rsvpCounts bump, a publish/complete - is a cheap no-op. On that transition it fans ONE in-app notification under the event_cancelled category (actionType open_event, relatedEntityId=eventId) out to every member who RSVP'd going (events/{eventId}/rsvps where status=='going') MINUS the event's own creator (createdByUserId - they cancelled it / are the organiser). This mirrors the events-remindUpcoming audience (going RSVPs), NOT the community-wide event_created broadcast; the per-attendee writes are chunked via writeInAppNotification exactly like the reminder fan-out. Per-recipient eligibility (deleted/suspended/per-category event_cancelled opt-out) is inherited from writeInAppNotification, never re-checked; push follows automatically via notifications-onNotificationCreated. AT MOST ONE notice per (event, attendee) EVER: the cancelled transition is single-shot and a deterministic per-event notificationId (event-cancelled-{eventId}) collapses any trigger redelivery or partial-fan-out retry into one inbox item per recipient. runEventCancelledFanOut(eventId) is exported for deterministic emulator tests.",
+      "access": "member",
       "appCheck": true,
       "status": "implemented",
       "source": "services/api/src/routes/events.ts (legacy POST /v1/admin/events/:eventId/cancel)"

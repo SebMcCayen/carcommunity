@@ -5,16 +5,19 @@
  * Deployed via the `events` export group as `events-publish`,
  * `events-cancel`, and `events-complete`.
  *
- * publish and cancel require an active admin via requireAdminActor: the
- * server-managed `admin` custom claim plus a non-suspended, non-deleted
- * Firestore `users/{uid}` state with role admin or owner. complete is
+ * publish requires an active admin via requireAdminActor: the server-managed
+ * `admin` custom claim plus a non-suspended, non-deleted Firestore
+ * `users/{uid}` state with role admin or owner. cancel and complete are both
  * creator-or-admin (see below).
  *
  * Status transitions mirror the legacy event-service:
  * - publish: draft only; requires title + approximateArea; start must not be
  *   in the past.
  * - cancel: draft or published; requires a reason; sets cancelledAt; never
- *   hard-deletes.
+ *   hard-deletes. Callable by an admin/owner OR the member who created the
+ *   event (guardManageEventActor); a member cancelling their own writes no
+ *   audit record. The `event_cancelled` fan-out (events-onEventCancelled)
+ *   notifies going-RSVP attendees on the transition into `cancelled`.
  * - complete: published only; callable by an admin OR the member who created
  *   the event (guardCompleteActor). Completion NO LONGER credits attendance:
  *   the first_event / five_events / Träffräv badge counts VERIFIED check-ins
@@ -39,6 +42,7 @@ import {
   guardCancellable,
   guardCompletable,
   guardCompleteActor,
+  guardManageEventActor,
   guardPublishable,
   parseCancelEventInput,
   parseEventIdInput,
@@ -156,7 +160,11 @@ export const publish = onCall(CALLABLE_OPTS, async (request): Promise<EventIdRes
 });
 
 export const cancel = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResponse> => {
-  const actor = await requireAdminActor(request);
+  // Creator-or-admin: an active member may cancel an event THEY created, an
+  // admin may cancel any (guardManageEventActor). requireMemberOrAdminActor
+  // rejects suspended/deleted/non-member callers before ownership is even
+  // considered — same shape as complete() below.
+  const actor = await requireMemberOrAdminActor(request);
 
   const parsed = parseCancelEventInput(request.data);
   if (!parsed.ok) {
@@ -169,12 +177,24 @@ export const cancel = onCall(CALLABLE_OPTS, async (request): Promise<EventIdResp
     actorUid: actor.uid,
     action: 'event.cancel',
     reason,
-    guard: (event) => guardCancellable(event.status),
+    guard: (event) => {
+      const actorGuard = guardManageEventActor(
+        { uid: actor.uid, isAdmin: actor.isAdmin },
+        { createdByUserId: event.createdByUserId },
+      );
+      if (!actorGuard.ok) {
+        return actorGuard;
+      }
+      return guardCancellable(event.status);
+    },
     statusUpdate: (serverTimestamp) => ({
       status: 'cancelled',
       cancelledAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     }),
+    // A member cancelling their OWN event writes no adminAuditEvents record —
+    // that log stays a record of admin actions (same rule complete() follows).
+    audit: actor.isAdmin,
   });
 
   return { eventId, status };

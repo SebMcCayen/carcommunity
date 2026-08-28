@@ -196,12 +196,15 @@ describe('events callables – authorization', () => {
     );
   });
 
-  it('keeps the rest of the events lifecycle admin-only for members', async () => {
+  it('does not let a member drive an event they did not create', async () => {
     const member = await createMemberUser('events-member-lifecycle');
-    const eventId = await createDraftEvent();
+    const eventId = await createDraftEvent(); // an ADMIN-created event
     await signInAs(member);
 
-    // A member may create, but must not drive anyone's event lifecycle.
+    // A member may create, but must not drive SOMEONE ELSE'S event. publish is
+    // admin-only outright; update/cancel are creator-or-admin, so this non-creator
+    // member is permission-denied on all three (their OWN events are covered by
+    // the "creator or admin" block below).
     expect(await callableErrorCode(call('events-publish', { eventId }))).toBe(
       'functions/permission-denied',
     );
@@ -660,6 +663,122 @@ describe('events-complete – creator or admin', () => {
     expect(audit.size).toBe(1);
     // size asserted === 1 above, so docs[0] is present.
     expect(audit.docs[0]!.data().adminId).toBe(adminUser.uid);
+  });
+});
+
+describe('events-update / events-cancel – creator or admin', () => {
+  it('lets the member who created an event edit it, with no admin audit record', async () => {
+    const member = await createMemberUser('events-creator-edit');
+    await signInAs(member);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    await call('events-update', { eventId, title: 'Creator-renamed cruise' });
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.title).toBe('Creator-renamed cruise');
+    // Attribution intact.
+    expect(event.createdByUserId).toBe(member.uid);
+
+    // adminAuditEvents stays a log of ADMIN actions: a member editing their own
+    // event must not write their uid into an adminId field.
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.update')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.empty).toBe(true);
+  });
+
+  it('lets the member who created an event cancel it, with no admin audit record', async () => {
+    const member = await createMemberUser('events-creator-cancel');
+    await signInAs(member);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    const result = await call('events-cancel', { eventId, reason: 'Changed my mind.' });
+    expect((result.data as { status: string }).status).toBe('cancelled');
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('cancelled');
+    expect(event.cancelledAt).not.toBeNull();
+
+    const audit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.cancel')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(audit.empty).toBe(true);
+  });
+
+  it('refuses a member who did not create the event on update and cancel', async () => {
+    const creator = await createMemberUser('events-edit-creator');
+    await signInAs(creator);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    const stranger = await createMemberUser('events-edit-stranger');
+    await signInAs(stranger);
+    expect(await callableErrorCode(call('events-update', { eventId, title: 'Hijacked' }))).toBe(
+      'functions/permission-denied',
+    );
+    expect(
+      await callableErrorCode(call('events-cancel', { eventId, reason: 'Not mine' })),
+    ).toBe('functions/permission-denied');
+    // Untouched and still live for its actual organiser.
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('published');
+    expect(event.title).toBe(validCreate.title);
+  });
+
+  it('lets an admin edit and cancel a member’s event, auditing each', async () => {
+    const member = await createMemberUser('events-admin-manages');
+    await signInAs(member);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    await signInAs(adminUser);
+    await call('events-update', { eventId, title: 'Admin-renamed' });
+    await call('events-cancel', { eventId, reason: 'Duplicate meetup.' });
+
+    const event = (await adminDb.collection('events').doc(eventId).get()).data()!;
+    expect(event.status).toBe('cancelled');
+    expect(event.title).toBe('Admin-renamed');
+
+    const updateAudit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.update')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(updateAudit.size).toBe(1);
+    expect(updateAudit.docs[0]!.data().adminId).toBe(adminUser.uid);
+
+    const cancelAudit = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'event.cancel')
+      .where('targetId', '==', eventId)
+      .get();
+    expect(cancelAudit.size).toBe(1);
+    expect(cancelAudit.docs[0]!.data().adminId).toBe(adminUser.uid);
+  });
+
+  it('freezes a creator-cancelled event: no re-cancel, no edit', async () => {
+    const member = await createMemberUser('events-creator-freeze');
+    await signInAs(member);
+    const eventId = (
+      (await call('events-create', validCreate)).data as { eventId: string }
+    ).eventId;
+
+    await call('events-cancel', { eventId, reason: 'Off' });
+    // Cancelled is terminal + immutable, even for the creator.
+    expect(
+      await callableErrorCode(call('events-cancel', { eventId, reason: 'Again' })),
+    ).toBe('functions/failed-precondition');
+    expect(
+      await callableErrorCode(call('events-update', { eventId, title: 'Too late' })),
+    ).toBe('functions/failed-precondition');
   });
 });
 
