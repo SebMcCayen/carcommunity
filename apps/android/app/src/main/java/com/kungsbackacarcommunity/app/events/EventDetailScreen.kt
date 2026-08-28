@@ -140,6 +140,18 @@ fun EventDetailScreen(
     // Whether a Mapbox token is configured, so the embedded map can render. When
     // false the map area is hidden (Navigate still shows if the event has a pin).
     hasMapToken: Boolean = false,
+    // True when the signed-in user is this event's CREATOR and the event is still
+    // in an editable state (draft/published) — the route computes it via
+    // Events.canManageOwnEvent. Gates the Edit/Remove creator actions; false for a
+    // non-creator, an admin (who moderates through admin-web), or an event that is
+    // already cancelled/completed (immutable).
+    canManage: Boolean = false,
+    // Opens the pre-filled edit form (the shared CreateEventScreen in edit mode).
+    // Shown only when [canManage]; null hides it (e.g. config-less build).
+    onEdit: (() -> Unit)? = null,
+    // Confirmed removal — invoked after the user accepts the confirmation dialog;
+    // the route calls events.cancel. Shown only when [canManage]; null hides it.
+    onRemove: (() -> Unit)? = null,
 ) {
     val haptics = LocalHapticFeedback.current
     // The event's single marker point, or null when it carries no valid pin — the
@@ -157,6 +169,10 @@ fun EventDetailScreen(
     // and defers the roster read until asked. Keyed on the event id so switching
     // events in place closes it rather than showing the previous event's roster.
     var showAttendeesDialog by rememberSaveable(event?.id) { mutableStateOf(false) }
+    // Whether the "remove event?" confirmation dialog is open. Keyed on the event
+    // id so switching events in place dismisses it rather than leaving a stale
+    // confirmation targeting the previous event.
+    var showRemoveDialog by rememberSaveable(event?.id) { mutableStateOf(false) }
     AeroPage(title = event?.title ?: stringResource(R.string.events_title), modifier = modifier) {
             if (event == null) {
                 Text(
@@ -240,6 +256,38 @@ fun EventDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.testTag(EVENT_DETAIL_ORGANIZER_TAG),
                 )
+            }
+
+            // Creator actions — Edit + Remove, shown ONLY when the signed-in user
+            // created this event and it is still editable (canManage). Placed with
+            // the event's identity, above the member-gated detail. A non-creator,
+            // an admin, or a cancelled/completed event never sees them.
+            if (canManage && (onEdit != null || onRemove != null)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (onEdit != null) {
+                        OutlinedButton(
+                            onClick = onEdit,
+                            modifier = Modifier.weight(1f).testTag(EVENT_DETAIL_EDIT_TAG),
+                        ) {
+                            Text(text = stringResource(R.string.events_editButton))
+                        }
+                    }
+                    if (onRemove != null) {
+                        OutlinedButton(
+                            onClick = { showRemoveDialog = true },
+                            modifier = Modifier.weight(1f).testTag(EVENT_DETAIL_REMOVE_TAG),
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                        ) {
+                            Text(text = stringResource(R.string.events_removeButton))
+                        }
+                    }
+                }
             }
 
             // 2. Description — the member-gated detail (long write-up + precise
@@ -419,6 +467,37 @@ fun EventDetailScreen(
                     onOpenMember = onOpenMember,
                     onRetry = onRetryAttendees,
                     onDismiss = { showAttendeesDialog = false },
+                )
+            }
+
+            // Remove confirmation — a creator removing their own event is a
+            // notify-everyone action (attendees marked "coming" are messaged), so
+            // it is gated behind an explicit confirm. Confirming invokes the
+            // route's events.cancel; the dialog never removes anything itself.
+            if (showRemoveDialog && onRemove != null) {
+                AlertDialog(
+                    onDismissRequest = { showRemoveDialog = false },
+                    title = { Text(text = stringResource(R.string.events_removeTitle)) },
+                    text = { Text(text = stringResource(R.string.events_removeConfirmMessage)) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showRemoveDialog = false
+                                onRemove()
+                            },
+                            modifier = Modifier.testTag(EVENT_DETAIL_REMOVE_CONFIRM_TAG),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.events_removeConfirmConfirm),
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showRemoveDialog = false }) {
+                            Text(text = stringResource(R.string.events_removeConfirmCancel))
+                        }
+                    },
                 )
             }
 
@@ -907,6 +986,11 @@ const val EVENT_DETAIL_CALENDAR_TAG = "events_detail_calendar"
 
 /** Test tag on the "Organizer: <name>" line. */
 const val EVENT_DETAIL_ORGANIZER_TAG = "events_detail_organizer"
+
+/** Test tags for the creator Edit / Remove actions and the remove-confirm button. */
+const val EVENT_DETAIL_EDIT_TAG = "events_detail_edit"
+const val EVENT_DETAIL_REMOVE_TAG = "events_detail_remove"
+const val EVENT_DETAIL_REMOVE_CONFIRM_TAG = "events_detail_remove_confirm"
 
 /** Test tag on the "Check who answered" button that opens the attendee roster dialog. */
 const val EVENT_DETAIL_REVEAL_ATTENDEES_TAG = "events_detail_reveal_attendees"

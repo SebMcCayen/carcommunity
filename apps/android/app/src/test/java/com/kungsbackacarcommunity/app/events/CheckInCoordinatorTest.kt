@@ -66,6 +66,10 @@ class CheckInCoordinatorTest {
 
         override suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus) = Unit
         override suspend fun createEvent(input: CreateEventInput): String = "unused"
+
+        override suspend fun updateEvent(eventId: String, input: CreateEventInput) = Unit
+
+        override suspend fun cancelEvent(eventId: String, reason: String) = Unit
         override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
             EventAttendeesResult.Unavailable
     }
@@ -226,6 +230,10 @@ class CheckInCoordinatorTest {
 
         override suspend fun setRsvp(eventId: String, uid: String, status: RsvpStatus) = Unit
         override suspend fun createEvent(input: CreateEventInput): String = "unused"
+
+        override suspend fun updateEvent(eventId: String, input: CreateEventInput) = Unit
+
+        override suspend fun cancelEvent(eventId: String, reason: String) = Unit
         override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
             EventAttendeesResult.Unavailable
     }

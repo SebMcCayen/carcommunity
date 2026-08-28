@@ -50,9 +50,9 @@ import java.time.ZoneOffset
 import java.util.Date
 
 /**
- * User-facing "create event" form (Aero themed). Owns its field state and
- * reports a validated [CreateEventInput] on submit; the route wires it to
- * [CreateEventCoordinator].
+ * User-facing event form (Aero themed) — shared by CREATE and creator EDIT. Owns
+ * its field state and reports a validated [CreateEventInput] on submit; the route
+ * wires it to [CreateEventCoordinator] (create) or [EditEventCoordinator] (edit).
  *
  * An active member may create an event: `events-create` publishes it straight
  * away and admins moderate afterwards, so the form promises immediate
@@ -61,26 +61,44 @@ import java.util.Date
  *    member-created events, so a control here would silently do nothing.
  *  - No "pending approval" language. The event is live the moment it is
  *    created; the only after-the-fact action is an admin takedown.
- * The 3-per-rolling-24h cap gets its own message
- * ([CreateEventFailure.RATE_LIMITED]) rather than a generic failure.
+ *
+ * EDIT MODE ([isEdit] = true, fields pre-filled from [initialInput]) reuses the
+ * exact same inputs and validation, with three differences: the title/subtitle
+ * and submit label say "edit"/"save", the "goes live on create" notice is hidden
+ * (the event is already live), and the public-homepage checkbox is hidden — the
+ * `events-update` payload deliberately never carries `publicSiteEnabled` (that
+ * flag is toggled only via events.setPublicSite), so offering it here would be a
+ * control the edit path silently ignores.
+ *
+ * Transient status is passed in decomposed form so the screen is agnostic to
+ * which coordinator drives it: [saving] disables the controls and swaps the
+ * button label, and [errorMessage] (already resolved by the route — the create
+ * rate-limit message, or an edit permission/immutable message) is shown inline.
  */
 @Composable
 fun CreateEventScreen(
-    status: CreateEventStatusUi,
+    saving: Boolean,
+    errorMessage: String?,
     onSubmit: (CreateEventInput) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
+    // Pre-fills every field for EDIT mode; null on create (empty form).
+    initialInput: CreateEventInput? = null,
+    // Switches the form's copy (title/subtitle/submit label) to "edit" and hides
+    // the create-only affordances (live notice + public-site opt-in).
+    isEdit: Boolean = false,
 ) {
-    var title by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
-    var address by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf(initialInput?.title ?: "") }
+    var description by rememberSaveable { mutableStateOf(initialInput?.description ?: "") }
+    var address by rememberSaveable { mutableStateOf(initialInput?.address ?: "") }
     // Creator opt-in to the public homepage + public event page. OFF by
     // default — an event never reaches the open web unless its creator asks.
-    var publicSiteEnabled by rememberSaveable { mutableStateOf(false) }
-    var startsAtMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Create-only: hidden and never submitted in edit mode.
+    var publicSiteEnabled by rememberSaveable { mutableStateOf(initialInput?.publicSiteEnabled ?: false) }
+    var startsAtMillis by rememberSaveable { mutableStateOf(initialInput?.startsAtMillis) }
     // Map-pin coordinates captured by the location picker (both set or both null).
-    var latitude by rememberSaveable { mutableStateOf<Double?>(null) }
-    var longitude by rememberSaveable { mutableStateOf<Double?>(null) }
+    var latitude by rememberSaveable { mutableStateOf(initialInput?.latitude) }
+    var longitude by rememberSaveable { mutableStateOf(initialInput?.longitude) }
     var showLocationPicker by rememberSaveable { mutableStateOf(false) }
     var showDatePicker by rememberSaveable { mutableStateOf(false) }
     var showTimePicker by rememberSaveable { mutableStateOf(false) }
@@ -88,7 +106,6 @@ fun CreateEventScreen(
     var pendingDateMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var showValidation by rememberSaveable { mutableStateOf(false) }
 
-    val saving = status == CreateEventStatusUi.Saving
     val startsAt = startsAtMillis
     val hasMapToken = stringResource(R.string.mapbox_access_token).isNotBlank()
 
@@ -147,7 +164,7 @@ fun CreateEventScreen(
     }
 
     AeroPage(
-        title = stringResource(R.string.events_createTitle),
+        title = stringResource(if (isEdit) R.string.events_editTitle else R.string.events_createTitle),
         modifier = modifier,
         // Consume the IME (and nav-bar) inset so the create button and lower fields
         // aren't hidden behind the keyboard/navigation bar on edge-to-edge devices
@@ -155,20 +172,23 @@ fun CreateEventScreen(
         contentWindowInsets = WindowInsets.ime.union(WindowInsets.navigationBars),
     ) {
         Text(
-            text = stringResource(R.string.events_createSubtitle),
+            text = stringResource(if (isEdit) R.string.events_editSubtitle else R.string.events_createSubtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         // Sets the expectation the backend actually honours: published on
-        // submit, moderated afterwards.
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Text(
-                text = stringResource(R.string.events_createLiveNotice),
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        // submit, moderated afterwards. Create-only — an edit is to an event that
+        // is already live, so the notice would be misleading.
+        if (!isEdit) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = stringResource(R.string.events_createLiveNotice),
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
 
         OutlinedTextField(
@@ -251,38 +271,43 @@ fun CreateEventScreen(
         // Public homepage opt-in. The whole row toggles (checkbox + label are
         // one touch target via toggleable), and the helper text spells out
         // exactly what becomes public — the creator is putting their event on
-        // the open web, so the decision must be informed.
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .toggleable(
-                        value = publicSiteEnabled,
-                        role = Role.Checkbox,
-                        enabled = !saving,
-                        onValueChange = { publicSiteEnabled = it },
-                    ),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Checkbox(
-                checked = publicSiteEnabled,
-                // Handled by the row's toggleable so the label is tappable too.
-                onCheckedChange = null,
-                // Mirror the row's disabled state so the checkbox looks (and
-                // reads to accessibility services) as disabled while saving.
-                enabled = !saving,
-            )
-            Column(modifier = Modifier.padding(start = 8.dp)) {
-                Text(
-                    text = stringResource(R.string.events_createPublicSiteLabel),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+        // the open web, so the decision must be informed. Create-only: the
+        // events-update payload never carries publicSiteEnabled (that flag is
+        // toggled through events.setPublicSite), so it is hidden in edit mode
+        // rather than offered as a control the edit path would ignore.
+        if (!isEdit) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = publicSiteEnabled,
+                            role = Role.Checkbox,
+                            enabled = !saving,
+                            onValueChange = { publicSiteEnabled = it },
+                        ),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Checkbox(
+                    checked = publicSiteEnabled,
+                    // Handled by the row's toggleable so the label is tappable too.
+                    onCheckedChange = null,
+                    // Mirror the row's disabled state so the checkbox looks (and
+                    // reads to accessibility services) as disabled while saving.
+                    enabled = !saving,
                 )
-                Text(
-                    text = stringResource(R.string.events_createPublicSiteHelp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Column(modifier = Modifier.padding(start = 8.dp)) {
+                    Text(
+                        text = stringResource(R.string.events_createPublicSiteLabel),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Text(
+                        text = stringResource(R.string.events_createPublicSiteHelp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
 
@@ -293,19 +318,12 @@ fun CreateEventScreen(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-        if (status is CreateEventStatusUi.Failed) {
-            // A rate limit is not a fault the member can retry away, so it gets
-            // its own message naming the real cap instead of "please try again".
+        // Already resolved by the route so the screen stays agnostic to which
+        // coordinator drives it (create rate-limit / generic, or edit
+        // permission-denied / immutable / generic).
+        errorMessage?.let { message ->
             Text(
-                text =
-                    when (status.reason) {
-                        CreateEventFailure.RATE_LIMITED ->
-                            stringResource(
-                                R.string.events_createRateLimited,
-                                Events.MEMBER_EVENT_RATE_LIMIT_PER_DAY,
-                            )
-                        CreateEventFailure.UNKNOWN -> stringResource(R.string.events_createError)
-                    },
+                text = message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
@@ -341,7 +359,12 @@ fun CreateEventScreen(
             Text(
                 text =
                     stringResource(
-                        if (saving) R.string.events_createSaving else R.string.events_createSubmit,
+                        when {
+                            saving && isEdit -> R.string.events_editSaving
+                            saving -> R.string.events_createSaving
+                            isEdit -> R.string.events_editSubmit
+                            else -> R.string.events_createSubmit
+                        },
                     ),
             )
         }
@@ -441,7 +464,8 @@ private fun StartTimePicker(
 private fun CreateEventPreview() {
     KccTheme {
         CreateEventScreen(
-            status = CreateEventStatusUi.Idle,
+            saving = false,
+            errorMessage = null,
             onSubmit = {},
             onCancel = {},
         )

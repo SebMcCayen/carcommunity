@@ -92,6 +92,25 @@ interface EventsRepository {
     suspend fun createEvent(input: CreateEventInput): String
 
     /**
+     * Applies a creator's partial edit to [eventId] via the `events-update`
+     * callable (the fields the app's event form manages — see
+     * [Events.updatePayload]). Throws [UpdateEventException] carrying a
+     * [ManageEventFailure]: [ManageEventFailure.PERMISSION_DENIED] when the caller
+     * is not the creator, [ManageEventFailure.IMMUTABLE] when the event is already
+     * cancelled/completed, [ManageEventFailure.UNKNOWN] otherwise.
+     */
+    suspend fun updateEvent(eventId: String, input: CreateEventInput)
+
+    /**
+     * Removes (cancels) [eventId] via the `events-cancel` callable with the given
+     * audit [reason]; the backend sets `cancelledAt` and never hard-deletes, so a
+     * cancelled event simply drops out of the published list. Throws
+     * [CancelEventException] carrying a [ManageEventFailure] with the same
+     * den/immutable/unknown vocabulary as [updateEvent].
+     */
+    suspend fun cancelEvent(eventId: String, reason: String)
+
+    /**
      * One-shot read of who is going to [eventId]. Deliberately not a Flow:
      * under the current rules this is denied for a normal member (see
      * [EventAttendees]), so a permanently-erroring snapshot listener would buy

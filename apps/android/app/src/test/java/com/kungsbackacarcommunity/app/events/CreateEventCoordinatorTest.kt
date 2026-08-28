@@ -41,6 +41,10 @@ class CreateEventCoordinatorTest {
             return returnId
         }
 
+        override suspend fun updateEvent(eventId: String, input: CreateEventInput) = Unit
+
+        override suspend fun cancelEvent(eventId: String, reason: String) = Unit
+
         override suspend fun loadAttendees(eventId: String): EventAttendeesResult =
             EventAttendeesResult.Unavailable
     }
