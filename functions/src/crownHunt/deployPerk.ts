@@ -286,12 +286,24 @@ const toMillis = (value: unknown): number | null =>
  * of an active/imminent event (the anti-griefing rule; window + distance maths
  * in event-exclusion-core.ts).
  *
- * PRE-TRANSACTION by design: events change slowly, so this runs OUTSIDE the
- * deploy transaction (like the self-spacing pre-check) to keep the transaction
- * small. The candidate set is bounded by a status + `startsAt`-window query;
- * precise coordinates then come from each candidate's member-gated
- * `details/private` subdoc (mirroring events/checkIn.ts), so this costs one
- * extra read per candidate — hence the tight time window on the query.
+ * PRE-TRANSACTION by design (accepted tradeoff): events change on a human,
+ * admin-paced cadence — created, published, edited, cancelled by hand — orders
+ * of magnitude slower than trap deploys, and their coordinates are fixed once
+ * set. So this runs OUTSIDE the deploy transaction to keep that transaction
+ * small: it walks the events collection page by page and reads each candidate's
+ * member-gated `details/private` subdoc (mirroring events/checkIn.ts), a broad
+ * cross-collection scan that does NOT belong in the hot deploy transaction —
+ * pulling it in would add every scanned event to the tx read-set and make deploys
+ * contend on/retry against unrelated event writes for no real gain.
+ *
+ * The residual race is narrow and self-healing: an event would have to flip INTO
+ * its blocking window (publish, or a start/end/coordinate edit) in the millisecond
+ * gap between this check and the trap write. The worst case is a single trap that
+ * slips through near a just-blocking event; it expires in TRAP_DURATION_HOURS and
+ * every subsequent deploy there is blocked. Closing that window is not worth
+ * taxing every trap deploy with event-collection transaction contention. (A trap
+ * placed BEFORE an event is published is out of scope by definition — the rule is
+ * "don't place near an ALREADY-active/imminent event".)
  */
 function throwEventTooClose(): never {
   throw new HttpsError(
