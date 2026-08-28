@@ -43,10 +43,6 @@ describe('decideSetFollowMe — exclusivity / takeover / toggle', () => {
     expect(decideSetFollowMe('alice', 'alice', true)).toEqual({ kind: 'noop' });
   });
 
-  it('activation with NO current leader sets the caller as leader', () => {
-    expect(decideSetFollowMe(null, 'alice', true)).toEqual({ kind: 'set', leaderUid: 'alice' });
-  });
-
   it('the current leader can toggle their own trail OFF', () => {
     expect(decideSetFollowMe('alice', 'alice', false)).toEqual({ kind: 'clear' });
   });

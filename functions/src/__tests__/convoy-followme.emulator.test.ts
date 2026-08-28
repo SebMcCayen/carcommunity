@@ -320,9 +320,11 @@ describe('followMe Firestore rules', () => {
     const readSnap = await getDoc(ref());
     expect(readSnap.exists()).toBe(true);
 
-    // A non-leader member may NOT update it.
+    // A non-leader member may NOT update it. (serverTimestamp() so this fails
+    // specifically on the leader-only check, not the updatedAt == request.time
+    // constraint.)
     const nonLeaderErr = await callableError(
-      updateDoc(ref(), { polyline: 'x', updatedAt: new Date() }),
+      updateDoc(ref(), { polyline: 'x', updatedAt: serverTimestamp() }),
     );
     expect(nonLeaderErr.code).toContain('permission-denied');
 
@@ -358,10 +360,12 @@ describe('followMe Firestore rules', () => {
     expect(createErr.code).toContain('permission-denied');
 
     // Owner activates, then even the leader cannot re-point leaderUid via a write.
+    // (serverTimestamp() so this fails specifically on the immutable-leaderUid
+    // check, not the updatedAt == request.time constraint.)
     await signInAs(owner);
     await call('convoy-setFollowMe', { convoyId, active: true });
     const hijackErr = await callableError(
-      updateDoc(ref(), { leaderUid: friend.uid, polyline: 'x', updatedAt: new Date() }),
+      updateDoc(ref(), { leaderUid: friend.uid, polyline: 'x', updatedAt: serverTimestamp() }),
     );
     expect(hijackErr.code).toContain('permission-denied');
   });
