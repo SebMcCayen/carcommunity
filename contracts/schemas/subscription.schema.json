@@ -16,7 +16,168 @@
     },
     "subscriptionEntitlement": {
       "type": "string",
-      "enum": ["none", "member_monthly"]
+      "enum": ["none", "member_monthly"],
+      "description": "Legacy compatibility field. member_monthly maps explicitly to the Plus tier; none maps to Community."
+    },
+    "subscriptionTier": {
+      "type": "string",
+      "enum": ["community", "plus", "supporter"],
+      "description": "Canonical plan tier. Optional on legacy subscription records during rolling migration; missing member_monthly resolves to Plus and missing none resolves to Community."
+    },
+    "subscriptionProductId": {
+      "type": "string",
+      "enum": ["plus_monthly", "supporter_monthly"],
+      "description": "Immutable Android/store product identifiers."
+    },
+    "driveHistoryLimit": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": { "kind": { "const": "latest" }, "count": { "const": 5 } },
+          "required": ["kind", "count"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "kind": { "const": "rolling_days" }, "days": { "const": 90 } },
+          "required": ["kind", "days"],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": { "kind": { "const": "unlimited" } },
+          "required": ["kind"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "tierCapabilityProfile": {
+      "type": "object",
+      "description": "Brand-neutral monthly plan and centralized capability policy. The SEK amounts are approved Swedish list prices for planning and admin reporting; checkout must display the localized price supplied by the app store. Community has no billed product. Plus is listed at 39 SEK/month and Supporter at 119 SEK/month; neither has an intro discount.",
+      "properties": {
+        "tier": { "$ref": "#/$defs/subscriptionTier" },
+        "monthlyPriceSek": { "type": ["integer", "null"], "enum": [null, 39, 119] },
+        "billingPeriod": { "type": ["string", "null"], "enum": [null, "monthly"] },
+        "productId": {
+          "oneOf": [{ "$ref": "#/$defs/subscriptionProductId" }, { "type": "null" }]
+        },
+        "hasIntroDiscount": { "const": false },
+        "garageVehicleLimit": { "type": "integer", "enum": [2, 5, 10] },
+        "driveHistory": { "$ref": "#/$defs/driveHistoryLimit" },
+        "exactOtherUserLivePositions": { "type": "boolean" },
+        "fullEventDetails": { "type": "boolean" },
+        "partnerOffers": { "type": "boolean" },
+        "supporterBadge": {
+          "type": "object",
+          "properties": {
+            "available": { "type": "boolean" },
+            "defaultVisible": { "type": "boolean" }
+          },
+          "required": ["available", "defaultVisible"],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "tier",
+        "monthlyPriceSek",
+        "billingPeriod",
+        "productId",
+        "hasIntroDiscount",
+        "garageVehicleLimit",
+        "driveHistory",
+        "exactOtherUserLivePositions",
+        "fullEventDetails",
+        "partnerOffers",
+        "supporterBadge"
+      ],
+      "allOf": [
+        {
+          "if": { "properties": { "tier": { "const": "community" } } },
+          "then": {
+            "properties": {
+              "monthlyPriceSek": { "const": null },
+              "billingPeriod": { "const": null },
+              "productId": { "const": null },
+              "garageVehicleLimit": { "const": 2 },
+              "driveHistory": {
+                "type": "object",
+                "properties": { "kind": { "const": "latest" }, "count": { "const": 5 } },
+                "required": ["kind", "count"]
+              },
+              "exactOtherUserLivePositions": { "const": false },
+              "fullEventDetails": { "const": false },
+              "partnerOffers": { "const": false },
+              "supporterBadge": {
+                "properties": {
+                  "available": { "const": false },
+                  "defaultVisible": { "const": false }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "plus" } } },
+          "then": {
+            "properties": {
+              "monthlyPriceSek": { "const": 39 },
+              "billingPeriod": { "const": "monthly" },
+              "productId": { "const": "plus_monthly" },
+              "garageVehicleLimit": { "const": 5 },
+              "driveHistory": {
+                "type": "object",
+                "properties": {
+                  "kind": { "const": "rolling_days" },
+                  "days": { "const": 90 }
+                },
+                "required": ["kind", "days"]
+              },
+              "exactOtherUserLivePositions": { "const": true },
+              "fullEventDetails": { "const": true },
+              "partnerOffers": { "const": true },
+              "supporterBadge": {
+                "properties": {
+                  "available": { "const": false },
+                  "defaultVisible": { "const": false }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "tier": { "const": "supporter" } } },
+          "then": {
+            "properties": {
+              "monthlyPriceSek": { "const": 119 },
+              "billingPeriod": { "const": "monthly" },
+              "productId": { "const": "supporter_monthly" },
+              "garageVehicleLimit": { "const": 10 },
+              "driveHistory": {
+                "type": "object",
+                "properties": { "kind": { "const": "unlimited" } },
+                "required": ["kind"]
+              },
+              "exactOtherUserLivePositions": { "const": true },
+              "fullEventDetails": { "const": true },
+              "partnerOffers": { "const": true },
+              "supporterBadge": {
+                "properties": {
+                  "available": { "const": true },
+                  "defaultVisible": { "const": true }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "additionalProperties": false
+    },
+    "supporterBadgePreference": {
+      "type": "object",
+      "description": "User-controlled visibility. Supporter defaults to visible, and the member may hide it. The preference has an effect only while the resolved tier is Supporter.",
+      "properties": { "visible": { "type": "boolean", "default": true } },
+      "required": ["visible"],
+      "additionalProperties": false
     },
     "subscriptionRecord": {
       "type": "object",
@@ -26,10 +187,18 @@
         "platform": { "$ref": "#/$defs/subscriptionPlatform" },
         "status": { "$ref": "#/$defs/subscriptionStatus" },
         "entitlement": { "$ref": "#/$defs/subscriptionEntitlement" },
+        "tier": {
+          "$ref": "#/$defs/subscriptionTier",
+          "description": "Optional for rolling compatibility. Explicit paid tiers are preserved after cancellation or expiry for lifecycle reporting."
+        },
         "purchaseTokenHash": {
           "type": ["string", "null"],
           "pattern": "^[a-f0-9]{64}$",
           "description": "SHA-256 of the purchase token; null for manual grants. The raw token never exists in storage."
+        },
+        "startsAt": {
+          "$ref": "common.schema.json#/$defs/nullableIsoTimestamp",
+          "description": "Optional on legacy records. Null means the historical start is unknown; migrations must not invent one."
         },
         "expiresAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" },
         "updatedAt": { "$ref": "common.schema.json#/$defs/isoTimestamp" }
@@ -42,6 +211,12 @@
         "purchaseTokenHash",
         "expiresAt",
         "updatedAt"
+      ],
+      "allOf": [
+        {
+          "if": { "properties": { "entitlement": { "const": "member_monthly" } } },
+          "then": { "properties": { "tier": { "enum": ["plus", "supporter"] } } }
+        }
       ],
       "additionalProperties": false
     },
@@ -61,10 +236,24 @@
       "properties": {
         "targetUid": { "$ref": "common.schema.json#/$defs/uid" },
         "entitlement": { "$ref": "#/$defs/subscriptionEntitlement" },
+        "tier": {
+          "$ref": "#/$defs/subscriptionTier",
+          "description": "Optional only for member_monthly grants. Omitted keeps old payloads valid and resolves to Plus; Supporter must be explicit. Revokes omit tier so the backend can preserve the stored lifecycle tier."
+        },
         "reason": { "type": "string", "minLength": 1, "maxLength": 500 },
         "expiresAt": { "$ref": "common.schema.json#/$defs/nullableIsoTimestamp" }
       },
       "required": ["targetUid", "entitlement", "reason"],
+      "allOf": [
+        {
+          "if": { "properties": { "entitlement": { "const": "member_monthly" } } },
+          "then": { "properties": { "tier": { "enum": ["plus", "supporter"] } } }
+        },
+        {
+          "if": { "properties": { "entitlement": { "const": "none" } } },
+          "then": { "not": { "required": ["tier"] } }
+        }
+      ],
       "additionalProperties": false
     }
   }

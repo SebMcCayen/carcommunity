@@ -72,6 +72,8 @@ describe('decideSubscriptionExpiry', () => {
       previousStatus: 'active',
       platform: 'manual',
       purchaseTokenHash: null,
+      tier: 'plus',
+      startsAt: null,
     });
   });
 
@@ -151,7 +153,11 @@ describe('decideSubscriptionExpiry', () => {
       { ...granting, status: 'grace_period', platform: 'google', expiresAt },
       CUTOFF,
     );
-    expect(decision).toMatchObject({ expire: true, previousStatus: 'grace_period', platform: 'google' });
+    expect(decision).toMatchObject({
+      expire: true,
+      previousStatus: 'grace_period',
+      platform: 'google',
+    });
   });
 
   /**
@@ -159,12 +165,15 @@ describe('decideSubscriptionExpiry', () => {
    * batch.set), so anything the decision does not carry through is
    * destroyed. The token hash is the only link back to the purchase.
    */
-  it('carries the purchase token hash and platform through', () => {
+  it('carries tier, startsAt, the purchase token hash, and platform through', () => {
+    const startsAt = hoursAgo(400);
     const decision = decideSubscriptionExpiry(
       {
         ...granting,
         platform: 'apple',
+        tier: 'supporter',
         purchaseTokenHash: 'a'.repeat(64),
+        startsAt,
         expiresAt: hoursAgo(200),
       },
       CUTOFF,
@@ -172,7 +181,9 @@ describe('decideSubscriptionExpiry', () => {
     expect(decision).toMatchObject({
       expire: true,
       platform: 'apple',
+      tier: 'supporter',
       purchaseTokenHash: 'a'.repeat(64),
+      startsAt,
     });
   });
 

@@ -44,9 +44,13 @@
 import {
   SUBSCRIPTION_PLATFORMS,
   SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_TIERS,
   isSubscriptionActiveStatus,
+  resolveSubscriptionTier,
+  type SubscriptionEntitlement,
   type SubscriptionPlatform,
   type SubscriptionStatus,
+  type SubscriptionTier,
 } from './subscription-core';
 
 /** Hours after `expiresAt` before the sweep revokes. See the header. */
@@ -79,8 +83,9 @@ export const MAX_EXPIRIES_PER_RUN = 200;
  * expired document forever, so the page would fill with already-revoked
  * records and never reach a new lapse.
  */
-export const EXPIRY_SWEEP_STATUSES: readonly SubscriptionStatus[] =
-  SUBSCRIPTION_STATUSES.filter(isSubscriptionActiveStatus);
+export const EXPIRY_SWEEP_STATUSES: readonly SubscriptionStatus[] = SUBSCRIPTION_STATUSES.filter(
+  isSubscriptionActiveStatus,
+);
 
 /**
  * The instant a subscription must have expired BEFORE to be swept — i.e.
@@ -94,8 +99,11 @@ export function subscriptionExpiryCutoff(now: Date): Date {
 export interface SubscriptionExpiryFields {
   status?: unknown;
   entitlement?: unknown;
+  tier?: unknown;
   platform?: unknown;
   purchaseTokenHash?: unknown;
+  /** Already converted from a Firestore Timestamp by the caller. */
+  startsAt?: Date | null;
   /** Already converted from a Firestore Timestamp by the caller. */
   expiresAt?: Date | null;
 }
@@ -108,6 +116,8 @@ export type SubscriptionExpiryDecision =
       previousStatus: SubscriptionStatus;
       platform: SubscriptionPlatform;
       purchaseTokenHash: string | null;
+      tier: SubscriptionTier;
+      startsAt: Date | null;
     }
   | {
       expire: false;
@@ -155,11 +165,23 @@ export function decideSubscriptionExpiry(
     (SUBSCRIPTION_PLATFORMS as readonly string[]).includes(fields.platform)
       ? (fields.platform as SubscriptionPlatform)
       : 'manual';
+  const entitlement: SubscriptionEntitlement =
+    fields.entitlement === 'member_monthly' ? 'member_monthly' : 'none';
+  const explicitTier =
+    typeof fields.tier === 'string' &&
+    (SUBSCRIPTION_TIERS as readonly string[]).includes(fields.tier)
+      ? (fields.tier as SubscriptionTier)
+      : undefined;
   return {
     expire: true,
     expiresAt,
     previousStatus: status,
     platform,
+    tier: resolveSubscriptionTier({ entitlement, tier: explicitTier }),
+    startsAt:
+      fields.startsAt instanceof Date && !Number.isNaN(fields.startsAt.getTime())
+        ? fields.startsAt
+        : null,
     // Preserved verbatim: applyEntitlement rewrites the document wholesale
     // (merge-less batch.set), so anything not carried through is DESTROYED.
     // The hash is the only record of which purchase this entitlement came

@@ -167,8 +167,10 @@ describe('subscription entitlement chain', () => {
       platform: 'manual',
       status: 'active',
       entitlement: 'member_monthly',
+      tier: 'plus',
       purchaseTokenHash: null,
     });
+    expect(record.startsAt?.toDate()).toBeInstanceOf(Date);
     expect((await adminDb.collection('users').doc(member.uid).get()).data()!.activeMember).toBe(
       true,
     );
@@ -179,6 +181,7 @@ describe('subscription entitlement chain', () => {
       .where('targetId', '==', member.uid)
       .get();
     expect(audit.size).toBe(1);
+    expect(audit.docs[0]?.data().details).toMatchObject({ tier: 'plus' });
 
     // The member gate is genuinely open now: a member-only callable works.
     await signInAs(member);
@@ -197,6 +200,7 @@ describe('subscription entitlement chain', () => {
       entitlement: 'member_monthly',
       reason: 'Grant.',
     });
+    const granted = (await adminDb.collection('subscriptions').doc(casual.uid).get()).data()!;
     await call('subscription-grantEntitlement', {
       targetUid: casual.uid,
       entitlement: 'none',
@@ -206,9 +210,69 @@ describe('subscription entitlement chain', () => {
       false,
     );
     expect((await adminAuth.getUser(casual.uid)).customClaims?.activeMember).toBeUndefined();
-    expect(
-      (await adminDb.collection('subscriptions').doc(casual.uid).get()).data()!.status,
-    ).toBe('revoked');
+    const revoked = (await adminDb.collection('subscriptions').doc(casual.uid).get()).data()!;
+    expect(revoked.status).toBe('revoked');
+    expect(revoked.tier).toBe('plus');
+    expect(revoked.startsAt.toMillis()).toBe(granted.startsAt.toMillis());
+  });
+
+  it('grants Supporter as paid and preserves tier/start across legacy regrant and revoke', async () => {
+    const supporter = await createProvisionedUser('p11-supporter');
+    await signInAs(adminUser);
+    await call('subscription-grantEntitlement', {
+      targetUid: supporter.uid,
+      entitlement: 'member_monthly',
+      tier: 'supporter',
+      reason: 'Supporter test grant.',
+    });
+    const first = (await adminDb.collection('subscriptions').doc(supporter.uid).get()).data()!;
+    expect(first.tier).toBe('supporter');
+    expect((await adminDb.collection('users').doc(supporter.uid).get()).data()!.activeMember).toBe(
+      true,
+    );
+    expect((await adminAuth.getUser(supporter.uid)).customClaims?.activeMember).toBe(true);
+
+    // An old caller omits tier. It must not silently downgrade an active Supporter.
+    await call('subscription-grantEntitlement', {
+      targetUid: supporter.uid,
+      entitlement: 'member_monthly',
+      reason: 'Legacy-compatible regrant.',
+    });
+    const regranted = (await adminDb.collection('subscriptions').doc(supporter.uid).get()).data()!;
+    expect(regranted.tier).toBe('supporter');
+    expect(regranted.startsAt.toMillis()).toBe(first.startsAt.toMillis());
+
+    await call('subscription-grantEntitlement', {
+      targetUid: supporter.uid,
+      entitlement: 'none',
+      reason: 'Supporter test revoke.',
+    });
+    const supporterRevoked = (
+      await adminDb.collection('subscriptions').doc(supporter.uid).get()
+    ).data()!;
+    expect(supporterRevoked).toMatchObject({
+      status: 'revoked',
+      entitlement: 'none',
+      tier: 'supporter',
+    });
+    expect(supporterRevoked.startsAt.toMillis()).toBe(first.startsAt.toMillis());
+
+    // A repeated legacy revoke remains idempotent and must not normalize the
+    // retained lifecycle tier to Community.
+    await call('subscription-grantEntitlement', {
+      targetUid: supporter.uid,
+      entitlement: 'none',
+      reason: 'Repeated Supporter test revoke.',
+    });
+    const revokedAgain = (
+      await adminDb.collection('subscriptions').doc(supporter.uid).get()
+    ).data()!;
+    expect(revokedAgain).toMatchObject({
+      status: 'revoked',
+      entitlement: 'none',
+      tier: 'supporter',
+    });
+    expect(revokedAgain.startsAt.toMillis()).toBe(first.startsAt.toMillis());
   });
 });
 

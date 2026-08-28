@@ -43,6 +43,45 @@ export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number];
 export const SUBSCRIPTION_ENTITLEMENTS = ['none', 'member_monthly'] as const;
 export type SubscriptionEntitlement = (typeof SUBSCRIPTION_ENTITLEMENTS)[number];
 
+/** Canonical tier names. Legacy `member_monthly` maps to Plus. */
+export const SUBSCRIPTION_TIERS = ['community', 'plus', 'supporter'] as const;
+export type SubscriptionTier = (typeof SUBSCRIPTION_TIERS)[number];
+
+export const PLUS_MONTHLY_PRODUCT_ID = 'plus_monthly' as const;
+export const SUPPORTER_MONTHLY_PRODUCT_ID = 'supporter_monthly' as const;
+
+export function subscriptionTierForLegacyEntitlement(
+  entitlement: SubscriptionEntitlement,
+): SubscriptionTier {
+  return entitlement === 'member_monthly' ? 'plus' : 'community';
+}
+
+/** Resolves effective access; retained lifecycle tier does not override `none`. */
+export function resolveSubscriptionTier(input: {
+  entitlement: SubscriptionEntitlement;
+  tier?: SubscriptionTier | null;
+}): SubscriptionTier {
+  if (input.entitlement === 'none') return 'community';
+  return input.tier ?? 'plus';
+}
+
+export function isPaidSubscriptionTier(tier: SubscriptionTier): boolean {
+  return tier === 'plus' || tier === 'supporter';
+}
+
+/** Compatibility projection used by the existing activeMember flag and claim. */
+export function grantsLegacyActiveMember(input: {
+  entitlement: SubscriptionEntitlement;
+  status: SubscriptionStatus;
+  tier?: SubscriptionTier | null;
+}): boolean {
+  return (
+    input.entitlement === 'member_monthly' &&
+    isPaidSubscriptionTier(resolveSubscriptionTier(input)) &&
+    isSubscriptionActiveStatus(input.status)
+  );
+}
+
 /** active and grace_period both grant access (legacy). */
 export function isSubscriptionActiveStatus(status: SubscriptionStatus): boolean {
   return status === 'active' || status === 'grace_period';
@@ -70,10 +109,25 @@ const grantEntitlementInputSchema = z
   .object({
     targetUid: uidSchema,
     entitlement: z.enum(SUBSCRIPTION_ENTITLEMENTS),
+    tier: z.enum(SUBSCRIPTION_TIERS).optional(),
     reason: z.string().trim().min(1).max(500),
     expiresAt: z.string().datetime().nullable().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((input, ctx) => {
+    const inconsistentCommunityGrant =
+      input.entitlement === 'member_monthly' && input.tier === 'community';
+    // Revocation preserves the stored tier for lifecycle reporting. A caller
+    // therefore cannot select a replacement tier while revoking.
+    const inconsistentPaidRevoke = input.entitlement === 'none' && input.tier !== undefined;
+    if (inconsistentCommunityGrant || inconsistentPaidRevoke) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['tier'],
+        message: 'Tier is inconsistent with the legacy entitlement.',
+      });
+    }
+  });
 
 export type VerifySubscriptionInput = z.infer<typeof verifySubscriptionInputSchema>;
 export type GrantEntitlementInput = z.infer<typeof grantEntitlementInputSchema>;
@@ -98,7 +152,7 @@ export const parseGrantEntitlementInput = (d: unknown) =>
   parse(
     grantEntitlementInputSchema,
     d,
-    'Expected { targetUid, entitlement: none|member_monthly, reason, expiresAt? }.',
+    'Expected { targetUid, entitlement: none|member_monthly, tier?: community|plus|supporter, reason, expiresAt? } with a consistent tier.',
   );
 
 // ---------------------------------------------------------------------------
@@ -110,8 +164,12 @@ export interface EntitlementRecordInput {
   platform: SubscriptionPlatform;
   status: SubscriptionStatus;
   entitlement: SubscriptionEntitlement;
+  /** Optional during rolling compatibility; explicit paid tiers survive lifecycle rewrites. */
+  tier?: SubscriptionTier;
   /** SHA-256 of the purchase token; null for manual grants. */
   purchaseTokenHash: string | null;
+  /** Optional for legacy callers and nullable when the historical start is unknown. */
+  startsAt?: Date | null;
   expiresAt: Date | null;
 }
 
@@ -120,12 +178,22 @@ export function buildSubscriptionDocument(
   input: EntitlementRecordInput,
   serverTimestamp: () => unknown,
 ): Record<string, unknown> {
+  if (input.entitlement === 'member_monthly' && input.tier === 'community') {
+    throw new Error('member_monthly cannot be persisted with the Community tier.');
+  }
+  // Persist an explicit historical tier even when entitlement is now `none`.
+  // Access readers use resolveSubscriptionTier(), which still resolves that
+  // lifecycle record to Community. Missing legacy tiers are materialized from
+  // the legacy entitlement when this merge-less writer runs.
+  const tier = input.tier ?? subscriptionTierForLegacyEntitlement(input.entitlement);
   return {
     userId: input.userId,
     platform: input.platform,
     status: input.status,
     entitlement: input.entitlement,
+    tier,
     purchaseTokenHash: input.purchaseTokenHash,
+    startsAt: input.startsAt ?? null,
     expiresAt: input.expiresAt,
     updatedAt: serverTimestamp(),
   };

@@ -20,13 +20,20 @@ import { adminAuth, db } from '../firebase';
 import { applyPrivilegeChange, computeUpdatedClaims } from '../admin/claims-core';
 import {
   buildSubscriptionDocument,
-  isSubscriptionActiveStatus,
+  grantsLegacyActiveMember,
   type EntitlementRecordInput,
 } from './subscription-core';
 
-export async function applyEntitlement(input: EntitlementRecordInput): Promise<void> {
-  const active =
-    input.entitlement === 'member_monthly' && isSubscriptionActiveStatus(input.status);
+export interface ApplyEntitlementOptions {
+  /** Optional audit event committed atomically with the Firestore entitlement records. */
+  auditEvent?: Record<string, unknown>;
+}
+
+export async function applyEntitlement(
+  input: EntitlementRecordInput,
+  options: ApplyEntitlementOptions = {},
+): Promise<void> {
+  const active = grantsLegacyActiveMember(input);
   const targetUser = await adminAuth.getUser(input.userId);
 
   await applyPrivilegeChange({
@@ -51,6 +58,9 @@ export async function applyEntitlement(input: EntitlementRecordInput): Promise<v
         { activeMember: active, updatedAt: FieldValue.serverTimestamp() },
         { merge: true },
       );
+      if (options.auditEvent) {
+        batch.set(db.collection('adminAuditEvents').doc(), options.auditEvent);
+      }
       await batch.commit();
     },
   });
