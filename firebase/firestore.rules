@@ -70,6 +70,17 @@ service cloud.firestore {
     // convoy doc ONCE (via a `let`) and checks both memberUids and the accepted
     // inviteStatus off the same snapshot — a single get() rather than two, which
     // matters on the frequently-read/updated follow-me trail subdoc.
+    //
+    // Known cost tradeoff (accepted for now): this get() runs on every followMe
+    // read-rule eval, so a busy convoy (leader writing ~every 4s, N members each
+    // listening) pays ~1 extra convoy read per delivered update on top of the
+    // followMe read itself. Negligible at this app's convoy scale. If Firestore
+    // spend ever shows it, denormalise an immutable acceptedMemberUids snapshot
+    // onto followMe/current (written ONLY by the callables that already mutate
+    // convoy membership) and check membership off that — but only then: the
+    // snapshot must be kept in lockstep with membership or a departed member
+    // keeps read access / a new one is locked out, a consistency risk not worth
+    // taking speculatively.
     function isAcceptedConvoyMember(convoyId, uid) {
       let convoy = get(/databases/$(database)/documents/convoys/$(convoyId)).data;
       return uid in convoy.memberUids
