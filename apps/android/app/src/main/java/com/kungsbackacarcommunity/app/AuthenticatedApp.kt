@@ -5059,6 +5059,24 @@ fun AuthenticatedApp(
                 val decodedFollowMeTrail =
                     remember(followMeState?.polyline) { FollowMeTrail.decode(followMeState?.polyline) }
 
+                // Timer tick so the staleness gate is re-evaluated even when NO data
+                // arrives. The draw effect below only re-runs on key changes (a
+                // live-marker update, a trail write); if the leader goes silent while
+                // everyone is stationary nothing changes and a stale trail would
+                // linger. This increments while (and only while) a non-self leader
+                // trail is present, so the effect re-checks freshness on a timer and
+                // takes a stale line down. No cost when there is no trail to draw.
+                var followMeStaleTick by remember { mutableIntStateOf(0) }
+                val followMeLeaderPresent = followMeState?.leaderUid != null && !followMeSelfLeading
+                LaunchedEffect(followMeLeaderPresent) {
+                    if (followMeLeaderPresent) {
+                        while (true) {
+                            delay(FollowMeTrail.STALE_RECHECK_MS)
+                            followMeStaleTick++
+                        }
+                    }
+                }
+
                 // Member-side draw: push the shared trail to the map ONLY when it
                 // should draw — a leader that is set, not me, still a member, and
                 // fresh (freshness taken from the leader's live marker OR the
@@ -5066,7 +5084,7 @@ fun AuthenticatedApp(
                 // has stopped extending the trail is not wrongly hidden). A crashed/
                 // vanished leader goes stale and the line comes down with no
                 // inactivity timer, and null clears it.
-                LaunchedEffect(mapSurface, followMeState, decodedFollowMeTrail, convoyMemberPositions, activeConvoy?.memberUids, uid) {
+                LaunchedEffect(mapSurface, followMeState, decodedFollowMeTrail, convoyMemberPositions, activeConvoy?.memberUids, uid, followMeStaleTick) {
                     val state = followMeState
                     val leaderUid = state?.leaderUid
                     val leaderPos = convoyMemberPositions.firstOrNull { it.uid == leaderUid }

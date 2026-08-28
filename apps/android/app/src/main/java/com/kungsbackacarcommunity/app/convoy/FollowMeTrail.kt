@@ -44,6 +44,16 @@ object FollowMeTrail {
     const val STALE_MS: Long = 90_000L
 
     /**
+     * How often the member-side render gate re-evaluates staleness on a TIMER,
+     * independent of data changes. The draw effect otherwise only re-runs when its
+     * inputs change (a live-marker tick, a trail write); if the leader goes silent
+     * while everyone is stationary NOTHING changes, so without this a stale trail
+     * would linger until the next unrelated update. Ticking at this interval takes
+     * a genuinely stale trail down within ~[STALE_RECHECK_MS] of [STALE_MS] elapsing.
+     */
+    const val STALE_RECHECK_MS: Long = 30_000L
+
+    /**
      * Minimum spacing between direct trail WRITES by the leader, in millis. The
      * leader's position stream ticks far faster; the trail is flushed to Firestore
      * at most this often (while it actually changed), so the ~15 km trail costs a
