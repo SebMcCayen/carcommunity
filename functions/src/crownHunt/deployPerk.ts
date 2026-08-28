@@ -261,8 +261,18 @@ function evaluateTrapCaps(
  */
 const CANDIDATE_PAST_MS = MAX_EVENT_DURATION_MS + EVENT_TRAP_BLOCK_AFTER_END_MS;
 
-/** Max candidate events resolved per deploy — bounds the per-candidate reads. */
-const MAX_CANDIDATE_EVENTS = 50;
+/** Page size for the candidate-event scan — bounds the per-page reads. */
+const EVENT_CANDIDATE_PAGE_SIZE = 50;
+
+/**
+ * Defensive ceiling on how many pages the candidate scan will walk before it
+ * gives up. The time window already bounds the real candidate count to a handful
+ * of concurrent car meets, so this is only ever reached by a pathological /
+ * runaway events collection. If it IS reached the rule cannot be proven, so the
+ * scan FAILS CLOSED (rejects the deploy) rather than allow a potentially illegal
+ * trap — the enforcement must never fail open.
+ */
+const MAX_EVENT_CANDIDATE_PAGES = 20;
 
 const toNumber = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -283,6 +293,48 @@ const toMillis = (value: unknown): number | null =>
  * `details/private` subdoc (mirroring events/checkIn.ts), so this costs one
  * extra read per candidate — hence the tight time window on the query.
  */
+function throwEventTooClose(): never {
+  throw new HttpsError(
+    'failed-precondition',
+    'Du kan inte placera en fälla så nära ett event.',
+    { reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE },
+  );
+}
+
+/**
+ * Resolve one candidate event's PRECISE coordinates. On this branch latitude/
+ * longitude live on the member-gated `details/private` subdoc; a concurrent
+ * change mirrors them onto the teaser. Reading the teaser first and falling back
+ * to the detail doc matches events/checkIn.ts and is correct under either layout
+ * (the Admin SDK bypasses rules). Candidates with no valid coords resolve to
+ * null (skipped, not blocking).
+ */
+async function resolveCandidateEvent(
+  doc: FirebaseFirestore.QueryDocumentSnapshot,
+): Promise<TrapExclusionEvent | null> {
+  const event = doc.data();
+  const startsAtMs = toMillis(event.startsAt);
+  if (startsAtMs === null) {
+    return null;
+  }
+  let eventLat = toNumber(event.latitude);
+  let eventLng = toNumber(event.longitude);
+  if (eventLat === null || eventLng === null) {
+    const detail = (await doc.ref.collection('details').doc('private').get()).data();
+    eventLat = eventLat ?? toNumber(detail?.latitude);
+    eventLng = eventLng ?? toNumber(detail?.longitude);
+  }
+  if (eventLat === null || eventLng === null || !isValidCoordinate(eventLat, eventLng)) {
+    return null;
+  }
+  return {
+    startsAtMs,
+    endsAtMs: toMillis(event.endsAt),
+    latitude: eventLat,
+    longitude: eventLng,
+  };
+}
+
 async function assertTrapNotNearEvent(
   latitude: number,
   longitude: number,
@@ -291,77 +343,53 @@ async function assertTrapNotNearEvent(
   const nowMs = now.getTime();
   // Candidate events: published or completed, starting within a window that
   // brackets both a just-ended event (up to CANDIDATE_PAST_MS ago) and one that
-  // has not yet started (up to the pre-block horizon). Needs the existing
-  // composite index events(status ASC, startsAt ASC).
-  const candidatesSnap = await db
+  // has not yet started (up to the pre-block horizon). Ordered by startsAt so we
+  // can PAGE deterministically. Needs the existing composite index
+  // events(status ASC, startsAt ASC).
+  const windowedOrdered = db
     .collection('events')
     .where('status', 'in', ['published', 'completed'])
     .where('startsAt', '>=', Timestamp.fromMillis(nowMs - CANDIDATE_PAST_MS))
     .where('startsAt', '<=', Timestamp.fromMillis(nowMs + EVENT_TRAP_BLOCK_BEFORE_START_MS))
-    // Explicit deterministic order so the `.limit` cap never drops an arbitrary
-    // (document-id ordered) subset — otherwise, with more than MAX_CANDIDATE_EVENTS
-    // matches, a relevant event could be omitted and a trap wrongly allowed. The
-    // existing composite index events(status ASC, startsAt ASC) covers this.
-    .orderBy('startsAt', 'asc')
-    .limit(MAX_CANDIDATE_EVENTS)
-    .get();
+    .orderBy('startsAt', 'asc');
 
-  if (candidatesSnap.empty) {
-    return;
+  // Walk EVERY candidate in the window — page by page, stopping early on the
+  // first blocking event — so the rule can never fail open by ignoring events
+  // beyond a single capped page. In practice the window holds a handful of
+  // events (one page); pagination only matters for a pathological collection,
+  // which the MAX_EVENT_CANDIDATE_PAGES ceiling then fails CLOSED on.
+  let cursor: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (let page = 0; page < MAX_EVENT_CANDIDATE_PAGES; page++) {
+    let pageQuery = windowedOrdered.limit(EVENT_CANDIDATE_PAGE_SIZE);
+    if (cursor) {
+      pageQuery = pageQuery.startAfter(cursor);
+    }
+    const snap = await pageQuery.get();
+    if (snap.empty) {
+      return; // exhausted with no blocking event
+    }
+
+    const resolved = await Promise.all(snap.docs.map(resolveCandidateEvent));
+    const candidates = resolved.filter((e): e is TrapExclusionEvent => e !== null);
+    if (isTrapBlockedByEvents(candidates, latitude, longitude, nowMs)) {
+      throwEventTooClose();
+    }
+
+    if (snap.size < EVENT_CANDIDATE_PAGE_SIZE) {
+      return; // last (partial) page — window fully scanned, nothing blocks
+    }
+    cursor = snap.docs[snap.docs.length - 1];
   }
 
-  // The cap is a safety bound on per-deploy reads, set far above any realistic
-  // count of concurrent car meets. A full page (size === cap; `.limit` means it
-  // can never exceed) means the query MAY have been truncated — there could be
-  // further in-window events that went unchecked (or there may be exactly this
-  // many and nothing beyond). Either way it is worth surfacing (no PII: a count
-  // only) as a signal to raise the cap, rather than risk silently under-enforcing.
-  if (candidatesSnap.size === MAX_CANDIDATE_EVENTS) {
-    logger.warn('crownHunt.deployPerk event-exclusion candidate cap reached (results may be truncated)', {
-      cap: MAX_CANDIDATE_EVENTS,
-    });
-  }
-
-  // Resolve each candidate's PRECISE coordinates. On this branch latitude/
-  // longitude live on the member-gated `details/private` subdoc; a concurrent
-  // change mirrors them onto the teaser. Reading the teaser first and falling
-  // back to the detail doc matches events/checkIn.ts and is correct under
-  // either layout (the Admin SDK bypasses rules). Candidates with no valid
-  // coords are skipped, not blocking.
-  const resolved = await Promise.all(
-    candidatesSnap.docs.map(async (doc): Promise<TrapExclusionEvent | null> => {
-      const event = doc.data();
-      const startsAtMs = toMillis(event.startsAt);
-      if (startsAtMs === null) {
-        return null;
-      }
-      let eventLat = toNumber(event.latitude);
-      let eventLng = toNumber(event.longitude);
-      if (eventLat === null || eventLng === null) {
-        const detail = (await doc.ref.collection('details').doc('private').get()).data();
-        eventLat = eventLat ?? toNumber(detail?.latitude);
-        eventLng = eventLng ?? toNumber(detail?.longitude);
-      }
-      if (eventLat === null || eventLng === null || !isValidCoordinate(eventLat, eventLng)) {
-        return null;
-      }
-      return {
-        startsAtMs,
-        endsAtMs: toMillis(event.endsAt),
-        latitude: eventLat,
-        longitude: eventLng,
-      };
-    }),
-  );
-
-  const candidates = resolved.filter((e): e is TrapExclusionEvent => e !== null);
-  if (isTrapBlockedByEvents(candidates, latitude, longitude, nowMs)) {
-    throw new HttpsError(
-      'failed-precondition',
-      'Du kan inte placera en fälla så nära ett event.',
-      { reason: PERK_DEPLOY_REASON_EVENT_TOO_CLOSE },
-    );
-  }
+  // Reached the defensive page ceiling without exhausting the window — absurd for
+  // a real events collection. We cannot prove the trap is clear of every event,
+  // so FAIL CLOSED rather than allow a potentially illegal deploy (no PII: counts
+  // only).
+  logger.warn('crownHunt.deployPerk event-exclusion pagination ceiling hit; failing closed', {
+    pages: MAX_EVENT_CANDIDATE_PAGES,
+    pageSize: EVENT_CANDIDATE_PAGE_SIZE,
+  });
+  throwEventTooClose();
 }
 
 async function deployTrap(args: {
