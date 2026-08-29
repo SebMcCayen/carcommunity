@@ -75,7 +75,14 @@ object PoliceMapMarkers {
         pins: List<PoliceReport>,
         suppressNearPoliceIncidents: List<LatLng> = emptyList(),
     ): List<MapIncidentMarker> =
-        pins.filterNot { pin -> coincidesWithAnyIncident(pin, suppressNearPoliceIncidents) }.map { pin ->
+        // Common case (nothing to suppress): a single map pass, no coincidence
+        // check. Only when there ARE Police incidents to dedupe against do we pay
+        // the extra filter pass.
+        (if (suppressNearPoliceIncidents.isEmpty()) {
+            pins
+        } else {
+            pins.filterNot { pin -> coincidesWithAnyIncident(pin, suppressNearPoliceIncidents) }
+        }).map { pin ->
             MapIncidentMarker(
                 id = POLICE_MARKER_ID_PREFIX + pin.id,
                 longitude = pin.longitude,
