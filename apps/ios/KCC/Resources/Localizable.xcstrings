@@ -30193,6 +30193,57 @@
         }
       }
     },
+    "subscription.manageAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hantera medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Manage membership"
+          }
+        }
+      }
+    },
+    "subscription.manageBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öppnar Google Play där du kan ändra eller avsluta medlemskapet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opens Google Play, where you can change or cancel your membership."
+          }
+        }
+      }
+    },
+    "subscription.manageUnavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunde inte öppna Google Play. Försök igen från Play Butik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not open Google Play. Try again from the Play Store."
+          }
+        }
+      }
+    },
     "subscription.memberMonthlyTitle": {
       "extractionState": "manual",
       "localizations": {
