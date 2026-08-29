@@ -13,7 +13,10 @@ struct RootView: View {
         case .signedOut:
             SignInScreen(coordinator: signInCoordinator)
         case .signedIn, .unavailable:
-            ShellView()
+            // The session rides along so the shell can show who is signed in
+            // and offer sign-out; in the unavailable case the shell renders
+            // bare (no profile entry) off the same state.
+            ShellView(session: session)
         }
     }
 }
