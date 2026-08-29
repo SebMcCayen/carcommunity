@@ -311,7 +311,7 @@
       "description": "Manually award the Helpful Member badge. A reason is required and the action is audited.",
       "userIdLabel": "User ID",
       "userIdPlaceholder": "Paste user ID",
-      "userIdHint": "Enter the internal user ID (UUID) for the user.",
+      "userIdHint": "Enter the internal user ID for the user.",
       "reasonLabel": "Reason",
       "reasonPlaceholder": "Describe why the user is receiving the award",
       "reasonHint": "The reason is saved in the audit log.",
