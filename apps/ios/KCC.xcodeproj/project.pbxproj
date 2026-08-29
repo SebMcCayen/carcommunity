@@ -8,13 +8,22 @@
 
 /* Begin PBXBuildFile section */
 		08ED336A66B293E73A27E257 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD356449B915D60437161C4F /* Tokens.swift */; };
+		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
+		2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */; };
+		54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1669E70D4D1058BBFE53B2E /* RootView.swift */; };
 		697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */; };
+		6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */; };
 		6D653074C83AD139C001A226 /* ShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00786BDC5D7D80DF3558096D /* ShellView.swift */; };
 		71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */; };
 		796D4208F306EAFA0B940C3E /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = C10372A5B1FF04CFD7520C67 /* FirebaseAuth */; };
 		7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A240814194538E5F33BD391 /* KCCApp.swift */; };
+		7C14EF2819D1D418929F4C63 /* AppleSignInProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */; };
+		878A768EA4269808A5DE4AD2 /* SignInScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */; };
 		C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */; };
+		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
 		E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB4411241111CAD26506FD14 /* Localizable.xcstrings */; };
+		EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */; };
+		F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -29,12 +38,21 @@
 
 /* Begin PBXFileReference section */
 		00786BDC5D7D80DF3558096D /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
+		165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthRepository.swift; sourceTree = "<group>"; };
 		1A240814194538E5F33BD391 /* KCCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KCCApp.swift; sourceTree = "<group>"; };
+		343B6E8AA56D06395AD48108 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
+		57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinatorTests.swift; sourceTree = "<group>"; };
 		5A1F61264065E19240C32A0D /* KCCTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KCCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInScreen.swift; sourceTree = "<group>"; };
 		690A7983868C88E10091C89A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
 		8B4A1900424F0BA9CB9105FA /* KCC.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KCC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinator.swift; sourceTree = "<group>"; };
 		AB4411241111CAD26506FD14 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		B1669E70D4D1058BBFE53B2E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
+		C80A81EA9949BF434E7C246D /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
+		CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInProvider.swift; sourceTree = "<group>"; };
 		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNav.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
@@ -56,6 +74,7 @@
 			isa = PBXGroup;
 			children = (
 				1A240814194538E5F33BD391 /* KCCApp.swift */,
+				B1669E70D4D1058BBFE53B2E /* RootView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -73,6 +92,7 @@
 			children = (
 				690A7983868C88E10091C89A /* Info.plist */,
 				07E79EF0F21135E662C9816C /* App */,
+				9469984432E4AD2C953FD6CF /* Auth */,
 				6CA551C0241BD4456236BBBD /* Design */,
 				EF108D173C02293016E81C0D /* Firebase */,
 				3C9357116487CACE984AFAEC /* Resources */,
@@ -107,6 +127,20 @@
 			path = Design;
 			sourceTree = "<group>";
 		};
+		9469984432E4AD2C953FD6CF /* Auth */ = {
+			isa = PBXGroup;
+			children = (
+				CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */,
+				8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */,
+				343B6E8AA56D06395AD48108 /* AuthSession.swift */,
+				C80A81EA9949BF434E7C246D /* AuthState.swift */,
+				165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */,
+				93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */,
+				5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */,
+			);
+			path = Auth;
+			sourceTree = "<group>";
+		};
 		99C0A5D5154EEC666ADC0211 /* Shell */ = {
 			isa = PBXGroup;
 			children = (
@@ -128,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */,
+				57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */,
 			);
 			path = KCCTests;
 			sourceTree = "<group>";
@@ -249,10 +284,18 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C14EF2819D1D418929F4C63 /* AppleSignInProvider.swift in Sources */,
+				6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */,
+				292854460109584A07D618C1 /* AuthSession.swift in Sources */,
+				E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */,
+				EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */,
 				C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */,
 				7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */,
+				54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */,
 				697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */,
 				6D653074C83AD139C001A226 /* ShellView.swift in Sources */,
+				F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */,
+				878A768EA4269808A5DE4AD2 /* SignInScreen.swift in Sources */,
 				08ED336A66B293E73A27E257 /* Tokens.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -262,6 +305,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */,
+				2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
