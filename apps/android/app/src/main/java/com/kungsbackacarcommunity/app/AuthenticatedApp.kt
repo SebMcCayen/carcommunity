@@ -1471,7 +1471,23 @@ fun AuthenticatedApp(
                     policeController?.nearbyPolice ?: MutableStateFlow(emptyList<PoliceReport>())
                 }
             val nearbyPolice by policeFlow.collectAsState()
-            val policeMarkers = remember(nearbyPolice) { PoliceMapMarkers.markers(nearbyPolice) }
+            // Locations of the Police-category incidents the incident layer is
+            // already drawing. A "report police" tap from the map creates BOTH a
+            // Police incident AND its proximity pin at the same fix, and both draw
+            // as the identical blue police disc — so a police pin coincident with
+            // one of these is suppressed from the DRAW below (its proximity alert
+            // still fires off the full nearbyPolice list), fixing the duplicate
+            // "two police icons" a single report otherwise left on the map.
+            val policeIncidentPoints =
+                remember(visibleIncidents) {
+                    visibleIncidents
+                        .filter { it.type == IncidentType.POLICE }
+                        .map { LatLng(latitude = it.latitude, longitude = it.longitude) }
+                }
+            val policeMarkers =
+                remember(nearbyPolice, policeIncidentPoints) {
+                    PoliceMapMarkers.markers(nearbyPolice, policeIncidentPoints)
+                }
             // The combined marker list handed to every map: incidents plus the
             // police pins, one shared IncidentMarkerLayer draw.
             val mapIncidentMarkers =
