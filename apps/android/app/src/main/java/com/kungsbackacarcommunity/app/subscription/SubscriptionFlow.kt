@@ -137,12 +137,12 @@ object PurchaseFlow {
             PurchaseFlowStatus.Idle,
             PurchaseFlowStatus.Ready,
             PurchaseFlowStatus.Success,
-            PurchaseFlowStatus.Pending,
             is PurchaseFlowStatus.Failed,
             -> true
             PurchaseFlowStatus.Connecting,
             PurchaseFlowStatus.Purchasing,
             PurchaseFlowStatus.Verifying,
+            PurchaseFlowStatus.Pending,
             -> false
         }
 

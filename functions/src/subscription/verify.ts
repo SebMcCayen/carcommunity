@@ -223,6 +223,13 @@ export const verify = onCall(
         }
       }
       if (error instanceof GooglePlayApiError) {
+        if (error.operation === 'get' && error.reason === 'invalid_purchase') {
+          logger.warn('Google Play rejected purchase token', {
+            operation: error.operation,
+            uid: actor.uid,
+          });
+          throw new HttpsError('failed-precondition', 'Google Play purchase is not valid.');
+        }
         logger.error('Google Play subscription request failed', {
           operation: error.operation,
           uid: actor.uid,

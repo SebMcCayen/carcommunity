@@ -6,6 +6,7 @@ import {
   obfuscatedAccountIdForUid,
   parseGooglePlaySubscription,
 } from '../subscription/google-play-core';
+import { classifyGooglePlayGetError } from '../subscription/google-play';
 import {
   PurchaseTokenOwnershipError,
   assertNoDifferentActiveToken,
@@ -44,6 +45,23 @@ function expectCode(run: () => unknown, code: GooglePlayVerificationError['code'
 }
 
 describe('Google Play subscription verification core', () => {
+  it('classifies rejected purchase tokens separately from retryable provider failures', () => {
+    for (const status of [400, 404, 410]) {
+      expect(classifyGooglePlayGetError({ response: { status } })).toBe('invalid_purchase');
+    }
+    for (const error of [
+      { response: { status: 401 } },
+      { response: { status: 403 } },
+      { response: { status: 429 } },
+      { response: { status: 500 } },
+      new Error('network'),
+      null,
+    ]) {
+      expect(classifyGooglePlayGetError(error)).toBe('unavailable');
+    }
+    expect(classifyGooglePlayGetError({ status: 404 })).toBe('invalid_purchase');
+  });
+
   it('pins the Android package and the only purchasable products', () => {
     expect(GOOGLE_PLAY_PACKAGE_NAME).toBe('com.kungsbackacarcommunity.app');
     expect(GOOGLE_PLAY_PRODUCT_IDS).toEqual(['plus_monthly', 'supporter_monthly']);

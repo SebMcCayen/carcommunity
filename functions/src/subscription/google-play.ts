@@ -17,10 +17,34 @@ const ANDROID_PUBLISHER_SCOPE = 'https://www.googleapis.com/auth/androidpublishe
 const API_ROOT = 'https://androidpublisher.googleapis.com/androidpublisher/v3';
 
 export class GooglePlayApiError extends Error {
-  constructor(readonly operation: 'get' | 'acknowledge') {
+  constructor(
+    readonly operation: 'get' | 'acknowledge',
+    readonly reason: 'invalid_purchase' | 'unavailable' = 'unavailable',
+  ) {
     super(`Google Play ${operation} request failed.`);
     this.name = 'GooglePlayApiError';
   }
+}
+
+/**
+ * Distinguishes definitive token rejection from retryable provider failures
+ * without preserving or logging the provider error, whose URL can contain the
+ * raw purchase token.
+ */
+export function classifyGooglePlayGetError(
+  error: unknown,
+): 'invalid_purchase' | 'unavailable' {
+  if (error === null || typeof error !== 'object') return 'unavailable';
+  const record = error as Record<string, unknown>;
+  const response = record.response;
+  const responseStatus =
+    response !== null && typeof response === 'object'
+      ? (response as Record<string, unknown>).status
+      : undefined;
+  const status = typeof responseStatus === 'number' ? responseStatus : record.status;
+  return status === 400 || status === 404 || status === 410
+    ? 'invalid_purchase'
+    : 'unavailable';
 }
 
 export interface GooglePlaySubscriptionClient {
@@ -39,10 +63,10 @@ export class AdcGooglePlaySubscriptionClient implements GooglePlaySubscriptionCl
       const client = await this.auth.getClient();
       const response = await client.request<unknown>({ method: 'GET', url });
       return response.data;
-    } catch {
+    } catch (error) {
       // Never include the request URL or provider error: both can contain the
       // raw purchase token. Callers log only this sanitized operation name.
-      throw new GooglePlayApiError('get');
+      throw new GooglePlayApiError('get', classifyGooglePlayGetError(error));
     }
   }
 

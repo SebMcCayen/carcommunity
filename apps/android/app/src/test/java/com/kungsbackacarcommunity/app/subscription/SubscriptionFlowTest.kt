@@ -90,17 +90,18 @@ class SubscriptionFlowTest {
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Idle))
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Ready))
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Success))
-        assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Pending))
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Failed(PurchaseFailureReason.Connection)))
 
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Connecting))
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Purchasing))
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Verifying))
+        assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Pending))
     }
 
     @Test
     fun `isInFlight is the inverse of canStart`() {
         assertTrue(PurchaseFlow.isInFlight(PurchaseFlowStatus.Verifying))
+        assertTrue(PurchaseFlow.isInFlight(PurchaseFlowStatus.Pending))
         assertFalse(PurchaseFlow.isInFlight(PurchaseFlowStatus.Idle))
     }
 }
