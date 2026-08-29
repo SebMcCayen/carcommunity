@@ -5,7 +5,7 @@ import SwiftUI
 /// (config-less build) → the bare shell so CI and clone-and-run builds still
 /// render.
 struct RootView: View {
-    let session: AuthSession
+    @Bindable var session: AuthSession
     let signInCoordinator: SignInCoordinator
 
     var body: some View {

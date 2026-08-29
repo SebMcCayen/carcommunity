@@ -8,7 +8,7 @@ struct ShellView: View {
     /// The signed-in session, threaded from ``RootView``. The config-less /
     /// unavailable state renders the bare shell with no profile entry —
     /// Android's "unavailable entries are omitted" hub rule.
-    let session: AuthSession
+    @Bindable var session: AuthSession
 
     @State private var selectedTab: ShellTab = .defaultTab
     /// The full-screen sub-route back-stack, held as the ONE pure value from
