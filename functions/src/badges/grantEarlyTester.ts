@@ -44,6 +44,15 @@ export interface GrantEarlyTesterResponse {
   skippedCount: number;
 }
 
+/**
+ * How many UIDs are processed concurrently within one chunk. Each UID is an
+ * independent read + single-document transaction, so a bounded fan-out keeps the
+ * whole batch well inside the callable timeout without opening an unbounded
+ * number of Firestore operations at once (which would risk contention at the top
+ * of the 200-UID cap).
+ */
+const GRANT_CONCURRENCY = 20;
+
 export const grantEarlyTester = onCall(
   {
     region: 'europe-west1',
@@ -51,7 +60,10 @@ export const grantEarlyTester = onCall(
     cpu: CPU_ADMIN,
     concurrency: 1,
     memory: '256MiB',
-    timeoutSeconds: 60,
+    // Headroom over the worst case (the 200-UID cap): with GRANT_CONCURRENCY
+    // fan-out the batch finishes in a few seconds, but 120s leaves ample margin
+    // for a cold start plus a slow region.
+    timeoutSeconds: 120,
     enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
   },
   async (request): Promise<GrantEarlyTesterResponse> => {
@@ -64,14 +76,13 @@ export const grantEarlyTester = onCall(
     const { uids, reason } = parsed.input;
 
     const serverTimestamp = () => FieldValue.serverTimestamp();
-    const results: GrantEarlyTesterResult[] = [];
 
-    for (const targetUid of uids) {
+    /** Grants (idempotently) to one UID; never throws for a missing target. */
+    const grantOne = async (targetUid: string): Promise<GrantEarlyTesterResult> => {
       const targetSnap = await db.collection('users').doc(targetUid).get();
       if (!targetSnap.exists || isRestricted(toUserAccessState(targetSnap.data()))) {
         // Missing, suspended or deleted target — skip, do not abort the batch.
-        results.push({ uid: targetUid, status: 'skipped' });
-        continue;
+        return { uid: targetUid, status: 'skipped' };
       }
 
       const badgeRef = db
@@ -107,10 +118,19 @@ export const grantEarlyTester = onCall(
         return false;
       });
 
-      results.push({
+      return {
         uid: targetUid,
         status: alreadyGranted ? 'alreadyGranted' : 'granted',
-      });
+      };
+    };
+
+    // Process in bounded-parallelism chunks: each UID is independent, so a chunk
+    // of GRANT_CONCURRENCY runs together and the next chunk starts only once it
+    // settles. Order of `results` follows the (de-duplicated) input.
+    const results: GrantEarlyTesterResult[] = [];
+    for (let i = 0; i < uids.length; i += GRANT_CONCURRENCY) {
+      const chunk = uids.slice(i, i + GRANT_CONCURRENCY);
+      results.push(...(await Promise.all(chunk.map(grantOne))));
     }
 
     return {

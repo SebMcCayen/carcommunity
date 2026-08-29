@@ -118,7 +118,7 @@
           "type": "array",
           "items": { "$ref": "common.schema.json#/$defs/uid" },
           "minItems": 1,
-          "maxItems": 500
+          "maxItems": 200
         },
         "reason": { "type": "string", "minLength": 1, "maxLength": 2000 }
       },

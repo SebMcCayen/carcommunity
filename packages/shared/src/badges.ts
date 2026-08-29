@@ -159,7 +159,7 @@ export interface AwardHelpfulMemberResponse {
  * log. Only the early_tester badge is granted through this endpoint.
  */
 export interface GrantEarlyTesterRequest {
-  /** The hand-picked UID list (1..500). De-duplicated server-side. */
+  /** The hand-picked UID list (1..200). De-duplicated server-side. */
   uids: string[];
   /** Optional reason, recorded in the audit log; defaulted when omitted. */
   reason?: string;

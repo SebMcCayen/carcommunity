@@ -811,13 +811,14 @@ export function parseAwardHelpfulMemberInput(
 /**
  * Input for badges.grantEarlyTester (admin-only): the hand-picked list of UIDs
  * that receive the exclusive early_tester ("Grundare") badge, plus an optional
- * reason for the audit trail. Accepts 1..500 UIDs per call; duplicates are
- * de-duplicated before granting so the same UID appearing twice is granted once.
- * The reason defaults to a fixed label when omitted.
+ * reason for the audit trail. Accepts 1..200 UIDs per call (the real early-tester
+ * list is small); duplicates are de-duplicated before granting so the same UID
+ * appearing twice is granted once. The reason defaults to a fixed label when
+ * omitted.
  */
 const grantEarlyTesterInputSchema = z
   .object({
-    uids: z.array(z.string().trim().min(1).max(128)).min(1).max(500),
+    uids: z.array(z.string().trim().min(1).max(128)).min(1).max(200),
     reason: z.string().trim().min(1).max(2000).optional(),
   })
   .strict();
