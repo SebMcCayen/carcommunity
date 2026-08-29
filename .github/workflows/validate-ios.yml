@@ -1,0 +1,76 @@
+name: Validate iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/ios/**'
+      - 'contracts/localization/**'
+      - 'contracts/design-tokens/**'
+      - '.github/workflows/validate-ios.yml'
+  # Intentionally no `branches:` filter: every PR runs CI regardless of its
+  # base branch, so stacked PRs (base = another feature branch) are verified
+  # too. A branch allowlist silently skips CI for any new naming scheme.
+  # The `paths:` filter below still scopes this to relevant changes.
+  pull_request:
+    paths:
+      - 'apps/ios/**'
+      - 'contracts/localization/**'
+      - 'contracts/design-tokens/**'
+      - '.github/workflows/validate-ios.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-ios:
+    name: validate-ios
+    # macOS minutes bill at a 10x multiplier on private repos — this job is
+    # paths-filtered above so it only runs when iOS or its contracts change.
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js (for codegen checks)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Verify generated String Catalog is up to date
+        run: |
+          node apps/ios/scripts/generate-strings.mjs
+          if ! git diff --exit-code apps/ios/KCC/Resources/Localizable.xcstrings; then
+            echo "::error::Localizable.xcstrings is out of date. Run: node apps/ios/scripts/generate-strings.mjs"
+            exit 1
+          fi
+
+      - name: Verify generated design tokens are up to date
+        run: |
+          node apps/ios/scripts/generate-tokens.mjs
+          if ! git diff --exit-code apps/ios/KCC/Design/Tokens.swift; then
+            echo "::error::Tokens.swift is out of date. Run: node apps/ios/scripts/generate-tokens.mjs"
+            exit 1
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      # Builds WITHOUT GoogleService-Info.plist (it is gitignored and no
+      # secret is injected here) — this is deliberate: it continuously proves
+      # the config-less-build seam that FirebaseBootstrap provides.
+      - name: Build and test (simulator, config-less)
+        run: |
+          cd apps/ios
+          # Pick the first available iPhone simulator on the runner image, so
+          # the workflow survives device-lineup renames across Xcode versions.
+          DEST=$(xcrun simctl list devices available | grep -m1 -o 'iPhone [0-9][^(]*' | sed 's/ *$//')
+          echo "Using simulator destination: ${DEST}"
+          xcodebuild -project KCC.xcodeproj -scheme KCC \
+            -destination "platform=iOS Simulator,name=${DEST}" \
+            test

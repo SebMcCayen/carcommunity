@@ -1,0 +1,91 @@
+# XcodeGen project specification — the source of truth for KCC.xcodeproj.
+#
+# The generated KCC.xcodeproj is committed so plain Xcode works out of the box;
+# after editing this file, regenerate with `xcodegen generate` (run from
+# apps/ios) and commit both. CI will diff-check the two once the iOS validation
+# workflow lands (mirroring the contracts codegen drift checks).
+name: KCC
+options:
+  developmentLanguage: sv
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+# Project-level settings so every target (and any future one) inherits the
+# same Swift language mode instead of Xcode's Swift 5 default.
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 12.0.0
+
+targets:
+  KCC:
+    type: application
+    platform: iOS
+    sources:
+      - path: KCC
+    dependencies:
+      - package: Firebase
+        product: FirebaseAuth
+    info:
+      path: KCC/Info.plist
+      properties:
+        CFBundleDisplayName: Kungsbacka Car Community
+        CFBundleDevelopmentRegion: sv
+        UILaunchScreen: {}
+        ITSAppUsesNonExemptEncryption: false
+        # Single-source the version from the build settings below.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kungsbackacarcommunity.app
+        MARKETING_VERSION: 0.1.0
+        CURRENT_PROJECT_VERSION: 1
+        # Keep script phases sandboxed; the GoogleService-Info.plist embedding
+        # phase below declares its input/output files so the sandbox permits
+        # exactly that copy and nothing else.
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+    postBuildScripts:
+      # The config-less-build seam (parity with Android's gitignored
+      # google-services.json): GoogleService-Info.plist is NOT referenced by the
+      # project. When the gitignored file exists locally (or is injected from a
+      # CI secret) it is copied into the app bundle; when absent the app still
+      # builds and runs with Firebase-backed features disabled
+      # (FirebaseBootstrap.configureIfAvailable finds no plist).
+      - name: Embed GoogleService-Info.plist when present
+        script: |
+          SRC="${SRCROOT}/KCC/GoogleService-Info.plist"
+          DST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/GoogleService-Info.plist"
+          if [ -f "$SRC" ]; then
+            cp "$SRC" "$DST"
+            echo "GoogleService-Info.plist embedded"
+          else
+            # Also remove any copy left in the product by an earlier build, so
+            # deleting the local plist really returns to a config-less build.
+            rm -f "$DST"
+            echo "GoogleService-Info.plist absent — building without Firebase config"
+          fi
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(SRCROOT)/KCC/GoogleService-Info.plist
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist
+    scheme:
+      testTargets:
+        - KCCTests
+
+  KCCTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: KCCTests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: KCC
