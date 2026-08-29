@@ -1,4 +1,4 @@
-import type { GooglePlayProductId } from './google-play-core';
+import { GOOGLE_PLAY_PRODUCT_IDS, type GooglePlayProductId } from './google-play-core';
 
 export class PurchaseTokenOwnershipError extends Error {
   constructor(
@@ -48,6 +48,14 @@ export function validateTokenOwnership(
     throw new PurchaseTokenOwnershipError('malformed_record');
   }
   const record = current as Record<string, unknown>;
+  if (
+    typeof record.uid !== 'string' ||
+    record.uid.length === 0 ||
+    typeof record.productId !== 'string' ||
+    !(GOOGLE_PLAY_PRODUCT_IDS as readonly string[]).includes(record.productId)
+  ) {
+    throw new PurchaseTokenOwnershipError('malformed_record');
+  }
   if (record.uid !== expected.uid) {
     throw new PurchaseTokenOwnershipError('different_user');
   }

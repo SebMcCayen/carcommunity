@@ -2,9 +2,9 @@
  * Pure Google Play subscriptionsv2 response validation and lifecycle mapping.
  *
  * This module deliberately accepts `unknown`: Android Publisher responses are
- * an external trust boundary. No entitlement decision is made until package,
- * product, Firebase-account binding, state, and timestamps have all been
- * validated here.
+ * an external trust boundary. No entitlement decision is made until product,
+ * Firebase-account binding, state, and timestamps have all been validated
+ * here. The package name is pinned separately in the Android Publisher URL.
  */
 
 import { createHash } from 'node:crypto';

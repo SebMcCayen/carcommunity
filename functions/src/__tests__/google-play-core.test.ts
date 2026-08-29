@@ -256,6 +256,23 @@ describe('Google Play purchase token ownership', () => {
     ).toThrow(PurchaseTokenOwnershipError);
   });
 
+  it.each([
+    {},
+    { uid: 123, productId: 'plus_monthly' },
+    { uid: '', productId: 'plus_monthly' },
+    { uid: UID },
+    { uid: UID, productId: 123 },
+    { uid: UID, productId: 'unknown_monthly' },
+  ])('classifies malformed ownership state separately from a replay %#', (current) => {
+    try {
+      validateTokenOwnership(current, expected);
+      throw new Error('Expected malformed ownership state.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PurchaseTokenOwnershipError);
+      expect((error as PurchaseTokenOwnershipError).reason).toBe('malformed_record');
+    }
+  });
+
   it('allows the same token to update or revoke its own effective subscription', () => {
     expect(() =>
       assertNoDifferentActiveToken(

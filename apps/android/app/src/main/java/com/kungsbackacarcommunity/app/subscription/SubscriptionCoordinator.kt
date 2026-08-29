@@ -13,8 +13,9 @@ import kotlinx.coroutines.flow.first
  * Orchestrates the subscription purchase → verify flow (Phase 12 slice 24):
  * connect → query products → launch Play purchase → await the purchaseToken →
  * call `subscription-verify`. The backend acknowledges only after verification
- * and entitlement application. Pure Kotlin (the Play-UI launch is
- * injected as a `() -> Unit` so no Android types leak in) and therefore
+ * and entitlement application. Pure Kotlin (the Play-UI launch is injected as
+ * a `() -> PurchaseLaunchResult` so no Android types leak in and synchronous
+ * launch failures remain observable) and therefore
  * unit-testable with fakes; it exposes a [StateFlow] of [PurchaseFlowStatus] the
  * UI observes.
  *
