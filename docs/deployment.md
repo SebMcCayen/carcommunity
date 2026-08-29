@@ -350,6 +350,10 @@ obfuscated Firebase UID, the backend compares it with Play's external account
 identifier, allows only the two products, transactionally locks each token hash
 to one UID, applies entitlement through `applyEntitlement`, and acknowledges on
 the server only after the grant. Raw purchase tokens are never logged or stored.
+While a paid subscription is effective, the Android purchase actions are
+disabled and the backend rejects a different purchase token. This prevents a
+pending, stale, or lower-tier second token from revoking/downgrading access or
+creating an unsupported double subscription before plan changes are built.
 
 ### Required before public subscription launch
 

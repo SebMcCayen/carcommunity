@@ -34,6 +34,12 @@ fun SubscriptionScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // This first Play slice supports one effective product at a time. Plan
+    // changes stay disabled until Play SubscriptionUpdateParams and backend
+    // multi-token effective-tier recomputation land together.
+    val canStartNewPurchase =
+        canSubscribe && !isActiveMember && !PurchaseFlow.isInFlight(status)
+
     AeroPage(title = stringResource(R.string.subscription_screenTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -69,7 +75,7 @@ fun SubscriptionScreen(
                 title = stringResource(R.string.subscription_plusTitle),
                 body = stringResource(R.string.subscription_plusBody),
                 action = stringResource(R.string.subscription_subscribePlusAction),
-                enabled = canSubscribe && !PurchaseFlow.isInFlight(status),
+                enabled = canStartNewPurchase,
                 onClick = { onSubscribe(PLUS_MONTHLY_PRODUCT_ID) },
             )
 
@@ -77,7 +83,7 @@ fun SubscriptionScreen(
                 title = stringResource(R.string.subscription_supporterTitle),
                 body = stringResource(R.string.subscription_supporterBody),
                 action = stringResource(R.string.subscription_subscribeSupporterAction),
-                enabled = canSubscribe && !PurchaseFlow.isInFlight(status),
+                enabled = canStartNewPurchase,
                 onClick = { onSubscribe(SUPPORTER_MONTHLY_PRODUCT_ID) },
             )
 

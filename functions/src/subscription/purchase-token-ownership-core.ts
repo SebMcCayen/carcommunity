@@ -1,10 +1,36 @@
 import type { GooglePlayProductId } from './google-play-core';
 
 export class PurchaseTokenOwnershipError extends Error {
-  constructor(readonly reason: 'different_user' | 'different_product' | 'malformed_record') {
+  constructor(
+    readonly reason:
+      'different_user' | 'different_product' | 'different_active_token' | 'malformed_record',
+  ) {
     super('Purchase token ownership conflict.');
     this.name = 'PurchaseTokenOwnershipError';
   }
+}
+
+export interface CurrentEffectiveSubscription {
+  grantsAccess: boolean;
+  purchaseTokenHash: string | null;
+  expiresAt: Date | null;
+}
+
+/**
+ * The first Play slice intentionally supports one effective store purchase at
+ * a time. A second token must not revoke, downgrade, or double-charge an
+ * already-paid subscription before multi-token tier recomputation and Play's
+ * upgrade/downgrade flow exist.
+ */
+export function assertNoDifferentActiveToken(
+  current: CurrentEffectiveSubscription | null,
+  nextPurchaseTokenHash: string,
+  now: Date,
+): void {
+  if (current === null || !current.grantsAccess) return;
+  if (current.expiresAt !== null && current.expiresAt.getTime() <= now.getTime()) return;
+  if (current.purchaseTokenHash === nextPurchaseTokenHash) return;
+  throw new PurchaseTokenOwnershipError('different_active_token');
 }
 
 export interface PurchaseTokenOwnershipRecord {

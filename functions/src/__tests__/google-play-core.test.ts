@@ -8,6 +8,7 @@ import {
 } from '../subscription/google-play-core';
 import {
   PurchaseTokenOwnershipError,
+  assertNoDifferentActiveToken,
   validateTokenOwnership,
 } from '../subscription/purchase-token-ownership-core';
 
@@ -235,5 +236,54 @@ describe('Google Play purchase token ownership', () => {
     expect(() =>
       validateTokenOwnership({ ...expected, productId: 'supporter_monthly' }, expected),
     ).toThrow(PurchaseTokenOwnershipError);
+  });
+
+  it('allows the same token to update or revoke its own effective subscription', () => {
+    expect(() =>
+      assertNoDifferentActiveToken(
+        {
+          grantsAccess: true,
+          purchaseTokenHash: 'a'.repeat(64),
+          expiresAt: new Date('2026-09-01T00:00:00Z'),
+        },
+        'a'.repeat(64),
+        NOW,
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects a second token while another paid subscription is effective', () => {
+    try {
+      assertNoDifferentActiveToken(
+        {
+          grantsAccess: true,
+          purchaseTokenHash: 'a'.repeat(64),
+          expiresAt: new Date('2026-09-01T00:00:00Z'),
+        },
+        'b'.repeat(64),
+        NOW,
+      );
+      throw new Error('Expected a different-active-token conflict.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(PurchaseTokenOwnershipError);
+      expect((error as PurchaseTokenOwnershipError).reason).toBe('different_active_token');
+    }
+  });
+
+  it('permits a replacement after the current token no longer grants paid access', () => {
+    for (const current of [
+      {
+        grantsAccess: false,
+        purchaseTokenHash: 'a'.repeat(64),
+        expiresAt: new Date('2026-09-01T00:00:00Z'),
+      },
+      {
+        grantsAccess: true,
+        purchaseTokenHash: 'a'.repeat(64),
+        expiresAt: new Date('2026-08-29T11:59:59Z'),
+      },
+    ]) {
+      expect(() => assertNoDifferentActiveToken(current, 'b'.repeat(64), NOW)).not.toThrow();
+    }
   });
 });

@@ -29,6 +29,7 @@ import { applyEntitlement } from './entitlement';
 import {
   SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_TIERS,
+  grantsLegacyActiveMember,
   hashPurchaseToken,
   isPaidSubscriptionTier,
   isSubscriptionActiveStatus,
@@ -52,7 +53,10 @@ import {
   verifyGooglePlaySubscription,
 } from './google-play';
 import { claimPurchaseTokenHash } from './purchase-token-ownership';
-import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
+import {
+  PurchaseTokenOwnershipError,
+  assertNoDifferentActiveToken,
+} from './purchase-token-ownership-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -60,11 +64,6 @@ const CALLABLE_OPTS = {
   memory: '256MiB' as const,
   timeoutSeconds: 60,
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
-};
-
-const VERIFY_CALLABLE_OPTS = {
-  ...CALLABLE_OPTS,
-  serviceAccount: GOOGLE_PLAY_RUNTIME_SERVICE_ACCOUNT,
 };
 
 async function isProviderEnabled(platform: 'apple' | 'google'): Promise<boolean> {
@@ -86,7 +85,14 @@ export interface VerifySubscriptionResponse {
 }
 
 export const verify = onCall(
-  VERIFY_CALLABLE_OPTS,
+  {
+    region: 'europe-west1',
+    maxInstances: MAX_INSTANCES_MEMBER,
+    memory: '256MiB' as const,
+    timeoutSeconds: 60,
+    enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+    serviceAccount: GOOGLE_PLAY_RUNTIME_SERVICE_ACCOUNT,
+  },
   async (request): Promise<VerifySubscriptionResponse> => {
     const actor = await requireActiveActor(request);
 
@@ -118,10 +124,37 @@ export const verify = onCall(
 
     const client = new AdcGooglePlaySubscriptionClient();
     try {
+      const verificationNow = new Date();
       const outcome = await verifyGooglePlaySubscription(client, {
         purchaseToken: parsed.input.purchaseToken,
         expectedObfuscatedAccountId: obfuscatedAccountIdForUid(actor.uid),
+        now: verificationNow,
       });
+
+      const currentSubscription = (
+        await db.collection('subscriptions').doc(actor.uid).get()
+      ).data();
+      const currentEntitlement = storedEntitlement(currentSubscription?.entitlement);
+      const currentStatus = storedStatus(currentSubscription?.status);
+      const currentTier = storedTier(currentSubscription?.tier);
+      assertNoDifferentActiveToken(
+        currentSubscription
+          ? {
+              grantsAccess: grantsLegacyActiveMember({
+                entitlement: currentEntitlement,
+                status: currentStatus,
+                tier: currentTier,
+              }),
+              purchaseTokenHash:
+                typeof currentSubscription.purchaseTokenHash === 'string'
+                  ? currentSubscription.purchaseTokenHash
+                  : null,
+              expiresAt: storedDate(currentSubscription.expiresAt),
+            }
+          : null,
+        purchaseTokenHash,
+        verificationNow,
+      );
 
       // Claim only after Play has authenticated the response and UID binding.
       // Same-UID retries are idempotent; another UID can never replay this
@@ -170,6 +203,12 @@ export const verify = onCall(
           reason: error.reason,
           uid: actor.uid,
         });
+        if (error.reason === 'different_active_token') {
+          throw new HttpsError(
+            'failed-precondition',
+            'A different subscription is already active for this account.',
+          );
+        }
         throw new HttpsError('already-exists', 'Google Play purchase belongs to another account.');
       }
       if (error instanceof GooglePlayApiError) {
