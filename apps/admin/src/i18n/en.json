@@ -320,6 +320,21 @@
       "success": "Badge awarded on",
       "alreadyAwarded": "This user has already received this award.",
       "error": "Could not award the badge. Please try again."
+    },
+    "grantFounder": {
+      "title": "Award \"Founder\"",
+      "description": "Award the exclusive Founder badge to the app's very first testers. Paste one user ID per line. The action is audited and safe to re-run — a user who already has the badge is skipped.",
+      "uidsLabel": "User IDs",
+      "uidsPlaceholder": "One user ID per line",
+      "uidsHint": "Paste the internal user IDs, one per line. Duplicates and blank lines are ignored.",
+      "reasonLabel": "Reason (optional)",
+      "reasonPlaceholder": "E.g. \"Closed beta group 1\"",
+      "reasonHint": "Saved in the audit log. A default text is used when left blank.",
+      "submit": "Award Founder",
+      "submitting": "Awarding...",
+      "success": "Done. New: %1$d, already had it: %2$d, skipped: %3$d.",
+      "noUids": "Enter at least one user ID.",
+      "error": "Could not award the badge. Please try again."
     }
   },
   "subscription": {
