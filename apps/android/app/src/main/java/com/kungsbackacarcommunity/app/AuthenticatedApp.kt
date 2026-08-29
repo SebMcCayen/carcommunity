@@ -5597,7 +5597,7 @@ fun AuthenticatedApp(
                 // marker enters/leaves OR a wave marks the discovery set as done — the
                 // Compose-observable read that drives the control's visibility.
                 val drawnMarkerUids = remember(nearbyLiveMarkers) { nearbyLiveMarkers.map { it.uid } }
-                val waveWaveableCount =
+                val waveableInRangeCount =
                     remember(drawnMarkerUids, waveGateVersion) {
                         waveRangeGate.waveableCount(drawnMarkerUids)
                     }
@@ -5692,7 +5692,7 @@ fun AuthenticatedApp(
                                         // everyone in range has been waved and returns
                                         // when a fresh driver appears or a waved one
                                         // leaves and re-enters range.
-                                        waveableInRangeCount = waveWaveableCount,
+                                        waveableInRangeCount = waveableInRangeCount,
                                     ),
                                 cooldownUntilMs = waveCooldownUntilMs,
                                 onWave = onWaveTap,
