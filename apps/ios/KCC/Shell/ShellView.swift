@@ -30,9 +30,9 @@ struct ShellView: View {
 }
 
 extension ShellTab {
-    /// Localized tab title. Keys live in `Localizable.xcstrings` and use the
-    /// same semantic names as `contracts/localization` (`shell.tabMap` …),
-    /// hand-seeded for now — replaced by contract codegen in the follow-up.
+    /// Localized tab title. Keys live in the generated `Localizable.xcstrings`
+    /// and are the same semantic names as `contracts/localization`
+    /// (`shell.tabMap` …) — see `apps/ios/scripts/generate-strings.mjs`.
     var title: LocalizedStringKey {
         switch self {
         case .map: "shell.tabMap"
