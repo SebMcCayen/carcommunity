@@ -52,6 +52,7 @@ import {
   updateVehicle,
 } from './garage/manageVehicle';
 import { awardHelpfulMember } from './badges/awardHelpfulMember';
+import { grantEarlyTester } from './badges/grantEarlyTester';
 import { adminSummary as badgesAdminSummary } from './badges/adminSummary';
 import { getMyProgress as badgesGetMyProgress } from './badges/getMyProgress';
 import {
@@ -470,9 +471,12 @@ export const garage = {
  * Awards live at users/{uid}/badges/{badgeKey} (owner-readable, backend-only
  * writes). Flat badges are evaluated inline by their source domains
  * (garage.addVehicle → garage_created; events.complete → first_event /
- * five_events via badgeProgress counters); helpful_member is the only
- * manually awardable badge (contracts/functions/functions.json:
- * badges.awardHelpfulMember).
+ * five_events via badgeProgress counters). Two badges are MANUALLY granted by
+ * an admin callable rather than earned: helpful_member (criteria-based, one
+ * target + reason — badges.awardHelpfulMember) and early_tester ("Grundare",
+ * the exclusive early-tester reward with NO criteria, granted to a hand-picked
+ * UID list on demand — badges.grantEarlyTester). Neither is ever awarded
+ * automatically.
  *
  * The six TIERED LADDERS (Kronjägare / Vägfarare / Träffräv / Trogen /
  * Konvojledare / Samlare — badges/badge-core.ts) are awarded from TRIGGERS, not
@@ -486,6 +490,7 @@ export const garage = {
  */
 export const badges = {
   awardHelpfulMember,
+  grantEarlyTester,
   adminSummary: badgesAdminSummary,
   getMyProgress: badgesGetMyProgress,
   onBadgeProgressWritten,

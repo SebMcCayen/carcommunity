@@ -545,6 +545,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'garage.removeVehiclePhoto': 'variable-member',
   'garage.reorderVehiclePhotos': 'variable-member',
   'badges.awardHelpfulMember': 'admin-rare',
+  'badges.grantEarlyTester': 'admin-rare',
   'badges.adminSummary': 'admin-rare',
   'badges.getMyProgress': 'variable-member',
   'points.adminAdjust': 'admin-rare',

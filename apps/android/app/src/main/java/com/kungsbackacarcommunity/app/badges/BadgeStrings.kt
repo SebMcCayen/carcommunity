@@ -10,7 +10,7 @@ import com.kungsbackacarcommunity.app.R
  *
  * Every key in the backend catalog (functions/src/badges/badge-core.ts) must
  * appear here, otherwise an English-locale member sees the Swedish fallback:
- * the eight milestone keys plus the 31 tiered ladder rungs. The strings
+ * the nine milestone keys plus the 31 tiered ladder rungs. The strings
  * themselves come from contracts/localization/{sv,en}.json via
  * apps/android/scripts/generate-strings.mjs — never hand-edited.
  */
@@ -22,6 +22,7 @@ fun badgeNameRes(key: String): Int? =
         "helpful_member" -> R.string.badges_badgeNames_helpful_member
         "early_member" -> R.string.badges_badgeNames_early_member
         "garage_created" -> R.string.badges_badgeNames_garage_created
+        "early_tester" -> R.string.badges_badgeNames_early_tester
         "sasong_guld" -> R.string.badges_badgeNames_sasong_guld
         "sasong_silver" -> R.string.badges_badgeNames_sasong_silver
         "sasong_brons" -> R.string.badges_badgeNames_sasong_brons

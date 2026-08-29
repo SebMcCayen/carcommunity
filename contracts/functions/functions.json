@@ -471,11 +471,20 @@
     {
       "name": "badges.awardHelpfulMember",
       "domain": "badges",
-      "description": "Manually awards the helpful_member badge (the only manually awardable key). Requires a non-empty reason; writes an adminAuditEvents record on first award only; idempotent repeats never duplicate audit entries; suspended/deleted targets rejected. Deployed via grouped export as badges-awardHelpfulMember (functions/src/badges/awardHelpfulMember.ts).",
+      "description": "Manually awards the helpful_member badge to one target with a required reason. helpful_member is criteria-based (positive/helpful contribution) but has no automatic trigger, so an admin awards it by hand; the sibling badges.grantEarlyTester grants the criteria-free early_tester badge. Requires a non-empty reason; writes an adminAuditEvents record on first award only; idempotent repeats never duplicate audit entries; suspended/deleted targets rejected. Deployed via grouped export as badges-awardHelpfulMember (functions/src/badges/awardHelpfulMember.ts).",
       "access": "admin",
       "appCheck": true,
       "status": "implemented",
       "source": "services/api/src/lib/badge-service.ts (awardHelpfulMemberByAdmin)"
+    },
+    {
+      "name": "badges.grantEarlyTester",
+      "domain": "badges",
+      "description": "Manually grants the exclusive early_tester ('Grundare' / Founder) badge to a hand-picked list of UIDs — the app's earliest test users. There are NO earning criteria and no backend path ever awards it automatically: an admin invokes this callable with the specific UID list on demand. Input { uids: string[] (1..200, de-duplicated), reason?: string } — reason defaults to a fixed audit label. Mirrors awardHelpfulMember's write (buildBadgeDocument + create-if-absent transaction + one adminAuditEvents record per FIRST grant) but batched: the UIDs are processed in bounded-parallelism chunks (20 concurrent) each an independent read + single-doc transaction, so a full batch finishes well inside the 120s timeout. Idempotent per UID (a repeat is a no-op with no duplicate document or audit entry), and a missing/suspended/deleted target is SKIPPED rather than aborting the batch. Returns per-UID status (granted | alreadyGranted | skipped) plus counts. Deployed via grouped export as badges-grantEarlyTester (functions/src/badges/grantEarlyTester.ts).",
+      "access": "admin",
+      "appCheck": true,
+      "status": "implemented",
+      "source": "carcommunity early-tester reward badge (feat/early-tester-badge)"
     },
     {
       "name": "badges.adminSummary",

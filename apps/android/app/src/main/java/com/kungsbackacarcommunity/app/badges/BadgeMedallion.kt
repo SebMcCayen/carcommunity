@@ -301,6 +301,7 @@ private fun DrawScope.drawGlyph(glyph: BadgeGlyph, box: Rect, ink: Color, field:
                 "helpful_member" -> drawHandsGlyph(box, ink)
                 "early_member" -> drawSunriseGlyph(box, ink)
                 "garage_created" -> drawGarageDoorGlyph(box, ink)
+                "early_tester" -> drawFounderGlyph(box, ink, field)
                 // An unrecognised key still renders a medallion rather than an
                 // empty ring: a neutral disc, deliberately unlike every glyph.
                 else -> fillDot(box, ink, 0.5f, 0.5f, 0.30f)
@@ -575,6 +576,41 @@ private fun DrawScope.drawSunriseGlyph(box: Rect, ink: Color) {
     fillRect(box, ink, 0.46f, 0.02f, 0.54f, 0.24f)
     fillRect(box, ink, 0.06f, 0.28f, 0.14f, 0.50f)
     fillRect(box, ink, 0.86f, 0.28f, 0.94f, 0.50f)
+}
+
+/**
+ * early_tester ("Grundare" / Founder) — a foundation cornerstone: a solid block
+ * resting on a short groundline bar, with a small four-point star punched into
+ * its upper face (the very first stone laid). A stable, wide-based silhouette,
+ * unlike any other glyph in the set. Placeholder art to be finalized alongside
+ * the rest of the badge kit.
+ */
+private fun DrawScope.drawFounderGlyph(box: Rect, ink: Color, field: Color) {
+    // Groundline the stone rests on.
+    fillRect(box, ink, 0.06f, 0.84f, 0.94f, 0.94f)
+    // The cornerstone block.
+    fillRect(box, ink, 0.22f, 0.36f, 0.78f, 0.84f)
+    // A four-point star punched into the block's upper face.
+    fillPolygon(
+        box,
+        field,
+        listOf(
+            0.50f to 0.44f,
+            0.56f to 0.58f,
+            0.50f to 0.72f,
+            0.44f to 0.58f,
+        ),
+    )
+    fillPolygon(
+        box,
+        field,
+        listOf(
+            0.36f to 0.58f,
+            0.50f to 0.52f,
+            0.64f to 0.58f,
+            0.50f to 0.64f,
+        ),
+    )
 }
 
 /** garage_created — a squared garage door with three slats, the top one raised. */

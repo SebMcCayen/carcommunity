@@ -68,6 +68,19 @@ export const LEGACY_BADGE_KEYS = [
 export type LegacyBadgeKey = (typeof LEGACY_BADGE_KEYS)[number];
 
 /**
+ * SPECIAL one-off badges that are neither a legacy achievement nor a ladder
+ * rung: a single, standalone award with NO earning criteria at all. Unlike
+ * every automatic badge, and unlike the criteria-based helpful_member, an
+ * early_tester ("Grundare" / Founder) badge is MANUALLY granted by an admin to
+ * a specific, hand-picked list of UIDs (the app's earliest test users) through
+ * the badges.grantEarlyTester callable — nothing in the backend ever awards it
+ * automatically. It is not hooked into any counter, trigger, or the tier
+ * evaluator. Its key is frozen once shipped, like every other badge ID.
+ */
+export const SPECIAL_BADGE_KEYS = ['early_tester'] as const;
+export type SpecialBadgeKey = (typeof SPECIAL_BADGE_KEYS)[number];
+
+/**
  * Kronjakt season PODIUM badges — one per finishing position in a single
  * season (Säsongspodium Guld / Silver / Brons for 1st / 2nd / 3rd). Standalone,
  * NOT a ladder: they are awarded by the season-rollover finalizer by RANK, not
@@ -141,6 +154,7 @@ export type TierBadgeKey = (typeof TIER_BADGE_KEYS)[number];
 
 export const BADGE_KEYS = [
   ...LEGACY_BADGE_KEYS,
+  ...SPECIAL_BADGE_KEYS,
   ...SEASON_PODIUM_BADGE_KEYS,
   ...TIER_BADGE_KEYS,
 ] as const;
@@ -613,6 +627,36 @@ const LEGACY_CATALOG: Readonly<Record<LegacyBadgeKey, BadgeDefinition>> = {
   },
 };
 
+/**
+ * SPECIAL standalone badges. early_tester ("Grundare" / Founder) is the exclusive
+ * early-tester reward: a one-off, non-tiered milestone MANUALLY granted to a
+ * hand-picked UID list by an admin (badges.grantEarlyTester). isAutomatic is
+ * false — there are no criteria and no backend path ever awards it on its own.
+ * It carries no Kronpoäng and belongs to no ladder.
+ */
+const SPECIAL_CATALOG: Readonly<Record<SpecialBadgeKey, BadgeDefinition>> = {
+  early_tester: {
+    key: 'early_tester',
+    name: 'Grundare',
+    nameEn: 'Founder',
+    description: 'En av de allra första som testade appen.',
+    iconIdentifier: 'badge_early_tester',
+    isAutomatic: false,
+    ladder: null,
+    tier: null,
+    metric: null,
+    threshold: null,
+    pointsReward: 0,
+    iconDesign:
+      'A foundation cornerstone: a solid rectangular building block resting on a ' +
+      'short groundline bar, with a small four-point star set into its upper face — ' +
+      'the very first stone laid. A stable, wide-based silhouette unlike any other ' +
+      `in the set. ${NON_TIERED_RING_TREATMENT}`,
+    isLegacy: false,
+    supersededBy: null,
+  },
+};
+
 /** Podium glyph, shared by the three rank badges; the ring conveys the rank. */
 const SEASON_PODIUM_GLYPH =
   'A three-step winner\'s podium seen head-on — a tall centre block flanked by ' +
@@ -704,6 +748,7 @@ const TIER_CATALOG = Object.fromEntries(
 
 export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
   ...LEGACY_CATALOG,
+  ...SPECIAL_CATALOG,
   ...SEASON_PODIUM_CATALOG,
   ...TIER_CATALOG,
 };
@@ -715,6 +760,7 @@ export const BADGE_CATALOG: Readonly<Record<BadgeKey, BadgeDefinition>> = {
  */
 export const BADGE_CATALOG_ORDER: readonly BadgeKey[] = [
   ...LEGACY_BADGE_KEYS,
+  ...SPECIAL_BADGE_KEYS,
   ...SEASON_PODIUM_BADGE_KEYS,
   ...BADGE_LADDERS.flatMap((ladder) => ladder.tiers.map((spec) => spec.key)),
 ];
@@ -760,6 +806,47 @@ export function parseAwardHelpfulMemberInput(
     };
   }
   return { ok: true, input: result.data };
+}
+
+/**
+ * Input for badges.grantEarlyTester (admin-only): the hand-picked list of UIDs
+ * that receive the exclusive early_tester ("Grundare") badge, plus an optional
+ * reason for the audit trail. Accepts 1..200 UIDs per call (the real early-tester
+ * list is small); duplicates are de-duplicated before granting so the same UID
+ * appearing twice is granted once. The reason defaults to a fixed label when
+ * omitted.
+ */
+const grantEarlyTesterInputSchema = z
+  .object({
+    uids: z.array(z.string().trim().min(1).max(128)).min(1).max(200),
+    reason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .strict();
+
+export type GrantEarlyTesterInput = z.infer<typeof grantEarlyTesterInputSchema>;
+
+/** Default audit reason when a grant call omits one. */
+export const GRANT_EARLY_TESTER_DEFAULT_REASON =
+  'Early-tester reward (Grundare) — manual grant';
+
+export function parseGrantEarlyTesterInput(
+  data: unknown,
+): ParseResult<{ uids: string[]; reason: string }> {
+  const result = grantEarlyTesterInputSchema.safeParse(data ?? {});
+  if (!result.success) {
+    return {
+      ok: false,
+      message:
+        'Expected { uids: string[] (1..200), reason?: string } for the early-tester grant.',
+    };
+  }
+  // De-duplicate while preserving first-seen order, so a list with repeats
+  // grants each UID exactly once.
+  const uids = Array.from(new Set(result.data.uids));
+  return {
+    ok: true,
+    input: { uids, reason: result.data.reason ?? GRANT_EARLY_TESTER_DEFAULT_REASON },
+  };
 }
 
 // ---------------------------------------------------------------------------

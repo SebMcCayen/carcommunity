@@ -10,6 +10,7 @@ import {
   BADGE_KEYS,
   buildBadgeDocument,
   parseAwardHelpfulMemberInput,
+  parseGrantEarlyTesterInput,
   parseEarlyMemberCutoff,
   qualifiedEventBadges,
   qualifiesAsEarlyMember,
@@ -26,9 +27,21 @@ describe('badge catalog (ported from legacy badge-catalog.ts)', () => {
     }
   });
 
-  it('keeps helpful_member as the only manual badge', () => {
+  it('keeps helpful_member and early_tester as the only manual badges', () => {
     const manual = BADGE_KEYS.filter((key) => !BADGE_CATALOG[key].isAutomatic);
-    expect(manual).toEqual(['helpful_member']);
+    expect(manual).toEqual(['helpful_member', 'early_tester']);
+  });
+
+  it('defines early_tester as a criteria-free, non-ladder, admin-granted badge', () => {
+    const founder = BADGE_CATALOG.early_tester;
+    expect(founder.isAutomatic).toBe(false);
+    expect(founder.ladder).toBeNull();
+    expect(founder.tier).toBeNull();
+    expect(founder.metric).toBeNull();
+    expect(founder.threshold).toBeNull();
+    expect(founder.pointsReward).toBe(0);
+    expect(founder.name).toBe('Grundare');
+    expect(founder.iconIdentifier).toBe('badge_early_tester');
   });
 });
 
@@ -40,6 +53,24 @@ describe('badge-core inputs and builders', () => {
     expect(
       parseAwardHelpfulMemberInput({ targetUid: 'u1', reason: 'ok', extra: 1 }).ok,
     ).toBe(false);
+  });
+
+  it('parses, de-duplicates and defaults the early-tester grant input', () => {
+    const ok = parseGrantEarlyTesterInput({ uids: ['a', 'b', 'a'] });
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      // Duplicates collapsed to first-seen order, default reason applied.
+      expect(ok.input.uids).toEqual(['a', 'b']);
+      expect(ok.input.reason.length).toBeGreaterThan(0);
+    }
+    const withReason = parseGrantEarlyTesterInput({ uids: ['a'], reason: 'Beta cohort' });
+    expect(withReason.ok && withReason.input.reason).toBe('Beta cohort');
+    // Rejections: empty list, non-array, unknown field, blank UID.
+    expect(parseGrantEarlyTesterInput({ uids: [] }).ok).toBe(false);
+    expect(parseGrantEarlyTesterInput({ uids: 'a' }).ok).toBe(false);
+    expect(parseGrantEarlyTesterInput({ uids: ['a'], extra: 1 }).ok).toBe(false);
+    expect(parseGrantEarlyTesterInput({ uids: ['  '] }).ok).toBe(false);
+    expect(parseGrantEarlyTesterInput({}).ok).toBe(false);
   });
 
   it('denormalizes the catalog definition onto the award document', () => {

@@ -26,6 +26,7 @@ const BADGE_KEYS = [
   'helpful_member',
   'early_member',
   'garage_created',
+  'early_tester',
 ] as const;
 export type BadgeKey = (typeof BADGE_KEYS)[number];
 
@@ -52,7 +53,8 @@ interface BadgeSummary {
 /**
  * The `helpful_member` badge definition — the frontend source of truth
  * (mirrors the backend catalog in functions/src/badges/badge-core.ts). It is
- * the only manually awardable badge; the admin award callable returns just
+ * one of the two manually granted badges (the other is `early_tester` /
+ * "Grundare", see EARLY_TESTER_BADGE); the admin award callable returns just
  * `{ alreadyAwarded }` (badges are owner-only, so no award document is read
  * back), so frontends shape the award response from this constant.
  */
@@ -61,6 +63,22 @@ export const HELPFUL_MEMBER_BADGE: BadgeSummary = {
   name: 'Hjälpsam medlem',
   description: 'Har bidragit positivt och hjälpsamt i communityn.',
   iconIdentifier: 'badge_helpful_member',
+  isAutomatic: false,
+};
+
+/**
+ * The `early_tester` ("Grundare" / Founder) badge — the exclusive early-tester
+ * reward (mirrors the backend catalog in functions/src/badges/badge-core.ts).
+ * It is MANUALLY granted by an admin to a hand-picked list of UIDs through the
+ * `badges-grantEarlyTester` callable; it has NO earning criteria and is never
+ * awarded automatically. The second (and only other) manually-awardable badge
+ * besides helpful_member.
+ */
+export const EARLY_TESTER_BADGE: BadgeSummary = {
+  key: 'early_tester',
+  name: 'Grundare',
+  description: 'En av de allra första som testade appen.',
+  iconIdentifier: 'badge_early_tester',
   isAutomatic: false,
 };
 
@@ -129,5 +147,39 @@ export interface AwardHelpfulMemberResponse {
     badge: AwardedBadge;
     /** True when the badge was already awarded before this request. */
     alreadyAwarded: boolean;
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Admin: manual early-tester (Grundare) grant
+// ---------------------------------------------------------------------------
+
+/**
+ * Request body for admin granting the early_tester badge to a hand-picked list
+ * of UIDs. Reason is optional (defaulted server-side) and written to the audit
+ * log. Only the early_tester badge is granted through this endpoint.
+ */
+export interface GrantEarlyTesterRequest {
+  /** The hand-picked UID list (1..200). De-duplicated server-side. */
+  uids: string[];
+  /** Optional reason, recorded in the audit log; defaulted when omitted. */
+  reason?: string;
+}
+
+export type GrantEarlyTesterStatus = 'granted' | 'alreadyGranted' | 'skipped';
+
+export interface GrantEarlyTesterResultItem {
+  uid: string;
+  status: GrantEarlyTesterStatus;
+}
+
+export interface GrantEarlyTesterResponse {
+  ok: true;
+  data: {
+    badgeKey: 'early_tester';
+    results: GrantEarlyTesterResultItem[];
+    grantedCount: number;
+    alreadyGrantedCount: number;
+    skippedCount: number;
   };
 }

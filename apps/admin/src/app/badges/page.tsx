@@ -4,23 +4,28 @@
  * Admin: Badges (Utmärkelser) page.
  *
  * Shows aggregate badge statistics (award count per badge key) and provides
- * a form to manually award the `helpful_member` badge.
+ * forms to manually award the `helpful_member` badge (one target + reason) and
+ * to grant the exclusive `early_tester` / "Grundare" badge to a hand-picked UID
+ * list.
  *
  * Security notes:
  *  - All operations are validated by the backend. Client-side role checks are
  *    for UX only and are NOT security boundaries.
- *  - Only `helpful_member` may be awarded manually. The backend rejects any
- *    other badge key.
- *  - A reason is required and audited server-side.
+ *  - Only two badges are granted manually — `helpful_member` and `early_tester`
+ *    — each through its own dedicated callable fixed to that badge server-side;
+ *    the backend rejects any other badge key.
+ *  - The helpful_member award requires a reason; the early_tester grant reason
+ *    is optional (defaulted server-side). Both are audited server-side.
  *  - No individual user lists are exposed — only aggregate counts.
  *  - No rankings, leaderboards, or user comparisons are shown.
- *  - Manual award is idempotent: a second award returns the existing record.
+ *  - Both are idempotent: a repeat grant/award is a no-op, not a duplicate.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   loadAdminBadgeSummary,
   awardHelpfulMemberBadge,
+  grantEarlyTesterBadge,
   type AdminBadgeSummaryResponse,
   type ApiError,
 } from '@/features/badges';
@@ -49,6 +54,28 @@ export default function BadgesPage() {
   const [alreadyAwarded, setAlreadyAwarded] = useState(false);
 
   const awardingRef = useRef(false);
+
+  // ---------------------------------------------------------------------------
+  // Grant early_tester (Grundare) form state — a hand-picked UID list
+  // ---------------------------------------------------------------------------
+  const [founderUids, setFounderUids] = useState('');
+  const [founderReason, setFounderReason] = useState('');
+  const [founderLoading, setFounderLoading] = useState(false);
+  const [founderError, setFounderError] = useState<string | null>(null);
+  const [founderSuccess, setFounderSuccess] = useState<string | null>(null);
+
+  const grantingRef = useRef(false);
+
+  /** Splits the textarea into a clean, de-duplicated UID list (one per line). */
+  const parseFounderUids = (raw: string): string[] =>
+    Array.from(
+      new Set(
+        raw
+          .split(/[\r\n,]+/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0),
+      ),
+    );
 
   // ---------------------------------------------------------------------------
   // Load summary
@@ -109,6 +136,51 @@ export default function BadgesPage() {
     } finally {
       setAwardLoading(false);
       awardingRef.current = false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Grant early_tester (Grundare) to a hand-picked UID list
+  // ---------------------------------------------------------------------------
+  async function handleGrantFounderSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (grantingRef.current) return;
+
+    const uids = parseFounderUids(founderUids);
+    if (uids.length === 0) {
+      setFounderError(t('badges.grantFounder.noUids'));
+      setFounderSuccess(null);
+      return;
+    }
+
+    grantingRef.current = true;
+    setFounderLoading(true);
+    setFounderError(null);
+    setFounderSuccess(null);
+
+    try {
+      const trimmedReason = founderReason.trim();
+      const result = await grantEarlyTesterBadge({
+        uids,
+        ...(trimmedReason ? { reason: trimmedReason } : {}),
+      });
+      const { grantedCount, alreadyGrantedCount, skippedCount } = result.data;
+      setFounderSuccess(
+        t('badges.grantFounder.success')
+          .replace('%1$d', String(grantedCount))
+          .replace('%2$d', String(alreadyGrantedCount))
+          .replace('%3$d', String(skippedCount)),
+      );
+      if (grantedCount > 0) {
+        // Refresh summary to reflect the new award counts.
+        void fetchSummary();
+      }
+    } catch (err) {
+      const apiErr = err as ApiError;
+      setFounderError(apiErr.message ?? t('badges.grantFounder.error'));
+    } finally {
+      setFounderLoading(false);
+      grantingRef.current = false;
     }
   }
 
@@ -245,6 +317,74 @@ export default function BadgesPage() {
             aria-busy={awardLoading}
           >
             {awardLoading ? t('badges.award.submitting') : t('badges.award.submit')}
+          </button>
+        </form>
+      </section>
+
+      {/* Grant early_tester (Grundare) to a hand-picked UID list */}
+      <section className={styles.section} aria-labelledby="grant-founder-heading">
+        <h2 id="grant-founder-heading" className={styles.sectionTitle}>
+          {t('badges.grantFounder.title')}
+        </h2>
+        <p className={styles.badgeMeta} style={{ marginBottom: 'var(--space-4)' }}>
+          {t('badges.grantFounder.description')}
+        </p>
+
+        {founderSuccess && (
+          <div className={styles.successState} role="status" aria-live="polite">
+            {founderSuccess}
+          </div>
+        )}
+
+        {founderError && (
+          <div className={styles.errorState} role="alert">
+            {founderError}
+          </div>
+        )}
+
+        <form className={styles.form} onSubmit={(e) => void handleGrantFounderSubmit(e)} noValidate>
+          <div className={styles.formGroup}>
+            <label htmlFor="founderUids" className={styles.label}>
+              {t('badges.grantFounder.uidsLabel')} <span aria-hidden="true">*</span>
+            </label>
+            <textarea
+              id="founderUids"
+              className={styles.textarea}
+              value={founderUids}
+              onChange={(e) => setFounderUids(e.target.value)}
+              placeholder={t('badges.grantFounder.uidsPlaceholder')}
+              required
+              disabled={founderLoading}
+            />
+            <span className={styles.hint}>{t('badges.grantFounder.uidsHint')}</span>
+          </div>
+
+          <div className={styles.formGroup}>
+            <label htmlFor="founderReason" className={styles.label}>
+              {t('badges.grantFounder.reasonLabel')}
+            </label>
+            <input
+              id="founderReason"
+              className={styles.input}
+              type="text"
+              value={founderReason}
+              onChange={(e) => setFounderReason(e.target.value)}
+              placeholder={t('badges.grantFounder.reasonPlaceholder')}
+              disabled={founderLoading}
+              autoComplete="off"
+            />
+            <span className={styles.hint}>{t('badges.grantFounder.reasonHint')}</span>
+          </div>
+
+          <button
+            type="submit"
+            className={styles.submitButton}
+            disabled={founderLoading || parseFounderUids(founderUids).length === 0}
+            aria-busy={founderLoading}
+          >
+            {founderLoading
+              ? t('badges.grantFounder.submitting')
+              : t('badges.grantFounder.submit')}
           </button>
         </form>
       </section>

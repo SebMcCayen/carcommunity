@@ -2364,6 +2364,23 @@
         }
       }
     },
+    "badges.badgeNames.early_tester": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grundare"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Founder"
+          }
+        }
+      }
+    },
     "badges.badgeNames.first_event": {
       "extractionState": "manual",
       "localizations": {

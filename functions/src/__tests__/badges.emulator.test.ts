@@ -310,6 +310,92 @@ describe('badges-awardHelpfulMember', () => {
   });
 });
 
+describe('badges-grantEarlyTester', () => {
+  it('is never auto-awarded and is rejected for non-admin callers / bad input', async () => {
+    // A brand-new member holds NO early_tester badge: there are no criteria and
+    // nothing awards it automatically — only the admin grant can.
+    const fresh = await createProvisionedUser('badges-founder-none');
+    await adminDb.collection('users').doc(fresh.uid).set({ activeMember: true }, { merge: true });
+    expect((await badgeDoc(fresh.uid, 'early_tester').get()).exists).toBe(false);
+
+    // A non-admin cannot grant it, not even to themselves.
+    await signInAs(fresh);
+    expect(
+      await callableErrorCode(call('badges-grantEarlyTester', { uids: [fresh.uid] })),
+    ).toBe('functions/permission-denied');
+    expect((await badgeDoc(fresh.uid, 'early_tester').get()).exists).toBe(false);
+
+    // Admin, but empty/invalid list → invalid-argument.
+    await signInAs(adminUser);
+    expect(await callableErrorCode(call('badges-grantEarlyTester', { uids: [] }))).toBe(
+      'functions/invalid-argument',
+    );
+  });
+
+  it('grants to a hand-picked UID list, skips missing targets, and is idempotent', async () => {
+    const founderA = await createProvisionedUser('badges-founder-a');
+    await adminDb
+      .collection('users')
+      .doc(founderA.uid)
+      .set({ activeMember: true }, { merge: true });
+    const founderB = await createProvisionedUser('badges-founder-b');
+    await adminDb
+      .collection('users')
+      .doc(founderB.uid)
+      .set({ activeMember: true }, { merge: true });
+
+    await signInAs(adminUser);
+    const first = (
+      await call('badges-grantEarlyTester', {
+        // A duplicate and a non-existent UID are included on purpose.
+        uids: [founderA.uid, founderB.uid, founderA.uid, 'missing-founder'],
+        reason: 'Beta cohort 1',
+      })
+    ).data as {
+      grantedCount: number;
+      alreadyGrantedCount: number;
+      skippedCount: number;
+      results: Array<{ uid: string; status: string }>;
+    };
+    // Two real members granted once each (dedup), the missing UID skipped.
+    expect(first.grantedCount).toBe(2);
+    expect(first.alreadyGrantedCount).toBe(0);
+    expect(first.skippedCount).toBe(1);
+    expect(first.results.find((r) => r.uid === 'missing-founder')?.status).toBe('skipped');
+
+    const badgeA = (await badgeDoc(founderA.uid, 'early_tester').get()).data()!;
+    expect(badgeA.badgeKey).toBe('early_tester');
+    expect(badgeA.name).toBe('Grundare');
+    expect(badgeA.source).toBe('admin_manual');
+    // The awarding admin's UID must never reach this publicly-readable document.
+    expect(badgeA).not.toHaveProperty('awardedByUserId');
+    const firstAwardedAt = badgeA.awardedAt;
+    expect((await badgeDoc(founderB.uid, 'early_tester').get()).exists).toBe(true);
+
+    // Idempotent: a repeat grant awards nothing new and does not move awardedAt
+    // nor add a second audit entry.
+    const second = (
+      await call('badges-grantEarlyTester', {
+        uids: [founderA.uid],
+        reason: 'Beta cohort 1 (again)',
+      })
+    ).data as { grantedCount: number; alreadyGrantedCount: number };
+    expect(second.grantedCount).toBe(0);
+    expect(second.alreadyGrantedCount).toBe(1);
+    expect((await badgeDoc(founderA.uid, 'early_tester').get()).data()!.awardedAt).toEqual(
+      firstAwardedAt,
+    );
+
+    const audits = await adminDb
+      .collection('adminAuditEvents')
+      .where('action', '==', 'badge.grantEarlyTester')
+      .where('targetId', '==', founderA.uid)
+      .get();
+    expect(audits.size).toBe(1);
+    expect(audits.docs[0]!.data().reason).toBe('Beta cohort 1');
+  });
+});
+
 describe('badges-adminSummary', () => {
   it('rejects non-admin callers', async () => {
     await signInAs(member);
