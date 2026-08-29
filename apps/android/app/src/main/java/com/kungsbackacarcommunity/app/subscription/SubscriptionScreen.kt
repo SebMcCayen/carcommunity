@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -31,11 +32,18 @@ fun SubscriptionScreen(
     status: PurchaseFlowStatus,
     canSubscribe: Boolean,
     onSubscribe: (String) -> Unit,
+    onManageSubscription: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
     val hasVerifiedPaidTier = status is PurchaseFlowStatus.Success
+    val verifiedProductId =
+        when (verifiedTier) {
+            "plus" -> PLUS_MONTHLY_PRODUCT_ID
+            "supporter" -> SUPPORTER_MONTHLY_PRODUCT_ID
+            else -> null
+        }
 
     // This first Play slice supports one effective product at a time. Plan
     // changes stay disabled until Play SubscriptionUpdateParams and backend
@@ -74,6 +82,19 @@ fun SubscriptionScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (verifiedProductId != null) {
+                        OutlinedButton(
+                            onClick = { onManageSubscription(verifiedProductId) },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(text = stringResource(R.string.subscription_manageAction))
+                        }
+                        Text(
+                            text = stringResource(R.string.subscription_manageBody),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 
@@ -189,6 +210,7 @@ private fun SubscriptionScreenPreview() {
             status = PurchaseFlowStatus.Idle,
             canSubscribe = true,
             onSubscribe = {},
+            onManageSubscription = {},
             onBack = {},
         )
     }

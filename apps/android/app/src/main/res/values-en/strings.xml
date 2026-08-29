@@ -229,6 +229,9 @@
     <string name="subscription_subscribeAction">Subscribe to monthly membership</string>
     <string name="subscription_subscribePlusAction">Choose Plus</string>
     <string name="subscription_subscribeSupporterAction">Choose Supporter</string>
+    <string name="subscription_manageAction">Manage membership</string>
+    <string name="subscription_manageBody">Opens Google Play, where you can change or cancel your membership.</string>
+    <string name="subscription_manageUnavailable">Could not open Google Play. Try again from the Play Store.</string>
     <string name="subscription_statusConnecting">Connecting to the store…</string>
     <string name="subscription_statusReady">Ready to subscribe.</string>
     <string name="subscription_statusPurchasing">Completing purchase…</string>
