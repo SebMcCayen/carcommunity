@@ -297,6 +297,7 @@ import com.kungsbackacarcommunity.app.live.FirebaseWaveRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.WaveCircleControl
 import com.kungsbackacarcommunity.app.live.WavePresence
+import com.kungsbackacarcommunity.app.live.WaveRangeGate
 import com.kungsbackacarcommunity.app.live.WaveSendResult
 import com.kungsbackacarcommunity.app.live.LiveSharerPopup
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
@@ -5250,24 +5251,33 @@ fun AuthenticatedApp(
                     }
                 val nearbySeeds by nearbySeedsFlow.collectAsState()
 
-                // Discovery uids to draw: drop self and anyone already drawn by
-                // the convoy layer (a convoy member who is ALSO broadcasting must
-                // not appear twice, once per layer). The backend already excludes
-                // self + blocked, but self is dropped again defensively. Capped at
-                // MAX_NEARBY_LIVE_MARKERS: the backend can return up to 200 sorted
-                // by freshness, and eagerly opening one RTDB observeLatest() stream
-                // per uid in a dense area is real bandwidth/battery + backend load
-                // for markers the overlay only draws while on-screen anyway. Taking
-                // the freshest N bounds the concurrent listener count; distant/older
-                // sharers simply aren't subscribed.
-                val nearbyUids =
+                // The FULL nearby-discovery uid roster: drop self and anyone already
+                // drawn by the convoy layer (a convoy member who is ALSO broadcasting
+                // must not appear twice, once per layer). The backend already excludes
+                // self + blocked, but self is dropped again defensively. NOT capped —
+                // these are just the poll's seed uids (no RTDB listener each), the set
+                // the backend geo-query returned as nearby, up to listNearby's 200,
+                // the SAME bound as the server wave fan-out's MAX_RECIPIENTS. The wave
+                // range gate is driven from this fuller set (see the wave wiring below)
+                // rather than the 50-capped drawn markers, so uids 51..200 can't
+                // re-spam when the tracked 50 cycle out and back in.
+                val nearbyDiscoveryUids =
                     remember(nearbySeeds, convoyLiveUids, uid) {
                         val convoySet = convoyLiveUids.toSet()
                         nearbySeeds
                             .map { it.uid }
                             .filter { it.isNotBlank() && it != uid && it !in convoySet }
                             .distinct()
-                            .take(MAX_NEARBY_LIVE_MARKERS)
+                    }
+                // Uids to actually DRAW as chips: capped at MAX_NEARBY_LIVE_MARKERS,
+                // because eagerly opening one RTDB observeLatest() stream per uid in a
+                // dense area is real bandwidth/battery + backend load for markers the
+                // overlay only draws while on-screen anyway. Taking the freshest N
+                // bounds the concurrent listener count; distant/older sharers simply
+                // aren't subscribed (nearbySeeds is already freshness-sorted).
+                val nearbyUids =
+                    remember(nearbyDiscoveryUids) {
+                        nearbyDiscoveryUids.take(MAX_NEARBY_LIVE_MARKERS)
                     }
 
                 // One per-uid RTDB read each, combined — the SAME
@@ -5559,6 +5569,38 @@ fun AuthenticatedApp(
                 // SERVER is the source of truth (it refuses an early send and returns
                 // the exact remaining window, applied below on RateLimited).
                 var waveCooldownUntilMs by remember { mutableLongStateOf(0L) }
+
+                // PER-TARGET range-based anti-spam gate: once you wave, every driver
+                // currently in range is remembered as "already waved this visit" and
+                // the wave is no longer offered until they LEAVE and re-enter range.
+                // Layers on top of the 45 s server cooldown (the authoritative
+                // backstop). The gate is a pure holder; a version tick republishes it
+                // to Compose whenever it mutates so the visibility below recomposes.
+                val waveRangeGate = remember { WaveRangeGate() }
+                var waveGateVersion by remember { mutableIntStateOf(0) }
+                // The GATE's range roster is the FULL nearby-discovery uid set
+                // (nearbyDiscoveryUids), NOT the 50-capped drawn markers: it matches
+                // the server's potential wave-recipient set (both bounded at 200) far
+                // more closely, so "already waved this visit" covers everyone the wave
+                // could actually reach — not just the tracked 50. Reconcile on every
+                // change so a driver leaving the discovery roster (truly out of range)
+                // clears their mark. Residual bound: this set is itself capped at
+                // listNearby's 200, the same limit as the server fan-out, so beyond
+                // 200 in-range sharers the two can still diverge.
+                LaunchedEffect(nearbyDiscoveryUids) {
+                    waveRangeGate.onRangeSet(nearbyDiscoveryUids)
+                    waveGateVersion++
+                }
+                // Visibility still keys on the DRAWN markers (what actually shows
+                // chips): the count of drawn drivers still waveable this visit. Keyed
+                // on both that roster AND the gate version so it recomputes when a
+                // marker enters/leaves OR a wave marks the discovery set as done — the
+                // Compose-observable read that drives the control's visibility.
+                val drawnMarkerUids = remember(nearbyLiveMarkers) { nearbyLiveMarkers.map { it.uid } }
+                val waveableInRangeCount =
+                    remember(drawnMarkerUids, waveGateVersion) {
+                        waveRangeGate.waveableCount(drawnMarkerUids)
+                    }
                 val waveCaptionFmt = stringResource(R.string.wave_caption)
                 val waveCaptionAnon = stringResource(R.string.wave_captionAnonymous)
                 val waveCaptionSelf = stringResource(R.string.wave_captionSelf)
@@ -5593,6 +5635,19 @@ fun AuthenticatedApp(
                     onWaveTap@{
                         val repo = waveRepository ?: return@onWaveTap
                         val clientId = UUID.randomUUID().toString().replace("-", "")
+                        // A TAP-TIME client-side snapshot of the in-range discovery
+                        // roster — a best-effort LOCAL approximation of who the wave
+                        // will reach, used only to decide what to mark waved. The
+                        // SERVER computes the real recipients from its OWN geo-query at
+                        // execution time and may deliver to a different set, so this is
+                        // not a guarantee of who was actually waved. The range gate is
+                        // committed only if the server ACCEPTS the wave (Sent, below); a
+                        // RateLimited/Failed/NotSharing reply never marks anyone, so a
+                        // rejected send never wrongly hides the control for people who
+                        // were not really waved. If a driver leaves range before the
+                        // async result, onRangeSet reconciles the gate on the next
+                        // roster change.
+                        val wavedSnapshot = nearbyDiscoveryUids
                         waveCooldownUntilMs = WavePresence.cooldownUntil(System.currentTimeMillis())
                         waveOverlayEvent =
                             ReactionOverlayEvent(
@@ -5610,7 +5665,15 @@ fun AuthenticatedApp(
                                         waveCooldownUntilMs =
                                             System.currentTimeMillis() + result.retryAfterMs
                                     }
-                                is WaveSendResult.Sent -> Unit // keep the optimistic cooldown + pop
+                                is WaveSendResult.Sent -> {
+                                    // The wave was actually delivered: NOW mark the
+                                    // tap-time snapshot as waved this visit so the
+                                    // control hides for them until they leave and
+                                    // re-enter range. onRangeSet forgets any of these
+                                    // that have since left range on the next refresh.
+                                    waveRangeGate.onWaved(wavedSnapshot)
+                                    waveGateVersion++
+                                }
                                 WaveSendResult.NotSharing, WaveSendResult.Failed ->
                                     waveCooldownUntilMs = 0L // let them retry; the pop just fades
                             }
@@ -5624,7 +5687,12 @@ fun AuthenticatedApp(
                                 visible =
                                     WavePresence.isWaveControlVisible(
                                         isSharingLive = isSharing,
-                                        nearbyLiveUserCount = nearbyLiveMarkers.size,
+                                        // WAVEABLE in-range drivers — those not yet
+                                        // waved this visit — so the control hides once
+                                        // everyone in range has been waved and returns
+                                        // when a fresh driver appears or a waved one
+                                        // leaves and re-enters range.
+                                        waveableInRangeCount = waveableInRangeCount,
                                     ),
                                 cooldownUntilMs = waveCooldownUntilMs,
                                 onWave = onWaveTap,
