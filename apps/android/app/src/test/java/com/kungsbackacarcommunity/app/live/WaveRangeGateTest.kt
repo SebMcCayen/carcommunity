@@ -99,6 +99,26 @@ class WaveRangeGateTest {
     }
 
     @Test
+    fun `a failed send leaves the driver waveable (gate committed only on success)`() {
+        // Mirrors the AuthenticatedApp contract: onWaved is called ONLY after a
+        // successful send. A RateLimited/Failed/NotSharing reply never calls
+        // onWaved, so the snapshot of in-range drivers stays fully waveable and the
+        // control is not wrongly hidden for people who were never actually waved.
+        val gate = WaveRangeGate()
+        val inRange = listOf("a", "b")
+        gate.onRangeSet(inRange)
+
+        // Server rejected the send -> onWaved NOT invoked.
+        assertTrue(gate.canWave("a"))
+        assertTrue(gate.canWave("b"))
+        assertEquals(2, gate.waveableCount(inRange))
+
+        // A later SUCCESSFUL send does commit the snapshot.
+        gate.onWaved(inRange)
+        assertEquals(0, gate.waveableCount(inRange))
+    }
+
+    @Test
     fun `re-waving after a driver cycles out and back in is allowed`() {
         val gate = WaveRangeGate()
         gate.onRangeSet(listOf("a"))

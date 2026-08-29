@@ -5619,13 +5619,14 @@ fun AuthenticatedApp(
                     onWaveTap@{
                         val repo = waveRepository ?: return@onWaveTap
                         val clientId = UUID.randomUUID().toString().replace("-", "")
-                        // The broadcast waves every driver currently in range, so mark
-                        // them all "already waved this visit": the control hides until a
-                        // not-yet-waved driver is around, or one of these leaves range
-                        // and comes back. This is the range-based gate; the cooldown
-                        // below is the server-mirrored time backstop.
-                        waveRangeGate.onWaved(inRangeUids)
-                        waveGateVersion++
+                        // Snapshot who is in range AT TAP TIME (the broadcast reaches
+                        // exactly these). The range gate is committed only if the server
+                        // ACCEPTS the wave (Sent, below); a RateLimited/Failed/NotSharing
+                        // reply never marks anyone, so a rejected send never wrongly
+                        // hides the control for people who were not really waved. If a
+                        // driver leaves range before the async result, onRangeSet keeps
+                        // the gate reconciled on the next roster change.
+                        val wavedSnapshot = inRangeUids
                         waveCooldownUntilMs = WavePresence.cooldownUntil(System.currentTimeMillis())
                         waveOverlayEvent =
                             ReactionOverlayEvent(
@@ -5643,7 +5644,15 @@ fun AuthenticatedApp(
                                         waveCooldownUntilMs =
                                             System.currentTimeMillis() + result.retryAfterMs
                                     }
-                                is WaveSendResult.Sent -> Unit // keep the optimistic cooldown + pop
+                                is WaveSendResult.Sent -> {
+                                    // The wave was actually delivered: NOW mark the
+                                    // tap-time snapshot as waved this visit so the
+                                    // control hides for them until they leave and
+                                    // re-enter range. onRangeSet forgets any of these
+                                    // that have since left range on the next refresh.
+                                    waveRangeGate.onWaved(wavedSnapshot)
+                                    waveGateVersion++
+                                }
                                 WaveSendResult.NotSharing, WaveSendResult.Failed ->
                                     waveCooldownUntilMs = 0L // let them retry; the pop just fades
                             }
@@ -5662,7 +5671,7 @@ fun AuthenticatedApp(
                                         // everyone in range has been waved and returns
                                         // when a fresh driver appears or a waved one
                                         // leaves and re-enters range.
-                                        nearbyLiveUserCount = waveWaveableCount,
+                                        waveableInRangeCount = waveWaveableCount,
                                     ),
                                 cooldownUntilMs = waveCooldownUntilMs,
                                 onWave = onWaveTap,

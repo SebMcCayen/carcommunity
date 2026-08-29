@@ -15,19 +15,19 @@ class WavePresenceTest {
 
     @Test
     fun `wave control is shown only while sharing AND someone is nearby`() {
-        assertTrue(WavePresence.isWaveControlVisible(isSharingLive = true, nearbyLiveUserCount = 1))
-        assertTrue(WavePresence.isWaveControlVisible(isSharingLive = true, nearbyLiveUserCount = 7))
+        assertTrue(WavePresence.isWaveControlVisible(isSharingLive = true, waveableInRangeCount = 1))
+        assertTrue(WavePresence.isWaveControlVisible(isSharingLive = true, waveableInRangeCount = 7))
     }
 
     @Test
     fun `wave control is hidden when nobody is nearby`() {
-        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = true, nearbyLiveUserCount = 0))
+        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = true, waveableInRangeCount = 0))
     }
 
     @Test
     fun `wave control is hidden when not sharing, even with people nearby`() {
-        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = false, nearbyLiveUserCount = 3))
-        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = false, nearbyLiveUserCount = 0))
+        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = false, waveableInRangeCount = 3))
+        assertFalse(WavePresence.isWaveControlVisible(isSharingLive = false, waveableInRangeCount = 0))
     }
 
     // --- cooldown gate ------------------------------------------------------

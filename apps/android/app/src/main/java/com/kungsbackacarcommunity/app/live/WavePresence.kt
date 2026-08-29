@@ -8,13 +8,17 @@ package com.kungsbackacarcommunity.app.live
 object WavePresence {
     /**
      * Whether the wave control should be shown. It appears ONLY when you are
-     * yourself sharing a live session AND at least one OTHER live user is within
-     * range — the two conditions the server also requires (you must be sharing to
-     * have an authoritative origin, and a wave with nobody nearby reaches no one).
-     * Showing it otherwise would offer a button that can only fail.
+     * yourself sharing a live session AND at least one in-range live user is still
+     * WAVEABLE this visit — [waveableInRangeCount], the count of nearby drivers not
+     * already waved during their current in-range visit (see [WaveRangeGate]). This
+     * mirrors the two conditions the server requires (you must be sharing to have an
+     * authoritative origin, and a wave with nobody eligible reaches no one) AND adds
+     * the per-target range gate: once everyone in range has been waved the control
+     * hides until a fresh driver appears or a waved one leaves and re-enters range.
+     * Showing it otherwise would offer a button that only re-spams the same people.
      */
-    fun isWaveControlVisible(isSharingLive: Boolean, nearbyLiveUserCount: Int): Boolean =
-        isSharingLive && nearbyLiveUserCount > 0
+    fun isWaveControlVisible(isSharingLive: Boolean, waveableInRangeCount: Int): Boolean =
+        isSharingLive && waveableInRangeCount > 0
 
     /**
      * Whether a tap may send right now: only once the client cooldown mirror at
