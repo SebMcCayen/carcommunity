@@ -64,7 +64,9 @@ describe('App Check enforcement (Phase 15d)', () => {
       for (const match of source.matchAll(siteRegex)) {
         const firstArg = (match[1] ?? '').trim();
         const window = source.slice(match.index ?? 0, (match.index ?? 0) + 600);
-        const usesSharedOpts = firstArg.startsWith('CALLABLE_OPTS') && fileHasEnforcingOpts;
+        const usesSharedOpts =
+          (firstArg.startsWith('CALLABLE_OPTS') || firstArg.includes('...CALLABLE_OPTS')) &&
+          fileHasEnforcingOpts;
         const usesInlinePattern =
           window.includes('enforceAppCheck') && !NON_ENFORCING_REGEX.test(window);
         if (!usesSharedOpts && !usesInlinePattern) {

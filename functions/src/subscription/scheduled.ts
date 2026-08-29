@@ -42,9 +42,11 @@
  * applyEntitlement itself is an overwrite of fixed values plus a claim
  * removal, both naturally idempotent.
  *
- * BOUNDED AND PAGED. One `limit(MAX_EXPIRIES_PER_RUN)` query per run,
- * ordered by `expiresAt` ascending so the longest-lapsed member is always
- * served first, and every document in the page is processed (a single
+ * BOUNDED AND PAGED. Two `limit(MAX_EXPIRIES_PER_RUN)` queries separate the
+ * immediate cancelled deadline from the active/grace outage window. Their
+ * results are merged by effective revocation deadline and re-bounded before
+ * writes, so the most-overdue member is always served first and every
+ * document in the final page is processed (a single
  * poison record therefore consumes one slot, it does not block the page
  * behind it). Because a revocation makes the document stop matching, a
  * backlog DRAINS across runs instead of recirculating — the same
@@ -105,6 +107,7 @@ import {
   decideSubscriptionExpiry,
   subscriptionExpiredNotificationId,
   subscriptionExpiryCutoff,
+  subscriptionRevocationDeadline,
 } from './expiry-core';
 
 /** Names this sweep in the userLifecycle record, in place of an adminId. */
@@ -267,13 +270,20 @@ export async function runSubscriptionExpirySweep(
     dueQuery(EXPIRY_GRACE_SWEEP_STATUSES, cutoff),
     dueQuery(EXPIRY_IMMEDIATE_SWEEP_STATUSES, now),
   ]);
-  // Both status sets are disjoint. Merge and re-apply the global page bound so
-  // two independent safety windows cannot double one run's mutation ceiling.
+  // Both status sets are disjoint. Merge by the deadline that actually governs
+  // revocation (paid expiry for cancelled, paid expiry + outage tolerance for
+  // active/grace), then re-apply the global page bound so two queries cannot
+  // double one run's mutation ceiling or starve an immediately-due cancellation.
   const dueDocs = [...graceDue.docs, ...immediateDue.docs]
     .sort((left, right) => {
-      const leftMs = left.get('expiresAt')?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
-      const rightMs = right.get('expiresAt')?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
-      return leftMs - rightMs;
+      const deadlineMs = (doc: FirebaseFirestore.QueryDocumentSnapshot): number => {
+        const expiresAt = doc.get('expiresAt')?.toDate?.();
+        const status = doc.get('status') as SubscriptionStatus;
+        return expiresAt instanceof Date
+          ? subscriptionRevocationDeadline(status, expiresAt).getTime()
+          : Number.MAX_SAFE_INTEGER;
+      };
+      return deadlineMs(left) - deadlineMs(right);
     })
     .slice(0, MAX_EXPIRIES_PER_RUN);
 

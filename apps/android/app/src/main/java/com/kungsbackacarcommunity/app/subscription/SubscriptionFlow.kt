@@ -27,6 +27,9 @@ fun obfuscatedAccountIdForUid(uid: String): String =
         .digest(uid.toByteArray(Charsets.UTF_8))
         .joinToString(separator = "") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
+/** Defense-in-depth before handing the account binding to Google Play. */
+fun isValidObfuscatedAccountId(value: String): Boolean = value.matches(Regex("^[a-f0-9]{64}$"))
+
 /** The platform tag sent to the `subscription-verify` callable from Android. */
 const val VERIFY_PLATFORM_GOOGLE: String = "google"
 

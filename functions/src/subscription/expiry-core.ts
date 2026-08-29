@@ -104,6 +104,21 @@ export function subscriptionExpiryCutoff(now: Date): Date {
   return new Date(now.getTime() - SUBSCRIPTION_EXPIRY_GRACE_HOURS * 60 * 60 * 1000);
 }
 
+/**
+ * Effective revocation deadline used when the two bounded Firestore result
+ * sets are merged. Cancelled subscriptions end at their paid expiry; active
+ * and grace-period subscriptions end after the outage-tolerance window.
+ */
+export function subscriptionRevocationDeadline(
+  status: SubscriptionStatus,
+  expiresAt: Date,
+): Date {
+  const graceMs = EXPIRY_IMMEDIATE_SWEEP_STATUSES.includes(status)
+    ? 0
+    : SUBSCRIPTION_EXPIRY_GRACE_HOURS * 60 * 60 * 1000;
+  return new Date(expiresAt.getTime() + graceMs);
+}
+
 /** The subset of a `subscriptions/{uid}` document the decision reads. */
 export interface SubscriptionExpiryFields {
   status?: unknown;

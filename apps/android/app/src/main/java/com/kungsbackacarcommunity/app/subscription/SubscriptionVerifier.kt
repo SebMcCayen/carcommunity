@@ -35,13 +35,11 @@ class FirebaseSubscriptionVerifier private constructor(
                 .call(buildVerifyPayload(purchaseToken))
                 .awaitOrThrow { "$VERIFY failed without a cause" }
         val verified = parseVerificationResult(callableResult.data)
-        if (verified.grantsAccess) {
-            // applyEntitlement updates the activeMember custom claim. Force a
-            // fresh ID token before reporting success so RTDB/Firestore gates do
-            // not keep using the pre-purchase claim until normal token refresh.
-            val user = auth.currentUser ?: error("No authenticated user after subscription verify")
-            user.getIdToken(true).awaitOrThrow { "Firebase ID token refresh failed" }
-        }
+        // applyEntitlement can either add OR clear the activeMember custom
+        // claim. Force a fresh token for every verified lifecycle outcome so
+        // a revocation cannot leave elevated access cached on the device.
+        val user = auth.currentUser ?: error("No authenticated user after subscription verify")
+        user.getIdToken(true).awaitOrThrow { "Firebase ID token refresh failed" }
         return verified
     }
 

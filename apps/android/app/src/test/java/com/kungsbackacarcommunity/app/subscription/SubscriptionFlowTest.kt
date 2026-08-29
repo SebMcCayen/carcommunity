@@ -35,6 +35,10 @@ class SubscriptionFlowTest {
         assertFalse(hash.contains(uid))
         assertEquals(hash, obfuscatedAccountIdForUid(uid))
         assertFalse(hash == obfuscatedAccountIdForUid("different-user"))
+        assertTrue(isValidObfuscatedAccountId(hash))
+        assertFalse(isValidObfuscatedAccountId("x".repeat(64)))
+        assertFalse(isValidObfuscatedAccountId("a".repeat(63)))
+        assertFalse(isValidObfuscatedAccountId("A".repeat(64)))
     }
 
     @Test

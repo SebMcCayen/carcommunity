@@ -131,7 +131,9 @@ class PlayBillingRepository private constructor(
         obfuscatedAccountId: String,
     ): PurchaseLaunchResult {
         if (productId !in SUBSCRIPTION_PRODUCT_IDS) return PurchaseLaunchResult.Failed
-        if (obfuscatedAccountId.length != 64) return PurchaseLaunchResult.Failed
+        if (!isValidObfuscatedAccountId(obfuscatedAccountId)) {
+            return PurchaseLaunchResult.Failed
+        }
         val product = cachedProducts[productId] ?: return PurchaseLaunchResult.Failed
         val offerToken =
             product.subscriptionOfferDetails

@@ -343,7 +343,11 @@ Deploy backend + Android with the Google flag still false. For a controlled
 Internal Testing purchase, set `google.enabled` true immediately before the
 test, buy each plan with a license tester, verify the entitlement/token-hash
 record and Play acknowledgement, then turn it false again if testing is done.
-Never enable Apple: there is no Apple adapter in this release.
+Do not enable Apple in this slice. This is the temporary platform exception
+approved by ADR-002 under "Milestones gated on the Apple Developer Program
+membership": StoreKit 2/App Store Connect purchases and Apple transaction
+verification remain deferred until paid membership exists. The Apple path must
+remain disabled and fail closed.
 
 The verified internal first-purchase path is safe: the client sends a SHA-256
 obfuscated Firebase UID, the backend compares it with Play's external account

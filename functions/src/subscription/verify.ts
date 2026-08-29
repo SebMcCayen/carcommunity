@@ -86,11 +86,7 @@ export interface VerifySubscriptionResponse {
 
 export const verify = onCall(
   {
-    region: 'europe-west1',
-    maxInstances: MAX_INSTANCES_MEMBER,
-    memory: '256MiB' as const,
-    timeoutSeconds: 60,
-    enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== 'true',
+    ...CALLABLE_OPTS,
     serviceAccount: GOOGLE_PLAY_RUNTIME_SERVICE_ACCOUNT,
   },
   async (request): Promise<VerifySubscriptionResponse> => {
@@ -113,8 +109,11 @@ export const verify = onCall(
     }
 
     if (parsed.input.platform !== 'google') {
-      // Apple remains disabled by default and has no adapter in this Android
-      // rollout. Even if misconfigured on, it still fails closed here.
+      // TEMPORARY PLATFORM EXCEPTION — ADR-002, "Milestones gated on the
+      // Apple Developer Program membership": StoreKit 2 against App Store
+      // Connect and Apple transaction verification are deferred until paid
+      // membership exists. Apple therefore remains disabled and fail-closed
+      // in this Google Play Internal Testing slice.
       logger.error('Subscription provider enabled but adapter is unavailable', {
         platform: parsed.input.platform,
         uid: actor.uid,
@@ -203,13 +202,25 @@ export const verify = onCall(
           reason: error.reason,
           uid: actor.uid,
         });
-        if (error.reason === 'different_active_token') {
-          throw new HttpsError(
-            'failed-precondition',
-            'A different subscription is already active for this account.',
-          );
+        switch (error.reason) {
+          case 'different_user':
+            throw new HttpsError(
+              'already-exists',
+              'Google Play purchase belongs to another account.',
+            );
+          case 'different_product':
+            throw new HttpsError(
+              'failed-precondition',
+              'Google Play purchase does not match its original subscription product.',
+            );
+          case 'different_active_token':
+            throw new HttpsError(
+              'failed-precondition',
+              'A different subscription is already active for this account.',
+            );
+          case 'malformed_record':
+            throw new HttpsError('internal', 'Subscription ownership record is invalid.');
         }
-        throw new HttpsError('already-exists', 'Google Play purchase belongs to another account.');
       }
       if (error instanceof GooglePlayApiError) {
         logger.error('Google Play subscription request failed', {
