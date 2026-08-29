@@ -35,7 +35,7 @@ fun SubscriptionScreen(
     modifier: Modifier = Modifier,
 ) {
     val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
-    val hasVerifiedPaidTier = verifiedTier == "plus" || verifiedTier == "supporter"
+    val hasVerifiedPaidTier = status is PurchaseFlowStatus.Success
 
     // This first Play slice supports one effective product at a time. Plan
     // changes stay disabled until Play SubscriptionUpdateParams and backend
