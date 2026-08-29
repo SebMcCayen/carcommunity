@@ -20,23 +20,29 @@ package com.kungsbackacarcommunity.app.moderation
  *    appears the day its route passes a submit lambda.
  *
  * [reportAvailability] (and [reportUserAvailability] for the profile action) is
- * the single source of truth for that split, so when the missing backends land
- * the only client change is flipping the surface to [ReportAvailability.Wired]
- * here (plus handing the route a submit lambda). Call sites must never hardcode
- * a surface check of their own.
+ * the single source of truth for that split, so bringing an unwired surface
+ * online is just flipping it to [ReportAvailability.Wired] here plus handing the
+ * route a submit lambda (and, for a surface whose backend does not exist yet,
+ * building that callable first). Call sites must never hardcode a surface check
+ * of their own.
  *
- * BACKEND GAP — what `ReportAvailability.BackendMissing` is waiting on:
+ * What each `ReportAvailability.BackendMissing` surface is waiting on. NOTE the
+ * name is historical: it means "report not wired on this surface", which today
+ * is TWO cases — a backend that already EXISTS but has no Android client wiring
+ * yet (convoy, DMs), and a backend not yet BUILT (the profile "report user"):
  *
  *  - `chatchannels.reportMessage` (grouped export `chatchannels-reportMessage`,
  *    europe-west1, auth + App Check), payload:
  *    `{ channel: 'community' | 'convoy', convoyId?: string, messageId: string,
  *       reason: <CHAT_MESSAGE_REPORT_REASONS>, details?: string (<=500) }`
- *    → `{ reported: true }`. `convoyId` required iff `channel === 'convoy'`.
+ *    → `{ reported: true }`. `convoyId` required iff `channel === 'convoy'`. EXISTS
+ *    (community is wired); convoy only needs the Android route wired.
  *  - `dm.reportMessage` (grouped export `dm-reportMessage`, same guards),
  *    payload: `{ conversationId: string, messageId: string, reason, details? }`
- *    → `{ reported: true }`.
+ *    → `{ reported: true }`. EXISTS — only needs the Android route wired.
  *  - `moderation.reportUser` (for the member-profile "Report user" action),
  *    payload: `{ reportedUserId: string, reason, details? }` → `{ reported: true }`.
+ *    NOT BUILT yet — a genuine backend gap.
  *
  * All three should mirror `functions/src/events/reportChatMessage.ts`: reporter
  * eligibility = read eligibility for that surface, own content is unreportable,
