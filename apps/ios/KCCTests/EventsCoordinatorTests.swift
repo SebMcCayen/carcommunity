@@ -13,7 +13,7 @@ final class EventsCoordinatorTests: XCTestCase {
     private final class FakeEventsRepository: EventsRepository, @unchecked Sendable {
         private let lock = NSLock()
         private var pending: [EventsListSnapshot] = []
-        private var continuations: [AsyncStream<EventsListSnapshot>.Continuation] = []
+        private var continuations: [UUID: AsyncStream<EventsListSnapshot>.Continuation] = [:]
         private(set) var subscribeCount = 0
 
         /// Snapshots replayed to each FUTURE subscription (the listener's
@@ -29,7 +29,7 @@ final class EventsCoordinatorTests: XCTestCase {
         /// update).
         func emit(_ snapshot: EventsListSnapshot) {
             lock.lock()
-            let live = continuations
+            let live = Array(continuations.values)
             lock.unlock()
             for continuation in live {
                 continuation.yield(snapshot)
@@ -45,9 +45,20 @@ final class EventsCoordinatorTests: XCTestCase {
                 for snapshot in snapshots {
                     continuation.yield(snapshot)
                 }
+                let id = UUID()
                 self.lock.lock()
-                self.continuations.append(continuation)
+                self.continuations[id] = continuation
                 self.lock.unlock()
+                // Drop the continuation when its consumer goes away (a reload
+                // tears down the old subscription) so dead sinks do not
+                // accumulate — same pattern as FirebaseEventsRepository /
+                // FirebaseAuthRepository.
+                continuation.onTermination = { [weak self] _ in
+                    guard let self else { return }
+                    self.lock.lock()
+                    self.continuations[id] = nil
+                    self.lock.unlock()
+                }
             }
         }
     }
