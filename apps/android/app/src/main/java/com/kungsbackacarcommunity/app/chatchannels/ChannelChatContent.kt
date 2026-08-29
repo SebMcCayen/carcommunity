@@ -73,6 +73,7 @@ import com.kungsbackacarcommunity.app.blocking.BlockActionStatus
 import com.kungsbackacarcommunity.app.chat.ChatLinkSpans
 import com.kungsbackacarcommunity.app.chat.ChatQuoteHeader
 import com.kungsbackacarcommunity.app.chat.ChatReply
+import com.kungsbackacarcommunity.app.chat.ChatReportReason
 import com.kungsbackacarcommunity.app.chat.ChatUrlOpener
 import com.kungsbackacarcommunity.app.chat.KeepPinnedToNewest
 import com.kungsbackacarcommunity.app.chat.RepinToNewestOnImeRise
@@ -94,6 +95,7 @@ import com.kungsbackacarcommunity.app.moderation.BlockConfirmDialog
 import com.kungsbackacarcommunity.app.moderation.ChatSurface
 import com.kungsbackacarcommunity.app.moderation.MessageActionsSheet
 import com.kungsbackacarcommunity.app.moderation.MessageModeration
+import com.kungsbackacarcommunity.app.moderation.ReportReasonDialog
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -108,6 +110,9 @@ const val MENTION_CAP_TEST_TAG = "mention-cap-note"
 
 /** Test tag for the "some mentions weren't delivered" note. */
 const val MENTION_DROPPED_TEST_TAG = "mention-dropped-note"
+
+/** Test tag for the report outcome line (shown on report Done/Failed). */
+const val CHANNEL_REPORT_STATUS_TEST_TAG = "channel-report-status"
 
 /** Test tag of one picker row (keyed by uid — display names are not unique). */
 fun mentionCandidateTestTag(uid: String): String = "mention-candidate-$uid"
@@ -231,6 +236,15 @@ fun ChannelChatContent(
     onBlock: ((String) -> Unit)? = null,
     blockStatus: BlockActionStatus = BlockActionStatus.Idle,
     onBlockDismiss: () -> Unit = {},
+    // Reporting another member's message. Non-null ONLY on a surface whose report
+    // callable is wired (community today; [MessageModeration.reportAvailability]
+    // must agree). Null (the default, e.g. convoy) leaves the report row hidden —
+    // the report picker is never shown on a surface that can't submit. Tapping
+    // "Report message" opens the shared reason picker, then this fires with the
+    // long-pressed message id + chosen reason.
+    onReport: ((messageId: String, reason: ChatReportReason) -> Unit)? = null,
+    reportStatus: ChannelReportStatus = ChannelReportStatus.Idle,
+    onReportDismiss: () -> Unit = {},
     // Tapping a shared `geo:` location link in a message moves the app's OWN map
     // to that point, IN-APP — the recipient's map camera, never an external maps
     // chooser. Null (the default, and in a config-less build with no map to move)
@@ -253,6 +267,11 @@ fun ChannelChatContent(
     // stream (author blocked, message moderated away) while it is showing.
     var actionsMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     var blockTargetUid by rememberSaveable { mutableStateOf<String?>(null) }
+    // The message the report reason picker is open for, held by id (Saveable) and
+    // resolved against the live list — same convention as the action sheet, so an
+    // open picker collapses if its message leaves the stream (author blocked,
+    // moderated away). Null while the picker is closed.
+    var reportingMessageId by rememberSaveable { mutableStateOf<String?>(null) }
     // The message being replied to, held by id (Saveable) and resolved against the
     // live list, so the composer quote chip clears itself if its target leaves the
     // stream. Only meaningful while [chatRepliesEnabled].
@@ -320,8 +339,16 @@ fun ChannelChatContent(
                             MessageModeration.canActOn(message.senderUid, currentUid) &&
                                 MessageModeration.hasActions(
                                     canBlock = onBlock != null,
+                                    // Report only counts as an available action when the
+                                    // route wired a submit lambda too — otherwise its row
+                                    // is hidden and long-press would open an empty sheet.
                                     reportAvailability =
-                                        MessageModeration.reportAvailability(surface),
+                                        if (onReport != null) {
+                                            MessageModeration.reportAvailability(surface)
+                                        } else {
+                                            com.kungsbackacarcommunity.app.moderation
+                                                .ReportAvailability.BackendMissing
+                                        },
                                 )
                         if (chatRepliesEnabled || moderationActions) {
                             actionsMessageId = message.id
@@ -343,6 +370,26 @@ fun ChannelChatContent(
                 text = stringResource(R.string.blocking_blockSuccess),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        // Report outcome, on its own status line (a report never blocks sending).
+        // A brief confirmation on success, a graceful retry-able message on failure;
+        // both are transient banners the route clears.
+        if (reportStatus == ChannelReportStatus.Failed) {
+            Text(
+                text = stringResource(R.string.chat_reportError),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.testTag(CHANNEL_REPORT_STATUS_TEST_TAG),
+            )
+        }
+        if (reportStatus == ChannelReportStatus.Done) {
+            Text(
+                text = stringResource(R.string.chat_reportSubmitted),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.testTag(CHANNEL_REPORT_STATUS_TEST_TAG),
             )
         }
 
@@ -510,8 +557,11 @@ fun ChannelChatContent(
                 actionsMessageId = null
             },
             canBlock = onBlock != null && canModerate,
+            // Wired only when the surface's report callable is live AND the route
+            // handed down a submit lambda — otherwise the row stays hidden rather
+            // than opening a picker that can't submit.
             reportAvailability =
-                if (canModerate) {
+                if (canModerate && onReport != null) {
                     MessageModeration.reportAvailability(surface)
                 } else {
                     com.kungsbackacarcommunity.app.moderation.ReportAvailability.BackendMissing
@@ -520,11 +570,33 @@ fun ChannelChatContent(
                 actionsMessageId = null
                 blockTargetUid = actionsMessage.senderUid
             },
-            // Unreachable while every channel is BackendMissing (the row is
-            // disabled), but wired so the callable landing only needs the route
-            // to pass a submit lambda.
-            onReport = { actionsMessageId = null },
+            // Reporting is a two-step confirm: the sheet closes and the shared reason
+            // picker opens for this message; the actual submit fires on a reason pick.
+            onReport = {
+                reportingMessageId = actionsMessage.id
+                actionsMessageId = null
+            },
             onDismiss = { actionsMessageId = null },
+        )
+    }
+
+    // The reason picker for a report in progress, resolved against the LIVE list so
+    // it closes itself if its message leaves the stream. Only reachable on a surface
+    // that passed [onReport] (the report row is hidden otherwise).
+    val reportingMessage = messages.firstOrNull { it.id == reportingMessageId }
+    if (reportingMessage != null && onReport != null) {
+        ReportReasonDialog(
+            onSelect = { reason ->
+                val id = reportingMessage.id
+                reportingMessageId = null
+                onReport(id, reason)
+            },
+            onDismiss = {
+                reportingMessageId = null
+                // Clear any lingering Done/Failed banner from a prior report when the
+                // user backs out of a new one (mirrors EventChatScreen).
+                onReportDismiss()
+            },
         )
     }
 

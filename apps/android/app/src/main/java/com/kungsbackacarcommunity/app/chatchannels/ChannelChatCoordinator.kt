@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatReportReason
 import com.kungsbackacarcommunity.app.diagnostics.CrashFeatures
 import com.kungsbackacarcommunity.app.diagnostics.CrashTelemetry
 import com.kungsbackacarcommunity.app.diagnostics.NoopCrashTelemetry
@@ -21,6 +22,24 @@ sealed interface ChannelPageStatus {
 
     /** The last older-page load failed transiently. NOT terminal — retryable. */
     data object Error : ChannelPageStatus
+}
+
+/**
+ * UI-facing status of a message report on a channel, mirroring
+ * [com.kungsbackacarcommunity.app.chat.ChatReportStatus] on event chat. Report
+ * runs on its own flow, entirely separate from [ChannelPageStatus] and the send
+ * pipeline, so filing a report never blocks (or is blocked by) sending or paging.
+ */
+sealed interface ChannelReportStatus {
+    data object Idle : ChannelReportStatus
+
+    data object Reporting : ChannelReportStatus
+
+    /** The report reached the backend. */
+    data object Done : ChannelReportStatus
+
+    /** The report failed; the reason is deliberately not distinguished to the reporter. */
+    data object Failed : ChannelReportStatus
 }
 
 /**
@@ -59,6 +78,11 @@ class ChannelChatCoordinator(
     private val pager: suspend (String) -> ChannelOlderResult,
     private val selfUid: String,
     private val marker: (suspend () -> Unit)? = null,
+    // (messageId, reason) -> result. Wired to the channel's `chatchannels-reportMessage`
+    // by the route on a surface whose report is live (community today); null on a
+    // surface with no report backend (convoy), where the report row is never shown
+    // and [report] is a no-op.
+    private val reporter: (suspend (String, ChatReportReason) -> ChannelReportResult)? = null,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val idGenerator: () -> String = { UUID.randomUUID().toString() },
     /**
@@ -111,6 +135,56 @@ class ChannelChatCoordinator(
      * the user dismisses it.
      */
     val droppedMentionCount: StateFlow<Int> = dropped.asStateFlow()
+
+    private val report = MutableStateFlow<ChannelReportStatus>(ChannelReportStatus.Idle)
+
+    /**
+     * Status of the caller's most recent message report. Its own flow so a report
+     * never blocks — and is never blocked by — sending or paging (mirrors
+     * [com.kungsbackacarcommunity.app.chat.ChatCoordinator.reportStatus]).
+     */
+    val reportStatus: StateFlow<ChannelReportStatus> = report.asStateFlow()
+
+    /**
+     * Reports the message [messageId] with [reason]. A no-op when no [reporter] is
+     * wired (a surface with no report backend) or a report is already in flight, so
+     * a double-tap can't file twice. On success the status flips to
+     * [ChannelReportStatus.Done], on failure to [ChannelReportStatus.Failed]; either
+     * is cleared by [resetReport]. The reporter never surfaces WHY it failed — the
+     * backend deliberately doesn't reveal whether a prior report already existed.
+     */
+    suspend fun report(messageId: String, reason: ChatReportReason) {
+        val submit = reporter ?: return
+        // Atomic in-flight claim: report() is launched from UI taps
+        // (scope.launch{}), so two rapid taps race. A plain
+        // `if (value == Reporting) return; value = Reporting` lets BOTH taps pass
+        // the check before either writes, double-filing. CAS-flip into Reporting
+        // so exactly one tap proceeds (same pattern as ShareLocationCoordinator).
+        while (true) {
+            val prev = report.value
+            if (prev == ChannelReportStatus.Reporting) return
+            if (report.compareAndSet(expect = prev, update = ChannelReportStatus.Reporting)) break
+        }
+        try {
+            report.value =
+                when (submit(messageId, reason)) {
+                    ChannelReportResult.Reported -> ChannelReportStatus.Done
+                    ChannelReportResult.Failed -> ChannelReportStatus.Failed
+                }
+        } catch (cancellation: CancellationException) {
+            // Leaving the channel cancels the report; drop back to Idle rather than
+            // stranding the banner (the report may well have landed).
+            report.value = ChannelReportStatus.Idle
+            throw cancellation
+        } catch (_: Exception) {
+            report.value = ChannelReportStatus.Failed
+        }
+    }
+
+    /** Clears the report status back to Idle (after showing Done/Failed). */
+    fun resetReport() {
+        report.value = ChannelReportStatus.Idle
+    }
 
     /**
      * Optimistically sends [text] (optionally @mentioning [mentionedUids], and
