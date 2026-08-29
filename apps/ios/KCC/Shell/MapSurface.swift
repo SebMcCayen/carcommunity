@@ -1016,9 +1016,13 @@ final class StubMapSurface: MapSurface {
     }
 
     /// No camera on the stub, so nothing can be projected — unless a test has
-    /// installed a projection via ``setProjectionForTest(_:)``.
+    /// installed a projection via ``setProjectionForTest(_:)``. A non-finite
+    /// projection returns nil, per the ``MapProjection`` contract.
     func screenPositionFor(latitude: Double, longitude: Double) -> MapScreenPoint? {
-        projectionForTest?(latitude, longitude)
+        guard let point = projectionForTest?(latitude, longitude),
+              point.x.isFinite, point.y.isFinite
+        else { return nil }
+        return point
     }
 
     func setConvoyFit(points: [MapPoint]?, focusEnabled: Bool) {

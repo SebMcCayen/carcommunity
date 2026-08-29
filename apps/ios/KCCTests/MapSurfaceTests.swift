@@ -314,6 +314,15 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertNil(surface.screenPositionFor(latitude: 57.48, longitude: 12.07))
     }
 
+    func testStubFiltersNonFiniteProjectionsToNil() {
+        // The MapProjection contract: a non-finite projection returns nil.
+        let surface = StubMapSurface(autoLoad: false)
+        surface.setProjectionForTest { _, _ in MapScreenPoint(x: .nan, y: 20) }
+        XCTAssertNil(surface.screenPositionFor(latitude: 57.48, longitude: 12.07))
+        surface.setProjectionForTest { _, _ in MapScreenPoint(x: 10, y: .infinity) }
+        XCTAssertNil(surface.screenPositionFor(latitude: 57.48, longitude: 12.07))
+    }
+
     func testStubReportsAFixedVisibleRadiusOverridableForTests() {
         let surface = StubMapSurface(autoLoad: false)
         XCTAssertEqual(surface.visibleRadiusMeters(), 15_000)
