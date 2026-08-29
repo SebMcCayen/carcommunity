@@ -2607,6 +2607,12 @@ describe('Firestore – subscription purchase-token replay locks', () => {
         uid: 'sub-owner',
         productId: 'plus_monthly',
       });
+      await setDoc(doc(ctx.firestore(), 'subscriptionPurchaseVerifications', 'sub-owner'), {
+        uid: 'sub-owner',
+        productId: 'plus_monthly',
+        purchaseTokenHash: TOKEN_HASH,
+        reservationId: 'server-only-reservation',
+      });
     });
   });
 
@@ -2624,6 +2630,13 @@ describe('Firestore – subscription purchase-token replay locks', () => {
           productId: 'supporter_monthly',
         }),
       );
+      const verificationRef = doc(
+        ctx.firestore(),
+        'subscriptionPurchaseVerifications',
+        'sub-owner',
+      );
+      await assertFails(getDoc(verificationRef));
+      await assertFails(setDoc(verificationRef, { purchaseTokenHash: TOKEN_HASH }));
     }
   });
 });

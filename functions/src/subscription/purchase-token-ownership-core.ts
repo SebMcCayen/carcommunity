@@ -3,7 +3,11 @@ import { GOOGLE_PLAY_PRODUCT_IDS, type GooglePlayProductId } from './google-play
 export class PurchaseTokenOwnershipError extends Error {
   constructor(
     readonly reason:
-      'different_user' | 'different_product' | 'different_active_token' | 'malformed_record',
+      | 'different_user'
+      | 'different_product'
+      | 'different_active_token'
+      | 'verification_in_progress'
+      | 'malformed_record',
   ) {
     super('Purchase token ownership conflict.');
     this.name = 'PurchaseTokenOwnershipError';

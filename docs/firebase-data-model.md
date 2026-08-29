@@ -756,6 +756,23 @@ clients (including admin clients) have no access.
 Claiming is transactional. Re-verification by the same UID/product is
 idempotent; a different UID or product is rejected before entitlement writes.
 
+### `subscriptionPurchaseVerifications` — per-user verification lease
+
+Document ID: Firebase UID. Backend read/write only; clients (including admin
+clients) have no access. The short lease serializes the gap between provider
+verification and entitlement application so two devices cannot apply different
+first-purchase tokens concurrently. It is deleted after the invocation and
+expires after two minutes if the function crashes.
+
+| Field               | Type        | Notes                                               |
+| ------------------- | ----------- | --------------------------------------------------- |
+| `uid`               | `string`    | Same Firebase UID as the document ID                |
+| `productId`         | `string`    | Product currently being verified                    |
+| `purchaseTokenHash` | `string`    | SHA-256 token hash; never the raw purchase token     |
+| `reservationId`     | `string`    | Unique invocation holder used for safe release      |
+| `leaseExpiresAt`    | `Timestamp` | Crash-safe upper bound for this verification holder |
+| `updatedAt`         | `Timestamp` | Last reservation write                              |
+
 ---
 
 ## Firebase Realtime Database

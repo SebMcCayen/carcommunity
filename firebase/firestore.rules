@@ -2328,5 +2328,10 @@ service cloud.firestore {
     match /subscriptionPurchaseTokens/{tokenHash} {
       allow read, write: if false;
     }
+
+    // Short backend-only lease serializing subscription verification per UID.
+    match /subscriptionPurchaseVerifications/{userId} {
+      allow read, write: if false;
+    }
   }
 }

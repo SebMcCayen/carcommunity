@@ -29,7 +29,6 @@ import { applyEntitlement } from './entitlement';
 import {
   SUBSCRIPTION_STATUSES,
   SUBSCRIPTION_TIERS,
-  grantsLegacyActiveMember,
   hashPurchaseToken,
   isPaidSubscriptionTier,
   isSubscriptionActiveStatus,
@@ -52,10 +51,12 @@ import {
   GooglePlayApiError,
   verifyGooglePlaySubscription,
 } from './google-play';
-import { claimPurchaseTokenHash } from './purchase-token-ownership';
+import {
+  releasePurchaseVerification,
+  reservePurchaseVerification,
+} from './purchase-token-ownership';
 import {
   PurchaseTokenOwnershipError,
-  assertNoDifferentActiveToken,
 } from './purchase-token-ownership-core';
 
 const CALLABLE_OPTS = {
@@ -122,6 +123,7 @@ export const verify = onCall(
     }
 
     const client = new AdcGooglePlaySubscriptionClient();
+    let verificationReservationId: string | null = null;
     try {
       const verificationNow = new Date();
       const outcome = await verifyGooglePlaySubscription(client, {
@@ -130,38 +132,15 @@ export const verify = onCall(
         now: verificationNow,
       });
 
-      const currentSubscription = (
-        await db.collection('subscriptions').doc(actor.uid).get()
-      ).data();
-      const currentEntitlement = storedEntitlement(currentSubscription?.entitlement);
-      const currentStatus = storedStatus(currentSubscription?.status);
-      const currentTier = storedTier(currentSubscription?.tier);
-      assertNoDifferentActiveToken(
-        currentSubscription
-          ? {
-              grantsAccess: grantsLegacyActiveMember({
-                entitlement: currentEntitlement,
-                status: currentStatus,
-                tier: currentTier,
-              }),
-              purchaseTokenHash:
-                typeof currentSubscription.purchaseTokenHash === 'string'
-                  ? currentSubscription.purchaseTokenHash
-                  : null,
-              expiresAt: storedDate(currentSubscription.expiresAt),
-            }
-          : null,
+      // Claim only after Play has authenticated the response and UID binding.
+      // Token ownership and the UID's verification slot are one transaction,
+      // so two devices cannot both pass a stale subscription read and apply
+      // different first-purchase tokens concurrently.
+      verificationReservationId = await reservePurchaseVerification(
         purchaseTokenHash,
+        { uid: actor.uid, productId: outcome.productId },
         verificationNow,
       );
-
-      // Claim only after Play has authenticated the response and UID binding.
-      // Same-UID retries are idempotent; another UID can never replay this
-      // token, even if it somehow obtains the raw value.
-      await claimPurchaseTokenHash(purchaseTokenHash, {
-        uid: actor.uid,
-        productId: outcome.productId,
-      });
 
       await applyEntitlement({
         userId: actor.uid,
@@ -218,6 +197,11 @@ export const verify = onCall(
               'failed-precondition',
               'A different subscription is already active for this account.',
             );
+          case 'verification_in_progress':
+            throw new HttpsError(
+              'aborted',
+              'Subscription verification is already in progress. Please retry shortly.',
+            );
           case 'malformed_record':
             throw new HttpsError('internal', 'Subscription ownership record is invalid.');
         }
@@ -240,6 +224,20 @@ export const verify = onCall(
         uid: actor.uid,
       });
       throw new HttpsError('internal', 'Google Play verification failed.');
+    } finally {
+      if (verificationReservationId !== null) {
+        try {
+          await releasePurchaseVerification(
+            actor.uid,
+            purchaseTokenHash,
+            verificationReservationId,
+          );
+        } catch {
+          // A stale lease expires automatically; never turn a successful
+          // entitlement result into a client-visible failure during cleanup.
+          logger.warn('Google Play verification lease release failed', { uid: actor.uid });
+        }
+      }
     }
   },
 );

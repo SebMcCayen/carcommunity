@@ -36,7 +36,12 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { claimPurchaseTokenHash } from '../subscription/purchase-token-ownership';
+import {
+  PURCHASE_VERIFICATION_LEASE_MS,
+  claimPurchaseTokenHash,
+  releasePurchaseVerification,
+  reservePurchaseVerification,
+} from '../subscription/purchase-token-ownership';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -181,6 +186,64 @@ describe('subscription entitlement chain', () => {
       uid: member.uid,
       productId: 'plus_monthly',
     });
+  });
+
+  it('atomically permits only one different first-purchase token per UID', async () => {
+    const raceMember = await createProvisionedUser('p11-purchase-race');
+    const tokenA = `${Date.now().toString(16).padStart(16, '0')}${'b'.repeat(48)}`;
+    const tokenB = `${(Date.now() + 1).toString(16).padStart(16, '0')}${'c'.repeat(48)}`;
+    const results = await Promise.allSettled([
+      reservePurchaseVerification(
+        tokenA,
+        { uid: raceMember.uid, productId: 'plus_monthly' },
+        new Date(),
+      ),
+      reservePurchaseVerification(
+        tokenB,
+        { uid: raceMember.uid, productId: 'supporter_monthly' },
+        new Date(),
+      ),
+    ]);
+
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    const rejected = results.find((result) => result.status === 'rejected');
+    expect(rejected).toMatchObject({ reason: { reason: 'different_active_token' } });
+
+    const winnerIndex = results[0]?.status === 'fulfilled' ? 0 : 1;
+    const winner = winnerIndex === 0 ? tokenA : tokenB;
+    const winningResult = results[winnerIndex];
+    expect(winningResult?.status).toBe('fulfilled');
+    if (winningResult?.status !== 'fulfilled') throw new Error('Expected a reservation winner.');
+    await releasePurchaseVerification(raceMember.uid, winner, winningResult.value);
+    expect(
+      (await adminDb.collection('subscriptionPurchaseVerifications').doc(raceMember.uid).get())
+        .exists,
+    ).toBe(false);
+  });
+
+  it('does not let an expired holder release a newer same-token reservation', async () => {
+    const member = await createProvisionedUser('p11-purchase-lease-holder');
+    const tokenHash = `${Date.now().toString(16).padStart(16, '0')}${'d'.repeat(48)}`;
+    const now = new Date();
+    const oldReservationId = await reservePurchaseVerification(
+      tokenHash,
+      { uid: member.uid, productId: 'plus_monthly' },
+      now,
+    );
+    const newReservationId = await reservePurchaseVerification(
+      tokenHash,
+      { uid: member.uid, productId: 'plus_monthly' },
+      new Date(now.getTime() + PURCHASE_VERIFICATION_LEASE_MS + 1),
+    );
+
+    await releasePurchaseVerification(member.uid, tokenHash, oldReservationId);
+    const lease = await adminDb
+      .collection('subscriptionPurchaseVerifications')
+      .doc(member.uid)
+      .get();
+    expect(lease.data()?.reservationId).toBe(newReservationId);
+
+    await releasePurchaseVerification(member.uid, tokenHash, newReservationId);
   });
 
   it('admin manual grant applies record + flag + claim; revoke tears down', async () => {
