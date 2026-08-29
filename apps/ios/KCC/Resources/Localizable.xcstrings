@@ -30057,6 +30057,40 @@
         }
       }
     },
+    "subscription.currentEntitlementPlus": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har ett aktivt Plus-medlemskap."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have an active Plus membership."
+          }
+        }
+      }
+    },
+    "subscription.currentEntitlementSupporter": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har ett aktivt Supporter-medlemskap."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have an active Supporter membership."
+          }
+        }
+      }
+    },
     "subscription.currentPlanTitle": {
       "extractionState": "manual",
       "localizations": {
