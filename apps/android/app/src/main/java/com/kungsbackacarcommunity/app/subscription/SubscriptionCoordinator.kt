@@ -88,7 +88,7 @@ class SubscriptionCoordinator(
                     val verified = verifier.verify(outcome.purchaseToken)
                     state.value =
                         if (verified.grantsAccess) {
-                            PurchaseFlowStatus.Success
+                            PurchaseFlowStatus.Success(verified.tier)
                         } else {
                             PurchaseFlow.failed(PurchaseFailureReason.InactivePurchase)
                         }
@@ -97,7 +97,11 @@ class SubscriptionCoordinator(
                     state.value = PurchaseFlowStatus.Verifying
                     val verified = verifier.verify(outcome.purchaseToken)
                     state.value =
-                        if (verified.grantsAccess) PurchaseFlowStatus.Success else PurchaseFlowStatus.Pending
+                        if (verified.grantsAccess) {
+                            PurchaseFlowStatus.Success(verified.tier)
+                        } else {
+                            PurchaseFlowStatus.Pending
+                        }
                 }
                 PurchaseResult.Canceled -> state.value = PurchaseFlowStatus.Idle
             }
@@ -133,7 +137,7 @@ class SubscriptionCoordinator(
             val verified = verifier.verify(purchase.purchaseToken)
             state.value =
                 when {
-                    verified.grantsAccess -> PurchaseFlowStatus.Success
+                    verified.grantsAccess -> PurchaseFlowStatus.Success(verified.tier)
                     purchase.state == OwnedPurchaseState.Pending -> PurchaseFlowStatus.Pending
                     else -> PurchaseFlow.failed(PurchaseFailureReason.InactivePurchase)
                 }

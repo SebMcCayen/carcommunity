@@ -2,6 +2,29 @@
   "note": "Bundled 'Vad är nytt' changelog. MAINTAINERS: every release PR that bumps versionCode/versionName in app/build.gradle.kts MUST append a new entry here (newest first): versionCode, versionName, releaseDate (ISO yyyy-MM-dd), highlights (max ~3 short user-facing Swedish lines shown in the update popup) and changes (full bulleted list shown on the 'Vad är nytt' page). Keep descriptions user-facing Swedish — no internal jargon. See apps/android/README.md § Changelog.",
   "entries": [
     {
+      "versionCode": 48,
+      "versionName": "0.8.37",
+      "releaseDate": "2026-08-29",
+      "highlights": [
+        "Nya medlemskap: Plus och Supporter",
+        "Rapportera olämpliga meddelanden i communitychatten",
+        "Redigera eller ta bort dina egna event"
+      ],
+      "changes": [
+        "Medlemskap: välj Plus eller Supporter och genomför köpet säkert via Google Play",
+        "Communitychatten: rapportera olämpliga meddelanden direkt från meddelandets meny",
+        "Utmärkelser: tidiga testare kan få den exklusiva utmärkelsen Grundare",
+        "Event: du kan nu redigera eller ta bort event som du själv har skapat",
+        "Konvoj: ledaren kan dela sin körda väg så att gruppen lättare håller ihop",
+        "Körstatistik: orimliga GPS-hopp räknas inte längre som verklig toppfart",
+        "Live-kartan: en rapporterad poliskontroll visas inte längre dubbelt",
+        "Vinka: du kan vinka igen efter att den andra föraren lämnat räckvidden och kommit tillbaka",
+        "Kronjakten: fällor kan inte placeras för nära aktiva event",
+        "Butiken: tydligare texter och snabbare väg till butiken från perk-rutan",
+        "Mindre förbättringar och buggfixar"
+      ]
+    },
+    {
       "versionCode": 47,
       "versionName": "0.8.36",
       "releaseDate": "2026-08-27",
@@ -36,9 +59,7 @@
       "versionCode": 45,
       "versionName": "0.8.34",
       "releaseDate": "2026-08-22",
-      "highlights": [
-        "Kronjakten: din \"insamlad\"-markering på delade kronor stannar kvar"
-      ],
+      "highlights": ["Kronjakten: din \"insamlad\"-markering på delade kronor stannar kvar"],
       "changes": [
         "Kronjakten: markeringen \"insamlad av dig\" på en delad krona du redan samlat stannar nu kvar i stället för att försvinna",
         "Mindre förbättringar och buggfixar"
@@ -633,20 +654,14 @@
       "versionCode": 13,
       "versionName": "0.8.2",
       "releaseDate": "2026-07-19",
-      "highlights": [
-        "Kartan syns igen på startsidan"
-      ],
-      "changes": [
-        "Rättat: kartan visades inte på startsidan"
-      ]
+      "highlights": ["Kartan syns igen på startsidan"],
+      "changes": ["Rättat: kartan visades inte på startsidan"]
     },
     {
       "versionCode": 12,
       "versionName": "0.8.1",
       "releaseDate": "2026-07-19",
-      "highlights": [
-        "Vägbeskrivning direkt i appen"
-      ],
+      "highlights": ["Vägbeskrivning direkt i appen"],
       "changes": [
         "Starta en vägbeskrivning och få svängvisning inne i appen – du skickas inte längre vidare till en annan kartapp"
       ]
@@ -800,10 +815,7 @@
       "versionCode": 3,
       "versionName": "0.1.0",
       "releaseDate": "2026-07-09",
-      "highlights": [
-        "Ny grafisk profil",
-        "Stabilare inloggning"
-      ],
+      "highlights": ["Ny grafisk profil", "Stabilare inloggning"],
       "changes": [
         "Appen har fått communityts grafiska profil med nya färger och typsnitt",
         "Buggfixar för inloggning",
@@ -814,10 +826,7 @@
       "versionCode": 2,
       "versionName": "0.1.0",
       "releaseDate": "2026-07-09",
-      "highlights": [
-        "Rapportera problem direkt i appen",
-        "Buggfixar"
-      ],
+      "highlights": ["Rapportera problem direkt i appen", "Buggfixar"],
       "changes": [
         "Nytt: ”Rapportera ett problem” i inställningarna",
         "Rättad poängberäkning i Kronjakten",
@@ -829,9 +838,7 @@
       "versionCode": 1,
       "versionName": "0.1.0",
       "releaseDate": "2026-07-09",
-      "highlights": [
-        "Första testversionen"
-      ],
+      "highlights": ["Första testversionen"],
       "changes": [
         "Inloggning med Google samt profil och garage",
         "Träffar med anmälan och träffchatt",

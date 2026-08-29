@@ -50,6 +50,12 @@ const PLATFORM_LABELS: Record<string, string> = {
   google: 'subscription.platform.google',
 };
 
+const TIER_LABELS: Record<string, string> = {
+  community: 'subscription.tier.community',
+  plus: 'subscription.tier.plus',
+  supporter: 'subscription.tier.supporter',
+};
+
 function formatDate(iso: string | null): string {
   return formatDateOnly(iso);
 }
@@ -67,6 +73,11 @@ function statusLabel(status: string): string {
 function platformLabel(platform: string): string {
   const key = PLATFORM_LABELS[platform];
   return key ? t(key) : platform;
+}
+
+function tierLabel(tier: string): string {
+  const key = TIER_LABELS[tier];
+  return key ? t(key) : tier;
 }
 
 export default function SubscriptionPage() {
@@ -234,10 +245,10 @@ export default function SubscriptionPage() {
           <dl className={styles.detailGrid}>
             <dt>{t('subscription.entitlementLabel')}</dt>
             <dd>{entitlementLabel(summary.entitlement)}</dd>
+            <dt>{t('subscription.tierLabel')}</dt>
+            <dd>{tierLabel(summary.subscription?.tier ?? 'community')}</dd>
             <dt>{t('subscription.statusLabel')}</dt>
-            <dd>
-              {summary.subscription ? statusLabel(summary.subscription.status) : '–'}
-            </dd>
+            <dd>{summary.subscription ? statusLabel(summary.subscription.status) : '–'}</dd>
             <dt>{t('subscription.platformLabel')}</dt>
             <dd>{summary.subscription ? platformLabel(summary.subscription.platform) : '–'}</dd>
             <dt>{t('subscription.expiresLabel')}</dt>

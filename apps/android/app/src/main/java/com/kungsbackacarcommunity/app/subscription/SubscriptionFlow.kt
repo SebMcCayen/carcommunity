@@ -118,7 +118,8 @@ sealed interface PurchaseFlowStatus {
 
     data object Verifying : PurchaseFlowStatus
 
-    data object Success : PurchaseFlowStatus
+    /** Verified paid access, retaining the exact tier for UI confirmation. */
+    data class Success(val tier: String) : PurchaseFlowStatus
 
     /** Play reports a pending payment; no entitlement is granted or acknowledged. */
     data object Pending : PurchaseFlowStatus
@@ -136,7 +137,7 @@ object PurchaseFlow {
         when (status) {
             PurchaseFlowStatus.Idle,
             PurchaseFlowStatus.Ready,
-            PurchaseFlowStatus.Success,
+            is PurchaseFlowStatus.Success,
             is PurchaseFlowStatus.Failed,
             -> true
             PurchaseFlowStatus.Connecting,

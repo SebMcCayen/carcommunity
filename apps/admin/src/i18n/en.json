@@ -348,12 +348,18 @@
     "lookupError": "Could not load the subscription.",
     "currentStatusTitle": "Current status",
     "entitlementLabel": "Entitlement",
+    "tierLabel": "Plan",
     "statusLabel": "Status",
     "platformLabel": "Platform",
     "expiresLabel": "Expires",
     "entitlement": {
       "none": "None",
       "member_monthly": "Member (monthly)"
+    },
+    "tier": {
+      "community": "Community",
+      "plus": "Plus",
+      "supporter": "Supporter"
     },
     "status": {
       "inactive": "Inactive",

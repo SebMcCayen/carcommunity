@@ -1079,6 +1079,7 @@ describe('subscription module', () => {
           platform: 'manual',
           status: 'active',
           entitlement: 'member_monthly',
+          tier: 'supporter',
           expiresAt: ts('2026-12-31T00:00:00Z'),
         }),
       })
@@ -1092,6 +1093,7 @@ describe('subscription module', () => {
     expect(summary.subscription).toMatchObject({
       platform: 'manual',
       status: 'active',
+      tier: 'supporter',
       expiresAt: '2026-12-31T00:00:00.000Z',
     });
   });
@@ -1131,6 +1133,7 @@ describe('subscription module', () => {
       platform: 'manual',
       status: 'inactive',
       entitlement: 'none',
+      tier: 'community',
     });
   });
 

@@ -217,6 +217,8 @@
     <string name="subscription_purchaseHandledExternally">Purchases are handled via the App Store or Google Play in a later version.</string>
     <string name="subscription_accessLimitedBySuspension">Your access may be restricted in the event of suspension or violations.</string>
     <string name="subscription_currentEntitlementMember">You have an active membership.</string>
+    <string name="subscription_currentEntitlementPlus">You have an active Plus membership.</string>
+    <string name="subscription_currentEntitlementSupporter">You have an active Supporter membership.</string>
     <string name="subscription_currentEntitlementFree">No active membership.</string>
     <string name="subscription_currentPlanTitle">Your membership</string>
     <string name="subscription_plusTitle">Plus · SEK 39/month</string>

@@ -89,7 +89,7 @@ class SubscriptionFlowTest {
     fun `canStart is true only from settled states`() {
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Idle))
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Ready))
-        assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Success))
+        assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Success("plus")))
         assertTrue(PurchaseFlow.canStart(PurchaseFlowStatus.Failed(PurchaseFailureReason.Connection)))
 
         assertFalse(PurchaseFlow.canStart(PurchaseFlowStatus.Connecting))
