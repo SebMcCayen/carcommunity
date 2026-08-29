@@ -47,11 +47,15 @@ object PoliceMapMarkers {
     const val GLYPH_COLOR_ARGB: Int = 0xFFFFFFFF.toInt()
 
     /**
-     * ~11 m expressed in latitude/longitude degrees. A police pin and a
+     * Coincidence threshold in RAW degrees, applied independently to latitude and
+     * longitude (see [isNearAnyIncident]). 1e-4° is ~11 m of LATITUDE everywhere;
+     * for LONGITUDE a degree shrinks with latitude, so 1e-4° is a TIGHTER bound
+     * east-west (≈6 m at Sweden's ~59°N) — fine here, since the pin and the
      * Police-category INCIDENT created by ONE "report police" tap land at the
-     * identical GPS fix, so any gap between them is only backend rounding; two
+     * identical GPS fix and any gap between them is only backend rounding; two
      * genuinely distinct police sightings this close are the same spot on a moving
-     * map anyway. Used by [markers] to suppress the coincident duplicate.
+     * map anyway. Used by [markers] to suppress the coincident duplicate. (A raw
+     * per-axis degree check is deliberate — no haversine needed at this scale.)
      */
     const val INCIDENT_COINCIDENCE_EPSILON_DEG: Double = 1e-4
 
