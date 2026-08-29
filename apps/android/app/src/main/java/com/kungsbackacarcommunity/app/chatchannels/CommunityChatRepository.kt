@@ -1,5 +1,6 @@
 package com.kungsbackacarcommunity.app.chatchannels
 
+import com.kungsbackacarcommunity.app.chat.ChatReportReason
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -66,4 +67,23 @@ interface CommunityChatRepository {
 
     /** `communityChat-markRead` — stamps the caller's last-read marker. Idempotent. */
     suspend fun markRead()
+
+    /**
+     * `chatchannels-reportMessage` (channel: 'community') — files a moderation
+     * report against the message [messageId] with [reason]. Eligibility mirrors the
+     * channel read rule (any active member), reporting your OWN message is rejected
+     * server-side (the client also gates this on [MessageModeration.canActOn]), and
+     * the message is snapshotted into the report so a later TTL-delete can't blank
+     * it. The reported message id is a community-channel doc id; the channel scope
+     * ('global') is fixed server-side, so the client sends only the reason + id.
+     *
+     * Binary [ChannelReportResult] by design: the queue is fire-and-forget and the
+     * backend never reveals whether a prior report existed, so the reporter only
+     * learns "reached the backend" vs "didn't".
+     *
+     * Defaults to [ChannelReportResult.Failed] so a fake predating reporting fails
+     * closed rather than falsely reporting success; the Firebase repository overrides it.
+     */
+    suspend fun report(messageId: String, reason: ChatReportReason): ChannelReportResult =
+        ChannelReportResult.Failed
 }

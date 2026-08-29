@@ -10,12 +10,14 @@ package com.kungsbackacarcommunity.app.moderation
  *  - **Block** is surface-independent: it targets a USER, and the
  *    `blocking-block` / `blocking-unblock` callables exist and are wired
  *    everywhere via [com.kungsbackacarcommunity.app.blocking.BlockingRepository].
- *  - **Report** is per-surface: only EVENT chat has a report callable today
- *    (`events-reportChatMessage`). The community channel, convoy channels and
- *    DMs have no report backend at all, so the action is NOT RENDERED there —
- *    an action that cannot run is not an action. A permanently dead button
- *    invites "report is broken" bug reports and teaches users the feature is
- *    unreliable; an absent one simply appears the day its callable lands.
+ *  - **Report** is per-surface: EVENT chat (`events-reportChatMessage`) and the
+ *    global community channel (`chatchannels-reportMessage`, channel: 'community')
+ *    are wired. Convoy channels (the same `chatchannels-reportMessage` callable,
+ *    channel: 'convoy') and DMs (`dm.reportMessage`) have a backend but no Android
+ *    wiring yet, so the action is NOT RENDERED there — an action that cannot run is
+ *    not an action. A permanently dead button invites "report is broken" bug
+ *    reports and teaches users the feature is unreliable; an absent one simply
+ *    appears the day its route passes a submit lambda.
  *
  * [reportAvailability] (and [reportUserAvailability] for the profile action) is
  * the single source of truth for that split, so when the missing backends land
@@ -75,8 +77,14 @@ object MessageModeration {
      */
     fun reportAvailability(surface: ChatSurface): ReportAvailability =
         when (surface) {
-            ChatSurface.EventChat -> ReportAvailability.Wired
+            // Event chat (`events-reportChatMessage`) and the community channel
+            // (`chatchannels-reportMessage`, channel: 'community') both have a wired
+            // report callable. Convoy shares the same callable but its Android entry
+            // point isn't wired yet, and DMs (`dm.reportMessage`) have no client
+            // wiring either — both stay hidden until their route passes a submit lambda.
+            ChatSurface.EventChat,
             ChatSurface.CommunityChannel,
+            -> ReportAvailability.Wired
             ChatSurface.ConvoyChannel,
             ChatSurface.DirectMessage,
             -> ReportAvailability.BackendMissing

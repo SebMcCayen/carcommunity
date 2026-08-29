@@ -33,6 +33,25 @@ class ChannelChatCoordinatorTest {
         var lastBefore: String? = null
         var markReadCalls = 0
 
+        var reportResult: ChannelReportResult = ChannelReportResult.Reported
+        var reportCalls = 0
+        var lastReportMessageId: String? = null
+        var lastReportReason: com.kungsbackacarcommunity.app.chat.ChatReportReason? = null
+
+        /** When set, [reporter] suspends on it until completed — models an in-flight report. */
+        var reportGate: CompletableDeferred<Unit>? = null
+
+        val reporter:
+            suspend (String, com.kungsbackacarcommunity.app.chat.ChatReportReason) ->
+            ChannelReportResult =
+            { messageId, reason ->
+                reportCalls++
+                lastReportMessageId = messageId
+                lastReportReason = reason
+                reportGate?.await()
+                reportResult
+            }
+
         /** When set, [sender] suspends on it until completed — models an in-flight callable. */
         var gate: CompletableDeferred<Unit>? = null
 
@@ -59,6 +78,7 @@ class ChannelChatCoordinatorTest {
     private fun coordinator(
         f: Fakes,
         withMarker: Boolean = true,
+        withReporter: Boolean = true,
         ids: () -> String = { "cid-1" },
     ) =
         ChannelChatCoordinator(
@@ -66,6 +86,7 @@ class ChannelChatCoordinatorTest {
             pager = f.pager,
             selfUid = "me",
             marker = if (withMarker) f.marker else null,
+            reporter = if (withReporter) f.reporter else null,
             clock = { 1000L },
             idGenerator = ids,
         )
@@ -413,6 +434,82 @@ class ChannelChatCoordinatorTest {
         val c = coordinator(f, withMarker = false)
         c.markRead()
         assertEquals(0, f.markReadCalls)
+    }
+
+    @Test
+    fun `report submits the message id and reason and reaches Done on success`() = runTest {
+        val f = Fakes().apply { reportResult = ChannelReportResult.Reported }
+        val c = coordinator(f)
+        assertEquals(ChannelReportStatus.Idle, c.reportStatus.value)
+
+        c.report("msg-1", com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM)
+
+        assertEquals(1, f.reportCalls)
+        assertEquals("msg-1", f.lastReportMessageId)
+        assertEquals(
+            com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM,
+            f.lastReportReason,
+        )
+        assertEquals(ChannelReportStatus.Done, c.reportStatus.value)
+    }
+
+    @Test
+    fun `report reaches Failed when the backend rejects it`() = runTest {
+        val f = Fakes().apply { reportResult = ChannelReportResult.Failed }
+        val c = coordinator(f)
+
+        c.report("msg-1", com.kungsbackacarcommunity.app.chat.ChatReportReason.HARASSMENT)
+
+        assertEquals(ChannelReportStatus.Failed, c.reportStatus.value)
+    }
+
+    @Test
+    fun `report is Reporting while in flight then resettable`() = runTest {
+        val f = Fakes().apply { reportGate = CompletableDeferred() }
+        val c = coordinator(f)
+
+        val job =
+            launch {
+                c.report("msg-1", com.kungsbackacarcommunity.app.chat.ChatReportReason.OTHER)
+            }
+        runCurrent()
+        assertEquals(ChannelReportStatus.Reporting, c.reportStatus.value)
+
+        f.reportGate!!.complete(Unit)
+        job.join()
+        assertEquals(ChannelReportStatus.Done, c.reportStatus.value)
+
+        c.resetReport()
+        assertEquals(ChannelReportStatus.Idle, c.reportStatus.value)
+    }
+
+    @Test
+    fun `a second report is ignored while one is in flight (no double file)`() = runTest {
+        val f = Fakes().apply { reportGate = CompletableDeferred() }
+        val c = coordinator(f)
+
+        val job =
+            launch {
+                c.report("msg-1", com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM)
+            }
+        runCurrent()
+        // Second call while Reporting must not fire the callable again.
+        c.report("msg-2", com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM)
+        assertEquals(1, f.reportCalls)
+
+        f.reportGate!!.complete(Unit)
+        job.join()
+    }
+
+    @Test
+    fun `report is a no-op without a reporter (convoy channel)`() = runTest {
+        val f = Fakes()
+        val c = coordinator(f, withReporter = false)
+
+        c.report("msg-1", com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM)
+
+        assertEquals(0, f.reportCalls)
+        assertEquals(ChannelReportStatus.Idle, c.reportStatus.value)
     }
 
     private fun msg(id: String, millis: Long) =

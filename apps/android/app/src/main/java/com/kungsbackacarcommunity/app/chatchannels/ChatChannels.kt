@@ -194,6 +194,19 @@ sealed interface ChannelOlderResult {
     data object Failed : ChannelOlderResult
 }
 
+/**
+ * Outcome of a `chatchannels-reportMessage` call. Deliberately binary: the report
+ * queue is fire-and-forget from the client's side, so the caller only needs "the
+ * report reached the backend" vs "it didn't". Every HttpsError code (a dedupe
+ * refresh included — the backend never reveals a prior report existed) collapses
+ * to one of these; the specific reason never surfaces to the reporter.
+ */
+sealed interface ChannelReportResult {
+    data object Reported : ChannelReportResult
+
+    data object Failed : ChannelReportResult
+}
+
 /** Pure code → send-error mapping. Branch on the HttpsError code, never the message. */
 object ChannelErrorMapper {
     fun mapSend(code: ChannelErrorCode): ChannelSendError =

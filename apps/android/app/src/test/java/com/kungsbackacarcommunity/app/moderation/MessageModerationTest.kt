@@ -8,23 +8,28 @@ import org.junit.Test
 class MessageModerationTest {
 
     @Test
-    fun eventChat_is_the_only_surface_with_a_wired_report() {
-        // events-reportChatMessage is the only report callable that exists today.
+    fun eventChat_and_community_have_a_wired_report() {
+        // events-reportChatMessage and chatchannels-reportMessage (channel:
+        // 'community') both exist and are wired.
         assertEquals(
             ReportAvailability.Wired,
             MessageModeration.reportAvailability(ChatSurface.EventChat),
         )
+        assertEquals(
+            ReportAvailability.Wired,
+            MessageModeration.reportAvailability(ChatSurface.CommunityChannel),
+        )
     }
 
     @Test
-    fun channels_and_dms_have_no_report_backend() {
-        // These must stay BackendMissing until their callables land — the sheet
-        // renders the action disabled off the back of this, which is the whole
-        // point: an un-fileable report must never look filed.
-        listOf(ChatSurface.CommunityChannel, ChatSurface.ConvoyChannel, ChatSurface.DirectMessage)
+    fun convoy_and_dms_have_no_report_wiring_yet() {
+        // Convoy shares chatchannels-reportMessage but its Android entry point is
+        // not wired; DMs (dm.reportMessage) have no client wiring either. Both must
+        // stay BackendMissing so an un-fileable report never looks filed.
+        listOf(ChatSurface.ConvoyChannel, ChatSurface.DirectMessage)
             .forEach { surface ->
                 assertEquals(
-                    "$surface must not offer a working report until its callable exists",
+                    "$surface must not offer a working report until its route wires one",
                     ReportAvailability.BackendMissing,
                     MessageModeration.reportAvailability(surface),
                 )
@@ -33,19 +38,16 @@ class MessageModerationTest {
 
     @Test
     fun only_surfaces_with_a_real_callable_are_wired() {
-        // The old version of this test just CALLED reportAvailability for every
-        // surface and asserted nothing — it could only fail if the function threw,
-        // and the exhaustiveness it claimed to guard is already a compile error
-        // (the `when` is expression-form, so a new ChatSurface breaks the build).
         // What is NOT compiler-guarded is a surface being flipped to Wired before
-        // its callable exists, which would render a report row that submits into
-        // the void. Pin the wired set to exactly the callables that exist.
+        // its callable exists (or is wired on the client), which would render a
+        // report row that submits into the void. Pin the wired set to exactly the
+        // surfaces that both have a callable AND route wiring.
         val wired = ChatSurface.entries.filter {
             MessageModeration.reportAvailability(it) == ReportAvailability.Wired
         }
         assertEquals(
-            "Only add a surface here once its report callable actually exists",
-            listOf(ChatSurface.EventChat),
+            "Only add a surface here once its report callable exists AND its route wires it",
+            listOf(ChatSurface.EventChat, ChatSurface.CommunityChannel),
             wired,
         )
     }

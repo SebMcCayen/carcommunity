@@ -217,6 +217,30 @@ class FirebaseCommunityChatRepository private constructor(
         functions.callChannel(MARK_READ, emptyMap())
     }
 
+    override suspend fun report(
+        messageId: String,
+        reason: com.kungsbackacarcommunity.app.chat.ChatReportReason,
+    ): ChannelReportResult =
+        // `channel: 'community'` fixes the scope ('global') server-side; convoyId is
+        // deliberately omitted (the backend rejects it for the community channel).
+        // `reason` goes over as its backend wire string (CHAT_MESSAGE_REPORT_REASONS).
+        functions.callChannel(
+            REPORT,
+            mapOf(
+                "channel" to "community",
+                "messageId" to messageId,
+                "reason" to reason.wire,
+            ),
+        ).fold(
+            // The backend returns { reported: true }; the client needs no field off
+            // it — reaching success at all is the whole signal.
+            onSuccess = { ChannelReportResult.Reported },
+            // Every failure (auth, not-a-member, invalid id, self-report, rate limit,
+            // transient) collapses to one neutral outcome — the reporter is never told
+            // which, matching the callable's own refusal to reveal report state.
+            onFailure = { ChannelReportResult.Failed },
+        )
+
     companion object {
         private const val COMMUNITY = "communityChat"
         private const val CHANNEL_ID = "global"
@@ -227,6 +251,10 @@ class FirebaseCommunityChatRepository private constructor(
         private const val POST = "communityChat-post"
         private const val LIST = "communityChat-list"
         private const val MARK_READ = "communityChat-markRead"
+
+        // Shared community+convoy report callable; the payload's `channel` field
+        // selects which (community here). NOT a `communityChat-*` export.
+        private const val REPORT = "chatchannels-reportMessage"
 
         /** Newest-message window scanned for the unread dot (see observeUnread). */
         private const val UNREAD_SCAN_LIMIT = 10L

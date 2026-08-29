@@ -99,9 +99,18 @@ fun CommunityChannelRoute(
                 pager = { before -> repository.loadOlder(before) },
                 selfUid = uid,
                 marker = { repository.markRead() },
+                // Community reports go through `chatchannels-reportMessage`
+                // (channel: 'community'); wiring this lambda is all that turns the
+                // hidden report row into a live one (MessageModeration marks the
+                // surface Wired).
+                reporter = { messageId, reason -> repository.report(messageId, reason) },
                 crashTelemetry = crashTelemetry ?: NoopCrashTelemetry,
             )
         }
+    // Clear a stale report Done/Failed banner when re-entering the channel (mirrors
+    // the block-status reset above).
+    LaunchedEffect(coordinator) { coordinator.resetReport() }
+    val reportStatus by coordinator.reportStatus.collectAsState()
 
     val messagesState by
         remember(repository) { repository.observeMessages() }
@@ -194,5 +203,8 @@ fun CommunityChannelRoute(
             },
         blockStatus = blockStatus,
         onBlockDismiss = { blockingCoordinator?.reset() },
+        onReport = { messageId, reason -> scope.launch { coordinator.report(messageId, reason) } },
+        reportStatus = reportStatus,
+        onReportDismiss = { coordinator.resetReport() },
     )
 }

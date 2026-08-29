@@ -48,6 +48,7 @@ class ChannelChatContentTest {
         onViewProfile: ((String) -> Unit)?,
         onBlock: ((String) -> Unit)? = null,
         surface: ChatSurface = ChatSurface.CommunityChannel,
+        onReport: ((String, com.kungsbackacarcommunity.app.chat.ChatReportReason) -> Unit)? = null,
     ) {
         composeTestRule.setContent {
             KccTheme {
@@ -64,6 +65,7 @@ class ChannelChatContentTest {
                     surface = surface,
                     onViewProfile = onViewProfile,
                     onBlock = onBlock,
+                    onReport = onReport,
                 )
             }
         }
@@ -139,17 +141,17 @@ class ChannelChatContentTest {
     }
 
     @Test
-    fun communityChannel_hasNoReportRow_becauseNoReportBackendExists() {
-        // The community channel has no report callable, so the row is ABSENT —
-        // not present-and-disabled. A permanently dead control teaches testers
-        // the feature is broken; an absent one simply appears when the callable
-        // lands. The sheet itself must still open (block is available here), so
-        // this cannot pass by the sheet failing to show.
+    fun communityChannel_withoutAWiredReportLambda_hasNoReportRow() {
+        // The community report callable exists, but this route passed NO submit
+        // lambda, so the row must stay ABSENT rather than open a picker that can't
+        // submit. The sheet still opens (block is available), so this can't pass by
+        // the sheet failing to show.
         setContent(
             messages = listOf(message("m1", senderUid = "other", name = "Alice")),
             onViewProfile = null,
             onBlock = {},
             surface = ChatSurface.CommunityChannel,
+            onReport = null,
         )
 
         longPress("Body of m1")
@@ -157,8 +159,50 @@ class ChannelChatContentTest {
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_BLOCK_TEST_TAG).assertIsDisplayed()
         composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertDoesNotExist()
-        // The note that used to explain the disabled row must be gone with it.
-        composeTestRule.onNodeWithText(str(R.string.moderation_reportMessage)).assertDoesNotExist()
+    }
+
+    @Test
+    fun communityChannel_reportRow_opensReasonPicker_andSubmitsChosenReason() {
+        // The wired path: a submit lambda is present, so the report row shows on
+        // another member's message. Tapping it opens the shared reason picker, and
+        // choosing a reason fires the report with that message's id + the reason.
+        var reported: Pair<String, com.kungsbackacarcommunity.app.chat.ChatReportReason>? = null
+        setContent(
+            messages = listOf(message("m1", senderUid = "other", name = "Alice")),
+            onViewProfile = null,
+            onBlock = {},
+            surface = ChatSurface.CommunityChannel,
+            onReport = { id, reason -> reported = id to reason },
+        )
+
+        longPress("Body of m1")
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).assertIsDisplayed()
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_REPORT_TEST_TAG).performClick()
+
+        // The reason picker opens; picking "Spam" submits.
+        composeTestRule.onNodeWithText(str(R.string.chat_reportReasonSpam)).performClick()
+
+        assertEquals(
+            "m1" to com.kungsbackacarcommunity.app.chat.ChatReportReason.SPAM,
+            reported,
+        )
+    }
+
+    @Test
+    fun communityChannel_reportRow_isAbsentOnOwnMessage() {
+        // You can't report yourself even with the callable wired.
+        setContent(
+            messages = listOf(message("m1", senderUid = "me", name = "Me")),
+            onViewProfile = null,
+            onBlock = {},
+            surface = ChatSurface.CommunityChannel,
+            onReport = { _, _ -> },
+        )
+
+        longPress("Body of m1")
+
+        // Own-message long-press opens no sheet at all (nothing to block or report).
+        composeTestRule.onNodeWithTag(MESSAGE_ACTIONS_SHEET_TEST_TAG).assertDoesNotExist()
     }
 
     @Test
