@@ -65,10 +65,19 @@ final class EventsCoordinator {
     private func subscribe() {
         subscription?.cancel()
         state = .loading
-        subscription = Task { [repository] in
-            for await snapshot in repository.publishedEvents() {
-                guard !Task.isCancelled else { return }
-                apply(snapshot)
+        // The stream is created HERE, not inside the task, so the listener is
+        // attached synchronously — reload() has re-subscribed by the time it
+        // returns, deterministically (and testably), rather than whenever the
+        // task first runs.
+        let stream = repository.publishedEvents()
+        // `self` is captured weakly so the long-lived stream task never
+        // retains the coordinator: otherwise self → subscription → closure →
+        // self would cycle, deinit could never run, and the listener would
+        // leak for the process lifetime.
+        subscription = Task { [weak self] in
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self else { return }
+                self.apply(snapshot)
             }
         }
     }

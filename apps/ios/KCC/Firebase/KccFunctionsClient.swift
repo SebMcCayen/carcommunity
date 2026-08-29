@@ -99,11 +99,18 @@ final class KccFunctionsClient: @unchecked Sendable {
 /// variables (auth 9099, functions 5001, firestore 8080 — firebase.json).
 enum FirebaseEmulatorHost {
     /// Parses `"127.0.0.1:5001"` into its parts; nil for an absent or
-    /// malformed value (the SDK then talks to production as usual).
+    /// malformed value — an empty host (`":5001"`) or an out-of-range port —
+    /// so a misconfigured variable degrades to production behaviour instead
+    /// of pointing the SDK at a nonsense address.
     static func parse(_ value: String?) -> (host: String, port: Int)? {
         guard let value else { return nil }
-        let parts = value.split(separator: ":")
-        guard parts.count == 2, let port = Int(parts[1]) else { return nil }
+        let parts = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: ":")
+        guard parts.count == 2,
+            !parts[0].isEmpty,
+            let port = Int(parts[1]),
+            (1...65535).contains(port)
+        else { return nil }
         return (String(parts[0]), port)
     }
 }
