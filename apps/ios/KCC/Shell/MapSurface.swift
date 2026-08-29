@@ -966,9 +966,18 @@ final class StubMapSurface: MapSurface {
     /// nothing when `autoLoad` is false, so tests can pin the state
     /// deterministically; cancelling the surrounding task before the delay
     /// elapses leaves the state untouched.
-    func simulateInitialLoadIfNeeded() async {
+    ///
+    /// `delay` defaults to the production 700 ms; tests exercising the
+    /// loading→loaded transition pass `.zero` so the suite stays fast.
+    func simulateInitialLoadIfNeeded(
+        delay: Duration = .milliseconds(StubMapSurface.stubLoadMillis)
+    ) async {
         guard autoLoad, loadState == .loading else { return }
-        guard (try? await Task.sleep(for: .milliseconds(Self.stubLoadMillis))) != nil else {
+        do {
+            try await Task.sleep(for: delay)
+        } catch {
+            // Cancelled before the simulated load finished — mirror the
+            // cancelled LaunchedEffect and leave the state untouched.
             return
         }
         loadState = .loaded

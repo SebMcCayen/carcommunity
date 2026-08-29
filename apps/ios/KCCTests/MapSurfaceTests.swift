@@ -70,7 +70,9 @@ final class MapSurfaceTests: XCTestCase {
     func testAutoLoadSimulatesTheTileLoadOnce() async {
         let surface = StubMapSurface()
         XCTAssertEqual(surface.loadState, .loading)
-        await surface.simulateInitialLoadIfNeeded()
+        // .zero delay keeps the suite fast; production callers use the
+        // default 700 ms.
+        await surface.simulateInitialLoadIfNeeded(delay: .zero)
         XCTAssertEqual(surface.loadState, .loaded)
     }
 
