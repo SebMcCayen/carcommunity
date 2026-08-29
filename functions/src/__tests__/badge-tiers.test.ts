@@ -92,9 +92,9 @@ describe('extended badge catalog', () => {
     expect(BADGE_CATALOG.helpful_member.iconIdentifier).toBe('badge_helpful_member');
   });
 
-  it('keeps helpful_member as the only manual badge', () => {
+  it('keeps helpful_member and early_tester as the only manual badges', () => {
     const manual = BADGE_KEYS.filter((key) => !BADGE_CATALOG[key].isAutomatic);
-    expect(manual).toEqual(['helpful_member']);
+    expect(manual).toEqual(['helpful_member', 'early_tester']);
   });
 
   it('marks garage_created as historic, superseded by samlare_brons', () => {

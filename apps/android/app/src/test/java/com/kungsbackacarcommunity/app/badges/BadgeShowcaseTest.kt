@@ -29,15 +29,16 @@ class BadgeShowcaseTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun `catalog is 8 milestones plus 31 ladder rungs`() {
-        // 8 standalone: the five original milestones + the three season PODIUM
-        // badges (sasong_guld/silver/brons), awarded by rank, not a ladder.
-        assertEquals(8, BADGE_MILESTONE_KEYS.size)
+    fun `catalog is 9 milestones plus 31 ladder rungs`() {
+        // 9 standalone: the five original milestones + the exclusive early_tester
+        // ("Grundare") reward (admin-granted, no criteria) + the three season
+        // PODIUM badges (sasong_guld/silver/brons), awarded by rank, not a ladder.
+        assertEquals(9, BADGE_MILESTONE_KEYS.size)
         // 31, not 32: only Trogen has three rungs (no Platina). The other seven
         // ladders each have four — Vinkare (waves sent) is the newest. See
         // BadgeLadderCatalogParityTest, which pins this to badge-core.ts.
         assertEquals(31, BADGE_LADDERS.sumOf { it.rungs.size })
-        assertEquals(39, BADGE_TOTAL_COUNT)
+        assertEquals(40, BADGE_TOTAL_COUNT)
     }
 
     @Test
@@ -74,7 +75,7 @@ class BadgeShowcaseTest {
 
         assertFalse(showcase.hasAnyBadge)
         assertEquals(0, showcase.earnedCount)
-        assertEquals(39, showcase.totalCount)
+        assertEquals(40, showcase.totalCount)
         assertTrue(showcase.milestones.isEmpty())
         // Every ladder is still rendered — an empty wall is a menu of goals,
         // never a gap.

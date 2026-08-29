@@ -23,12 +23,21 @@ import {
   type AwardHelpfulMemberRequest,
   type AwardHelpfulMemberResponse,
   type BadgeKey,
+  type GrantEarlyTesterRequest,
+  type GrantEarlyTesterResponse,
+  type GrantEarlyTesterResultItem,
 } from '@carcommunity/shared/badges';
 
 import { ApiError } from '../../lib/errors';
 import { callAdmin } from '../../lib/callables';
 
-export type { AdminBadgeSummaryResponse, AwardHelpfulMemberRequest, AwardHelpfulMemberResponse };
+export type {
+  AdminBadgeSummaryResponse,
+  AwardHelpfulMemberRequest,
+  AwardHelpfulMemberResponse,
+  GrantEarlyTesterRequest,
+  GrantEarlyTesterResponse,
+};
 export { ApiError };
 
 // ---------------------------------------------------------------------------
@@ -84,6 +93,41 @@ export async function awardHelpfulMemberBadge(
         awardedAt: result.alreadyAwarded ? '' : new Date().toISOString(),
       },
       alreadyAwarded: result.alreadyAwarded,
+    },
+  };
+}
+
+/**
+ * Grants the exclusive `early_tester` ("Grundare") badge to a hand-picked list
+ * of UIDs via the `badges-grantEarlyTester` callable. There are NO earning
+ * criteria — an admin grants it on demand to the app's earliest testers. The
+ * reason is optional (defaulted server-side) and audited. Idempotent per UID; a
+ * missing/suspended/deleted target is skipped rather than failing the batch. The
+ * callable returns per-UID status plus aggregate counts.
+ */
+export async function grantEarlyTesterBadge(
+  request: GrantEarlyTesterRequest,
+): Promise<GrantEarlyTesterResponse> {
+  const payload: { uids: string[]; reason?: string } = { uids: request.uids };
+  if (request.reason && request.reason.trim()) {
+    payload.reason = request.reason.trim();
+  }
+  const result = await callAdmin<{
+    badgeKey: 'early_tester';
+    results: GrantEarlyTesterResultItem[];
+    grantedCount: number;
+    alreadyGrantedCount: number;
+    skippedCount: number;
+  }>('badges-grantEarlyTester', payload);
+
+  return {
+    ok: true,
+    data: {
+      badgeKey: result.badgeKey,
+      results: result.results,
+      grantedCount: result.grantedCount,
+      alreadyGrantedCount: result.alreadyGrantedCount,
+      skippedCount: result.skippedCount,
     },
   };
 }

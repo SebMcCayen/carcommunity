@@ -195,8 +195,10 @@ val BADGE_LADDERS: List<BadgeLadder> =
 
 /**
  * The standalone (non-tiered) badges, in catalog order: the five original
- * milestones plus the three season PODIUM badges (a single season's top three,
- * awarded by rank — not a ladder). Matches the backend catalog's standalone set.
+ * milestones, the exclusive early_tester ("Grundare") reward, then the three
+ * season PODIUM badges (a single season's top three, awarded by rank — not a
+ * ladder). Matches the backend catalog's standalone set and its order
+ * (functions/src/badges/badge-core.ts::BADGE_CATALOG_ORDER).
  */
 val BADGE_MILESTONE_KEYS: List<String> =
     listOf(
@@ -205,6 +207,8 @@ val BADGE_MILESTONE_KEYS: List<String> =
         "helpful_member",
         "early_member",
         "garage_created",
+        // Manually granted to a hand-picked UID list by an admin; never earned.
+        "early_tester",
         "sasong_guld",
         "sasong_silver",
         "sasong_brons",

@@ -320,6 +320,21 @@
       "success": "Utmärkelsen tilldelades",
       "alreadyAwarded": "Användaren har redan fått denna utmärkelse.",
       "error": "Kunde inte tilldela utmärkelsen. Försök igen."
+    },
+    "grantFounder": {
+      "title": "Tilldela \"Grundare\"",
+      "description": "Tilldela den exklusiva Grundare-utmärkelsen till appens allra första testanvändare. Klistra in ett användar-ID (UUID) per rad. Åtgärden loggas och kan köras om utan risk – en användare som redan har utmärkelsen hoppas över.",
+      "uidsLabel": "Användar-ID:n",
+      "uidsPlaceholder": "Ett användar-ID (UUID) per rad",
+      "uidsHint": "Klistra in de interna användar-ID:na, ett per rad. Dubbletter och tomma rader ignoreras.",
+      "reasonLabel": "Orsak (valfritt)",
+      "reasonPlaceholder": "T.ex. \"Sluten betatestgrupp 1\"",
+      "reasonHint": "Sparas i granskningsloggen. Lämnas tom används en standardtext.",
+      "submit": "Tilldela Grundare",
+      "submitting": "Tilldelar...",
+      "success": "Klart. Nya: %1$d, hade redan: %2$d, hoppade över: %3$d.",
+      "noUids": "Ange minst ett användar-ID.",
+      "error": "Kunde inte tilldela utmärkelsen. Försök igen."
     }
   },
   "subscription": {
