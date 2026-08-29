@@ -9564,6 +9564,7 @@ private fun RouteHost(
                 SubscriptionRoute(
                     billing = billingRepository,
                     verifier = subscriptionVerifier,
+                    uid = uid,
                     isActiveMember = profileActiveMember,
                     onBack = onClose,
                 )

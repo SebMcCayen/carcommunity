@@ -26,10 +26,11 @@ import {
 const NOW = new Date('2026-07-05T12:00:00Z');
 
 describe('subscription-core', () => {
-  it('treats active and grace_period as access-granting (legacy)', () => {
+  it('treats paid-period lifecycle states as access-granting', () => {
     expect(isSubscriptionActiveStatus('active')).toBe(true);
     expect(isSubscriptionActiveStatus('grace_period')).toBe(true);
-    for (const status of ['inactive', 'expired', 'revoked', 'cancelled'] as const) {
+    expect(isSubscriptionActiveStatus('cancelled')).toBe(true);
+    for (const status of ['inactive', 'expired', 'revoked'] as const) {
       expect(isSubscriptionActiveStatus(status)).toBe(false);
     }
   });

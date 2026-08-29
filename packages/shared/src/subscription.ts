@@ -262,8 +262,9 @@ export interface AdminUserSubscriptionSummary {
 
 /**
  * Returns true if the subscription status grants or continues access.
- * grace_period is included to allow brief continuation after expiry.
+ * grace_period continues access while payment retries; cancelled continues
+ * access only until the already-paid expiresAt boundary enforced by backend.
  */
 export function isSubscriptionActiveStatus(status: SubscriptionStatus): boolean {
-  return status === 'active' || status === 'grace_period';
+  return status === 'active' || status === 'grace_period' || status === 'cancelled';
 }

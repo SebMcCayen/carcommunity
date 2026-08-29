@@ -2322,5 +2322,16 @@ service cloud.firestore {
       // receipt verification"): subscription.verify /
       // admin.grantEntitlement are the only writers.
     }
+
+    // Global replay lock for hashed store purchase tokens. Neither owners nor
+    // admins need client access; subscription.verify is the only writer.
+    match /subscriptionPurchaseTokens/{tokenHash} {
+      allow read, write: if false;
+    }
+
+    // Short backend-only lease serializing subscription verification per UID.
+    match /subscriptionPurchaseVerifications/{userId} {
+      allow read, write: if false;
+    }
   }
 }

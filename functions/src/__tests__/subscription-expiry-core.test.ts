@@ -20,6 +20,7 @@ import {
   decideSubscriptionExpiry,
   subscriptionExpiredNotificationId,
   subscriptionExpiryCutoff,
+  subscriptionRevocationDeadline,
 } from '../subscription/expiry-core';
 
 const NOW = new Date('2026-07-30T12:00:00.000Z');
@@ -41,6 +42,20 @@ describe('subscription expiry constants', () => {
     expect(MAX_EXPIRIES_PER_RUN).toBeLessThanOrEqual(500);
   });
 
+  it('orders merged candidates by their effective revocation deadline', () => {
+    const cancelledExpiry = hoursAgo(1);
+    const activeExpiry = hoursAgo(SUBSCRIPTION_EXPIRY_GRACE_HOURS + 2);
+    expect(subscriptionRevocationDeadline('cancelled', cancelledExpiry).toISOString()).toBe(
+      cancelledExpiry.toISOString(),
+    );
+    expect(subscriptionRevocationDeadline('active', activeExpiry).getTime()).toBe(
+      activeExpiry.getTime() + SUBSCRIPTION_EXPIRY_GRACE_HOURS * HOUR_MS,
+    );
+    expect(
+      subscriptionRevocationDeadline('active', activeExpiry).getTime(),
+    ).toBeLessThan(subscriptionRevocationDeadline('cancelled', cancelledExpiry).getTime());
+  });
+
   /**
    * The sweep's status filter is DERIVED from the granting predicate rather
    * than hardcoded. If a future status is added that grants access, this
@@ -48,7 +63,7 @@ describe('subscription expiry constants', () => {
    * going blind to it.
    */
   it('sweeps exactly the statuses that grant access', () => {
-    expect([...EXPIRY_SWEEP_STATUSES]).toEqual(['active', 'grace_period']);
+    expect([...EXPIRY_SWEEP_STATUSES]).toEqual(['active', 'grace_period', 'cancelled']);
     for (const status of SUBSCRIPTION_STATUSES) {
       expect(EXPIRY_SWEEP_STATUSES.includes(status)).toBe(isSubscriptionActiveStatus(status));
     }

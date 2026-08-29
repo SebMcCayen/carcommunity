@@ -42,21 +42,21 @@ This document is the source of truth for the Firebase-native backend described i
 
 Document ID: Firebase UID.
 
-| Field                   | Type         | Notes                                                                                |
-| ----------------------- | ------------ | ------------------------------------------------------------------------------------ |
-| `displayName`           | `string`     | Visible username                                                                     |
-| `avatarPath`            | `string?`    | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}`                             |
-| `bio`                   | `string?`    | Short profile description                                                            |
-| `facebook`              | `string?`    | Facebook **handle** (username or numeric id), never a URL — rendered as `https://www.facebook.com/{handle}`; absent when unset |
-| `instagram`             | `string?`    | Instagram **handle**, never a URL — rendered as `https://www.instagram.com/{handle}`; absent when unset |
+| Field                   | Type         | Notes                                                                                                                                              |
+| ----------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `displayName`           | `string`     | Visible username                                                                                                                                   |
+| `avatarPath`            | `string?`    | Cloud Storage path, e.g. `profileImages/{uid}/{imageId}`                                                                                           |
+| `bio`                   | `string?`    | Short profile description                                                                                                                          |
+| `facebook`              | `string?`    | Facebook **handle** (username or numeric id), never a URL — rendered as `https://www.facebook.com/{handle}`; absent when unset                     |
+| `instagram`             | `string?`    | Instagram **handle**, never a URL — rendered as `https://www.instagram.com/{handle}`; absent when unset                                            |
 | `youtube`               | `string?`    | YouTube channel **handle** without the leading `@`, never a URL or channel id — rendered as `https://www.youtube.com/@{handle}`; absent when unset |
-| `role`                  | `string`     | `'user'` \| `'admin'` — **backend-managed only**                                     |
-| `activeMember`          | `boolean`    | Subscription entitlement — **backend-managed only**                                  |
-| `suspended`             | `boolean`    | Moderation state — **backend-managed only**                                          |
-| `deleted`               | `boolean`    | Soft-delete flag — **backend-managed only**                                          |
-| `onboardingCompletedAt` | `Timestamp?` | Written by `auth.completeOnboarding` — **backend-managed only**; null until complete |
-| `createdAt`             | `Timestamp`  | Server timestamp                                                                     |
-| `updatedAt`             | `Timestamp`  | Server timestamp                                                                     |
+| `role`                  | `string`     | `'user'` \| `'admin'` — **backend-managed only**                                                                                                   |
+| `activeMember`          | `boolean`    | Subscription entitlement — **backend-managed only**                                                                                                |
+| `suspended`             | `boolean`    | Moderation state — **backend-managed only**                                                                                                        |
+| `deleted`               | `boolean`    | Soft-delete flag — **backend-managed only**                                                                                                        |
+| `onboardingCompletedAt` | `Timestamp?` | Written by `auth.completeOnboarding` — **backend-managed only**; null until complete                                                               |
+| `createdAt`             | `Timestamp`  | Server timestamp                                                                                                                                   |
+| `updatedAt`             | `Timestamp`  | Server timestamp                                                                                                                                   |
 
 Security: any authenticated user can read; owner can update non-protected fields; backend (Admin SDK) manages protected fields.
 
@@ -68,18 +68,18 @@ The three social fields store a **handle, not a URL**, on purpose: the rendered 
 
 Document ID: Firebase UID.
 
-| Field                        | Type         | Notes                                                                  |
-| ---------------------------- | ------------ | ---------------------------------------------------------------------- |
-| `email`                      | `string?`    | Contact channel, not identity key                                      |
-| `phone`                      | `string?`    | Optional                                                               |
-| `notificationPreferences`    | `map?`       | Per-category `{ inApp?, push? }`; essential categories enforced at delivery |
-| `licenceConfirmedAt`         | `Timestamp?` | Consent audit record (holds a valid driving licence for the vehicle they drive) — written by `auth.completeOnboarding` only |
+| Field                        | Type         | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `email`                      | `string?`    | Contact channel, not identity key                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `phone`                      | `string?`    | Optional                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `notificationPreferences`    | `map?`       | Per-category `{ inApp?, push? }`; essential categories enforced at delivery                                                                                                                                                                                                                                                                                                                                                                |
+| `licenceConfirmedAt`         | `Timestamp?` | Consent audit record (holds a valid driving licence for the vehicle they drive) — written by `auth.completeOnboarding` only                                                                                                                                                                                                                                                                                                                |
 | `ageConfirmedAt`             | `Timestamp?` | **Legacy** — the retired 18+ confirmation. Not seeded on new documents, but it WAS seeded as `null` on every document provisioned before the licence wording landed, so a pre-change document may have it null (old onboarding never completed), set (the owner did confirm the 18+ wording) or absent. **Only a non-null value is a consent record.** Kept untouched, never rewritten into a licence confirmation; nothing branches on it |
-| `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
-| `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only       |
-| `anonymousPartnerStatsOptIn` | `boolean`    | Privacy setting; defaults to `false` (explicit opt-in); owner-editable |
-| `createdAt`                  | `Timestamp`  | Server timestamp                                                       |
-| `updatedAt`                  | `Timestamp`  | Server timestamp                                                       |
+| `termsAcceptedAt`            | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only                                                                                                                                                                                                                                                                                                                                                                           |
+| `privacyPolicyAcceptedAt`    | `Timestamp?` | Consent audit record — written by `auth.completeOnboarding` only                                                                                                                                                                                                                                                                                                                                                                           |
+| `anonymousPartnerStatsOptIn` | `boolean`    | Privacy setting; defaults to `false` (explicit opt-in); owner-editable                                                                                                                                                                                                                                                                                                                                                                     |
+| `createdAt`                  | `Timestamp`  | Server timestamp                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `updatedAt`                  | `Timestamp`  | Server timestamp                                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 Security: owner-only read and write. No other users may access this collection. Consent timestamps are backend-written compliance records — clients cannot set, modify, or delete them, and the document itself cannot be deleted by clients (account deletion is a backend workflow).
 
@@ -148,20 +148,20 @@ are never revoked.
 
 Document ID: auto-generated.
 
-| Field       | Type        | Notes                                                    |
-| ----------- | ----------- | -------------------------------------------------------- |
-| `userId`    | `string`    | Owner Firebase UID                                       |
-| `make`      | `string`    | Human-readable make, e.g. `'Volvo'` — the field every reader renders. DERIVED server-side from `makeId` for a catalogue vehicle; the owner's original free text for a pre-catalogue one. **Never aggregate on this** |
-| `model`     | `string`    | Human-readable model; same derivation as `make`          |
-| `makeId`    | `string?`   | Catalogue manufacturer id (`'volvo'`, or `'other'` = "not listed") — **the aggregation key**. `null`/absent means the vehicle was written on the legacy free-text path and is outside the aggregate |
-| `modelId`   | `string?`   | Catalogue model id within `makeId` (or `'other'`). Unique only WITHIN a manufacturer |
-| `catalogueVersion` | `string?` | Which catalogue release the ids were selected from; server-supplied, never client-claimed |
-| `modelYear` | `number`    | Model year (the stored field is `modelYear`, not `year`) |
-| `color`     | `string?`   | Optional color description                               |
-| `registrationPlate` | `string?` | Optional, **deliberately PUBLIC** registration plate (Seb product decision 2026-07). Normalised (trim/collapse-whitespace/uppercase), no country regex, ≤12 chars after normalisation; `null` when blank |
-| `imagePath` | `string?`   | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}` |
-| `createdAt` | `Timestamp` | Server timestamp                                         |
-| `updatedAt` | `Timestamp` | Server timestamp                                         |
+| Field               | Type        | Notes                                                                                                                                                                                                                |
+| ------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userId`            | `string`    | Owner Firebase UID                                                                                                                                                                                                   |
+| `make`              | `string`    | Human-readable make, e.g. `'Volvo'` — the field every reader renders. DERIVED server-side from `makeId` for a catalogue vehicle; the owner's original free text for a pre-catalogue one. **Never aggregate on this** |
+| `model`             | `string`    | Human-readable model; same derivation as `make`                                                                                                                                                                      |
+| `makeId`            | `string?`   | Catalogue manufacturer id (`'volvo'`, or `'other'` = "not listed") — **the aggregation key**. `null`/absent means the vehicle was written on the legacy free-text path and is outside the aggregate                  |
+| `modelId`           | `string?`   | Catalogue model id within `makeId` (or `'other'`). Unique only WITHIN a manufacturer                                                                                                                                 |
+| `catalogueVersion`  | `string?`   | Which catalogue release the ids were selected from; server-supplied, never client-claimed                                                                                                                            |
+| `modelYear`         | `number`    | Model year (the stored field is `modelYear`, not `year`)                                                                                                                                                             |
+| `color`             | `string?`   | Optional color description                                                                                                                                                                                           |
+| `registrationPlate` | `string?`   | Optional, **deliberately PUBLIC** registration plate (Seb product decision 2026-07). Normalised (trim/collapse-whitespace/uppercase), no country regex, ≤12 chars after normalisation; `null` when blank             |
+| `imagePath`         | `string?`   | Cloud Storage path, e.g. `vehicleImages/{uid}/{imageId}`                                                                                                                                                             |
+| `createdAt`         | `Timestamp` | Server timestamp                                                                                                                                                                                                     |
+| `updatedAt`         | `Timestamp` | Server timestamp                                                                                                                                                                                                     |
 
 Security (Phase 9e): any authenticated user can read; all writes go through the `garage.addVehicle` / `garage.updateVehicle` / `garage.deleteVehicle` callables (per-user cap of 10, strict schemas, storage cleanup on delete). Those callables use `requireActiveActor`, i.e. signed-in + not suspended + not deleted — managing your own garage is deliberately NOT member-gated, and member gating is in any case currently DISABLED repo-wide (`MEMBER_GATING_ENABLED = false` in `functions/src/shared/memberGating.ts`), so do not read "member" anywhere on this record as a subscription requirement. `powertrain`, `engineDescription`, and `description` complete the field list above; `imagePath` follows `vehicleImages/{uid}/{vehicleId}/{imageId}`.
 
@@ -183,21 +183,21 @@ Every field below is written on every save by `buildRideDocument`
 (`functions/src/drives/drives-core.ts`), so `?` here means **`null`**, not
 absent — with the two documented exceptions in the last column.
 
-| Field              | Type        | Notes                                                                              |
-| ------------------ | ----------- | ---------------------------------------------------------------------------------- |
-| `userId`           | `string`    | Owner Firebase UID                                                                 |
-| `title`            | `string?`   | User-given title; `null` when the save omitted one                                 |
-| `distanceMeters`   | `number?`   | Server-computed total distance. **`null` for a summary-only save** (no route points, or fewer than two) — clients must render a missing-value placeholder, never `0` |
-| `durationSeconds`  | `number`    | Total duration, from `startedAt`/`endedAt`; always present                         |
-| `averageSpeedMetersPerSecond` | `number?` | Server-computed; `null` whenever `distanceMeters` is                    |
-| `maxSpeedMetersPerSecond` | `number?` | Highest plausible instantaneous speed, same >200 km/h GPS-glitch filter distance uses; `null` for a summary-only save. **ABSENT** (key missing, not `null`) on drives saved before 2026-07 — no backfill. Neutral stat, never a record or ranking |
-| `routeThumbnail`   | `string?`   | Route simplified to ≤64 points (Ramer–Douglas–Peucker) as a polyline encoded at 1e5 precision. `null` when there is no drawable shape (fewer than two points, or a stationary recording) and **ABSENT** on drives saved before 2026-07 — no backfill; all three cases render the History placeholder |
-| `startedAt`        | `Timestamp` | Ride start time                                                                    |
-| `endedAt`          | `Timestamp` | Ride end time                                                                      |
-| `routePath`        | `string`    | Cloud Storage path to compressed route, e.g. `rideRoutes/{uid}/{rideId}/route.bin` |
-| `previewImagePath` | `string`    | Cloud Storage path to the static map preview, `rideRoutes/{uid}/{rideId}/preview.png`. Always written; the client uploads the file afterwards, so the path existing does not mean the object does |
-| `sourceSessionId`  | `string?`   | Client recording identifier for idempotent save retries; `null` when the save did not supply one |
-| `createdAt`        | `Timestamp` | Server timestamp                                                                   |
+| Field                         | Type        | Notes                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `userId`                      | `string`    | Owner Firebase UID                                                                                                                                                                                                                                                                                   |
+| `title`                       | `string?`   | User-given title; `null` when the save omitted one                                                                                                                                                                                                                                                   |
+| `distanceMeters`              | `number?`   | Server-computed total distance. **`null` for a summary-only save** (no route points, or fewer than two) — clients must render a missing-value placeholder, never `0`                                                                                                                                 |
+| `durationSeconds`             | `number`    | Total duration, from `startedAt`/`endedAt`; always present                                                                                                                                                                                                                                           |
+| `averageSpeedMetersPerSecond` | `number?`   | Server-computed; `null` whenever `distanceMeters` is                                                                                                                                                                                                                                                 |
+| `maxSpeedMetersPerSecond`     | `number?`   | Highest plausible instantaneous speed, same >200 km/h GPS-glitch filter distance uses; `null` for a summary-only save. **ABSENT** (key missing, not `null`) on drives saved before 2026-07 — no backfill. Neutral stat, never a record or ranking                                                    |
+| `routeThumbnail`              | `string?`   | Route simplified to ≤64 points (Ramer–Douglas–Peucker) as a polyline encoded at 1e5 precision. `null` when there is no drawable shape (fewer than two points, or a stationary recording) and **ABSENT** on drives saved before 2026-07 — no backfill; all three cases render the History placeholder |
+| `startedAt`                   | `Timestamp` | Ride start time                                                                                                                                                                                                                                                                                      |
+| `endedAt`                     | `Timestamp` | Ride end time                                                                                                                                                                                                                                                                                        |
+| `routePath`                   | `string`    | Cloud Storage path to compressed route, e.g. `rideRoutes/{uid}/{rideId}/route.bin`                                                                                                                                                                                                                   |
+| `previewImagePath`            | `string`    | Cloud Storage path to the static map preview, `rideRoutes/{uid}/{rideId}/preview.png`. Always written; the client uploads the file afterwards, so the path existing does not mean the object does                                                                                                    |
+| `sourceSessionId`             | `string?`   | Client recording identifier for idempotent save retries; `null` when the save did not supply one                                                                                                                                                                                                     |
+| `createdAt`                   | `Timestamp` | Server timestamp                                                                                                                                                                                                                                                                                     |
 
 **The full route GPS track is never stored in Firestore.** It is encoded, compressed, and stored as a single file in Cloud Storage under `rideRoutes/{uid}/{rideId}/` (route.bin + preview.png — both member-gated; route visuals are withheld from non-members, matching the legacy member-only routeOverview). One bounded exception: `routeThumbnail`, the route simplified to at most 64 points (Ramer–Douglas–Peucker) as an encoded polyline — a few hundred bytes — so the History list can draw a drive's shape without a Storage fetch per card. It sits on an owner-only document like every other field here, and it is an overview, not a track.
 
@@ -256,7 +256,7 @@ in a separate member-gated document under `details/private` while
 | `startsAt`        | `Timestamp`  |                                                                    |
 | `endsAt`          | `Timestamp?` | Defaults to Europe/Stockholm end-of-day of `startsAt` when omitted |
 | `approximateArea` | `string`     | Coarse area shown to non-members, ≤200 chars                       |
-| `isOfficial`      | `boolean`    | Club-sanctioned badge; forced `false` on member-created events      |
+| `isOfficial`      | `boolean`    | Club-sanctioned badge; forced `false` on member-created events     |
 | `status`          | `string`     | `'draft'` \| `'published'` \| `'cancelled'` \| `'completed'`       |
 | `cancelledAt`     | `Timestamp?` | Set by `events.cancel`                                             |
 | `autoClosedAt`    | `Timestamp?` | Set by `events-autoClose` only — absent on a hand-completed event  |
@@ -644,12 +644,12 @@ Security: admin-only read; no client writes.
 
 Document ID: Firebase UID of the requesting user.
 
-| Field       | Type        | Notes                        |
-| ----------- | ----------- | ---------------------------- |
-| `userId`    | `string`    | Firebase UID                 |
-| `reason`    | `string?`   | Optional stated reason       |
-| `status`    | `string`    | `'pending'` \| `'processed'` |
-| `createdAt` | `Timestamp` | Server timestamp             |
+| Field         | Type         | Notes                        |
+| ------------- | ------------ | ---------------------------- |
+| `userId`      | `string`     | Firebase UID                 |
+| `reason`      | `string?`    | Optional stated reason       |
+| `status`      | `string`     | `'pending'` \| `'processed'` |
+| `createdAt`   | `Timestamp`  | Server timestamp             |
 | `processedAt` | `Timestamp?` | Stamped by the purge worker  |
 
 Security: owner can create and read their own request (Phase 9p:
@@ -716,15 +716,17 @@ minimum-contributor threshold) is backend-only: no client read or write.
 
 Document ID: Firebase UID. **Written by Cloud Functions only after receipt verification. No client writes.**
 
-| Field         | Type         | Notes                                      |
-| ------------- | ------------ | ------------------------------------------ |
-| `userId`      | `string`     | Firebase UID                               |
-| `entitlement` | `string`     | Internal name, e.g. `'member_monthly'`     |
-| `status`      | `string`     | `'active'` \| `'expired'` \| `'cancelled'` |
-| `platform`    | `string`     | `'apple'` \| `'google'` \| `'manual'` (audited admin grant) |
-| `purchaseTokenHash` | `string?` | SHA-256 of the purchase token; raw tokens never stored |
-| `expiresAt`   | `Timestamp?` |                                            |
-| `updatedAt`   | `Timestamp`  | Server timestamp                           |
+| Field               | Type         | Notes                                                                                         |
+| ------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `userId`            | `string`     | Firebase UID                                                                                  |
+| `entitlement`       | `string`     | Compatibility value: `'none'` or `'member_monthly'`                                           |
+| `tier`              | `string`     | `'community'` \| `'plus'` \| `'supporter'`                                                    |
+| `status`            | `string`     | `'inactive'` \| `'active'` \| `'grace_period'` \| `'expired'` \| `'revoked'` \| `'cancelled'` |
+| `platform`          | `string`     | `'apple'` \| `'google'` \| `'manual'` (audited admin grant)                                   |
+| `purchaseTokenHash` | `string?`    | SHA-256 of the purchase token; raw tokens never stored                                        |
+| `startsAt`          | `Timestamp?` | Provider start time when known                                                                |
+| `expiresAt`         | `Timestamp?` |                                                                                               |
+| `updatedAt`         | `Timestamp`  | Server timestamp                                                                              |
 
 Security: owner can read their own subscription; NO client writes — not
 even admin clients (Phase 11 tightening): `subscription.verify` (fails
@@ -732,6 +734,44 @@ closed until store credentials are configured at cutover) and the audited
 `admin.grantEntitlement` are the only writers, applying the record,
 `users/{uid}.activeMember`, and the `activeMember` claim with Phase 8
 fail-safe privilege ordering.
+
+Google Play lifecycle mapping is intentionally conservative: active, grace
+period, and canceled-but-not-expired retain paid access; pending, paused, on
+hold, pending-canceled, and expired do not. A canceled record keeps its paid
+tier as lifecycle history, while `expiresAt` bounds the already-paid period.
+
+### `subscriptionPurchaseTokens` — global provider-token replay lock
+
+Document ID: SHA-256 of the Google Play purchase token. Backend read/write only;
+clients (including admin clients) have no access.
+
+| Field       | Type        | Notes                                                      |
+| ----------- | ----------- | ---------------------------------------------------------- |
+| `tokenHash` | `string`    | Same SHA-256 value as the document ID; never the raw token |
+| `uid`       | `string`    | Firebase UID that first verified the token                 |
+| `productId` | `string`    | `plus_monthly` or `supporter_monthly`                      |
+| `createdAt` | `Timestamp` | First successful claim                                     |
+| `updatedAt` | `Timestamp` | Last same-owner reconciliation                             |
+
+Claiming is transactional. Re-verification by the same UID/product is
+idempotent; a different UID or product is rejected before entitlement writes.
+
+### `subscriptionPurchaseVerifications` — per-user verification lease
+
+Document ID: Firebase UID. Backend read/write only; clients (including admin
+clients) have no access. The short lease serializes the gap between provider
+verification and entitlement application so two devices cannot apply different
+first-purchase tokens concurrently. It is deleted after the invocation and
+expires after two minutes if the function crashes.
+
+| Field               | Type        | Notes                                               |
+| ------------------- | ----------- | --------------------------------------------------- |
+| `uid`               | `string`    | Same Firebase UID as the document ID                |
+| `productId`         | `string`    | Product currently being verified                    |
+| `purchaseTokenHash` | `string`    | SHA-256 token hash; never the raw purchase token     |
+| `reservationId`     | `string`    | Unique invocation holder used for safe release      |
+| `leaseExpiresAt`    | `Timestamp` | Crash-safe upper bound for this verification holder |
+| `updatedAt`         | `Timestamp` | Last reservation write                              |
 
 ---
 

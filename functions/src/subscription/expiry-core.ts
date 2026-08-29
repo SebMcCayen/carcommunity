@@ -76,7 +76,7 @@ export const MAX_EXPIRIES_PER_RUN = 200;
  * rather than hardcoded: the sweep's job is to revoke things that
  * currently grant access, so if isSubscriptionActiveStatus ever changes,
  * the sweep's query follows it instead of silently going blind to a new
- * granting status. Today: ['active', 'grace_period'].
+ * granting status. Today: ['active', 'grace_period', 'cancelled'].
  *
  * Restricting the query to these is also what makes the sweep SCALE — an
  * `expiresAt <= cutoff` query alone would match every historically
@@ -87,12 +87,36 @@ export const EXPIRY_SWEEP_STATUSES: readonly SubscriptionStatus[] = SUBSCRIPTION
   isSubscriptionActiveStatus,
 );
 
+/** Canceled Play subscriptions become revocable at expiry, with no extra grace window. */
+export const EXPIRY_IMMEDIATE_SWEEP_STATUSES: readonly SubscriptionStatus[] = ['cancelled'];
+
+/** Active/grace records retain the existing outage-tolerance window. */
+export const EXPIRY_GRACE_SWEEP_STATUSES: readonly SubscriptionStatus[] = [
+  'active',
+  'grace_period',
+];
+
 /**
  * The instant a subscription must have expired BEFORE to be swept — i.e.
  * `now` minus the grace window.
  */
 export function subscriptionExpiryCutoff(now: Date): Date {
   return new Date(now.getTime() - SUBSCRIPTION_EXPIRY_GRACE_HOURS * 60 * 60 * 1000);
+}
+
+/**
+ * Effective revocation deadline used when the two bounded Firestore result
+ * sets are merged. Cancelled subscriptions end at their paid expiry; active
+ * and grace-period subscriptions end after the outage-tolerance window.
+ */
+export function subscriptionRevocationDeadline(
+  status: SubscriptionStatus,
+  expiresAt: Date,
+): Date {
+  const graceMs = EXPIRY_IMMEDIATE_SWEEP_STATUSES.includes(status)
+    ? 0
+    : SUBSCRIPTION_EXPIRY_GRACE_HOURS * 60 * 60 * 1000;
+  return new Date(expiresAt.getTime() + graceMs);
 }
 
 /** The subset of a `subscriptions/{uid}` document the decision reads. */
@@ -149,7 +173,7 @@ export function decideSubscriptionExpiry(
 ): SubscriptionExpiryDecision {
   const status = toStatus(fields.status);
   if (status === null || !isSubscriptionActiveStatus(status)) {
-    // Already expired/revoked/cancelled/inactive — nothing to take away.
+    // Already expired/revoked/inactive — nothing to take away.
     // This is the idempotent no-op path: a re-run sees its own output.
     return { expire: false, reason: 'not_granting' };
   }

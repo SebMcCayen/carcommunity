@@ -2,7 +2,6 @@ package com.kungsbackacarcommunity.app.subscription
 
 import android.app.Activity
 import android.content.Context
-import com.android.billingclient.api.AcknowledgePurchaseParams
 import com.android.billingclient.api.BillingClient
 import com.android.billingclient.api.BillingClientStateListener
 import com.android.billingclient.api.BillingFlowParams
@@ -11,6 +10,7 @@ import com.android.billingclient.api.PendingPurchasesParams
 import com.android.billingclient.api.Purchase
 import com.android.billingclient.api.PurchasesUpdatedListener
 import com.android.billingclient.api.QueryProductDetailsParams
+import com.android.billingclient.api.QueryPurchasesParams
 import com.android.billingclient.api.ProductDetails
 import kotlin.coroutines.resume
 import kotlinx.coroutines.channels.BufferOverflow
@@ -25,13 +25,10 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * Construction is guarded ([createIfAvailable]) so config-less / no-Play builds
  * compile and launch: `BillingClient` needs no Firebase and no
  * `google-services.json`, but we still centralise creation so the wiring mirrors
- * the other slices. On a `PURCHASED` purchase we acknowledge it (subscriptions
- * must be acknowledged within 3 days or they auto-refund) and surface the
- * purchaseToken for the coordinator to hand to `subscription-verify`.
- *
- * NOTE: an actual charge requires a Play Console `member_monthly` subscription
- * product and a signed build uploaded to a Play track — neither exists yet, so
- * this path is exercised only structurally here (deferred cutover).
+ * the other slices. The client never acknowledges purchases. It surfaces the
+ * in-memory token to `subscription-verify`; the backend verifies and grants
+ * before acknowledging server-side, which prevents forged/unverified purchases
+ * from being finalized.
  */
 class PlayBillingRepository private constructor(
     context: Context,
@@ -46,7 +43,7 @@ class PlayBillingRepository private constructor(
 
     override val purchases: Flow<PurchaseResult> = purchaseEvents.asSharedFlow()
 
-    private var cachedProduct: ProductDetails? = null
+    private var cachedProducts: Map<String, ProductDetails> = emptyMap()
 
     private val purchasesListener =
         PurchasesUpdatedListener { result, purchases ->
@@ -69,6 +66,9 @@ class PlayBillingRepository private constructor(
             .build()
 
     override suspend fun connect(): BillingConnectionResult =
+        if (billingClient.isReady) {
+            BillingConnectionResult.Connected
+        } else {
         suspendCancellableCoroutine { continuation ->
             billingClient.startConnection(
                 object : BillingClientStateListener {
@@ -87,17 +87,19 @@ class PlayBillingRepository private constructor(
             )
         }
 
-    override suspend fun queryProduct(): ProductQueryResult =
+        }
+
+    override suspend fun queryProducts(): ProductQueryResult =
         suspendCancellableCoroutine { continuation ->
             val params =
                 QueryProductDetailsParams.newBuilder()
                     .setProductList(
-                        listOf(
+                        SUBSCRIPTION_PRODUCT_IDS.map { productId ->
                             QueryProductDetailsParams.Product.newBuilder()
-                                .setProductId(SUBSCRIPTION_PRODUCT)
+                                .setProductId(productId)
                                 .setProductType(BillingClient.ProductType.SUBS)
-                                .build(),
-                        ),
+                                .build()
+                        },
                     )
                     .build()
             billingClient.queryProductDetailsAsync(params) { result, productDetailsResult ->
@@ -105,22 +107,41 @@ class PlayBillingRepository private constructor(
                 // Billing v8+ delivers a QueryProductDetailsResult (not a bare
                 // List<ProductDetails>); the fetched products live under
                 // productDetailsList, with unfetched ids reported separately.
-                val product = productDetailsResult.productDetailsList.firstOrNull()
-                if (result.responseCode == BillingClient.BillingResponseCode.OK && product != null) {
-                    cachedProduct = product
-                    continuation.resume(ProductQueryResult.Available)
+                if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                    cachedProducts =
+                        productDetailsResult.productDetailsList
+                            .filter { product ->
+                                product.productId in SUBSCRIPTION_PRODUCT_IDS &&
+                                    product.subscriptionOfferDetails.orEmpty().any {
+                                        it.basePlanId == MONTHLY_BASE_PLAN_ID
+                                    }
+                            }
+                            .associateBy(ProductDetails::getProductId)
+                    continuation.resume(ProductQueryResult(cachedProducts.keys))
                 } else {
-                    continuation.resume(ProductQueryResult.Unavailable)
+                    cachedProducts = emptyMap()
+                    continuation.resume(ProductQueryResult(emptySet()))
                 }
             }
         }
 
-    override fun launchPurchase(activity: Activity) {
-        val product = cachedProduct ?: return
+    override fun launchPurchase(
+        activity: Activity,
+        productId: String,
+        obfuscatedAccountId: String,
+    ): PurchaseLaunchResult {
+        if (productId !in SUBSCRIPTION_PRODUCT_IDS) return PurchaseLaunchResult.Failed
+        if (!isValidObfuscatedAccountId(obfuscatedAccountId)) {
+            return PurchaseLaunchResult.Failed
+        }
+        val product = cachedProducts[productId] ?: return PurchaseLaunchResult.Failed
         val offerToken =
-            product.subscriptionOfferDetails?.firstOrNull()?.offerToken ?: return
+            product.subscriptionOfferDetails
+                ?.firstOrNull { it.basePlanId == MONTHLY_BASE_PLAN_ID }
+                ?.offerToken ?: return PurchaseLaunchResult.Failed
         val params =
             BillingFlowParams.newBuilder()
+                .setObfuscatedAccountId(obfuscatedAccountId)
                 .setProductDetailsParamsList(
                     listOf(
                         BillingFlowParams.ProductDetailsParams.newBuilder()
@@ -130,30 +151,58 @@ class PlayBillingRepository private constructor(
                     ),
                 )
                 .build()
-        billingClient.launchBillingFlow(activity, params)
+        val result = billingClient.launchBillingFlow(activity, params)
+        return if (result.responseCode == BillingClient.BillingResponseCode.OK) {
+                PurchaseLaunchResult.Launched
+            } else {
+                PurchaseLaunchResult.Failed
+            }
     }
 
+    override suspend fun queryOwnedPurchases(): List<OwnedPurchase> =
+        suspendCancellableCoroutine { continuation ->
+            val params =
+                QueryPurchasesParams.newBuilder()
+                    .setProductType(BillingClient.ProductType.SUBS)
+                    .build()
+            billingClient.queryPurchasesAsync(params) { result, purchases ->
+                if (!continuation.isActive) return@queryPurchasesAsync
+                if (result.responseCode != BillingClient.BillingResponseCode.OK) {
+                    continuation.resume(emptyList())
+                    return@queryPurchasesAsync
+                }
+                continuation.resume(purchases.mapNotNull(::ownedPurchase))
+            }
+        }
+
     private fun handlePurchase(purchase: Purchase) {
-        // A non-PURCHASED state (e.g. PENDING) grants no entitlement; treat it as
-        // a Canceled outcome so an awaiting coordinator leaves its purchasing
-        // state instead of hanging for a token that will not arrive here.
-        if (purchase.purchaseState != Purchase.PurchaseState.PURCHASED) {
+        if (purchase.products.none { it in SUBSCRIPTION_PRODUCT_IDS }) {
             purchaseEvents.tryEmit(PurchaseResult.Canceled)
             return
         }
-        if (purchase.isAcknowledged) {
-            purchaseEvents.tryEmit(PurchaseResult.Purchased(purchase.purchaseToken))
-            return
+        when (purchase.purchaseState) {
+            Purchase.PurchaseState.PURCHASED ->
+                purchaseEvents.tryEmit(PurchaseResult.Purchased(purchase.purchaseToken))
+            Purchase.PurchaseState.PENDING ->
+                purchaseEvents.tryEmit(PurchaseResult.Pending(purchase.purchaseToken))
+            else -> purchaseEvents.tryEmit(PurchaseResult.Canceled)
         }
-        val ackParams =
-            AcknowledgePurchaseParams.newBuilder()
-                .setPurchaseToken(purchase.purchaseToken)
-                .build()
-        billingClient.acknowledgePurchase(ackParams) {
-            // Surface the token regardless of ack result — verification is the
-            // source of truth for entitlement; ack just prevents auto-refund.
-            purchaseEvents.tryEmit(PurchaseResult.Purchased(purchase.purchaseToken))
-        }
+    }
+
+    private fun ownedPurchase(purchase: Purchase): OwnedPurchase? {
+        val productIds = purchase.products.filterTo(mutableSetOf()) { it in SUBSCRIPTION_PRODUCT_IDS }
+        if (productIds.isEmpty()) return null
+        val state =
+            when (purchase.purchaseState) {
+                Purchase.PurchaseState.PURCHASED -> OwnedPurchaseState.Purchased
+                Purchase.PurchaseState.PENDING -> OwnedPurchaseState.Pending
+                else -> return null
+            }
+        return OwnedPurchase(
+            purchaseToken = purchase.purchaseToken,
+            productIds = productIds,
+            state = state,
+        )
     }
 
     override fun close() {

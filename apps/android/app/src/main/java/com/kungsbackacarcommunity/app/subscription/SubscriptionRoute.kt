@@ -3,6 +3,7 @@ package com.kungsbackacarcommunity.app.subscription
 import android.app.Activity
 import androidx.activity.compose.LocalActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 fun SubscriptionRoute(
     billing: BillingRepository,
     verifier: SubscriptionVerifier?,
+    uid: String,
     isActiveMember: Boolean,
     onBack: () -> Unit,
 ) {
@@ -32,14 +34,23 @@ fun SubscriptionRoute(
     val coordinator = remember(billing, verifier) { SubscriptionCoordinator(billing, verifier) }
     val status by coordinator.status.collectAsState()
     val scope = rememberCoroutineScope()
+    val obfuscatedAccountId = remember(uid) { obfuscatedAccountIdForUid(uid) }
+
+    // Restore/reconcile on every route entry. Play owns the purchase history;
+    // no raw token is persisted locally, and reinstall/renewal needs no checkout.
+    LaunchedEffect(coordinator, uid) { coordinator.reconcileOwnedPurchases() }
 
     SubscriptionScreen(
         isActiveMember = isActiveMember,
         status = status,
         canSubscribe = activity != null && verifier != null,
-        onSubscribe = {
+        onSubscribe = { productId ->
             activity?.let { a ->
-                scope.launch { coordinator.subscribe { billing.launchPurchase(a) } }
+                scope.launch {
+                    coordinator.subscribe(productId) {
+                        billing.launchPurchase(a, productId, obfuscatedAccountId)
+                    }
+                }
             }
         },
         onBack = onBack,

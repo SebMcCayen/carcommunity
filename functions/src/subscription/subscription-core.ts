@@ -12,10 +12,8 @@
  *   SHA-256 hash (legacy security requirement).
  * - Suspension and deletion always override entitlement (enforced by
  *   shared/access.ts, unchanged here).
- * - Store receipt verification (Apple App Store Server API / Google Play
- *   Developer API) was a PLACEHOLDER in legacy too; the real adapters
- *   land with the end-of-MVP console/credentials setup. Until
- *   `config/subscriptionProviders` enables a provider,
+ * - Google Play receipt verification uses Android Publisher subscriptionsv2;
+ *   Apple remains unavailable. Until `config/subscriptionProviders` enables a provider,
  *   subscription.verify fails closed with failed-precondition. The
  *   entitlement application chain (record + users flag + claim) is fully
  *   implemented and reachable via admin.grantEntitlement (platform
@@ -82,9 +80,13 @@ export function grantsLegacyActiveMember(input: {
   );
 }
 
-/** active and grace_period both grant access (legacy). */
+/**
+ * Active, grace-period, and canceled-before-expiry subscriptions grant access.
+ * Google Play's CANCELED state means auto-renew is off, not that the already
+ * paid billing period has ended; expiresAt remains the final authority.
+ */
 export function isSubscriptionActiveStatus(status: SubscriptionStatus): boolean {
-  return status === 'active' || status === 'grace_period';
+  return status === 'active' || status === 'grace_period' || status === 'cancelled';
 }
 
 /** SHA-256 hex of a raw purchase token — the only stored representation. */
