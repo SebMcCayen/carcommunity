@@ -74,8 +74,8 @@ object MessageModeration {
      * Whether reporting a MESSAGE is wired for [surface]. Event chat
      * (`events-reportChatMessage`) and the community channel
      * (`chatchannels-reportMessage`, channel: 'community') are wired today; the
-     * convoy channel and DMs are not yet (see the per-branch note below and the
-     * file KDoc for the callables they are waiting on).
+     * convoy channel and DMs are not yet — see the comment on the `when` branches
+     * below for the callables they are waiting on.
      */
     fun reportAvailability(surface: ChatSurface): ReportAvailability =
         when (surface) {
