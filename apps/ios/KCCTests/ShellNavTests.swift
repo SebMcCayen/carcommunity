@@ -4,8 +4,9 @@ import XCTest
 
 /// Unit tests for the map-first shell's pure navigation + toggle logic — the
 /// iOS port of Android's `ShellNavTest.kt`, minus the Android-only cases
-/// (`rememberSaveable` restore of retired route constants, and the
-/// `StubMapSurface` wiring, which has no iOS counterpart yet).
+/// (`rememberSaveable` restore of retired route constants). The
+/// `StubMapSurface` cases live in `MapSurfaceTests.swift`, alongside the
+/// ported seam.
 final class ShellNavTests: XCTestCase {
 
     // MARK: - system Back resolution
