@@ -125,6 +125,28 @@ struct ShellRouteStack: Equatable, Sendable {
     let current: ShellRoute?
 }
 
+extension ShellRouteStack {
+    /// The closed stack: nothing open, the shell shows its tab hubs.
+    static let empty = ShellRouteStack(parents: [], current: nil)
+
+    /// The stack after opening `route` one level deeper. Thin composition of
+    /// ``ShellNavigation/pushRoute(parents:current:)`` with the new top, so
+    /// the view layer holds ONE value and never assembles parents/current by
+    /// hand (where the two could drift apart).
+    func opening(_ route: ShellRoute) -> ShellRouteStack {
+        ShellRouteStack(
+            parents: ShellNavigation.pushRoute(parents: parents, current: current),
+            current: route
+        )
+    }
+
+    /// The stack after a Back gesture pops one level — the counterpart of
+    /// ``opening(_:)``, delegating to ``ShellNavigation/popRoute(parents:)``.
+    func poppingOne() -> ShellRouteStack {
+        ShellNavigation.popRoute(parents: parents)
+    }
+}
+
 enum ShellNavigation {
     /// Resolves a system-Back gesture given the current `tab` and open `route`.
     /// An open route always closes first — which, with a route back-stack,

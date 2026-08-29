@@ -84,6 +84,44 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(popped.current, .settings)
     }
 
+    // MARK: - ShellRouteStack reducers (the view layer's single stack value)
+
+    func testTheEmptyStackHasNothingOpen() {
+        XCTAssertNil(ShellRouteStack.empty.current)
+        XCTAssertEqual(ShellRouteStack.empty.parents, [])
+    }
+
+    func testOpeningATopLevelRouteFromTheEmptyStackStacksNoParent() {
+        // The map-home profile entry: opening .profile with nothing already
+        // open, so Back from it returns straight to the map.
+        let opened = ShellRouteStack.empty.opening(.profile)
+        XCTAssertEqual(opened.current, .profile)
+        XCTAssertEqual(opened.parents, [])
+    }
+
+    func testOpeningAChildStacksTheCurrentRouteAsItsParent() {
+        // Profile → Points is the documented hub → child pair for .profile.
+        let child = ShellRouteStack.empty.opening(.profile).opening(.points)
+        XCTAssertEqual(child.current, .points)
+        XCTAssertEqual(child.parents, [.profile])
+    }
+
+    func testPoppingAChildReturnsToItsParentNotTheMap() {
+        let popped = ShellRouteStack.empty
+            .opening(.profile)
+            .opening(.points)
+            .poppingOne()
+        XCTAssertEqual(popped.current, .profile)
+        XCTAssertEqual(popped.parents, [])
+    }
+
+    func testPoppingATopLevelRouteClosesTheStack() {
+        // Back from the profile (opened from the map home) leaves nothing
+        // open — the shell falls through to its tab Back rules.
+        let popped = ShellRouteStack.empty.opening(.profile).poppingOne()
+        XCTAssertEqual(popped, .empty)
+    }
+
     func testTheDefaultTabIsMap() {
         // Assert the real default constant (used by production), not case
         // order.
