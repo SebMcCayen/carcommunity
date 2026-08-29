@@ -1079,6 +1079,7 @@ describe('subscription module', () => {
           platform: 'manual',
           status: 'active',
           entitlement: 'member_monthly',
+          tier: 'supporter',
           expiresAt: ts('2026-12-31T00:00:00Z'),
         }),
       })
@@ -1092,6 +1093,7 @@ describe('subscription module', () => {
     expect(summary.subscription).toMatchObject({
       platform: 'manual',
       status: 'active',
+      tier: 'supporter',
       expiresAt: '2026-12-31T00:00:00.000Z',
     });
   });
@@ -1131,6 +1133,43 @@ describe('subscription module', () => {
       platform: 'manual',
       status: 'inactive',
       entitlement: 'none',
+      tier: 'community',
+    });
+  });
+
+  it('maps an active legacy paid entitlement with a missing or invalid tier to Plus', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'google',
+          status: 'active',
+          entitlement: 'member_monthly',
+          tier: 'unknown_paid_tier',
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.subscription).toMatchObject({
+      entitlement: 'member_monthly',
+      tier: 'plus',
+    });
+  });
+
+  it('maps a retained paid tier with no entitlement to Community', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'google',
+          status: 'inactive',
+          entitlement: 'none',
+          tier: 'supporter',
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.subscription).toMatchObject({
+      entitlement: 'none',
+      tier: 'community',
     });
   });
 

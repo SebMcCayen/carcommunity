@@ -22,12 +22,15 @@ import { doc, getDoc } from 'firebase/firestore';
 
 import {
   isSubscriptionActiveStatus,
+  resolveSubscriptionTier,
   SUBSCRIPTION_PLATFORMS,
   SUBSCRIPTION_STATUSES,
+  SUBSCRIPTION_TIERS,
   type AdminUserSubscriptionSummary,
   type SubscriptionPlatform,
   type SubscriptionSourceSummary,
   type SubscriptionStatus,
+  type SubscriptionTier,
 } from '@carcommunity/shared/subscription';
 import {
   SUBSCRIPTION_ENTITLEMENTS,
@@ -96,6 +99,13 @@ function coerceEntitlement(raw: unknown): SubscriptionEntitlement {
     : 'none';
 }
 
+function coerceTier(raw: unknown, entitlement: SubscriptionEntitlement): SubscriptionTier {
+  const tier = (SUBSCRIPTION_TIERS as readonly string[]).includes(raw as string)
+    ? (raw as SubscriptionTier)
+    : undefined;
+  return resolveSubscriptionTier({ entitlement, tier });
+}
+
 /**
  * Reads a user's subscription entitlement summary. `subscriptions/{uid}` is
  * admin-readable; `users/{uid}` supplies the suspended flag so the "suspended
@@ -114,13 +124,17 @@ export async function adminGetUserSubscription(
   const user = userSnap.data() as Record<string, unknown> | undefined;
 
   const subscription: SubscriptionSourceSummary | null = sub
-    ? {
-        platform: coercePlatform(sub.platform),
-        status: coerceStatus(sub.status),
-        entitlement: coerceEntitlement(sub.entitlement),
-        startsAt: toIso(sub.startsAt),
-        expiresAt: toIso(sub.expiresAt),
-      }
+    ? (() => {
+        const entitlement = coerceEntitlement(sub.entitlement);
+        return {
+          platform: coercePlatform(sub.platform),
+          status: coerceStatus(sub.status),
+          entitlement,
+          tier: coerceTier(sub.tier, entitlement),
+          startsAt: toIso(sub.startsAt),
+          expiresAt: toIso(sub.expiresAt),
+        };
+      })()
     : null;
 
   const entitlement: SubscriptionEntitlement = subscription?.entitlement ?? 'none';

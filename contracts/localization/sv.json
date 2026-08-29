@@ -242,6 +242,8 @@
     "purchaseHandledExternally": "Köp hanteras via App Store eller Google Play i en senare version.",
     "accessLimitedBySuspension": "Din åtkomst kan begränsas vid avstängning eller regelbrott.",
     "currentEntitlementMember": "Du har ett aktivt medlemskap.",
+    "currentEntitlementPlus": "Du har ett aktivt Plus-medlemskap.",
+    "currentEntitlementSupporter": "Du har ett aktivt Supporter-medlemskap.",
     "currentEntitlementFree": "Inget aktivt medlemskap.",
     "currentPlanTitle": "Ditt medlemskap",
     "plusTitle": "Plus · 39 kr/månad",

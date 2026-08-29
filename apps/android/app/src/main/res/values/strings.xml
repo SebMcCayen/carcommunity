@@ -217,6 +217,8 @@
     <string name="subscription_purchaseHandledExternally">Köp hanteras via App Store eller Google Play i en senare version.</string>
     <string name="subscription_accessLimitedBySuspension">Din åtkomst kan begränsas vid avstängning eller regelbrott.</string>
     <string name="subscription_currentEntitlementMember">Du har ett aktivt medlemskap.</string>
+    <string name="subscription_currentEntitlementPlus">Du har ett aktivt Plus-medlemskap.</string>
+    <string name="subscription_currentEntitlementSupporter">Du har ett aktivt Supporter-medlemskap.</string>
     <string name="subscription_currentEntitlementFree">Inget aktivt medlemskap.</string>
     <string name="subscription_currentPlanTitle">Ditt medlemskap</string>
     <string name="subscription_plusTitle">Plus · 39 kr/månad</string>

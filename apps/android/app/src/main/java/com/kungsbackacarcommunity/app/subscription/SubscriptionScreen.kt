@@ -34,11 +34,23 @@ fun SubscriptionScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val verifiedTier = (status as? PurchaseFlowStatus.Success)?.tier
+    val hasVerifiedPaidTier = status is PurchaseFlowStatus.Success
+
     // This first Play slice supports one effective product at a time. Plan
     // changes stay disabled until Play SubscriptionUpdateParams and backend
     // multi-token effective-tier recomputation land together.
     val canStartNewPurchase =
-        canSubscribe && !isActiveMember && !PurchaseFlow.isInFlight(status)
+        canSubscribe && !isActiveMember && !hasVerifiedPaidTier && !PurchaseFlow.isInFlight(status)
+
+    val currentEntitlement =
+        when {
+            verifiedTier == "supporter" -> R.string.subscription_currentEntitlementSupporter
+            verifiedTier == "plus" -> R.string.subscription_currentEntitlementPlus
+            hasVerifiedPaidTier -> R.string.subscription_currentEntitlementMember
+            isActiveMember -> R.string.subscription_currentEntitlementMember
+            else -> R.string.subscription_currentEntitlementFree
+        }
 
     AeroPage(title = stringResource(R.string.subscription_screenTitle), modifier = modifier) {
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -53,13 +65,7 @@ fun SubscriptionScreen(
                     )
                     Text(
                         text =
-                            stringResource(
-                                if (isActiveMember) {
-                                    R.string.subscription_currentEntitlementMember
-                                } else {
-                                    R.string.subscription_currentEntitlementFree
-                                },
-                            ),
+                            stringResource(currentEntitlement),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -159,7 +165,7 @@ private fun statusTextRes(status: PurchaseFlowStatus): Int? =
         PurchaseFlowStatus.Ready -> R.string.subscription_statusReady
         PurchaseFlowStatus.Purchasing -> R.string.subscription_statusPurchasing
         PurchaseFlowStatus.Verifying -> R.string.subscription_statusVerifying
-        PurchaseFlowStatus.Success -> R.string.subscription_statusSuccess
+        is PurchaseFlowStatus.Success -> R.string.subscription_statusSuccess
         PurchaseFlowStatus.Pending -> R.string.subscription_statusPending
         is PurchaseFlowStatus.Failed ->
             when (status.reason) {

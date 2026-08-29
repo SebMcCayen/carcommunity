@@ -25,7 +25,7 @@ class SubscriptionCoordinatorTest {
             }
         job.join()
 
-        assertEquals(PurchaseFlowStatus.Success, coordinator.status.value)
+        assertEquals(PurchaseFlowStatus.Success("plus"), coordinator.status.value)
         assertEquals("tok-abc", verifier.verifiedToken)
     }
 
@@ -149,12 +149,12 @@ class SubscriptionCoordinatorTest {
                         ),
                     ),
             )
-        val verifier = FakeVerifier(shouldFail = false)
+        val verifier = FakeVerifier(shouldFail = false, tier = "supporter")
         val coordinator = SubscriptionCoordinator(billing, verifier)
 
         coordinator.reconcileOwnedPurchases()
 
-        assertEquals(PurchaseFlowStatus.Success, coordinator.status.value)
+        assertEquals(PurchaseFlowStatus.Success("supporter"), coordinator.status.value)
         assertEquals("supporter-token", verifier.verifiedToken)
     }
 
@@ -232,6 +232,7 @@ private class FakeBilling(
 private class FakeVerifier(
     private val shouldFail: Boolean,
     private val grantsAccess: Boolean = true,
+    private val tier: String = "plus",
 ) : SubscriptionVerifier {
     var verifiedToken: String? = null
         private set
@@ -240,7 +241,7 @@ private class FakeVerifier(
         verifiedToken = purchaseToken
         if (shouldFail) throw IllegalStateException("verify failed closed")
         return if (grantsAccess) {
-                SubscriptionVerificationResult("member_monthly", "active", "plus")
+                SubscriptionVerificationResult("member_monthly", "active", tier)
             } else {
                 SubscriptionVerificationResult("none", "inactive", "plus")
             }

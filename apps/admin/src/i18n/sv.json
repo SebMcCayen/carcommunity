@@ -348,12 +348,18 @@
     "lookupError": "Kunde inte hämta prenumerationen.",
     "currentStatusTitle": "Nuvarande status",
     "entitlementLabel": "Berättigande",
+    "tierLabel": "Plan",
     "statusLabel": "Status",
     "platformLabel": "Plattform",
     "expiresLabel": "Utgår",
     "entitlement": {
       "none": "Ingen",
       "member_monthly": "Medlem (månad)"
+    },
+    "tier": {
+      "community": "Community",
+      "plus": "Plus",
+      "supporter": "Supporter"
     },
     "status": {
       "inactive": "Inaktiv",

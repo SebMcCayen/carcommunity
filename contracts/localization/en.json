@@ -242,6 +242,8 @@
     "purchaseHandledExternally": "Purchases are handled via the App Store or Google Play in a later version.",
     "accessLimitedBySuspension": "Your access may be restricted in the event of suspension or violations.",
     "currentEntitlementMember": "You have an active membership.",
+    "currentEntitlementPlus": "You have an active Plus membership.",
+    "currentEntitlementSupporter": "You have an active Supporter membership.",
     "currentEntitlementFree": "No active membership.",
     "currentPlanTitle": "Your membership",
     "plusTitle": "Plus · SEK 39/month",
