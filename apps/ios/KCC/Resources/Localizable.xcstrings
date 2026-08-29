@@ -30040,6 +30040,23 @@
         }
       }
     },
+    "subscription.currentPlanTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ditt medlemskap"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your membership"
+          }
+        }
+      }
+    },
     "subscription.errorConnection": {
       "extractionState": "manual",
       "localizations": {
@@ -30053,6 +30070,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Could not connect to the store. Try again later."
+          }
+        }
+      }
+    },
+    "subscription.errorInactivePurchase": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Play bekräftade inget aktivt medlemskap för köpet."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Play did not confirm an active membership for this purchase."
           }
         }
       }
@@ -30097,13 +30131,13 @@
         "sv": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vi kunde inte verifiera ditt köp. Det har ännu inte debiterats för medlemskap."
+            "value": "Vi kunde inte verifiera ditt köp. Det har ännu inte aktiverats som medlemskap."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "We could not verify your purchase. It has not been charged for membership yet."
+            "value": "We could not verify your purchase. It has not been activated as a membership."
           }
         }
       }
@@ -30138,6 +30172,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "Membership is required to view other live locations, event details and RSVP."
+          }
+        }
+      }
+    },
+    "subscription.plusBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De viktigaste medlemsfunktionerna, upp till 5 garagefordon och 90 dagars körhistorik."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The essential member features, up to 5 garage vehicles and 90 days of drive history."
+          }
+        }
+      }
+    },
+    "subscription.plusTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus · 39 kr/månad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plus · SEK 39/month"
           }
         }
       }
@@ -30189,6 +30257,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "Connecting to the store…"
+          }
+        }
+      }
+    },
+    "subscription.statusPending": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Betalningen behandlas av Google Play. Inga medlemsförmåner aktiveras innan köpet är klart."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Play is processing the payment. No member benefits are enabled until it completes."
           }
         }
       }
@@ -30291,6 +30376,74 @@
           "stringUnit": {
             "state": "translated",
             "value": "Subscribe to monthly membership"
+          }
+        }
+      }
+    },
+    "subscription.subscribePlusAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj Plus"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Plus"
+          }
+        }
+      }
+    },
+    "subscription.subscribeSupporterAction": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Välj Supporter"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Supporter"
+          }
+        }
+      }
+    },
+    "subscription.supporterBody": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alla medlemsfunktioner, upp till 10 garagefordon, obegränsad körhistorik och möjlighet till Supporter-märke."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All member features, up to 10 garage vehicles, unlimited drive history and an optional Supporter badge."
+          }
+        }
+      }
+    },
+    "subscription.supporterTitle": {
+      "extractionState": "manual",
+      "localizations": {
+        "sv": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter · 119 kr/månad"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supporter · SEK 119/month"
           }
         }
       }
