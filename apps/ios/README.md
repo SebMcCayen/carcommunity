@@ -47,6 +47,27 @@ xcodebuild -project KCC.xcodeproj -scheme KCC \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' test
 ```
 
+## Developing against the Firebase emulators
+
+There is no paid Apple Developer membership yet (ADR-002), so the Sign in
+with Apple capability cannot be used against production. Development instead
+targets the **Firebase Auth emulator**, which never verifies token
+signatures:
+
+1. Start the emulators from the repo root: `firebase emulators:start`
+   (auth listens on 127.0.0.1:9099 per `firebase.json`).
+2. Provide any `GoogleService-Info.plist` at `KCC/GoogleService-Info.plist`
+   (values are not validated by the emulator).
+3. Run the app with the environment variable
+   `FIREBASE_AUTH_EMULATOR_HOST=127.0.0.1:9099` (Xcode scheme → Run →
+   Arguments → Environment Variables).
+
+In DEBUG builds with that variable set, sign-in uses
+`EmulatorAppleIDTokenProvider` — a fabricated (unsigned) Apple identity token
+that exercises the real `OAuthProvider.appleCredential` exchange path against
+the emulator. Release builds always use the real
+`ASAuthorizationController` flow.
+
 ## Localization
 
 Swedish is the source language, English is required alongside it. Keys are the
