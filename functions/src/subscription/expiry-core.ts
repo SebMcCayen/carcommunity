@@ -87,7 +87,7 @@ export const EXPIRY_SWEEP_STATUSES: readonly SubscriptionStatus[] = SUBSCRIPTION
   isSubscriptionActiveStatus,
 );
 
-/** Canceled Play subscriptions stop exactly at the paid line-item expiry. */
+/** Canceled Play subscriptions become revocable at expiry, with no extra grace window. */
 export const EXPIRY_IMMEDIATE_SWEEP_STATUSES: readonly SubscriptionStatus[] = ['cancelled'];
 
 /** Active/grace records retain the existing outage-tolerance window. */
