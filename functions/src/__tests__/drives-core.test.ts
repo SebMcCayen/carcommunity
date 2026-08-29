@@ -113,6 +113,68 @@ describe('maxSpeedMps (stored since the 2026-07 decision)', () => {
     ];
     expect(maxSpeedMps(parked)).toBe(0);
   });
+
+  // --- GPS spike rejection UNDER the 200 km/h cap (the reported inflation bug) ---
+  // metres north → degrees latitude near these coords.
+  const METRES_PER_DEG_LAT = (6_371_000 * Math.PI) / 180;
+  const latOff = (metres: number) => metres / METRES_PER_DEG_LAT;
+  const lonOff = (metres: number, atLat: number) =>
+    metres / (METRES_PER_DEG_LAT * Math.cos((atLat * Math.PI) / 180));
+
+  it('rejects a lone spike that stays UNDER the 200 km/h absolute cap', () => {
+    // Real 20 m/s (72 km/h) cruise at a 5 s cadence with ONE segment implying
+    // 43 m/s (~155 km/h) — a GPS glitch well under the 55.6 m/s cap. Without the
+    // acceleration guard this became the stored top speed (the ~70 km/h
+    // inflation on the drive's card).
+    const lat0 = 59.3293;
+    const points = [
+      { latitude: lat0, longitude: 18.0686, timestampMs: 0 },
+      { latitude: lat0 + latOff(100), longitude: 18.0686, timestampMs: 5_000 }, // 20 m/s
+      { latitude: lat0 + latOff(315), longitude: 18.0686, timestampMs: 10_000 }, // 43 m/s spike
+      { latitude: lat0 + latOff(415), longitude: 18.0686, timestampMs: 15_000 }, // 20 m/s
+    ];
+    const max = maxSpeedMps(points);
+    expect(max).not.toBeNull();
+    // The 43 m/s spike is dropped; the real 20 m/s cruise stands.
+    expect(max as number).toBeGreaterThan(19);
+    expect(max as number).toBeLessThan(21);
+  });
+
+  it('rejects a single sideways glitch on BOTH segments it touches', () => {
+    // One fix flung ~215 m east and back corrupts the two adjacent segments
+    // (both ~43–47 m/s); neither survives because a rejected segment does not
+    // advance the trust anchor.
+    const lat0 = 59.3293;
+    const points = [
+      { latitude: lat0, longitude: 18.0686, timestampMs: 0 },
+      { latitude: lat0 + latOff(100), longitude: 18.0686, timestampMs: 5_000 }, // 20 m/s
+      // Glitch: same latitude as previous, flung ~215 m east.
+      { latitude: lat0 + latOff(100), longitude: 18.0686 + lonOff(215, lat0), timestampMs: 10_000 },
+      { latitude: lat0 + latOff(200), longitude: 18.0686, timestampMs: 15_000 },
+      { latitude: lat0 + latOff(300), longitude: 18.0686, timestampMs: 20_000 }, // 20 m/s
+    ];
+    const max = maxSpeedMps(points);
+    expect(max).not.toBeNull();
+    expect(max as number).toBeGreaterThan(19);
+    expect(max as number).toBeLessThan(21);
+  });
+
+  it('keeps a genuinely sustained high speed (guard never clips real driving)', () => {
+    // Accelerate 20 → 30 → 40 m/s over 5 s steps, then hold 40 m/s (144 km/h).
+    // Each step is plausible acceleration, so the true top is preserved.
+    const lat0 = 59.3293;
+    const speeds = [20, 30, 40, 40]; // per 5 s segment
+    const points = [{ latitude: lat0, longitude: 18.0686, timestampMs: 0 }];
+    let lat = lat0;
+    speeds.forEach((s, i) => {
+      lat += latOff(s * 5);
+      points.push({ latitude: lat, longitude: 18.0686, timestampMs: (i + 1) * 5_000 });
+    });
+    const max = maxSpeedMps(points);
+    expect(max).not.toBeNull();
+    expect(max as number).toBeGreaterThan(39);
+    expect(max as number).toBeLessThan(41);
+  });
 });
 
 describe('drives-core input parsing and guards', () => {

@@ -34,6 +34,36 @@ const EARTH_RADIUS_METRES = 6_371_000;
  */
 const MAX_PLAUSIBLE_SPEED_MPS = 55.6;
 
+/**
+ * Maximum plausible forward ACCELERATION for a car (m/s²), used ONLY by
+ * {@link maxSpeedMps} to reject a GPS position glitch that stays UNDER
+ * MAX_PLAUSIBLE_SPEED_MPS and so slips past that absolute cap.
+ *
+ * Implied speed is distance ÷ elapsed time, so a fix that jumps ~100 m over a
+ * normal ~5 s cadence implies ~20 m/s (~70 km/h) of extra speed — well under
+ * 200 km/h, so the absolute cap waves it through, yet a maximum takes that
+ * single worst sample. Distance averages such a fix away; a maximum cannot, so
+ * it needs a tighter guard: a segment's speed counts toward the max only if it
+ * is REACHABLE from the last trustworthy speed without super-car acceleration.
+ * 3.5 m/s² is ~0–100 km/h in ~8 s — generous for real cars (genuine brisk
+ * acceleration is never clipped) but far below the tens of m/s² a lone glitch
+ * implies. Kept in parity with the Android client's MAX_PLAUSIBLE_ACCEL_MPS2
+ * (DriveRecording.kt) so the stored value, the History card, and the in-app
+ * top-speed marker agree.
+ */
+const MAX_PLAUSIBLE_ACCEL_MPS2 = 3.5;
+
+/**
+ * The acceleration budget is MAX_PLAUSIBLE_ACCEL_MPS2 × the segment's elapsed
+ * seconds, but the elapsed time is capped here first. Fixes normally arrive
+ * every ~2–5 s, so this is a no-op for a healthy stream; it only bites after a
+ * gap (lost signal), where an uncapped budget would grow big enough to admit a
+ * glitch coinciding with that gap. Capping keeps the per-segment jump ceiling
+ * bounded (~21 m/s ≈ 75 km/h) regardless of gap length. Parity with the Android
+ * client's ACCEL_WINDOW_CAP_SECONDS.
+ */
+const ACCEL_WINDOW_CAP_SECONDS = 6;
+
 function toRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
 }
@@ -118,18 +148,31 @@ export function totalDistanceMetres(points: readonly TimedPoint[]): number {
  * or null when none can be derived (fewer than 2 points, or every segment is
  * filtered out).
  *
- * Applies the SAME filters as {@link totalDistanceMetres}: a non-positive time
- * delta is skipped, and so is any segment implying more than
- * MAX_PLAUSIBLE_SPEED_MPS (~200 km/h). That filter is load-bearing here, more
- * so than for distance: distance averages a bad fix away over a whole drive,
- * but a maximum takes the single worst sample — one GPS glitch, unfiltered,
- * would put an absurd number on the drive's card. Non-finite results are
- * dropped defensively for the same reason.
+ * Rejects GPS spikes two ways. First the SAME filters as
+ * {@link totalDistanceMetres}: a non-positive time delta is skipped, and so is
+ * any segment implying more than MAX_PLAUSIBLE_SPEED_MPS (~200 km/h); non-finite
+ * results are dropped defensively.
+ *
+ * Second — and this is what distance does NOT need — an acceleration guard. The
+ * absolute cap is load-bearing here yet insufficient: distance averages a bad
+ * fix away over a whole drive, but a maximum takes the single worst sample, and
+ * a position glitch that stays UNDER 200 km/h (e.g. a ~150 km/h spike on a real
+ * 80 km/h drive) would otherwise put an inflated number on the drive's card. So
+ * a segment's implied speed counts toward the max only if it is reachable from
+ * the last accepted speed without impossible acceleration
+ * (MAX_PLAUSIBLE_ACCEL_MPS2 × the window-capped elapsed time). A rejected
+ * segment does not advance the trusted anchor, so a single glitchy fix — which
+ * corrupts the two segments that touch it (out, then back) — is rejected on both
+ * halves. Only positive jumps are gated (a slowdown can never inflate a
+ * maximum); a genuinely high SUSTAINED speed is admitted segment after segment
+ * and never clipped. The first segment has no prior speed to compare and rests
+ * on the absolute cap alone.
  */
 export function maxSpeedMps(points: readonly TimedPoint[]): number | null {
   if (points.length < 2) return null;
 
   let max: number | null = null;
+  let anchor: number | null = null;
 
   for (let i = 1; i < points.length; i++) {
     const prev = points[i - 1] as TimedPoint;
@@ -140,17 +183,31 @@ export function maxSpeedMps(points: readonly TimedPoint[]): number | null {
       continue;
     }
 
+    const elapsedSeconds = deltaMs / 1000;
     const distanceM = haversineDistanceMetres(
       prev.latitude,
       prev.longitude,
       curr.latitude,
       curr.longitude,
     );
-    const impliedSpeed = distanceM / (deltaMs / 1000);
+    const impliedSpeed = distanceM / elapsedSeconds;
+    // Absolute >200 km/h backstop (+ non-finite guard). A rejected segment must
+    // not advance the anchor.
     if (!Number.isFinite(impliedSpeed) || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) {
       continue;
     }
 
+    // Acceleration guard: drop a segment implying an impossible jump up from the
+    // last trustworthy speed. Only positive jumps are implausible.
+    if (anchor !== null) {
+      const budgetSeconds = Math.min(elapsedSeconds, ACCEL_WINDOW_CAP_SECONDS);
+      const maxIncrease = MAX_PLAUSIBLE_ACCEL_MPS2 * budgetSeconds;
+      if (impliedSpeed - anchor > maxIncrease) {
+        continue;
+      }
+    }
+
+    anchor = impliedSpeed;
     if (max === null || impliedSpeed > max) {
       max = impliedSpeed;
     }

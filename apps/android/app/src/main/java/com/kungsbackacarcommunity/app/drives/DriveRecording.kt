@@ -514,6 +514,51 @@ object DriveSummary {
      */
     const val MAX_PLAUSIBLE_SPEED_MPS = 55.6
 
+    /**
+     * Maximum plausible forward ACCELERATION for a car, in m/s². Used by the
+     * top-speed scan (NOT distance) to reject a single GPS position glitch that
+     * stays UNDER [MAX_PLAUSIBLE_SPEED_MPS] and so slips past that absolute cap.
+     *
+     * Why the absolute cap is not enough for a maximum: implied speed is
+     * distance ÷ elapsed time, so a fix that jumps ~100 m sideways over a normal
+     * ~5 s cadence implies ~20 m/s (~70 km/h) of extra speed — comfortably under
+     * 200 km/h, so [MAX_PLAUSIBLE_SPEED_MPS] waves it through, and a maximum
+     * takes that single worst sample. That is exactly the reported bug: a real
+     * ~80 km/h drive saved with a ~150 km/h "top speed". Distance averages such a
+     * fix away; a maximum cannot, so it needs a second, tighter guard.
+     *
+     * The guard is corroboration by physics: a segment's implied speed only
+     * counts toward the max if it is REACHABLE from the last trustworthy speed
+     * without super-car acceleration. 3.5 m/s² is ~0–100 km/h in ~8 s — generous
+     * for real road cars (so genuine brisk acceleration is never clipped) yet far
+     * below the tens of m/s² a lone position glitch implies. A single glitchy
+     * fix corrupts the TWO segments that touch it (out, then back); because a
+     * rejected segment does NOT advance the trusted anchor, both halves are
+     * measured against the real speed on either side and both are rejected.
+     *
+     * What it deliberately does NOT do: clip a genuinely high SUSTAINED speed —
+     * once you are cruising fast, segment-to-segment change is ~0, so every
+     * segment is admitted and the true top speed stands. Only an isolated,
+     * physically impossible jump is dropped. It also cannot vet the very first
+     * segment (there is no prior speed to compare); that lone case still relies
+     * on the [MAX_PLAUSIBLE_SPEED_MPS] backstop.
+     */
+    const val MAX_PLAUSIBLE_ACCEL_MPS2 = 3.5
+
+    /**
+     * The acceleration budget for a segment is [MAX_PLAUSIBLE_ACCEL_MPS2] × its
+     * elapsed seconds — but the elapsed time is capped here first. Fixes normally
+     * arrive every ~2–5 s ([com.kungsbackacarcommunity.app.location.BackgroundLocation]),
+     * so this cap is a no-op for a healthy stream; it only bites after a GAP in
+     * fixes (lost signal), where an uncapped budget would grow large enough to let
+     * a glitch coinciding with that gap slip through. Capping the window keeps the
+     * per-segment jump ceiling bounded (~21 m/s ≈ 75 km/h at the cap) regardless of
+     * how long the gap was, so a glitch after a long silence is still caught. The
+     * cost — under-reporting a real hard acceleration sustained across a >6 s gap —
+     * is an honest under-read, never the inflation this fixes.
+     */
+    const val ACCEL_WINDOW_CAP_SECONDS = 6.0
+
     private fun toRadians(degrees: Double): Double = degrees * Math.PI / 180.0
 
     /** Haversine distance in metres between two coordinates; 0 for identical points. */
@@ -595,12 +640,15 @@ object DriveSummary {
     /**
      * Highest instantaneous speed (m/s) implied by consecutive route points, or
      * null when it cannot be derived (fewer than two points, or every segment is
-     * filtered out). Applies the SAME implausible-jump filter the backend uses
-     * for distance (functions/src/drives/drive-calculations.ts): a segment
-     * implying more than [MAX_PLAUSIBLE_SPEED_MPS] (~200 km/h) is treated as a
-     * GPS glitch and excluded, so a lone spike can never claim an absurd top
-     * speed in the share text. Non-positive time deltas are skipped exactly like
-     * the distance scan.
+     * filtered out). Rejects GPS spikes two ways (see [scanPlausibleSegments]):
+     * the absolute [MAX_PLAUSIBLE_SPEED_MPS] (~200 km/h) backstop the distance
+     * scan also uses, AND — because a maximum takes the single worst sample where
+     * distance averages it away — an acceleration guard that drops a lone segment
+     * implying an impossible jump from the last real speed
+     * ([MAX_PLAUSIBLE_ACCEL_MPS2]). That second guard is what stops a position
+     * glitch UNDER 200 km/h (e.g. a ~150 km/h spike on a real 80 km/h drive) from
+     * inflating the figure. Non-positive time deltas are skipped exactly like the
+     * distance scan. A genuinely high SUSTAINED speed is never clipped.
      *
      * This is the SHARE-TEXT figure, derived client-side from points already in
      * memory. Since 2026-07 the backend ALSO persists an equivalent figure on
@@ -648,11 +696,12 @@ object DriveSummary {
     /**
      * The fastest fix on a route AND where it occurred — the top speed plus the
      * point that ends the fastest segment — or null when it cannot be derived
-     * (fewer than two points, or every segment filtered out). Applies the EXACT
-     * same GPS-jump filter as [topSpeedMetersPerSecond]: a non-positive time
-     * delta or an implied speed above [MAX_PLAUSIBLE_SPEED_MPS] is skipped, so a
-     * spike can never be chosen as the top. A tie keeps the FIRST (earliest)
-     * fastest segment (strictly-greater comparison).
+     * (fewer than two points, or every segment filtered out). Shares the EXACT
+     * same [scanPlausibleSegments] core as [topSpeedMetersPerSecond] — the
+     * absolute [MAX_PLAUSIBLE_SPEED_MPS] cap AND the [MAX_PLAUSIBLE_ACCEL_MPS2]
+     * jump guard — so a spike (over OR under 200 km/h) can never be chosen as the
+     * top and the marked point always matches the scalar figure. A tie keeps the
+     * FIRST (earliest) fastest segment (strictly-greater comparison).
      *
      * Scans [RoutePoint]s — the very list the summary's route map draws — so the
      * returned [TopSpeedPoint.index] and coordinate line up with the drawn
@@ -663,27 +712,22 @@ object DriveSummary {
      * disagree.
      */
     fun topSpeedPoint(points: List<RoutePoint>): TopSpeedPoint? {
-        if (points.size < 2) return null
         var best: TopSpeedPoint? = null
-        for (i in 1 until points.size) {
-            val prev = points[i - 1]
-            val curr = points[i]
-            val deltaMs = curr.timestampMs - prev.timestampMs
-            if (deltaMs <= 0) continue
-            val distance =
-                haversineMetres(prev.latitude, prev.longitude, curr.latitude, curr.longitude)
-            val impliedSpeed = distance / (deltaMs / 1000.0)
-            // Same >200 km/h GPS-glitch guard the distance/top-speed scans apply;
-            // also drop any non-finite result defensively.
-            if (!impliedSpeed.isFinite() || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
+        scanPlausibleSegments(
+            size = points.size,
+            latitude = { points[it].latitude },
+            longitude = { points[it].longitude },
+            timestampMs = { points[it].timestampMs },
+        ) { index, impliedSpeed ->
+            val current = best
             // Strictly greater → a tie keeps the earliest fastest segment.
-            if (best == null || impliedSpeed > best.metersPerSecond) {
+            if (current == null || impliedSpeed > current.metersPerSecond) {
                 best =
                     TopSpeedPoint(
                         metersPerSecond = impliedSpeed,
-                        latitude = curr.latitude,
-                        longitude = curr.longitude,
-                        index = i,
+                        latitude = points[index].latitude,
+                        longitude = points[index].longitude,
+                        index = index,
                     )
             }
         }
@@ -693,9 +737,9 @@ object DriveSummary {
     /**
      * Shared core for both [topSpeedMetersPerSecond] overloads: the highest
      * plausible instantaneous speed (m/s) over [size] ordered points addressed
-     * by index. `inline`, so the accessors are inlined and no intermediate list
-     * (nor lambda) is allocated — the RecordedPoint and RoutePoint overloads
-     * fold straight over their own backing list.
+     * by index. Funnels through [scanPlausibleSegments] so it applies the EXACT
+     * same GPS-jump + spike rejection as [topSpeedPoint] — the scalar figure and
+     * the marked point can never disagree.
      */
     private inline fun topSpeedOverPoints(
         size: Int,
@@ -703,20 +747,73 @@ object DriveSummary {
         longitude: (Int) -> Double,
         timestampMs: (Int) -> Long,
     ): Double? {
-        if (size < 2) return null
         var top: Double? = null
+        scanPlausibleSegments(size, latitude, longitude, timestampMs) { _, impliedSpeed ->
+            val current = top
+            if (current == null || impliedSpeed > current) top = impliedSpeed
+        }
+        return top
+    }
+
+    /**
+     * The ONE place the top-speed segment filter lives. Walks [size] ordered
+     * points and invokes [onAccepted] with `(index, impliedSpeedMps)` for each
+     * segment (ending at `index`) whose implied speed is accepted as a real
+     * ground speed. Every top-speed reader ([topSpeedMetersPerSecond] overloads
+     * and [topSpeedPoint]) folds over this, so they can never drift apart.
+     *
+     * A segment is REJECTED (never handed to [onAccepted]) when:
+     * - its time delta is non-positive (out-of-order / duplicate fix), or the
+     *   implied speed is non-finite; or
+     * - it exceeds [MAX_PLAUSIBLE_SPEED_MPS] — the absolute >200 km/h backstop,
+     *   the same one the distance total applies; or
+     * - it implies impossible ACCELERATION from the last accepted speed: the
+     *   jump up exceeds [MAX_PLAUSIBLE_ACCEL_MPS2] × the (window-capped) elapsed
+     *   time. This is what catches a GPS position glitch that stays under
+     *   200 km/h yet spikes the max — the case the absolute cap misses.
+     *
+     * The trusted `anchor` (last accepted speed) is deliberately NOT advanced by
+     * a rejected segment: a single glitchy fix corrupts the two segments that
+     * touch it, and measuring both against the real speed either side rejects
+     * both. Only positive jumps are gated — a deceleration can never inflate a
+     * maximum, and hard braking is physically fine, so a downward change is
+     * always accepted and simply re-anchors to the lower speed. The first
+     * accepted segment has no prior speed to compare, so it is admitted on the
+     * absolute cap alone.
+     *
+     * `inline` so the index accessors and the [onAccepted] callback are inlined
+     * and no intermediate list is allocated over a route of up to
+     * [DriveRecorder.MAX_ROUTE_POINTS] points.
+     */
+    private inline fun scanPlausibleSegments(
+        size: Int,
+        latitude: (Int) -> Double,
+        longitude: (Int) -> Double,
+        timestampMs: (Int) -> Long,
+        onAccepted: (index: Int, impliedSpeedMps: Double) -> Unit,
+    ) {
+        if (size < 2) return
+        var anchor: Double? = null
         for (i in 1 until size) {
             val deltaMs = timestampMs(i) - timestampMs(i - 1)
             if (deltaMs <= 0) continue
+            val elapsedSeconds = deltaMs / 1000.0
             val distance =
                 haversineMetres(latitude(i - 1), longitude(i - 1), latitude(i), longitude(i))
-            val impliedSpeed = distance / (deltaMs / 1000.0)
-            // Same >200 km/h GPS-glitch guard the distance total applies; also
-            // drop any non-finite result defensively.
+            val impliedSpeed = distance / elapsedSeconds
+            // Absolute >200 km/h backstop (+ non-finite guard). A rejected
+            // segment must not advance the anchor.
             if (!impliedSpeed.isFinite() || impliedSpeed > MAX_PLAUSIBLE_SPEED_MPS) continue
-            if (top == null || impliedSpeed > top) top = impliedSpeed
+            val previous = anchor
+            if (previous != null) {
+                val budgetSeconds = minOf(elapsedSeconds, ACCEL_WINDOW_CAP_SECONDS)
+                val maxIncrease = MAX_PLAUSIBLE_ACCEL_MPS2 * budgetSeconds
+                // Only positive jumps are implausible; a slowdown is always fine.
+                if (impliedSpeed - previous > maxIncrease) continue
+            }
+            anchor = impliedSpeed
+            onAccepted(i, impliedSpeed)
         }
-        return top
     }
 
     /**
