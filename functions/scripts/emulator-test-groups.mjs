@@ -67,7 +67,7 @@ export const GROUPS = [
       'friends',
       'dm',
       'user-search',
-      'chatchannels',
+      'chatchannels*',
       'communityDigest',
       'notifications*',
       'block*',

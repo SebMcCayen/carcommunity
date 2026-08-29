@@ -23,6 +23,7 @@ import {
   parseListCommunityInput,
   parseListConvoyInput,
   parseMarkReadCommunityInput,
+  parseAdminDeleteCommunityMessageInput,
   parseMarkReadConvoyInput,
   parsePostCommunityInput,
   parsePostConvoyInput,
@@ -167,6 +168,29 @@ describe('chat-core parsing', () => {
     expect(parseMarkReadConvoyInput({ convoyId: 'bad/id' }).ok).toBe(false);
     expect(parseMarkReadConvoyInput({ convoyId: '..' }).ok).toBe(false);
     expect(parseMarkReadConvoyInput({ convoyId: 'c-1', extra: 1 }).ok).toBe(false);
+  });
+
+  it('parses chatchannels.adminDeleteMessage strictly (messageId required, reason optional)', () => {
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: 'msg-1' })).toEqual({
+      ok: true,
+      input: { messageId: 'msg-1' },
+    });
+    expect(
+      parseAdminDeleteCommunityMessageInput({ messageId: 'msg-1', reason: 'spam' }),
+    ).toEqual({ ok: true, input: { messageId: 'msg-1', reason: 'spam' } });
+    // messageId is a single Firestore document-id segment — no traversal.
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: 'bad/id' }).ok).toBe(false);
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: '..' }).ok).toBe(false);
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: '' }).ok).toBe(false);
+    expect(parseAdminDeleteCommunityMessageInput({}).ok).toBe(false);
+    expect(parseAdminDeleteCommunityMessageInput(null).ok).toBe(false);
+    // A blank reason is rejected (min 1 after trim); over-cap reason rejected.
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: 'm', reason: '   ' }).ok).toBe(false);
+    expect(
+      parseAdminDeleteCommunityMessageInput({ messageId: 'm', reason: 'x'.repeat(2001) }).ok,
+    ).toBe(false);
+    // No unknown keys.
+    expect(parseAdminDeleteCommunityMessageInput({ messageId: 'm', extra: 1 }).ok).toBe(false);
   });
 });
 

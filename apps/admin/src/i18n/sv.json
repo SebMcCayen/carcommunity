@@ -1204,14 +1204,21 @@
     "dismiss": "Avfärda",
     "reopen": "Återöppna",
     "resolvePending": "Uppdaterar…",
+    "messageSnapshotLabel": "Meddelande",
+    "deleteMessage": "Radera meddelande",
+    "deletePending": "Raderar…",
     "confirmReviewed": "Markera anmälan som granskad?",
     "confirmDismissed": "Avfärda anmälan? Den markeras som avfärdad utan åtgärd.",
     "confirmReopen": "Återöppna anmälan? Den flyttas tillbaka till väntande.",
+    "confirmDeleteMessage": "Radera det anmälda meddelandet från community-chatten permanent? Det tas bort för alla och relaterade anmälningar markeras som granskade. Originaltexten sparas i händelseloggen.",
     "resolveSuccess": {
       "reviewed": "Anmälan markerad som granskad.",
       "dismissed": "Anmälan avfärdad.",
       "pending": "Anmälan återöppnad."
     },
+    "deleteSuccess": "Meddelandet raderades och anmälan markerades som granskad.",
+    "alreadyDeleted": "Meddelandet var redan borttaget – inga fler ändringar gjordes.",
+    "deleteError": "Kunde inte radera meddelandet.",
     "alreadyResolved": "Anmälan hade redan den statusen – ingen ändring gjordes.",
     "resolveError": "Kunde inte uppdatera anmälans status."
   },

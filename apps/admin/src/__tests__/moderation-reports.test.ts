@@ -21,7 +21,10 @@ const runTransactionMock = vi.fn();
 const txGetMock = vi.fn();
 const txUpdateMock = vi.fn();
 
+const callAdminMock = vi.fn();
+
 vi.mock('../lib/firestore', () => ({ getAdminFirestore: () => ({}) }));
+vi.mock('../lib/callables', () => ({ callAdmin: (...args: unknown[]) => callAdminMock(...args) }));
 vi.mock('firebase/firestore', () => ({
   doc: (_db: unknown, ...segments: unknown[]) => ({ segments }),
   collection: (_db: unknown, ...segments: unknown[]) => ({ segments }),
@@ -36,10 +39,13 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import {
+  ADMIN_DELETE_COMMUNITY_MESSAGE_CALLABLE,
   ApiError,
   MODERATION_REPORTS_PAGE_SIZE,
+  adminDeleteCommunityMessage,
   adminGetModerationReport,
   adminListModerationReports,
+  isCommunityMessageReport,
   resolveModerationReport,
   toAdminModerationReport,
 } from '../features/moderation-reports';
@@ -59,6 +65,7 @@ beforeEach(() => {
   runTransactionMock.mockReset();
   txGetMock.mockReset();
   txUpdateMock.mockReset();
+  callAdminMock.mockReset();
   // Default: run the callback against the mocked transaction handle, like the
   // real SDK does on a contention-free attempt.
   runTransactionMock.mockImplementation(
@@ -87,7 +94,56 @@ describe('toAdminModerationReport mapping', () => {
       details: 'Repeated abusive replies.',
       status: 'pending',
       createdAt: '2026-07-01T10:00:00.000Z',
+      // New callable-report fields are always present (null when absent).
+      surface: null,
+      snapshotText: null,
+      snapshotAuthorUserId: null,
+      snapshotAuthorDisplayName: null,
     });
+  });
+
+  it('maps a community-message report with its snapshot + surface', () => {
+    const row = toAdminModerationReport('report-cm', {
+      reportedBy: 'reporter-uid',
+      targetType: 'message',
+      targetId: 'msg-community-1',
+      reason: 'hate_or_abuse',
+      details: null,
+      status: 'pending',
+      createdAt: ts('2026-08-01T10:00:00.000Z'),
+      surface: 'community',
+      scopeId: 'global',
+      reportedUserId: 'author-uid',
+      snapshot: {
+        text: 'the reported message body',
+        authorUserId: 'author-uid',
+        authorDisplayName: 'Author Name',
+        createdAt: '2026-08-01T09:00:00.000Z',
+      },
+    });
+    expect(row.surface).toBe('community');
+    expect(row.snapshotText).toBe('the reported message body');
+    expect(row.snapshotAuthorUserId).toBe('author-uid');
+    expect(row.snapshotAuthorDisplayName).toBe('Author Name');
+    expect(isCommunityMessageReport(row)).toBe(true);
+  });
+
+  it('tolerates a corrupt/absent snapshot on a message report', () => {
+    const row = toAdminModerationReport('report-bad-snap', {
+      reportedBy: 'r',
+      targetType: 'message',
+      targetId: 'm',
+      reason: 'spam',
+      status: 'pending',
+      createdAt: ts('2026-08-01T00:00:00.000Z'),
+      surface: 'community',
+      // snapshot is a non-object — must degrade to nulls, never throw.
+      snapshot: 'not-an-object',
+    });
+    expect(row.snapshotText).toBeNull();
+    expect(row.snapshotAuthorUserId).toBeNull();
+    // Still a community message report (surface is set) even with no snapshot.
+    expect(isCommunityMessageReport(row)).toBe(true);
   });
 
   it('treats the document ID as canonical (never a stored id field)', () => {
@@ -416,5 +472,70 @@ describe('resolveModerationReport', () => {
 
   it('re-exports ApiError for page-level error narrowing', () => {
     expect(new ApiError(404, 'not-found', 'x')).toBeInstanceOf(Error);
+  });
+});
+
+describe('isCommunityMessageReport', () => {
+  const base = {
+    id: 'r',
+    reportedBy: 'u',
+    targetId: 't',
+    reason: 'spam',
+    details: null,
+    status: 'pending' as const,
+    createdAt: null,
+    snapshotText: null,
+    snapshotAuthorUserId: null,
+    snapshotAuthorDisplayName: null,
+  };
+
+  it('is true only for a community-surface message report', () => {
+    expect(isCommunityMessageReport({ ...base, targetType: 'message', surface: 'community' })).toBe(
+      true,
+    );
+  });
+
+  it('is false for a convoy/DM message report (not admin-reachable from here)', () => {
+    expect(isCommunityMessageReport({ ...base, targetType: 'message', surface: 'convoy' })).toBe(
+      false,
+    );
+    expect(isCommunityMessageReport({ ...base, targetType: 'message', surface: 'dm' })).toBe(false);
+  });
+
+  it('is false for a person report or a message report with no surface', () => {
+    expect(isCommunityMessageReport({ ...base, targetType: 'user', surface: null })).toBe(false);
+    expect(isCommunityMessageReport({ ...base, targetType: 'message', surface: null })).toBe(false);
+  });
+});
+
+describe('adminDeleteCommunityMessage', () => {
+  it('calls the delete callable with the messageId + reason and returns its result', async () => {
+    callAdminMock.mockResolvedValue({ messageId: 'msg-1', deleted: true, resolvedReports: 2 });
+
+    const result = await adminDeleteCommunityMessage('msg-1', 'spam');
+
+    expect(result).toEqual({ messageId: 'msg-1', deleted: true, resolvedReports: 2 });
+    expect(callAdminMock).toHaveBeenCalledWith(ADMIN_DELETE_COMMUNITY_MESSAGE_CALLABLE, {
+      messageId: 'msg-1',
+      reason: 'spam',
+    });
+  });
+
+  it('omits an absent reason from the payload', async () => {
+    callAdminMock.mockResolvedValue({ messageId: 'msg-2', deleted: false, resolvedReports: 0 });
+
+    await adminDeleteCommunityMessage('msg-2');
+
+    expect(callAdminMock).toHaveBeenCalledWith(ADMIN_DELETE_COMMUNITY_MESSAGE_CALLABLE, {
+      messageId: 'msg-2',
+    });
+  });
+
+  it('propagates a callable error (e.g. permission-denied) to the caller', async () => {
+    callAdminMock.mockRejectedValue(new ApiError(403, 'permission-denied', 'nope'));
+    await expect(adminDeleteCommunityMessage('msg-3')).rejects.toMatchObject({
+      statusCode: 403,
+      code: 'permission-denied',
+    });
   });
 });

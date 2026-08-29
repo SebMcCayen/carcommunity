@@ -223,6 +223,7 @@ import {
   post as convoyChatPost,
 } from './chatchannels/convoyChat';
 import { reportMessage as chatChannelsReportMessage } from './chatchannels/reportMessage';
+import { adminDeleteMessage as chatChannelsAdminDeleteMessage } from './chatchannels/adminDeleteMessage';
 import { reportMessage as dmReportMessage } from './dm/reportMessage';
 import { reportUser as moderationReportUser } from './moderation/reportUser';
 
@@ -1392,6 +1393,7 @@ export const convoyChat = {
  */
 export const chatchannels = {
   reportMessage: chatChannelsReportMessage,
+  adminDeleteMessage: chatChannelsAdminDeleteMessage,
 };
 
 /**

@@ -425,6 +425,35 @@ export function parseMarkReadConvoyInput(data: unknown): ParseResult<MarkReadCon
   return parse(markReadConvoySchema, data, MARK_READ_CONVOY_EXPECTED);
 }
 
+/**
+ * Admin moderation delete of a single GLOBAL community-chat message.
+ *
+ * `messageId` is the community message doc id (same alphabet as every other id
+ * on this channel, so a hostile id is invalid-argument rather than a traversal
+ * into another document). `reason` is an OPTIONAL moderator note recorded in the
+ * adminAuditEvents record; when absent the callable stamps a default so the
+ * audit row is never blank. Unlike events.removeChatMessage (which requires a
+ * reason) the admin queue's delete is a one-click action from an already-triaged
+ * report, so the reason is optional here.
+ */
+const adminDeleteCommunityMessageSchema = z
+  .object({
+    messageId: idSchema,
+    reason: z.string().trim().min(1).max(2000).optional(),
+  })
+  .strict();
+
+export type AdminDeleteCommunityMessageInput = z.infer<typeof adminDeleteCommunityMessageSchema>;
+
+export const ADMIN_DELETE_COMMUNITY_MESSAGE_EXPECTED =
+  'Expected { messageId, reason? } with reason 1..2000 characters.';
+
+export function parseAdminDeleteCommunityMessageInput(
+  data: unknown,
+): ParseResult<AdminDeleteCommunityMessageInput> {
+  return parse(adminDeleteCommunityMessageSchema, data, ADMIN_DELETE_COMMUNITY_MESSAGE_EXPECTED);
+}
+
 /** User-facing messages (clients branch on the HttpsError code, never text). */
 export const EMPTY_MESSAGE_MESSAGE = 'Message cannot be empty.';
 export const NOT_DELIVERABLE_MESSAGE = 'This message cannot be delivered right now.';
