@@ -47,6 +47,7 @@ fun SubscriptionScreen(
         when {
             verifiedTier == "supporter" -> R.string.subscription_currentEntitlementSupporter
             verifiedTier == "plus" -> R.string.subscription_currentEntitlementPlus
+            hasVerifiedPaidTier -> R.string.subscription_currentEntitlementMember
             isActiveMember -> R.string.subscription_currentEntitlementMember
             else -> R.string.subscription_currentEntitlementFree
         }

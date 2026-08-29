@@ -1137,6 +1137,42 @@ describe('subscription module', () => {
     });
   });
 
+  it('maps an active legacy paid entitlement with a missing or invalid tier to Plus', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'google',
+          status: 'active',
+          entitlement: 'member_monthly',
+          tier: 'unknown_paid_tier',
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.subscription).toMatchObject({
+      entitlement: 'member_monthly',
+      tier: 'plus',
+    });
+  });
+
+  it('maps a retained paid tier with no entitlement to Community', async () => {
+    getDocMock
+      .mockResolvedValueOnce({
+        data: () => ({
+          platform: 'google',
+          status: 'inactive',
+          entitlement: 'none',
+          tier: 'supporter',
+        }),
+      })
+      .mockResolvedValueOnce({ data: () => ({ suspended: false }) });
+    const summary = await adminGetUserSubscription('u1');
+    expect(summary.subscription).toMatchObject({
+      entitlement: 'none',
+      tier: 'community',
+    });
+  });
+
   it('grants and revokes membership via subscription-grantEntitlement', async () => {
     callAdminMock.mockResolvedValue({ targetUid: 'u1', entitlement: 'member_monthly' });
     await adminGrantMembership('u1', 'Kampanj');
