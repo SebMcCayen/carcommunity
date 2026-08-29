@@ -837,7 +837,7 @@ export function parseGrantEarlyTesterInput(
     return {
       ok: false,
       message:
-        'Expected { uids: string[] (1..500), reason?: string } for the early-tester grant.',
+        'Expected { uids: string[] (1..200), reason?: string } for the early-tester grant.',
     };
   }
   // De-duplicate while preserving first-seen order, so a list with repeats
