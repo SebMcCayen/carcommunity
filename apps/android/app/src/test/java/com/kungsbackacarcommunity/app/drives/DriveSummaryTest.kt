@@ -282,6 +282,88 @@ class DriveSummaryTest {
         assertNull(DriveSummary.topSpeedPoint(route))
     }
 
+    // --- GPS spike rejection UNDER the absolute 200 km/h cap (the reported bug) ---
+    // A position glitch on a real ~80 km/h drive can imply ~150 km/h for one
+    // segment — comfortably under MAX_PLAUSIBLE_SPEED_MPS, so the absolute cap
+    // waves it through and the max is inflated ~70 km/h. The acceleration guard
+    // rejects it without clipping genuinely high, SUSTAINED speeds.
+
+    /** Longitude delta (degrees) spanning [metres] east at latitude [atLat]. */
+    private fun lonOffsetForMetres(metres: Double, atLat: Double): Double =
+        metres / (6_371_000.0 * Math.PI / 180.0 * Math.cos(Math.toRadians(atLat)))
+
+    @Test
+    fun `a lone sub-200kmh spike is rejected from the top speed`() {
+        // Real 20 m/s (72 km/h) cruise at a 5 s fix cadence, with ONE segment
+        // implying 43 m/s (~155 km/h) — a GPS glitch well under the 55.6 m/s
+        // absolute cap. Old behaviour: 43 m/s becomes the top speed (the bug).
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(100.0) // 100 m / 5 s = 20 m/s
+        val lat2 = lat1 + latOffsetForMetres(215.0) // 215 m / 5 s = 43 m/s spike
+        val lat3 = lat2 + latOffsetForMetres(100.0) // 100 m / 5 s = 20 m/s
+        val points =
+            listOf(
+                point(lat0, 12.0, 0L),
+                point(lat1, 12.0, 5_000L),
+                point(lat2, 12.0, 10_000L),
+                point(lat3, 12.0, 15_000L),
+            )
+        val top = DriveSummary.topSpeedMetersPerSecond(points)
+        assertNotNull(top)
+        // The 43 m/s spike is dropped; the real 20 m/s cruise stands.
+        assertEquals(20.0, top!!, 0.3)
+        // The marker agrees: it is NOT placed at the spike (index 2).
+        val marker = DriveSummary.topSpeedPoint(points.map { RoutePoint(it.latitude, it.longitude, it.timestampMs) })
+        assertNotNull(marker)
+        assertEquals(top, marker!!.metersPerSecond, 0.0)
+        assertTrue("marker must not sit on the spike segment", marker.index != 2)
+    }
+
+    @Test
+    fun `a genuinely sustained high speed is kept`() {
+        // Accelerate 20 -> 30 -> 40 m/s over 5 s steps, then hold 40 m/s
+        // (144 km/h). Each step is plausible acceleration, so the true top is
+        // kept — the guard must not clip a real fast drive.
+        var lat = 57.0
+        val ts = mutableListOf(0L)
+        val lats = mutableListOf(lat)
+        val speeds = listOf(20.0, 30.0, 40.0, 40.0) // per 5 s segment
+        speeds.forEachIndexed { i, s ->
+            lat += latOffsetForMetres(s * 5.0)
+            lats += lat
+            ts += (i + 1) * 5_000L
+        }
+        val points = lats.indices.map { point(lats[it], 12.0, ts[it]) }
+        val top = DriveSummary.topSpeedMetersPerSecond(points)
+        assertNotNull(top)
+        assertEquals(40.0, top!!, 0.4)
+    }
+
+    @Test
+    fun `a single-point sideways glitch is rejected on both of its segments`() {
+        // A lone fix that jumps ~215 m EAST and back corrupts the TWO segments
+        // touching it (out, then back) — both imply > 40 m/s while the real
+        // drive is 20 m/s. Because a rejected segment does not advance the trust
+        // anchor, both halves are measured against the real speed and rejected.
+        val lat0 = 57.0
+        val lat1 = lat0 + latOffsetForMetres(100.0)
+        val lat3 = lat0 + latOffsetForMetres(200.0)
+        val lat4 = lat0 + latOffsetForMetres(300.0)
+        val points =
+            listOf(
+                point(lat0, 12.0, 0L),
+                point(lat1, 12.0, 5_000L), // seg1: 20 m/s
+                // Glitch: same latitude as p1 but flung ~215 m east.
+                point(lat1, 12.0 + lonOffsetForMetres(215.0, 57.0), 10_000L),
+                point(lat3, 12.0, 15_000L), // back on the real line
+                point(lat4, 12.0, 20_000L), // seg4: 20 m/s
+            )
+        val top = DriveSummary.topSpeedMetersPerSecond(points)
+        assertNotNull(top)
+        // Neither inflated glitch segment (~43 and ~47 m/s) survives.
+        assertEquals(20.0, top!!, 0.5)
+    }
+
     @Test
     fun `top speed point keeps the first of two equally fast segments`() {
         // Two identical 20 m/s legs; a tie must resolve to the EARLIER segment,
