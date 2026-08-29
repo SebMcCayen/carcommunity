@@ -228,7 +228,9 @@ describe('chatchannels.adminDeleteMessage', () => {
     expect(auditData.adminId).toBe(admin.uid);
     expect(auditData.details?.originalText).toBe('delete me please');
     expect(auditData.details?.authorUserId).toBe(author.uid);
-    expect(auditData.details?.resolvedReports).toBe(1);
+    // Audit records the open-reports count observed just before the delete
+    // (not the resolved count — resolution is best-effort and runs afterwards).
+    expect(auditData.details?.pendingReportsAtDelete).toBe(1);
 
     // A re-delete is idempotent — no throw, nothing removed.
     await signInAs(admin);
@@ -273,7 +275,10 @@ describe('chatchannels.adminDeleteMessage', () => {
         createdAt: new Date(),
       });
       pending += 1;
-      if (pending === 450) {
+      // Commit each seed batch at the shared cap constant, never a hard-coded
+      // number — so this can't drift past Firestore's 500-write limit if the
+      // constant changes.
+      if (pending === REPORT_RESOLVE_BATCH_SIZE) {
         await seedBatch.commit();
         seedBatch = adminDb.batch();
         pending = 0;

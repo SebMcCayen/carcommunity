@@ -216,10 +216,13 @@ export const adminDeleteMessage = onCall(
                 typeof message.senderDisplayName === 'string' ? message.senderDisplayName : null,
               // Original text preserved for audit — the live message is gone.
               originalText: typeof message.text === 'string' ? message.text : null,
-              // The number of open reports found for this message (the intended
-              // resolution count; the actual committed count is returned to the
-              // caller and may be lower on a partial batch failure).
-              resolvedReports: openReportRefs.length,
+              // The number of OPEN reports observed just before the delete — a
+              // true fact at audit-write time, and useful context for a
+              // moderator. It is deliberately NOT called "resolved": resolution
+              // is best-effort and runs AFTER this transaction (batched, plus a
+              // straggler re-query), so the count actually resolved can differ.
+              // The callable's RETURN `resolvedReports` carries the committed count.
+              pendingReportsAtDelete: openReportRefs.length,
             },
           },
           serverTimestamp,
