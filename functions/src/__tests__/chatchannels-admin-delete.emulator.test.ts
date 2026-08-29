@@ -311,6 +311,53 @@ describe('chatchannels.adminDeleteMessage', () => {
     expect(last.data()?.status).toBe('reviewed');
   });
 
+  it('does NOT overwrite a concurrent dismissed/reviewed decision back to reviewed', async () => {
+    // Another admin's terminal decision on a report must survive a message
+    // delete: the resolution runs in per-chunk transactions that re-read status
+    // and touch ONLY still-'pending' reports. A blind update would flip an
+    // already-'dismissed' report to 'reviewed' — this asserts it does not.
+    const author = await newMember(`Author-${SFX}-conc`);
+    const admin = await newMember(`Admin-${SFX}-conc`);
+    await makeAdmin(admin);
+
+    await signInAs(author);
+    const posted = (await call('communityChat-post', { text: 'concurrent-decision message' }))
+      .data as { messageId: string };
+    const messageId = posted.messageId;
+
+    const mk = (status: string) => ({
+      reportedBy: `seed-${status}`,
+      targetType: 'message',
+      targetId: messageId,
+      reason: 'spam',
+      status,
+      surface: 'community',
+      scopeId: 'global',
+      reportedUserId: author.uid,
+      createdAt: new Date(),
+    });
+    const pendingId = `${SFX}-conc-pending-${messageId}`;
+    const dismissedId = `${SFX}-conc-dismissed-${messageId}`;
+    const reviewedId = `${SFX}-conc-reviewed-${messageId}`;
+    await adminDb.collection('moderationReports').doc(pendingId).set(mk('pending'));
+    await adminDb.collection('moderationReports').doc(dismissedId).set(mk('dismissed'));
+    await adminDb.collection('moderationReports').doc(reviewedId).set(mk('reviewed'));
+
+    await signInAs(admin);
+    const result = (await call('chatchannels-adminDeleteMessage', { messageId }))
+      .data as DeleteResponse;
+    expect(result.deleted).toBe(true);
+    // Only the one still-pending report is resolved.
+    expect(result.resolvedReports).toBe(1);
+
+    const statusOf = async (id: string) =>
+      (await adminDb.collection('moderationReports').doc(id).get()).data()?.status;
+    expect(await statusOf(pendingId)).toBe('reviewed');
+    // The other admins' decisions are respected — never overwritten.
+    expect(await statusOf(dismissedId)).toBe('dismissed');
+    expect(await statusOf(reviewedId)).toBe('reviewed');
+  });
+
   it('rejects an invalid messageId with invalid-argument', async () => {
     const admin = await newMember(`Admin-${SFX}-2`);
     await makeAdmin(admin);

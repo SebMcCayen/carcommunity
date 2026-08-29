@@ -46,8 +46,8 @@
  *
  * WRITE-COUNT SAFETY (Firestore caps a transaction/batch at 500 writes). The
  * ATOMIC, critical part — the message DELETE + the adminAuditEvents record — is
- * the ONLY thing inside the transaction (2 writes, always). The pending reports
- * are resolved AFTER the transaction in batched commits of
+ * the ONLY thing inside the delete transaction (2 writes, always). The pending
+ * reports are resolved AFTER the delete, in per-chunk transactions of at most
  * REPORT_RESOLVE_BATCH_SIZE (<= 500). This is deliberate: a heavily-reported
  * message (the one an admin most needs to gone) can carry hundreds of open
  * reports, and folding one update-per-report into the delete transaction would
@@ -56,6 +56,12 @@
  * best-effort bookkeeping — a chunk that fails just leaves some reports 'pending'
  * in the queue while the message is already gone (logged, PII-free; an admin can
  * re-run the delete, which is idempotent, or resolve the stragglers by hand).
+ *
+ * CONCURRENT ADMIN DECISIONS ARE RESPECTED. Each resolution chunk runs in its own
+ * transaction that RE-READS the reports and moves ONLY the ones still 'pending'
+ * to 'reviewed'. If another admin flips one of them to 'dismissed'/'reviewed' in
+ * the window between our query and the write, that decision stands — it is never
+ * clobbered back to 'reviewed'. (A blind batch update would have overwritten it.)
  *
  * The pending reports are re-QUERIED after the delete transaction (not reused
  * from the pre-transaction read), which closes the race where a report filed in
@@ -135,11 +141,23 @@ async function queryPendingReportRefs(
 }
 
 /**
- * Resolves the given open-report refs to 'reviewed' in batched commits of
- * REPORT_RESOLVE_BATCH_SIZE, AFTER the delete transaction. Best-effort: a
- * failing chunk is logged (PII-free — only the count + message id, never report
- * contents) and skipped, so it never fails a delete that already committed.
- * Returns how many reports were actually committed.
+ * Resolves the given open-report refs to 'reviewed', AFTER the delete
+ * transaction, in per-chunk TRANSACTIONS of at most REPORT_RESOLVE_BATCH_SIZE.
+ *
+ * Each chunk runs in its own transaction that RE-READS every ref and updates
+ * only the ones still at OPEN_REPORT_STATUS at commit time — so a concurrent
+ * decision by another admin (a report they flipped to 'dismissed'/'reviewed' in
+ * the window between our query and this write) is RESPECTED, never clobbered
+ * back to 'reviewed'. A blind batch.update would have overwritten it.
+ *
+ * The chunk size keeps both the read set and the write set of each transaction
+ * safely under Firestore's 500 cap (writes <= pending-in-chunk <= chunk size).
+ *
+ * Best-effort across chunks: a failing chunk is logged (PII-free — only the
+ * count + message id, never report contents) and skipped, so it never fails a
+ * delete that already committed; a re-run of the callable (idempotent) or the
+ * post-delete straggler re-query picks up whatever it left. Returns how many
+ * reports this call actually moved to 'reviewed'.
  */
 async function resolvePendingReports(
   reportRefs: readonly FirebaseFirestore.DocumentReference[],
@@ -147,15 +165,18 @@ async function resolvePendingReports(
 ): Promise<number> {
   let resolved = 0;
   for (const group of chunk(reportRefs, REPORT_RESOLVE_BATCH_SIZE)) {
-    const batch = db.batch();
-    for (const ref of group) {
-      batch.update(ref, { status: RESOLVED_REPORT_STATUS });
-    }
     try {
-      await batch.commit();
-      resolved += group.length;
+      resolved += await db.runTransaction(async (tx) => {
+        // All reads first (Firestore transaction rule), then the writes.
+        const snaps = await tx.getAll(...group);
+        const stillOpen = snaps.filter((snap) => snap.get('status') === OPEN_REPORT_STATUS);
+        for (const snap of stillOpen) {
+          tx.update(snap.ref, { status: RESOLVED_REPORT_STATUS });
+        }
+        return stillOpen.length;
+      });
     } catch (error) {
-      logger.error('chatchannels.adminDeleteMessage: report-resolution batch failed', {
+      logger.error('chatchannels.adminDeleteMessage: report-resolution chunk failed', {
         messageId,
         chunkSize: group.length,
         error: error instanceof Error ? error.message : String(error),
