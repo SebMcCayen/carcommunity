@@ -297,6 +297,7 @@ import com.kungsbackacarcommunity.app.live.FirebaseWaveRepository
 import com.kungsbackacarcommunity.app.live.LiveMarker
 import com.kungsbackacarcommunity.app.live.WaveCircleControl
 import com.kungsbackacarcommunity.app.live.WavePresence
+import com.kungsbackacarcommunity.app.live.WaveRangeGate
 import com.kungsbackacarcommunity.app.live.WaveSendResult
 import com.kungsbackacarcommunity.app.live.LiveSharerPopup
 import com.kungsbackacarcommunity.app.live.LiveSessionDuration
@@ -5559,6 +5560,31 @@ fun AuthenticatedApp(
                 // SERVER is the source of truth (it refuses an early send and returns
                 // the exact remaining window, applied below on RateLimited).
                 var waveCooldownUntilMs by remember { mutableLongStateOf(0L) }
+
+                // PER-TARGET range-based anti-spam gate: once you wave, every driver
+                // currently in range is remembered as "already waved this visit" and
+                // the wave is no longer offered until they LEAVE and re-enter range.
+                // Layers on top of the 45 s server cooldown (the authoritative
+                // backstop). The gate is a pure holder; a version tick republishes it
+                // to Compose whenever it mutates so the visibility below recomposes.
+                val waveRangeGate = remember { WaveRangeGate() }
+                var waveGateVersion by remember { mutableIntStateOf(0) }
+                // The current in-range uids — the SAME roster the wave affordance is
+                // gated on (nearbyLiveMarkers). Reconcile the gate on every change so a
+                // driver leaving range clears their "already waved" mark.
+                val inRangeUids = remember(nearbyLiveMarkers) { nearbyLiveMarkers.map { it.uid } }
+                LaunchedEffect(inRangeUids) {
+                    waveRangeGate.onRangeSet(inRangeUids)
+                    waveGateVersion++
+                }
+                // The count of in-range drivers still waveable this visit. Keyed on
+                // both the roster AND the gate version so it recomputes when a driver
+                // enters/leaves range OR a wave marks the current set as done — the
+                // Compose-observable read that drives the control's visibility.
+                val waveWaveableCount =
+                    remember(inRangeUids, waveGateVersion) {
+                        waveRangeGate.waveableCount(inRangeUids)
+                    }
                 val waveCaptionFmt = stringResource(R.string.wave_caption)
                 val waveCaptionAnon = stringResource(R.string.wave_captionAnonymous)
                 val waveCaptionSelf = stringResource(R.string.wave_captionSelf)
@@ -5593,6 +5619,13 @@ fun AuthenticatedApp(
                     onWaveTap@{
                         val repo = waveRepository ?: return@onWaveTap
                         val clientId = UUID.randomUUID().toString().replace("-", "")
+                        // The broadcast waves every driver currently in range, so mark
+                        // them all "already waved this visit": the control hides until a
+                        // not-yet-waved driver is around, or one of these leaves range
+                        // and comes back. This is the range-based gate; the cooldown
+                        // below is the server-mirrored time backstop.
+                        waveRangeGate.onWaved(inRangeUids)
+                        waveGateVersion++
                         waveCooldownUntilMs = WavePresence.cooldownUntil(System.currentTimeMillis())
                         waveOverlayEvent =
                             ReactionOverlayEvent(
@@ -5624,7 +5657,12 @@ fun AuthenticatedApp(
                                 visible =
                                     WavePresence.isWaveControlVisible(
                                         isSharingLive = isSharing,
-                                        nearbyLiveUserCount = nearbyLiveMarkers.size,
+                                        // WAVEABLE in-range drivers — those not yet
+                                        // waved this visit — so the control hides once
+                                        // everyone in range has been waved and returns
+                                        // when a fresh driver appears or a waved one
+                                        // leaves and re-enters range.
+                                        nearbyLiveUserCount = waveWaveableCount,
                                     ),
                                 cooldownUntilMs = waveCooldownUntilMs,
                                 onWave = onWaveTap,
