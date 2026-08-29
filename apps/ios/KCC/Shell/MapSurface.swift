@@ -380,7 +380,9 @@ struct MapCameraSnapshot: Equatable, Sendable {
         guard value.isFinite else { return 0.0 }
         var factor = 1.0
         for _ in 0..<decimals { factor *= 10.0 }
-        return (value * factor).rounded() / factor
+        // Ties round to even, the same rule as Android's `kotlin.math.round`,
+        // so both platforms snapshot an identical camera to identical values.
+        return (value * factor).rounded(.toNearestOrEven) / factor
     }
 }
 

@@ -74,6 +74,28 @@ final class MapSurfaceTests: XCTestCase {
         // default 700 ms.
         await surface.simulateInitialLoadIfNeeded(delay: .zero)
         XCTAssertEqual(surface.loadState, .loaded)
+        // A second call is a no-op: the simulation only runs while the state
+        // is still `.loading`. The long delay proves it returns immediately
+        // rather than re-running the load.
+        await surface.simulateInitialLoadIfNeeded(delay: .seconds(60))
+        XCTAssertEqual(surface.loadState, .loaded)
+    }
+
+    func testSimulateInitialLoadIsANoOpWhenAlreadyLoaded() async {
+        let surface = StubMapSurface(initialState: .loaded)
+        await surface.simulateInitialLoadIfNeeded(delay: .seconds(60))
+        XCTAssertEqual(surface.loadState, .loaded)
+    }
+
+    func testCancellingTheSimulatedLoadLeavesTheStateUntouched() async {
+        // The doc contract: cancelling the surrounding task before the delay
+        // elapses leaves the state untouched — mirroring Android's cancelled
+        // LaunchedEffect.
+        let surface = StubMapSurface()
+        let load = Task { await surface.simulateInitialLoadIfNeeded(delay: .seconds(60)) }
+        load.cancel()
+        await load.value
+        XCTAssertEqual(surface.loadState, .loading)
     }
 
     func testMarkLoadedForcesTheLoadedState() {
@@ -133,6 +155,26 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertNil(surface.eventTap)
         XCTAssertNil(surface.crownTap)
         XCTAssertNil(surface.billboardTap)
+    }
+
+    func testIncidentTapNeverRaisesAPlaceRequest() {
+        // Marker taps and place gestures are separate channels — an incident
+        // tap must never leak into the place-request slot (mirrors the
+        // Android seam's separation).
+        let surface = StubMapSurface(autoLoad: false)
+        surface.emitIncidentTap("incident-1")
+        XCTAssertEqual(surface.incidentTap, "incident-1")
+        XCTAssertNil(surface.placeRequest)
+    }
+
+    func testASecondTapInTheSameSlotSupersedesTheFirst() {
+        let surface = StubMapSurface(autoLoad: false)
+        surface.emitIncidentTap("incident-1")
+        surface.emitIncidentTap("incident-2")
+        // One slot, one pending tap — the later gesture wins.
+        XCTAssertEqual(surface.incidentTap, "incident-2")
+        surface.consumeIncidentTap()
+        XCTAssertNil(surface.incidentTap)
     }
 
     // MARK: - compass / recenter wiring
@@ -306,6 +348,17 @@ final class MapSurfaceTests: XCTestCase {
         XCTAssertEqual(a.zoom, 16.0, accuracy: 1e-9)
         XCTAssertEqual(a.bearing, 0, accuracy: 1e-9)
         XCTAssertEqual(a.pitch, 45, accuracy: 1e-9)
+    }
+
+    func testCameraSnapshotRoundsTiesToEvenMatchingAndroid() {
+        // Kotlin's `round` resolves .5 ties to the nearest EVEN integer;
+        // the snapshot must do the same so both platforms round an identical
+        // camera to identical values: 42.5 -> 42 (down), 43.5 -> 44 (up).
+        let snapshot = MapCameraSnapshot.of(
+            latitude: 0, longitude: 0, zoom: 16, bearing: 42.5, pitch: 43.5
+        )
+        XCTAssertEqual(snapshot.bearing, 42, accuracy: 1e-9)
+        XCTAssertEqual(snapshot.pitch, 44, accuracy: 1e-9)
     }
 
     func testCameraSnapshotZeroesNonFiniteComponents() {
