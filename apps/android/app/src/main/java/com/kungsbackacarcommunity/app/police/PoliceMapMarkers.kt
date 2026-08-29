@@ -48,7 +48,7 @@ object PoliceMapMarkers {
 
     /**
      * Coincidence threshold in RAW degrees, applied independently to latitude and
-     * longitude (see [isNearAnyIncident]). 1e-4° is ~11 m of LATITUDE everywhere;
+     * longitude (see [coincidesWithAnyIncident]). 1e-4° is ~11 m of LATITUDE everywhere;
      * for LONGITUDE a degree shrinks with latitude, so 1e-4° is a TIGHTER bound
      * east-west (≈6 m at Sweden's ~59°N) — fine here, since the pin and the
      * Police-category INCIDENT created by ONE "report police" tap land at the
