@@ -71,9 +71,11 @@ enum class ReportAvailability {
 
 object MessageModeration {
     /**
-     * Whether reporting a MESSAGE is wired for [surface]. Only event chat has a
-     * report callable today (`events-reportChatMessage`); see the file KDoc for
-     * the exact callables the other surfaces are waiting on.
+     * Whether reporting a MESSAGE is wired for [surface]. Event chat
+     * (`events-reportChatMessage`) and the community channel
+     * (`chatchannels-reportMessage`, channel: 'community') are wired today; the
+     * convoy channel and DMs are not yet (see the per-branch note below and the
+     * file KDoc for the callables they are waiting on).
      */
     fun reportAvailability(surface: ChatSurface): ReportAvailability =
         when (surface) {
