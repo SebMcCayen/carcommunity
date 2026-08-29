@@ -196,9 +196,15 @@ function coerceStatus(raw: unknown): ModerationReportStatus {
     : 'pending';
 }
 
-/** Coerces an optional string field to a non-empty string, else null. */
+/**
+ * Coerces an optional string field to a non-null value only when it has
+ * non-whitespace content, else null. Trims before the empty check so a
+ * whitespace-only string (e.g. a corrupt '   ' surface) maps to null rather than
+ * a truthy value; the ORIGINAL (untrimmed) string is returned when non-blank, so
+ * meaningful leading/trailing spaces in a message snapshot are preserved.
+ */
 function toNullableString(value: unknown): string | null {
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
 }
 
 export function toAdminModerationReport(id: string, data: DocumentData): AdminModerationReport {

@@ -146,6 +146,45 @@ describe('toAdminModerationReport mapping', () => {
     expect(isCommunityMessageReport(row)).toBe(true);
   });
 
+  it('maps whitespace-only nullable fields to null (not a truthy blank)', () => {
+    const row = toAdminModerationReport('report-ws', {
+      reportedBy: 'r',
+      targetType: 'message',
+      targetId: 'm',
+      reason: 'spam',
+      status: 'pending',
+      createdAt: ts('2026-08-01T00:00:00.000Z'),
+      // A corrupt whitespace-only surface must map to null, not '   '.
+      surface: '   ',
+      snapshot: {
+        text: '   ',
+        authorUserId: '\t\n',
+        authorDisplayName: ' ',
+      },
+    });
+    expect(row.surface).toBeNull();
+    expect(row.snapshotText).toBeNull();
+    expect(row.snapshotAuthorUserId).toBeNull();
+    expect(row.snapshotAuthorDisplayName).toBeNull();
+    // A null surface means it is NOT a deletable community message report.
+    expect(isCommunityMessageReport(row)).toBe(false);
+  });
+
+  it('preserves meaningful leading/trailing spaces in a non-blank snapshot', () => {
+    const row = toAdminModerationReport('report-pad', {
+      reportedBy: 'r',
+      targetType: 'message',
+      targetId: 'm',
+      reason: 'spam',
+      status: 'pending',
+      createdAt: ts('2026-08-01T00:00:00.000Z'),
+      surface: 'community',
+      snapshot: { text: '  hello  ', authorUserId: 'a', authorDisplayName: 'A' },
+    });
+    // Non-blank content is returned untrimmed — the message body is not mangled.
+    expect(row.snapshotText).toBe('  hello  ');
+  });
+
   it('treats the document ID as canonical (never a stored id field)', () => {
     const row = toAdminModerationReport('doc-id', {
       // A hand-edited doc might carry a stray/foreign id field — it must not win.

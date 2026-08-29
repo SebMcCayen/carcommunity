@@ -107,9 +107,18 @@ export interface AdminDeleteCommunityMessageResponse {
 
 /**
  * The still-`pending` moderationReports refs that escalated THIS community
- * message. Two equality filters (surface + targetId), no range and no orderBy,
- * so Firestore serves it by merging single-field indexes — NO composite index.
- * `targetId` is the reported messageId (moderation-core
+ * message. THREE equality filters (surface + targetId + status), no range and
+ * no orderBy — Firestore serves an equality-only query by merging single-field
+ * indexes (zigzag merge join), so NO composite index is required no matter how
+ * many equality terms it has (the pre-existing surface+targetId query already
+ * relied on this; adding status is the same class — verified there is no
+ * surface/targetId composite in firebase/firestore.indexes.json).
+ *
+ * The `status` filter is SERVER-SIDE deliberately: a message can accumulate many
+ * already reviewed/dismissed reports over its 120-day retention, and filtering
+ * status client-side would make the admin delete read every historical report
+ * for that message. Filtering server-side reads ONLY the open ones — the exact
+ * set this callable acts on. `targetId` is the reported messageId (moderation-core
  * buildMessageReportDocument); `surface` pins it to the community channel so a
  * same-id message on another surface can't be swept in.
  */
@@ -120,8 +129,9 @@ async function queryPendingReportRefs(
     .collection(MODERATION_REPORTS_COLLECTION)
     .where('surface', '==', 'community')
     .where('targetId', '==', messageId)
+    .where('status', '==', OPEN_REPORT_STATUS)
     .get();
-  return snap.docs.filter((doc) => doc.data().status === OPEN_REPORT_STATUS).map((doc) => doc.ref);
+  return snap.docs.map((doc) => doc.ref);
 }
 
 /**
