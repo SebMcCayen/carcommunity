@@ -9,8 +9,14 @@
 /* Begin PBXBuildFile section */
 		08ED336A66B293E73A27E257 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD356449B915D60437161C4F /* Tokens.swift */; };
 		13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF81B13C98719E049F390996 /* MapSurface.swift */; };
+		1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */; };
 		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
 		2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */; };
+		2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FD0E994263AEF5E23FE59538 /* FirebaseFunctions */; };
+		38341C0532CB5C9152336422 /* EventsCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D2BF1BAD556A8C3D22925AB /* EventsCoordinator.swift */; };
+		39D345B7A1C416A1B6469E28 /* EventsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92EC568281BD1016FABE9919 /* EventsScreen.swift */; };
+		4205D21D03B3C87AC978B782 /* EventsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17DE72EC857215D18C55F5F /* EventsRepository.swift */; };
+		48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */; };
 		54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1669E70D4D1058BBFE53B2E /* RootView.swift */; };
 		5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */; };
 		697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */; };
@@ -21,11 +27,17 @@
 		7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A240814194538E5F33BD391 /* KCCApp.swift */; };
 		7C14EF2819D1D418929F4C63 /* AppleSignInProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */; };
 		878A768EA4269808A5DE4AD2 /* SignInScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */; };
+		8D0B56DF9BD0EB28E457338C /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = B688C912C571A1CC3752D0B8 /* FirebaseFirestore */; };
+		94B224E99B1DDE286A4FDF06 /* KccFunctionsError.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51CD341A4027796948864A5C /* KccFunctionsError.swift */; };
+		B0559DC40D219348A5611670 /* FirebaseEventsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */; };
 		C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */; };
+		DA04F6E3D0F1737A1F3C045D /* EventsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF465D5E8668C38571889BC0 /* EventsModels.swift */; };
+		E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693946E5862A24E475BE6ED3 /* EventsModelTests.swift */; };
 		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
 		E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB4411241111CAD26506FD14 /* Localizable.xcstrings */; };
 		EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */; };
 		F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */; };
+		F9A3DAFA5B59B49C00839395 /* KccFunctionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */; };
 		FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -43,23 +55,33 @@
 		00786BDC5D7D80DF3558096D /* ShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellView.swift; sourceTree = "<group>"; };
 		165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseAuthRepository.swift; sourceTree = "<group>"; };
 		1A240814194538E5F33BD391 /* KCCApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KCCApp.swift; sourceTree = "<group>"; };
+		2D2BF1BAD556A8C3D22925AB /* EventsCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsCoordinator.swift; sourceTree = "<group>"; };
 		343B6E8AA56D06395AD48108 /* AuthSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthSession.swift; sourceTree = "<group>"; };
 		4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurfaceTests.swift; sourceTree = "<group>"; };
+		51CD341A4027796948864A5C /* KccFunctionsError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsError.swift; sourceTree = "<group>"; };
 		57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinatorTests.swift; sourceTree = "<group>"; };
 		5A1F61264065E19240C32A0D /* KCCTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = KCCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInScreen.swift; sourceTree = "<group>"; };
 		690A7983868C88E10091C89A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		693946E5862A24E475BE6ED3 /* EventsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModelTests.swift; sourceTree = "<group>"; };
 		8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
 		8B4A1900424F0BA9CB9105FA /* KCC.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KCC.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		92EC568281BD1016FABE9919 /* EventsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsScreen.swift; sourceTree = "<group>"; };
 		93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinator.swift; sourceTree = "<group>"; };
 		AB4411241111CAD26506FD14 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsClient.swift; sourceTree = "<group>"; };
+		AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsCoordinatorTests.swift; sourceTree = "<group>"; };
 		B1669E70D4D1058BBFE53B2E /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileScreen.swift; sourceTree = "<group>"; };
 		C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseBootstrap.swift; sourceTree = "<group>"; };
 		C80A81EA9949BF434E7C246D /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
+		CF465D5E8668C38571889BC0 /* EventsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModels.swift; sourceTree = "<group>"; };
 		CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInProvider.swift; sourceTree = "<group>"; };
+		D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsErrorTests.swift; sourceTree = "<group>"; };
+		D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseEventsRepository.swift; sourceTree = "<group>"; };
 		DD356449B915D60437161C4F /* Tokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tokens.swift; sourceTree = "<group>"; };
 		DF81B13C98719E049F390996 /* MapSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapSurface.swift; sourceTree = "<group>"; };
+		F17DE72EC857215D18C55F5F /* EventsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsRepository.swift; sourceTree = "<group>"; };
 		F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNav.swift; sourceTree = "<group>"; };
 		FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellNavTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -70,6 +92,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				796D4208F306EAFA0B940C3E /* FirebaseAuth in Frameworks */,
+				8D0B56DF9BD0EB28E457338C /* FirebaseFirestore in Frameworks */,
+				2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -100,6 +124,7 @@
 				07E79EF0F21135E662C9816C /* App */,
 				9469984432E4AD2C953FD6CF /* Auth */,
 				6CA551C0241BD4456236BBBD /* Design */,
+				5B6F5419639D89F3942A28C5 /* Events */,
 				EF108D173C02293016E81C0D /* Firebase */,
 				A65CB7303F6D8424A87E5D3B /* Profile */,
 				3C9357116487CACE984AFAEC /* Resources */,
@@ -124,6 +149,18 @@
 				F609A800CAF387D91FC4893D /* KCCTests */,
 				4CDCB20F1F46BDF788444D9D /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		5B6F5419639D89F3942A28C5 /* Events */ = {
+			isa = PBXGroup;
+			children = (
+				2D2BF1BAD556A8C3D22925AB /* EventsCoordinator.swift */,
+				CF465D5E8668C38571889BC0 /* EventsModels.swift */,
+				F17DE72EC857215D18C55F5F /* EventsRepository.swift */,
+				92EC568281BD1016FABE9919 /* EventsScreen.swift */,
+				D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */,
+			);
+			path = Events;
 			sourceTree = "<group>";
 		};
 		6CA551C0241BD4456236BBBD /* Design */ = {
@@ -170,6 +207,8 @@
 			isa = PBXGroup;
 			children = (
 				C3137C1DDC1B111033698002 /* FirebaseBootstrap.swift */,
+				AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */,
+				51CD341A4027796948864A5C /* KccFunctionsError.swift */,
 			);
 			path = Firebase;
 			sourceTree = "<group>";
@@ -177,6 +216,9 @@
 		F609A800CAF387D91FC4893D /* KCCTests */ = {
 			isa = PBXGroup;
 			children = (
+				AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */,
+				693946E5862A24E475BE6ED3 /* EventsModelTests.swift */,
+				D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */,
 				4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */,
 				FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */,
 				57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */,
@@ -203,6 +245,8 @@
 			name = KCC;
 			packageProductDependencies = (
 				C10372A5B1FF04CFD7520C67 /* FirebaseAuth */,
+				B688C912C571A1CC3752D0B8 /* FirebaseFirestore */,
+				FD0E994263AEF5E23FE59538 /* FirebaseFunctions */,
 			);
 			productName = KCC;
 			productReference = 8B4A1900424F0BA9CB9105FA /* KCC.app */;
@@ -305,9 +349,16 @@
 				6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */,
 				292854460109584A07D618C1 /* AuthSession.swift in Sources */,
 				E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */,
+				38341C0532CB5C9152336422 /* EventsCoordinator.swift in Sources */,
+				DA04F6E3D0F1737A1F3C045D /* EventsModels.swift in Sources */,
+				4205D21D03B3C87AC978B782 /* EventsRepository.swift in Sources */,
+				39D345B7A1C416A1B6469E28 /* EventsScreen.swift in Sources */,
 				EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */,
 				C9EB9AFEE9024C2136112616 /* FirebaseBootstrap.swift in Sources */,
+				B0559DC40D219348A5611670 /* FirebaseEventsRepository.swift in Sources */,
 				7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */,
+				F9A3DAFA5B59B49C00839395 /* KccFunctionsClient.swift in Sources */,
+				94B224E99B1DDE286A4FDF06 /* KccFunctionsError.swift in Sources */,
 				13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */,
 				5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */,
 				54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */,
@@ -323,6 +374,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */,
+				E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */,
+				48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */,
 				FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */,
 				71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */,
 				2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */,
@@ -573,10 +627,20 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		B688C912C571A1CC3752D0B8 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
 		C10372A5B1FF04CFD7520C67 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseAuth;
+		};
+		FD0E994263AEF5E23FE59538 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2463E4F930BC5BDBC34F663 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

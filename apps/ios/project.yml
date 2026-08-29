@@ -31,6 +31,14 @@ targets:
     dependencies:
       - package: Firebase
         product: FirebaseAuth
+      # Events read path: direct Firestore snapshot listeners, mirroring
+      # Android's FirebaseEventsRepository.
+      - package: Firebase
+        product: FirebaseFirestore
+      # Callable seam (KccFunctionsClient) — every KCC callable lives in
+      # europe-west1.
+      - package: Firebase
+        product: FirebaseFunctions
     info:
       path: KCC/Info.plist
       properties:
