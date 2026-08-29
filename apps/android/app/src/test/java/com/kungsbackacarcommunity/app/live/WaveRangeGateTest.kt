@@ -119,6 +119,35 @@ class WaveRangeGateTest {
     }
 
     @Test
+    fun `reconciling on the FULL roster keeps a beyond-draw-cap driver marked while still in range`() {
+        // The bug: if the gate is reconciled against only the drawn (capped) markers,
+        // a previously-waved driver outside that cap (uid 51..200) is wrongly
+        // forgotten when the tracked markers cycle, and the wave re-enables for them.
+        // Driving onRangeSet/onWaved from the FULL discovery roster fixes it: as long
+        // as a driver stays in that roster they keep their "waved" mark even though
+        // they are NOT among a smaller drawn subset.
+        val gate = WaveRangeGate()
+        val fullRoster = (1..60).map { "u$it" } // > the 50-marker draw cap
+        gate.onRangeSet(fullRoster)
+        gate.onWaved(fullRoster)
+
+        // The drawn subset shifts (older markers drop, u51.. rotate in) but everyone
+        // is STILL in the discovery roster, so reconciling on it forgets nobody.
+        gate.onRangeSet(fullRoster)
+
+        // A driver beyond the draw cap stays blocked...
+        assertFalse(gate.canWave("u55"))
+        // ...and the count over ANY drawn subset of them is 0 (control stays hidden).
+        val drawnSubset = (11..60).map { "u$it" }
+        assertEquals(0, gate.waveableCount(drawnSubset))
+
+        // Only genuinely LEAVING the full roster re-enables u55.
+        gate.onRangeSet(fullRoster.filterNot { it == "u55" })
+        gate.onRangeSet(fullRoster)
+        assertTrue(gate.canWave("u55"))
+    }
+
+    @Test
     fun `re-waving after a driver cycles out and back in is allowed`() {
         val gate = WaveRangeGate()
         gate.onRangeSet(listOf("a"))
