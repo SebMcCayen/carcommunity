@@ -224,7 +224,12 @@ export default function ModerationReportsPage() {
       setActionError(null);
       setSuccessMessage(null);
       try {
-        const result = await adminDeleteCommunityMessage(report.targetId, report.reason);
+        // Deliberately pass NO reason: the callable's `reason` is a MODERATOR
+        // note (the backend stamps a default when omitted). The report's
+        // `reason` is the REPORTER's category (e.g. "spam"), so forwarding it
+        // would misrepresent what the moderator did in the admin audit log. If a
+        // note field is ever added to this UI, pass it only when non-empty.
+        const result = await adminDeleteCommunityMessage(report.targetId);
         // Reload so the report's now-resolved status (and any sibling reports on
         // the same message) reflect the backend's transactional resolution.
         await load(filter);

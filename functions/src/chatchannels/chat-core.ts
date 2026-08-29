@@ -118,6 +118,32 @@ export function messagePreview(text: string): string {
 export const COMMUNITY_CHANNEL_ID = 'global';
 
 /**
+ * Max writes per batched Firestore commit used when resolving the pending
+ * moderationReports of a deleted community message. Firestore caps a batch (and
+ * a transaction) at 500 writes; 450 leaves headroom. A heavily-reported message
+ * can have hundreds of open reports, so the admin-delete resolves them in
+ * chunks of this size OUTSIDE the delete transaction — see
+ * chatchannels/adminDeleteMessage.ts.
+ */
+export const REPORT_RESOLVE_BATCH_SIZE = 450;
+
+/**
+ * Splits `items` into contiguous chunks of at most `size` (the last is the
+ * remainder). Pure + Firebase-free so the batching arithmetic is unit-testable
+ * without the emulator. `size` must be >= 1.
+ */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  if (size < 1) {
+    throw new RangeError('chunk size must be >= 1');
+  }
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
+/**
  * Hard cap on @mentions per message — the whole reason a mention producer is
  * affordable where a per-message community fan-out is not. It bounds the post's
  * extra I/O (at most this many profile + block lookups, batched) AND the inbox

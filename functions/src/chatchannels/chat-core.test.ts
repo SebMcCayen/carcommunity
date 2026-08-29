@@ -9,8 +9,10 @@ import {
   CONVOY_LAST_READ_MAX_ENTRIES,
   COMMUNITY_REPLY_NOTIFY_WINDOW_MS,
   MAX_MESSAGE_MENTIONS,
+  REPORT_RESOLVE_BATCH_SIZE,
   acceptedConvoyMemberUids,
   buildChatMessageDocument,
+  chunk,
   buildReplyToSnapshot,
   chatMessageExpiry,
   communityMentionNotificationId,
@@ -713,5 +715,45 @@ describe('chat-core isAlreadyExistsError (atomic keyed-send guard)', () => {
     expect(isAlreadyExistsError(undefined)).toBe(false);
     expect(isAlreadyExistsError(null)).toBe(false);
     expect(isAlreadyExistsError('boom')).toBe(false);
+  });
+});
+
+describe('chunk (report-resolution batching)', () => {
+  it('returns no chunks for an empty input', () => {
+    expect(chunk([], 450)).toEqual([]);
+  });
+
+  it('returns a single chunk when the input fits in one batch', () => {
+    expect(chunk([1, 2, 3], 450)).toEqual([[1, 2, 3]]);
+  });
+
+  it('splits into contiguous chunks of at most `size`, last is the remainder', () => {
+    expect(chunk([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
+  });
+
+  it('splits an exact multiple with no trailing empty chunk', () => {
+    expect(chunk([1, 2, 3, 4], 2)).toEqual([[1, 2], [3, 4]]);
+  });
+
+  it('splits a many-reports count that would exceed one Firestore batch', () => {
+    // The whole point of the batched resolution: a heavily-reported message can
+    // carry more open reports than a single transaction/batch (500-write cap)
+    // could ever resolve. 1000 > REPORT_RESOLVE_BATCH_SIZE, so it must split.
+    const refs = Array.from({ length: 1000 }, (_, i) => i);
+    const groups = chunk(refs, REPORT_RESOLVE_BATCH_SIZE);
+    expect(groups.length).toBe(Math.ceil(1000 / REPORT_RESOLVE_BATCH_SIZE));
+    // No chunk exceeds the cap, and every element is covered exactly once.
+    expect(groups.every((g) => g.length <= REPORT_RESOLVE_BATCH_SIZE)).toBe(true);
+    expect(groups.reduce((n, g) => n + g.length, 0)).toBe(1000);
+    expect(groups.flat()).toEqual(refs);
+  });
+
+  it('keeps the batch size at or under the Firestore 500-write cap', () => {
+    expect(REPORT_RESOLVE_BATCH_SIZE).toBeLessThanOrEqual(500);
+    expect(REPORT_RESOLVE_BATCH_SIZE).toBeGreaterThanOrEqual(1);
+  });
+
+  it('rejects a non-positive chunk size', () => {
+    expect(() => chunk([1], 0)).toThrow(RangeError);
   });
 });

@@ -39,6 +39,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { REPORT_RESOLVE_BATCH_SIZE } from '../chatchannels/chat-core';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -233,6 +234,76 @@ describe('chatchannels.adminDeleteMessage', () => {
     await signInAs(admin);
     const again = (await call('chatchannels-adminDeleteMessage', { messageId })).data as DeleteResponse;
     expect(again).toMatchObject({ messageId, deleted: false, resolvedReports: 0 });
+  });
+
+  it('resolves MORE reports than a single Firestore transaction/batch could hold', async () => {
+    // A heavily-reported message: more open reports than the 500-write cap (and
+    // more than one resolution batch), proving the delete does NOT fold
+    // report-resolution into the delete transaction. This is exactly the message
+    // an admin most needs gone, so it must never fail on report count.
+    const author = await newMember(`Author-${SFX}-many`);
+    const admin = await newMember(`Admin-${SFX}-many`);
+    await makeAdmin(admin);
+
+    await signInAs(author);
+    const posted = (await call('communityChat-post', { text: 'mass reported message' })).data as {
+      messageId: string;
+    };
+    const messageId = posted.messageId;
+
+    // Seed synthetic pending reports directly (fast; the report callable's own
+    // per-reporter rate limit would otherwise cap us at 10). Count spans more
+    // than one resolution batch.
+    const reportCount = REPORT_RESOLVE_BATCH_SIZE + 25;
+    const seededIds: string[] = [];
+    let seedBatch = adminDb.batch();
+    let pending = 0;
+    for (let i = 0; i < reportCount; i += 1) {
+      const ref = adminDb.collection('moderationReports').doc(`${SFX}-mass-${messageId}-${i}`);
+      seededIds.push(ref.id);
+      seedBatch.set(ref, {
+        reportedBy: `seed-reporter-${i}`,
+        targetType: 'message',
+        targetId: messageId,
+        reason: 'spam',
+        status: 'pending',
+        surface: 'community',
+        scopeId: 'global',
+        reportedUserId: author.uid,
+        createdAt: new Date(),
+      });
+      pending += 1;
+      if (pending === 450) {
+        await seedBatch.commit();
+        seedBatch = adminDb.batch();
+        pending = 0;
+      }
+    }
+    if (pending > 0) await seedBatch.commit();
+
+    // Delete: the message is removed and EVERY seeded report resolves, across
+    // multiple batches, without hitting the transaction write cap.
+    await signInAs(admin);
+    const result = (await call('chatchannels-adminDeleteMessage', { messageId })).data as DeleteResponse;
+    expect(result.deleted).toBe(true);
+    expect(result.resolvedReports).toBe(reportCount);
+
+    const rawSnap = await adminDb
+      .collection('communityChat')
+      .doc('global')
+      .collection('messages')
+      .doc(messageId)
+      .get();
+    expect(rawSnap.exists).toBe(false);
+
+    // Spot-check the first and last seeded report both moved to 'reviewed'.
+    const first = await adminDb.collection('moderationReports').doc(seededIds[0]!).get();
+    const last = await adminDb
+      .collection('moderationReports')
+      .doc(seededIds[seededIds.length - 1]!)
+      .get();
+    expect(first.data()?.status).toBe('reviewed');
+    expect(last.data()?.status).toBe('reviewed');
   });
 
   it('rejects an invalid messageId with invalid-argument', async () => {
