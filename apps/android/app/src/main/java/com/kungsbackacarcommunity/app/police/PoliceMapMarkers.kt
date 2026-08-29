@@ -1,7 +1,9 @@
 package com.kungsbackacarcommunity.app.police
 
 import com.kungsbackacarcommunity.app.R
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import com.kungsbackacarcommunity.app.shell.MapIncidentMarker
+import kotlin.math.abs
 
 /**
  * Maps live police pins to the shell's [MapIncidentMarker] drawing primitives, so
@@ -44,9 +46,32 @@ object PoliceMapMarkers {
     /** White glyph, for contrast on the blue disc. */
     const val GLYPH_COLOR_ARGB: Int = 0xFFFFFFFF.toInt()
 
-    /** One police [MapIncidentMarker] per pin, ready to append to the layer's list. */
-    fun markers(pins: List<PoliceReport>): List<MapIncidentMarker> =
-        pins.map { pin ->
+    /**
+     * ~11 m expressed in latitude/longitude degrees. A police pin and a
+     * Police-category INCIDENT created by ONE "report police" tap land at the
+     * identical GPS fix, so any gap between them is only backend rounding; two
+     * genuinely distinct police sightings this close are the same spot on a moving
+     * map anyway. Used by [markers] to suppress the coincident duplicate.
+     */
+    const val INCIDENT_COINCIDENCE_EPSILON_DEG: Double = 1e-4
+
+    /**
+     * One police [MapIncidentMarker] per pin, ready to append to the layer's list.
+     *
+     * [suppressNearPoliceIncidents] are the locations of the Police-category
+     * incident markers ALREADY drawn by the incident layer. A police pin coincident
+     * with one of them is DROPPED here: reporting a police sighting from the map
+     * creates BOTH a Police incident AND its short-TTL proximity pin at the same
+     * fix, and both render as the identical blue police disc — so without this the
+     * one sighting is drawn TWICE (the "two police icons" bug). Only the redundant
+     * DRAW is removed; the full pin list still drives the proximity ALERT, and a
+     * pin with no coincident incident (e.g. a convoy signal) is unaffected.
+     */
+    fun markers(
+        pins: List<PoliceReport>,
+        suppressNearPoliceIncidents: List<LatLng> = emptyList(),
+    ): List<MapIncidentMarker> =
+        pins.filterNot { pin -> coincidesWithAnyIncident(pin, suppressNearPoliceIncidents) }.map { pin ->
             MapIncidentMarker(
                 id = POLICE_MARKER_ID_PREFIX + pin.id,
                 longitude = pin.longitude,
@@ -58,5 +83,16 @@ object PoliceMapMarkers {
                 // fade — they are transient and age out on their own TTL.
                 reportedCleared = false,
             )
+        }
+
+    /**
+     * True when [pin] sits within [INCIDENT_COINCIDENCE_EPSILON_DEG] of any of the
+     * given Police-incident [incidents] — i.e. the same sighting the incident layer
+     * is already drawing, so this pin must not be drawn a second time.
+     */
+    private fun coincidesWithAnyIncident(pin: PoliceReport, incidents: List<LatLng>): Boolean =
+        incidents.any { incident ->
+            abs(pin.latitude - incident.latitude) <= INCIDENT_COINCIDENCE_EPSILON_DEG &&
+                abs(pin.longitude - incident.longitude) <= INCIDENT_COINCIDENCE_EPSILON_DEG
         }
 }

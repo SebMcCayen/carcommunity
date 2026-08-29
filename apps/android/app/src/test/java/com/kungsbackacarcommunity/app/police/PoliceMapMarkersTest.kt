@@ -2,6 +2,7 @@ package com.kungsbackacarcommunity.app.police
 
 import com.kungsbackacarcommunity.app.incidents.IncidentPalette
 import com.kungsbackacarcommunity.app.incidents.IncidentType
+import com.kungsbackacarcommunity.app.navigation.LatLng
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,6 +15,9 @@ import org.junit.Test
 class PoliceMapMarkersTest {
     private fun pin(id: String) =
         PoliceReport(id = id, latitude = 57.5, longitude = 12.0, source = "manual", expiresAtIso = null)
+
+    private fun pinAt(id: String, latitude: Double, longitude: Double) =
+        PoliceReport(id = id, latitude = latitude, longitude = longitude, source = "manual", expiresAtIso = null)
 
     @Test
     fun `namespaces the marker id so it never collides with an incident id`() {
@@ -48,5 +52,60 @@ class PoliceMapMarkersTest {
     @Test
     fun `empty in empty out`() {
         assertTrue(PoliceMapMarkers.markers(emptyList()).isEmpty())
+    }
+
+    @Test
+    fun `suppresses a pin coincident with a Police incident so the sighting is drawn once`() {
+        // One "report police" tap drops BOTH a Police incident and its proximity
+        // pin at the same fix; the incident layer already draws the incident, so
+        // the coincident pin must NOT add a second identical blue disc.
+        val markers =
+            PoliceMapMarkers.markers(
+                pins = listOf(pinAt("p1", 57.5, 12.0)),
+                suppressNearPoliceIncidents = listOf(LatLng(latitude = 57.5, longitude = 12.0)),
+            )
+        assertTrue(markers.isEmpty())
+    }
+
+    @Test
+    fun `suppresses a pin within the coincidence epsilon of a Police incident`() {
+        // Backend rounding can nudge the pin a metre or two off the incident's
+        // stored fix; still the same sighting, still suppressed.
+        val nudge = PoliceMapMarkers.INCIDENT_COINCIDENCE_EPSILON_DEG / 2
+        val markers =
+            PoliceMapMarkers.markers(
+                pins = listOf(pinAt("p1", 57.5 + nudge, 12.0 - nudge)),
+                suppressNearPoliceIncidents = listOf(LatLng(latitude = 57.5, longitude = 12.0)),
+            )
+        assertTrue(markers.isEmpty())
+    }
+
+    @Test
+    fun `keeps a pin that has no coincident Police incident`() {
+        // A pin far from any Police incident (e.g. a convoy police signal) is a
+        // real, separately-drawn sighting and must survive.
+        val markers =
+            PoliceMapMarkers.markers(
+                pins = listOf(pinAt("p1", 57.6, 12.2)),
+                suppressNearPoliceIncidents = listOf(LatLng(latitude = 57.5, longitude = 12.0)),
+            )
+        assertEquals(listOf("police:p1"), markers.map { it.id })
+    }
+
+    @Test
+    fun `drops only the coincident pin and keeps the rest`() {
+        val markers =
+            PoliceMapMarkers.markers(
+                pins = listOf(pinAt("dup", 57.5, 12.0), pinAt("far", 57.9, 12.9)),
+                suppressNearPoliceIncidents = listOf(LatLng(latitude = 57.5, longitude = 12.0)),
+            )
+        assertEquals(listOf("police:far"), markers.map { it.id })
+    }
+
+    @Test
+    fun `no suppression list draws every pin`() {
+        val markers =
+            PoliceMapMarkers.markers(listOf(pinAt("a", 57.5, 12.0), pinAt("b", 57.5, 12.0)))
+        assertEquals(listOf("police:a", "police:b"), markers.map { it.id })
     }
 }
