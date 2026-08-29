@@ -155,8 +155,16 @@ class ChannelChatCoordinator(
      */
     suspend fun report(messageId: String, reason: ChatReportReason) {
         val submit = reporter ?: return
-        if (report.value == ChannelReportStatus.Reporting) return
-        report.value = ChannelReportStatus.Reporting
+        // Atomic in-flight claim: report() is launched from UI taps
+        // (scope.launch{}), so two rapid taps race. A plain
+        // `if (value == Reporting) return; value = Reporting` lets BOTH taps pass
+        // the check before either writes, double-filing. CAS-flip into Reporting
+        // so exactly one tap proceeds (same pattern as ShareLocationCoordinator).
+        while (true) {
+            val prev = report.value
+            if (prev == ChannelReportStatus.Reporting) return
+            if (report.compareAndSet(expect = prev, update = ChannelReportStatus.Reporting)) break
+        }
         try {
             report.value =
                 when (submit(messageId, reason)) {
