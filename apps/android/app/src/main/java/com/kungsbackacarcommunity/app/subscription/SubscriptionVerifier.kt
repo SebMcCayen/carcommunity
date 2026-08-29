@@ -1,11 +1,10 @@
 package com.kungsbackacarcommunity.app.subscription
 
 import android.content.Context
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.FirebaseApp
 import com.google.firebase.functions.FirebaseFunctions
-import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
-import kotlinx.coroutines.suspendCancellableCoroutine
+import com.kungsbackacarcommunity.app.firebase.awaitOrThrow
 
 /**
  * Verifies a Play purchase server-side (Phase 12 slice 24). Firebase-free
@@ -20,30 +19,31 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * from this slice.
  */
 interface SubscriptionVerifier {
-    suspend fun verify(purchaseToken: String)
+    suspend fun verify(purchaseToken: String): SubscriptionVerificationResult
 }
 
 /** [SubscriptionVerifier] backed by the `subscription-verify` callable. */
 class FirebaseSubscriptionVerifier private constructor(
     private val functions: FirebaseFunctions,
+    private val auth: FirebaseAuth,
 ) : SubscriptionVerifier {
 
-    override suspend fun verify(purchaseToken: String): Unit =
-        suspendCancellableCoroutine { continuation ->
+    override suspend fun verify(purchaseToken: String): SubscriptionVerificationResult {
+        val callableResult =
             functions
                 .getHttpsCallable(VERIFY)
                 .call(buildVerifyPayload(purchaseToken))
-                .addOnCompleteListener { task ->
-                    if (!continuation.isActive) return@addOnCompleteListener
-                    if (task.isSuccessful) {
-                        continuation.resume(Unit)
-                    } else {
-                        continuation.resumeWithException(
-                            task.exception ?: IllegalStateException("$VERIFY failed without a cause"),
-                        )
-                    }
-                }
+                .awaitOrThrow { "$VERIFY failed without a cause" }
+        val verified = parseVerificationResult(callableResult.data)
+        if (verified.grantsAccess) {
+            // applyEntitlement updates the activeMember custom claim. Force a
+            // fresh ID token before reporting success so RTDB/Firestore gates do
+            // not keep using the pre-purchase claim until normal token refresh.
+            val user = auth.currentUser ?: error("No authenticated user after subscription verify")
+            user.getIdToken(true).awaitOrThrow { "Firebase ID token refresh failed" }
         }
+        return verified
+    }
 
     companion object {
         private const val REGION = "europe-west1"
@@ -51,7 +51,10 @@ class FirebaseSubscriptionVerifier private constructor(
 
         fun createIfAvailable(context: Context): SubscriptionVerifier? {
             if (FirebaseApp.getApps(context).isEmpty()) return null
-            return FirebaseSubscriptionVerifier(FirebaseFunctions.getInstance(REGION))
+            return FirebaseSubscriptionVerifier(
+                functions = FirebaseFunctions.getInstance(REGION),
+                auth = FirebaseAuth.getInstance(),
+            )
         }
     }
 }

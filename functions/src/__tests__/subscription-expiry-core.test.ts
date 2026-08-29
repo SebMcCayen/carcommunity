@@ -48,7 +48,7 @@ describe('subscription expiry constants', () => {
    * going blind to it.
    */
   it('sweeps exactly the statuses that grant access', () => {
-    expect([...EXPIRY_SWEEP_STATUSES]).toEqual(['active', 'grace_period']);
+    expect([...EXPIRY_SWEEP_STATUSES]).toEqual(['active', 'grace_period', 'cancelled']);
     for (const status of SUBSCRIPTION_STATUSES) {
       expect(EXPIRY_SWEEP_STATUSES.includes(status)).toBe(isSubscriptionActiveStatus(status));
     }

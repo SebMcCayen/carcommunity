@@ -99,6 +99,14 @@ describe('subscription tier contract', () => {
       true,
     );
     assert.equal(
+      grantsLegacyActiveMember({
+        entitlement: 'member_monthly',
+        status: 'cancelled',
+        tier: 'plus',
+      }),
+      true,
+    );
+    assert.equal(
       grantsLegacyActiveMember({ entitlement: 'none', status: 'active', tier: 'supporter' }),
       false,
     );

@@ -255,9 +255,7 @@ describe('Firestore – badges (Phase 9f)', () => {
         tier: 'platina',
       }),
     );
-    await assertFails(
-      deleteDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'garage_created')),
-    );
+    await assertFails(deleteDoc(doc(ctx.firestore(), 'users', OWNER, 'badges', 'garage_created')));
     // A viewer who can now READ someone else's wall still cannot touch it.
     const otherCtx = testEnv.authenticatedContext(OTHER, { activeMember: true });
     await assertFails(
@@ -418,7 +416,14 @@ describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () 
       await setDoc(doc(ctx.firestore(), 'config', 'perkCatalog'), {
         version: 2,
         perks: [
-          { perkId: 'shield', kind: 'shield', name: 'Sköld', nameEn: 'Shield', iconKey: 'x', costKp: 100 },
+          {
+            perkId: 'shield',
+            kind: 'shield',
+            name: 'Sköld',
+            nameEn: 'Shield',
+            iconKey: 'x',
+            costKp: 100,
+          },
         ],
       });
       // An armed spike-strip trap the OWNER placed — the placer-only hidden-trap
@@ -491,9 +496,7 @@ describe('Firestore – Kronjakt shop (perkInventory + config/perkCatalog)', () 
       .firestore();
     await assertFails(getDoc(doc(suspendedFs, 'config', 'perkCatalog')));
 
-    await assertFails(
-      setDoc(doc(memberFs, 'config', 'perkCatalog'), { version: 2, perks: [] }),
-    );
+    await assertFails(setDoc(doc(memberFs, 'config', 'perkCatalog'), { version: 2, perks: [] }));
   });
 });
 
@@ -686,7 +689,9 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
     // Same shape as the client query but asking for a claimed crown — the
     // status term (`resource.data.status == 'live'`) must still deny it, so
     // dropping the time clause did not open non-live crowns.
-    const memberFs = testEnv.authenticatedContext('cs-member-2', { activeMember: true }).firestore();
+    const memberFs = testEnv
+      .authenticatedContext('cs-member-2', { activeMember: true })
+      .firestore();
     const deviceNow = Timestamp.fromMillis(Date.now() - 2000);
     await assertFails(
       getDocs(
@@ -707,7 +712,9 @@ describe('Firestore – crownSpawns auto-spawn member read', () => {
     // single-doc read is evaluated against the ACTUAL document so the server-time
     // check is verifiable. This stops a member fetching an expired-but-unswept
     // crown by ID, while the live one is still gettable.
-    const memberFs = testEnv.authenticatedContext('cs-member-3', { activeMember: true }).firestore();
+    const memberFs = testEnv
+      .authenticatedContext('cs-member-3', { activeMember: true })
+      .firestore();
     await assertSucceeds(getDoc(doc(memberFs, 'crownSpawns', LIVE)));
     await assertFails(getDoc(doc(memberFs, 'crownSpawns', EXPIRED)));
     // Admin bypass still reaches the expired crown (the admin portal sees all).
@@ -916,9 +923,7 @@ describe('Firestore – Kronjakt stats + leaderboard + seasons', () => {
         crownsCollected: 999,
       }),
     );
-    await assertFails(
-      updateDoc(doc(memberFs, 'crownHuntUserStats', MEMBER), { seasonsWon: 99 }),
-    );
+    await assertFails(updateDoc(doc(memberFs, 'crownHuntUserStats', MEMBER), { seasonsWon: 99 }));
   });
 });
 
@@ -1055,9 +1060,7 @@ describe('Firestore – partners (Phase 9i)', () => {
         savedAt: serverTimestamp(),
       }),
     );
-    await assertSucceeds(
-      deleteDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-active')),
-    );
+    await assertSucceeds(deleteDoc(doc(memberFs, 'users', MEMBER, 'savedOffers', 'of-active')));
   });
 
   it('no client writes to companies or offers', async () => {
@@ -1209,7 +1212,10 @@ describe('Firestore – finance recurring costs', () => {
       .firestore();
     await assertFails(getDoc(doc(memberFs, 'financeRecurringCosts', COST_ID)));
     await assertFails(
-      setDoc(doc(memberFs, 'financeRecurringCosts', 'fin-rc-member-created'), { label: 'X', amount: 1 }),
+      setDoc(doc(memberFs, 'financeRecurringCosts', 'fin-rc-member-created'), {
+        label: 'X',
+        amount: 1,
+      }),
     );
   });
 
@@ -1217,7 +1223,10 @@ describe('Firestore – finance recurring costs', () => {
     const anonFs = testEnv.unauthenticatedContext().firestore();
     await assertFails(getDoc(doc(anonFs, 'financeRecurringCosts', COST_ID)));
     await assertFails(
-      setDoc(doc(anonFs, 'financeRecurringCosts', 'fin-rc-anon-created'), { label: 'X', amount: 1 }),
+      setDoc(doc(anonFs, 'financeRecurringCosts', 'fin-rc-anon-created'), {
+        label: 'X',
+        amount: 1,
+      }),
     );
   });
 
@@ -1283,7 +1292,9 @@ describe('Firestore – billboards (Phase 9k)', () => {
     const ctx = testEnv.authenticatedContext('bb-rules-user');
     await assertSucceeds(getDoc(doc(ctx.firestore(), 'billboards', 'bb-active')));
     await assertFails(getDoc(doc(ctx.firestore(), 'billboards', 'bb-draft')));
-    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'billboards', 'bb-active')));
+    await assertFails(
+      getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'billboards', 'bb-active')),
+    );
     const adminCtx = testEnv.authenticatedContext('bb-rules-admin', { admin: true });
     await assertFails(
       updateDoc(doc(adminCtx.firestore(), 'billboards', 'bb-active'), { headline: 'Hacked' }),
@@ -1340,9 +1351,7 @@ describe('Firestore – billboards (Phase 9k)', () => {
       }),
     );
     const userCtx = testEnv.authenticatedContext('bb-img-user');
-    await assertSucceeds(
-      getBytes(storageRef(userCtx.storage(), 'billboardImages/bb-1/hero.png')),
-    );
+    await assertSucceeds(getBytes(storageRef(userCtx.storage(), 'billboardImages/bb-1/hero.png')));
     await assertFails(
       uploadBytes(storageRef(userCtx.storage(), 'billboardImages/bb-1/spoof.png'), data, {
         contentType: 'image/png',
@@ -1578,171 +1587,181 @@ describe('Firestore – config / feature flags (Phase 9m)', () => {
     );
   });
 
-// ---------------------------------------------------------------------------
-// Firestore: diagnostics reports (Phase 9n)
-// Admin-only read; callable-only writes (server-side sanitization).
-// ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // Firestore: diagnostics reports (Phase 9n)
+  // Admin-only read; callable-only writes (server-side sanitization).
+  // ---------------------------------------------------------------------------
 
-describe('Firestore – diagnostics reports (Phase 9n)', () => {
-  const REPORT = 'diagnosticsReports/report-1';
+  describe('Firestore – diagnostics reports (Phase 9n)', () => {
+    const REPORT = 'diagnosticsReports/report-1';
 
-  beforeAll(async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), REPORT), {
-        userId: null,
-        severity: 'error',
-        platform: 'android',
-        featureArea: 'auth',
-        safeMessage: 'seed',
-        fingerprint: 'f'.repeat(64),
-        createdAt: serverTimestamp(),
+    beforeAll(async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), REPORT), {
+          userId: null,
+          severity: 'error',
+          platform: 'android',
+          featureArea: 'auth',
+          safeMessage: 'seed',
+          fingerprint: 'f'.repeat(64),
+          createdAt: serverTimestamp(),
+        });
+      });
+    });
+
+    it('admins can read reports', async () => {
+      const ctx = testEnv.authenticatedContext('diag-admin', { admin: true });
+      await assertSucceeds(getDoc(doc(ctx.firestore(), REPORT)));
+    });
+
+    it('regular users cannot read reports (not even their own)', async () => {
+      const ctx = testEnv.authenticatedContext('diag-user');
+      await assertFails(getDoc(doc(ctx.firestore(), REPORT)));
+    });
+
+    it('clients can never write reports directly (sanitization bypass)', async () => {
+      const ctx = testEnv.authenticatedContext('diag-user');
+      await assertFails(
+        setDoc(doc(ctx.firestore(), 'diagnosticsReports/self-made'), {
+          severity: 'error',
+          safeMessage: 'raw',
+          metadata: { idToken: 'leaked' },
+        }),
+      );
+      const admin = testEnv.authenticatedContext('diag-admin', { admin: true });
+      await assertFails(deleteDoc(doc(admin.firestore(), REPORT)));
+    });
+
+    // ---------------------------------------------------------------------------
+    // Firestore: moderationReports is callable-only
+    // The Phase 9o client `create` path is REMOVED — chatchannels.reportMessage /
+    // dm.reportMessage / moderation.reportUser (and events.reportChatMessage for
+    // event chat) are the only writers. Admins read and may move `status` only.
+    // ---------------------------------------------------------------------------
+
+    describe('Firestore – moderationReports is callable-only', () => {
+      const REPORTER = 'mod-reporter';
+      const validReport = {
+        reportedBy: REPORTER,
+        targetType: 'user',
+        targetId: 'bad-actor',
+        reason: 'harassment',
+        details: 'Upprepade otrevliga meddelanden.',
+        status: 'pending',
+      };
+
+      // A dedicated, pre-seeded report for the admin-review assertions below,
+      // so that test does not depend on the create test having run first.
+      beforeAll(async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+          await setDoc(doc(ctx.firestore(), 'moderationReports/review-target'), {
+            ...validReport,
+            createdAt: serverTimestamp(),
+          });
+        });
+      });
+
+      it('denies a client create even in the previously-valid shape', async () => {
+        // The exact document the Phase 9o rules used to accept. A client create is
+        // now denied outright: it bypasses the report callables' eligibility check
+        // on the surface being reported, their per-reporter rate limit, their
+        // dedup, and the message snapshot.
+        const ctx = testEnv.authenticatedContext(REPORTER);
+        await assertFails(
+          setDoc(doc(ctx.firestore(), 'moderationReports/valid-1'), {
+            ...validReport,
+            createdAt: serverTimestamp(),
+          }),
+        );
+      });
+
+      it('denies a client create aimed at an arbitrary target', async () => {
+        const ctx = testEnv.authenticatedContext(REPORTER);
+        await assertFails(
+          setDoc(doc(ctx.firestore(), 'moderationReports/arbitrary'), {
+            ...validReport,
+            targetType: 'message',
+            targetId: 'a-message-in-a-dm-they-are-not-party-to',
+            createdAt: serverTimestamp(),
+          }),
+        );
+      });
+
+      it('denies an admin client create too (callables use the Admin SDK)', async () => {
+        const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
+        await assertFails(
+          setDoc(doc(admin.firestore(), 'moderationReports/admin-create'), {
+            ...validReport,
+            createdAt: serverTimestamp(),
+          }),
+        );
+      });
+
+      it('denies reads of the per-target report summary to everyone but admins', async () => {
+        await testEnv.withSecurityRulesDisabled(async (ctx) => {
+          await setDoc(doc(ctx.firestore(), 'moderationUserSummaries/bad-actor'), {
+            reportedUserId: 'bad-actor',
+            reporterCount: 3,
+            totalSubmissions: 5,
+            lastReportedAt: serverTimestamp(),
+          });
+        });
+        const reporter = testEnv.authenticatedContext(REPORTER);
+        await assertFails(getDoc(doc(reporter.firestore(), 'moderationUserSummaries/bad-actor')));
+        // Least of all the reported user themselves — the count is a moderation
+        // signal, and surfacing it would be both a harassment vector and a way to
+        // work out who reported whom.
+        const target = testEnv.authenticatedContext('bad-actor');
+        await assertFails(getDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor')));
+        await assertFails(
+          setDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor'), {
+            reporterCount: 0,
+          }),
+        );
+        const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor')));
+        // Admin-READ-only: the aggregate is callable-maintained, not admin-editable.
+        await assertFails(
+          updateDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor'), {
+            reporterCount: 0,
+          }),
+        );
+      });
+
+      it('reporters cannot read, update, or delete their reports (admin-only review)', async () => {
+        const ctx = testEnv.authenticatedContext(REPORTER);
+        await assertFails(getDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
+        await assertFails(
+          updateDoc(doc(ctx.firestore(), 'moderationReports/review-target'), {
+            status: 'reviewed',
+          }),
+        );
+        await assertFails(deleteDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
+        const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
+        await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationReports/review-target')));
+        await assertSucceeds(
+          updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
+            status: 'reviewed',
+          }),
+        );
+        // Admin review updates are status-only: immutable fields stay immutable
+        // and the status vocabulary is closed.
+        await assertFails(
+          updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
+            status: 'reviewed',
+            reason: 'rewritten',
+          }),
+        );
+        await assertFails(
+          updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
+            status: 'archived',
+          }),
+        );
+        // Even admins cannot delete review records.
+        await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/review-target')));
       });
     });
   });
-
-  it('admins can read reports', async () => {
-    const ctx = testEnv.authenticatedContext('diag-admin', { admin: true });
-    await assertSucceeds(getDoc(doc(ctx.firestore(), REPORT)));
-  });
-
-  it('regular users cannot read reports (not even their own)', async () => {
-    const ctx = testEnv.authenticatedContext('diag-user');
-    await assertFails(getDoc(doc(ctx.firestore(), REPORT)));
-  });
-
-  it('clients can never write reports directly (sanitization bypass)', async () => {
-    const ctx = testEnv.authenticatedContext('diag-user');
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'diagnosticsReports/self-made'), {
-        severity: 'error',
-        safeMessage: 'raw',
-        metadata: { idToken: 'leaked' },
-      }),
-    );
-    const admin = testEnv.authenticatedContext('diag-admin', { admin: true });
-    await assertFails(deleteDoc(doc(admin.firestore(), REPORT)));
-  });
-
-// ---------------------------------------------------------------------------
-// Firestore: moderationReports is callable-only
-// The Phase 9o client `create` path is REMOVED — chatchannels.reportMessage /
-// dm.reportMessage / moderation.reportUser (and events.reportChatMessage for
-// event chat) are the only writers. Admins read and may move `status` only.
-// ---------------------------------------------------------------------------
-
-describe('Firestore – moderationReports is callable-only', () => {
-  const REPORTER = 'mod-reporter';
-  const validReport = {
-    reportedBy: REPORTER,
-    targetType: 'user',
-    targetId: 'bad-actor',
-    reason: 'harassment',
-    details: 'Upprepade otrevliga meddelanden.',
-    status: 'pending',
-  };
-
-  // A dedicated, pre-seeded report for the admin-review assertions below,
-  // so that test does not depend on the create test having run first.
-  beforeAll(async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'moderationReports/review-target'), {
-        ...validReport,
-        createdAt: serverTimestamp(),
-      });
-    });
-  });
-
-  it('denies a client create even in the previously-valid shape', async () => {
-    // The exact document the Phase 9o rules used to accept. A client create is
-    // now denied outright: it bypasses the report callables' eligibility check
-    // on the surface being reported, their per-reporter rate limit, their
-    // dedup, and the message snapshot.
-    const ctx = testEnv.authenticatedContext(REPORTER);
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/valid-1'), {
-        ...validReport,
-        createdAt: serverTimestamp(),
-      }),
-    );
-  });
-
-  it('denies a client create aimed at an arbitrary target', async () => {
-    const ctx = testEnv.authenticatedContext(REPORTER);
-    await assertFails(
-      setDoc(doc(ctx.firestore(), 'moderationReports/arbitrary'), {
-        ...validReport,
-        targetType: 'message',
-        targetId: 'a-message-in-a-dm-they-are-not-party-to',
-        createdAt: serverTimestamp(),
-      }),
-    );
-  });
-
-  it('denies an admin client create too (callables use the Admin SDK)', async () => {
-    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
-    await assertFails(
-      setDoc(doc(admin.firestore(), 'moderationReports/admin-create'), {
-        ...validReport,
-        createdAt: serverTimestamp(),
-      }),
-    );
-  });
-
-  it('denies reads of the per-target report summary to everyone but admins', async () => {
-    await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await setDoc(doc(ctx.firestore(), 'moderationUserSummaries/bad-actor'), {
-        reportedUserId: 'bad-actor',
-        reporterCount: 3,
-        totalSubmissions: 5,
-        lastReportedAt: serverTimestamp(),
-      });
-    });
-    const reporter = testEnv.authenticatedContext(REPORTER);
-    await assertFails(getDoc(doc(reporter.firestore(), 'moderationUserSummaries/bad-actor')));
-    // Least of all the reported user themselves — the count is a moderation
-    // signal, and surfacing it would be both a harassment vector and a way to
-    // work out who reported whom.
-    const target = testEnv.authenticatedContext('bad-actor');
-    await assertFails(getDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor')));
-    await assertFails(
-      setDoc(doc(target.firestore(), 'moderationUserSummaries/bad-actor'), { reporterCount: 0 }),
-    );
-    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
-    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor')));
-    // Admin-READ-only: the aggregate is callable-maintained, not admin-editable.
-    await assertFails(
-      updateDoc(doc(admin.firestore(), 'moderationUserSummaries/bad-actor'), { reporterCount: 0 }),
-    );
-  });
-
-  it('reporters cannot read, update, or delete their reports (admin-only review)', async () => {
-    const ctx = testEnv.authenticatedContext(REPORTER);
-    await assertFails(getDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
-    await assertFails(
-      updateDoc(doc(ctx.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
-    );
-    await assertFails(deleteDoc(doc(ctx.firestore(), 'moderationReports/review-target')));
-    const admin = testEnv.authenticatedContext('mod-admin', { admin: true });
-    await assertSucceeds(getDoc(doc(admin.firestore(), 'moderationReports/review-target')));
-    await assertSucceeds(
-      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'reviewed' }),
-    );
-    // Admin review updates are status-only: immutable fields stay immutable
-    // and the status vocabulary is closed.
-    await assertFails(
-      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), {
-        status: 'reviewed',
-        reason: 'rewritten',
-      }),
-    );
-    await assertFails(
-      updateDoc(doc(admin.firestore(), 'moderationReports/review-target'), { status: 'archived' }),
-    );
-    // Even admins cannot delete review records.
-    await assertFails(deleteDoc(doc(admin.firestore(), 'moderationReports/review-target')));
-  });
-});
-});
 });
 
 // ---------------------------------------------------------------------------
@@ -1825,9 +1844,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
 
   it('owner can set a bio up to 500 characters but not beyond', async () => {
     const ctx = testEnv.authenticatedContext(OWNER);
-    await assertSucceeds(
-      updateDoc(doc(ctx.firestore(), 'users', OWNER), { bio: 'b'.repeat(500) }),
-    );
+    await assertSucceeds(updateDoc(doc(ctx.firestore(), 'users', OWNER), { bio: 'b'.repeat(500) }));
     await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { bio: 'b'.repeat(501) }));
   });
 
@@ -1892,9 +1909,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
       'https://user:pass@instagram.com/sebmccayen',
       'https://instagram.com:8080/sebmccayen',
     ]) {
-      await assertFails(
-        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
-      );
+      await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }));
     }
   });
 
@@ -1907,9 +1922,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
       'intent://x#Intent;scheme=https;end',
       'file:///etc/passwd',
     ]) {
-      await assertFails(
-        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
-      );
+      await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }));
     }
   });
 
@@ -1929,9 +1942,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
       '../../evil',
       '.sebmccayen',
     ]) {
-      await assertFails(
-        updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }),
-      );
+      await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: value }));
     }
   });
 
@@ -1965,9 +1976,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
     await assertSucceeds(
       updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'a'.repeat(30) }),
     );
-    await assertFails(
-      updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'a'.repeat(31) }),
-    );
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'a'.repeat(31) }));
     // Below YouTube's 3-character minimum.
     await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { youtube: 'ab' }));
   });
@@ -1983,9 +1992,7 @@ describe('Firestore – user profile field validation (Phase 9a)', () => {
 
   it('another member cannot write a social handle onto this profile', async () => {
     const ctx = testEnv.authenticatedContext('validation-stranger');
-    await assertFails(
-      updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'sebmccayen' }),
-    );
+    await assertFails(updateDoc(doc(ctx.firestore(), 'users', OWNER), { instagram: 'sebmccayen' }));
   });
 
   it('owner cannot create their profile directly (backend provisioning only)', async () => {
@@ -2182,9 +2189,7 @@ describe('Firestore – events (Phase 9b)', () => {
   });
 
   it('members cannot read the detail document of a draft event', async () => {
-    await assertFails(
-      getDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'details', 'private')),
-    );
+    await assertFails(getDoc(doc(memberCtx().firestore(), 'events', DRAFT, 'details', 'private')));
   });
 
   it('a suspended member loses detail access (suspension overrides entitlement)', async () => {
@@ -2592,6 +2597,37 @@ describe('Firestore – subscriptions', () => {
   });
 });
 
+describe('Firestore – subscription purchase-token replay locks', () => {
+  const TOKEN_HASH = 'a'.repeat(64);
+
+  beforeAll(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'subscriptionPurchaseTokens', TOKEN_HASH), {
+        tokenHash: TOKEN_HASH,
+        uid: 'sub-owner',
+        productId: 'plus_monthly',
+      });
+    });
+  });
+
+  it('denies reads and writes to owners and admins', async () => {
+    for (const ctx of [
+      testEnv.authenticatedContext('sub-owner'),
+      testEnv.authenticatedContext('sub-admin', { admin: true }),
+    ]) {
+      const ref = doc(ctx.firestore(), 'subscriptionPurchaseTokens', TOKEN_HASH);
+      await assertFails(getDoc(ref));
+      await assertFails(
+        setDoc(ref, {
+          tokenHash: TOKEN_HASH,
+          uid: 'sub-owner',
+          productId: 'supporter_monthly',
+        }),
+      );
+    }
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Firestore: admin-only collections
 // ---------------------------------------------------------------------------
@@ -2860,14 +2896,12 @@ describe('Firestore – suspension enforcement', () => {
       // `isOwner(userId) && isActiveMember()`, and isActiveMember() folds in
       // isNotSuspended(). Seed one for the suspended user and one for a
       // non-suspended member to prove the suspension gate both ways below.
-      await setDoc(
-        doc(ctx.firestore(), 'users', SUSPENDED, 'savedOffers', 'suspended-offer'),
-        { offerId: 'suspended-offer' },
-      );
-      await setDoc(
-        doc(ctx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
-        { offerId: 'active-offer' },
-      );
+      await setDoc(doc(ctx.firestore(), 'users', SUSPENDED, 'savedOffers', 'suspended-offer'), {
+        offerId: 'suspended-offer',
+      });
+      await setDoc(doc(ctx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'), {
+        offerId: 'active-offer',
+      });
       // Published event where the (now suspended) member had RSVP'd — chat
       // read eligibility must still be revoked by suspension.
       await setDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event'), {
@@ -2876,19 +2910,15 @@ describe('Firestore – suspension enforcement', () => {
         status: 'published',
         rsvpCounts: { going: 1, maybe: 0, not_going: 0 },
       });
-      await setDoc(
-        doc(ctx.firestore(), 'events', 'suspended-chat-event', 'rsvps', SUSPENDED),
-        { status: 'going' },
-      );
-      await setDoc(
-        doc(ctx.firestore(), 'events', 'suspended-chat-event', 'messages', 'msg-1'),
-        {
-          authorUserId: 'someone',
-          authorDisplayName: 'Someone',
-          message: 'hello',
-          moderationState: 'visible',
-        },
-      );
+      await setDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event', 'rsvps', SUSPENDED), {
+        status: 'going',
+      });
+      await setDoc(doc(ctx.firestore(), 'events', 'suspended-chat-event', 'messages', 'msg-1'), {
+        authorUserId: 'someone',
+        authorDisplayName: 'Someone',
+        message: 'hello',
+        moderationState: 'visible',
+      });
     });
   });
 
@@ -2933,9 +2963,7 @@ describe('Firestore – suspension enforcement', () => {
     // denied regardless of suspension.
     const activeCtx = testEnv.authenticatedContext(ACTIVE_MEMBER, { activeMember: true });
     await assertSucceeds(
-      deleteDoc(
-        doc(activeCtx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer'),
-      ),
+      deleteDoc(doc(activeCtx.firestore(), 'users', ACTIVE_MEMBER, 'savedOffers', 'active-offer')),
     );
 
     const suspendedCtx = testEnv.authenticatedContext(SUSPENDED, {
@@ -3011,16 +3039,13 @@ describe('Firestore – group drive roster (Phase 11 rules)', () => {
         title: 'Roster test',
         status: 'published',
       });
-      await setDoc(
-        doc(ctx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`),
-        {
-          displayName: 'Deltagare',
-          status: 'joined',
-          joinedAt: serverTimestamp(),
-          leftAt: null,
-          updatedAt: serverTimestamp(),
-        },
-      );
+      await setDoc(doc(ctx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`), {
+        displayName: 'Deltagare',
+        status: 'joined',
+        joinedAt: serverTimestamp(),
+        leftAt: null,
+        updatedAt: serverTimestamp(),
+      });
     });
   });
 
@@ -3046,7 +3071,9 @@ describe('Firestore – group drive roster (Phase 11 rules)', () => {
       suspended: true,
     });
     await assertFails(
-      getDoc(doc(suspendedCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`)),
+      getDoc(
+        doc(suspendedCtx.firestore(), `events/${EVENT}/groupDriveParticipants/${PARTICIPANT}`),
+      ),
     );
     const memberCtx = testEnv.authenticatedContext('gd-member', { activeMember: true });
     await assertFails(
@@ -3071,9 +3098,7 @@ describe('Firestore – announcements (pre-migration scaffold coverage)', () => 
   it('authenticated users read; regular users cannot write', async () => {
     const userCtx = testEnv.authenticatedContext('ann-user');
     await assertSucceeds(getDoc(doc(userCtx.firestore(), 'announcements/a1')));
-    await assertFails(
-      setDoc(doc(userCtx.firestore(), 'announcements/a2'), { title: 'Spam' }),
-    );
+    await assertFails(setDoc(doc(userCtx.firestore(), 'announcements/a2'), { title: 'Spam' }));
     const unauth = testEnv.unauthenticatedContext();
     await assertFails(getDoc(doc(unauth.firestore(), 'announcements/a1')));
   });
@@ -3096,9 +3121,7 @@ describe('Firestore – managedCredentials (admin-only)', () => {
   });
 
   it('admins read and write; regular users and unauth are denied read and write', async () => {
-    const adminFs = testEnv
-      .authenticatedContext('cred-admin', { admin: true })
-      .firestore();
+    const adminFs = testEnv.authenticatedContext('cred-admin', { admin: true }).firestore();
     await assertSucceeds(getDoc(doc(adminFs, 'managedCredentials/c1')));
     await assertSucceeds(
       setDoc(doc(adminFs, 'managedCredentials/c2'), {
@@ -3110,9 +3133,7 @@ describe('Firestore – managedCredentials (admin-only)', () => {
 
     const userFs = testEnv.authenticatedContext('cred-user').firestore();
     await assertFails(getDoc(doc(userFs, 'managedCredentials/c1')));
-    await assertFails(
-      setDoc(doc(userFs, 'managedCredentials/c3'), { name: 'Sneaky' }),
-    );
+    await assertFails(setDoc(doc(userFs, 'managedCredentials/c3'), { name: 'Sneaky' }));
 
     const unauth = testEnv.unauthenticatedContext();
     await assertFails(getDoc(doc(unauth.firestore(), 'managedCredentials/c1')));
@@ -3209,14 +3230,8 @@ describe('Realtime Database – liveLocation (Phase 10)', () => {
 
     // Seed the RTDB mirror the way blocking-onBlockWrite maintains it.
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
-      await dbSet(
-        dbRef(ctx.database(), `liveLocationBlocks/${SHARER}/${BLOCKED_BY_SHARER}`),
-        true,
-      );
-      await dbSet(
-        dbRef(ctx.database(), `liveLocationBlocks/${BLOCKER_OF_SHARER}/${SHARER}`),
-        true,
-      );
+      await dbSet(dbRef(ctx.database(), `liveLocationBlocks/${SHARER}/${BLOCKED_BY_SHARER}`), true);
+      await dbSet(dbRef(ctx.database(), `liveLocationBlocks/${BLOCKER_OF_SHARER}/${SHARER}`), true);
     });
 
     // Target blocked viewer → denied.
@@ -3241,9 +3256,7 @@ describe('Realtime Database – liveLocation (Phase 10)', () => {
   it('the liveLocationBlocks mirror is never client-readable or writable', async () => {
     const ctx = testEnv.authenticatedContext(MEMBER, { activeMember: true });
     await assertFails(dbGet(dbRef(ctx.database(), `liveLocationBlocks/${SHARER}/${MEMBER}`)));
-    await assertFails(
-      dbSet(dbRef(ctx.database(), `liveLocationBlocks/${MEMBER}/${SHARER}`), true),
-    );
+    await assertFails(dbSet(dbRef(ctx.database(), `liveLocationBlocks/${MEMBER}/${SHARER}`), true));
   });
 
   it('non-members CAN read while member gating is disabled', async () => {
@@ -3483,9 +3496,7 @@ describe('Cloud Storage – vehicle images', () => {
 
   it('authenticated user can read a vehicle image', async () => {
     const ctx = testEnv.authenticatedContext(OTHER);
-    await assertSucceeds(
-      getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car.jpg`)),
-    );
+    await assertSucceeds(getBytes(storageRef(ctx.storage(), `vehicleImages/${OWNER}/v-1/car.jpg`)));
   });
 
   it('unauthenticated user cannot read a vehicle image', async () => {

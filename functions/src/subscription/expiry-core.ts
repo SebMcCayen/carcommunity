@@ -76,7 +76,7 @@ export const MAX_EXPIRIES_PER_RUN = 200;
  * rather than hardcoded: the sweep's job is to revoke things that
  * currently grant access, so if isSubscriptionActiveStatus ever changes,
  * the sweep's query follows it instead of silently going blind to a new
- * granting status. Today: ['active', 'grace_period'].
+ * granting status. Today: ['active', 'grace_period', 'cancelled'].
  *
  * Restricting the query to these is also what makes the sweep SCALE — an
  * `expiresAt <= cutoff` query alone would match every historically
@@ -86,6 +86,15 @@ export const MAX_EXPIRIES_PER_RUN = 200;
 export const EXPIRY_SWEEP_STATUSES: readonly SubscriptionStatus[] = SUBSCRIPTION_STATUSES.filter(
   isSubscriptionActiveStatus,
 );
+
+/** Canceled Play subscriptions stop exactly at the paid line-item expiry. */
+export const EXPIRY_IMMEDIATE_SWEEP_STATUSES: readonly SubscriptionStatus[] = ['cancelled'];
+
+/** Active/grace records retain the existing outage-tolerance window. */
+export const EXPIRY_GRACE_SWEEP_STATUSES: readonly SubscriptionStatus[] = [
+  'active',
+  'grace_period',
+];
 
 /**
  * The instant a subscription must have expired BEFORE to be swept — i.e.
@@ -149,7 +158,7 @@ export function decideSubscriptionExpiry(
 ): SubscriptionExpiryDecision {
   const status = toStatus(fields.status);
   if (status === null || !isSubscriptionActiveStatus(status)) {
-    // Already expired/revoked/cancelled/inactive — nothing to take away.
+    // Already expired/revoked/inactive — nothing to take away.
     // This is the idempotent no-op path: a re-run sees its own output.
     return { expire: false, reason: 'not_granting' };
   }

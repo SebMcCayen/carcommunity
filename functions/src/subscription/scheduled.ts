@@ -96,9 +96,10 @@ import { adminAuth, db } from '../firebase';
 import { MAX_INSTANCES_SCHEDULED, CPU_SCHEDULED } from '../shared/instanceLimits';
 import { writeInAppNotification } from '../notifications/deliver';
 import { applyEntitlement } from './entitlement';
-import type { SubscriptionTier } from './subscription-core';
+import type { SubscriptionStatus, SubscriptionTier } from './subscription-core';
 import {
-  EXPIRY_SWEEP_STATUSES,
+  EXPIRY_GRACE_SWEEP_STATUSES,
+  EXPIRY_IMMEDIATE_SWEEP_STATUSES,
   MAX_EXPIRIES_PER_RUN,
   SUBSCRIPTION_EXPIRY_GRACE_HOURS,
   decideSubscriptionExpiry,
@@ -228,8 +229,8 @@ function isUserNotFound(error: unknown): boolean {
 }
 
 /**
- * Revokes every entitlement whose subscription lapsed more than
- * SUBSCRIPTION_EXPIRY_GRACE_HOURS ago, up to MAX_EXPIRIES_PER_RUN.
+ * Revokes active/grace entitlements after the outage-tolerance window and
+ * canceled subscriptions at their paid expiry, up to MAX_EXPIRIES_PER_RUN.
  *
  * A member holding entitlement with NO `subscriptions` document, or with
  * one carrying no `expiresAt`, is DELIBERATELY UNTOUCHED: the sweep is
@@ -247,28 +248,34 @@ export async function runSubscriptionExpirySweep(
   now: Date,
 ): Promise<SubscriptionExpirySweepResult> {
   const cutoff = subscriptionExpiryCutoff(now);
+  const dueQuery = (statuses: readonly SubscriptionStatus[], dueBefore: Date) =>
+    db
+      .collection('subscriptions')
+      // Only statuses that currently GRANT access, so revoked records drop
+      // out of the query and a backlog drains instead of recirculating.
+      .where('status', 'in', statuses)
+      // Excludes PERPETUAL grants (expiresAt null) at the QUERY level, not
+      // just in the decision below. Firestore's inequality filters follow its
+      // total type ordering, in which null sorts BEFORE every timestamp.
+      .where('expiresAt', '>', Timestamp.fromMillis(0))
+      .where('expiresAt', '<=', Timestamp.fromDate(dueBefore))
+      .orderBy('expiresAt', 'asc')
+      .limit(MAX_EXPIRIES_PER_RUN)
+      .get();
 
-  const due = await db
-    .collection('subscriptions')
-    // Only statuses that currently GRANT access, so revoked records drop
-    // out of the query and a backlog drains instead of recirculating.
-    .where('status', 'in', EXPIRY_SWEEP_STATUSES)
-    // Excludes PERPETUAL grants (expiresAt null) at the QUERY level, not
-    // just in the decision below. Firestore's inequality filters follow its
-    // total type ordering, in which null sorts BEFORE every timestamp — so
-    // `expiresAt <= cutoff` alone would match every null-expiry record, and
-    // because the page is ordered ascending they would sort to the FRONT and
-    // permanently starve real lapses out of the bounded page. A lower bound
-    // of the epoch excludes both null and a missing field (an inequality
-    // filter already requires the field to exist) while admitting every real
-    // expiry date. decideSubscriptionExpiry still rejects them independently.
-    .where('expiresAt', '>', Timestamp.fromMillis(0))
-    .where('expiresAt', '<=', Timestamp.fromDate(cutoff))
-    // Longest-lapsed first: the member who has owed us the longest is
-    // always served, no matter how deep the backlog.
-    .orderBy('expiresAt', 'asc')
-    .limit(MAX_EXPIRIES_PER_RUN)
-    .get();
+  const [graceDue, immediateDue] = await Promise.all([
+    dueQuery(EXPIRY_GRACE_SWEEP_STATUSES, cutoff),
+    dueQuery(EXPIRY_IMMEDIATE_SWEEP_STATUSES, now),
+  ]);
+  // Both status sets are disjoint. Merge and re-apply the global page bound so
+  // two independent safety windows cannot double one run's mutation ceiling.
+  const dueDocs = [...graceDue.docs, ...immediateDue.docs]
+    .sort((left, right) => {
+      const leftMs = left.get('expiresAt')?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+      const rightMs = right.get('expiresAt')?.toMillis?.() ?? Number.MAX_SAFE_INTEGER;
+      return leftMs - rightMs;
+    })
+    .slice(0, MAX_EXPIRIES_PER_RUN);
 
   const expiredUids: string[] = [];
   let orphanedCount = 0;
@@ -276,9 +283,10 @@ export async function runSubscriptionExpirySweep(
   let notifiedCount = 0;
   let failedCount = 0;
 
-  for (const docSnap of due.docs) {
+  for (const docSnap of dueDocs) {
     const uid = docSnap.id;
     const data = docSnap.data();
+    const decisionCutoff = data.status === 'cancelled' ? now : cutoff;
     const decision = decideSubscriptionExpiry(
       {
         ...data,
@@ -286,7 +294,7 @@ export async function runSubscriptionExpirySweep(
         startsAt: toDate(data.startsAt),
         expiresAt: toDate(data.expiresAt),
       },
-      cutoff,
+      decisionCutoff,
     );
     if (!decision.expire) {
       // The query and the re-derived decision disagreed — never revoke on
@@ -402,7 +410,7 @@ export async function runSubscriptionExpirySweep(
   }
 
   const result: SubscriptionExpirySweepResult = {
-    scanned: due.size,
+    scanned: dueDocs.length,
     expiredCount: expiredUids.length,
     expiredUids,
     orphanedCount,

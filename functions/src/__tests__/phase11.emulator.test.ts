@@ -36,6 +36,7 @@ import { getApps as getAdminApps, initializeApp as initializeAdminApp } from 'fi
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore, FieldValue } from 'firebase-admin/firestore';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { claimPurchaseTokenHash } from '../subscription/purchase-token-ownership';
 
 const PROJECT_ID = 'demo-test';
 const EMULATOR_HOST = '127.0.0.1';
@@ -152,6 +153,34 @@ describe('subscription entitlement chain', () => {
         call('subscription-verify', { platform: 'apple', purchaseToken: 'receipt-abc' }),
       ),
     ).toBe('functions/failed-precondition');
+  });
+
+  it('purchase-token hash claim is same-UID idempotent and rejects cross-UID replay', async () => {
+    const tokenHash = `${Date.now().toString(16).padStart(16, '0')}${'a'.repeat(48)}`;
+    await claimPurchaseTokenHash(tokenHash, {
+      uid: member.uid,
+      productId: 'plus_monthly',
+    });
+    await claimPurchaseTokenHash(tokenHash, {
+      uid: member.uid,
+      productId: 'plus_monthly',
+    });
+
+    await expect(
+      claimPurchaseTokenHash(tokenHash, {
+        uid: adminUser.uid,
+        productId: 'plus_monthly',
+      }),
+    ).rejects.toMatchObject({ reason: 'different_user' });
+
+    const claim = (
+      await adminDb.collection('subscriptionPurchaseTokens').doc(tokenHash).get()
+    ).data();
+    expect(claim).toMatchObject({
+      tokenHash,
+      uid: member.uid,
+      productId: 'plus_monthly',
+    });
   });
 
   it('admin manual grant applies record + flag + claim; revoke tears down', async () => {

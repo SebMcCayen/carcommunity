@@ -297,6 +297,78 @@ GitHub environment.
 
 See the [Google Cloud documentation](https://cloud.google.com/iam/docs/workload-identity-federation-with-deployment-pipelines) for background.
 
+## Google Play subscription verification (disabled by default)
+
+`subscription-verify` is the only function that runs as the dedicated runtime
+identity below; `subscription-grantEntitlement` and every other function keep
+their normal/default runtime identity.
+
+```
+play-subscription-verifier@kungsbacka-car-community.iam.gserviceaccount.com
+```
+
+No JSON key is created or stored. The function uses Application Default
+Credentials with the Android Publisher OAuth scope. One-time console setup:
+
+1. Enable **Google Play Android Developer API** in project
+   `kungsbacka-car-community`.
+2. In Play Console **Users and permissions**, invite the service-account email
+   with access only to `com.kungsbackacarcommunity.app` and grant **View app
+   information**, **View app quality information**, **View financial data**, and
+   **Manage orders and subscriptions**.
+3. In Google Cloud IAM, grant that runtime account **Cloud Datastore User** and
+   **Firebase Authentication Admin**. Do not grant Owner/Editor and do not
+   create a service-account key.
+4. Grant the GitHub deployment service account
+   `roles/iam.serviceAccountUser` (ActAs) on this dedicated runtime account in
+   addition to the existing compute/appspot ActAs bindings. The function deploy
+   otherwise cannot select it.
+5. In Play Console keep exactly these subscription products/base plans active:
+   `plus_monthly` / `monthly` and `supporter_monthly` / `monthly`. The Android
+   client rejects every other product/base plan, including legacy
+   `member_monthly`.
+
+Provider activation is a backend-only Firestore switch. Missing config and
+`enabled: false` both fail closed:
+
+```json
+// config/subscriptionProviders
+{
+  "google": { "enabled": false },
+  "apple": { "enabled": false }
+}
+```
+
+Deploy backend + Android with the Google flag still false. For a controlled
+Internal Testing purchase, set `google.enabled` true immediately before the
+test, buy each plan with a license tester, verify the entitlement/token-hash
+record and Play acknowledgement, then turn it false again if testing is done.
+Never enable Apple: there is no Apple adapter in this release.
+
+The verified internal first-purchase path is safe: the client sends a SHA-256
+obfuscated Firebase UID, the backend compares it with Play's external account
+identifier, allows only the two products, transactionally locks each token hash
+to one UID, applies entitlement through `applyEntitlement`, and acknowledges on
+the server only after the grant. Raw purchase tokens are never logged or stored.
+
+### Required before public subscription launch
+
+Keep `google.enabled` **false for public rollout** until all of these land:
+
+- effective-tier recomputation across multiple current/linked tokens for
+  Plus↔Supporter upgrades/downgrades;
+- Real-time Developer Notifications (RTDN) plus backend reconciliation for
+  renewals, refunds, revocations, account hold, and out-of-app changes;
+- periodic server reconciliation as a recovery path when RTDN delivery fails;
+- end-to-end internal tests for first purchase, restore/reinstall, cancellation,
+  grace, hold, expiry, acknowledgement retry, and cross-account replay;
+- UI sourced from Play's localized price/offer data before expanding beyond the
+  Sweden-only base-plan availability.
+
+Route-open `queryPurchasesAsync` reconciliation is intentionally included now
+for interrupted callbacks, renewal visibility, and reinstall. It is not a
+replacement for RTDN or multi-token effective-tier recomputation.
+
 ## Android Releases and the In-App Update Prompt
 
 **There is no operator step.** The app asks Google Play directly, via the
