@@ -53,7 +53,8 @@ interface BadgeSummary {
 /**
  * The `helpful_member` badge definition — the frontend source of truth
  * (mirrors the backend catalog in functions/src/badges/badge-core.ts). It is
- * the only manually awardable badge; the admin award callable returns just
+ * one of the two manually granted badges (the other is `early_tester` /
+ * "Grundare", see EARLY_TESTER_BADGE); the admin award callable returns just
  * `{ alreadyAwarded }` (badges are owner-only, so no award document is read
  * back), so frontends shape the award response from this constant.
  */

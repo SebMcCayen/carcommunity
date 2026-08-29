@@ -4,17 +4,21 @@
  * Admin: Badges (Utmärkelser) page.
  *
  * Shows aggregate badge statistics (award count per badge key) and provides
- * a form to manually award the `helpful_member` badge.
+ * forms to manually award the `helpful_member` badge (one target + reason) and
+ * to grant the exclusive `early_tester` / "Grundare" badge to a hand-picked UID
+ * list.
  *
  * Security notes:
  *  - All operations are validated by the backend. Client-side role checks are
  *    for UX only and are NOT security boundaries.
- *  - Only `helpful_member` may be awarded manually. The backend rejects any
- *    other badge key.
- *  - A reason is required and audited server-side.
+ *  - Only two badges are granted manually — `helpful_member` and `early_tester`
+ *    — each through its own dedicated callable fixed to that badge server-side;
+ *    the backend rejects any other badge key.
+ *  - The helpful_member award requires a reason; the early_tester grant reason
+ *    is optional (defaulted server-side). Both are audited server-side.
  *  - No individual user lists are exposed — only aggregate counts.
  *  - No rankings, leaderboards, or user comparisons are shown.
- *  - Manual award is idempotent: a second award returns the existing record.
+ *  - Both are idempotent: a repeat grant/award is a no-op, not a duplicate.
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';

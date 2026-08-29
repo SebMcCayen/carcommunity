@@ -8,10 +8,13 @@
  * Security notes:
  *  - All admin operations are validated server-side (the callable independently
  *    verifies the `admin` custom claim). Client-side role checks are UX only.
- *  - Only `helpful_member` may be awarded manually. Arbitrary badge keys are
- *    rejected by the backend.
- *  - Award operations are idempotent — a second award for the same badge
- *    returns `alreadyAwarded: true` without duplicating the record or audit.
+ *  - Two badges are granted manually, each through its own dedicated callable:
+ *    `helpful_member` (one target + required reason, via awardHelpfulMemberBadge)
+ *    and `early_tester` / "Grundare" (a hand-picked UID list, via
+ *    grantEarlyTesterBadge). Neither callable accepts an arbitrary badge key —
+ *    each is fixed to its own badge server-side.
+ *  - Grant/award operations are idempotent — a repeat for the same badge is a
+ *    no-op (`alreadyAwarded` / `alreadyGranted`) with no duplicate record or audit.
  *  - Audit records for manual awards are written by the backend.
  *  - The summary exposes aggregate counts only (no rankings, no user lists).
  */

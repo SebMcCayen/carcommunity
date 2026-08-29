@@ -5,10 +5,12 @@
  * Deployed via the `badges` export group as `badges-awardHelpfulMember`.
  * Requires an active admin via requireAdminActor.
  *
- * Manually awards the helpful_member badge (the only manually awardable
- * key — legacy awardHelpfulMemberByAdmin). Requires a non-empty reason,
- * writes an adminAuditEvents record on first award only (idempotent repeats
- * never duplicate audit entries), and rejects suspended/deleted targets.
+ * Manually awards the helpful_member badge (legacy awardHelpfulMemberByAdmin).
+ * One of two manually granted badges — the sibling badges.grantEarlyTester
+ * grants the criteria-free early_tester ("Grundare") badge to a UID list.
+ * Requires a non-empty reason, writes an adminAuditEvents record on first award
+ * only (idempotent repeats never duplicate audit entries), and rejects
+ * suspended/deleted targets.
  */
 
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
