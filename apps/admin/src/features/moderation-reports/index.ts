@@ -231,9 +231,18 @@ export function toAdminModerationReport(id: string, data: DocumentData): AdminMo
  * the admin can act on with the delete-message action below. A convoy/DM message
  * report or a person report is not deletable from here (convoy/DM messages are
  * not admin-reachable, and a person report has no single message to remove).
+ *
+ * Also requires a non-empty `targetId`: toAdminModerationReport coerces a
+ * missing/corrupt targetId to '', and offering a Delete button for such a
+ * malformed row would only ever produce an invalid-argument round-trip. Gating
+ * here keeps the button off rows the callable could never act on.
  */
 export function isCommunityMessageReport(report: AdminModerationReport): boolean {
-  return report.targetType === 'message' && report.surface === 'community';
+  return (
+    report.targetType === 'message' &&
+    report.surface === 'community' &&
+    report.targetId.trim() !== ''
+  );
 }
 
 // ---------------------------------------------------------------------------

@@ -56,6 +56,12 @@
  * best-effort bookkeeping — a chunk that fails just leaves some reports 'pending'
  * in the queue while the message is already gone (logged, PII-free; an admin can
  * re-run the delete, which is idempotent, or resolve the stragglers by hand).
+ *
+ * The pending reports are re-QUERIED after the delete transaction (not reused
+ * from the pre-transaction read), which closes the race where a report filed in
+ * the delete window would otherwise be stranded 'pending' against a gone message.
+ * A report filed after even that final query is left 'pending' — a documented,
+ * harmless residual (it targets a deleted message, so it is inert).
  */
 
 import { logger } from 'firebase-functions';
@@ -97,6 +103,25 @@ export interface AdminDeleteCommunityMessageResponse {
    * remainder stays 'pending' — see the write-count note in the header).
    */
   resolvedReports: number;
+}
+
+/**
+ * The still-`pending` moderationReports refs that escalated THIS community
+ * message. Two equality filters (surface + targetId), no range and no orderBy,
+ * so Firestore serves it by merging single-field indexes — NO composite index.
+ * `targetId` is the reported messageId (moderation-core
+ * buildMessageReportDocument); `surface` pins it to the community channel so a
+ * same-id message on another surface can't be swept in.
+ */
+async function queryPendingReportRefs(
+  messageId: string,
+): Promise<FirebaseFirestore.DocumentReference[]> {
+  const snap = await db
+    .collection(MODERATION_REPORTS_COLLECTION)
+    .where('surface', '==', 'community')
+    .where('targetId', '==', messageId)
+    .get();
+  return snap.docs.filter((doc) => doc.data().status === OPEN_REPORT_STATUS).map((doc) => doc.ref);
 }
 
 /**
@@ -154,26 +179,13 @@ export const adminDeleteMessage = onCall(
       .doc(COMMUNITY_CHANNEL_ID)
       .collection('messages')
       .doc(messageId);
-    const reportsRef = db.collection(MODERATION_REPORTS_COLLECTION);
     const serverTimestamp = () => FieldValue.serverTimestamp();
 
-    // Read the open reports OUTSIDE the transaction. Every report that escalated
-    // THIS community message — two equality filters (surface + targetId), no
-    // range and no orderBy, so Firestore serves it by merging single-field
-    // indexes (NO composite index). `targetId` is the reported messageId
-    // (moderation-core buildMessageReportDocument); `surface` pins it to the
-    // community channel so a same-id message on another surface can't be swept
-    // in. Reading here (not in the tx) is safe: a report can never be filed
-    // against an already-deleted message (reportMessage 404s on a missing
-    // message), and there can be an unbounded number of them — which is exactly
-    // why their resolution must NOT sit inside the 500-write delete transaction.
-    const reportsSnap = await reportsRef
-      .where('surface', '==', 'community')
-      .where('targetId', '==', messageId)
-      .get();
-    const openReportRefs = reportsSnap.docs
-      .filter((doc) => doc.data().status === OPEN_REPORT_STATUS)
-      .map((doc) => doc.ref);
+    // Read the open reports OUTSIDE the transaction — there can be an unbounded
+    // number of them, which is exactly why their resolution must NOT sit inside
+    // the 500-write delete transaction. This first read is only for the audit
+    // COUNT (the actual resolution runs after the transaction, below).
+    const openReportRefs = await queryPendingReportRefs(messageId);
 
     // The ATOMIC critical section — message delete + audit — is the ONLY thing
     // in the transaction (a fixed 2 writes), so it can never hit the 500-write
@@ -220,7 +232,22 @@ export const adminDeleteMessage = onCall(
     // the queue never strands a pending report over an already-gone message —
     // best-effort, and unbounded in count. Runs whether or not the message
     // existed (an idempotent re-delete normally finds none still open).
-    const resolvedReports = await resolvePendingReports(openReportRefs, messageId);
+    //
+    // Re-QUERY here rather than reusing openReportRefs: a report can be filed in
+    // the window between the first read and the delete (reportMessage only 404s
+    // once the message is actually gone), which would otherwise be stranded
+    // `pending` against a deleted message with nothing to resolve it. This second
+    // pass captures those stragglers along with the originals in one query.
+    //
+    // RESIDUAL (documented, harmless): a report filed AFTER this final query is
+    // still left `pending`. It targets an already-deleted message, so it is inert
+    // — the message can't be shown or re-deleted — and a re-run of this callable
+    // (idempotent) or a manual resolve clears it. We deliberately do NOT chase it
+    // with a Firestore trigger: the window is tiny and the leftover is benign.
+    const resolvedReports = await resolvePendingReports(
+      await queryPendingReportRefs(messageId),
+      messageId,
+    );
 
     return { messageId, deleted, resolvedReports };
   },

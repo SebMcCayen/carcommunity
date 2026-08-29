@@ -506,6 +506,22 @@ describe('isCommunityMessageReport', () => {
     expect(isCommunityMessageReport({ ...base, targetType: 'user', surface: null })).toBe(false);
     expect(isCommunityMessageReport({ ...base, targetType: 'message', surface: null })).toBe(false);
   });
+
+  it('is false for a malformed community message report with an empty/blank targetId', () => {
+    // toAdminModerationReport coerces a missing/corrupt targetId to '', which
+    // the callable would reject as invalid-argument — so no Delete button.
+    expect(
+      isCommunityMessageReport({ ...base, targetType: 'message', surface: 'community', targetId: '' }),
+    ).toBe(false);
+    expect(
+      isCommunityMessageReport({
+        ...base,
+        targetType: 'message',
+        surface: 'community',
+        targetId: '   ',
+      }),
+    ).toBe(false);
+  });
 });
 
 describe('adminDeleteCommunityMessage', () => {
