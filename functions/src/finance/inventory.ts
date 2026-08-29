@@ -621,6 +621,7 @@ export const CALLABLE_COST_CLASS: Record<string, CallableCostClass> = {
   'convoyChat.list': 'variable-member',
   'convoyChat.markRead': 'variable-member',
   'chatchannels.reportMessage': 'variable-member',
+  'chatchannels.adminDeleteMessage': 'admin-rare',
   'moderation.reportUser': 'variable-member',
   'incidents.report': 'variable-member',
   'incidents.listNearby': 'variable-member',

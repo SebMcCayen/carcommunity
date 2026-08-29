@@ -53,6 +53,7 @@ import {
 } from 'firebase/firestore';
 
 import { ApiError } from '../../lib/errors';
+import { callAdmin } from '../../lib/callables';
 import { getAdminFirestore } from '../../lib/firestore';
 
 export { ApiError };
@@ -106,7 +107,28 @@ export interface AdminModerationReport {
   status: ModerationReportStatus;
   /** ISO string; null only for malformed/hand-edited documents. */
   createdAt: string | null;
+  /**
+   * Which chat the reported message lives on ('community' | 'convoy' | 'dm'),
+   * or null for a legacy/person report. Added by the callable-backed report
+   * path (moderation-core buildMessageReportDocument). The community-message
+   * DELETE action is offered only when this is 'community'.
+   */
+  surface: string | null;
+  /**
+   * The reported message, snapshotted at report time (the evidence a moderator
+   * judges — channel messages are TTL-deleted, so the report carries its own
+   * copy). null for a person report or a legacy document with no snapshot.
+   */
+  snapshotText: string | null;
+  snapshotAuthorUserId: string | null;
+  snapshotAuthorDisplayName: string | null;
 }
+
+/**
+ * The deployed callable name for the admin community-message delete
+ * (grouped export `domain-action`, contracts/functions/functions.json).
+ */
+export const ADMIN_DELETE_COMMUNITY_MESSAGE_CALLABLE = 'chatchannels-adminDeleteMessage';
 
 /** Opaque load-more cursor (a Firestore document snapshot). */
 export type ModerationReportCursor = QueryDocumentSnapshot;
@@ -174,8 +196,25 @@ function coerceStatus(raw: unknown): ModerationReportStatus {
     : 'pending';
 }
 
+/**
+ * Coerces an optional string field to a non-null value only when it has
+ * non-whitespace content, else null. Trims before the empty check so a
+ * whitespace-only string (e.g. a corrupt '   ' surface) maps to null rather than
+ * a truthy value; the ORIGINAL (untrimmed) string is returned when non-blank, so
+ * meaningful leading/trailing spaces in a message snapshot are preserved.
+ */
+function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value : null;
+}
+
 export function toAdminModerationReport(id: string, data: DocumentData): AdminModerationReport {
   const details = toStringField(data.details);
+  // The message snapshot is a nested object on message reports; tolerate its
+  // absence (person reports / legacy docs) and any corrupt shape.
+  const snapshot =
+    data.snapshot != null && typeof data.snapshot === 'object'
+      ? (data.snapshot as Record<string, unknown>)
+      : {};
   return {
     // The doc id is authoritative (see AdminModerationReport.id).
     id,
@@ -186,7 +225,30 @@ export function toAdminModerationReport(id: string, data: DocumentData): AdminMo
     details: details.length > 0 ? details : null,
     status: coerceStatus(data.status),
     createdAt: toIso(data.createdAt),
+    surface: toNullableString(data.surface),
+    snapshotText: toNullableString(snapshot.text),
+    snapshotAuthorUserId: toNullableString(snapshot.authorUserId),
+    snapshotAuthorDisplayName: toNullableString(snapshot.authorDisplayName),
   };
+}
+
+/**
+ * True when a report targets a GLOBAL community-chat message — the only reports
+ * the admin can act on with the delete-message action below. A convoy/DM message
+ * report or a person report is not deletable from here (convoy/DM messages are
+ * not admin-reachable, and a person report has no single message to remove).
+ *
+ * Also requires a non-empty `targetId`: toAdminModerationReport coerces a
+ * missing/corrupt targetId to '', and offering a Delete button for such a
+ * malformed row would only ever produce an invalid-argument round-trip. Gating
+ * here keeps the button off rows the callable could never act on.
+ */
+export function isCommunityMessageReport(report: AdminModerationReport): boolean {
+  return (
+    report.targetType === 'message' &&
+    report.surface === 'community' &&
+    report.targetId.trim() !== ''
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -287,5 +349,40 @@ export async function resolveModerationReport(
     // Exactly the one writable field — nothing else (rules: hasOnly(['status'])).
     transaction.update(ref, { status });
     return { id: reportId, status, alreadyResolved: false };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Delete a reported community-chat message (callable-backed admin action)
+// ---------------------------------------------------------------------------
+
+export interface DeleteCommunityMessageResult {
+  messageId: string;
+  /** True when a message document was actually deleted by this call. */
+  deleted: boolean;
+  /** How many open reports the backend moved to 'reviewed'. */
+  resolvedReports: number;
+}
+
+/**
+ * HARD-deletes a reported GLOBAL community-chat message via the
+ * chatchannels.adminDeleteMessage callable, which also resolves every open
+ * moderationReports document that targets it and writes an adminAuditEvents
+ * record preserving the original text.
+ *
+ * Unlike resolveModerationReport (a rules-granted direct Firestore status write),
+ * this goes through a callable: deleting a message from another collection is not
+ * something the moderationReports rules can express, the backend must independently
+ * re-verify the admin claim, and the delete is an audited admin action. The
+ * callable is idempotent — a re-delete of an already-gone message returns
+ * { deleted: false } rather than failing.
+ */
+export async function adminDeleteCommunityMessage(
+  messageId: string,
+  reason?: string,
+): Promise<DeleteCommunityMessageResult> {
+  return callAdmin<DeleteCommunityMessageResult>(ADMIN_DELETE_COMMUNITY_MESSAGE_CALLABLE, {
+    messageId,
+    ...(reason ? { reason } : {}),
   });
 }

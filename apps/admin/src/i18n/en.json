@@ -1144,14 +1144,21 @@
     "dismiss": "Dismiss",
     "reopen": "Reopen",
     "resolvePending": "Updating…",
+    "messageSnapshotLabel": "Message",
+    "deleteMessage": "Delete message",
+    "deletePending": "Deleting…",
     "confirmReviewed": "Mark this report as reviewed?",
     "confirmDismissed": "Dismiss this report? It will be marked dismissed with no action taken.",
     "confirmReopen": "Reopen this report? It will move back to pending.",
+    "confirmDeleteMessage": "Permanently delete the reported message from the community chat? It will be removed for everyone and related reports marked reviewed. The original text is kept in the audit log.",
     "resolveSuccess": {
       "reviewed": "Report marked as reviewed.",
       "dismissed": "Report dismissed.",
       "pending": "Report reopened."
     },
+    "deleteSuccess": "Message deleted and the report marked as reviewed.",
+    "alreadyDeleted": "The message was already removed – no further changes were made.",
+    "deleteError": "Could not delete the message.",
     "alreadyResolved": "The report already had that status – no change was made.",
     "resolveError": "Could not update the report status."
   },
