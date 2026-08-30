@@ -215,8 +215,6 @@ struct NewDialogueSheet: View {
     let coordinator: NewDialogueCoordinator
     let onPick: (FriendSummary) -> Void
 
-    @Environment(\.dismiss) private var dismiss
-
     var body: some View {
         NavigationStack {
             content
