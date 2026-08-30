@@ -55,9 +55,7 @@ import {
   releasePurchaseVerification,
   reservePurchaseVerification,
 } from './purchase-token-ownership';
-import {
-  PurchaseTokenOwnershipError,
-} from './purchase-token-ownership-core';
+import { PurchaseTokenOwnershipError } from './purchase-token-ownership-core';
 
 const CALLABLE_OPTS = {
   region: 'europe-west1',
@@ -140,6 +138,7 @@ export const verify = onCall(
         purchaseTokenHash,
         { uid: actor.uid, productId: outcome.productId },
         verificationNow,
+        outcome.linkedPurchaseTokenHash,
       );
 
       await applyEntitlement({

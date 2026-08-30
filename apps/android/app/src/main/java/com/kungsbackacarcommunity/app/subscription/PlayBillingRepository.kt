@@ -129,6 +129,7 @@ class PlayBillingRepository private constructor(
         activity: Activity,
         productId: String,
         obfuscatedAccountId: String,
+        replacement: SubscriptionReplacement?,
     ): PurchaseLaunchResult {
         if (productId !in SUBSCRIPTION_PRODUCT_IDS) return PurchaseLaunchResult.Failed
         if (!isValidObfuscatedAccountId(obfuscatedAccountId)) {
@@ -139,18 +140,41 @@ class PlayBillingRepository private constructor(
             product.subscriptionOfferDetails
                 ?.firstOrNull { it.basePlanId == MONTHLY_BASE_PLAN_ID }
                 ?.offerToken ?: return PurchaseLaunchResult.Failed
-        val params =
+        val productParamsBuilder =
+            BillingFlowParams.ProductDetailsParams.newBuilder()
+                .setProductDetails(product)
+                .setOfferToken(offerToken)
+        if (replacement != null) {
+            if (
+                replacement.oldProductId !in SUBSCRIPTION_PRODUCT_IDS ||
+                replacement.oldProductId == productId ||
+                replacement.oldPurchaseToken.isBlank()
+            ) {
+                return PurchaseLaunchResult.Failed
+            }
+            productParamsBuilder.setSubscriptionProductReplacementParams(
+                BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
+                    .newBuilder()
+                    .setOldProductId(replacement.oldProductId)
+                    .setReplacementMode(replacementMode(replacement.oldProductId, productId))
+                    .build(),
+            )
+        }
+
+        val paramsBuilder =
             BillingFlowParams.newBuilder()
                 .setObfuscatedAccountId(obfuscatedAccountId)
                 .setProductDetailsParamsList(
-                    listOf(
-                        BillingFlowParams.ProductDetailsParams.newBuilder()
-                            .setProductDetails(product)
-                            .setOfferToken(offerToken)
-                            .build(),
-                    ),
+                    listOf(productParamsBuilder.build()),
                 )
-                .build()
+        if (replacement != null) {
+            paramsBuilder.setSubscriptionUpdateParams(
+                BillingFlowParams.SubscriptionUpdateParams.newBuilder()
+                    .setOldPurchaseToken(replacement.oldPurchaseToken)
+                    .build(),
+            )
+        }
+        val params = paramsBuilder.build()
         val result = billingClient.launchBillingFlow(activity, params)
         return if (result.responseCode == BillingClient.BillingResponseCode.OK) {
                 PurchaseLaunchResult.Launched
@@ -208,6 +232,23 @@ class PlayBillingRepository private constructor(
     override fun close() {
         billingClient.endConnection()
     }
+
+    /**
+     * Google Play's recommended behavior: upgrades take effect immediately and
+     * charge only the remaining price difference; downgrades retain Supporter
+     * until the next renewal instead of taking away already-paid access.
+     */
+    private fun replacementMode(oldProductId: String, newProductId: String): Int =
+        if (
+            oldProductId == PLUS_MONTHLY_PRODUCT_ID &&
+            newProductId == SUPPORTER_MONTHLY_PRODUCT_ID
+        ) {
+            BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
+                .ReplacementMode.CHARGE_PRORATED_PRICE
+        } else {
+            BillingFlowParams.ProductDetailsParams.SubscriptionProductReplacementParams
+                .ReplacementMode.DEFERRED
+        }
 
     companion object {
         /**

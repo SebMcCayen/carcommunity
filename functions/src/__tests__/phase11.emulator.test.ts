@@ -246,6 +246,48 @@ describe('subscription entitlement chain', () => {
     await releasePurchaseVerification(member.uid, tokenHash, newReservationId);
   });
 
+  it('accepts only a Play-linked replacement for an active purchase token', async () => {
+    const switchingMember = await createProvisionedUser('p11-purchase-replacement');
+    const oldTokenHash = `${Date.now().toString(16).padStart(16, '0')}${'e'.repeat(48)}`;
+    const rejectedTokenHash = `${(Date.now() + 1).toString(16).padStart(16, '0')}${'f'.repeat(48)}`;
+    const replacementTokenHash = `${(Date.now() + 2).toString(16).padStart(16, '0')}${'1'.repeat(48)}`;
+    await adminDb
+      .collection('subscriptions')
+      .doc(switchingMember.uid)
+      .set({
+        userId: switchingMember.uid,
+        platform: 'google',
+        status: 'active',
+        entitlement: 'member_monthly',
+        tier: 'plus',
+        purchaseTokenHash: oldTokenHash,
+        startsAt: new Date(),
+        expiresAt: new Date(Date.now() + 60_000),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+
+    await expect(
+      reservePurchaseVerification(
+        rejectedTokenHash,
+        { uid: switchingMember.uid, productId: 'supporter_monthly' },
+        new Date(),
+      ),
+    ).rejects.toMatchObject({ reason: 'different_active_token' });
+
+    const reservationId = await reservePurchaseVerification(
+      replacementTokenHash,
+      { uid: switchingMember.uid, productId: 'supporter_monthly' },
+      new Date(),
+      oldTokenHash,
+    );
+    expect(
+      (
+        await adminDb.collection('subscriptionPurchaseTokens').doc(replacementTokenHash).get()
+      ).data(),
+    ).toMatchObject({ uid: switchingMember.uid, productId: 'supporter_monthly' });
+    await releasePurchaseVerification(switchingMember.uid, replacementTokenHash, reservationId);
+  });
+
   it('admin manual grant applies record + flag + claim; revoke tears down', async () => {
     await signInAs(adminUser);
     await call('subscription-grantEntitlement', {

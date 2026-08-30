@@ -99,6 +99,7 @@ import com.kungsbackacarcommunity.app.push.KccMessagingService
 import com.kungsbackacarcommunity.app.push.PushNavigator
 import com.kungsbackacarcommunity.app.push.PushRegistrationCoordinator
 import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionVerifier
+import com.kungsbackacarcommunity.app.subscription.FirebaseSubscriptionStateRepository
 import com.kungsbackacarcommunity.app.shell.LiveSessionAnchor
 import com.kungsbackacarcommunity.app.subscription.PlayBillingRepository
 import kotlinx.coroutines.CancellationException
@@ -293,6 +294,8 @@ class MainActivity : ComponentActivity() {
         val billingRepository = PlayBillingRepository.createIfAvailable(applicationContext)
         val subscriptionVerifier =
             FirebaseSubscriptionVerifier.createIfAvailable(applicationContext)
+        val subscriptionStateRepository =
+            FirebaseSubscriptionStateRepository.createIfAvailable(applicationContext)
 
         setContent {
             val authState =
@@ -521,6 +524,7 @@ class MainActivity : ComponentActivity() {
                         feedbackCoordinator = feedbackCoordinator,
                         billingRepository = billingRepository,
                         subscriptionVerifier = subscriptionVerifier,
+                        subscriptionStateRepository = subscriptionStateRepository,
                         pushRegistrationCoordinator = pushRegistrationCoordinator,
                         loginRecordCoordinator = loginRecordCoordinator,
                         flags = flags,

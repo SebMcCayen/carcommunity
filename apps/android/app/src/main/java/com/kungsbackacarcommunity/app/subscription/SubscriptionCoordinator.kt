@@ -30,6 +30,9 @@ class SubscriptionCoordinator(
     private val state = MutableStateFlow<PurchaseFlowStatus>(PurchaseFlowStatus.Idle)
     val status: StateFlow<PurchaseFlowStatus> = state.asStateFlow()
 
+    private val ownedPurchaseState = MutableStateFlow<OwnedPurchase?>(null)
+    val ownedPurchase: StateFlow<OwnedPurchase?> = ownedPurchaseState.asStateFlow()
+
     /**
      * Runs the full flow for one immutable Play [productId]. [launchPurchase]
      * triggers the Play purchase UI. Suspends until the
@@ -84,6 +87,12 @@ class SubscriptionCoordinator(
             }
             when (outcome) {
                 is PurchaseResult.Purchased -> {
+                    ownedPurchaseState.value =
+                        OwnedPurchase(
+                            purchaseToken = outcome.purchaseToken,
+                            productIds = setOf(productId),
+                            state = OwnedPurchaseState.Purchased,
+                        )
                     state.value = PurchaseFlowStatus.Verifying
                     val verified = verifier.verify(outcome.purchaseToken)
                     state.value =
@@ -94,6 +103,12 @@ class SubscriptionCoordinator(
                         }
                 }
                 is PurchaseResult.Pending -> {
+                    ownedPurchaseState.value =
+                        OwnedPurchase(
+                            purchaseToken = outcome.purchaseToken,
+                            productIds = setOf(productId),
+                            state = OwnedPurchaseState.Pending,
+                        )
                     state.value = PurchaseFlowStatus.Verifying
                     val verified = verifier.verify(outcome.purchaseToken)
                     state.value =
@@ -129,6 +144,7 @@ class SubscriptionCoordinator(
                 return
             }
             val purchase = preferredPurchaseForReconciliation(billing.queryOwnedPurchases())
+            ownedPurchaseState.value = purchase
             if (purchase == null) {
                 state.value = PurchaseFlowStatus.Idle
                 return
