@@ -45,6 +45,12 @@ data class OwnedPurchase(
     val state: OwnedPurchaseState,
 )
 
+/** Existing Play purchase that a new tier purchase replaces. Kept in memory only. */
+data class SubscriptionReplacement(
+    val oldPurchaseToken: String,
+    val oldProductId: String,
+)
+
 /**
  * Play Billing access for the subscriptions slice (Phase 12 slice 24).
  * Firebase-free and Activity-only so the coordinator can be driven by a fake in
@@ -67,6 +73,7 @@ interface BillingRepository {
         activity: Activity,
         productId: String,
         obfuscatedAccountId: String,
+        replacement: SubscriptionReplacement? = null,
     ): PurchaseLaunchResult
 
     /** Restores owned/pending subscriptions for renewal and reinstall reconciliation. */

@@ -12,10 +12,18 @@ import java.nio.charset.StandardCharsets
 object SubscriptionManagementLink {
     private const val PLAY_STORE_PACKAGE = "com.android.vending"
 
-    /** Official product-specific Google Play subscription-management URL. */
-    fun webUri(applicationId: String, productId: String): String =
-        "https://play.google.com/store/account/subscriptions" +
-            "?sku=${encode(productId)}&package=${encode(applicationId)}"
+    /**
+     * Official product-specific URL when the product is known, otherwise the
+     * generic subscriptions center. The fallback keeps cancellation reachable
+     * while a stale/offline entitlement is being reconciled.
+     */
+    fun webUri(applicationId: String, productId: String?): String =
+        if (productId.isNullOrBlank()) {
+            "https://play.google.com/store/account/subscriptions"
+        } else {
+            "https://play.google.com/store/account/subscriptions" +
+                "?sku=${encode(productId)}&package=${encode(applicationId)}"
+        }
 
     /**
      * Prefers the Play Store app, then falls back to any browser. If neither can
@@ -24,7 +32,7 @@ object SubscriptionManagementLink {
     fun open(
         context: Context,
         applicationId: String,
-        productId: String,
+        productId: String?,
         onUnavailable: () -> Unit,
     ) {
         val uri = Uri.parse(webUri(applicationId, productId))
