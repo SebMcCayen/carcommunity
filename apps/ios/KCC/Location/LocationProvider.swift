@@ -57,11 +57,14 @@ protocol LocationProvider: AnyObject {
 
     /// Start a stream of position fixes.
     ///
-    /// Starting the first live stream starts device positioning; terminating
-    /// the last one stops it — the stream's lifecycle IS the start/stop
-    /// control, so a feature that goes away cannot leave the GPS running.
-    /// Yields nothing while ``authorization`` is not granted (starting a
-    /// stream never triggers a permission prompt).
+    /// Device positioning runs exactly while at least one stream is live AND
+    /// the app is authorized: the first authorized stream starts it,
+    /// terminating the last one — or a revocation — stops it. The stream's
+    /// lifecycle IS the start/stop control, so a feature that goes away
+    /// cannot leave the GPS running. While ``authorization`` is not granted
+    /// a stream yields nothing and no positioning call is made at all
+    /// (starting a stream never triggers a permission prompt); a grant
+    /// arriving later makes fixes flow without a re-subscribe.
     func fixes() -> AsyncStream<LocationFix>
 }
 

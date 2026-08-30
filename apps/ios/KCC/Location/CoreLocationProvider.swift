@@ -25,7 +25,9 @@ import Foundation
 ///   never prompt. When-in-use is the only level ever requested; see
 ///   ``LocationAuthorization/always`` for why there is no Always request.
 /// - Positioning hardware runs only while at least one ``fixes()`` stream is
-///   live; the last termination stops it.
+///   live AND the app is authorized; the last termination — or a revocation —
+///   stops it, and starting a stream while unauthorized issues no
+///   CoreLocation call at all (see ``reconcileUpdates()``).
 @MainActor
 final class CoreLocationProvider: NSObject, LocationProvider {
     private let manager: CLLocationManager
@@ -75,15 +77,8 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     func fixes() -> AsyncStream<LocationFix> {
         AsyncStream { continuation in
             let id = UUID()
-            let wasIdle = fixContinuations.isEmpty
             fixContinuations[id] = continuation
-            if wasIdle {
-                // First consumer: start the hardware. Deliberately NOT gated
-                // on authorization here — starting while unauthorized simply
-                // yields nothing (no prompt, no error dialog), and the grant
-                // arriving later makes fixes flow without a re-subscribe.
-                manager.startUpdatingLocation()
-            }
+            reconcileUpdates()
             continuation.onTermination = { [weak self] _ in
                 Task { @MainActor in self?.dropFixStream(id) }
             }
@@ -92,10 +87,35 @@ final class CoreLocationProvider: NSObject, LocationProvider {
 
     private func dropFixStream(_ id: UUID) {
         guard fixContinuations.removeValue(forKey: id) != nil else { return }
-        if fixContinuations.isEmpty {
-            // Last consumer gone: stop the hardware. This is what makes
-            // "stop sharing when a drive ends" structural — the feature's
-            // stream teardown IS the GPS stop.
+        reconcileUpdates()
+    }
+
+    /// Whether `startUpdatingLocation()` has been issued without a matching
+    /// stop — so start/stop are only ever sent on a real transition.
+    private var updatesRunning = false
+
+    /// The ONE place the hardware is started or stopped, recomputed from the
+    /// two inputs that may change independently: positioning runs exactly
+    /// while (a) at least one ``fixes()`` stream is live AND (b) the app is
+    /// authorized.
+    ///
+    /// Gating on authorization is part of the privacy contract: starting
+    /// location updates while not-determined must never happen, so no code
+    /// path — not even a subscribed-but-unanswered fix stream — can nudge the
+    /// system toward a prompt; only ``requestWhenInUseAuthorization()`` asks.
+    /// The gate also means a grant arriving while streams are already live
+    /// starts updates then (no re-subscribe needed), and a revocation under a
+    /// running feature stops the hardware immediately instead of leaving it
+    /// spinning for nothing. Last stream gone → stop, which is what makes
+    /// "stop sharing when a drive ends" structural: the feature's stream
+    /// teardown IS the GPS stop.
+    private func reconcileUpdates() {
+        let shouldRun = !fixContinuations.isEmpty && authorization.isAuthorized
+        guard shouldRun != updatesRunning else { return }
+        updatesRunning = shouldRun
+        if shouldRun {
+            manager.startUpdatingLocation()
+        } else {
             manager.stopUpdatingLocation()
         }
     }
@@ -137,6 +157,10 @@ final class CoreLocationProvider: NSObject, LocationProvider {
     private func apply(_ authorization: LocationAuthorization) {
         guard authorization != self.authorization else { return }
         self.authorization = authorization
+        // An authorization change can flip whether positioning may run: a
+        // grant landing under live streams starts updates, a revocation
+        // stops them (see reconcileUpdates()).
+        reconcileUpdates()
         for sink in authContinuations.values {
             sink.yield(authorization)
         }
