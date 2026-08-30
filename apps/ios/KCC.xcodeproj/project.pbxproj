@@ -7,9 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		062AE7034B90A9707143E724 /* ShellHubs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86B8BFD68C018AC836A606A7 /* ShellHubs.swift */; };
 		08ED336A66B293E73A27E257 /* Tokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD356449B915D60437161C4F /* Tokens.swift */; };
 		13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF81B13C98719E049F390996 /* MapSurface.swift */; };
 		1C2DA365BA8BE6F3314C2A25 /* EventsCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */; };
+		1E50D3893A5C34E20441F632 /* ShellMapHostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */; };
 		292854460109584A07D618C1 /* AuthSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 343B6E8AA56D06395AD48108 /* AuthSession.swift */; };
 		2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */; };
 		2EC5800FD4E02C0186D0E3E2 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = FD0E994263AEF5E23FE59538 /* FirebaseFunctions */; };
@@ -18,6 +20,7 @@
 		4205D21D03B3C87AC978B782 /* EventsRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = F17DE72EC857215D18C55F5F /* EventsRepository.swift */; };
 		48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */; };
 		54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1669E70D4D1058BBFE53B2E /* RootView.swift */; };
+		5767653F95DEA636DB8FF15D /* MapHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 838365AF9A026F751D6E80C2 /* MapHomeView.swift */; };
 		5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC9DE0933201A46D20EE2ED8 /* ProfileScreen.swift */; };
 		697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */ = {isa = PBXBuildFile; fileRef = F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */; };
 		6C25F552799AC5E993EA18E2 /* AuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */; };
@@ -40,10 +43,12 @@
 		DA04F6E3D0F1737A1F3C045D /* EventsModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF465D5E8668C38571889BC0 /* EventsModels.swift */; };
 		E0EFA24043EC79042A5890CE /* EventsModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 693946E5862A24E475BE6ED3 /* EventsModelTests.swift */; };
 		E4D61FAACAFFB1746CE8FB47 /* AuthState.swift in Sources */ = {isa = PBXBuildFile; fileRef = C80A81EA9949BF434E7C246D /* AuthState.swift */; };
+		E7D0FD9A2D31A4568504745E /* TranslucentPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */; };
 		E89DC7EC35F16BB97D6E2B60 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB4411241111CAD26506FD14 /* Localizable.xcstrings */; };
 		EBAED2446DD015CA190171AC /* UserProfileModelsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3251B8E9A0D98C310036E4E0 /* UserProfileModelsTests.swift */; };
 		EEE4B45033521B214E892FBF /* FirebaseAuthRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 165AC07D59EE53D2EDC1688F /* FirebaseAuthRepository.swift */; };
 		F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */; };
+		F8A62804AA5A01BE636510FB /* ShellMapHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = 694D26C4A5F68ACDAEEACD46 /* ShellMapHost.swift */; };
 		F9A3DAFA5B59B49C00839395 /* KccFunctionsClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */; };
 		FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */; };
 /* End PBXBuildFile section */
@@ -73,12 +78,16 @@
 		5D524D57EA2B43023BC49CE4 /* SignInScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInScreen.swift; sourceTree = "<group>"; };
 		690A7983868C88E10091C89A /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		693946E5862A24E475BE6ED3 /* EventsModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModelTests.swift; sourceTree = "<group>"; };
+		694D26C4A5F68ACDAEEACD46 /* ShellMapHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellMapHost.swift; sourceTree = "<group>"; };
 		6C4A684F2E228EDA44F3221F /* ProfileCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileCoordinator.swift; sourceTree = "<group>"; };
 		70940A5568FF91A6A171D3CF /* UserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserProfileRepository.swift; sourceTree = "<group>"; };
+		838365AF9A026F751D6E80C2 /* MapHomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapHomeView.swift; sourceTree = "<group>"; };
+		86B8BFD68C018AC836A606A7 /* ShellHubs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellHubs.swift; sourceTree = "<group>"; };
 		8B1E7BBD0B5E2B7BA4D84048 /* AuthRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthRepository.swift; sourceTree = "<group>"; };
 		8B4A1900424F0BA9CB9105FA /* KCC.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = KCC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		92EC568281BD1016FABE9919 /* EventsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsScreen.swift; sourceTree = "<group>"; };
 		93D6E6AE3AC9E44FCB519C47 /* SignInCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInCoordinator.swift; sourceTree = "<group>"; };
+		99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellMapHostTests.swift; sourceTree = "<group>"; };
 		AB4411241111CAD26506FD14 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		AC12A1C8EAC2098EF88A0598 /* KccFunctionsClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsClient.swift; sourceTree = "<group>"; };
 		AF4AECA45E7B6366153A08BB /* EventsCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsCoordinatorTests.swift; sourceTree = "<group>"; };
@@ -88,6 +97,7 @@
 		C80A81EA9949BF434E7C246D /* AuthState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AuthState.swift; sourceTree = "<group>"; };
 		CF465D5E8668C38571889BC0 /* EventsModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventsModels.swift; sourceTree = "<group>"; };
 		CFB5267678CF1ACF6AB93E03 /* AppleSignInProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleSignInProvider.swift; sourceTree = "<group>"; };
+		D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranslucentPanelView.swift; sourceTree = "<group>"; };
 		D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KccFunctionsErrorTests.swift; sourceTree = "<group>"; };
 		D713D56081039952EA2D3DF0 /* FirebaseEventsRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseEventsRepository.swift; sourceTree = "<group>"; };
 		DC183FCE8F1C3FAFC61A5784 /* FirebaseUserProfileRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseUserProfileRepository.swift; sourceTree = "<group>"; };
@@ -202,9 +212,13 @@
 		99C0A5D5154EEC666ADC0211 /* Shell */ = {
 			isa = PBXGroup;
 			children = (
+				838365AF9A026F751D6E80C2 /* MapHomeView.swift */,
 				DF81B13C98719E049F390996 /* MapSurface.swift */,
+				86B8BFD68C018AC836A606A7 /* ShellHubs.swift */,
+				694D26C4A5F68ACDAEEACD46 /* ShellMapHost.swift */,
 				F30DAC5CEBAD558BADEB5F13 /* ShellNav.swift */,
 				00786BDC5D7D80DF3558096D /* ShellView.swift */,
+				D310DD7A144B4F601CF0B1B7 /* TranslucentPanelView.swift */,
 			);
 			path = Shell;
 			sourceTree = "<group>";
@@ -239,6 +253,7 @@
 				D4DEFB37DAA0C85D0F08626E /* KccFunctionsErrorTests.swift */,
 				4C0408D9A1BEFD4479399D14 /* MapSurfaceTests.swift */,
 				E4C13E96CF6F7A3D81269B6D /* ProfileCoordinatorTests.swift */,
+				99BCF885BCAC95E5A84E495A /* ShellMapHostTests.swift */,
 				FF7A1C3128BDBD3E00E2A30D /* ShellNavTests.swift */,
 				57135BB547425D479FB343C2 /* SignInCoordinatorTests.swift */,
 				3251B8E9A0D98C310036E4E0 /* UserProfileModelsTests.swift */,
@@ -381,15 +396,19 @@
 				7994A2A8FBAD98AB73D621A2 /* KCCApp.swift in Sources */,
 				F9A3DAFA5B59B49C00839395 /* KccFunctionsClient.swift in Sources */,
 				94B224E99B1DDE286A4FDF06 /* KccFunctionsError.swift in Sources */,
+				5767653F95DEA636DB8FF15D /* MapHomeView.swift in Sources */,
 				13D59B678BA7758DD88C0863 /* MapSurface.swift in Sources */,
 				B65E5027BA2EFEBBC7DD3220 /* ProfileCoordinator.swift in Sources */,
 				5BE03CCD4750CF212C0B4BAD /* ProfileScreen.swift in Sources */,
 				54F2359A2474231CD9D08DB4 /* RootView.swift in Sources */,
+				062AE7034B90A9707143E724 /* ShellHubs.swift in Sources */,
+				F8A62804AA5A01BE636510FB /* ShellMapHost.swift in Sources */,
 				697C89CA4640597CB1B11586 /* ShellNav.swift in Sources */,
 				6D653074C83AD139C001A226 /* ShellView.swift in Sources */,
 				F0D7B365DD492778C8168813 /* SignInCoordinator.swift in Sources */,
 				878A768EA4269808A5DE4AD2 /* SignInScreen.swift in Sources */,
 				08ED336A66B293E73A27E257 /* Tokens.swift in Sources */,
+				E7D0FD9A2D31A4568504745E /* TranslucentPanelView.swift in Sources */,
 				94B41B1A5E246C64CAC9C0A2 /* UserProfileModels.swift in Sources */,
 				D7B09A124B1BED21F2359EC6 /* UserProfileRepository.swift in Sources */,
 			);
@@ -404,6 +423,7 @@
 				48182221EE13B82E02D8C4EA /* KccFunctionsErrorTests.swift in Sources */,
 				FE582215755EF34BD19A7EE7 /* MapSurfaceTests.swift in Sources */,
 				861F71B6C0EEEE426160133D /* ProfileCoordinatorTests.swift in Sources */,
+				1E50D3893A5C34E20441F632 /* ShellMapHostTests.swift in Sources */,
 				71CDB8557B99F7B612E30134 /* ShellNavTests.swift in Sources */,
 				2A9A0CC92D72BFD43FC5AA31 /* SignInCoordinatorTests.swift in Sources */,
 				EBAED2446DD015CA190171AC /* UserProfileModelsTests.swift in Sources */,
