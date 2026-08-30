@@ -168,8 +168,13 @@ final class StubLocationProvider: LocationProvider {
         requestOutcome = outcome
     }
 
-    /// Pushes a fix to every live ``fixes()`` stream.
+    /// Pushes a fix to every live ``fixes()`` stream — dropped entirely
+    /// while unauthorized, because the protocol promises an unauthorized
+    /// stream yields nothing and the real provider cannot deliver a fix
+    /// then. The stub enforcing the same rule keeps consumer tests from
+    /// passing under behavior production can never produce.
     func emitFix(_ fix: LocationFix) {
+        guard authorization.isAuthorized else { return }
         for sink in fixContinuations.values {
             sink.yield(fix)
         }

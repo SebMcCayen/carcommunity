@@ -118,6 +118,31 @@ final class StubLocationProviderTests: XCTestCase {
     }
 
     @MainActor
+    func testEmittedFixesAreDroppedWhileUnauthorized() async {
+        // The protocol promises an unauthorized stream yields nothing; the
+        // stub must enforce it, or consumer tests could pass under behavior
+        // the real provider can never deliver.
+        let provider = StubLocationProvider(authorization: .denied)
+        let stream = provider.fixes()
+
+        let dropped = LocationFix.of(
+            latitude: 1, longitude: 2, timestamp: Date(timeIntervalSince1970: 0)
+        )!
+        provider.emitFix(dropped)
+
+        // A grant later lets fixes through on the SAME stream.
+        provider.setAuthorization(.whileInUse)
+        let delivered = LocationFix.of(
+            latitude: 3, longitude: 4, timestamp: Date(timeIntervalSince1970: 1)
+        )!
+        var iterator = stream.makeAsyncIterator()
+        provider.emitFix(delivered)
+
+        let first = await iterator.next()
+        XCTAssertEqual(first, delivered)
+    }
+
+    @MainActor
     func testTwoStreamsBothReceiveAndCountIndependently() async {
         let provider = StubLocationProvider(authorization: .whileInUse)
         let first = provider.fixes()
